@@ -50,6 +50,10 @@
    verified lead blob has named. The relay's header names a writer and an epoch before any signature is checked, and that
    header moves nothing: leadEpoch rises only once the pinned lead's upload signature on the blob verifies.
 
+   PENDING (F7 of the slice 1 review). A blob is parked to wait for a key only once that same signature verifies under a
+   writer this program already trusts, the pinned lead or a desk a roster it holds names. A forged blob, or one from a
+   writer it does not trust, is dropped and said, and cannot fill the pending list or push an honest wait out.
+
    Two halves. createProgram is synchronous and talks to nobody: it judges, writes the mirror and says what it owes; the
    harness's adapter drives it directly. createChannel talks to the relay (the hello, a session re-opened when it lapses,
    since and the blobs, the uploads, the socket's announcements) and watches the mirror. Nothing private leaves unsealed:
@@ -673,7 +677,7 @@ function createProgram(opts) {
       last = r;
       if (r.reason !== "bad-signature") break;
     }
-    if (t.missing && (!last || last.reason === "bad-signature")) { pend(it, floors0); return null; }
+    if (t.missing && signedUpload(it) && (!last || last.reason === "bad-signature")) { pend(it, floors0); return null; } /* plant:pending-sig */
     unpend(m.id);
     dropSaid("a file from " + m.writer, last || R("bad-signature"));
     return null;

@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 83;
+const EXPECTED = 85;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2013,7 +2013,9 @@ try {
 check(regStand.held(), "942f every reg call was answered by the stand-in (" + regStand.said() + ")");
 
 /* F8. A joining desk seals its one request at an epoch a verified lead blob named. A header the relay lists moves
-   leadEpoch only once the pinned lead's upload signature verifies. */
+   leadEpoch only once the pinned lead's upload signature verifies. F7, the program's half: a blob is parked to wait
+   for a key only after that signature verifies under a writer this program trusts, so a forged future epoch cannot
+   fill pending or push an honest wait out. */
 {
   const LEAD8 = keyPair(false, "lane-lead");
   const DESK8 = keyPair(true);
@@ -2091,6 +2093,34 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   prog8.applyBatch([itemOf(signed2, 1), lie], { keyFor: () => null });
   check(prog8.state().leadEpoch === 2,
     "951e f8 a verified lead blob raises the lead's epoch and a forged header beside it does not: leadEpoch " + prog8.state().leadEpoch);
+
+  const K1 = crypto.randomBytes(32);
+  const prog7 = C.createProgram({
+    io: { read() { return null; }, write() {}, remove() {}, list() { return []; } },
+    pin: pin8, clock: () => 1700000000000, save() {}, say() {},
+  });
+  const ctx7 = { keyFor: e => (e === 1 ? K1 : null) };
+  const good = B.seal({ relayTeamId: rt8, epoch: 1, teamKey: K1, writer: leadW, path: "guide.ec", body: "v", counter: 1, place: "root" });
+  const bad = Object.assign({}, good, { id: hex(16), signature: "aa".repeat(64), counter: 2 });
+  prog7.applyBatch([itemOf(bad, 1)], ctx7);
+  const afterBad = prog7.state().pending.map(p => p.id);
+  check(afterBad.length === 0,
+    "951c f7-control a bad signature at an epoch the desk holds is not pending (" + afterBad.length + ")");
+  const waiting = B.seal({ relayTeamId: rt8, epoch: 2, teamKey: K1, writer: leadW, path: "hold.ec", body: "wait", counter: 1, place: "root" });
+  const junk = [];
+  for (let i = 0; i < 1000; i++) {
+    const id = hex(16);
+    const ct = Buffer.from("x");
+    junk.push({ seq: 10 + i, ct, meta: { v: 1, id, writer: LEAD8.keyId, epoch: 999999, counter: 1, size: ct.length,
+      sig: "ab".repeat(64), nonce: "cd".repeat(12), supersedes: null, del: false } });
+  }
+  prog7.applyBatch([itemOf(waiting, 2)].concat(junk), ctx7);
+  const pending = prog7.state().pending;
+  const kept = pending.some(p => p.id === waiting.id);
+  const forgedN = pending.filter(p => p.epoch === 999999).length;
+  check(kept && forgedN === 0 && pending.length === 1,
+    "951d f7 a forged epoch must not be pending and must not evict a real wait: pending " + pending.length
+    + ", forged " + forgedN + ", real id kept " + kept);
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
