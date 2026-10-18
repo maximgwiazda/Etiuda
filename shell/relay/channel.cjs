@@ -384,7 +384,7 @@ function createProgram(opts) {
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!B.verifySig(pin.lead.public, bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
+    if (!B.verifySigned(pin.lead.public, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
     if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || relayOf(doc) !== pin.rt) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || !isCount(doc.rev)) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev };
@@ -398,8 +398,8 @@ function createProgram(opts) {
     try { doc = JSON.parse(String(body).replace(/^\uFEFF/, "")); } catch { doc = null; }
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
-    try { bytes = Buffer.concat([Buffer.from(HEAD_PREFIX, "utf8"), signedBytes(doc)]); } catch { return R("bad-signature"); }
-    if (!B.verifySig(pin.lead.public, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
+    try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
+    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
     if (doc.v !== 1) return R("bad-signature");
     if (doc.team !== pin.teamId) return R("wrong-team");
     if (!isCount(doc.epoch) || !isCount(doc.rev) || !Number.isFinite(doc.t)) return R("bad-signature");
@@ -1029,8 +1029,8 @@ function createProgram(opts) {
     if (!pin || !table(head) || !table(head.sig)) return none;
     if (head.keyId !== pin.lead.keyId || head.relay !== pin.rt) return none;
     let bytes;
-    try { bytes = Buffer.concat([Buffer.from(HEAD_PREFIX, "utf8"), signedBytes(head)]); } catch { return none; }
-    if (!B.verifySig(pin.lead.public, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
+    try { bytes = signedBytes(head); } catch { return none; }
+    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
     const now = Number.isFinite(i.now) ? i.now : clock();
     return { shown: true, blocked: false, time: head.time, epoch: head.epoch, rev: head.rev, ageMs: now - head.time };
   }
@@ -1460,6 +1460,6 @@ module.exports = {
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),
   verifyDeskSignature: (publicKey, body, signature) => {
     const b = toBytes(body);
-    return !!b && B.verifySig(publicKey, Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), b]), signature);
+    return !!b && B.verifySigned(publicKey, BRANCH_PREFIX, b, signature);
   },
 };

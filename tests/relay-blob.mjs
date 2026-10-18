@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 57;
+const EXPECTED = 59;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -483,6 +483,24 @@ function main() {
   });
   check(planted.turned && planted.back, "10b lifting plant:desk-id lets writerOf resolve a desk id of con, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+
+  /* ---- 11: a signature verifies only under a prefix of this protocol. The team file's scheme carries none. ---- */
+  const signer = keyPair("k-" + hex(8));
+  const payload = Buffer.from("{\"kind\":\"note\"}", "utf8");
+  const headPref = "etiuda-relay-head\n", branchPref = "etiuda-desk-branch\n", teamPref = "", oddPrefix = "etiuda-not-a-prefix\n";
+  const signOver = (pref) => crypto.sign(null, pref ? Buffer.concat([Buffer.from(pref, "utf8"), payload]) : payload, signer.privateKey).toString("hex");
+  const sigHead = signOver(headPref), sigBranch = signOver(branchPref), sigTeam = signOver(teamPref), sigOdd = signOver(oddPrefix);
+  const verdict = (pref, sig) => B.verifySigned(signer.public, pref, payload, sig) === true;
+  check(verdict(headPref, sigHead) && !verdict(branchPref, sigHead) && !verdict(teamPref, sigHead)
+    && verdict(branchPref, sigBranch) && !verdict(headPref, sigBranch)
+    && verdict(teamPref, sigTeam) && !verdict(headPref, sigTeam)
+    && !verdict(oddPrefix, sigOdd) && B.verifySig === undefined,
+    "11a a signature verifies only under its own prefix from the protocol's list: the head prefix verifies the head and not the branch"
+    + " or the team, the branch prefix verifies the branch and not the head, the empty prefix verifies the team file's bytes and not the head,"
+    + " a prefix outside the list verifies nothing, and verifySig is not exported");
+  const signedPlant = liftBlob("plant:signed-prefix", mod => mod.verifySigned(signer.public, oddPrefix, payload, sigOdd) === true);
+  check(signedPlant.turned && signedPlant.back, "11b lifting plant:signed-prefix verifies a prefix outside the list, and the file is put back: "
+    + signedPlant.detail + ", sha " + (signedPlant.back ? "restored" : "differs"));
 }
 
 try { main(); }
