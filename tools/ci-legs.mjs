@@ -10,10 +10,10 @@
  * It exits non-zero when it could not run: an unknown id, a bad os, a write that failed.
  * A leg's exit code is recorded and is not enough on its own to call the leg green.
  *
- * ETIUDA_FIXTURES is removed from the child. ETIUDA_WINDOWS is set on a child only
- * for a window leg, only when this process is the Windows runner, and only when the
- * date equals the day tests/engine.js's window wall computed at load. Anywhere else
- * the leg is refused and nothing is spawned.
+ * Whether a leg spawns, and its child's environment, is decided by
+ * tools/ci-legs-decide.cjs alone: ETIUDA_FIXTURES and the window word never reach a
+ * child from this process's environment, and a window leg spawns only on the Windows
+ * runner with the dispatch's date. tests/engine-selftest.js 22f drives every arm.
  *
  * A FAIL line's first word is FAIL. An ERROR line's first word is ERROR or Error.
  * Both streams count. The result line is the last #counts or RESULT line.
@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const E = require(path.join(ROOT, "tests", "engine.js"));
+const { decide } = require(path.join(ROOT, "tools", "ci-legs-decide.cjs"));
 
 const FAIL_LINE = /^\s*FAIL\b/;
 const ERROR_LINE = /^\s*(?:ERROR|Error)\b/;
@@ -129,39 +130,6 @@ function resultLineOf(stdout, stderr) {
   return found;
 }
 
-function onWindowsRunner(osNorm) {
-  return process.env.GITHUB_ACTIONS === "true" && process.platform === "win32" && osNorm === "windows";
-}
-
-/* Null when the child may be spawned. Otherwise the wall's lines, which already
- * include the date the caller asked for when that date is not today's. */
-function windowBlock(leg, windowsDate, osNorm) {
-  if (!leg.window) return null;
-  if (onWindowsRunner(osNorm) && windowsDate === E.WINDOWS_DAY) return null;
-  const probe = {};
-  if (windowsDate && (onWindowsRunner(osNorm) || windowsDate !== E.WINDOWS_DAY))
-    probe[E.WINDOWS_VAR] = windowsDate;
-  const bad = E.windowWallRefusal(leg.who, probe) || E.windowWallRefusal(leg.who, {});
-  const lines = ["#refused window-wall", "  FAIL " + bad[0]];
-  for (let i = 1; i < bad.length; i++) lines.push("       " + bad[i]);
-  lines.push("  SUITE DID NOT COMPLETE: " + bad[0]);
-  return lines.join("\n") + "\n";
-}
-
-function childEnv(leg, windowsDate) {
-  const env = Object.assign({}, process.env);
-  delete env.ETIUDA_FIXTURES;
-  delete env.ETIUDA_WINDOWS;
-  delete env.GITHUB_TOKEN;
-  delete env.GH_TOKEN;
-  delete env.CI_LEGS;
-  delete env.CI_WINDOWS_DATE;
-  delete env.RELAY_TARGET;
-  if (leg.relay) env.RELAY_TARGET = leg.relay;
-  if (leg.window && windowsDate) env[E.WINDOWS_VAR] = windowsDate;
-  return env;
-}
-
 function runChild(leg, env) {
   return new Promise(resolve => {
     let stdout = "";
@@ -255,19 +223,16 @@ async function main() {
   for (const id of ids) {
     const leg = BY_ID.get(id);
     const t0 = Date.now();
-    if (osNorm === "ubuntu" && leg.where === "windows-only") {
-      const text = "skipped: " + id + " is windows-only and this job is ubuntu\n";
-      rows.push(recordOf(leg, "skipped", text, "", null, false, Date.now() - t0));
+    const d = decide(E, leg, { windowsDate: opts.windowsDate, osNorm, platform: process.platform, env: process.env });
+    if (d.status === "skipped") {
+      rows.push(recordOf(leg, "skipped", d.text, "", null, false, Date.now() - t0));
       continue;
     }
-    const blocked = windowBlock(leg, opts.windowsDate, osNorm);
-    if (blocked) {
-      rows.push(recordOf(leg, "refused", blocked, "", 78, false, Date.now() - t0));
+    if (d.status === "refused") {
+      rows.push(recordOf(leg, "refused", d.text, "", 78, false, Date.now() - t0));
       continue;
     }
-    const setWindows = !!leg.window;
-    const env = childEnv(leg, setWindows ? opts.windowsDate : "");
-    const ran = await runChild(leg, env);
+    const ran = await runChild(leg, d.env);
     const rec = recordOf(leg, "red", ran.stdout, ran.stderr, ran.exitCode, true, Date.now() - t0);
     rec.status = judgeRan(rec);
     rows.push(rec);

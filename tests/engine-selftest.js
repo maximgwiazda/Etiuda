@@ -672,8 +672,10 @@ try {
        + ", where " + slow.join(" and ") + " (npm run gates' two window scripts) are both launch-site files");
 
     /* 22e. NO GATE GIVES ITSELF THE WORD. The variable is named in tests/ and tools/ by engine.js
-       alone, and an environment is keyed by it only in this file's probes and in sbom.mjs's release
-       lab, whose window gates are `node -e 0`. */
+       alone, and an environment is keyed by it only in this file's probes, in sbom.mjs's release
+       lab, whose window gates are `node -e 0`, and in tools/ci-legs-decide.cjs, the verify runner's
+       one decision, which keys a child only from its dispatch's date on GitHub's Windows runner
+       (22f drives it arm by arm). */
     const LITERAL = new RegExp("ETIUDA_" + "WINDOWS"), KEYED = /\[\s*E\.WINDOWS_VAR\s*\]/;
     const every = (dir, rel) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? (d.name === "node_modules" ? [] : every(path.join(dir, d.name), rel + d.name + "/"))
@@ -682,9 +684,41 @@ try {
     const naming = scripts.filter(f => LITERAL.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
     const keying = scripts.filter(f => KEYED.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
     const plantedName = LITERAL.test("process.env." + "ETIUDA_" + "WINDOWS = today;");
-    ok(naming.join() === "tests/engine.js" && keying.join() === "tests/engine-selftest.js,tests/sbom.mjs" && plantedName,
+    ok(naming.join() === "tests/engine.js" && keying.join() === "tests/engine-selftest.js,tests/sbom.mjs,tools/ci-legs-decide.cjs" && plantedName,
        "22e the variable is named by " + JSON.stringify(naming) + " and keyed by " + JSON.stringify(keying) + " over "
        + scripts.length + " script(s) in tests/ and tools/; the regex finds a planted assignment (" + plantedName + ")");
+
+    /* 22f. THE VERIFY RUNNER TAKES THE WORD FROM ITS DISPATCH ALONE. A window leg spawns only on
+       GitHub's Windows runner, with the dispatch's windows_date equal to the wall's day: the word
+       set for that one run by the verdict that argued it (the test architect's channel, 549).
+       Every arm is driven through tools/ci-legs-decide.cjs itself, which spawns nothing. The
+       first arm is the positive control, so the rest cannot all pass by refusing everything. */
+    const { decide } = require(path.join(E.ROOT, "tools", "ci-legs-decide.cjs"));
+    const winLeg = { id: "csp", window: true, where: "linux-ok", who: "tests/csp.js" };
+    const nodeLeg = { id: "relay-unit", where: "linux-ok" };
+    const runnerEnv = { GITHUB_ACTIONS: "true" };
+    const profile = Object.assign({ [E.WINDOWS_VAR]: E.WINDOWS_DAY }, runnerEnv);
+    const arm = (leg, o) => decide(E, leg, Object.assign(
+      { platform: "win32", osNorm: "windows", env: runnerEnv, windowsDate: E.WINDOWS_DAY }, o));
+    const keyed = d => d.status === "spawn" && Object.prototype.hasOwnProperty.call(d.env, E.WINDOWS_VAR);
+    const walled = d => d.status === "refused" && /WINDOW WALL/.test(d.text);
+    const arms = [
+      ["the Windows runner with the day's date spawns, keyed with that date",
+        d => d.status === "spawn" && d.env[E.WINDOWS_VAR] === E.WINDOWS_DAY, arm(winLeg, {})],
+      ["no date, the workflow's default, is refused", walled, arm(winLeg, { windowsDate: "" })],
+      ["a date that is not the wall's day is refused", walled, arm(winLeg, { windowsDate: "1999-01-01" })],
+      ["the Linux job is refused", walled, arm(winLeg, { osNorm: "ubuntu", platform: "linux" })],
+      ["a windows job off win32 is refused", walled, arm(winLeg, { platform: "linux" })],
+      ["the laptop, with no GITHUB_ACTIONS, is refused", walled, arm(winLeg, { env: {} })],
+      ["a profile carrying the word, with no date, is refused", walled, arm(winLeg, { env: profile, windowsDate: "" })],
+      ["a node leg never inherits the word from a profile", d => d.status === "spawn" && !keyed(d), arm(nodeLeg, { env: profile })],
+      ["a node leg is not given the word by the day's date", d => d.status === "spawn" && !keyed(d), arm(nodeLeg, {})],
+    ];
+    const missed = arms.filter(([, good, d]) => !good(d)).map(([what]) => what);
+    ok(missed.length === 0,
+       "22f the verify runner keys a window leg only from its dispatch's date on the Windows runner: "
+       + (arms.length - missed.length) + " of " + arms.length + " arms hold"
+       + (missed.length ? "; these do not: " + missed.join("; ") : ""));
   }
 
   /* 24 to 24e: PARKING A SHORTCUT, board item 514. The reinstall loop runs a real installer
