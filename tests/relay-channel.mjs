@@ -2232,7 +2232,7 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
     env: Object.assign({}, process.env, { RELAY_TARGET: path.join("relay", "test", "targets", "product.cjs") }), timeout: 300000 });
   /* Slice 2 still open on the real channel, the same list as relay-unit 16a: remove an id when that attack goes green. */
-  const SLICE2_OPEN = ["S2-epoch-gone", "S2-remove", "S2-count", "S2-e2e-inuse", "S2-e2e-answer", "S2-e2e-stats", "S2-e2e-edit"];
+  const SLICE2_OPEN = ["S2-remove", "S2-count", "S2-e2e-inuse", "S2-e2e-answer", "S2-e2e-stats", "S2-e2e-edit"];
   const lines = (r.stdout || "").split(/\r?\n/);
   const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
   const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;

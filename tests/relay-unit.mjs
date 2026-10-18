@@ -892,7 +892,6 @@ async function main() {
   {
     /* Slice 2 still open on the real channel. One list: remove an id when that attack goes green. */
     const SLICE2_OPEN = [
-      "S2-epoch-gone",
       "S2-remove",
       "S2-count",
       "S2-e2e-inuse",
