@@ -62,6 +62,12 @@ const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 const isId = v => typeof v === "string" && ID_RE.test(v);
+/* A desk id is an id the program can write: the same shape, and not a reserved device name such as con or nul. */
+function isDeskId(v) {
+  if (!isId(v)) return false;
+  if (RESERVED.test(v)) return false; /* plant:desk-id */
+  return true;
+}
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -220,7 +226,7 @@ function writerOf(trust, keyId) {
   if (lead && typeof lead === "object" && lead.keyId === keyId && publicKeyOf(lead.public))
     hits.push({ role: "lead", keyId: keyId, public: lead.public });
   for (const d of Array.isArray(trust.desks) ? trust.desks : []) {
-    if (d && typeof d === "object" && d.keyId === keyId && isId(d.deskId) && !RESERVED.test(d.deskId) && publicKeyOf(d.public))
+    if (d && typeof d === "object" && d.keyId === keyId && isDeskId(d.deskId) && publicKeyOf(d.public))
       hits.push({ role: "desk", deskId: d.deskId, keyId: keyId, public: d.public });
   }
   return hits.length === 1 ? hits[0] : null;
@@ -357,6 +363,6 @@ function opened(input) {
 
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, PAD_FLOOR, NONCE_BYTES, TAG_BYTES, KEY_BYTES, AAD_LABEL, UPLOAD_PREFIX,
-  REASONS, refusal, isId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySig, seal, openBlob,
+  REASONS, refusal, isId, isDeskId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySig, seal, openBlob,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
 };

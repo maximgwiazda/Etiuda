@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 55;
+const EXPECTED = 57;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -32,6 +32,31 @@ function keyPair(keyId) {
 const pubKey = h => crypto.createPublicKey({ key: Buffer.concat([SPKI, Buffer.from(h, "hex")]), format: "der", type: "spki" });
 const flip = (buf, i) => { const b = Buffer.from(buf); b[i] ^= 1; return b; };
 const throwsOf = fn => { try { fn(); return false; } catch { return true; } };
+
+function liftBlob(tag, fn) {
+  const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = crypto.createHash("sha256").update(beforeBytes).digest("hex");
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = require.resolve(src);
+      delete require.cache[resolved];
+      turned = fn(require(src));
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  } finally {
+    fs.writeFileSync(src, beforeBytes);
+    try { delete require.cache[require.resolve(src)]; require(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  return { turned, back: crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest, detail };
+}
 
 function main() {
   let B = null;
@@ -435,6 +460,29 @@ function main() {
   check(shapeFirst === malformed.length, "9d a malformed blob is bad-signature before any later check: nonce zz off the trust, on a"
     + " replayed counter and under epoch 2, writer K-A, a 5000-byte ciphertext off the trust and on a replayed counter, signature x"
     + " off the trust: " + shapeFirst + " of " + malformed.length);
+
+  /* ---- 10: a desk id the program can write. isId still accepts a reserved device name; isDeskId and writerOf do not. ---- */
+  const reserved = ["con", "nul", "prn", "aux", "com1", "lpt9"];
+  const heldBack = reserved.filter(id => B.isId(id) === true && B.isDeskId(id) === false);
+  const ordinary = "k-" + hex(8);
+  const conKey = keyPair("k-" + hex(8)), nulKey = keyPair("k-" + hex(8)), ordinaryKey = keyPair(ordinary);
+  const deskTrust = (id, key) => ({ desks: [{ deskId: id, keyId: key.keyId, public: key.public }] });
+  const conW = B.writerOf(deskTrust("con", conKey), conKey.keyId);
+  const nulW = B.writerOf(deskTrust("nul", nulKey), nulKey.keyId);
+  const ordinaryW = B.writerOf(deskTrust(ordinary, ordinaryKey), ordinaryKey.keyId);
+  check(heldBack.length === reserved.length && B.isDeskId(ordinary) === true && conW === null && nulW === null
+    && !!ordinaryW && ordinaryW.role === "desk" && ordinaryW.deskId === ordinary,
+    "10a a reserved device name is not a desk id: isId accepts con, nul, prn, aux, com1 and lpt9, isDeskId refuses them, writerOf"
+    + " resolves none of con or nul, and an ordinary desk id still resolves: refused " + heldBack.length + " of " + reserved.length
+    + ", con " + (conW ? "resolved" : "refused") + ", nul " + (nulW ? "resolved" : "refused")
+    + ", ordinary " + (ordinaryW ? ordinaryW.deskId : "refused"));
+  const planted = liftBlob("plant:desk-id", mod => {
+    const k = keyPair("k-" + hex(8));
+    const w = mod.writerOf(deskTrust("con", k), k.keyId);
+    return mod.isId("con") === true && mod.isDeskId("con") === true && !!w && w.deskId === "con";
+  });
+  check(planted.turned && planted.back, "10b lifting plant:desk-id lets writerOf resolve a desk id of con, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 }
 
 try { main(); }
