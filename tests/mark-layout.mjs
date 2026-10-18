@@ -30,6 +30,12 @@
  * ink, and that stroke's frame reads no style and no size. Observers are
  * recorded and stay quiet until a leg fires one, so the 1700ms window fires
  * none: a read that lives in an observer is not a read in that window.
+ *
+ * THE BITMAP FOLLOWS THE RATIO. The tile's CSS size stays when the window moves
+ * to another screen or the zoom changes, so a content-box watch never fires.
+ * The stand-in records each ResizeObserver box and fires device-pixel-content-box
+ * on its own. That fire resizes the bitmap, and the repaints after it read no
+ * size and lay nothing out.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -37,7 +43,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 4;
+const EXPECTED = 5;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -109,6 +115,7 @@ function makeLab() {
         tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a, ink: ctx.strokeStyle });
     };
     const cv = { className: "", _w: 0, _h: 0, setAttribute() {}, getContext: () => ctx };
+    lab.canvas = cv;
     // The bitmap size is a layout. A repaint that sets it again would put the layouts back.
     Object.defineProperty(cv, "width", { get() { return cv._w; }, set(v) { if (lab.arm && v !== cv._w) mark(); cv._w = v; } });
     Object.defineProperty(cv, "height", { get() { return cv._h; }, set(v) { if (lab.arm && v !== cv._h) mark(); cv._h = v; } });
@@ -123,6 +130,7 @@ function makeLab() {
     }
   };
   const mos = [];
+  const ros = [];
   const doc = {
     hidden: false,
     body,
@@ -147,6 +155,13 @@ function makeLab() {
         mos.push({ cb: this.cb, target, filter: (options && options.attributeFilter) || null });
       }
       disconnect() {}
+    },
+    ResizeObserver: class {
+      constructor(cb) { this.cb = cb; }
+      observe(target, options) {
+        ros.push({ cb: this.cb, target, box: (options && options.box) || "content-box" });
+      }
+      disconnect() {}
     }
   };
   vm.runInNewContext(loadFifth() + "\nglobalThis.__f = { fifthLinePath, fifthRadius, fifthPhase, wireFifth };", sb);
@@ -155,10 +170,14 @@ function makeLab() {
   lab.tile = tile;
   lab.std = std;
   lab.body = body;
+  lab.sb = sb;
   lab.fireAttr = (target, name) => {
     mos.forEach(o => {
       if (o.target === target && (!o.filter || o.filter.indexOf(name) !== -1)) o.cb();
     });
+  };
+  lab.fireBox = box => {
+    ros.forEach(r => { if (r.box === box) r.cb(); });
   };
   lab.wire = o => sb.__f.wireFifth(o);
   lab.play = ms => {
@@ -219,6 +238,25 @@ check(band.draws.length === 1 && bandInk === "rgb(255, 255, 255)" && band.styleR
   "898d a deep band on body turns the stroke to " + (bandInk || "nothing")
   + ", and that repaint lays out " + band.layouts + " time(s), reads style " + band.styleReads
   + " time(s) and reads a size " + band.clientReads + " time(s)");
+
+const ratio = makeLab();
+ratio.wire();
+ratio.play(SETTLE);
+const beforeBmp = ratio.canvas._w;
+ratio.sb.devicePixelRatio = 2;
+ratio.fireBox("device-pixel-content-box");
+const afterBmp = ratio.canvas._w;
+ratio.zero();
+ratio.arm = true;
+ratio.play(WINDOW);
+const ratioLast = ratio.draws.length ? ratio.draws[ratio.draws.length - 1] : null;
+const wantRatio = 2 * (25 / wantVb);
+check(beforeBmp === 25 && afterBmp === 50 && ratio.draws.length >= 30 && ratio.draws.length <= 36
+  && ratio.draws.every(p => Math.abs(p.a - wantRatio) < 1e-6)
+  && ratio.clientReads === 0 && ratio.layouts === 0 && ratio.styleReads === 0 && ratio.dWrites === 0,
+  "898e a ratio change resizes the bitmap from " + beforeBmp + " to " + afterBmp
+  + " and the next window strokes at " + (ratioLast ? ratioLast.a : "nothing")
+  + ", with " + ratio.layouts + " layout(s) and " + ratio.clientReads + " size read(s)");
 
 if (asserted !== EXPECTED) {
   failed++;

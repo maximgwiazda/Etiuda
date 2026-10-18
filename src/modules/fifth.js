@@ -150,7 +150,11 @@ function headerPaint(node){
     if(cv.height!==bh) cv.height=bh;
   };
   fit();
-  if(typeof ResizeObserver==="function") new ResizeObserver(fit).observe(tile);
+  if(typeof ResizeObserver==="function"){
+    new ResizeObserver(fit).observe(tile);
+    // device-pixel-content-box changes when the ratio does and the CSS box does not. An unknown box throws.
+    try{ new ResizeObserver(fit).observe(tile,{box:"device-pixel-content-box"}); }catch(e){}
+  }
   return {
     readInk,
     show(d){
