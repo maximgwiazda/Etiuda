@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 58;
+const EXPECTED = 59;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1125,6 +1125,25 @@ try {
   check(halted.every(h => h.ok),
     "946d a lasting refusal about the sender or the epoch costs one upload a cycle however many files are owed, and each goes once it lifts:"
     + " PUTs a cycle with five owed, " + halted.map(h => h.reason + " " + h.per.join(",") + ", then " + h.sentNow + " of 5 sent").join("; "));
+
+  /* A lead's copy of the team file for an invitation, refused for a reason that can never lift, never stops the lead's own
+     team file of the same bytes: the root upload waits once (a refusal that lifts), the copy is refused as outside its place
+     every time, and the root file goes at the next cycle. */
+  const fTeam = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: FPIN.teamId, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+    channel: { kind: "relay", rt: FRT, url: URLV1 }, roster: [] }, LEAD), null, 1) + "\n";
+  let roots = 0;
+  const copyStop = await cycles("f4-copy-stop", meta => (String(meta.place).startsWith("invite:") ? refusal("outside-place")
+    : roots++ ? TAKEN : refusal("replay-counter")), { cycles: 2, who: LEAD, place: "root", files: { [C.TEAM_NAME]: fTeam },
+    inviteKeys: [{ id: hex(16), key: crypto.randomBytes(32) }] });
+  const rootSent = copyStop.st.sent[C.TEAM_NAME];
+  const copyWaits = copyStop.said.filter(l => l.indexOf("a copy of " + C.TEAM_NAME + " for one desk or invitation waits, and goes once this lifts: "
+    + B.REASONS["outside-place"]) === 0).length;
+  check(roots === 2 && !!rootSent && rootSent.sha === sha(Buffer.from(fTeam, "utf8")) && !copyStop.st.refused[C.TEAM_NAME]
+    && Object.keys(copyStop.st.sentInv).length === 0 && copyWaits === 1,
+    "946e a copy of the team file refused for good never stops the lead's own team file of the same bytes: root uploads " + roots
+    + ", the root file " + (rootSent ? "sent" : "NOT sent") + ", stopped " + (copyStop.st.refused[C.TEAM_NAME] ? "as " + copyStop.st.refused[C.TEAM_NAME].why : "never")
+    + ", the copy's wait said " + copyWaits + " time(s)");
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
