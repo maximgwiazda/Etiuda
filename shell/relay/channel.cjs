@@ -56,6 +56,7 @@ const crypto = require("node:crypto");
 const B = require("./blob.cjs");
 
 const TEAM_NAME = "etiuda-team.json";
+const HEAD_NAME = "etiuda-head.json";
 const STATE_KIND = "etiuda-relay-channel";
 /* A file received is an echo, not a change of this program's, for an hour after it was written, unless its bytes moved. */
 const ECHO_MS = 60 * 60 * 1000;
@@ -262,7 +263,7 @@ function readState(file) {
 
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
-    refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false };
+    refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false, headT: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -274,6 +275,7 @@ function stateOf(x) {
   if (count(x.own)) s.own = x.own;
   if (count(x.bytes)) s.bytes = x.bytes;
   if (count(x.leadEpoch)) s.leadEpoch = x.leadEpoch;
+  if (Number.isFinite(x.headT)) s.headT = x.headT;
   s.tokenUsed = x.tokenUsed === true;
   s.invited = x.invited === true;
   for (const [name, prefix] of [["counters", "c\n"], ["revs", "r\n"]]) {
@@ -318,6 +320,25 @@ function stateOf(x) {
   return s;
 }
 
+/* A short text the desk may show from a head: nothing hidden in it, and not so long that one head fills the row. */
+function headTextOk(s, max) {
+  return typeof s === "string" && s.length >= 1 && s.length <= max && !/[\u0000-\u001f\u007f]/.test(s);
+}
+/* The newest edition a head names. The greatest rev wins, and the last of a tie. One entry that is not well shaped
+   refuses the whole head, so a desk never shows a mixture. */
+function newestEdition(list) {
+  if (!Array.isArray(list) || !list.length) return null;
+  let best = null;
+  for (const e of list) {
+    if (!table(e) || !B.isId(e.catalog) || !Number.isSafeInteger(e.rev) || e.rev < 0) return null;
+    let published = e.published;
+    if (typeof published === "number" && Number.isFinite(published)) published = String(published);
+    if (!headTextOk(e.edition, 120) || !headTextOk(published, 80)) return null;
+    if (!best || e.rev >= best.rev) best = { edition: e.edition, published: published };
+  }
+  return best;
+}
+
 function createProgram(opts) {
   const o = opts || {};
   const io = o.io;
@@ -352,6 +373,25 @@ function createProgram(opts) {
     if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || relayOf(doc) !== pin.rt) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || !isCount(doc.rev)) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev };
+  }
+
+  /* The head the lead's Studio writes. The pinned lead's signature over the head prefix, and this team's name.
+     An older t than one already kept is left out. Whatever it says, the desk is not blocked. */
+  function headJudged(body, floor) {
+    if (!pin) return R("wrong-team");
+    let doc = null;
+    try { doc = JSON.parse(String(body).replace(/^\uFEFF/, "")); } catch { doc = null; }
+    if (!table(doc) || !table(doc.sig)) return R("bad-signature");
+    let bytes;
+    try { bytes = Buffer.concat([Buffer.from(HEAD_PREFIX, "utf8"), signedBytes(doc)]); } catch { return R("bad-signature"); }
+    if (!B.verifySig(pin.lead.public, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
+    if (doc.v !== 1) return R("bad-signature");
+    if (doc.team !== pin.teamId) return R("wrong-team");
+    if (!isCount(doc.epoch) || !isCount(doc.rev) || !Number.isFinite(doc.t)) return R("bad-signature");
+    const edition = newestEdition(doc.editions);
+    if (!edition) return R("bad-signature");
+    if (floor && Number.isFinite(st.headT) && doc.t < st.headT) return R("replay-counter");
+    return { ok: true, t: doc.t, edition: edition.edition, published: edition.published, epoch: doc.epoch, rev: doc.rev };
   }
 
   function keepTrust(t) {
@@ -394,6 +434,14 @@ function createProgram(opts) {
   function land(r) {
     const prev = has(st.applied, r.path) ? st.applied[r.path] : null;
     if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true };
+    /* Judged before the write, and said here: the batch's landing of a root file does not say a refusal of its own.
+       The counter stays where it was, so a later genuine head is not refused as a replay of one that was left out.
+       A deletion keeps the t already taken, so the same older head does not come back after the file is gone. */
+    let head = null;
+    if (r.path === HEAD_NAME && r.kind === "file") {
+      head = headJudged(r.body, true);
+      if (!head.ok) return dropSaid(HEAD_NAME, head);
+    }
     try {
       if (r.kind === "delete") io.remove(r.path);
       else io.write(r.path, r.body);
@@ -401,6 +449,7 @@ function createProgram(opts) {
       say(r.path + " could not be written into the mirror - " + (e && e.message));
       return { ok: false, reason: "unwritten", said: "That file could not be written into the mirror.", served: false };
     }
+    if (head) st.headT = head.t;
     st.counters = B.raiseCounter(st.counters, r.writerKeyId, r.epoch, r.counter); /* plant:floor-raise */
     st.applied[r.path] = { writer: r.writerKeyId, epoch: r.epoch, counter: r.counter, id: r.id, at: clock(),
       sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")), del: r.kind === "delete" };
@@ -840,6 +889,21 @@ function createProgram(opts) {
     return { ok: true };
   }
 
+  /* The head in this mirror, read again and verified. A missing or bad file shows nothing, and nothing is blocked. */
+  function headNews(now) {
+    const none = { shown: false, blocked: false, time: null, epoch: null, rev: null, ageMs: null, edition: null, published: null };
+    if (!pin) return none;
+    const raw = io.read(HEAD_NAME);
+    if (raw == null) return none;
+    let text;
+    try { text = UTF8.decode(toBytes(raw)); } catch { return none; }
+    const h = headJudged(text, false);
+    if (!h.ok) return none;
+    const at = Number.isFinite(now) ? now : clock();
+    return { shown: true, blocked: false, time: h.t, epoch: h.epoch, rev: h.rev, ageMs: at - h.t,
+      edition: h.edition, published: h.published };
+  }
+
   /* The head shown by its signed time, never as a block: only one the pinned lead signed for this relay. */
   function showFreshness(input) {
     const i = input || {};
@@ -871,7 +935,7 @@ function createProgram(opts) {
 
   return {
     setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
-    sentDeletion, unchain, allowUpload, showFreshness, readRing, readMirror, nextCounter, teamEpoch,
+    sentDeletion, unchain, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed() { st.tokenUsed = true; persist(); },

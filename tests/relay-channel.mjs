@@ -7,7 +7,10 @@
  * (a request and a team file sealed under the invitation's own key, in a place of its own) serves the invited desk and
  * nobody else; a relay address is followed only where an invitation pinned the lead (board 907), a relay file's own
  * ring pinning nobody (900i inverted); and an epoch move (F1): every remaining desk, live or offline, reaches the new epoch
- * by its own copy of the team file, and the desk taken off opens nothing of it. Throwaway keys and invented words only;
+ * by its own copy of the team file, and the desk taken off opens nothing of it. On a relay team the desk also reads the
+ * head the lead's Studio writes (etiuda-head.json): a genuine one is shown with its newest edition, when that edition
+ * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
+ * other team's head is dropped and said. A folder team shows nothing new. Throwaway keys and invented words only;
  * nothing contacts a host.
  *
  *     node tests/relay-channel.mjs     exit code is the number of failed checks, capped at 63; 78 where it did not complete
@@ -31,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 63;
+const EXPECTED = 71;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -132,6 +135,24 @@ function signDoc(doc, key) {
   o.sig.value = signHex(key, C.signedBytes(o));
   return o;
 }
+/* The head the lead's Studio writes, signed over the head prefix plus the same canonical bytes as a team file. */
+const HEAD_FILE = "etiuda-head.json";
+function signHead(doc, key) {
+  const o = JSON.parse(JSON.stringify(doc));
+  const k = key || LEAD;
+  o.sig = { alg: "Ed25519", keyId: k.keyId };
+  o.sig.value = signHex(k, Buffer.concat([Buffer.from(C.HEAD_PREFIX, "utf8"), C.signedBytes(o)]));
+  return JSON.stringify(o) + "\n";
+}
+function headBody(team, t, edition, published) {
+  return signHead({ v: 1, team: team, epoch: 1, rev: 1,
+    editions: [{ catalog: "quay-board", rev: 1, edition: edition, published: published }], t: t });
+}
+function dayStamp(ms) {
+  const d = new Date(ms), p = v => String(v).padStart(2, "0");
+  return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+const shownText = s => String(s).replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 const teamText = (rev, roster, more) => JSON.stringify(signDoc(Object.assign({ format: 1, kind: "etiuda-team", id: TEAM,
   catalogs: ["quay-board"], lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev,
   channel: { kind: "relay", rt: RT, url: URLV1 }, ring: RING, roster }, more || {}), LEAD), null, 1) + "\n";
@@ -1394,6 +1415,236 @@ try {
     + whileDown + ", then " + (caught ? 2 : "not caught up: the mirror's edition " + (read(mirror, "board.ec") === read(studioMirror, "board.ec")
       ? "is the lead's" : "is not the lead's") + ", the desk read " + factsOf(D.api.readCatalog() || "") + "; "
       + D.said.filter(l => l.indexOf("relay") >= 0).slice(-3).join(" / ")));
+  /* The head the lead's Studio writes. An older t cannot replace a newer one, so the old head is put first. */
+  let relayHeadShown = false;
+  try {
+    const headCh = () => D.api.relayRun();
+    const newsOf = () => {
+      const ch = headCh();
+      const p = ch && ch.program;
+      if (!p || typeof p.headNews !== "function") return null;
+      try { return p.headNews(Date.now()); } catch { return null; }
+    };
+    const pump = async () => {
+      await studio.kick(); await studio.idle();
+      const ch = headCh();
+      if (ch) { ch.kick(); await ch.idle(); }
+    };
+    let tookFn = null, pageMod = null, pageErr = "";
+    const pageHtml = async leads => {
+      try {
+        if (!pageMod) {
+          globalThis.window = globalThis.window || {};
+          globalThis.document = globalThis.document || {};
+          document.documentElement = document.documentElement || {};
+          document.body = { classList: { contains: () => false, toggle() {}, add() {}, remove() {} }, appendChild: el => el };
+          document.createElement = () => ({ className: "", id: "", style: {}, attrs: {}, innerHTML: "",
+            setAttribute() {}, appendChild: el => el, classList: { add() {}, remove() {}, contains: () => false, toggle() {} } });
+          document.getElementById = () => null;
+          document.querySelector = () => null;
+          document.querySelectorAll = () => [];
+          document.addEventListener = () => {};
+          document.removeEventListener = () => {};
+          window.addEventListener = () => {};
+          window.removeEventListener = () => {};
+          globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+          globalThis.innerWidth = 1280;
+          globalThis.innerHeight = 800;
+          window.E_HOST = { teamJoin: () => Promise.resolve({ leads: [] }), onTeamJoin: fn => { tookFn = fn; } };
+          const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
+          HK.hooks.render = () => {};
+          const TJ = await import(pathToFileURL(path.join(ROOT, "src", "modules", "team-join.js")).href);
+          const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+          const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
+          TJ.wireTeamJoin();
+          await wait(40);
+          pageMod = { ST, SET };
+        }
+        if (tookFn) tookFn({ leads: leads || [] });
+        pageMod.ST.lsSet("eUiLang", "en");
+        const en = shownText(pageMod.SET.settingsBodyHtml());
+        pageMod.ST.lsSet("eUiLang", "pl");
+        const pl = shownText(pageMod.SET.settingsBodyHtml());
+        pageMod.ST.lsSet("eUiLang", "en");
+        return { en, pl };
+      } catch (e) {
+        pageErr = e && e.stack ? e.stack : String(e);
+        return { en: "", pl: "" };
+      }
+    };
+    const leadsOf = async () => {
+      const v = await D.ask("etiuda:team-join", "leads");
+      return v && Array.isArray(v.leads) ? v.leads : [];
+    };
+    const teamLead = leads => leads.filter(l => l && l.team === TEAM2)[0] || null;
+    const absent = newsOf();
+    const stillLoaded = factsOf(D.api.readCatalog() || "") === 2;
+    const oldT = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    const oldText = headBody(TEAM2, oldT, "Quay two", "1 March 2026");
+    const oldLanded = await until(async () => { put(studioMirror, HEAD_FILE, oldText); await pump(); return read(mirror, HEAD_FILE) === oldText; }, 8000);
+    const oldNews = newsOf();
+    const oldLeads = await leadsOf();
+    const oldPage = await pageHtml(oldLeads);
+    const oldSentence = "Newest edition Quay two, published 1 March 2026. The team's news: " + dayStamp(oldT);
+    const oldPl = "Najnowsze wydanie Quay two, opublikowane 1 March 2026. Wiadomość zespołu: " + dayStamp(oldT);
+    const noteRel = "desks/" + me.id + "/note.ec";
+    const note = "Desk Nine still writes while the team's news is old.\n";
+    put(mirror, noteRel, note);
+    const noteSent = await until(async () => { await pump(); return read(studioMirror, noteRel) === note; }, 8000);
+    const oldLead = teamLead(oldLeads);
+    check(oldLanded && stillLoaded && absent && absent.shown === false && absent.blocked === false
+      && oldNews && oldNews.shown === true && oldNews.blocked === false && oldNews.edition === "Quay two"
+      && oldNews.published === "1 March 2026" && oldNews.ageMs > 2 * 24 * 60 * 60 * 1000
+      && oldLead && oldLead.head && oldLead.head.edition === "Quay two"
+      && oldPage.en.indexOf(oldSentence) >= 0 && oldPage.en.indexOf("just now") < 0
+      && oldPage.pl.indexOf(oldPl) >= 0 && noteSent && factsOf(D.api.readCatalog() || "") === 2,
+      "945b an old head is shown as old, with its edition and publish time, and nothing is blocked: the catalog still reads and a desk file still goes up: "
+      + (oldLanded ? "landed" : "not in the mirror") + ", news " + (oldNews ? oldNews.edition + " blocked " + oldNews.blocked : "none")
+      + ", note " + (noteSent ? "at the lead" : "not sent") + ", catalog " + factsOf(D.api.readCatalog() || "")
+      + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+    const freshT = Date.now();
+    const freshText = headBody(TEAM2, freshT, "Quay three", "2 March 2026");
+    const freshLanded = await until(async () => { put(studioMirror, HEAD_FILE, freshText); await pump(); return read(mirror, HEAD_FILE) === freshText; }, 8000);
+    const freshNews = newsOf();
+    const freshLeads = await leadsOf();
+    const freshPage = await pageHtml(freshLeads);
+    const freshLead = teamLead(freshLeads);
+    const enFresh = freshPage.en.indexOf("Newest edition Quay three, published 2 March 2026. The team's news: ") >= 0
+      && (freshPage.en.indexOf("The team's news: just now") >= 0 || freshPage.en.indexOf("The team's news: 1 min ago") >= 0);
+    const plFresh = freshPage.pl.indexOf("Najnowsze wydanie Quay three, opublikowane 2 March 2026. Wiadomość zespołu: ") >= 0
+      && (freshPage.pl.indexOf("Wiadomość zespołu: przed chwilą") >= 0 || freshPage.pl.indexOf("Wiadomość zespołu: 1 min temu") >= 0);
+    relayHeadShown = enFresh && plFresh;
+    check(freshLanded && freshNews && freshNews.shown === true && freshNews.blocked === false
+      && freshNews.edition === "Quay three" && freshNews.published === "2 March 2026"
+      && freshNews.ageMs >= 0 && freshNews.ageMs < 120000
+      && freshLead && freshLead.head && freshLead.head.edition === "Quay three" && freshLead.head.published === "2 March 2026"
+      && enFresh && plFresh,
+      "945a a genuine head is shown with its edition, when it was published, and how old the head is: "
+      + (freshNews ? freshNews.edition + " / " + freshNews.published + " / " + freshNews.ageMs + "ms" : "no news")
+      + ", english " + enFresh + ", polish " + plFresh + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+    const kept = read(mirror, HEAD_FILE);
+    const forgedObj = JSON.parse(freshText);
+    forgedObj.sig.value = (forgedObj.sig.value[0] === "a" ? "b" : "a") + forgedObj.sig.value.slice(1);
+    const forgedText = JSON.stringify(forgedObj) + "\n";
+    const forgedFrom = D.said.length;
+    const forgedSaid = await until(async () => {
+      put(studioMirror, HEAD_FILE, forgedText); await pump();
+      return D.said.slice(forgedFrom).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
+    }, 8000);
+    check(forgedSaid && read(mirror, HEAD_FILE) === kept,
+      "945c a forged head is dropped and said, and the mirror keeps the genuine one: "
+      + (forgedSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
+    const olderText = headBody(TEAM2, freshT - 60 * 1000, "Quay one", "1 March 2026");
+    const olderFrom = D.said.length;
+    const olderSaid = await until(async () => {
+      put(studioMirror, HEAD_FILE, olderText); await pump();
+      return D.said.slice(olderFrom).some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+    }, 8000);
+    check(olderSaid && read(mirror, HEAD_FILE) === kept,
+      "945d an older head is dropped and said, and the newer stays: "
+      + (olderSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
+    const otherText = headBody("t-" + hex(8), Date.now(), "Quay four", "3 March 2026");
+    const otherFrom = D.said.length;
+    const otherSaid = await until(async () => {
+      put(studioMirror, HEAD_FILE, otherText); await pump();
+      return D.said.slice(otherFrom).some(l => l.indexOf(B.REASONS["wrong-team"]) >= 0);
+    }, 8000);
+    check(otherSaid && read(mirror, HEAD_FILE) === kept,
+      "945e another team's head is dropped and said, and this team's stays: "
+      + (otherSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
+    /* plant:head-sig. Deleting that line, leaving the file valid script, lets a forged head through. */
+    {
+      const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+      const before = fs.readFileSync(src);
+      const digest = sha(before);
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = before.toString("utf8").split(/\n/);
+        const at = lines.findIndex(l => l.indexOf("plant:head-sig") >= 0);
+        if (at >= 0) {
+          lines.splice(at, 1);
+          fs.writeFileSync(src, lines.join("\n"));
+          const resolved = nodeRequire.resolve(src);
+          delete nodeRequire.cache[resolved];
+          const lifted = nodeRequire(src);
+          const dir = path.join(LAB, "head-plant-" + hex(4));
+          fs.mkdirSync(dir, { recursive: true });
+          const said = [];
+          const prog = lifted.createProgram({ io: lifted.diskIO(dir), pin: PIN2, say: l => said.push(l) });
+          const team = JSON.parse(team2(2, []));
+          const body = headBody(TEAM2, Date.now(), "Quay three", "2 March 2026");
+          const seal = (text, n) => B.seal({ relayTeamId: RT2, epoch: 1, teamKey: K2,
+            writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey }, path: HEAD_FILE, body: text, counter: n, place: "root" });
+          const first = prog.acceptBlob({ blob: seal(body, 1), teamDoc: team, teamKey: K2 });
+          const badObj = JSON.parse(body);
+          badObj.sig.value = (badObj.sig.value[0] === "a" ? "b" : "a") + badObj.sig.value.slice(1);
+          const badText = JSON.stringify(badObj) + "\n";
+          const second = prog.acceptBlob({ blob: seal(badText, 2), teamDoc: team, teamKey: K2 });
+          const wrote = read(dir, HEAD_FILE);
+          turned = first.ok === true && second.ok === true && wrote === badText;
+          detail = "genuine " + first.ok + ", forged accepted " + (second.ok === true) + ", file " + (wrote === badText ? "the forged one" : "not the forged one");
+        }
+      } catch (e) {
+        detail = e && e.message ? e.message : String(e);
+      } finally {
+        fs.writeFileSync(src, before);
+        try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+      }
+      const back = sha(fs.readFileSync(src)) === digest;
+      check(turned && back, "945g lifting plant:head-sig lets a forged head through, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
+    }
+    /* plant:head-show. Deleting that line, leaving the file valid script, drops the sentence. */
+    {
+      const src = path.join(ROOT, "src", "modules", "settings.js");
+      const before = fs.readFileSync(src);
+      const digest = sha(before);
+      let turned = false, detail = "plant line absent";
+      try {
+        if (tookFn) tookFn({ leads: freshLeads });
+        const lines = before.toString("utf8").split(/\n/);
+        const at = lines.findIndex(l => l.indexOf("plant:head-show") >= 0);
+        if (at >= 0 && pageMod) {
+          lines.splice(at, 1);
+          fs.writeFileSync(src, lines.join("\n"));
+          const SET2 = await import(pathToFileURL(src).href + "?plant=" + Date.now());
+          pageMod.ST.lsSet("eUiLang", "en");
+          const html = shownText(SET2.settingsBodyHtml());
+          turned = html.indexOf("Newest edition Quay three") < 0;
+          detail = turned ? "the sentence is gone" : "the sentence is still there";
+        }
+      } catch (e) {
+        detail = e && e.message ? e.message : String(e);
+      } finally {
+        fs.writeFileSync(src, before);
+      }
+      const back = sha(fs.readFileSync(src)) === digest;
+      check(turned && back, "945h lifting plant:head-show drops the sentence, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
+    }
+    const shareH = path.join(LAB, "head-folder");
+    fs.mkdirSync(shareH, { recursive: true });
+    const H = newDesk("head-folder-desk", shareH);
+    const hme = await H.ask("etiuda:branch-identity", true);
+    const KH = crypto.randomBytes(32), TEAMH = "t-" + hex(8);
+    const folderTeam = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMH, catalogs: ["quay-board"],
+      lead: { keyId: INTR.keyId, public: INTR.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+      channel: { kind: "relay", rt: hex(16), url: "https://evil.test/relay/v1" },
+      ring: { format: 1, kind: "etiuda-ring", keys: [{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.pub }] },
+      roster: [{ desk: { id: hme.id, key: hme.key, box: hme.box }, wrap: H.api.wrapTeamKey(KH, hme.box, TEAMH, 1, hme.id) }] }, INTR), null, 1) + "\n";
+    fs.writeFileSync(path.join(shareH, C.TEAM_NAME), folderTeam);
+    H.api.heedTeam();
+    fs.writeFileSync(path.join(shareH, HEAD_FILE), headBody(TEAMH, Date.now(), "Quay three", "2 March 2026"));
+    H.api.heedTeam();
+    const hv = await H.ask("etiuda:team-join", "leads");
+    const hleads = hv && Array.isArray(hv.leads) ? hv.leads : [];
+    const hpage = await pageHtml(hleads);
+    const noKey = hleads.length > 0 && hleads.every(l => !Object.prototype.hasOwnProperty.call(l, "head"));
+    check(relayHeadShown && noKey && hpage.en.indexOf("Newest edition") < 0 && H.api.catalogFolder() === shareH,
+      "945f a folder team shows nothing new, while the relay desk showed the head: leads " + hleads.length
+      + ", head " + (noKey ? "absent" : "present") + ", sentence " + (hpage.en.indexOf("Newest edition") < 0 ? "absent" : "shown")
+      + ", relay sentence " + relayHeadShown + ", folder " + (H.api.catalogFolder() === shareH ? "the share" : H.api.catalogFolder()));
+  } catch (e) {
+    check(false, "945 the team's news: " + (e && e.stack ? e.stack : e));
+  }
   /* F1 through the desk's own shell: the lead's Studio lends its box's agreement, takes a desk off with a new key, and this
      desk, holding only the first key, reaches the new epoch by itself: its own copy of the team file, its wrap opened by
      heedTeam, and the edition sealed under the new key loaded. */
