@@ -6,7 +6,13 @@
    OUT: a whole file this program writes in its own place in the mirror is sealed under the team key, signed and uploaded.
    A .tmp, the name an atomic write uses before its rename, is never sent; neither is a file the layer itself wrote from a
    download (an echo). What waits while the relay does not answer is the outbox: the files of this program's own place
-   whose bytes differ from what it last sent, which go after the catch-up.
+   whose bytes differ from what it last sent, which go after the catch-up. Each upload names the blob it replaces, so the
+   relay keeps one per chain. A file written again after its deletion names that deletion; where the relay has let the
+   deletion go, its keep over, it refuses the name as superseded and says of the deletion's own id that it expired. No blob
+   of that chain is served then, so the program forgets the deletion and the file goes at once as the first of a chain of
+   its own, a file of its own place and a desk's copy alike, with no step by anyone (S-readd-late and N3 of the reviews
+   of F1). Where the relay says the deletion was superseded instead, a newer blob of the chain is live, and the file
+   waits as any refusal that lifts.
 
    IN: each blob is fetched and judged through blob.cjs, the trust taken only from the signed team file this program holds
    (E1, E2): the lead's key is the pin, the desks' keys the signed roster of the blob's epoch, and the relay's own list is
@@ -20,8 +26,13 @@
    and at the root it is sealed under that key, which a desk holding only the old one cannot open. So the lead also seals
    the team file once for each desk its roster names, under a key only the lead and that desk can make: the X25519
    agreement of the lead's box (the file's lead.box) and the desk's (its roster entry's box), through HKDF bound to this
-   relay, team, lead key, desk and both boxes. Each such copy sits in a place of its own named by that agreement too, so
-   the relay sees one more lead copy and cannot tell whose. A desk opens only its own, under the pinned lead's signature,
+   relay, team, lead key, desk and both boxes. Each such copy sits in a place of its own named by that agreement too.
+   What the relay cannot tell: whose a copy is from its place or its bytes, the place being 128 bits of HKDF output only
+   that agreement makes; anything inside a copy; and anything from a fetch, since every desk fetches every blob listed.
+   What it can tell: that a place is a copy of the lead's and how many there are, which its own device list already
+   gives; that a copy pads to the size of the team file at the root; and, since a place stays the same for as long as
+   both boxes do, which place first took a copy just after an enrolment it was told of, or took the lead's deletion just
+   after a withdrawal, and so, by timing, whose that place is. A desk opens only its own, under the pinned lead's signature,
    takes the team file from it and so its own wrap, and loads what waited for the new key, with no step by anyone. A desk
    taken off the roster gets no copy of any later file, and its last one is superseded by the lead's signed deletion; and
    nothing any program sends is sealed under an epoch older than the team file it holds, so the new team file never goes
@@ -587,7 +598,8 @@ function createProgram(opts) {
 
   /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3's wrap in small), AND A DESK'S OWN COPY: what the lead sealed
      under one invitation's key alone, or under one desk's copy key alone, the team file for the desk that holds that key to
-     read before it holds the team key of the file's epoch. The relay cannot tell the two apart. A program that holds
+     read before it holds the team key of the file's epoch. The relay can tell the two apart, an invitation's place being
+     an id on its own list of invitations, but not whose a desk's copy is (the header's EPOCH MOVE). A program that holds
      neither key for that place passes over it and says nothing: it is not its file, and one it cannot open there is
      expected. The desk that holds it opens it under that key and the pinned lead's signature alone, and takes from it the
      team file and nothing else; a deletion there is the relay's keep for the copy, never applied to the mirror. */
@@ -764,6 +776,28 @@ function createProgram(opts) {
     persist();
   }
 
+  /* A chain the relay let go (the header's OUT): the id of the deletion this program last sent for that path or copy, where
+     the file owed there now is one written again after it; else null. */
+  function sentDeletion(op) {
+    const was = lastSent(op);
+    return op.kind === "file" && was && was.del ? was.id : null;
+  }
+  /* That deletion forgotten, the relay having said it lapsed: the file goes as the first of a chain of its own. True where
+     it was still the last this program sent there. */
+  function unchain(op, id) {
+    const was = lastSent(op);
+    if (op.kind !== "file" || !was || !was.del || was.id !== id) return false;
+    if (op.invite) {
+      delete st.sentInv[op.invite.id][op.rel];
+      if (!Object.keys(st.sentInv[op.invite.id]).length) delete st.sentInv[op.invite.id];
+    } else {
+      delete st.sent[op.rel];
+      st.bytes = Math.max(0, st.bytes - was.size);
+    }
+    persist();
+    return true;
+  }
+
   /* An upload refused: one that cannot lift (STOPS) stops that file until its bytes change; any other waits, the file left
      owed for the next cycle (F4). Each is said, a wait once while it lasts. A copy of the team file the lead owes a desk or
      an invitation always waits, so its refusal never stops the lead's own team file of the same bytes. True where it waits. */
@@ -832,7 +866,7 @@ function createProgram(opts) {
 
   return {
     setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
-    allowUpload, showFreshness, readRing, readMirror, nextCounter, teamEpoch,
+    sentDeletion, unchain, allowUpload, showFreshness, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed() { st.tokenUsed = true; persist(); },
@@ -1046,6 +1080,33 @@ function createChannel(opts) {
     return key ? { epoch: e, key } : null;
   }
 
+  /* One file owed, sealed, held to the limits and put: {ok}; {lim} where a limit held it; {r, why} where the relay did not
+     take it. */
+  async function upload(op, who, sealing) {
+    const blob = prog.sealOut(op, who, sealing);
+    const lim = prog.allowUpload(blob, who.keyId);
+    if (!lim.ok) return { lim };
+    const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
+      del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
+    if (sealing.byInvite) meta.pub = who.public;
+    const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
+    if (r.status === 200) { prog.sentOut(op, blob); return { ok: true }; }
+    return { r, why: r.refused || refusalOf(r) };
+  }
+
+  /* A file written again after its deletion, refused as superseded: true where the relay says of that deletion's own id that
+     its keep is over, or that it is gone, and the program has forgotten it. No blob of that chain is served then, so the
+     file goes as the first of a chain of its own and forks nothing. Where the relay says the deletion was superseded, a
+     newer blob of the chain is live, and the file waits as any refusal that lifts. */
+  async function lapsed(op) {
+    const id = prog.sentDeletion(op);
+    if (!id) return false;
+    const got = await authed("GET", "b/" + id);
+    if (got.status === 200) return false;
+    const why = got.refused || refusalOf(got);
+    return (why.reason === "expired" || why.reason === "missing") && prog.unchain(op, id);
+  }
+
   async function flush() {
     const who = me();
     if (!who || !who.privateKey) return { ok: true };
@@ -1058,17 +1119,12 @@ function createChannel(opts) {
         continue;
       }
       op.byInvite = !!sealing.byInvite;
-      const blob = prog.sealOut(op, who, sealing);
-      const lim = prog.allowUpload(blob, who.keyId);
-      if (!lim.ok) { if (lim.reason === "rate") return lim; prog.refusedOut(op, lim); continue; }
-      const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
-        del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
-      if (sealing.byInvite) meta.pub = who.public;
-      const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
-      if (r.status === 200) { prog.sentOut(op, blob); continue; }
-      const why = r.refused || refusalOf(r);
-      if (r.status === 0 || r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(why.reason) >= 0) return why;
-      if (prog.refusedOut(op, why) && HALTS.indexOf(why.reason) >= 0) return { ok: true };
+      let u = await upload(op, who, sealing);
+      if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
+      if (u.ok) continue;
+      if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
+      if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) return u.why;
+      if (prog.refusedOut(op, u.why) && HALTS.indexOf(u.why.reason) >= 0) return { ok: true };
     }
     return { ok: true };
   }

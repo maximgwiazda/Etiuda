@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 51;
+const EXPECTED = 57;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -589,7 +589,7 @@ try {
   }
   /* A desk: its keys held by epoch, its box, and its onTeam taking the key from its own wrap as heedTeam does. */
   function deskOf(tm, name, d, o) {
-    const held = new Map([[1, d.k1]]);
+    const held = new Map(d.start || [[1, d.k1]]);
     const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({ rt: tm.rt, pin: () => pinOf(tm), watch: false,
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
@@ -856,6 +856,164 @@ try {
   check(f6b.heldAtAsk && f6b.asked && !f6b.inviteCopy && f6b.joined,
     "945b a desk that read the invitation's copy before going offline joins the same way with an invitation naming no box, the lead's box"
     + " taken from the team file it holds (F1's copy alone): " + f6b.line);
+
+  /* ---- the test architect's scenarios on F1 (his read of 2026-10-18), each a team of its own: a desk added after a move,
+     a desk whose box changed, a desk taken off and put back inside the relay's 30-day keep and past it, each reaching the
+     next epoch by its own copy with no step by anyone; a file deleted and written again past that keep (N3 of the outside
+     review of 2026-10-18); and the binding of a copy's key and place to every field it names. ---- */
+  const reached = (d, epoch, key, file, text) => epochIn(d.mirror) === epoch && !!d.held.get(epoch) && d.held.get(epoch).equals(key)
+    && read(d.mirror, file) === text && d.prog.state().pending.length === 0;
+  const where = (d, epoch, file, text) => "mirror epoch " + epochIn(d.mirror) + ", key " + (d.held.get(epoch) ? "held" : "absent")
+    + ", the new file " + (read(d.mirror, file) === text ? "loaded" : "missing") + ", pending " + d.prog.state().pending.length;
+  const atPlace = (rt, id) => R.stores.get(rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k, v]) => k.startsWith("blob:") && v.place === "invite:" + id).map(([, v]) => v);
+
+  /* S-add: a desk added at epoch 2 rev 2, its mirror and the epoch-2 key as an invitation leaves them; then a move to epoch 3. */
+  {
+    const ta = await makeTeam();
+    const A1 = desk(), AN = Object.assign(desk(), { start: [[2, KM2]] });
+    await ta.enrol(A1.k);
+    const la = leadOf(ta, "s-add-lead", new Map([[1, KM1]]));
+    put(la.mirror, C.TEAM_NAME, teamDoc(ta, 1, 1, [entry(ta, A1, KM1, 1)]));
+    la.ch.start();
+    await settle(la);
+    la.held.set(2, KM2);
+    put(la.mirror, C.TEAM_NAME, teamDoc(ta, 2, 1, [entry(ta, A1, KM2, 2)]));
+    await settle(la);
+    await ta.enrol(A1.k, AN.k);
+    put(la.mirror, C.TEAM_NAME, teamDoc(ta, 2, 2, [entry(ta, A1, KM2, 2), entry(ta, AN, KM2, 2)]));
+    await settle(la);
+    const an = deskOf(ta, "s-add-desk", AN);
+    an.ch.start();
+    await settle(an);
+    const atTwo = epochIn(an.mirror);
+    la.held.set(3, KM3);
+    await ta.enrol(AN.k);
+    const ADDED = "{\"note\":\"Lane Board, written at the third key\"}\n";
+    put(la.mirror, C.TEAM_NAME, teamDoc(ta, 3, 1, [entry(ta, AN, KM3, 3)]));
+    put(la.mirror, "added.ec", ADDED);
+    await settle(la);
+    await settle(an);
+    check(atTwo === 2 && reached(an, 3, KM3, "added.ec", ADDED),
+      "944i S-add: a desk added at epoch 2 rev 2 holding only that epoch's key reaches epoch 3 by its own copy at the next move: at the add epoch "
+      + atTwo + "; after the move " + where(an, 3, "added.ec", ADDED));
+    await la.ch.stop(); await an.ch.stop();
+  }
+
+  /* S-box: a desk's box changes, the lead names the new box at rev 2, then a move; the copy at the old box's place is let go. */
+  {
+    const tb = await makeTeam();
+    const B1 = desk(), BB = desk();
+    await tb.enrol(B1.k, BB.k);
+    const lb = leadOf(tb, "s-box-lead", new Map([[1, KM1]]));
+    put(lb.mirror, C.TEAM_NAME, teamDoc(tb, 1, 1, [entry(tb, B1, KM1, 1), entry(tb, BB, KM1, 1)]));
+    lb.ch.start();
+    await settle(lb);
+    const bb1 = deskOf(tb, "s-box-desk", BB);
+    bb1.ch.start();
+    await settle(bb1);
+    await bb1.ch.stop();
+    const BB2 = Object.assign({}, BB, { box: boxPair() });
+    put(lb.mirror, C.TEAM_NAME, teamDoc(tb, 1, 2, [entry(tb, B1, KM1, 1), entry(tb, BB2, KM1, 1)]));
+    await settle(lb);
+    const bb2 = deskOf(tb, "s-box-desk", BB2);
+    bb2.ch.start();
+    await settle(bb2);
+    lb.held.set(2, KM2);
+    await tb.enrol(BB.k);
+    const BOXED = "{\"note\":\"Lane Board, written after the box changed\"}\n";
+    put(lb.mirror, C.TEAM_NAME, teamDoc(tb, 2, 1, [entry(tb, BB2, KM2, 2)]));
+    put(lb.mirror, "boxed.ec", BOXED);
+    await settle(lb);
+    await settle(bb2);
+    const oldCopy = copyOf(tb, BB), newCopy = copyOf(tb, BB2);
+    const oldPlace = oldCopy ? atPlace(tb.rt, oldCopy.id) : [], newPlace = newCopy ? atPlace(tb.rt, newCopy.id) : [];
+    check(reached(bb2, 2, KM2, "boxed.ec", BOXED) && oldPlace.length === 1 && oldPlace[0].del === true && newPlace.length === 1 && newPlace[0].del === false,
+      "944j S-box: a desk whose box changed, the lead naming the new box at rev 2, reaches the next epoch by the copy at its new box's place: "
+      + where(bb2, 2, "boxed.ec", BOXED) + "; the old box's place " + oldPlace.map(v => (v.del ? "a deletion" : "a copy")).join(", ")
+      + ", the new box's " + newPlace.map(v => (v.del ? "a deletion" : "a copy")).join(", "));
+    await lb.ch.stop(); await bb2.ch.stop();
+  }
+
+  /* S-readd and S-readd-late: a desk taken off at epoch 2 and put back at epoch 3 with the same box, the relay's clock moved
+     on `days` between; a page of the lead's let go at the removal and written again at the re-add. */
+  async function readd(name, days) {
+    const tr = await makeTeam();
+    const R1 = desk(), RR = desk();
+    await tr.enrol(R1.k, RR.k);
+    const lr = leadOf(tr, name + "-lead", new Map([[1, KM1]]));
+    const PAGE = "{\"note\":\"Lane Board, a page\"}\n", AGAIN = "{\"note\":\"Lane Board, the page written again\"}\n";
+    const BACK = "{\"note\":\"Lane Board, written at the re-add\"}\n";
+    put(lr.mirror, "page.ec", PAGE);
+    put(lr.mirror, C.TEAM_NAME, teamDoc(tr, 1, 1, [entry(tr, R1, KM1, 1), entry(tr, RR, KM1, 1)]));
+    lr.ch.start();
+    await settle(lr);
+    const r1 = deskOf(tr, name + "-stays", R1), rr = deskOf(tr, name + "-desk", RR);
+    r1.ch.start(); rr.ch.start();
+    await settle(r1, rr);
+    const one = epochIn(rr.mirror) === 1 && read(rr.mirror, "page.ec") === PAGE && read(r1.mirror, "page.ec") === PAGE;
+    await rr.ch.stop();
+    lr.held.set(2, KM2);
+    await tr.enrol(R1.k);
+    put(lr.mirror, C.TEAM_NAME, teamDoc(tr, 2, 1, [entry(tr, R1, KM2, 2)]));
+    fs.unlinkSync(path.join(lr.mirror, "page.ec"));
+    await settle(lr);
+    await settle(r1);
+    const copy = copyOf(tr, RR);
+    const off = copy ? atPlace(tr.rt, copy.id) : [];
+    const letGo = off.length === 1 && off[0].del === true && read(r1.mirror, "page.ec") === null;
+    R.clock.now += days * DAY;
+    await settle(lr, r1);
+    lr.held.set(3, KM3);
+    await tr.enrol(R1.k, RR.k);
+    const saidAt = lr.said.length;
+    put(lr.mirror, C.TEAM_NAME, teamDoc(tr, 3, 1, [entry(tr, R1, KM3, 3), entry(tr, RR, KM3, 3)]));
+    put(lr.mirror, "page.ec", AGAIN);
+    put(lr.mirror, "back.ec", BACK);
+    await settle(lr);
+    const quiet = lr.sent.length;
+    await settle(lr);
+    const rb = deskOf(tr, name + "-desk", RR);
+    rb.ch.start();
+    await settle(rb);
+    await settle(r1);
+    const on = copy ? atPlace(tr.rt, copy.id) : [];
+    const out = { one, letGo, back: reached(rb, 3, KM3, "back.ec", BACK), again: read(r1.mirror, "page.ec") === AGAIN,
+      onPlace: on.map(v => (v.del ? "a deletion" : "a copy")).join(", ") || "nothing", copyLive: on.length === 1 && on[0].del === false,
+      quiet: lr.sent.length === quiet, waits: lr.said.slice(saidAt).filter(l => l.indexOf(B.REASONS.superseded) >= 0).length,
+      where: where(rb, 3, "back.ec", BACK), extra: lr.sent.length - quiet };
+    await lr.ch.stop(); await r1.ch.stop(); await rb.ch.stop();
+    return out;
+  }
+  const inKeep = await readd("s-readd", 0);
+  check(inKeep.one && inKeep.letGo && inKeep.back && inKeep.copyLive && inKeep.quiet,
+    "944k S-readd: a desk taken off at epoch 2 and put back at epoch 3 with the same box reaches epoch 3 by its own copy: " + inKeep.where
+    + "; its place holds " + inKeep.onPlace);
+  const late = await readd("s-readd-late", 31);
+  check(late.one && late.letGo && late.back && late.copyLive && late.quiet && late.waits === 0,
+    "944m S-readd-late: the same, the relay's clock 31 days on before the re-add, its copy's deletion pruned past the keep: the desk reaches"
+    + " epoch 3 by its own copy with no step by anyone and no upload repeated: " + late.where + "; its place holds " + late.onPlace
+    + "; the lead said superseded " + late.waits + " time(s), uploads on a settled cycle " + late.extra);
+  check(late.again && inKeep.again,
+    "944o N3: a page the lead let go and wrote again 31 days on, its deletion pruned past the keep, reaches a desk that stayed, as it"
+    + " does inside the keep: past the keep " + (late.again ? "arrived" : "NOT ARRIVED") + ", inside it " + (inKeep.again ? "arrived" : "NOT ARRIVED"));
+
+  /* A copy's key and place are bound to every field deskCopyOf names: change any one alone and both change; a field with a
+     newline or out of its shape, or an all-zero agreement, makes nothing; the same inputs make the same copy. */
+  {
+    const dh = crypto.randomBytes(32);
+    const base = { rt: hex(16), teamId: "t-" + hex(8), leadKeyId: "lane-lead", leadBox: boxPair().pub, deskId: keyPair(true).keyId, deskBox: boxPair().pub };
+    const alt = { rt: hex(16), teamId: "t-" + hex(8), leadKeyId: "lane-lead-two", leadBox: boxPair().pub, deskId: keyPair(true).keyId, deskBox: boxPair().pub };
+    const a = deskCopyOf(dh, base), same = deskCopyOf(Buffer.from(dh), Object.assign({}, base));
+    const moved = Object.keys(alt).map(k => [k, deskCopyOf(dh, Object.assign({}, base, { [k]: alt[k] }))]).concat([["dh", deskCopyOf(crypto.randomBytes(32), base)]]);
+    const apart = moved.filter(([, c]) => !!a && !!c && c.id !== a.id && !c.key.equals(a.key)).map(([k]) => k);
+    const ids = new Set(moved.map(([, c]) => (c ? c.id : "none")));
+    const bent = Object.keys(base).filter(k => deskCopyOf(dh, Object.assign({}, base, { [k]: base[k] + "\n" })) === null);
+    check(!!a && !!same && same.id === a.id && same.key.equals(a.key) && apart.length === 7 && ids.size === 7 && bent.length === 6
+      && deskCopyOf(Buffer.alloc(32), base) === null && deskCopyOf(dh.subarray(0, 31), base) === null,
+      "944n a copy's key and place are bound to the relay team, the team, the lead's key, the lead's box, the desk and the desk's box: of 7 inputs"
+      + " each changed alone " + apart.length + " move both (" + apart.join(", ") + "); of 6 with a trailing newline " + bent.length
+      + " make nothing; the same inputs " + (same && a && same.id === a.id ? "the same copy" : "ANOTHER") + "; an all-zero or short agreement nothing");
+  }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
