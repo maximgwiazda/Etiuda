@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 96;
+const EXPECTED = 97;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -668,6 +668,43 @@ async function main() {
       "10i a hello naming a bound key, signed by another key or by none, opens nothing and lets no session go: the forged one "
       + (forged.json && forged.json.error || "OPENED A SESSION") + ", the unsigned one " + (bare.json && bare.json.error || "OPENED A SESSION")
       + ", the desk's resumed session then listing " + stillLists.status);
+  }
+
+  /* A bound key's resume ends when the invitation's 30-day keep does, whether or not a list has pruned the record by then (C2
+     of the test architect's read of cf90c15): two keys bound at the same moment; one resumes a minute inside the keep, the
+     other a minute past it with no list between; the session opened inside the keep then tries the one upload past the keep,
+     before a list prunes the record and after. */
+  {
+    const w = await world();
+    async function bindTo(who) {
+      const token = hex(32), id = hex(16);
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const n = await challenge(w);
+      const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
+        key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+      return { id, ok: r.status === 200 && r.json.invite === true };
+    }
+    const early = keyPair(true), late = keyPair(true), earlyDesk = "k-" + hex(8);
+    const a = await bindTo(early), b = await bindTo(late);
+    w.R.clock.now += C.KEEP_MS - MIN;
+    const inside = await helloAs(w, early);
+    w.R.clock.now += 2 * MIN;
+    const past = await helloAs(w, late);
+    const ask = counter => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: early.keyId, privateKey: early.privateKey }, path: "desks/" + earlyDesk + "/join.json", body: "ask", counter,
+      place: "desk:" + earlyDesk, kind: "file" });
+    const s = inside.json && inside.json.session;
+    const unpruned = await put(w, s, ask(1), { extra: { pub: early.pub } });
+    const listed = await since(w, await sessionOf(w, w.lead));
+    const kept = w.R.stores.get(w.rt).get("inv:" + a.id);
+    const pruned = await put(w, s, ask(2), { extra: { pub: early.pub } });
+    const said = r => (r.json && r.json.error) || String(r.status);
+    check(a.ok && b.ok && inside.status === 200 && inside.json.invite === true && refused(past, "not-enrolled")
+      && refused(unpruned, "token-spent") && listed.status === 200 && JSON.stringify(kept) === "{\"spent\":true}"
+      && refused(pruned, "token-spent"),
+      "10j a bound key's resume ends when the invitation's 30-day keep does, a list between or not: a minute inside the keep "
+      + said(inside) + ", a minute past it with no list between " + said(past) + "; the session opened inside the keep uploads past"
+      + " it " + said(unpruned) + " before a list and " + said(pruned) + " after the list kept " + JSON.stringify(kept));
   }
 
   /* ---- 11: chains and deletions ---- */

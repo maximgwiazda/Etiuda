@@ -206,9 +206,15 @@ function createCore(deps) {
     });
   }
 
-  /* An invitation spent by a token hello that bound this key, its one upload not yet made, while the relay keeps it. */
+  /* An invitation spent by a token hello that bound this key, its one upload not yet made, inside its keep: the binding ends
+     when the keep does, at the time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). */
   function boundInvite(key) {
-    for (const [k, v] of store.list("inv:")) if (v.spent && !v.uploaded && v.key === key && is(HEX64, v.pub)) return { id: k.slice(4), inv: v };
+    const now = clock();
+    for (const [k, v] of store.list("inv:")) {
+      if (!v.spent || v.uploaded || v.key !== key || !is(HEX64, v.pub)) continue;
+      if (now - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
+      return { id: k.slice(4), inv: v };
+    }
     return null;
   }
 
@@ -313,11 +319,16 @@ function createCore(deps) {
     return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null };
   }
 
-  /* An invitation's one upload: a writer on no list, at a desk place nobody holds, small, signed by the key its id names. */
+  /* An invitation's one upload: a writer on no list, at a desk place nobody holds, small, signed by the key its id names,
+     inside the invitation's keep. A record pruned to {spent: true} has lost its times and whether the upload was made, so it
+     admits nothing; nor does one past its keep that no list has pruned yet, so a session opened just inside the keep makes
+     no upload after it, a list between or not (C2 of the read of cf90c15). */
   function admitInvite(team, s, m) {
     const inv = store.get("inv:" + s.inv);
     if (!inv) return no("no-hello");
     if (inv.uploaded) return no("token-spent"); /* plant:invite-once */
+    if (inv.spentAt === undefined) return no("token-spent"); /* plant:invite-pruned */
+    if (clock() - inv.spentAt > KEEP_MS) return no("token-spent"); /* plant:invite-keep */
     if (s.bound && m.writer !== s.bound) return no("no-hello"); /* plant:invite-bound */
     if (m.writer === team.lead.keyId || store.get("dev:" + m.writer) !== undefined) return no("no-hello"); /* plant:invite-stranger */
     if (store.get("gone:" + m.writer) !== undefined) return no("removed"); /* plant:invite-removed */
