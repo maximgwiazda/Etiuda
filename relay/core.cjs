@@ -185,10 +185,10 @@ function createCore(deps) {
     const ch = is(HEX32, b.challenge) ? store.get("ch:" + b.challenge) : undefined;
     if (ch === undefined) return no("hello-replay"); /* plant:challenge-once */
     if (clock() - ch.at > CHALLENGE_MS) return no("nonce-stale"); /* plant:challenge-life */
-    return b.invite !== undefined ? byToken(b) : byKey(team, rt, b);
+    return b.invite !== undefined ? byToken(rt, b) : byKey(team, rt, b);
   }
 
-  function byToken(b) {
+  function byToken(rt, b) {
     const inv = is(HEX32, b.inv) ? store.get("inv:" + b.inv) : undefined;
     if (!inv) return no("not-enrolled");
     if (inv.fails >= TOKEN_TRIES) return no("token-tries"); /* plant:token-tries */
@@ -196,9 +196,20 @@ function createCore(deps) {
     const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
     if (!right) return failedTry(b.inv, inv); /* plant:token-match */
+    /* The desk's own key, where its hello is signed by it, is bound to the invitation as it is spent (N4): until the one
+       upload is made, that key and no token opens the invitation's session again, so a request lost on the way is sent
+       again without a second use of the token. */
+    const bound = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig)
+      ? { key: b.key, pub: b.pub } : {};
     return issue(b.challenge, { key: null, inv: b.inv }, () => {
-      store.put("inv:" + b.inv, Object.assign({}, inv, { spent: true, spentAt: clock() })); /* plant:token-spend */
+      store.put("inv:" + b.inv, Object.assign({}, inv, { spent: true, spentAt: clock() }, bound)); /* plant:token-spend */
     });
+  }
+
+  /* An invitation spent by a token hello that bound this key, its one upload not yet made, while the relay keeps it. */
+  function boundInvite(key) {
+    for (const [k, v] of store.list("inv:")) if (v.spent && !v.uploaded && v.key === key && is(HEX64, v.pub)) return { id: k.slice(4), inv: v };
+    return null;
   }
 
   function failedTry(id, inv) {
@@ -216,7 +227,15 @@ function createCore(deps) {
     const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
     if (!dev && gone && !verified(gone.pub, msg, b.sig)) return no("bad-signature"); /* plant:removed-sig */
     if (!dev && gone) return no("removed"); /* plant:removed-key */
-    if (!dev) return no("not-enrolled"); /* plant:key-enrolled */
+    if (!dev) {
+      /* A key on no list that a token hello bound: the invitation's session again, for its one upload, and only one held. */
+      const held = boundInvite(b.key);
+      if (held && verified(held.inv.pub, msg, b.sig)) /* plant:invite-resume */
+        return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
+          for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
+        });
+      return no("not-enrolled"); /* plant:key-enrolled */
+    }
     if (!verified(dev.pub, msg, b.sig)) return no("bad-signature"); /* plant:key-sig */
     return issue(b.challenge, { key: b.key, inv: null });
   }
@@ -229,9 +248,9 @@ function createCore(deps) {
       store.del("ch:" + nonce); /* plant:challenge-spend */
       const held = store.list("ses:").filter(([k, s]) => (s.until < now ? (store.del(k), false) : true)).sort((a, b) => a[1].until - b[1].until);
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
-      store.put("ses:" + sha256(token), { key: who.key, inv: who.inv, until });
+      store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
     });
-    return { ok: true, session: token, until };
+    return who.inv ? { ok: true, session: token, until, invite: true } : { ok: true, session: token, until };
   }
 
   function sessionByHash(h) {
@@ -239,7 +258,7 @@ function createCore(deps) {
     if (!s) return no("no-hello"); /* plant:session-known */
     if (clock() > s.until) return no("no-hello"); /* plant:session-life */
     if (s.removed) return no("removed"); /* plant:session-removed */
-    return { ok: true, hash: h, key: s.key, inv: s.inv, until: s.until };
+    return { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
   }
   const sessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
 
@@ -299,6 +318,7 @@ function createCore(deps) {
     const inv = store.get("inv:" + s.inv);
     if (!inv) return no("no-hello");
     if (inv.uploaded) return no("token-spent"); /* plant:invite-once */
+    if (s.bound && m.writer !== s.bound) return no("no-hello"); /* plant:invite-bound */
     if (m.writer === team.lead.keyId || store.get("dev:" + m.writer) !== undefined) return no("no-hello"); /* plant:invite-stranger */
     if (store.get("gone:" + m.writer) !== undefined) return no("removed"); /* plant:invite-removed */
     const pub = m.pub !== null ? m.pub : m.writer;

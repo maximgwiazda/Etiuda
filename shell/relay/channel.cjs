@@ -1027,7 +1027,9 @@ function createChannel(opts) {
       const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
       const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
       if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
-        session = { token: r.json.session, at: clock(), by: "key" };
+        /* The invitation's session again, where this key was bound by the token's one session and the request is not yet in
+           (N4): a request lost on the way, or a quit before it went, is sent again without the token. */
+        session = { token: r.json.session, at: clock(), by: r.json.invite === true ? "invite" : "key" }; /* plant:n4-resume */
         return { ok: true };
       }
       why = refusalOf(r);
@@ -1035,7 +1037,11 @@ function createChannel(opts) {
     }
     const inv = typeof o.invite === "function" ? o.invite() : null;
     if (!inv || prog.state().tokenUsed || !HEX32.test(String(inv.inv)) || typeof inv.token !== "string") return why;
-    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, invite: inv.token, inv: inv.inv } });
+    /* The token's hello names this desk's key and is signed by it, so the relay binds that key to the invitation it spends. */
+    const bind = who && who.privateKey && /^[0-9a-f]{64}$/.test(String(who.public))
+      ? { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") }
+      : {};
+    const r = await call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind) });
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed();
       session = { token: r.json.session, at: clock(), by: "invite" };

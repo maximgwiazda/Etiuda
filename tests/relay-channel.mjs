@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 76;
+const EXPECTED = 78;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -542,6 +542,49 @@ try {
   const deletion = entries().filter(([k, v]) => k.startsWith("blob:") && v.place === "invite:" + INV && v.del && v.supersedes === lastCopy);
   check(servedBefore && !copyNow && deletion.length === 1, "941e the invitation let go, the lead supersedes its copy with a signed deletion: copy "
     + (copyNow ? "still served" : "no longer served") + ", deletion records " + deletion.length);
+  /* N4: a joining desk whose connection drops on its first PUT, its request, after the token's one session (950a), or which quits
+     right then and runs again (950b), sends the request by itself without a new invitation: one token session in all, one upload
+     at the relay, the invitation spent and marked uploaded, no failed try. */
+  for (const quits of [false, true]) {
+    const SEC9 = hex(16), INV9 = hex(16), TOK9 = hex(32), KI9 = C.inviteSealKey(SEC9);
+    await invites([{ id: INV9, hash: sha(Buffer.from(TOK9, "utf8")) }], []);
+    liveInvites.push({ id: INV9, key: KI9 });
+    await settle(lead2);
+    const J9 = keyPair(true), name9 = "joiner-n4-" + (quits ? "quit" : "drop");
+    const rel9 = "desks/" + J9.keyId + "/join.json", body9 = "{\"kind\":\"etiuda-join\",\"note\":\"" + name9 + "\"}\n";
+    const t9 = transport(name9);
+    let puts = 0, tokenHellos = 0;
+    const request = async (method, url, headers, body) => {
+      if (method === "POST" && /\/session$/.test(String(url))) {
+        try { if (JSON.parse(Buffer.from(body).toString("utf8")).invite !== undefined) tokenHellos++; } catch { /* not JSON */ }
+      }
+      if (method === "PUT" && ++puts === 1) throw new Error("the connection dropped");
+      return t9.request(method, url, headers, body);
+    };
+    const opts9 = { keyFor: () => null, sealEpoch: () => null, invite: () => ({ inv: INV9, token: TOK9, seal: KI9 }), request, connect: t9.connect };
+    let j9 = program(name9, J9, "desk:" + J9.keyId, opts9);
+    put(j9.mirror, rel9, body9);
+    j9.ch.start();
+    await until(async () => { j9.ch.kick(); await j9.ch.idle(); return puts >= 1; }, 6000);
+    const strandedFirst = read(lead2.mirror, rel9) === null;
+    if (quits) {
+      await j9.ch.stop();
+      j9 = program(name9, J9, "desk:" + J9.keyId, opts9);
+      j9.ch.start();
+    }
+    const atLead = await until(async () => { await settle(j9); await settle(lead2); return read(lead2.mirror, rel9) === body9; }, 8000);
+    const rec = store().get("inv:" + INV9) || {};
+    const uploads = entries().filter(([k, v]) => k.startsWith("blob:") && v.writer === J9.keyId).length;
+    const used = j9.prog.state().tokenUsed === true;
+    await j9.ch.stop();
+    check(strandedFirst && atLead && puts >= 2 && tokenHellos === 1 && rec.spent === true && rec.uploaded === true && rec.fails === 0
+      && uploads === 1 && used,
+      (quits ? "950b" : "950a") + " a joining desk whose request was lost on its first PUT after the token's one session"
+      + (quits ? ", and which quit then and ran again," : "") + " sends it by itself without a new invitation: request "
+      + (atLead ? "at the lead" : "not at the lead") + ", PUTs " + puts + ", token sessions " + tokenHellos + ", uploads at the relay " + uploads
+      + ", the invitation " + (rec.spent ? "spent" : "not spent") + (rec.uploaded ? " and uploaded" : "") + ", failed tries " + rec.fails
+      + ", token used " + used + (strandedFirst ? "" : ", but the first PUT reached the lead"));
+  }
   await desk2.ch.stop(); await other.ch.stop(); await lead2.ch.stop();
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

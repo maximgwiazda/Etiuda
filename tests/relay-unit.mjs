@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 92;
+const EXPECTED = 95;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -611,6 +611,44 @@ async function main() {
       writer: { keyId: w.desk.keyId, privateKey: w.desk.privateKey }, path: "desks/k-new/x.json", body: "x", counter: 3,
       place: "desk:k-" + hex(8), kind: "file" }), { extra: { pub: w.desk.pub } });
     check(refused(removedVia, "removed"), "10e a withdrawn key cannot come back through an invitation's session");
+
+    /* N4: the token's one session binds the desk's key where the hello names it and is signed by it. Until the one upload, that
+       key's own hello opens the invitation's session again, the session before it let go; the token stays spent. */
+    const t3 = hex(32), id3 = hex(16), asker = keyPair(true), askDesk = "k-" + hex(8);
+    await invites(w, [{ id: id3, hash: sha(t3) }], []);
+    const n3 = await challenge(w);
+    const bound = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n3, invite: t3, inv: id3,
+      key: asker.keyId, pub: asker.pub, sig: signHex(asker, C.helloBytes(w.rt, n3, asker.keyId)) } });
+    const tokenAgain = await tokenHello(w, id3, t3);
+    const resumed = await helloAs(w, asker);
+    const strangerKey = await helloAs(w, keyPair(true));
+    const firstGone = await since(w, bound.json && bound.json.session);
+    check(bound.status === 200 && bound.json.invite === true && refused(tokenAgain, "token-spent") && resumed.status === 200
+      && resumed.json.invite === true && refused(strangerKey, "not-enrolled") && refused(firstGone, "no-hello"),
+      "10f a token hello signed by the desk's key binds it: that key's own hello opens the invitation's session again, marked as the"
+      + " invitation's, and lets the one before it go, while the token stays spent and another key opens nothing: "
+      + (resumed.json && resumed.json.error || "resumed") + ", the token " + (tokenAgain.json && tokenAgain.json.error));
+    const sealAsk = (who, counter) => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + askDesk + "/join.json", body: "ask", counter,
+      place: "desk:" + askDesk, kind: "file" });
+    const usurper = keyPair(true);
+    const rs = resumed.json && resumed.json.session;
+    const byUsurper = await put(w, rs, sealAsk(usurper, 1), { extra: { pub: usurper.pub } });
+    const askUp = await put(w, rs, sealAsk(asker, 1), { extra: { pub: asker.pub } });
+    const askSecond = await put(w, rs, sealAsk(asker, 2), { extra: { pub: asker.pub } });
+    const afterUp = await helloAs(w, asker);
+    check(refused(byUsurper, "no-hello") && askUp.status === 200 && refused(askSecond, "token-spent") && refused(afterUp, "not-enrolled"),
+      "10g the session a bound key opens again makes the invitation's one upload, by that key alone, and once it is made the key opens"
+      + " nothing until it is enrolled: another writer " + (byUsurper.json && byUsurper.json.error) + ", a second upload "
+      + (askSecond.json && askSecond.json.error) + ", the key's hello after " + (afterUp.json && afterUp.json.error));
+    const t4 = hex(32), id4 = hex(16), unsigned = keyPair(true);
+    await invites(w, [{ id: id4, hash: sha(t4) }], []);
+    const n4 = await challenge(w);
+    const loose = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4, invite: t4, inv: id4,
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)) } });
+    const looseKey = await helloAs(w, unsigned);
+    check(loose.status === 200 && refused(looseKey, "not-enrolled") && !("key" in (w.R.stores.get(w.rt).get("inv:" + id4) || {})),
+      "10h a token hello naming a key it is not signed by binds nothing: the session opens as before, and that key opens nothing");
   }
 
   /* ---- 11: chains and deletions ---- */
