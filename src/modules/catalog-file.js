@@ -21,7 +21,7 @@ import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
-import { catPackKey } from "./cat-set.js";
+import { catPackKey, catCatalogLabel } from "./cat-set.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
 import { rebuildCards } from "./rebuild.js";
@@ -647,7 +647,8 @@ function catalogEdited(){ return !sampleUntouched(); }
 /* WHETHER THE LAYER HOLDS ANYTHING AN EXPORT WOULD CARRY, for the desk's own file: the fields are
    LOOSE_FIELDS, read directly, and presence counts for all but three. The category editor writes the icon
    and the colour on every save, so those and the Polish name count only where they differ from what the
-   category would show with no pick at all. Order counts as sampleUntouched counts it. */
+   category would show with no pick at all. A declared language whose bag is not already one of those
+   fields counts the same way. Order counts as sampleUntouched counts it. */
 function deskBranchHolds(){
   const p=pack||{};
   const bare=(bag,k,read)=>{
@@ -659,7 +660,7 @@ function deskBranchHolds(){
     const m=p[bag]||{};
     return Object.keys(CATS).some(k=>m[k]!=null && m[k]!=="" && m[k]!==bare(bag,k,read));
   };
-  return LOOSE_FIELDS.some(f=>{
+  if(LOOSE_FIELDS.some(f=>{
     const v=p[f];
     if(f==="cardOrder") return !cardOrderIsBase();
     if(f==="facts" || f==="who") return v!=null;
@@ -667,6 +668,12 @@ function deskBranchHolds(){
     if(f==="catIcons") return differs(f,catIconKey);
     if(f==="catColors") return differs(f,catSlot);
     return Array.isArray(v) ? v.length>0 : !!v && typeof v==="object" && Object.keys(v).length>0;
+  })) return true;
+  const primary=CONTENT_LANGS[0]||"en";
+  return CONTENT_LANGS.slice(1).some(l=>{
+    const bag=catPackKey(l,primary);
+    if(LOOSE_FIELDS.indexOf(bag)>=0) return false;
+    return differs(bag,k=>catCatalogLabel(l,k));
   });
 }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
