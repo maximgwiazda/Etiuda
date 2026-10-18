@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 59;
+const EXPECTED = 63;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1144,6 +1144,106 @@ try {
     "946e a copy of the team file refused for good never stops the lead's own team file of the same bytes: root uploads " + roots
     + ", the root file " + (rootSent ? "sent" : "NOT sent") + ", stopped " + (copyStop.st.refused[C.TEAM_NAME] ? "as " + copyStop.st.refused[C.TEAM_NAME].why : "never")
     + ", the copy's wait said " + copyWaits + " time(s)");
+} catch (e) {
+  check(false, "harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a blob the relay could not serve for a reason that can pass is fetched again (N6(3) of the review of F6, F4 and F9,
+   the receive-side twin of F4): the test architect's probe is 947a, its control 947A. Only an answer that the blob is gone
+   lets it go (947c). A lead's three files over the relay as built; a desk whose transport answers one fetch as the leg says. ---- */
+try {
+  if (!W) throw new Error("no relay to drive");
+  const KN = crypto.randomBytes(32);
+  const FILES = { "lane.ec": "{\"note\":\"Lane Board edition one\"}\n", "zz.ec": "{\"note\":\"a later root file\"}\n" };
+  /* A team of its own with its lead's three files on the relay; a desk over it whose fetches of a blob go through `fault`
+     (method, url, the count of fetches of that blob so far) answering a reply, or null to reach the relay. */
+  async function laneTeam(name) {
+    const rt = hex(16), teamId = "t-" + hex(8), D = keyPair(true);
+    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+    if (made.status !== 200) throw new Error("a team for N6 was not made: " + JSON.stringify(made.json));
+    const list = [{ id: D.keyId, pub: D.pub, desk: D.keyId }], t = R.clock.now;
+    await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, list)) });
+    const pin = { teamId, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+    const lead = program(name + "-lead", LEAD, "root", { rt, pin: () => pin, keyFor: e => (e === 1 ? KN : null) });
+    put(lead.mirror, C.TEAM_NAME, JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamId, catalogs: ["lane-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+      channel: { kind: "relay", rt, url: URLV1 }, roster: [member(D)] }, LEAD), null, 1) + "\n");
+    for (const rel of Object.keys(FILES)) put(lead.mirror, rel, FILES[rel]);
+    lead.ch.start();
+    await settle(lead);
+    await lead.ch.stop();
+    const deskOn = (fault, o) => {
+      const net = transport(name + "-net"), fetched = new Map();
+      const request = async (method, url, headers, body) => {
+        const m = /\/b\/([0-9a-f]{32})$/.exec(String(url));
+        if (method === "GET" && m) {
+          fetched.set(m[1], (fetched.get(m[1]) || 0) + 1);
+          const f = fault(m[1], fetched.get(m[1]), fetched);
+          if (f) return { status: f.status, header: () => null, bytes: Buffer.from(JSON.stringify(f.body)) };
+        }
+        return net.request(method, url, headers, body);
+      };
+      const d = program(name + "-desk", D, "desk:" + D.keyId, Object.assign({ rt, pin: () => pin, watch: false, keyFor: e => (e === 1 ? KN : null),
+        request, connect: () => null }, o || {}));
+      return Object.assign(d, { fetched });
+    };
+    return { rt, deskOn };
+  }
+  const landed = d => [C.TEAM_NAME].concat(Object.keys(FILES)).filter(rel => read(d.mirror, rel) !== null).join(",");
+  const busy = { status: 503, body: { error: "fault" } }, gone = { status: 404, body: { error: "missing", said: B.REASONS.missing } };
+
+  /* The probe's case: the second blob the desk fetches answered 503 once; four more cycles. */
+  {
+    const tm = await laneTeam("n6-busy");
+    let failed = null;
+    const d = tm.deskOn((id, n, fetched) => (!failed && fetched.size === 2 && n === 1 ? (failed = id, busy) : null));
+    d.ch.start(); await d.ch.idle();
+    await settle(d); d.ch.kick(); await d.ch.idle();
+    const again = failed ? d.fetched.get(failed) : 0;
+    check(!!failed && again >= 2 && landed(d) === [C.TEAM_NAME, "lane.ec", "zz.ec"].join(",") && read(d.mirror, "lane.ec") === FILES["lane.ec"],
+      "947a n6c: a blob the relay answered 503 during a catch-up is fetched again and applied, and the files after it with it: fetched "
+      + again + " time(s), the mirror holds " + landed(d));
+    await d.ch.stop();
+  }
+  {
+    const tm = await laneTeam("n6-ctl");
+    const d = tm.deskOn(() => null);
+    d.ch.start(); await d.ch.idle();
+    check(landed(d) === [C.TEAM_NAME, "lane.ec", "zz.ec"].join(","), "947A n6c-control: with no fault one catch-up applies all three: " + landed(d));
+    await d.ch.stop();
+  }
+
+  /* A blob left for want of a key, answered 503 when the key comes and it is fetched again: it stays pending and lands. */
+  {
+    const tm = await laneTeam("n6-pend");
+    const held = new Map();
+    let busied = 0;
+    const d = tm.deskOn((id, n) => (n === 2 ? (busied++, busy) : null), { keyFor: e => held.get(e) || null });
+    d.ch.start(); await d.ch.idle();
+    const pendFirst = d.prog.state().pending.length;
+    held.set(1, KN);
+    d.ch.kick(); await d.ch.idle();
+    const pendBusy = d.prog.state().pending.length;
+    await settle(d);
+    check(pendFirst === 3 && busied === 3 && pendBusy === 3 && d.prog.state().pending.length === 0 && landed(d) === [C.TEAM_NAME, "lane.ec", "zz.ec"].join(","),
+      "947b a blob pending for its key and answered 503 when the key comes stays pending and lands at the next cycle: pending "
+      + pendFirst + ", " + busied + " answered 503, pending then " + pendBusy + ", at the end " + d.prog.state().pending.length + ", the mirror holds " + landed(d));
+    await d.ch.stop();
+  }
+
+  /* A blob the relay says is gone is let go: the catch-up moves past it, the files after it land, and it is not asked again. */
+  {
+    const tm = await laneTeam("n6-gone");
+    let failed = null;
+    const d = tm.deskOn((id, n, fetched) => (failed === id || (!failed && fetched.size === 2) ? (failed = id, gone) : null));
+    d.ch.start(); await d.ch.idle();
+    await settle(d);
+    const asked = failed ? d.fetched.get(failed) : 0;
+    check(!!failed && asked === 1 && landed(d).split(",").length === 2 && d.said.every(l => l.indexOf("The relay answered") < 0),
+      "947c a blob the relay says is gone (404) is let go and the catch-up goes on past it: fetched " + asked + " time(s), the mirror holds " + landed(d));
+    await d.ch.stop();
+  }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }

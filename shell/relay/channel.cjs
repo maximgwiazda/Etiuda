@@ -18,9 +18,11 @@
    (E1, E2): the lead's key is the pin, the desks' keys the signed roster of the blob's epoch, and the relay's own list is
    never read. A blob that passes is written into the mirror whole, by the atomic write the shell uses on a share; one that
    fails is dropped and said, never written. A deletion is only a signed record from the path's writer (E3), and a blob the
-   relay stops serving deletes nothing. A catch-up applies the team file first, then the other root files, then the desks',
-   so nothing is judged against a roster older than the batch. The floors (each writer's counter per epoch, the team file's
-   rev per team, lead key and epoch) and the place in the relay's sequence survive a restart.
+   relay stops serving deletes nothing. A blob it could not serve for a reason that can pass is fetched again, the catch-up
+   resuming from it at the next cycle; only an answer that the blob is gone lets it go. A catch-up applies the team file
+   first, then the other root files, then the desks', so nothing is judged against a roster older than the batch. The
+   floors (each writer's counter per epoch, the team file's rev per team, lead key and epoch) and the place in the relay's
+   sequence survive a restart.
 
    AN EPOCH MOVE (F1 of the slice 1 review). The team file of a new epoch carries each remaining desk's wrap of the new key,
    and at the root it is sealed under that key, which a desk holding only the old one cannot open. So the lead also seals
@@ -87,6 +89,9 @@ const STOPS = ["bad-path", "forged-delete", "outside-place", "blob-size", "bad-s
 /* Waits about who sends or the epoch it seals under, which every other file of the cycle meets too: the cycle's uploads stop
    at the first and go again at the next cycle. */
 const HALTS = ["epoch", "not-enrolled", "removed", "token-spent"];
+/* A fetch answered 404 or 410 says the blob is gone (missing, superseded, expired), and it is let go. Any other answer, a
+   fault, a limit or a session refused among them, can pass: the blob stays owed and is fetched again. */
+const gone = r => r.status === 404 || r.status === 410;
 
 const R = B.refusal;
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
@@ -1025,12 +1030,15 @@ function createChannel(opts) {
       let top = st.seq;
       for (const e of r.json) {
         if (!table(e) || !Number.isSafeInteger(e.seq) || e.seq <= top || !table(e.meta)) continue;
+        const before = top;
         top = e.seq;
         const m = e.meta;
         if (who && m.writer === who.keyId) continue;
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
         const got = await authed("GET", "b/" + m.id);
+        /* Not served for a reason that can pass (see gone): what came before it is applied and the next cycle asks from it. */
+        if (got.status !== 200 && !gone(got)) { prog.applyBatch(items, ctx()); prog.setSeq(before); return got.refused || refusalOf(got); } /* plant:fetch-kept */
         if (got.status !== 200) continue;
         items.push({ seq: e.seq, meta: table(got.meta) && got.meta.id === m.id ? got.meta : m, ct: got.bytes });
       }
@@ -1051,7 +1059,7 @@ function createChannel(opts) {
     for (const p of ready) {
       const got = await authed("GET", "b/" + p.id);
       if (got.status === 200 && table(got.meta) && got.meta.id === p.id) items.push({ seq: p.seq, meta: got.meta, ct: got.bytes, floor: p.floor });
-      else if (got.status !== 0) prog.unpend(p.id);
+      else if (got.status === 200 || gone(got)) prog.unpend(p.id); /* plant:pending-kept */
     }
     if (items.length) prog.applyBatch(items, c);
   }
