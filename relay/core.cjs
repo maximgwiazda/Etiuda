@@ -211,7 +211,8 @@ function createCore(deps) {
       for (const entry of replacing) {
         if (drop.has(entry.id)) continue;
         const cur = store.get("inv:" + entry.id);
-        if (!cur || cur.spent || !cur.hash) continue;
+        /* Opened, so spent, and not yet admitted: the new wrap replaces the old. An admitted invitation, or one kept only as spent, is left. */
+        if (!cur || cur.uploaded || !cur.hash) continue;
         let replace = false;
         replace = true; /* plant:S3-reseal */
         const next = Object.assign({}, cur);
