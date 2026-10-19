@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 53;
+const EXPECTED = 57;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -553,6 +553,104 @@ try {
         && stillEnv.kind === "etiuda-sealed" && stillEnv.team === TEAM,
         "14av a catalog the team file does not list is refused, and the catalog the first team covers still exports sealed:"
         + " " + said(refusedQ.r) + ", then " + said(stillQ.r) + ", team " + stillEnv.team);
+    }
+
+    /* The folder's own team seals an export when that team held the pin, whichever envelope was read first.
+       A claim that does not open, and a folder that holds the pin under two teams, still refuse. */
+    {
+      const prevSave = process.env.ETIUDA_TEST_SAVE_AS;
+      const take = async (D, save, name, made, pin) => {
+        process.env.ETIUDA_TEST_SAVE_AS = save;
+        await D.ask("etiuda:choose-catalog-save", "Export", name, "Catalogs");
+        const r = await D.ask("etiuda:write-catalog-save", made, { id: "lamp-shop", sha: pin });
+        const at = path.join(save, name);
+        const out = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null;
+        let env = {};
+        try { env = JSON.parse(out) || {}; } catch { env = {}; }
+        return { r: r, out: out, env: env };
+      };
+      const opensWith = (env, key) => env && env.kind === "etiuda-sealed" ? D1.api.openSealed(key, env) : null;
+      const pair = async (label) => {
+        const homeA = folder(label + "-a"), homeB = folder(label + "-b");
+        const D = newDesk(label, homeA);
+        const me = await D.ask("etiuda:branch-identity", true);
+        fs.writeFileSync(path.join(homeA, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+        fs.writeFileSync(path.join(homeB, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+        const TB = "t-" + crypto.randomBytes(8).toString("hex"), KB = crypto.randomBytes(32);
+        const point = dir => {
+          const e = D.envelope();
+          e.keys = Object.assign({}, e.keys, { eCatalogFolder: dir });
+          fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(e), "utf8");
+          D.ipc("etiuda:desk");
+        };
+        const admit = async (dir, team, key) => {
+          put(dir, "etiuda-team.json", JSON.stringify(teamFile({ team: team, epoch: 1, roster: [entry(me, key, 1, team)], exportsSealed: true })));
+          put(dir, "lamps.ec", seal(key, 1, A2, team));
+          point(dir);
+          return await read(D, "lamps.ec");
+        };
+        const pinOf = async () => (await row(D, "lamps.ec") || {}).sha || "";
+        return { D: D, homeA: homeA, homeB: homeB, TB: TB, KB: KB, point: point, admit: admit, pinOf: pinOf };
+      };
+      const cove = await pair("cove");
+      const coveB = await cove.admit(cove.homeB, cove.TB, cove.KB);
+      const covePin = await cove.pinOf();
+      const coveA = await cove.admit(cove.homeA, TEAM, K1);
+      const coveNamed = cove.D.api.teamOf(covePin);
+      const coveMade = text(catalog("lamp-export", 4, "Cove board", "2026-10-18"));
+      const coveBody = "Good day, Cove board.";
+      const coveGot = await take(cove.D, folder("cove-save"), "Cove.ec", coveMade, covePin);
+      const coveByA = opensWith(coveGot.env, K1), coveByB = opensWith(coveGot.env, cove.KB);
+      check(coveB === A2.trim() && coveA === A2.trim() && coveNamed === cove.TB && coveGot.env.team === TEAM
+        && coveGot.env.kind === "etiuda-sealed" && coveByA === coveMade && coveByB === null
+        && !!coveGot.out && coveGot.out.indexOf(coveBody) < 0,
+        "14aw with team B's envelope read before team A's, the export at A's folder is sealed for A and the pin stays"
+        + " the team read first: pin " + JSON.stringify(coveNamed) + ", " + said(coveGot.r) + ", team " + coveGot.env.team
+        + ", A's key opens it " + (coveByA === coveMade ? "yes" : "no") + ", B's key opens it " + (coveByB ? "yes" : "no")
+        + ", the body " + (coveGot.out && coveGot.out.indexOf(coveBody) >= 0 ? "is in the file" : "is not in the file"));
+      const inlet = await pair("inlet");
+      const inletA = await inlet.admit(inlet.homeA, TEAM, K1);
+      const inletPin = await inlet.pinOf();
+      const inletB = await inlet.admit(inlet.homeB, inlet.TB, inlet.KB);
+      const inletNamed = inlet.D.api.teamOf(inletPin);
+      const inletMade = text(catalog("lamp-export", 4, "Inlet board", "2026-10-18"));
+      const inletBody = "Good day, Inlet board.";
+      const inletGot = await take(inlet.D, folder("inlet-save"), "Inlet.ec", inletMade, inletPin);
+      const inletByB = opensWith(inletGot.env, inlet.KB), inletByA = opensWith(inletGot.env, K1);
+      check(inletA === A2.trim() && inletB === A2.trim() && inletNamed === TEAM && inletGot.env.team === inlet.TB
+        && inletGot.env.kind === "etiuda-sealed" && inletByB === inletMade && inletByA === null
+        && !!inletGot.out && inletGot.out.indexOf(inletBody) < 0,
+        "14ax with team A's envelope read before team B's, the export at B's folder is sealed for B and the pin stays"
+        + " the team read first: pin " + JSON.stringify(inletNamed) + ", " + said(inletGot.r) + ", team " + inletGot.env.team
+        + ", B's key opens it " + (inletByB === inletMade ? "yes" : "no") + ", A's key opens it " + (inletByA ? "yes" : "no"));
+      const reed = await pair("reed");
+      const reedA = await reed.admit(reed.homeA, TEAM, K1);
+      const reedPin = await reed.pinOf();
+      put(reed.homeA, "lamps.ec", seal(reed.KB, 1, A2, TEAM));
+      const reedForged = await read(reed.D, "lamps.ec");
+      const reedNamed = reed.D.api.teamOf(reedPin);
+      const reedMade = text(catalog("lamp-export", 4, "Reed board", "2026-10-18"));
+      const reedGot = await take(reed.D, folder("reed-save"), "Reed.ec", reedMade, reedPin);
+      const reedByA = opensWith(reedGot.env, K1), reedByB = opensWith(reedGot.env, reed.KB);
+      check(reedA === A2.trim() && reedForged !== A2.trim() && reedNamed === TEAM && reedGot.env.team === TEAM
+        && reedByA === reedMade && reedByB === null,
+        "14ay an envelope sealed under team B's key claiming team A, read after A's, does not open, and the export at A's"
+        + " folder stays sealed for A: opened " + (reedForged === A2.trim() ? "yes" : "no") + ", pin " + JSON.stringify(reedNamed)
+        + ", " + said(reedGot.r) + ", team " + reedGot.env.team);
+      const kiln = await pair("kiln");
+      const kilnA = await kiln.admit(kiln.homeA, TEAM, K1);
+      const kilnPin = await kiln.pinOf();
+      const kilnB = await kiln.admit(kiln.homeB, kiln.TB, kiln.KB);
+      kiln.point(kiln.homeA);
+      put(kiln.homeA, "other.ec", seal(kiln.KB, 1, A2, kiln.TB));
+      const kilnMade = text(catalog("lamp-export", 4, "Kiln board", "2026-10-18"));
+      const kilnGot = await take(kiln.D, folder("kiln-save"), "Kiln.ec", kilnMade, kilnPin);
+      if (prevSave === undefined) delete process.env.ETIUDA_TEST_SAVE_AS;
+      else process.env.ETIUDA_TEST_SAVE_AS = prevSave;
+      check(kilnA === A2.trim() && kilnB === A2.trim() && kilnGot.out === null
+        && said(kilnGot.r) === said({ name: "Kiln.ec", ok: false, sealed: true }),
+        "14az both teams' envelopes of one pin in A's folder, the export at A is refused: " + said(kilnGot.r)
+        + ", a file " + (kilnGot.out === null ? "no" : "yes"));
     }
   }
 
