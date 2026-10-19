@@ -152,12 +152,67 @@ function createTarget(limits) {
   }
 
   function hello(input) {
-    const body = input.token !== undefined
-      ? { challenge: input.nonce, invite: input.token, inv: input.invitationId }
-      : { challenge: input.nonce, key: input.keyId, sig: input.signature };
-    if (input.publicKey !== undefined && input.token === undefined) body.pub = input.publicKey;
+    let body;
+    if (input.token !== undefined) {
+      body = { challenge: input.nonce, invite: input.token, inv: input.invitationId };
+      const key = input.key !== undefined ? input.key : input.keyId;
+      const pub = input.pub !== undefined ? input.pub : input.publicKey;
+      const sig = input.sig !== undefined ? input.sig : input.signature;
+      if (key !== undefined) body.key = key;
+      if (pub !== undefined) body.pub = pub;
+      if (sig !== undefined) body.sig = sig;
+    } else {
+      body = { challenge: input.nonce, key: input.keyId, sig: input.signature };
+      if (input.publicKey !== undefined) body.pub = input.publicKey;
+    }
     const r = http("POST", teamPath(input.relayTeamId, "session"), { json: body });
-    return r.status === 200 ? { ok: true, session: r.json.session } : refusalOf(r);
+    if (r.status !== 200) return refusalOf(r);
+    const out = { ok: true, session: r.json.session };
+    if (r.json.until !== undefined) out.until = r.json.until;
+    if (r.json.invite === true) out.invite = true;
+    const boundKey = input.key !== undefined ? input.key : input.keyId;
+    if (out.invite && boundKey) {
+      sessions.set(input.relayTeamId + ":" + boundKey, {
+        token: r.json.session,
+        until: r.json.until,
+        invite: true,
+      });
+    }
+    return out;
+  }
+
+  function postInvites(relayTeamId, add, drop, wraps, opts) {
+    const team = teams.get(relayTeamId);
+    if (!team) return { ok: false, reason: "not-enrolled", said: B.REASONS["not-enrolled"], served: false };
+    const o = opts || {};
+    const signer = o.signer || team.lead;
+    const covered = o.cover === "bare" ? undefined : wraps;
+    let sig = sign(signer.privateKey, core.invitesBytes(relayTeamId, now, add, drop, covered));
+    if (o.signed === false) sig = sig.slice(-1) === "a" ? sig.slice(0, -1) + "b" : sig.slice(0, -1) + "a";
+    const json = { add: add, drop: drop, t: now, sig: sig };
+    if (wraps !== undefined) json.wraps = wraps;
+    return http("POST", teamPath(relayTeamId, "invites"), { json: json });
+  }
+
+  function openWrap(input) {
+    try {
+      const wrap = input && input.wrap;
+      const teamDoc = (input && input.teamDoc) || {};
+      if (!wrap || Number(wrap.epoch) !== Number(teamDoc.epoch)) {
+        return { ok: false, reason: "epoch", said: B.REASONS.epoch, served: false };
+      }
+      const secret = Buffer.isBuffer(input.secret) ? input.secret : Buffer.from(String(input.secret), "hex");
+      const wrapKey = Buffer.from(crypto.hkdfSync("sha256", secret, Buffer.alloc(0), Buffer.from("etiuda-invite-wrap", "utf8"), 32));
+      const ad = Buffer.from(["etiuda-invite-wrap", String(input.relayTeamId), String(input.teamId), String(input.invitationId), String(wrap.epoch), ""].join("\n"), "utf8");
+      const raw = Buffer.from(String(wrap.ct), "hex");
+      const decipher = crypto.createDecipheriv("aes-256-gcm", wrapKey, raw.subarray(0, 12));
+      decipher.setAAD(ad);
+      decipher.setAuthTag(raw.subarray(raw.length - 16));
+      const plain = JSON.parse(Buffer.concat([decipher.update(raw.subarray(12, raw.length - 16)), decipher.final()]).toString("utf8"));
+      return { ok: true, epoch: plain.epoch, key: Buffer.from(plain.key, "hex") };
+    } catch (e) {
+      return { ok: false, reason: "bad-signature", said: B.REASONS["bad-signature"], served: false };
+    }
   }
 
   /* The session a program would hold for its own key, opened with a fresh challenge when it has none or it has ended. */
@@ -240,14 +295,43 @@ function createTarget(limits) {
       const nextDevices = new Map([...team.devices].filter(([, v]) => v.desk !== deskId));
       return postDevices(relayTeamId, team, nextDevices);
     },
-    invite({ relayTeamId }) {
-      const team = teams.get(relayTeamId);
-      const token = crypto.randomBytes(32).toString("hex"), invitationId = crypto.randomBytes(16).toString("hex");
-      const add = [{ id: invitationId, hash: sha256(token) }];
-      const sig = sign(team.lead.privateKey, core.invitesBytes(relayTeamId, now, add, []));
-      const r = http("POST", teamPath(relayTeamId, "invites"), { json: { add, drop: [], t: now, sig } });
-      return r.status === 200 ? { token, invitationId } : refusalOf(r);
+    invite(input) {
+      const relayTeamId = input.relayTeamId;
+      const token = crypto.randomBytes(32).toString("hex");
+      const invitationId = input.invitationId || crypto.randomBytes(16).toString("hex");
+      const row = { id: invitationId, hash: sha256(token) };
+      if (input.wrap !== undefined) row.wrap = input.wrap;
+      if (input.until !== undefined) row.until = input.until;
+      const r = postInvites(relayTeamId, [row], [], undefined, input);
+      if (r.ok === false) return r;
+      return r.status === 200 ? { token: token, invitationId: invitationId } : refusalOf(r);
     },
+    reseal(input) {
+      const r = postInvites(input.relayTeamId, [], input.drop || [], input.wraps || [], input);
+      if (r.ok === false) return r;
+      if (r.status !== 200) return refusalOf(r);
+      const body = r.json || {};
+      return { ok: true, dropped: body.dropped || [], used: body.used || [] };
+    },
+    drop(input) {
+      const r = postInvites(input.relayTeamId, [], input.ids || [], undefined, input);
+      if (r.ok === false) return r;
+      if (r.status !== 200) return refusalOf(r);
+      const body = r.json || {};
+      return { ok: true, dropped: body.dropped || [], used: body.used || [] };
+    },
+    fetchWrap({ relayTeamId, session }) {
+      const r = http("GET", teamPath(relayTeamId, "wrap"), { token: session });
+      if (r.status !== 200) return refusalOf(r);
+      if (!r.json || r.json.wrap == null) return { ok: false, reason: "missing", said: B.REASONS.missing, served: false };
+      return { ok: true, served: true, wrap: r.json.wrap };
+    },
+    inviteStates({ relayTeamId, session }) {
+      const r = http("GET", teamPath(relayTeamId, "states"), { token: session });
+      if (r.status !== 200) return refusalOf(r);
+      return { ok: true, served: true, states: r.json && r.json.states };
+    },
+    openWrap,
     challenge,
     hello,
     helloMessage(relayTeamId, nonce, keyId) { return C.helloBytes(relayTeamId, nonce, keyId); },
