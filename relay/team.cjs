@@ -10,7 +10,7 @@ const core = require("./core.cjs");
 const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
-  "outside-place": 403, "token-spent": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
+  "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
   "replay-rev": 409, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };

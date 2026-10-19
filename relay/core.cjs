@@ -253,6 +253,20 @@ function createCore(deps) {
     const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
     if (!right) return failedTry(b.inv, inv); /* plant:token-match */
+    /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
+       still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
+    let ended = false;
+    ended = inv.until != null && clock() > inv.until; /* plant:S3-lapse */
+    if (ended) {
+      store.atomic(() => {
+        const cur = store.get("inv:" + b.inv);
+        if (!cur || cur.spent) return;
+        const next = Object.assign({}, cur);
+        delete next.wrap;
+        store.put("inv:" + b.inv, next);
+      });
+      return no("invite-ended");
+    }
     /* The first use is this hello, and only where it binds the desk's own key. A right token that binds no key is refused
        and spends nothing: the token stays unspent, the failure is not one of the 20 tries, and the challenge is kept. */
     const binds = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
