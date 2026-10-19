@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 100;
+const EXPECTED = 104;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -904,6 +904,109 @@ async function main() {
       && !!got && got.desk === ordinaryId,
       "3k a desk id of con or nul is refused, the rev unchanged by either, and an ordinary desk id still enrols: con "
       + (con.json && con.json.error) + ", nul " + (nul.json && nul.json.error) + ", rev " + w.rev);
+  }
+
+  /* A key removed earlier uploads one join through an invitation registered after the removal, and nothing else.
+     An invitation registered before the removal still refuses that upload. */
+  async function boundHello(w, who, id, token) {
+    const n = await challenge(w);
+    return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
+      key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+  }
+  function sealJoin(w, who, counter, place) {
+    return B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + place.slice(5) + "/join.json",
+      body: "ask " + counter, counter, place, kind: "file" });
+  }
+  async function removedThen(after) {
+    const w = await world();
+    const token = hex(32), id = hex(16);
+    if (!after) {
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const hello = await boundHello(w, w.desk, id, token);
+      await devices(w, w.devs.slice(1));
+      return { w, hello, id };
+    }
+    await devices(w, w.devs.slice(1));
+    w.R.clock.now += 1;
+    await invites(w, [{ id, hash: sha(token) }], []);
+    const hello = await boundHello(w, w.desk, id, token);
+    return { w, hello, id };
+  }
+  /* The team's module keeps the first exports object. A later require, after the cache is cleared, is a new
+     object, so every lift patches the first. */
+  let heldCore = null;
+  async function liftCore(tag, fn) {
+    const src = path.join(ROOT, "relay", "core.cjs");
+    const resolved = require.resolve(src);
+    if (!heldCore) heldCore = require(resolved);
+    const liveExports = heldCore;
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        fs.writeFileSync(src, lines.join("\n"));
+        delete require.cache[resolved];
+        liveExports.createCore = require(resolved).createCore;
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
+      try {
+        delete require.cache[resolved];
+        liveExports.createCore = require(resolved).createCore;
+      } catch { /* the next world loads the restored file */ }
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  {
+    const x = await removedThen(true);
+    const session = x.hello.json && x.hello.json.session;
+    const resumed = await helloAs(x.w, x.w.desk);
+    const quiet = await since(x.w, resumed.json && resumed.json.session);
+    const blob = sealJoin(x.w, x.w.desk, 1, "desk:" + x.w.deskId);
+    const rs = resumed.json && resumed.json.session;
+    const up = await put(x.w, rs, blob, { extra: { pub: x.w.desk.pub } });
+    const fetched = await getBlob(x.w, rs, blob.id);
+    const sock = await socket(x.w, rs);
+    const second = await put(x.w, rs, sealJoin(x.w, x.w.desk, 2, "desk:" + x.w.deskId), { extra: { pub: x.w.desk.pub } });
+    const later = await helloAs(x.w, x.w.desk);
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    check(x.hello.status === 200 && x.hello.json.invite === true && resumed.status === 200 && resumed.json.invite === true
+      && up.status === 200 && refused(quiet, "removed") && refused(fetched, "removed") && refused(sock, "removed")
+      && refused(second, "token-spent") && refused(later, "removed"),
+      "962a a key removed earlier uploads one join through an invitation registered after its removal, and neither reads, nor uploads"
+      + " again, nor opens a key session after: token " + said(x.hello) + ", resume " + said(resumed) + ", upload " + said(up)
+      + ", list " + said(quiet) + ", fetch " + said(fetched) + ", socket " + said(sock) + ", second " + said(second)
+      + ", key after " + said(later) + ", first session " + (session ? "open" : "none"));
+    const early = await removedThen(false);
+    const earlyBlob = sealJoin(early.w, early.w.desk, 1, "desk:" + early.w.deskId);
+    const earlyUp = await put(early.w, early.hello.json && early.hello.json.session, earlyBlob, { extra: { pub: early.w.desk.pub } });
+    check(early.hello.status === 200 && refused(earlyUp, "removed"),
+      "962b the same key presenting an invitation registered before its removal is refused: upload " + said(earlyUp));
+    const planted = await liftCore("plant:invite-removed", async () => {
+      const y = await removedThen(false);
+      const place = "desk:k-" + hex(8);
+      const yBlob = sealJoin(y.w, y.w.desk, 1, place);
+      const yUp = await put(y.w, y.hello.json && y.hello.json.session, yBlob, { extra: { pub: y.w.desk.pub } });
+      return y.hello.status === 200 && yUp.status === 200;
+    });
+    check(planted.turned && planted.back, "962c lifting plant:invite-removed accepts that earlier invitation's upload, and the file is put back: "
+      + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+    const quietPlant = await liftCore("plant:rejoin-quiet", async () => {
+      const y = await removedThen(true);
+      const listed = await since(y.w, y.hello.json && y.hello.json.session);
+      return y.hello.status === 200 && listed.status === 200;
+    });
+    check(quietPlant.turned && quietPlant.back, "962d lifting plant:rejoin-quiet lets that session list, and the file is put back: "
+      + quietPlant.detail + ", sha " + (quietPlant.back ? "restored" : "differs"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

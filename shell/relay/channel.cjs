@@ -281,7 +281,8 @@ function readState(file) {
 
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
-    refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false, headT: null };
+    refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
+    tokenUsedIds: {}, invitedIds: {}, headT: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -296,6 +297,13 @@ function stateOf(x) {
   if (Number.isFinite(x.headT)) s.headT = x.headT;
   s.tokenUsed = x.tokenUsed === true;
   s.invited = x.invited === true;
+  const idSet = m => {
+    const out = {};
+    if (table(m)) for (const k of Object.keys(m)) if (HEX32.test(k) && m[k] === true) out[k] = true;
+    return out;
+  };
+  s.tokenUsedIds = idSet(x.tokenUsedIds);
+  s.invitedIds = idSet(x.invitedIds);
   for (const [name, prefix] of [["counters", "c\n"], ["revs", "r\n"]]) {
     if (table(x[name])) for (const k of Object.keys(x[name])) if (k.startsWith(prefix) && count(x[name][k])) s[name][k] = x[name][k];
   }
@@ -492,12 +500,16 @@ function createProgram(opts) {
   /* One blob judged: blob.cjs's first line under `trust` at `epoch` with `key`, against `floors`; a key the newest
      loaded epoch leaves off its roster is then removed, at an older epoch and at the newest where an older roster named
      it; then a supersedes that names a blob this program took must name one of the same path and writer. */
-  function judge(blob, trust, epoch, key, floors) {
+  function judge(blob, trust, epoch, key, floors, asked) {
     const r = B.openBlob({ blob, relayTeamId: pin.rt, epoch, teamKey: key, trust, counters: floors });
     if (r.ok || r.reason === "not-roster") {
       const writer = r.ok ? r.writerKeyId : (blob && blob.writerKeyId);
       const at = r.ok ? r.epoch : (isCount(blob && blob.epoch) ? blob.epoch : epoch);
-      const gone = removedAfterMove(writer, at, r.ok);
+      const ask = asked === true && r.ok && r.kind === "file"
+        && r.path.toLowerCase() === ("desks/" + writer + "/join.json").toLowerCase()
+        && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX;
+      let gone = removedAfterMove(writer, at, r.ok);
+      if (ask) gone = null; /* plant:ask-rejoin */
       if (gone) return gone;
     }
     if (!r.ok) return r;
@@ -772,7 +784,7 @@ function createProgram(opts) {
     let last = null;
     for (const x of t.tries) {
       if (x.refuse) { last = R(x.refuse); break; }
-      const r = judge(blob, x.trust, m.epoch, x.key, floors);
+      const r = judge(blob, x.trust, m.epoch, x.key, floors, x.asked === true);
       if (r.ok && x.asked && !(r.kind === "file" && r.path.toLowerCase() === ("desks/" + m.writer + "/join.json").toLowerCase()
         && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX)) { last = R("outside-place"); break; }
       if (r.ok) return { it, r };
@@ -973,7 +985,10 @@ function createProgram(opts) {
       delete st.refused[k];
     }
     waiting.delete(op.invite ? "invite:" + op.invite.id : k);
-    if (op.byInvite) st.invited = true;
+    if (op.byInvite) {
+      st.invited = true;
+      if (HEX32.test(String(op.inviteId || ""))) st.invitedIds[String(op.inviteId)] = true;
+    }
     persist();
   }
 
@@ -1089,7 +1104,13 @@ function createProgram(opts) {
     sentDeletion, unchain, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
-    markTokenUsed() { st.tokenUsed = true; persist(); },
+    markTokenUsed(id) {
+      st.tokenUsed = true;
+      if (HEX32.test(String(id || ""))) st.tokenUsedIds[String(id)] = true;
+      persist();
+    },
+    tokenSpent(id) { return HEX32.test(String(id || "")) && st.tokenUsedIds[String(id)] === true; },
+    inviteSent(id) { return HEX32.test(String(id || "")) && st.invitedIds[String(id)] === true; },
     pending: () => st.pending.slice(),
     unpend(id) { unpend(id); persist(); },
   };
@@ -1184,23 +1205,27 @@ function createChannel(opts) {
         return { ok: true };
       }
       why = refusalOf(r);
-      if (why.reason !== "not-enrolled") return why;
     }
     const inv = typeof o.invite === "function" ? o.invite() : null;
-    if (!inv || prog.state().tokenUsed || !HEX32.test(String(inv.inv)) || typeof inv.token !== "string") return why;
+    const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
+    if (why.reason === "removed" && freshInvite) why = R("not-enrolled"); /* plant:removed-token */
+    if (why.reason !== "not-enrolled") return why;
+    let spent = prog.state().tokenUsed === true;
+    if (inv && prog.tokenSpent(inv.inv) === false && HEX32.test(String(inv.inv))) spent = false; /* plant:token-by-id */
+    if (!inv || spent || !HEX32.test(String(inv.inv)) || typeof inv.token !== "string") return why;
     /* The token's hello names this desk's key and is signed by it, so the relay binds that key to the invitation it spends. */
     const bind = who && who.privateKey && /^[0-9a-f]{64}$/.test(String(who.public))
       ? { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") }
       : {};
     const r = await call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind) });
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
-      prog.markTokenUsed();
+      prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite" };
       return { ok: true };
     }
     const t = refusalOf(r);
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
-    prog.markTokenUsed();
+    prog.markTokenUsed(inv.inv);
     return t;
   }
 
@@ -1219,7 +1244,9 @@ function createChannel(opts) {
 
   /* An invitation's session serves one upload; once that is made, each cycle asks whether the lead has enrolled this key. */
   async function ensureSession() {
-    if (session && session.by === "invite" && prog.state().invited) {
+    const id = ctx().inviteId;
+    if (session && session.by === "invite" && id && prog.tokenSpent(id) === false && prog.inviteSent(id) === false) return openSession();
+    if (session && session.by === "invite" && (id ? prog.inviteSent(id) === true : prog.state().invited === true)) {
       const k = await keySession();
       if (k.ok || k.reason !== "not-enrolled") return k;
     }
@@ -1247,7 +1274,12 @@ function createChannel(opts) {
     for (let round = 0; round < 1000; round++) {
       const st = prog.state();
       const r = await authed("GET", "since/" + st.seq);
-      if (r.status !== 200 || !Array.isArray(r.json)) return r.refused || refusalOf(r);
+      if (r.status !== 200 || !Array.isArray(r.json)) {
+        const why = r.refused || refusalOf(r);
+        /* A key removed earlier holds an invitation's session that may not list. Its one request still goes. */
+        if (session && session.by === "invite" && why.reason === "removed") return { ok: true };
+        return why;
+      }
       const items = [];
       let top = st.seq;
       for (const e of r.json) {
@@ -1299,9 +1331,11 @@ function createChannel(opts) {
       return isCount(e) && key ? { epoch: e, key } : null;
     }
     if (session && session.by === "invite") {
-      const inv = ctx().inviteSeal, st = prog.state();
+      const c = ctx(), inv = c.inviteSeal, st = prog.state();
       const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
-      if (!inv || st.invited || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null; /* plant:invite-join */
+      let sent = st.invited === true;
+      if (c.inviteId && prog.inviteSent(c.inviteId) === false) sent = false; /* plant:invited-by-id */
+      if (!inv || sent || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null; /* plant:invite-join */
       return { epoch: Math.max(1, st.leadEpoch), key: inv, byInvite: true };
     }
     const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
@@ -1349,6 +1383,7 @@ function createChannel(opts) {
         continue;
       }
       op.byInvite = !!sealing.byInvite;
+      if (sealing.byInvite) op.inviteId = ctx().inviteId;
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok) continue;

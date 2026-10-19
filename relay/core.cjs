@@ -119,7 +119,11 @@ function createCore(deps) {
     }
     const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
     store.atomic(() => {
-      for (const id of withdrawn) { store.put("gone:" + id, store.get("dev:" + id)); store.del("dev:" + id); }
+      for (const id of withdrawn) {
+        const was = store.get("dev:" + id);
+        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock() }));
+        store.del("dev:" + id);
+      }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       store.put("devrev", b.rev);
       for (const [k, s] of store.list("ses:")) if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
@@ -158,7 +162,7 @@ function createCore(deps) {
         if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
-      for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false });
+      for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false, at: now });
     });
     return { ok: true, dropped: [...drop] };
   }
@@ -201,6 +205,11 @@ function createCore(deps) {
        again without a second use of the token. */
     const bound = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig)
       ? { key: b.key, pub: b.pub } : {};
+    /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
+    if (bound.key) {
+      const gone = store.get("gone:" + bound.key);
+      if (gone && !registeredAfter(inv, gone)) return no("removed");
+    }
     return issue(b.challenge, { key: null, inv: b.inv }, () => {
       store.put("inv:" + b.inv, Object.assign({}, inv, { spent: true, spentAt: clock() }, bound)); /* plant:token-spend */
     });
@@ -232,7 +241,15 @@ function createCore(deps) {
     }
     const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
     if (!dev && gone && !verified(gone.pub, msg, b.sig)) return no("bad-signature"); /* plant:removed-sig */
-    if (!dev && gone) return no("removed"); /* plant:removed-key */
+    if (!dev && gone) {
+      /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
+      const held = boundInvite(b.key);
+      if (held && registeredAfter(held.inv, gone) && verified(held.inv.pub, msg, b.sig))
+        return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
+          for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
+        });
+      return no("removed"); /* plant:removed-key */
+    }
     if (!dev) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload, and only one held. */
       const held = boundInvite(b.key);
@@ -259,12 +276,30 @@ function createCore(deps) {
     return who.inv ? { ok: true, session: token, until, invite: true } : { ok: true, session: token, until };
   }
 
+  /* An invitation registered strictly after the key was withdrawn. A missing time, or the same time, is not after. */
+  function registeredAfter(inv, gone) {
+    return !!inv && !!gone && Number.isSafeInteger(inv.at) && Number.isSafeInteger(gone.at) && inv.at > gone.at;
+  }
+
+  /* An invitation's session bound to a key removed earlier may put its one request and may not read. */
+  function quietSession(s) {
+    if (!s || !s.inv || s.key) return false;
+    const inv = store.get("inv:" + s.inv);
+    if (!inv) return false;
+    const who = s.bound || inv.key;
+    if (!who) return false;
+    const gone = store.get("gone:" + who);
+    return registeredAfter(inv, gone);
+  }
+
   function sessionByHash(h) {
     const s = is(HEX64, h) ? store.get("ses:" + h) : undefined;
     if (!s) return no("no-hello"); /* plant:session-known */
     if (clock() > s.until) return no("no-hello"); /* plant:session-life */
     if (s.removed) return no("removed"); /* plant:session-removed */
-    return { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
+    const out = { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
+    if (quietSession(out)) out.quiet = true; /* plant:rejoin-quiet */
+    return out;
   }
   const sessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
 
@@ -283,6 +318,7 @@ function createCore(deps) {
   function since(token, after) {
     const s = sessionOf(token);
     if (!s.ok) return s;
+    if (s.quiet) return no("removed");
     const now = clock(), items = [];
     for (const [, id] of store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX })) {
       const m = store.get("blob:" + id);
@@ -294,6 +330,7 @@ function createCore(deps) {
   function blobFor(token, id) {
     const s = sessionOf(token);
     if (!s.ok) return s;
+    if (s.quiet) return no("removed");
     const now = clock();
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
     if (m && expired(m, now)) return no("expired");
@@ -331,10 +368,12 @@ function createCore(deps) {
     if (clock() - inv.spentAt > KEEP_MS) return no("token-spent"); /* plant:invite-keep */
     if (s.bound && m.writer !== s.bound) return no("no-hello"); /* plant:invite-bound */
     if (m.writer === team.lead.keyId || store.get("dev:" + m.writer) !== undefined) return no("no-hello"); /* plant:invite-stranger */
-    if (store.get("gone:" + m.writer) !== undefined) return no("removed"); /* plant:invite-removed */
+    const goneRec = store.get("gone:" + m.writer);
+    if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
     const pub = m.pub !== null ? m.pub : m.writer;
     if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
-    if (m.place === "root" || deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
+    const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
+    if (m.place === "root" || !ownDesk && deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
     return { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub, lead: false, invite: s.inv, inv };
   }
 
