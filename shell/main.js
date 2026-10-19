@@ -262,12 +262,14 @@ function ecFromArgv(argv) {
    base64url, handed to inviteRead as etiuda-join: and the same text. A folder invitation, a page
    address, a link wrapped twice and anything longer than 8192 characters are said and dropped,
    and a refusal reads nothing from disk. Nothing joins: the confirm is still the person's yes. */
-const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
-const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
-const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
-const LINK_FORM_PL = "Proszę wkleić zaproszenie w Etiudzie. Etiuda otwiera zaproszenie tylko ze swojego odnośnika.";
-const LINK_LONG = "Ask your lead for a new invitation. This one is longer than Etiuda opens.";
-const LINK_LONG_PL = "Proszę poprosić lidera o nowe zaproszenie. To jest dłuższe, niż Etiuda otwiera.";
+const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
+const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
+const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
+const LINK_FORM_PL = "Etiuda nie potrafi odczytać tego odnośnika, więc niczego nie otwarto ani nie wysłano. Zaproszenie można zamiast tego wkleić w Etiudzie.";
+const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothing was sent. Ask your lead for a new one.";
+const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
+const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
+const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
 function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
 function linkLooks(s) {
   const head = s.slice(0, 12).toLowerCase();
@@ -323,17 +325,18 @@ function handPendingLink(win) {
   try { win.webContents.send("etiuda:team-join", view); }
   catch (e) { pendingLink = view; }
 }
+function sayLinkRefusal(got) {
+  console.error("etiuda: " + got.saidEn + " " + got.saidPl);
+  heldLinkText = "";
+  handLinkView({ linkRefusal: { en: got.saidEn, pl: got.saidPl } });
+  return { refused: got.refused, said: got.saidEn };
+}
 function acceptLink(arg) {
   const got = linkFromArg(arg);
   if (!got) return null;
-  if (got.refused) {
-    console.error("etiuda: " + got.saidEn + " " + got.saidPl);
-    heldLinkText = "";
-    handLinkView({ linkRefusal: { en: got.saidEn, pl: got.saidPl } });
-    return { refused: got.refused, said: got.saidEn };
-  }
+  if (got.refused) return sayLinkRefusal(got);
   const view = readInvite(got.text);
-  if (!view || !view.offer) return { refused: LINK_FORM, said: LINK_FORM }; /* plant:link-offer */
+  if (!view || !view.offer) return sayLinkRefusal(linkRefusal(LINK_NO_TEAM, LINK_NO_TEAM_PL)); /* plant:link-offer */
   const clean = linkOfferView(view, got.parsed);
   heldLinkText = got.text;
   handLinkView(clean);

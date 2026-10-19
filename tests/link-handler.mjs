@@ -23,13 +23,15 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 24;
-const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
-const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
-const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
-const LINK_FORM_PL = "Proszę wkleić zaproszenie w Etiudzie. Etiuda otwiera zaproszenie tylko ze swojego odnośnika.";
-const LINK_LONG = "Ask your lead for a new invitation. This one is longer than Etiuda opens.";
-const LINK_LONG_PL = "Proszę poprosić lidera o nowe zaproszenie. To jest dłuższe, niż Etiuda otwiera.";
+const EXPECTED = 25;
+const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
+const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
+const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
+const LINK_FORM_PL = "Etiuda nie potrafi odczytać tego odnośnika, więc niczego nie otwarto ani nie wysłano. Zaproszenie można zamiast tego wkleić w Etiudzie.";
+const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothing was sent. Ask your lead for a new one.";
+const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
+const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
+const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
 const WIN_LOG = "Windows did not make this desk the program that opens an etiuda: link";
 const HOST = "relay.example";
 const RELAY_URL = "https://" + HOST + "/v1";
@@ -60,6 +62,7 @@ const TAIL = "\nreturn { linkFromArg: typeof linkFromArg === \"function\" ? link
   + " ecFromArgv: ecFromArgv, handPendingLink: typeof handPendingLink === \"function\" ? handPendingLink : null,"
   + " handHeldLink: typeof handHeldLink === \"function\" ? handHeldLink : null,"
   + " heldView: typeof heldLinkView !== \"undefined\" ? () => heldLinkView : () => null,"
+  + " heldText: typeof heldLinkText !== \"undefined\" ? () => heldLinkText : () => null,"
   + " bindWindow: w => { theWindow = w; } };";
 
 let loadN = 0;
@@ -151,7 +154,7 @@ function withEnv(name, value, fn) {
   try { return fn(); }
   finally { if (had) process.env[name] = prev; else delete process.env[name]; }
 }
-function lift(tag, fn, file) {
+function lift(tag, fn, file, replacement) {
   const target = file || MAIN;
   const beforeBytes = fs.readFileSync(target);
   const digest = crypto.createHash("sha256").update(beforeBytes).digest("hex");
@@ -160,7 +163,8 @@ function lift(tag, fn, file) {
     const lines = beforeBytes.toString("utf8").split(/\n/);
     const at = lines.findIndex(l => l.indexOf(tag) >= 0);
     if (at >= 0) {
-      lines.splice(at, 1);
+      if (typeof replacement === "string") lines.splice(at, 1, replacement);
+      else lines.splice(at, 1);
       fs.writeFileSync(target, lines.join("\n"));
       turned = fn(fs.readFileSync(target, "utf8")) === true;
       detail = turned ? "the check lifted" : "the check still held";
@@ -545,6 +549,35 @@ try {
   check(filePlant.turned && filePlant.back, "3hd lifting plant:link-file reads an etiuda: argument as a file, and the file is put back: "
     + filePlant.detail + ", sha " + (filePlant.back ? "restored" : "differs"));
 
+  /* A readable invitation that names no team this desk can be offered (here a team whose lead's key is pinned to another)
+     is its own refusal: its own two sentences on the console and to the page, nothing sent, the link held before it let go.
+     Pasting is not offered for it, because a pasted invitation fails the same way. */
+  const otherArg = "etiuda:join#" + pack(relayDoc());
+  function noTeamRun(src) {
+    const L = loadShell({ lock: false, pins: { [doc.team]: { keyId: "other-quay", public: otherPub } }, src: src });
+    L.api.bindWindow(L.win);
+    const first = L.api.acceptLink(otherArg);
+    const heldBefore = L.api.heldText();
+    const said0 = L.said.length, sent0 = L.sent.length, net0 = L.netHits();
+    const ans = L.api.acceptLink(exactArg);
+    const lines = L.said.slice(said0);
+    const sentNow = L.sent.slice(sent0);
+    const views = sentNow.filter(m => m[0] === "etiuda:team-join");
+    const refusal = views.length === 1 && views[0][1] && views[0][1].linkRefusal ? views[0][1] : null;
+    const held = L.api.heldView();
+    const mirror = path.join(L.ud, "relay", doc.relay.rt);
+    const ok = !!(first && first.confirm === true && heldBefore === first.text
+      && ans && ans.confirm !== true && ans.refused === LINK_NO_TEAM && ans.said === LINK_NO_TEAM
+      && hasBoth(lines, LINK_NO_TEAM, LINK_NO_TEAM_PL) && !lines.some(l => l.indexOf(LINK_FORM) >= 0)
+      && refusal && refusal.linkRefusal.en === LINK_NO_TEAM && refusal.linkRefusal.pl === LINK_NO_TEAM_PL
+      && sentNow.length === 1 && L.api.heldText() === "" && held && held.linkRefusal && held.linkRefusal.en === LINK_NO_TEAM
+      && L.netHits() === net0 && fs.readFileSync(path.join(L.ud, "desk.json"), "utf8") === L.desk && !fs.existsSync(mirror)
+      && JSON.stringify([lines, sentNow]).indexOf(doc.relay.token) < 0);
+    return { ok, refusal, answer: ans && ans.refused, sent: sentNow.length, held: heldBefore !== "" };
+  }
+  const noTeamNow = noTeamRun(undefined);
+  let noPageOk = false, noPageNote = "page not reached";
+
   let pageOk = false, pageNote = "", pagePlant = { turned: false, back: false, detail: "not run" };
   try {
     globalThis.window = { addEventListener: noop, removeEventListener: noop };
@@ -593,6 +626,18 @@ try {
     const saidOk = refusedEn.indexOf(LINK_FORM) >= 0 && refusedPl.indexOf(LINK_FORM_PL) >= 0 && refusedPl.indexOf(LINK_FORM) < 0;
     const saidNote = saidOk ? "" : " (en " + (refusedEn.indexOf(LINK_FORM) >= 0) + ", pl " + (refusedPl.indexOf(LINK_FORM_PL) >= 0)
       + ", lang " + ST.lsGet("eUiLang") + ")";
+    if (pageTook && noTeamNow.refusal) {
+      pageTook(noTeamNow.refusal);
+      ST.lsSet("eUiLang", "en");
+      const noEn = TJ.teamJoinEmptyHtml();
+      ST.lsSet("eUiLang", "pl");
+      const noPl = TJ.teamJoinEmptyHtml();
+      ST.lsSet("eUiLang", "en");
+      noPageOk = noEn.indexOf(LINK_NO_TEAM) >= 0 && noPl.indexOf(LINK_NO_TEAM_PL) >= 0 && noPl.indexOf(LINK_NO_TEAM) < 0
+        && noEn.indexOf(LINK_FORM) < 0 && !/data-join-paste/.test(noEn + noPl);
+      noPageNote = "en " + (noEn.indexOf(LINK_NO_TEAM) >= 0) + ", pl " + (noPl.indexOf(LINK_NO_TEAM_PL) >= 0)
+        + ", no paste box " + !/data-join-paste/.test(noEn + noPl);
+    } else noPageNote = "the shell sent no refusal to the page";
     const desk = loadShell({ lock: false });
     desk.api.bindWindow(desk.win);
     const ans = desk.api.acceptLink(exactArg);
@@ -628,6 +673,13 @@ try {
   check(pageOk && pagePlant.turned && pagePlant.back,
     "3hn the page shows the link's confirm and its refusal, and yes names the held link without the secret: "
     + pageNote + ", " + pagePlant.detail + ", sha " + (pagePlant.back ? "restored" : "differs"));
+
+  const noTeamPlant = lift("plant:link-offer", src => !noTeamRun(src).ok, MAIN,
+    "  if (!view || !view.offer) return { refused: LINK_FORM, said: LINK_FORM };");
+  check(noTeamNow.ok && noPageOk && noTeamPlant.turned && noTeamPlant.back,
+    "3ho a readable invitation that names no team this desk can join is said in its own two sentences to the console and the page, nothing sent and the held link let go, "
+    + "and putting back the old answer at plant:link-offer is heard: answer " + JSON.stringify(noTeamNow.answer) + ", page " + noPageNote
+    + ", " + noTeamPlant.detail + ", sha " + (noTeamPlant.back ? "restored" : "differs"));
 
   check(regStand.held(), "3h0 every reg call was answered by the stand-in (" + regStand.said() + ")");
 } finally {

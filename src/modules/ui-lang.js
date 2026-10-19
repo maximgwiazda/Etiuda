@@ -1032,7 +1032,7 @@ UI_STRINGS.pl={
   "Join this team":"Dołącz do tego zespołu",
   "Folder: {FOLDER}":"Folder: {FOLDER}",
   "Lead: {NAME}":"Lider zespołu: {NAME}",
-  "{LEAD} invites this desk to join the team through {HOST}.":"{LEAD} zaprasza to stanowisko do zespołu przez {HOST}.",
+  "{LEAD} invites this desk to join the team through {HOST}.":"{LEAD} zaprasza to stanowisko do zespołu przez przekaźnik {HOST}.",
   "Team: {TEAM}":"Zespół: {TEAM}",
   "Relay: {HOST}":"Przekaźnik: {HOST}",
   "This invitation cannot be read, so nothing was changed.":"Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
