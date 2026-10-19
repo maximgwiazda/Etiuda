@@ -653,13 +653,19 @@ async function main() {
     const usurper = keyPair(true);
     const rs = resumed.json && resumed.json.session;
     const byUsurper = await put(w, rs, sealAsk(usurper, 1), { extra: { pub: usurper.pub } });
-    const askUp = await put(w, rs, sealAsk(asker, 1), { extra: { pub: asker.pub } });
+    const askBlob = sealAsk(asker, 1);
+    const askUp = await put(w, rs, askBlob, { extra: { pub: asker.pub } });
     const askSecond = await put(w, rs, sealAsk(asker, 2), { extra: { pub: asker.pub } });
     const afterUp = await helloAs(w, asker);
-    check(refused(byUsurper, "no-hello") && askUp.status === 200 && refused(askSecond, "token-spent") && refused(afterUp, "not-enrolled"),
-      "10g the session a bound key opens again makes the invitation's one upload, by that key alone, and once it is made the key opens"
-      + " nothing until it is enrolled: another writer " + (byUsurper.json && byUsurper.json.error) + ", a second upload "
-      + (askSecond.json && askSecond.json.error) + ", the key's hello after " + (afterUp.json && afterUp.json.error));
+    const afterToken = afterUp.json && afterUp.json.session;
+    const listed = await since(w, afterToken);
+    const fetched = await getBlob(w, afterToken, askBlob.id);
+    check(refused(byUsurper, "no-hello") && askUp.status === 200 && refused(askSecond, "token-spent")
+      && afterUp.status === 200 && afterUp.json.invite === true && listed.status === 200 && fetched.status === 200,
+      "10g the session a bound key opens again makes the invitation's one upload, by that key alone, and once it is made that key"
+      + " still reads and a second upload is refused: another writer " + (byUsurper.json && byUsurper.json.error) + ", a second upload "
+      + (askSecond.json && askSecond.json.error) + ", the key's hello after " + afterUp.status + ", the list " + listed.status
+      + ", the fetch " + fetched.status);
     const t4 = hex(32), id4 = hex(16), unsigned = keyPair(true);
     await invites(w, [{ id: id4, hash: sha(t4) }], []);
     const n4 = await challenge(w);

@@ -282,12 +282,16 @@ function createCore(deps) {
     });
   }
 
-  /* An invitation spent by a token hello that bound this key, its one upload not yet made, inside its keep: the binding ends
-     when the keep does, at the time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). */
+  /* An invitation spent by a token hello that bound this key, inside its keep: the binding ends when the keep does, at the
+     time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). After the one upload the
+     same key still opens a session for reads, until it is enrolled, the invitation is dropped or the keep ends. */
   function boundInvite(key) {
     const now = clock();
+    let skipUploaded = true;
+    skipUploaded = false; /* plant:S3-read-on */
     for (const [k, v] of store.list("inv:")) {
-      if (!v.spent || v.uploaded || v.key !== key || !is(HEX64, v.pub)) continue;
+      if (!v.spent || v.key !== key || !is(HEX64, v.pub)) continue;
+      if (skipUploaded && v.uploaded) continue;
       if (now - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
       return { id: k.slice(4), inv: v };
     }
@@ -310,7 +314,7 @@ function createCore(deps) {
     if (!dev && gone && !verified(gone.pub, msg, b.sig)) return no("bad-signature"); /* plant:removed-sig */
     if (!dev && gone) return no("removed"); /* plant:removed-key */
     if (!dev) {
-      /* A key on no list that a token hello bound: the invitation's session again, for its one upload, and only one held. */
+      /* A key on no list that a token hello bound: the invitation's session again, for its one upload and for reads after it, and only one held. */
       const held = boundInvite(b.key);
       if (held && verified(held.inv.pub, msg, b.sig)) /* plant:invite-resume */
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
@@ -427,7 +431,9 @@ function createCore(deps) {
     if (store.get("gone:" + m.writer) !== undefined) return no("removed"); /* plant:invite-removed */
     const pub = m.pub !== null ? m.pub : m.writer;
     if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
-    if (m.place === "root" || deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
+    let atDesk = true;
+    atDesk = typeof m.place === "string" && m.place.indexOf("desk:") === 0; /* plant:S3-invite-place */
+    if (!atDesk || m.place === "root" || deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
     return { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub, lead: false, invite: s.inv, inv };
   }
 
