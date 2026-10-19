@@ -382,6 +382,8 @@ function createProgram(opts) {
   const rates = new Map();
   /* What waits on a refusal that lifts, by path or copy, with the reason last said for it, so a wait is said once. */
   const waiting = new Map();
+  /* A case variant left beside the one file its folded path sends, so that variant is said once. */
+  const stayed = new Set();
 
   const persist = () => { try { save(st); } catch (e) { say("the relay's record could not be kept - " + (e && e.message)); } };
   const revKey = t => ({ teamId: pin.teamId, leadKeyId: pin.lead.keyId, epoch: t.epoch, rev: t.rev });
@@ -876,8 +878,9 @@ function createProgram(opts) {
   }
 
   /* What this program owes the relay from its own place: each whole file whose bytes differ from the last it sent, and a
-     deletion for each it sent that is gone. On the lead's side, the team file once more under each live invitation's key,
-     and once more for each desk its roster names, under that desk's copy key. */
+     deletion for each it sent that is gone. Two paths that differ only in case are one file: the first listed is sent,
+     and each other is said once as staying on this computer. On the lead's side, the team file once more under each live
+     invitation's key, and once more for each desk its roster names, under that desk's copy key. */
   function owed(me, ctx) {
     const ops = [];
     if (!pin || !me) return ops;
@@ -887,6 +890,8 @@ function createProgram(opts) {
       const p = B.checkPath(rel);
       if (!p.ok) continue;
       const relKey = pathKey(p.path);
+      /* Two names differing only in case are one file. The first listed is the one sent; each other is said once and stays. */
+      if (here.has(relKey)) { if (!stayed.has(p.path)) { stayed.add(p.path); say(p.path + " stays on this computer"); } continue; } /* plant:case-one */
       here.set(relKey, p.path);
       const bytes = io.read(p.path);
       if (bytes == null) continue;
