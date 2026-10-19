@@ -17,13 +17,13 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 23;
+const EXPECTED = 24;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
 const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
@@ -59,6 +59,7 @@ const TAIL = "\nreturn { linkFromArg: typeof linkFromArg === \"function\" ? link
   + " linkArgFrom: typeof linkArgFrom === \"function\" ? linkArgFrom : null,"
   + " ecFromArgv: ecFromArgv, handPendingLink: typeof handPendingLink === \"function\" ? handPendingLink : null,"
   + " handHeldLink: typeof handHeldLink === \"function\" ? handHeldLink : null,"
+  + " heldView: typeof heldLinkView !== \"undefined\" ? () => heldLinkView : () => null,"
   + " bindWindow: w => { theWindow = w; } };";
 
 let loadN = 0;
@@ -162,6 +163,28 @@ function lift(tag, fn, file) {
       lines.splice(at, 1);
       fs.writeFileSync(target, lines.join("\n"));
       turned = fn(fs.readFileSync(target, "utf8")) === true;
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(target, beforeBytes);
+  }
+  const back = crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex") === digest;
+  return { turned, back, detail };
+}
+async function liftAsync(tag, fn, file) {
+  const target = file || MAIN;
+  const beforeBytes = fs.readFileSync(target);
+  const digest = crypto.createHash("sha256").update(beforeBytes).digest("hex");
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(target, lines.join("\n"));
+      turned = (await fn(fs.readFileSync(target, "utf8"))) === true;
       detail = turned ? "the check lifted" : "the check still held";
     }
   } catch (e) {
@@ -521,6 +544,90 @@ try {
   });
   check(filePlant.turned && filePlant.back, "3hd lifting plant:link-file reads an etiuda: argument as a file, and the file is put back: "
     + filePlant.detail + ", sha " + (filePlant.back ? "restored" : "differs"));
+
+  let pageOk = false, pageNote = "", pagePlant = { turned: false, back: false, detail: "not run" };
+  try {
+    globalThis.window = { addEventListener: noop, removeEventListener: noop };
+    globalThis.document = {
+      addEventListener: noop, removeEventListener: noop,
+      getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+      body: { appendChild: noop, classList: { contains: () => false, add: noop, remove: noop } },
+    };
+    const pageOps = [];
+    let pageTook = null;
+    const cleanOffer = { sealed: null, join: null, leads: [], offer: { lead: LEAD, team: doc.team, relay: HOST, link: true } };
+    window.E_HOST = {
+      onTeamJoin: fn => { pageTook = fn; },
+      teamJoin: (op, file) => {
+        pageOps.push([op, String(file || "")]);
+        if (op === "held") return Promise.resolve(cleanOffer);
+        return Promise.resolve({ sealed: null, join: null, leads: [] });
+      },
+    };
+    const mod = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
+    const HK = await import(mod("hooks.js"));
+    HK.hooks.render = noop;
+    const TJ = await import(mod("team-join.js"));
+    const ST = await import(mod("storage.js"));
+    TJ.wireTeamJoin();
+    await new Promise(r => setTimeout(r, 40));
+    const html = TJ.teamJoinEmptyHtml();
+    const yesBtn = (/<button[^>]*data-join="invite"[^>]*>/.exec(html) || [""])[0];
+    const shown = html.indexOf(LEAD) >= 0 && html.indexOf(doc.team) >= 0 && html.indexOf(HOST) >= 0
+      && !/data-join-check/.test(html) && yesBtn !== "" && !/ disabled/.test(yesBtn)
+      && html.indexOf(token) < 0 && html.indexOf("etiuda-join:") < 0 && html.indexOf(b64) < 0;
+    const askedHeld = pageOps.some(c => c[0] === "held");
+    const beforeYes = pageOps.filter(c => c[0] === "link" || c[0] === "invite").length;
+    const inviteBtn = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "invite" : null) };
+    TJ.wireTeamJoinEmpty({ querySelectorAll: () => [inviteBtn] });
+    await Promise.resolve(inviteBtn.onclick && inviteBtn.onclick());
+    await new Promise(r => setTimeout(r, 20));
+    const yesCall = pageOps.filter(c => c[0] === "link");
+    const yesOk = beforeYes === 0 && yesCall.length === 1 && yesCall[0][1] === "";
+    ST.lsSet("eUiLang", "en");
+    if (pageTook) pageTook({ linkRefusal: { en: LINK_FORM, pl: LINK_FORM_PL } });
+    const refusedEn = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const refusedPl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const saidOk = refusedEn.indexOf(LINK_FORM) >= 0 && refusedPl.indexOf(LINK_FORM_PL) >= 0 && refusedPl.indexOf(LINK_FORM) < 0;
+    const saidNote = saidOk ? "" : " (en " + (refusedEn.indexOf(LINK_FORM) >= 0) + ", pl " + (refusedPl.indexOf(LINK_FORM_PL) >= 0)
+      + ", lang " + ST.lsGet("eUiLang") + ")";
+    const desk = loadShell({ lock: false });
+    desk.api.bindWindow(desk.win);
+    const ans = desk.api.acceptLink(exactArg);
+    const sentOffer = desk.sent.filter(m => m[0] === "etiuda:team-join" && m[1] && m[1].offer);
+    const held = desk.api.heldView ? desk.api.heldView() : null;
+    const payload = JSON.stringify(sentOffer) + JSON.stringify(held);
+    const after = fs.readFileSync(path.join(desk.ud, "desk.json"), "utf8");
+    const mirror = path.join(desk.ud, "relay", doc.relay.rt);
+    const offer = sentOffer.length === 1 ? sentOffer[0][1].offer : null;
+    const clean = !!(ans && ans.confirm === true && offer && offer.lead === LEAD && offer.team === doc.team
+      && offer.relay === HOST && offer.link === true && !Object.prototype.hasOwnProperty.call(offer, "code")
+      && held && held.offer && held.offer.link === true
+      && payload.indexOf(token) < 0 && payload.indexOf(b64) < 0 && payload.indexOf("etiuda-join:") < 0
+      && after === desk.desk && !fs.existsSync(mirror));
+    pageOk = shown && askedHeld && yesOk && saidOk && clean;
+    pageNote = "shown " + shown + ", held-ask " + askedHeld + ", yes " + yesCall.length + " before " + beforeYes
+      + ", said " + saidOk + saidNote + ", clean " + clean;
+    const pageFile = path.join(ROOT, "src", "modules", "team-join.js");
+    pagePlant = await liftAsync("plant:link-page", async () => {
+      const TJ2 = await import(mod("team-join.js") + "?plant=" + Date.now());
+      window.E_HOST = {
+        onTeamJoin: noop,
+        teamJoin: (op) => (op === "held" ? Promise.resolve(cleanOffer) : Promise.resolve({ sealed: null, join: null, leads: [] })),
+      };
+      TJ2.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 40));
+      const h = TJ2.teamJoinEmptyHtml();
+      return h.indexOf(LEAD) < 0 && h.indexOf("Join this team?") < 0;
+    }, pageFile);
+  } catch (e) {
+    pageNote = e && e.stack ? e.stack.split("\n")[0] : String(e);
+  }
+  check(pageOk && pagePlant.turned && pagePlant.back,
+    "3hn the page shows the link's confirm and its refusal, and yes names the held link without the secret: "
+    + pageNote + ", " + pagePlant.detail + ", sha " + (pagePlant.back ? "restored" : "differs"));
 
   check(regStand.held(), "3h0 every reg call was answered by the stand-in (" + regStand.said() + ")");
 } finally {

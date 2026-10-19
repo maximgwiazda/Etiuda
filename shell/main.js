@@ -293,7 +293,21 @@ function linkArgFrom(argv) {
   return "";
 }
 let pendingLink = null, pendingLinkArg = "";
+let heldLinkText = "", heldLinkView = null;
+/* What the page may see of a link: the lead's name, the team and the relay's host. The invitation
+   text stays here, so a yes can name it and the secret never enters the renderer. */
+function linkOfferView(view, parsed) {
+  const base = view && typeof view === "object" ? Object.assign({}, view) : {};
+  base.offer = {
+    lead: String(view && view.offer && view.offer.lead || ""),
+    team: String(parsed && parsed.team || ""),
+    relay: String(view && view.offer && view.offer.relay || ""),
+    link: true,
+  };
+  return base;
+}
 function handLinkView(view) {
+  heldLinkView = view;
   const win = theWindow;
   if (win && !win.isDestroyed() && win.webContents && typeof win.webContents.send === "function") {
     try { win.webContents.send("etiuda:team-join", view); pendingLink = null; return; }
@@ -314,12 +328,41 @@ function acceptLink(arg) {
   if (!got) return null;
   if (got.refused) {
     console.error("etiuda: " + got.saidEn + " " + got.saidPl);
+    heldLinkText = "";
+    handLinkView({ linkRefusal: { en: got.saidEn, pl: got.saidPl } });
     return { refused: got.refused, said: got.saidEn };
   }
   const view = readInvite(got.text);
   if (!view || !view.offer) return { refused: LINK_FORM, said: LINK_FORM }; /* plant:link-offer */
-  handLinkView(view);
-  return { confirm: true, text: got.text, offer: view.offer };
+  const clean = linkOfferView(view, got.parsed);
+  heldLinkText = got.text;
+  handLinkView(clean);
+  return { confirm: true, text: got.text, offer: clean.offer };
+}
+function heldLinkAnswer() {
+  if (heldLinkView) return heldLinkView;
+  return joinView();
+}
+function declineHeldLink() {
+  heldLinkText = "";
+  heldLinkView = null;
+  pendingLink = null;
+  pendingLinkArg = "";
+  return joinView();
+}
+async function takeHeldLink(name) {
+  const text = heldLinkText;
+  if (!text) return Object.assign({}, joinView(), { refused: "unread" });
+  const parsed = inviteParse(text);
+  if (!parsed || !parsed.relay) return Object.assign({}, joinView(), { refused: "unread" });
+  const ans = await takeInvite(text, name, "", true);
+  if (!ans || !ans.refused) {
+    heldLinkText = "";
+    heldLinkView = null;
+    pendingLink = null;
+    pendingLinkArg = "";
+  }
+  return ans;
 }
 function handHeldLink(win) {
   if (pendingLinkArg) {
@@ -3209,7 +3252,7 @@ function readInvite(text) {
 /* The person's yes, with the check code they typed. The folder is asked before anything is written, and one that
    does not answer, or whose team file is not the invited team's, is put back as it was. A pin the invitation sets is
    a key not yet shown; the request carries the proof, never the secret. */
-async function takeInvite(text, name, check) {
+async function takeInvite(text, name, check, fromLink) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const shut = inviteDoor();
   if (shut) return Object.assign({}, joinView(), { refused: shut });
@@ -3218,7 +3261,9 @@ async function takeInvite(text, name, check) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, joinView(), { refused: settled });
   const code = inviteCode(parsed.secret, parsed.lead.public);
-  if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
+  if (!(fromLink === true && parsed.relay)) {
+    if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
+  }
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   if (parsed.relay) return takeRelayInvite(parsed, name, me);
@@ -4709,11 +4754,13 @@ ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRe
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen", "forget" and "leave" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
-// adds the check code the agent typed, and "leads" answers the pinned leads alone.
+// adds the check code the agent typed, and "leads" answers the pinned leads alone. "held" is a link waiting here,
+// "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check) : joinView()));
+  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
+  : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView()));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in

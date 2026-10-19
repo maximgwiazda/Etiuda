@@ -21,6 +21,7 @@ let joinBlob="";                  // the paste box's text while it is open, so a
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
 let joinTyped="";                 // the check code the agent typed on the confirm
 let joinWhy="";                   // the refusal's word, as the shell said it
+let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell's two sentences, the secret never among them
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 function eHasJoin(){
   const h=eHost();
@@ -43,7 +44,7 @@ function joinAsk(op,file,name,check,before){
 }
 /* Lets go of every copy of an invitation the page holds; a read still in flight is then answered to nobody. */
 function dropInvite(){
-  joinMode=""; joinOffer=null; joinBlob=""; joinRead=""; joinTyped=""; joinWhy=""; joinReads++;
+  joinMode=""; joinOffer=null; joinBlob=""; joinRead=""; joinTyped=""; joinWhy=""; joinLinkSaid=null; joinReads++;
 }
 /* Whether the agent typed this invitation's check code, which the shell made at read and checks again at yes. */
 function typedOk(){
@@ -155,6 +156,22 @@ function joinTook(v,changed){
     if(wholeThingEmpty()) hooks.loadCatalogFromFolder(String(s.joined.file),0);
   }
   syncJoinDoor();
+  const refusal=s.linkRefusal;
+  if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
+    dropInvite();
+    joinLinkSaid={en:String(refusal.en), pl:typeof refusal.pl==="string"?String(refusal.pl):""};
+    joinWhy="link"; joinMode="refused";
+    paintJoin();
+    return joinNow;
+  }
+  const offer=s.offer;
+  if(offer && offer.link===true && typeof offer.relay==="string" && offer.relay){
+    joinOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:""};
+    joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
+    joinMode="confirm"; /* plant:link-page */
+    paintJoin();
+    return joinNow;
+  }
   if(changed===true || JSON.stringify(joinNow)!==was) paintJoin();
   return joinNow;
 }
@@ -166,6 +183,7 @@ function wireTeamJoin(){
   if(typeof eHost().onTeamJoin==="function") eHost().onTeamJoin(joinTook);
   if(typeof eHost().onCatalogCopy==="function") eOnCatalogCopy(noteCatalogCopy);
   joinAsk("state");
+  joinAsk("held");
 }
 function paintJoin(){
   if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); return; }
@@ -226,6 +244,16 @@ function joinInviteParts(){
     body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
       +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>'+joinDisclosure(),
     acts:[["read",t("Continue")],["back",t("Cancel")]]};
+  /* A link names its lead, its team and the relay's host, and it asks for no check code. */
+  if(joinMode==="confirm" && joinOffer && joinOffer.link){
+    const o=joinOffer;
+    const line=t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
+    return {title:t("Join this team?"), line:line,
+      body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
+        +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(o.team))+'</div>'
+        +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(o.relay))+'</div>',
+      acts:[["invite",t("Join this team")],["back",t("Cancel")]]};
+  }
   /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
     const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its five digits here.");
@@ -241,6 +269,10 @@ function joinInviteParts(){
         +esc(t("This code does not match this invitation. Ask the lead again before joining."))+'</div>'
         +joinDisclosure(),
       acts:[["invite",t("Join this team"),!typedOk()],["back",t("Cancel")]]};
+  }
+  if(joinMode==="refused" && joinWhy==="link" && joinLinkSaid){
+    const said=uiLang()==="pl" && joinLinkSaid.pl ? joinLinkSaid.pl : joinLinkSaid.en;
+    return {title:t("Join a team"), line:said, body:"", acts:[["back",t("Cancel")]]};
   }
   if(joinMode==="refused") return {title:t("Join a team"),
     line:joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
@@ -298,14 +330,20 @@ function joinParts(){
 function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;
   if(act==="join") return Promise.resolve(openJoinPaste());
-  if(act==="back") return Promise.resolve(clearJoinAsk());
+  if(act==="back"){
+    if((joinOffer&&joinOffer.link) || (joinMode==="refused"&&joinWhy==="link"))
+      return joinAsk("link-no","","","",()=>{ dropInvite(); return true; });
+    return Promise.resolve(clearJoinAsk());
+  }
   if(act==="read"){
     const sent=pastedText(), n=++joinReads;
     joinBlob=sent;
     return joinAsk("read",sent,"","",v=>readTook(v,n,sent));
   }
   if(act==="invite"){
-    if(joinMode!=="confirm" || !joinRead || !typedOk()) return Promise.resolve(null);
+    if(joinMode!=="confirm" || !joinOffer) return Promise.resolve(null);
+    if(joinOffer.link) return joinAsk("link","",agentName(),"",v=>yesTook(v,"link"));
+    if(!joinRead || !typedOk()) return Promise.resolve(null);
     const sent=joinRead;
     return joinAsk("invite",sent,agentName(),joinTyped,v=>yesTook(v,sent));
   }
