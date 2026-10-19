@@ -85,7 +85,7 @@ const HELLO_LABEL = "etiuda-relay-hello";
 const INVITE_SEAL_INFO = "etiuda-relay-invite-seal";
 /* What a desk says when its token hello is answered token-spent. An upload refused token-spent keeps the contract
    sentence: that refusal can lift (F4), and blob.REASONS stays the older wording. */
-const INVITE_USED_SAID = "This invitation was already used. Ask your lead for a new one.";
+const INVITE_USED_SAID = "This invitation has already been used. Ask your lead for a new one.";
 /* What a desk says when its token hello is answered invite-ended. The token is not spent: the end bounds an unused
    invitation only. This tree's relay does not say it yet; the desk says it when the answer names that error. */
 const INVITE_ENDED_SAID = "This invitation has expired. Ask your lead for a new one.";
@@ -94,9 +94,9 @@ const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 /* The label of the lead's answer to one invitation. One key, 32 bytes, and no place id: the blob's id is the invitation's. */
 const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
-/* The page already shows this while a request waits. After the one upload the channel says the same line, once, where an
+/* The page shows this while a relay request waits. After the one upload the channel says the same line, once, where an
    enrolment fault would have been said. */
-const WAITING_SAID = "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.";
+const WAITING_SAID = "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.";
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
@@ -1232,11 +1232,20 @@ function createChannel(opts) {
       return { ok: true };
     }
     const t = refusalOf(r);
-    if (r.json && r.json.error === "invite-ended") return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
+    const ended = !!(r.json && r.json.error === "invite-ended");
+    if (ended) inviteEnd("ended"); /* plant:S3-page-ended */
+    if (ended) return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed();
     t.said = INVITE_USED_SAID; /* plant:invite-used */
+    inviteEnd("used"); /* plant:S3-page-used */
     return t;
+  }
+
+  /* The relay has refused this invitation's token, as spent ("used") or past its end ("ended"). The shell keeps that with
+     the request, which is where the page reads it; the console line is said besides. */
+  function inviteEnd(kind) {
+    if (typeof o.onInviteEnd === "function") o.onInviteEnd(kind);
   }
 
   /* A session by this program's own key. Where the relay still answers for the invitation, the session stays the

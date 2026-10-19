@@ -3039,9 +3039,11 @@ function joinView() {
     }
     /* The code is the lead's opening, whether or not the request came by invitation. The invite field names that lead. */
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
-                  state: j.refused ? "refused" : j.opened ? "code" : "waiting",
+                  state: j.refused ? "refused" : j.opened ? "code" : (j.invite && j.invite.relay && j.invite.relay.end) || "waiting",
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
+    /* A relay join names its relay's host, so the page words it as one; the state is "used" or "ended" where the relay refused the token. */
+    if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
@@ -3081,6 +3083,7 @@ function relayKept(r) {
   return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
     && typeof r.seal === "string" && r.seal !== ""
     && (r.wrap === undefined || (typeof r.wrap === "string" && r.wrap !== ""))
+    && (r.end === undefined || r.end === "used" || r.end === "ended")
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
@@ -3451,6 +3454,14 @@ function relayRun() {
       return out;
     },
     onTeam: () => { teamStamp = ""; heedTeam(); },
+    /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
+    onInviteEnd: kind => {
+      const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+      if ((kind !== "used" && kind !== "ended") || !inv || inv.end === kind) return;
+      inv.end = kind;
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+    },
     /* The invitation's one upload has gone, so its wrap is not asked for again and the key that opens it is forgotten. */
     onWrapGone: () => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;

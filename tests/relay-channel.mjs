@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 143;
+const EXPECTED = 147;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1870,6 +1870,56 @@ try {
   check(oncePlant.turned && oncePlant.back,
     "966e lifting plant:S3-wrap-once asks for the wrap again after the upload, and the file is put back: "
     + oncePlant.detail + ", sha " + (oncePlant.back ? "restored" : "differs"));
+  /* Board 922, F1. A relay invitation the relay answers token-spent, or invite-ended, is kept with the request and said in its view,
+     which the page draws, and not only in the console. */
+  async function endedJoin(label, error) {
+    const inv = await inviteOnW(1);
+    const hooks = { fetch: (url, init) => (init && init.method === "POST" && String(url).endsWith("/session") && init.body
+      && String(init.body).indexOf('"invite"') >= 0
+      ? new Response(Buffer.from(JSON.stringify({ error: error }), "utf8"), { status: 403, headers: { "content-type": "application/json" } })
+      : null) };
+    const folder = path.join(LAB, label + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    const desk = newDesk(label, folder, hooks);
+    const taken = await desk.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
+    let view = null;
+    const shown = await until(async () => {
+      const ch = desk.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      view = await desk.ask("etiuda:team-join", "view");
+      return !!(view && view.join && view.join.state !== "waiting");
+    }, 6000);
+    const kept = (((((desk.envelope().teamJoin || {}).invite || {}).relay || {}).end)) || "";
+    const again = loadDesk(desk.ud);
+    const after = await again.ask("etiuda:team-join", "view");
+    const stop = desk.api.relayRun();
+    if (stop) await stop.stop();
+    return { taken: taken, shown: shown, view: view, kept: kept, reloaded: after && after.join ? after.join.state : "none" };
+  }
+  const viewSays = (r, state) => !!(r.taken && !r.taken.refused && r.shown && r.view && r.view.join && r.view.join.state === state
+    && r.view.join.invite && r.view.join.invite.relay === new URL(URLW).host && r.view.join.team === TEAMW);
+  const usedJoin = await endedJoin("ended-used", "token-spent");
+  check(viewSays(usedJoin, "used") && usedJoin.kept === "used" && usedJoin.reloaded === "used",
+    "967a a relay invitation answered token-spent is said in the request's view, naming the relay, and kept with the request through a restart: view "
+    + (usedJoin.view && usedJoin.view.join ? usedJoin.view.join.state : "none") + ", kept " + JSON.stringify(usedJoin.kept) + ", after a restart " + usedJoin.reloaded);
+  const endedJoined = await endedJoin("ended-expired", "invite-ended");
+  check(viewSays(endedJoined, "ended") && endedJoined.kept === "ended" && endedJoined.reloaded === "ended",
+    "967b a relay invitation answered invite-ended is said in the request's view, naming the relay, and kept with the request through a restart: view "
+    + (endedJoined.view && endedJoined.view.join ? endedJoined.view.join.state : "none") + ", kept " + JSON.stringify(endedJoined.kept) + ", after a restart " + endedJoined.reloaded);
+  const usedLift = await liftChannel("plant:S3-page-used", async () => {
+    const again = await endedJoin("ended-used-plant", "token-spent");
+    return !again.shown && again.kept === "";
+  });
+  check(usedLift.turned && usedLift.back,
+    "967c lifting plant:S3-page-used leaves the used invitation unsaid in the view, and the file is put back: "
+    + usedLift.detail + ", sha " + (usedLift.back ? "restored" : "differs"));
+  const endedLift = await liftChannel("plant:S3-page-ended", async () => {
+    const again = await endedJoin("ended-expired-plant", "invite-ended");
+    return !again.shown && again.kept === "";
+  });
+  check(endedLift.turned && endedLift.back,
+    "967d lifting plant:S3-page-ended leaves the expired invitation unsaid in the view, and the file is put back: "
+    + endedLift.detail + ", sha " + (endedLift.back ? "restored" : "differs"));
   delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
   await studioW.stop();
 
@@ -3819,7 +3869,7 @@ try {
 }
 
 /* ---- slice 3, item 2: a token hello that binds no key is not sent; a second use is said as already used. ---- */
-const INVITE_USED_NEW = "This invitation was already used. Ask your lead for a new one.";
+const INVITE_USED_NEW = "This invitation has already been used. Ask your lead for a new one.";
 const INVITE_USED_OLD = "This invitation has already been used.";
 async function relayTeam() {
   const rt = hex(16);

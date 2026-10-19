@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 88;
+const EXPECTED = 90;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1275,6 +1275,46 @@ try {
     + " a request still waits with empty places and then shows its code: view " + (shellWait && shellWait.join ? shellWait.join.state + "/" + shellWait.join.code : "none")
     + (quietInvite ? " lead named" : " lead missing")
     + " parts " + [!!quietInvite, !!enInvite, !!armedDigits, !!namedLead, !!requestDoor, !!plInvite].join("/"));
+
+  /* Board 922, F1. A relay join that waits says so in the copywriter's words, and a relay invitation the relay refused as used or
+     expired is said on the same card, in English and in Polish, with acts that clear it; a shared-folder join keeps its own line. */
+  const escPage = (await import(MOD("esc.js"))).esc;
+  const COPY = { waitEn: "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.", waitPl: "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.", usedEn: "This invitation has already been used. Ask your lead for a new one.", usedPl: "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
+    endedEn: "This invitation has expired. Ask your lead for a new one.", endedPl: "To zaproszenie wygasło. Nowe wystawi lider zespołu." };
+  const SHARED_EN = "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.";
+  const SHARED_PL = "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.";
+  const RELAY_TEAM = "t-5c1a77e0b3d94f20";
+  const relayJoin = state => ({ join: { file: "", state: state, code: "", asked: 1, name: "Nia", team: RELAY_TEAM,
+    invite: { lead: "Lamp lead", relay: "relay.test" } }, leads: [] });
+  const folderJoin = { join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia", invite: { lead: "Lamp lead" } }, leads: [] };
+  const cardIn = (lang, view) => { ST.lsSet("eUiLang", lang); return paint(view); };
+  const waitEn = cardIn("en", relayJoin("waiting")), waitPl = cardIn("pl", relayJoin("waiting"));
+  const folderEn = cardIn("en", folderJoin), folderPl = cardIn("pl", folderJoin);
+  const relayWaits = waitEn.indexOf(escPage(COPY.waitEn)) >= 0 && waitEn.indexOf("Usually this happens by itself") < 0
+    && waitPl.indexOf(COPY.waitPl) >= 0 && waitPl.indexOf("Zwykle dzieje się to samo") < 0
+    && waitEn.indexOf('data-join="cancel"') >= 0 && waitEn.indexOf("e-join-code") < 0;
+  const folderKept = folderEn.indexOf(escPage(SHARED_EN)) >= 0 && folderEn.indexOf("Nothing more is needed here") < 0
+    && folderPl.indexOf(SHARED_PL) >= 0 && folderPl.indexOf("Tutaj nic więcej nie trzeba robić") < 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(!!tookFn && relayWaits && folderKept,
+    "15cj a relay join that waits shows the copywriter's waiting line on its card in English and in Polish, and a shared-folder join keeps its own line:"
+    + " relay " + (relayWaits ? "worded" : "not worded") + ", folder " + (folderKept ? "unchanged" : "changed"));
+  const cards = {
+    usedEn: cardIn("en", relayJoin("used")), usedPl: cardIn("pl", relayJoin("used")),
+    endedEn: cardIn("en", relayJoin("ended")), endedPl: cardIn("pl", relayJoin("ended")) };
+  const sayingUsed = cards.usedEn.indexOf(escPage(COPY.usedEn)) >= 0 && cards.usedPl.indexOf(COPY.usedPl) >= 0
+    && cards.usedEn.indexOf(escPage(COPY.endedEn)) < 0 && cards.usedPl.indexOf(COPY.endedPl) < 0;
+  const sayingEnded = cards.endedEn.indexOf(escPage(COPY.endedEn)) >= 0 && cards.endedPl.indexOf(COPY.endedPl) >= 0
+    && cards.endedEn.indexOf(escPage(COPY.usedEn)) < 0 && cards.endedPl.indexOf(COPY.usedPl) < 0;
+  const offered = Object.values(cards).every(h => h.indexOf('data-join="cancel"') >= 0 && h.indexOf('data-join="load"') >= 0
+    && h.indexOf("e-join-code") < 0 && h.indexOf(RELAY_TEAM) >= 0 && h.indexOf("relay.test") >= 0 && h.indexOf("Waiting for the team") < 0);
+  await press("cancel");
+  const cleared = !TJ.teamJoinShown();
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(!!tookFn && sayingUsed && sayingEnded && offered && cleared,
+    "15ck a relay invitation answered already used, or expired, is said on the join's card in English and in Polish, naming the team and the relay,"
+    + " with Cancel the request and Load another catalog, and Cancel the request clears it: used " + (sayingUsed ? "said" : "not said")
+    + ", expired " + (sayingEnded ? "said" : "not said") + ", acts " + (offered ? "offered" : "missing") + ", card " + (cleared ? "cleared" : "still there"));
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];

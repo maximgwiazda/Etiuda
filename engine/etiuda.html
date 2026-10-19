@@ -7603,6 +7603,9 @@ What you type stays in this browser only.`;
     "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
     "Joining {LEAD}'s team": "Dołączanie do zespołu osoby {LEAD}",
     "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.": "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
+    "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.": "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.",
+    "This invitation has already been used. Ask your lead for a new one.": "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
+    "This invitation has expired. Ask your lead for a new one.": "To zaproszenie wygasło. Nowe wystawi lider zespołu.",
     "Team": "Zespół",
     "the lead": "lidera",
     "Read this code to the team's lead": "Podaj ten kod liderowi zespołu",
@@ -8905,7 +8908,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-19";
+  var E_BUILT = "2026-10-20";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -14973,9 +14976,10 @@ What you type stays in this browser only.`;
       state: String(j.state || ""),
       code: String(j.code || ""),
       asked: +j.asked || 0,
-      name: String(j.name || "")
+      name: String(j.name || ""),
+      team: String(j.team || "")
     };
-    if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || "") };
+    if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || ""), relay: String(j.invite.relay || "") };
     return row;
   }
   function syncJoinDoor() {
@@ -15142,11 +15146,17 @@ What you type stays in this browser only.`;
       const lead = String(j.invite.lead || "").trim() || t("the lead");
       return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-        line: t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+        line: j.invite.relay ? t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.") : t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
         body: meta,
         acts: [["cancel", t("Cancel the request")]]
       };
     }
+    if (j && j.invite && j.invite.relay && (j.state === "used" || j.state === "ended")) return {
+      title: t("Join a team"),
+      line: j.state === "used" ? t("This invitation has already been used. Ask your lead for a new one.") : t("This invitation has expired. Ask your lead for a new one."),
+      body: '<div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead || "").trim() || t("the lead"))) + '</div><div class="e-join-meta">' + esc(t("Team: {TEAM}").split("{TEAM}").join(j.team)) + '</div><div class="e-join-meta">' + esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay)) + "</div>",
+      acts: [["cancel", t("Cancel the request")], ["load", t("Load another catalog")]]
+    };
     if (j && j.state === "code") return {
       title: t("Read this code to the team's lead"),
       line: t("They type it in Studio, and the catalog opens here once they let this desk in."),

@@ -120,8 +120,8 @@ function refuseInvite(v){
 function joinShown(j){
   if(!j || !(j.file||j.state)) return null;
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
-    asked:+j.asked||0,name:String(j.name||"")};
-  if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||"")};
+    asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
+  if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -286,9 +286,17 @@ function joinParts(){
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+      line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
+        :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
+  /* A relay invitation the relay refused: its token was spent by another desk, or it ended unused. Cancel the request clears it. */
+  if(j && j.invite && j.invite.relay && (j.state==="used" || j.state==="ended")) return {title:t("Join a team"),
+    line:j.state==="used"?t("This invitation has already been used. Ask your lead for a new one."):t("This invitation has expired. Ask your lead for a new one."),
+    body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
+      +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
+      +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
