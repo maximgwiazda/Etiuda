@@ -813,16 +813,20 @@ function createProgram(opts) {
     return null;
   }
 
-  /* The newest of each path in `list` (by epoch, then counter), the rest of that path left: older copies in one batch. */
+  /* The newest of each path in `list` (by epoch, then counter), the rest of that path left: older copies in one batch.
+     The key is the path key, the same fold as the mirror. toLowerCase would join the Kelvin sign with k and drop one
+     of them. The assignment after the lowercase key replaces it, and lifting the assignment returns that lowercase. */
   function landNewest(list, out) {
     const best = new Map();
+    let keyOf = x => x.r.path.toLowerCase();
+    keyOf = x => pathKey(x.r.path); /* plant:land-fold */
     for (const x of list) {
-      const k = x.r.path.toLowerCase();
+      const k = keyOf(x);
       const had = best.get(k);
       if (!had || later(x.r, had.r)) best.set(k, x);
     }
     for (const x of list) {
-      if (best.get(x.r.path.toLowerCase()) !== x) { unpend(x.r.id); continue; }
+      if (best.get(keyOf(x)) !== x) { unpend(x.r.id); continue; }
       unpend(x.r.id);
       const landed = land(x.r);
       if (landed.ok && !landed.stale) out.applied.push(x.r.path);

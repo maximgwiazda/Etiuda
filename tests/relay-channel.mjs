@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 121;
+const EXPECTED = 123;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3226,6 +3226,54 @@ try {
   await lead.ch.stop();
 } catch (e) {
   check(false, "harness (the leg 960a): " + (e && e.stack ? e.stack : e));
+}
+
+/* A batch that holds the Kelvin sign name and kelvin.ec lands both. They are two files on NTFS, and
+   two path keys. Keying the batch by toLowerCase drops one of them. */
+async function kelvinBatch(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const keys = new Map([[1, k1]]);
+  const tag = tm.rt.slice(0, 8);
+  const signName = "\u212aelvin.ec";
+  const SIGN = "sign-body\n", ASCII = "ascii-body\n";
+  const lead = opened(mod, "962-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+  });
+  put(lead.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  put(lead.mirror, signName, SIGN);
+  put(lead.mirror, "kelvin.ec", ASCII);
+  lead.ch.start();
+  await settle(lead);
+  const desk = opened(mod, "962-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+  });
+  desk.ch.start();
+  await settle(desk);
+  const sign = read(desk.mirror, signName);
+  const ascii = read(desk.mirror, "kelvin.ec");
+  await desk.ch.stop();
+  await lead.ch.stop();
+  return { sign, ascii, SIGN, ASCII };
+}
+try {
+  const got = await kelvinBatch(C);
+  check(got.sign === got.SIGN && got.ascii === got.ASCII,
+    "962a a batch lands both the Kelvin sign name and kelvin.ec: sign " + JSON.stringify(got.sign)
+    + ", ascii " + JSON.stringify(got.ascii));
+} catch (e) {
+  check(false, "harness (the leg 962a): " + (e && e.stack ? e.stack : e));
+}
+try {
+  const planted = await liftChannel("plant:land-fold", async mod => {
+    const x = await kelvinBatch(mod);
+    return (x.sign === x.SIGN) !== (x.ascii === x.ASCII);
+  });
+  check(planted.turned && planted.back, "962b lifting plant:land-fold drops one of the Kelvin sign name and kelvin.ec, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 962b): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
