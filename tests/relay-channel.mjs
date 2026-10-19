@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 113;
+const EXPECTED = 116;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2932,6 +2932,108 @@ try {
   }
   const back = sha(fs.readFileSync(src)) === digest;
   check(turned && back, "957d lifting plant:path-key lets the older case replace the file, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
+}
+
+/* A mirror that keeps every name as given, so two names differing only in case can sit side by side.
+   A case-folding disk cannot hold that pair; this stand-in can. */
+function exactNames(entries) {
+  const store = new Map(entries);
+  return {
+    read(rel) { return store.has(rel) ? Buffer.from(store.get(rel)) : null; },
+    write(rel, text) { store.set(rel, Buffer.isBuffer(text) ? text : Buffer.from(String(text), "utf8")); },
+    remove(rel) { store.delete(rel); },
+    list() { return [...store.keys()]; },
+  };
+}
+const LEAD_ME = { keyId: LEAD.keyId, place: "root" };
+function oweFiles(prog) {
+  return prog.owed(LEAD_ME, null).filter(op => op.kind === "file");
+}
+function markSent(prog, ops, n) {
+  for (const op of ops) prog.sentOut(op, { id: hex(16), epoch: 1, counter: n, ciphertext: Buffer.alloc(4) });
+}
+
+/* ---- two names of one path on a case-sensitive stand-in (board 912). A cycle owes one of them, later cycles owe
+   nothing until that file changes, and the other is said once as staying on this computer. One file per path is
+   unchanged. ---- */
+try {
+  const said = [];
+  const io = exactNames([["Guide.ec", "alpha"], ["guide.ec", "beta"]]);
+  const prog = C.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {}, say: l => said.push(l) });
+  const first = oweFiles(prog);
+  markSent(prog, first, 1);
+  const quiet = [oweFiles(prog), oweFiles(prog), oweFiles(prog)];
+  const sentRel = first.length === 1 ? first[0].rel : "";
+  const otherRel = sentRel === "Guide.ec" ? "guide.ec" : sentRel === "guide.ec" ? "Guide.ec" : "";
+  if (sentRel) io.write(sentRel, "gamma");
+  const changed = oweFiles(prog);
+  markSent(prog, changed, 2);
+  const after = oweFiles(prog);
+  const stays = said.filter(l => l.indexOf("stays on this computer") >= 0 && l.indexOf("is not text") < 0);
+  const quietNone = quiet.every(ops => ops.length === 0);
+  check(first.length === 1 && otherRel !== "" && quietNone && after.length === 0
+    && changed.length === 1 && changed[0].rel === sentRel && changed[0].body === "gamma"
+    && stays.length === 1 && stays[0].indexOf(otherRel) >= 0,
+    "958a two case variants of one path owe one file, then nothing until that file changes, and the other is said once as staying: first "
+    + JSON.stringify(first.map(op => op.rel)) + ", quiet " + quiet.map(ops => ops.length).join(" ")
+    + ", changed " + JSON.stringify(changed.map(op => op.rel)) + " then " + after.length
+    + ", said " + stays.length + " " + JSON.stringify(stays));
+} catch (e) {
+  check(false, "harness (the leg 958a): " + (e && e.stack ? e.stack : e));
+}
+try {
+  const said = [];
+  const io = exactNames([["page.ec", "one"]]);
+  const prog = C.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {}, say: l => said.push(l) });
+  const first = oweFiles(prog);
+  markSent(prog, first, 1);
+  const second = oweFiles(prog);
+  const stays = said.filter(l => l.indexOf("stays on this computer") >= 0);
+  check(first.length === 1 && first[0].rel === "page.ec" && first[0].body === "one" && second.length === 0 && stays.length === 0,
+    "958b one file per path is unchanged: ops " + first.length + " then " + second.length + ", said " + stays.length);
+} catch (e) {
+  check(false, "harness (the leg 958b): " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:case-one. Deleting that line, leaving the file valid script, owes a case variant on later cycles again. */
+{
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:case-one") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      const lifted = nodeRequire(src);
+      const io = exactNames([["Guide.ec", "alpha"], ["guide.ec", "beta"]]);
+      const prog = lifted.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {} });
+      const names = [];
+      let looping = false;
+      for (let n = 0; n < 5; n++) {
+        const ops = prog.owed(LEAD_ME, null).filter(op => op.kind === "file");
+        if (ops.length > 1 || (n > 0 && ops.length > 0)) looping = true;
+        for (const op of ops) {
+          names.push(op.rel);
+          prog.sentOut(op, { id: hex(16), epoch: 1, counter: n + 1, ciphertext: Buffer.alloc(4) });
+        }
+      }
+      turned = looping;
+      detail = "sent " + JSON.stringify(names);
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "958c lifting plant:case-one sends a case variant on later cycles, and the file is put back: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
