@@ -660,6 +660,8 @@ function catalogChanged(win) {
   tryHeldUse();
   resealHeld(win);
   const now = readCatalog();
+  /* The owed eject is in the envelope, which the read above loads on a fresh run. */
+  if (ejectOwed) tryHeldUse();
   tryLiveStats(win);
   tryHeldBranches();
   sendListing(win, false);
@@ -853,9 +855,14 @@ const handedAsked = new Map(), HANDED_ASKED_MAX = 32;
 /* Bytes handed to the page for the catalog in use, kept after the take so a later ask can still seal them.
    Separate from handedAsked: a boot or a watch raises its mark at once, and must not be treated as an ask. */
 const handedUse = new Map();
-let inUseKept = null, catalogAskIds = [], heldInUse = null, heldAnswer = null;
+let inUseKept = null, catalogAskIds = [], heldInUse = null, heldAnswer = null, ejectOwed = null;
 let loadedText = "", asksWatcher = null, askSettle = null, lastCatalogCopy = "";
 const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
+/* The catalog text this desk loaded, beside its own desk file. The page keeps the runtime copy,
+   not the format-2 document, and the folder's file is not always the one in use, so a restart
+   would otherwise have the pin and not the text. Written only once in-use.ec names it. */
+const LOADED_CATALOG_FILE = "catalog-loaded.txt";
+const LOADED_CATALOG_MAX = 16 * 1024 * 1024;
 const ASK_DIR = "catalog-asks", ASK_KIND = "etiuda-catalog-ask", ASK_PREFIX = "etiuda-catalog-ask\n";
 const ANSWER_KIND = "etiuda-catalog-answer", ANSWER_NAME = "catalog-answer.ec";
 const ASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
@@ -911,6 +918,11 @@ ipcMain.on("etiuda:catalog-taken", (e, pin, text) => {
   try { win = BrowserWindow.fromWebContents(e.sender); } catch { win = null; }
   writeInUse(key, win);
   noteOpenedTaken(key, backed, win);
+});
+/* The page put the catalog down. The lead, the team pin and the desk's key stay. */
+ipcMain.on("etiuda:catalog-eject", (e) => {
+  if (!fromEngine(e)) return;
+  ejectLoadedCatalog();
 });
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
    would read, in the shape the host answer gives the first, or null where there is none. */
@@ -1049,6 +1061,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
+    + (ejectOwed ? ',"ejectOwed":' + JSON.stringify(ejectOwed) : "")
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
@@ -2048,6 +2061,7 @@ function clearInUseFile() {
   catch (e) { if (e.code !== "ENOENT") { heldInUse = { remove: true }; return; } }
   inUseKept = null;
   if (heldInUse && heldInUse.remove) heldInUse = null;
+  dropLoadedCatalog();
   persistDeskEnvelope();
 }
 function releaseInUse() {
@@ -2082,11 +2096,98 @@ function tellCopy(win, id) {
 }
 function catalogCopyNote() { return lastCatalogCopy; }
 function asksWatching() { return !!asksWatcher; }
+function loadedCatalogPath() { return path.join(app.getPath("userData"), LOADED_CATALOG_FILE); }
+/* Kept only when the text is the catalog just named. A pin the text does not back is not written. */
+function keepLoadedCatalog(text, pin) {
+  const body = String(text || "");
+  if (!PIN_RE.test(String(pin || "")) || !body) return;
+  let hashed = "";
+  try {
+    const doc = catalogDocIn(body);
+    hashed = doc && doc.kind === "etiuda-catalog" ? signedSha(doc) : "";
+  } catch { hashed = ""; }
+  if (hashed !== pin || Buffer.byteLength(body, "utf8") > LOADED_CATALOG_MAX) return;
+  try { writeReplacing(loadedCatalogPath(), body); }
+  catch (e) { console.error("etiuda: the loaded catalog could not be kept - " + e.message); }
+}
+function dropLoadedCatalog() {
+  try { fs.unlinkSync(loadedCatalogPath()); }
+  catch (e) { if (e.code !== "ENOENT") console.error("etiuda: the loaded catalog could not be dropped - " + e.message); }
+}
+/* What an eject still owes the share, named by the team and the pin when this run recorded them.
+   Kept in the envelope: the memory of it would not survive the desk starting again. */
+function rememberEjectOwed() {
+  const prev = ejectOwed && typeof ejectOwed === "object" ? ejectOwed : null;
+  const team = inUseKept && SEALED_TEAM_RE.test(String(inUseKept.team || "")) ? String(inUseKept.team)
+    : (prev && prev.team) || "";
+  const sha = inUseKept && PIN_RE.test(String(inUseKept.sha || "")) ? String(inUseKept.sha)
+    : (prev && prev.sha) || "";
+  const next = {};
+  if (team) next.team = team;
+  if (sha) next.sha = sha;
+  ejectOwed = next;
+}
+/* The catalog alone. releaseInUse keeps the file while this desk is still a member, which it is,
+   so an eject unlinks in-use.ec itself. A share that is not answering, or an unlink that does not
+   land, is owed that removal when the folder next answers, and the debt stays in the envelope. */
+function ejectLoadedCatalog() {
+  loadedText = "";
+  dropLoadedCatalog();
+  const dest = inUseFile();
+  if (!dest || !folderAnswers(catalogFolder())) {
+    if (dest) rememberEjectOwed();
+    heldInUse = dest ? { eject: true } : null;
+    inUseKept = null;
+    persistDeskEnvelope();
+    removeAnswer();
+    return;
+  }
+  let failed = false;
+  try { fs.unlinkSync(dest); }
+  catch (e) { if (e.code !== "ENOENT") failed = true; }
+  if (failed) {
+    rememberEjectOwed();
+    heldInUse = { eject: true };
+    inUseKept = null;
+  } else {
+    heldInUse = null;
+    inUseKept = null;
+    ejectOwed = null;
+  }
+  persistDeskEnvelope();
+  removeAnswer();
+}
+/* At the start of a run, the text comes back only when its pin is the one the envelope recorded
+   for in-use.ec. Anything else, including a missing file, leaves this run as it was. */
+function reloadLoadedCatalog() {
+  if (loadedText || !inUseKept || !PIN_RE.test(String(inUseKept.sha || ""))) return;
+  const file = loadedCatalogPath();
+  let text = "";
+  try {
+    const st = fs.statSync(file);
+    if (!st.isFile() || st.size > LOADED_CATALOG_MAX || st.size < 1) return;
+    text = fs.readFileSync(file, "utf8");
+  } catch { return; }
+  const doc = catalogDocIn(text);
+  if (!doc || doc.kind !== "etiuda-catalog") return;
+  let pin = "";
+  try { pin = signedSha(doc); } catch { return; }
+  if (pin !== inUseKept.sha) return;
+  loadedText = text;
+  const source = inUseKept.source;
+  if ((source === "folder" || source === "opened" || source === "desk-file") && !handedUse.has(pin))
+    noteHanded(text, source);
+}
 function writeInUse(pin, win) {
   const got = handedUse.get(String(pin || ""));
   /* A pin this shell did not hand on is not a catalog this desk has loaded. */
   if (!got) return;
   loadedText = got.text;
+  /* A take replaces an eject the share has not yet heard. The debt would otherwise remove this catalog. */
+  if (ejectOwed) { ejectOwed = null; persistDeskEnvelope(); }
+  /* A pin other than the one already recorded drops the kept file before the returns below,
+     so a take the share has not recorded cannot leave the previous catalog to be reloaded. */
+  if (!inUseKept || inUseKept.sha !== String(pin || "")) dropLoadedCatalog();
   const root = catalogFolder();
   if (!folderAnswers(root)) { heldInUse = { text: got.text, source: got.source }; return; }
   let isDir = false;
@@ -2103,6 +2204,7 @@ function writeInUse(pin, win) {
     const doc = catalogDocIn(got.text);
     if (!doc || doc.kind !== "etiuda-catalog") return;
     if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === seal.epoch && inUseKept.team === seal.team) {
+      keepLoadedCatalog(got.text, pin);
       tryCatalogAsk(win);
       return;
     }
@@ -2123,9 +2225,10 @@ function writeInUse(pin, win) {
       try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
     }
     writeReplacing(at.dest, JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, JSON.stringify(out)), null, 1) + "\n");
-    inUseKept = { sha: pin, epoch: seal.epoch, team: seal.team };
+    inUseKept = { sha: pin, epoch: seal.epoch, team: seal.team, source: got.source };
     heldInUse = null;
     persistDeskEnvelope();
+    keepLoadedCatalog(got.text, pin);
     tryCatalogAsk(win);
   } catch (e) {
     console.error("etiuda: the catalog in use could not be written - " + e.message);
@@ -2252,12 +2355,26 @@ function watchAsks(win) {
   } catch { asksWatcher = null; }
 }
 function tryHeldUse() {
+  if (ejectOwed && !heldInUse) heldInUse = { eject: true };
+  if (ejectOwed && !heldAnswer) heldAnswer = { remove: true };
   if (!heldInUse && !heldAnswer) return;
   if (!folderAnswers(catalogFolder())) return;
   const use = heldInUse, ans = heldAnswer;
   heldInUse = null;
   heldAnswer = null;
-  if (use && use.remove) releaseInUse();
+  if (use && use.eject) {
+    const dest = inUseFile();
+    let failed = false;
+    if (dest) {
+      try { fs.unlinkSync(dest); }
+      catch (e) { if (e.code !== "ENOENT") { heldInUse = { eject: true }; failed = true; } }
+    }
+    if (!failed) {
+      dropLoadedCatalog();
+      inUseKept = null;
+      persistDeskEnvelope();
+    }
+  } else if (use && use.remove) releaseInUse();
   else if (use && use.text) {
     noteHanded(use.text, use.source || "opened");
     let pin = "";
@@ -2266,6 +2383,10 @@ function tryHeldUse() {
   }
   if (ans && ans.remove) removeAnswer();
   else if (ans) tryCatalogAsk(theWindow);
+  if (use && use.eject && ejectOwed && !heldInUse && !(heldAnswer && heldAnswer.remove)) {
+    ejectOwed = null;
+    persistDeskEnvelope();
+  }
 }
 
 /* ---- the team: its file beside the catalogs, its lead's key pinned, and this desk's team keys -----------
@@ -3958,10 +4079,20 @@ function readDesk() {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
     });
     teamJoin = joinKept(doc && doc.teamJoin);
-    if (doc && doc.inUse && typeof doc.inUse === "object" && !Array.isArray(doc.inUse)) {
+    if (doc && doc.ejectOwed && typeof doc.ejectOwed === "object" && !Array.isArray(doc.ejectOwed)) {
+      const o = doc.ejectOwed;
+      const next = {};
+      if (SEALED_TEAM_RE.test(String(o.team || ""))) next.team = String(o.team);
+      if (PIN_RE.test(String(o.sha || ""))) next.sha = String(o.sha);
+      ejectOwed = next;
+    }
+    /* An eject still owed wins over a pin left beside it: reloading that pin would put the catalog back. */
+    if (!ejectOwed && doc && doc.inUse && typeof doc.inUse === "object" && !Array.isArray(doc.inUse)) {
       const u = doc.inUse;
-      if (PIN_RE.test(String(u.sha || "")) && Number.isInteger(u.epoch) && u.epoch >= 1 && SEALED_TEAM_RE.test(String(u.team || "")))
+      if (PIN_RE.test(String(u.sha || "")) && Number.isInteger(u.epoch) && u.epoch >= 1 && SEALED_TEAM_RE.test(String(u.team || ""))) {
         inUseKept = { sha: String(u.sha), epoch: u.epoch, team: String(u.team) };
+        if (u.source === "folder" || u.source === "opened" || u.source === "desk-file") inUseKept.source = u.source;
+      }
     }
     if (doc && Array.isArray(doc.catalogAsks)) doc.catalogAsks.forEach(id => {
       const s = String(id || "");
@@ -3970,6 +4101,7 @@ function readDesk() {
     while (catalogAskIds.length > 64) catalogAskIds.shift();
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
+    reloadLoadedCatalog();
     return keys;
   }
   deskRestored = "";

@@ -176,6 +176,12 @@ function eCatalogTaken(pin, text){
   if(!pin || !h || typeof h.catalogTaken!=="function") return;
   try{ h.catalogTaken(String(pin), text==null?"":String(text)); }catch(e){}
 }
+/* The page put the catalog down. Nothing in a browser, which has no shell keeping a copy. */
+function eCatalogEject(){
+  const h=eHost();
+  if(!h || typeof h.catalogEject!=="function") return;
+  try{ h.catalogEject(); }catch(e){}
+}
 /* The shell says a copy of the catalog in use was sent to the team's lead. The page speaks; the desk does not ask. */
 function eOnCatalogCopy(fn){
   const h=eHost();
@@ -450,6 +456,7 @@ export {
   ePickCatalogFolder,
   eReadCatalogFile,
   eCatalogTaken,
+  eCatalogEject,
   eOnCatalogCopy,
   eSaveCatalogFile,
   wireHost,

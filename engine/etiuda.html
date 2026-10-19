@@ -14375,6 +14375,7 @@ What you type stays in this browser only.`;
     dispatchTabChord: () => dispatchTabChord,
     eBranchIdentity: () => eBranchIdentity,
     eCatalogBuiltIn: () => eCatalogBuiltIn,
+    eCatalogEject: () => eCatalogEject,
     eCatalogFile: () => eCatalogFile,
     eCatalogFiles: () => eCatalogFiles,
     eCatalogFolder: () => eCatalogFolder,
@@ -14570,6 +14571,14 @@ What you type stays in this browser only.`;
     if (!pin || !h || typeof h.catalogTaken !== "function") return;
     try {
       h.catalogTaken(String(pin), text == null ? "" : String(text));
+    } catch (e) {
+    }
+  }
+  function eCatalogEject() {
+    const h = eHost();
+    if (!h || typeof h.catalogEject !== "function") return;
+    try {
+      h.catalogEject();
     } catch (e) {
     }
   }
@@ -25516,6 +25525,7 @@ What you type stays in this browser only.`;
     const was = keepKeys(keys);
     keys.forEach((k) => lsDel(k));
     ssDel(TAB_KEY);
+    if (typeof eCatalogEject === "function") eCatalogEject();
     hooks.restartDesk();
     offerUndo("Catalog ejected", () => undoEject(was));
   }
@@ -25526,6 +25536,7 @@ What you type stays in this browser only.`;
       return false;
     }
     putBack(was);
+    if (typeof tellTaken === "function" && typeof storedCatalog === "function") tellTaken(storedCatalog());
     return true;
   }
 

@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 39;
+const EXPECTED = 54;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -67,7 +67,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(
+    SRC + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -154,6 +154,24 @@ try {
   };
   const join = (box, epoch, roster, catalogs) => {
     put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs));
+  };
+  const declOf = (src, marker) => {
+    const at = src.indexOf(marker);
+    if (at < 0) throw new Error("no " + marker);
+    let par = 0, brk = 0, brc = 0, saw = false;
+    for (let i = at; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === "(") par++;
+      else if (ch === ")") par--;
+      else if (ch === "[") brk++;
+      else if (ch === "]") brk--;
+      else if (ch === "{") { brc++; saw = true; }
+      else if (ch === "}") {
+        brc--;
+        if (saw && !par && !brk && !brc) return src.slice(at, i + 1);
+      }
+    }
+    throw new Error("unterminated " + marker);
   };
 
   /* ---- boot of the folder's own file ---------------------------------------------------------- */
@@ -470,6 +488,305 @@ try {
       "890ai a pin the catalog text does not back writes nothing");
   }
 
+  /* ---- a restart holding a catalog that is not the folder's file ------------------------------------ */
+  {
+    const FERRY = "A ferry lamp hangs over the deck.";
+    const STRAY = "A stray lamp was left on the pier.";
+    const box = await arm("outside");
+    put(box.share, "board.ec", textOf(catalog(2, { date: "2026-04-02" })));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const folderBoot = box.D.sync("etiuda:catalog");
+    const folderPin = pinOf(box.D, folderBoot || "");
+    take(box.D, folderPin);
+    const outsideDir = folder("ferry-opened");
+    const ferryBody = textOf(catalog(5, { id: "ferry-lamps", name: "Ferry lamps", date: "2026-03-11", card: FERRY }));
+    put(outsideDir, "ferry.ec", ferryBody);
+    const outsideFile = path.join(outsideDir, "ferry.ec");
+    box.D.api.offerFile(box.D.win, outsideFile);
+    const offered = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+    const outsidePin = pinOf(box.D, offered ? offered[1] : "");
+    take(box.D, outsidePin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const named = openSealedDoc(box.D, useFile, box.key);
+    const kept = path.join(box.D.ud, "catalog-loaded.txt");
+    const keptPin = fs.existsSync(kept) ? pinOf(box.D, fs.readFileSync(kept, "utf8")) : "";
+    const keptInShare = path.relative(box.share, kept);
+    const outsideShare = keptInShare !== "" && !keptInShare.startsWith("..") && !path.isAbsolute(keptInShare);
+    const again = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: again, me: box.me }, "Askferry1", outsidePin);
+    again.api.tryCatalogAsk(again.win);
+    const ans = answerPath(box.share, box.me.id);
+    const answered = openSealedDoc(again, ans, box.key);
+    const answeredText = answered ? JSON.stringify(answered) : "";
+    const shareHas = (dir, needle) => {
+      let hit = false;
+      const walk = d => {
+        if (hit || !fs.existsSync(d)) return;
+        for (const name of fs.readdirSync(d)) {
+          const at = path.join(d, name);
+          if (fs.statSync(at).isDirectory()) walk(at);
+          else if (fs.readFileSync(at).includes(Buffer.from(needle))) hit = true;
+        }
+      };
+      walk(dir);
+      return hit;
+    };
+    check(folderPin && outsidePin && folderPin !== outsidePin && path.resolve(path.dirname(outsideFile)) !== path.resolve(box.share)
+        && named && named.catalog.source === "opened" && named.catalog.sha256 === outsidePin
+        && named.catalog.title === "Ferry lamps" && named.catalog.rev === 5
+        && JSON.stringify(named).indexOf(FERRY) < 0
+        && keptPin === outsidePin && path.dirname(kept) === box.D.ud && !outsideShare
+        && !shareHas(box.share, FERRY)
+        && answered && answered.kind === "etiuda-catalog-answer" && answered.sha256 === outsidePin
+        && answered.sha256 !== folderPin && answeredText.indexOf(FERRY) >= 0,
+      "895a a desk that restarts holding a catalog opened from outside the folder answers the lead's ask with that catalog, and the text stays beside the desk");
+
+    const strayBody = textOf(catalog(9, { id: "stray-lamps", name: "Stray lamps", date: "2026-02-02", card: STRAY }));
+    const strayPin = pinOf(box.D, strayBody);
+    fs.writeFileSync(kept, strayBody, "utf8");
+    if (fs.existsSync(ans)) fs.unlinkSync(ans);
+    const third = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: third, me: box.me }, "Askstray1", outsidePin);
+    third.api.tryCatalogAsk(third.win);
+    const strayAns = openSealedDoc(third, ans, box.key);
+    const still = openSealedDoc(third, useFile, box.key);
+    const strayInShare = shareHas(box.share, STRAY) || (strayAns && JSON.stringify(strayAns).indexOf(STRAY) >= 0);
+    check(strayPin && strayPin !== outsidePin && still && still.catalog.sha256 === outsidePin
+        && !fs.existsSync(ans) && !strayAns && !strayInShare,
+      "895b a kept text whose pin does not match in-use.ec answers nothing");
+  }
+
+  /* ---- the kept copy follows the catalog the desk still holds -------------------------------------- */
+  {
+    const keptOf = D => path.join(D.ud, "catalog-loaded.txt");
+    const box = await arm("forget-kept");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const b = box.D.sync("etiuda:catalog");
+    take(box.D, pinOf(box.D, b || ""));
+    const had = fs.existsSync(keptOf(box.D));
+    await box.D.ask("etiuda:team-join", "forget", box.team);
+    const gone = !fs.existsSync(keptOf(box.D));
+    check(had && gone, "895c forgetting the lead drops the kept copy (had=" + had + " gone=" + gone + ")");
+  }
+
+  {
+    const box = await arm("edition-held");
+    const r2 = textOf(catalog(2, { card: "Rev two lamp." }));
+    put(box.share, "board.ec", r2);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const b = box.D.sync("etiuda:catalog");
+    const pin2 = pinOf(box.D, b || "");
+    take(box.D, pin2);
+    put(box.share, "board.ec", textOf(catalog(3, { card: "Rev three lamp." })));
+    const again = loadDesk(box.D.ud);
+    const b3 = again.sync("etiuda:catalog");
+    const pin3 = pinOf(again, b3 || "");
+    putAsk({ share: box.share, D: again, me: box.me }, "Askq3a", pin2);
+    again.api.tryCatalogAsk(again.win);
+    const ans = openSealedDoc(again, answerPath(box.share, box.me.id), box.key);
+    check(pin3 && pin3 !== pin2 && ans && ans.sha256 === pin2,
+      "895d a folder that has moved on to a newer edition leaves a restarted desk answering the edition it holds (answered "
+      + (ans ? ans.sha256.slice(7, 15) : "none") + ")");
+    const key2 = crypto.randomBytes(32);
+    join(box, 2, [entry(again, box.me, key2, box.team, 2)]);
+    touch(path.join(box.share, "etiuda-team.json"), Date.now() + 1500);
+    again.api.tryCatalogAsk(again.win);
+    const use2 = openSealedDoc(again, inUsePath(box.share, box.me.id), key2);
+    check(use2 && use2.catalog.sha256 === pin2 && use2.catalog.source === "folder",
+      "895e after that restart, a newer team epoch reseals the held edition with source folder (got "
+      + (use2 ? use2.catalog.source + " " + use2.catalog.sha256.slice(7, 15) : "none") + ")");
+  }
+
+  {
+    const box = await arm("held-down");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const b = box.D.sync("etiuda:catalog");
+    const pinA = pinOf(box.D, b || "");
+    take(box.D, pinA);
+    const outDir = folder("held-down-out");
+    put(outDir, "b.ec", textOf(catalog(6, { id: "b-lamps", name: "B lamps", card: "B lamp." })));
+    box.D.api.offerFile(box.D.win, path.join(outDir, "b.ec"));
+    const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+    const pinB = pinOf(box.D, off ? off[1] : "");
+    box.D.api.setDown(box.share);
+    take(box.D, pinB);
+    const keptFile = path.join(box.D.ud, "catalog-loaded.txt");
+    const keptPin = fs.existsSync(keptFile) ? pinOf(box.D, fs.readFileSync(keptFile, "utf8")) : "";
+    const useNow = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const again = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: again, me: box.me }, "Askq7a", pinA);
+    again.api.tryCatalogAsk(again.win);
+    const ans = openSealedDoc(again, answerPath(box.share, box.me.id), box.key);
+    check(!ans || ans.sha256 === pinB,
+      "895f a take held while the share is down does not leave the previous catalog to be answered after a restart (answered "
+      + (ans ? ans.sha256.slice(7, 15) : "none") + ", kept " + (keptPin ? keptPin.slice(7, 15) : "none")
+      + ", in use " + (useNow && useNow.catalog ? useNow.catalog.sha256.slice(7, 15) : "none") + ")");
+  }
+
+  /* ---- an eject reaches the shell, and only the catalog goes -------------------------------------- */
+  {
+    const box = await arm("eject-run");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const kept = path.join(box.D.ud, "catalog-loaded.txt");
+    const ans = answerPath(box.share, box.me.id);
+    putAsk(box, "Ask906a", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const before = openSealedDoc(box.D, ans, box.key);
+    const envBefore = box.D.envelope();
+    const leadPub = envBefore.teamPins && envBefore.teamPins[box.team] && envBefore.teamPins[box.team].public;
+    const deskPub = envBefore.branch && envBefore.branch.sign && envBefore.branch.sign.pub;
+    box.D.sync("etiuda:catalog-eject");
+    putAsk(box, "Ask906b", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const after = fs.existsSync(ans) ? openSealedDoc(box.D, ans, box.key) : null;
+    const named = fs.existsSync(useFile) ? openSealedDoc(box.D, useFile, box.key) : null;
+    check(!!pin && before && before.kind === "etiuda-catalog-answer" && JSON.stringify(before).indexOf(CARD) >= 0
+        && !after && !fs.existsSync(ans) && !fs.existsSync(useFile) && !named && !fs.existsSync(kept),
+      "906a an eject, then an ask, answers no catalog, and the team folder no longer names it (answer "
+      + (after ? "still there" : "gone") + ", in use " + (named ? "still there" : "gone") + ", kept "
+      + (fs.existsSync(kept) ? "still there" : "gone") + ")");
+
+    const again = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: again, me: box.me }, "Ask906c", pin);
+    again.api.tryCatalogAsk(again.win);
+    const restarted = fs.existsSync(ans) ? openSealedDoc(again, ans, box.key) : null;
+    const keptAgain = fs.existsSync(path.join(again.ud, "catalog-loaded.txt"));
+    const namedAgain = fs.existsSync(useFile) ? openSealedDoc(again, useFile, box.key) : null;
+    check(!restarted && !fs.existsSync(ans) && !keptAgain && !namedAgain,
+      "906b an eject, then a restart, answers no catalog, and the kept copy is gone (answer "
+      + (restarted ? "still there" : "gone") + ", kept " + (keptAgain ? "still there" : "gone") + ")");
+
+    const envAfter = again.envelope();
+    const leadAfter = envAfter.teamPins && envAfter.teamPins[box.team] && envAfter.teamPins[box.team].public;
+    const deskAfter = envAfter.branch && envAfter.branch.sign && envAfter.branch.sign.pub;
+    check(!!leadPub && leadAfter === leadPub && !!deskPub && deskAfter === deskPub
+        && envAfter.keys && envAfter.keys.eAgent === "North desk" && envAfter.keys.eCatalogFolder === box.share
+        && !envAfter.inUse && !namedAgain,
+      "906c an eject keeps the lead, the team pin and the desk's key, and the envelope no longer names the catalog (lead "
+      + (leadAfter === leadPub ? "kept" : "gone") + ", key " + (deskAfter === deskPub ? "kept" : "gone") + ")");
+  }
+
+  /* An eject the share does not hear is still owed after the desk starts again. */
+  {
+    const box = await arm("eject-relaunch");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const ans = answerPath(box.share, box.me.id);
+    putAsk(box, "Ask906e", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const hadUse = fs.existsSync(useFile);
+    const hadAns = fs.existsSync(ans) && !!openSealedDoc(box.D, ans, box.key);
+    box.D.api.setDown(box.share);
+    box.D.sync("etiuda:catalog-eject");
+    const owed = box.D.envelope().ejectOwed;
+    const again = loadDesk(box.D.ud);
+    again.api.catalogChanged(again.win);
+    const env = again.envelope();
+    const useLeft = fs.existsSync(useFile);
+    const ansLeft = fs.existsSync(ans);
+    check(hadUse && hadAns && owed && owed.team === box.team && owed.sha === pin
+        && !useLeft && !ansLeft && !env.ejectOwed && !env.inUse,
+      "906e an eject while the share is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
+      + (owed && owed.team === box.team && owed.sha === pin ? "kept" : "lost")
+      + ", in use " + (useLeft ? "still there" : "gone") + ", answer " + (ansLeft ? "still there" : "gone") + ")");
+  }
+
+  /* A failed unlink of in-use.ec holds an eject, and the next change of the folder finishes it. */
+  {
+    const box = await arm("eject-busy");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const had = fs.existsSync(useFile) && !!box.D.envelope().inUse;
+    const realUnlink = fs.unlinkSync;
+    let armed = true;
+    fs.unlinkSync = function (p) {
+      if (armed && String(p).endsWith("in-use.ec")) {
+        armed = false;
+        const err = new Error("busy");
+        err.code = "EBUSY";
+        throw err;
+      }
+      return realUnlink.apply(fs, arguments);
+    };
+    let threw = "";
+    try {
+      box.D.sync("etiuda:catalog-eject");
+      box.D.api.catalogChanged(box.D.win);
+    } catch (e) { threw = e && e.message ? e.message : String(e); }
+    finally { fs.unlinkSync = realUnlink; }
+    const env = box.D.envelope();
+    const left = fs.existsSync(useFile);
+    check(had && !threw && !left && !env.inUse,
+      "906f a failed unlink of in-use.ec holds an eject, and the next change removes the file and the envelope's pin (in use "
+      + (left ? "still there" : "gone") + ", envelope " + (env.inUse ? "still names it" : "clear") + ")");
+  }
+
+  /* An eject while the share is down drops the local copy at once, and the files when the share answers. */
+  {
+    const box = await arm("eject-away");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const ans = answerPath(box.share, box.me.id);
+    const kept = path.join(box.D.ud, "catalog-loaded.txt");
+    putAsk(box, "Ask906h", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const had = fs.existsSync(useFile) && fs.existsSync(ans) && fs.existsSync(kept) && !!box.D.envelope().inUse;
+    box.D.api.setDown(box.share);
+    box.D.sync("etiuda:catalog-eject");
+    const keptGone = !fs.existsSync(kept);
+    const pinGone = !box.D.envelope().inUse;
+    box.D.api.setDown("");
+    box.D.api.catalogChanged(box.D.win);
+    const useLeft = fs.existsSync(useFile);
+    const ansLeft = fs.existsSync(ans);
+    check(had && keptGone && pinGone && !useLeft && !ansLeft,
+      "906h an eject while the share is unreachable drops the kept copy and the envelope's pin, and the next answer of the folder removes in-use.ec and the answer (kept "
+      + (keptGone ? "gone" : "still there") + ", envelope " + (pinGone ? "clear" : "still names it")
+      + ", in use " + (useLeft ? "still there" : "gone") + ", answer " + (ansLeft ? "still there" : "gone") + ")");
+  }
+
+  {
+    /* 906i (the test architect's condition C1 on 906, his third probe): unreachable share, eject, undo while still
+       unreachable, quit, relaunch with the share back. The take clears the debt, so the undone eject is not finished later. */
+    const box = await arm("906i-undo-relaunch");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    box.D.api.setDown(box.share);
+    box.D.sync("etiuda:catalog-eject");
+    take(box.D, pin, booted);
+    const again = loadDesk(box.D.ud);
+    again.api.catalogChanged(again.win);
+    again.api.catalogChanged(again.win);
+    const inner = fs.existsSync(useFile) ? openSealedDoc(again, useFile, box.key) : null;
+    const env = again.envelope();
+    check(inner && inner.catalog && inner.catalog.sha256 === pin && !env.ejectOwed,
+      "906i undo of an unreachable eject, then a relaunch with the share back, keeps in-use.ec naming the pin (in use "
+      + (inner ? "kept" : "removed") + ", owed " + !!env.ejectOwed + ")");
+  }
+
   /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */
   {
     const boot = await arm("pageboot");
@@ -671,6 +988,77 @@ try {
     TJ.noteCatalogCopy();
     check(enToast === SENT_EN && toastEl.textContent === SENT_PL,
       "890aa the quiet note is shown, in the desk's language, when a copy was sent");
+
+    /* The page's eject, through the real preload, on a channel named as the preload's others are. */
+    const savedWindow = globalThis.window;
+    const savedDocument = globalThis.document;
+    const sentCh = [];
+    const ipcRenderer = {
+      sendSync: (ch) => {
+        sentCh.push(ch);
+        if (ch === "etiuda:catalog") return null;
+        if (ch === "etiuda:host") return { platform: "linux", backdrop: null };
+        return undefined;
+      },
+      send: (ch) => { sentCh.push(ch); },
+      invoke: () => Promise.resolve(null),
+      on: () => {},
+    };
+    const fakeWindow = { addEventListener() {}, removeEventListener() {} };
+    globalThis.window = fakeWindow;
+    globalThis.document = { addEventListener() {}, removeEventListener() {} };
+    const preloadSrc = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+    new Function("require", preloadSrc)(n => (n === "electron" ? {
+      contextBridge: {
+        exposeInMainWorld: (k, v) => { fakeWindow[k] = v; },
+        executeInMainWorld: () => {},
+      },
+      ipcRenderer,
+      webUtils: {},
+    } : nodeRequire(n)));
+    globalThis.window = savedWindow;
+    globalThis.document = savedDocument;
+    const prevHost = savedWindow.E_HOST;
+    const hostFn = fakeWindow.E_HOST && fakeWindow.E_HOST.catalogEject;
+    const takenFn = fakeWindow.E_HOST && fakeWindow.E_HOST.catalogTaken;
+    savedWindow.E_HOST = Object.assign({}, prevHost,
+      hostFn ? { catalogEject: hostFn } : {},
+      takenFn ? { catalogTaken: takenFn } : {});
+    const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "local-memory.js"), "utf8");
+    const ls = { eCatalog: "{\"cards\":[1]}", eTheme: "dark" };
+    let restarts = 0;
+    const H = await import(MOD("host.js"));
+    const tell = typeof H.eCatalogEject === "function" ? H.eCatalogEject : function () {};
+    const runEject = new Function("eCatalogEject", "ejectKeys", "keepKeys", "lsDel", "ssDel", "TAB_KEY", "hooks", "offerUndo", "undoEject",
+      declOf(pageSrc, "function ejectCatalog(") + "\nreturn ejectCatalog;")(
+      tell, () => ["eCatalog"], () => ({ keys: {}, tabs: null }),
+      (k) => { delete ls[k]; }, () => {}, "tabs",
+      { flushPillState() {}, restartDesk() { restarts++; } }, () => {}, () => {});
+    /* Undo of that eject, through the same preload. The shell is told only if undoEject names the catalog. */
+    let undoBack = false;
+    let undoThrew = "";
+    let takenSends = 0;
+    try {
+      runEject();
+      const beforeTaken = sentCh.filter(c => c === "etiuda:catalog-taken").length;
+      const runUndo = new Function("tellTaken", "storedCatalog", "E_CATALOG_STORE", "lsSet", "lsGet",
+        "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "putBack",
+        declOf(pageSrc, "function undoEject(") + "\nreturn undoEject;")(
+        File.tellTaken, Cat.storedCatalog, "eCatalog",
+        () => true, () => null,
+        () => {}, () => "", () => "",
+        () => {});
+      try { undoBack = runUndo({ keys: {}, tabs: null }) === true; }
+      catch (e) { undoThrew = e && e.message ? e.message : String(e); }
+      takenSends = sentCh.filter(c => c === "etiuda:catalog-taken").length - beforeTaken;
+    } finally { savedWindow.E_HOST = prevHost; }
+    const ejectSends = sentCh.filter(c => c === "etiuda:catalog-eject");
+    check(ejectSends.length === 1 && !("eCatalog" in ls) && ls.eTheme === "dark" && restarts === 1,
+      "906d the page's eject reaches the host through preload on etiuda:catalog-eject, and the page still drops its own catalog keys (sent "
+      + sentCh.filter(c => c.indexOf("eject") >= 0).join(",") + ", restarts " + restarts + ")");
+    check(undoBack && !undoThrew && takenSends === 1,
+      "906g an undo of the eject names the restored catalog to the shell on etiuda:catalog-taken (sent "
+      + takenSends + (undoThrew ? ", " + undoThrew : "") + ")");
   }
 
   /* ---- a catalog the team file does not name, and an ask that names another hash ------------------- */
