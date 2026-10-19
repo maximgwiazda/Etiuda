@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 123;
+const EXPECTED = 127;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3227,6 +3227,78 @@ try {
     "961d lifting plant:wrap-epoch opens that wrap, and the file is put back: " + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 961a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 2: a token hello that binds no key is not sent; a second use is said as already used. ---- */
+const INVITE_USED_NEW = "This invitation was already used. Ask your lead for a new one.";
+const INVITE_USED_OLD = "This invitation has already been used.";
+async function relayTeam() {
+  const rt = hex(16);
+  const made = await admin("POST", "/relay/v1/teams", { rt: rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+  if (made.status !== 200) throw new Error("a team was not made: " + made.status);
+  return rt;
+}
+async function registerInvite(rt, id, token) {
+  const t = R.clock.now, hash = sha(Buffer.from(token, "utf8"));
+  const res = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [{ id: id, hash: hash }], drop: [], t: t,
+    sig: signHex(LEAD, core.invitesBytes(rt, t, [{ id: id, hash: hash }], [])) });
+  if (res.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(res.json));
+}
+async function tokenHello(mod, rt, token, inv, who) {
+  const said = [];
+  const place = who ? "desk:" + who.keyId : "desk:k-hollow";
+  const extra = {
+    invite: () => ({ inv: inv, token: token, seal: crypto.randomBytes(32) }),
+    say: l => said.push(l),
+  };
+  if (!who) extra.me = () => ({ keyId: "k-" + hex(8), public: hex(32), place: place });
+  const desk = opened(mod, "tok-" + hex(4), { rt: rt, id: "t-" + hex(8) }, who || LEAD, place, extra);
+  desk.ch.start();
+  await desk.ch.idle();
+  const sessions = desk.t.log.filter(l => l.indexOf("POST session") === 0).length;
+  const used = desk.prog.state().tokenUsed === true;
+  const online = desk.ch.online();
+  await desk.ch.stop();
+  return { sessions: sessions, used: used, said: said, online: online };
+}
+try {
+  const rt = await relayTeam(), token = hex(32), inv = hex(16);
+  await registerInvite(rt, inv, token);
+  const bare = await tokenHello(C, rt, token, inv, null);
+  const later = await tokenHello(C, rt, token, inv, keyPair(true));
+  check(bare.sessions === 0 && bare.used === false && later.online === true && later.used === true,
+    "962a a token hello that binds no key is not sent and spends nothing, and a later hello that binds a key spends the token: "
+    + "bare sessions " + bare.sessions + ", bare used " + bare.used + ", later online " + later.online + ", later used " + later.used);
+  const bindPlant = await liftChannel("plant:invite-bind", async mod => {
+    const rt2 = await relayTeam(), token2 = hex(32), inv2 = hex(16);
+    await registerInvite(rt2, inv2, token2);
+    const a = await tokenHello(mod, rt2, token2, inv2, null);
+    const b = await tokenHello(mod, rt2, token2, inv2, keyPair(true));
+    return a.sessions >= 1 && a.used === true && b.online === false;
+  });
+  check(bindPlant.turned && bindPlant.back,
+    "962b lifting plant:invite-bind sends the unbound hello and spends the token, and the file is put back: "
+    + bindPlant.detail + ", sha " + (bindPlant.back ? "restored" : "differs"));
+  const rt3 = await relayTeam(), token3 = hex(32), inv3 = hex(16);
+  await registerInvite(rt3, inv3, token3);
+  const first = await tokenHello(C, rt3, token3, inv3, keyPair(true));
+  const again = await tokenHello(C, rt3, token3, inv3, keyPair(true));
+  const saidNew = again.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
+  check(first.online === true && saidNew,
+    "962c a second key is told the invitation was already used: first online " + first.online + ", said " + JSON.stringify(again.said));
+  const saidPlant = await liftChannel("plant:invite-used", async mod => {
+    const rt4 = await relayTeam(), token4 = hex(32), inv4 = hex(16);
+    await registerInvite(rt4, inv4, token4);
+    await tokenHello(mod, rt4, token4, inv4, keyPair(true));
+    const b = await tokenHello(mod, rt4, token4, inv4, keyPair(true));
+    return b.said.some(l => l.indexOf(INVITE_USED_OLD) >= 0) && !b.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
+  });
+  check(saidPlant.turned && saidPlant.back,
+    "962d lifting plant:invite-used says the old sentence, and the file is put back: "
+    + saidPlant.detail + ", sha " + (saidPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 962a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

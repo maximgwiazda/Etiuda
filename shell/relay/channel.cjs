@@ -78,6 +78,9 @@ const HELLO_LABEL = "etiuda-relay-hello";
 /* The key a desk joining by invitation seals its one request under, and reads the lead's team file with, before it holds
    the team key: HKDF-SHA256 of the invitation's 128-bit secret, which only the lead and the invited hold. */
 const INVITE_SEAL_INFO = "etiuda-relay-invite-seal";
+/* What a desk says when its token hello is answered token-spent. An upload refused token-spent keeps the contract
+   sentence: that refusal can lift (F4), and blob.REASONS stays the older wording. */
+const INVITE_USED_SAID = "This invitation was already used. Ask your lead for a new one.";
 /* The label of a desk's own copy of the team file: its key and its place from one agreement of two boxes (deskCopyOf). */
 const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 const INVITE_UPLOAD_MAX = 64 * 1024;
@@ -1185,10 +1188,11 @@ function createChannel(opts) {
     }
     const inv = typeof o.invite === "function" ? o.invite() : null;
     if (!inv || prog.state().tokenUsed || !HEX32.test(String(inv.inv)) || typeof inv.token !== "string") return why;
-    /* The token's hello names this desk's key and is signed by it, so the relay binds that key to the invitation it spends. */
-    const bind = who && who.privateKey && /^[0-9a-f]{64}$/.test(String(who.public))
-      ? { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") }
-      : {};
+    /* A token hello that binds no key is not sent. Sending it would spend the invitation with nobody bound to it. */
+    let bind = {};
+    const canBind = who && who.privateKey && HEX64.test(String(who.public));
+    if (canBind) bind = { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") };
+    else return why; /* plant:invite-bind */
     const r = await call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind) });
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed();
@@ -1198,6 +1202,7 @@ function createChannel(opts) {
     const t = refusalOf(r);
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed();
+    t.said = INVITE_USED_SAID; /* plant:invite-used */
     return t;
   }
 
