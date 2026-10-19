@@ -1845,7 +1845,7 @@ function attacks() {
     e2eDesk("S2-e2e-answer", "catalog-answer.ec"),
     e2eDesk("S2-e2e-stats", "stats.estat"),
     e2eDesk("S2-e2e-edit", "edit.ec"),
-    ["S3-burn", "the bound hello is served the wrap once per ask until the upload, and a second token hello is spent", function (create) {
+    ["S3-burn", "the bound hello is served the wrap until the upload, a second token hello is spent, and another key's signature on that id is refused", function (create) {
       const t = create();
       const w = world(t);
       if (!w) return false;
@@ -1867,6 +1867,16 @@ function attacks() {
       for (let i = 0; i < served.length; i++) {
         if (!served[i] || served[i].ok !== true || !served[i].wrap || served[i].wrap.ct !== wrap.ct) return false;
       }
+      const otherKey = wire.generateKey();
+      const forgedCh = t.challenge({ relayTeamId: w.relayTeamId });
+      const forgedMsg = t.helloMessage(w.relayTeamId, forgedCh.nonce, joiner.keyId);
+      const forged = t.hello({
+        relayTeamId: w.relayTeamId,
+        nonce: forgedCh.nonce,
+        keyId: joiner.keyId,
+        signature: wire.sign(otherKey.privateKey, forgedMsg),
+      });
+      if (!refused(forged, "not-enrolled") || forged.session != null) return false;
       const second = bindHello(t, w.relayTeamId, inv, joiner);
       const stranger = bindHello(t, w.relayTeamId, inv, wire.generateKey());
       if (!refused(second, "token-spent") || second.ciphertext != null) return false;
@@ -1878,7 +1888,7 @@ function attacks() {
       const seen = t.inspect({ relayTeamId: w.relayTeamId, id: joined.id });
       return wrapGone(after) && !!seen && !hasText(seen, wrap.ct);
     }, true],
-    ["S3-unbound", "an unbound token hello is refused and spends nothing, and a later bound hello is served", function (create) {
+    ["S3-unbound", "an unbound hello, a bad signature and a key that is not its pub's id are refused unspent, and a later bound hello is served", function (create) {
       const t = create();
       const w = world(t);
       if (!w) return false;
@@ -1893,6 +1903,31 @@ function attacks() {
       });
       if (!refused(loose, "bad-signature") || loose.wrap != null) return false;
       const joiner = wire.generateKey();
+      const other = wire.generateKey();
+      const chBad = t.challenge({ relayTeamId: w.relayTeamId });
+      const msgBad = t.helloMessage(w.relayTeamId, chBad.nonce, joiner.keyId);
+      const badSig = t.hello({
+        relayTeamId: w.relayTeamId,
+        nonce: chBad.nonce,
+        invitationId: inv.invitationId,
+        token: inv.token,
+        key: joiner.keyId,
+        pub: joiner.publicKey,
+        sig: wire.sign(other.privateKey, msgBad),
+      });
+      if (!refused(badSig, "bad-signature") || badSig.session != null) return false;
+      const chId = t.challenge({ relayTeamId: w.relayTeamId });
+      const msgId = t.helloMessage(w.relayTeamId, chId.nonce, joiner.keyId);
+      const badId = t.hello({
+        relayTeamId: w.relayTeamId,
+        nonce: chId.nonce,
+        invitationId: inv.invitationId,
+        token: inv.token,
+        key: joiner.keyId,
+        pub: other.publicKey,
+        sig: wire.sign(other.privateKey, msgId),
+      });
+      if (!refused(badId, "bad-signature") || badId.session != null) return false;
       const bound = bindHello(t, w.relayTeamId, inv, joiner);
       if (!bound.ok) return false;
       const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: bound.session });
@@ -2273,7 +2308,7 @@ function attacks() {
       const deskStates = t.inviteStates({ relayTeamId: w.relayTeamId, session: desk.session });
       return refused(own, "not-enrolled") && desk.ok === true && refused(deskStates, "not-enrolled");
     }, true],
-    ["S3-invite-place", "an invitation upload at invite:<id> is outside its place, and the same bytes at desk:<id> are kept", function (create) {
+    ["S3-invite-place", "an invitation upload at invite:<id> or a held desk's place is outside its place, a bad signature is refused, and desk:<id> is kept", function (create) {
       const t = create();
       const w = world(t);
       if (!w) return false;
@@ -2285,6 +2320,14 @@ function attacks() {
       const blob = sealAt(w, joiner, "join.json", 1, "invite:" + wire.randomId(), { body: "join" });
       const bad = upload(w, blob);
       if (!refused(bad, "outside-place")) return false;
+      blob.place = "desk:" + w.deskId;
+      const heldDesk = upload(w, blob);
+      if (!refused(heldDesk, "outside-place")) return false;
+      const freshPlace = "desk:" + ("k-" + wire.randomId().slice(0, 16));
+      const forged = sealAt(w, joiner, "join.json", 1, freshPlace, { body: "join" });
+      forged.signature = corrupt(forged.signature);
+      const badSig = upload(w, forged);
+      if (!refused(badSig, "bad-signature")) return false;
       blob.place = "desk:" + ("k-" + wire.randomId().slice(0, 16));
       const good = upload(w, blob);
       return !!good && good.ok === true && good.id === blob.id;
