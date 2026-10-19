@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 127;
+const EXPECTED = 129;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3299,6 +3299,55 @@ try {
     + saidPlant.detail + ", sha " + (saidPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 962a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 3: a token hello the relay ends is said as expired, and the token stays unspent. ---- */
+const INVITE_ENDED_NEW = "This invitation has expired. Ask your lead for a new one.";
+const INVITE_ENDED_OLD = "The relay answered 403.";
+async function endedHello(mod) {
+  const rt = await relayTeam(), token = hex(32), inv = hex(16);
+  await registerInvite(rt, inv, token);
+  const who = keyPair(true), said = [], tag = hex(4);
+  const deskT = transport("end-" + tag);
+  const desk = opened(mod, "end-" + tag, { rt: rt, id: "t-" + hex(8) }, who, "desk:" + who.keyId, {
+    invite: () => ({ inv: inv, token: token, seal: crypto.randomBytes(32) }),
+    say: l => said.push(l),
+    connect: deskT.connect,
+    request: async (m, u, h, b) => {
+      if (m === "POST" && /\/session$/.test(String(u))) {
+        let body = null;
+        try { body = JSON.parse(Buffer.from(b || "").toString("utf8")); } catch { body = null; }
+        if (body && typeof body.invite === "string") {
+          return { status: 403, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "invite-ended" })) };
+        }
+      }
+      return deskT.request(m, u, h, b);
+    },
+  });
+  desk.ch.start();
+  await desk.ch.idle();
+  const used = desk.prog.state().tokenUsed === true;
+  await desk.ch.stop();
+  const later = await tokenHello(mod, rt, token, inv, keyPair(true));
+  return { used: used, said: said, laterOnline: later.online === true, laterUsed: later.used === true };
+}
+try {
+  const ended = await endedHello(C);
+  const saidNew = ended.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0);
+  check(ended.used === false && saidNew && ended.laterOnline && ended.laterUsed,
+    "963a a token hello the relay ends is said as expired, the token stays unspent, and a later hello spends it: "
+    + "used " + ended.used + ", said " + JSON.stringify(ended.said) + ", later online " + ended.laterOnline
+    + ", later used " + ended.laterUsed);
+  const endedPlant = await liftChannel("plant:invite-ended", async mod => {
+    const x = await endedHello(mod);
+    return x.used === false && x.laterOnline && x.laterUsed
+      && x.said.some(l => l.indexOf(INVITE_ENDED_OLD) >= 0) && !x.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0);
+  });
+  check(endedPlant.turned && endedPlant.back,
+    "963b lifting plant:invite-ended says the relay answered 403, and the file is put back: "
+    + endedPlant.detail + ", sha " + (endedPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

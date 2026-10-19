@@ -81,6 +81,9 @@ const INVITE_SEAL_INFO = "etiuda-relay-invite-seal";
 /* What a desk says when its token hello is answered token-spent. An upload refused token-spent keeps the contract
    sentence: that refusal can lift (F4), and blob.REASONS stays the older wording. */
 const INVITE_USED_SAID = "This invitation was already used. Ask your lead for a new one.";
+/* What a desk says when its token hello is answered invite-ended. The token is not spent: the end bounds an unused
+   invitation only. This tree's relay does not say it yet; the desk says it when the answer names that error. */
+const INVITE_ENDED_SAID = "This invitation has expired. Ask your lead for a new one.";
 /* The label of a desk's own copy of the team file: its key and its place from one agreement of two boxes (deskCopyOf). */
 const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 const INVITE_UPLOAD_MAX = 64 * 1024;
@@ -1200,6 +1203,7 @@ function createChannel(opts) {
       return { ok: true };
     }
     const t = refusalOf(r);
+    if (r.json && r.json.error === "invite-ended") return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed();
     t.said = INVITE_USED_SAID; /* plant:invite-used */
