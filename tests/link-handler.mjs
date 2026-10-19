@@ -150,8 +150,9 @@ function withEnv(name, value, fn) {
   try { return fn(); }
   finally { if (had) process.env[name] = prev; else delete process.env[name]; }
 }
-function lift(tag, fn) {
-  const beforeBytes = fs.readFileSync(MAIN);
+function lift(tag, fn, file) {
+  const target = file || MAIN;
+  const beforeBytes = fs.readFileSync(target);
   const digest = crypto.createHash("sha256").update(beforeBytes).digest("hex");
   let turned = false, detail = "plant line absent";
   try {
@@ -159,16 +160,16 @@ function lift(tag, fn) {
     const at = lines.findIndex(l => l.indexOf(tag) >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(MAIN, lines.join("\n"));
-      turned = fn(fs.readFileSync(MAIN, "utf8")) === true;
+      fs.writeFileSync(target, lines.join("\n"));
+      turned = fn(fs.readFileSync(target, "utf8")) === true;
       detail = turned ? "the check lifted" : "the check still held";
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
   } finally {
-    fs.writeFileSync(MAIN, beforeBytes);
+    fs.writeFileSync(target, beforeBytes);
   }
-  const back = crypto.createHash("sha256").update(fs.readFileSync(MAIN)).digest("hex") === digest;
+  const back = crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex") === digest;
   return { turned, back, detail };
 }
 
@@ -442,9 +443,29 @@ try {
     "3hl a second-instance link with no window is sent once the page loads, and lifting plant:link-pending sends none: mid "
     + midOffers.length + ", later " + lateOffers.length + ", " + pendingPlant.detail + ", sha " + (pendingPlant.back ? "restored" : "differs"));
 
-  const builder = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
-  check(builder.indexOf("MimeType=x-scheme-handler/etiuda;") >= 0 && /schemes:\s*\[\s*"etiuda"\s*\]/.test(builder),
-    "3h9 the Linux packaging names MimeType=x-scheme-handler/etiuda; and the etiuda scheme");
+  const PROTOCOLS = [{ name: "Etiuda", schemes: ["etiuda"] }];
+  function protocolsMatch() {
+    const file = path.join(ROOT, "electron-builder.js");
+    const key = nodeRequire.resolve(file);
+    delete nodeRequire.cache[key];
+    let cfg = null;
+    try { cfg = nodeRequire(file); }
+    catch (e) { return false; }
+    return JSON.stringify(cfg && cfg.protocols) === JSON.stringify(PROTOCOLS);
+  }
+  const protocolsNow = protocolsMatch();
+  const protocolsPlant = lift("plant:link-protocols", () => {
+    const file = path.join(ROOT, "electron-builder.js");
+    const key = nodeRequire.resolve(file);
+    delete nodeRequire.cache[key];
+    let cfg = null;
+    try { cfg = nodeRequire(file); }
+    catch (e) { return false; }
+    return JSON.stringify(cfg && cfg.protocols) !== JSON.stringify(PROTOCOLS);
+  }, path.join(ROOT, "electron-builder.js"));
+  check(protocolsNow && protocolsPlant.turned && protocolsPlant.back,
+    "3h9 electron-builder.js protocols deep-compare to [{name:\"Etiuda\", schemes:[\"etiuda\"]}], and lifting plant:link-protocols drops the compare: "
+    + protocolsPlant.detail + ", sha " + (protocolsPlant.back ? "restored" : "differs"));
 
   const formPlant = lift("plant:link-form", src => {
     const L = loadShell({ lock: false, src });

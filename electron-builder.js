@@ -124,7 +124,7 @@ module.exports = {
   // It does not register a URL protocol in the Windows installer; the desk checks
   // app.setAsDefaultProtocolClient at start (shell/main.js). On Ubuntu the same list is what
   // puts MimeType=x-scheme-handler/etiuda; on the desktop entry, after the catalog's own type.
-  protocols: [{ name: "Etiuda", schemes: ["etiuda"] }],
+  protocols: [{ name: "Etiuda", schemes: ["etiuda"] }], /* plant:link-protocols */
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
     // Generated, not drawn here: the family's app icon, whose build renders every
