@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 22;
+const EXPECTED = 23;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
 const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
@@ -466,6 +466,19 @@ try {
   check(protocolsNow && protocolsPlant.turned && protocolsPlant.back,
     "3h9 electron-builder.js protocols deep-compare to [{name:\"Etiuda\", schemes:[\"etiuda\"]}], and lifting plant:link-protocols drops the compare: "
     + protocolsPlant.detail + ", sha " + (protocolsPlant.back ? "restored" : "differs"));
+
+  const legsFile = path.join(ROOT, "tools", "ci-legs.mjs");
+  const legLine = '{ id: "link-handler", args: ["tests/link-handler.mjs"], where: "linux-ok" }';
+  function linkLegNamed(src) {
+    const at = src.indexOf('{ id: "team-join"');
+    const next = src.indexOf('{ id: "desk-ipc"');
+    return at >= 0 && next > at && src.slice(at, next).indexOf(legLine) >= 0;
+  }
+  const legsNow = linkLegNamed(fs.readFileSync(legsFile, "utf8"));
+  const legsPlant = lift("plant:link-leg", src => !linkLegNamed(src), legsFile);
+  check(legsNow && legsPlant.turned && legsPlant.back,
+    "3hm tools/ci-legs.mjs names link-handler beside team-join, and lifting plant:link-leg drops it: "
+    + (legsNow ? "named" : "unnamed") + ", " + legsPlant.detail + ", sha " + (legsPlant.back ? "restored" : "differs"));
 
   const formPlant = lift("plant:link-form", src => {
     const L = loadShell({ lock: false, src });

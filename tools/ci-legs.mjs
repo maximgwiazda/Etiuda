@@ -58,6 +58,7 @@ const LEGS = [
   { id: "module-calls", args: ["tests/module-calls.mjs"], where: "linux-ok" },
   { id: "catalog-routes", args: ["tests/catalog-routes.mjs"], where: "linux-ok" },
   { id: "team-join", args: ["tests/team-join.mjs"], where: "linux-ok" },
+  { id: "link-handler", args: ["tests/link-handler.mjs"], where: "linux-ok" }, /* plant:link-leg */
   { id: "desk-ipc", args: ["tests/desk-ipc.mjs"], where: "linux-ok" },
   { id: "test", args: ["tests/test.js"], where: "linux-ok" },
   { id: "gate-run", args: ["tools/gate-run.mjs", "test", "split-guard"], where: "linux-ok" },
