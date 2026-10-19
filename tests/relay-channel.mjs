@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 123;
+const EXPECTED = 125;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1177,17 +1177,20 @@ try {
     "946A f4-control: HTTP 500 leaves the file owed and the next cycle sends it: stopped " + down.after[0].stopped + ", puts " + down.puts
     + ", " + (down.sent ? "sent" : "not sent"));
 
-  /* A refusal that can never lift still stops the file, says so, and holds across a restart. */
+  /* A refusal the relay answers, of a path, a place, a signature or a size, does not stop the file (C2). It waits, is
+     said once, and the next cycle sends it. A restart after that send keeps it sent and does not put it again. */
   const STOP = ["outside-place", "bad-path", "bad-signature", "blob-size"];
   const stops = [];
   for (const reason of STOP) {
     const r = await cycles("f4-stop-" + reason, [refusal(reason), TAKEN], { cycles: 2, restart: true });
-    stops.push({ reason, ok: r.after[0].stopped && r.puts === 1 && !r.sent && !r.owed && r.waits === 0
-      && r.said.some(l => l === FREL + " was not sent: " + B.REASONS[reason]), puts: r.puts });
+    stops.push({ reason, ok: !r.after[0].stopped && r.after[0].puts === 1 && r.puts === 2 && r.sent && !r.owed
+      && r.waits === 1 && !r.st.refused[FREL]
+      && r.said.some(l => l === FREL + " waits, and goes once this lifts: " + B.REASONS[reason]),
+      puts: r.puts, stopped: r.after[0].stopped, sent: r.sent, waits: r.waits });
   }
   check(stops.every(s => s.ok),
-    "946c a refusal that can never lift still stops that file, says so, and holds across a restart, the same bytes never sent again: "
-    + stops.map(s => s.reason + " " + (s.ok ? "stopped" : "puts " + s.puts)).join("; "));
+    "946c a refusal the relay answers does not stop that file: it waits, is said once, and the next cycle sends it, and a restart does not put it again: "
+    + stops.map(s => s.reason + " " + (s.ok ? "sent" : "puts " + s.puts + ", stopped " + s.stopped + ", waits " + s.waits + ", sent " + s.sent)).join("; "));
 
   /* A refusal about the sender or the epoch sealed under ends the cycle's uploads at the first file it meets: five files
      owed and the refusal lasting three cycles, one upload a cycle, nothing stopped, and all five go once it lifts. */
@@ -1260,6 +1263,174 @@ try {
     "944P e1-control: the same answered expired forgets the deletion and the file goes as the first of a chain of its own: " + tell(exp));
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a refusal the relay answers is not a stop by content hash (C2, board 919). The lab relay answers the first
+   PUT of a root .ec and of a desk's join.json with 400 bad-signature, then takes uploads. The next cycle puts both,
+   and so does a program started again from the record that refusal left. ---- */
+const C2_ROOT = "harbour.ec";
+const C2_NOTE = "{\"kind\":\"etiuda-sealed\",\"note\":\"a harbour note\"}\n";
+const C2_JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"harbour desk\"}\n";
+async function relayRefusal(mod, tag) {
+  const running = [];
+  const whyOf = (file, rel) => {
+    let j = null;
+    try { j = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return "unread"; }
+    const r = j && j.refused ? j.refused[rel] : null;
+    return r && r.why ? r.why : "none";
+  };
+  const memWhy = (prog, rel) => {
+    const r = prog.state().refused[rel];
+    return r && r.why ? r.why : "none";
+  };
+  const waitsFor = (said, rel) => said.filter(l => l.indexOf(rel + " waits, and goes once this lifts: ") === 0).length;
+  async function oneTeam(label) {
+    const rt = hex(16), teamId = "t-" + hex(8), deskKey = keyPair(true), key = crypto.randomBytes(32);
+    const joinRel = "desks/" + deskKey.keyId + "/join.json";
+    const t0 = R.clock.now;
+    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: t0,
+      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, t0)) });
+    if (made.status !== 200) return { detail: label + " team " + made.status, bad: true };
+    const list = [{ id: deskKey.keyId, pub: deskKey.pub, desk: deskKey.keyId }], t1 = R.clock.now;
+    const en = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: 1, t: t1,
+      sig: signHex(LEAD, core.devicesBytes(rt, 1, t1, list)) });
+    if (en.status !== 200) return { detail: label + " enrol " + en.status, bad: true };
+    const pin = { teamId, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+    const stored = writer => {
+      const s = R.stores.get(rt);
+      if (!s) return 0;
+      let n = 0;
+      for (const [k, v] of s.dump()) {
+        if (!k.startsWith("blob:")) continue;
+        const rec = JSON.parse(v);
+        if (rec.writer === writer && rec.del !== true) n++;
+      }
+      return n;
+    };
+    const attach = (slot, who, place, refuse) => {
+      const net = transport(tag + "-" + label + "-" + slot + (refuse ? "-hold" : "-go"));
+      const tally = { refused: 0, forwarded: 0 };
+      const request = async (method, url, headers, body) => {
+        if (method === "PUT" && refuse && tally.refused === 0) {
+          tally.refused++;
+          return { status: 400, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "bad-signature", said: B.REASONS["bad-signature"] })) };
+        }
+        if (method === "PUT") tally.forwarded++;
+        return net.request(method, url, headers, body);
+      };
+      const said = [];
+      const mirror = path.join(LAB, tag + "-" + label + "-" + slot);
+      const stateFile = path.join(LAB, tag + "-" + label + "-" + slot + ".json");
+      const ch = mod.createChannel({
+        rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => pin,
+        me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
+        keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1,
+        request, connect: () => null, say: l => said.push(l),
+      });
+      running.push(ch);
+      return { ch, said, tally, mirror, stateFile };
+    };
+    const lead = attach("lead", LEAD, "root", true);
+    const desk = attach("desk", deskKey, "desk:" + deskKey.keyId, true);
+    put(lead.mirror, C2_ROOT, C2_NOTE);
+    put(desk.mirror, joinRel, C2_JOIN);
+    lead.ch.start();
+    desk.ch.start();
+    await lead.ch.idle();
+    await desk.ch.idle();
+    const atRefusal = {
+      lead: whyOf(lead.stateFile, C2_ROOT), desk: whyOf(desk.stateFile, joinRel),
+      memLead: memWhy(lead.ch.program, C2_ROOT), memDesk: memWhy(desk.ch.program, joinRel),
+      saidLead: waitsFor(lead.said, C2_ROOT), saidDesk: waitsFor(desk.said, joinRel),
+      refused: lead.tally.refused + desk.tally.refused,
+    };
+    return { rt, deskKey, joinRel, lead, desk, atRefusal, stored, attach };
+  }
+  try {
+    const cycle = await oneTeam("cycle");
+    if (cycle.bad) return { c2: false, bug: false, detail: cycle.detail };
+    cycle.lead.ch.kick();
+    cycle.desk.ch.kick();
+    await cycle.lead.ch.idle();
+    await cycle.desk.ch.idle();
+    const cycleOn = { lead: cycle.stored(LEAD.keyId), desk: cycle.stored(cycle.deskKey.keyId) };
+    const cycleForward = cycle.lead.tally.forwarded + cycle.desk.tally.forwarded;
+    await cycle.lead.ch.stop();
+    await cycle.desk.ch.stop();
+
+    const again = await oneTeam("restart");
+    if (again.bad) return { c2: false, bug: false, detail: again.detail };
+    await again.lead.ch.stop();
+    await again.desk.ch.stop();
+    const restarted = {
+      lead: again.attach("lead", LEAD, "root", false),
+      desk: again.attach("desk", again.deskKey, "desk:" + again.deskKey.keyId, false),
+    };
+    restarted.lead.ch.start();
+    restarted.desk.ch.start();
+    await restarted.lead.ch.idle();
+    await restarted.desk.ch.idle();
+    const restartOn = { lead: again.stored(LEAD.keyId), desk: again.stored(again.deskKey.keyId) };
+    await restarted.lead.ch.stop();
+    await restarted.desk.ch.stop();
+
+    const a = cycle.atRefusal, b = again.atRefusal;
+    const detail = "cycle: refused " + a.refused + ", forwarded " + cycleForward
+      + ", record " + a.lead + "/" + a.desk + ", memory " + a.memLead + "/" + a.memDesk
+      + ", waiting said " + a.saidLead + "/" + a.saidDesk
+      + ", on the relay lead " + cycleOn.lead + " desk " + cycleOn.desk
+      + "; restart: record at the refusal " + b.lead + "/" + b.desk
+      + ", on the relay lead " + restartOn.lead + " desk " + restartOn.desk;
+    const clear = w => w === "none";
+    const held = w => w === "bad-signature";
+    const c2 = a.refused === 2 && cycleForward === 2 && clear(a.lead) && clear(a.desk) && clear(a.memLead) && clear(a.memDesk)
+      && a.saidLead === 1 && a.saidDesk === 1 && cycleOn.lead === 1 && cycleOn.desk === 1
+      && clear(b.lead) && clear(b.desk) && restartOn.lead === 1 && restartOn.desk === 1;
+    const bug = held(a.lead) && held(a.desk) && held(a.memLead) && held(a.memDesk) && cycleOn.lead === 0 && cycleOn.desk === 0
+      && held(b.lead) && held(b.desk) && restartOn.lead === 0 && restartOn.desk === 0;
+    return { c2, bug, detail };
+  } finally {
+    for (const ch of running) { try { await ch.stop(); } catch { /* already stopped */ } }
+  }
+}
+
+try {
+  const scene = await relayRefusal(C, "c2-" + hex(3));
+  check(scene.c2,
+    "919a a relay refusal of a root file and of join.json is not kept by content hash: the next cycle puts both, and a program"
+    + " restarted from that record puts both: " + scene.detail);
+} catch (e) {
+  check(false, "harness (the leg 919a): " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:relay-waits. Deleting that line, leaving the file valid script, keeps a relay refusal as a stop by content hash. */
+{
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:relay-waits") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      const lifted = nodeRequire(src);
+      const scene = await relayRefusal(lifted, "c2p-" + hex(3));
+      turned = scene.bug === true;
+      detail = scene.detail;
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "919b lifting plant:relay-waits keeps the relay's refusal as a stop, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
 /* ---- a blob the relay could not serve for a reason that can pass is fetched again (N6(3) of the review of F6, F4 and F9,

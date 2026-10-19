@@ -93,11 +93,10 @@ const TMP_RE = /\.tmp$/i;
 const HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/;
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
-/* An upload refused (F4 of the slice 1 review). These refusals no later state of the team can lift: the path, the place, the
-   bytes or their signature are wrong in themselves, so the same bytes are refused again however long they wait. The file
-   stops until its bytes change, and the program says so. Any other refusal waits: the epoch, the team's space, an
-   enrolment, a counter, a chain, or an answer this layer does not know. The file stays owed and goes again at the next
-   cycle, and the program says once that it waits. */
+/* Reasons a judgement this program makes before an upload may record as a stop by content hash, and which a record
+   read back may keep. Not text, a limit allowUpload holds, and a path check are that kind of judgement. A refusal the
+   relay answers is not recorded, whatever its reason (C2): the file stays owed and goes again at the next cycle, and
+   at a new session or a start. The program says once that it waits. */
 const STOPS = ["bad-path", "forged-delete", "outside-place", "blob-size", "bad-signature", "not-roster", "wrong-team", "tmp", "echo"];
 /* Waits about who sends or the epoch it seals under, which every other file of the cycle meets too: the cycle's uploads stop
    at the first and go again at the next cycle. */
@@ -1001,12 +1000,15 @@ function createProgram(opts) {
     return true;
   }
 
-  /* An upload refused: one that cannot lift (STOPS) stops that file until its bytes change; any other waits, the file left
-     owed for the next cycle (F4). Each is said, a wait once while it lasts. A copy of the team file the lead owes a desk or
-     an invitation always waits, so its refusal never stops the lead's own team file of the same bytes. True where it waits. */
-  function refusedOut(op, r) {
+  /* An upload refused. A refusal the relay answers (relayAnswer) always waits: those bytes stay owed and go again at
+     the next cycle, and at a new session or a start, because that refusal is not kept by content hash (C2). A copy of
+     the team file always waits, so its refusal never stops the lead's own team file of the same bytes. A judgement this
+     program makes before the upload, a limit allowUpload holds among them, stops the file until its bytes change when
+     the reason is one no later send of those bytes can lift. Each is said, a wait once while it lasts. True where it waits. */
+  function refusedOut(op, r, relayAnswer) {
     const key = op.invite ? "invite:" + op.invite.id : pathKey(op.rel);
     let waits = !!op.invite;
+    if (relayAnswer) waits = true; /* plant:relay-waits */
     if (STOPS.indexOf(r.reason) < 0) waits = true; /* plant:refused-waits */
     if (waits) {
       if (waiting.get(key) !== r.reason) {
@@ -1352,7 +1354,8 @@ function createChannel(opts) {
       if (u.ok) continue;
       if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) return u.why;
-      if (prog.refusedOut(op, u.why) && HALTS.indexOf(u.why.reason) >= 0) return { ok: true };
+      /* true: the relay answered. That refusal waits; it is not kept by content hash. */
+      if (prog.refusedOut(op, u.why, true) && HALTS.indexOf(u.why.reason) >= 0) return { ok: true };
     }
     return { ok: true };
   }
