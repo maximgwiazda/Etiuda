@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 113;
+const EXPECTED = 114;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2933,6 +2933,49 @@ try {
   const back = sha(fs.readFileSync(src)) === digest;
   check(turned && back, "957d lifting plant:path-key lets the older case replace the file, and the file is put back: "
     + detail + ", sha " + (back ? "restored" : "differs"));
+}
+
+/* A desk's relay socket closes. The channel sees that close, and the lead's next edition still arrives by the poll,
+   which runs only while the desk holds no socket. */
+try {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const keys = new Map([[1, k1]]);
+  const tag = tm.rt.slice(0, 8);
+  const ONE = "{\"kind\":\"etiuda-sealed\",\"note\":\"quay edition one\"}\n";
+  const TWO = "{\"kind\":\"etiuda-sealed\",\"note\":\"quay edition two\"}\n";
+  const lead = opened(C, "958-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+  });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  put(lead.mirror, "guide.ec", ONE);
+  lead.ch.start();
+  await settle(lead);
+  const deskT = transport("958-desk-" + tag);
+  let handle = null;
+  const connect = (url, headers, on) => { handle = deskT.connect(url, headers, on); return handle; };
+  const desk = opened(C, "958-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+    request: deskT.request, connect, pollMs: 300,
+  });
+  desk.ch.start();
+  await settle(desk);
+  const had = read(desk.mirror, "guide.ec") === ONE;
+  const socketUp = await until(() => desk.ch.socketOpen(), 5000);
+  if (handle) handle.close();
+  const seenClosed = await until(() => !desk.ch.socketOpen(), 3000);
+  put(lead.mirror, "guide.ec", TWO);
+  await settle(lead);
+  const caught = await until(() => read(desk.mirror, "guide.ec") === TWO, 10000);
+  check(had && socketUp && seenClosed && caught,
+    "958a a desk whose relay socket closes still receives the lead's next edition by the poll: first edition "
+    + (had ? "in the mirror" : "missing") + ", socket opened " + socketUp + ", seen closed " + seenClosed
+    + ", the next edition arrived " + caught);
+  await desk.ch.stop();
+  await lead.ch.stop();
+} catch (e) {
+  check(false, "harness (the leg 958a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
