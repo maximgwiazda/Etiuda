@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 134;
+const EXPECTED = 138;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3876,6 +3876,97 @@ try {
     + asked.detail + ", sha " + (asked.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 961a): " + (e && e.stack ? e.stack : e));
+}
+
+/* One channel across two invitations (board 918). A desk's invitation session serves one upload; after it the desk asks each
+   cycle whether the lead has enrolled its key, and a second invitation gets a session of its own. The first invitation
+   stays registered here (nothing withdraws it), so the relay does not close its session and the channel must not reuse it. */
+async function invitedDesk(mod, name) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const inv1 = hex(16), token1 = hex(32), ki1 = C.inviteSealKey(hex(16));
+  if ((await addInvite(tm.rt, inv1, token1)).status !== 200) throw new Error("the first invitation was not made");
+  const live = [{ id: inv1, key: ki1 }];
+  let current = { inv: inv1, token: token1, seal: ki1 };
+  const lead = opened(mod, name + "-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, inviteKeys: () => live.slice(),
+  });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  lead.ch.start();
+  await lead.ch.idle();
+  const desk = opened(mod, name + "-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: () => null, sealEpoch: () => null, invite: () => current,
+  });
+  const rel = "desks/" + deskKey.keyId + "/join.json";
+  const JOIN1 = "{\"kind\":\"etiuda-join\",\"note\":\"first ask\"}\n";
+  put(desk.mirror, rel, JOIN1);
+  desk.ch.start();
+  await desk.ch.idle();
+  await once(lead);
+  return { tm, deskKey, lead, desk, rel, live, inv1, first: read(lead.mirror, rel) === JOIN1, take: c => { current = c; } };
+}
+/* The first request lands and the first invitation's one upload is made. The lead then registers a second invitation and
+   withdraws nothing, the desk takes it and writes a second request. */
+async function heldInvite(mod) {
+  const x = await invitedDesk(mod, "961h");
+  const inv2 = hex(16), token2 = hex(32), ki2 = C.inviteSealKey(hex(16));
+  const JOIN2 = "{\"kind\":\"etiuda-join\",\"note\":\"second ask\"}\n";
+  const added = await addInvite(x.tm.rt, inv2, token2);
+  x.live.push({ id: inv2, key: ki2 });
+  x.take({ inv: inv2, token: token2, seal: ki2 });
+  put(x.desk.mirror, x.rel, JOIN2);
+  await once(x.desk);
+  await once(x.lead);
+  const s = relayStore(x.tm.rt), r1 = s.get("inv:" + x.inv1), r2 = s.get("inv:" + inv2);
+  const out = { first: x.first, added: added.status === 200, second: read(x.lead.mirror, x.rel), join2: JOIN2,
+    used1: !!(r1 && r1.uploaded), spent2: !!(r2 && r2.spent), used2: !!(r2 && r2.uploaded) };
+  await x.lead.ch.stop();
+  await x.desk.ch.stop();
+  return out;
+}
+/* The first request lands and the lead enrols the desk's key. The desk's next cycle, with no change to the invitation. */
+async function keyTurn(mod) {
+  const x = await invitedDesk(mod, "961j");
+  const list = [{ id: x.deskKey.keyId, pub: x.deskKey.pub, desk: x.deskKey.keyId }], t = R.clock.now;
+  const enrolled = await admin("POST", "/relay/v1/t/" + x.tm.rt + "/devices", { keys: list, rev: 2, t,
+    sig: signHex(LEAD, core.devicesBytes(x.tm.rt, 2, t, list)) });
+  const mark = x.desk.t.log.length;
+  await once(x.desk);
+  const out = { first: x.first, enrolled: enrolled.status === 200, hello: x.desk.t.log.slice(mark).indexOf("POST hello") >= 0,
+    keyed: relayStore(x.tm.rt).dump().some(([k, v]) => k.startsWith("ses:") && JSON.parse(v).key === x.deskKey.keyId) };
+  await x.lead.ch.stop();
+  await x.desk.ch.stop();
+  return out;
+}
+try {
+  const held = await heldInvite(C);
+  check(held.first && held.added && held.used1 && held.second === held.join2 && held.spent2 && held.used2,
+    "961h one channel holds the first invitation's session after its upload, the lead registers a second invitation and withdraws nothing,"
+    + " and the second request goes by a session of the second invitation's own: first request " + (held.first ? "at the lead" : "missing")
+    + ", first invitation " + (held.used1 ? "used" : "not used") + ", second request "
+    + (held.second === held.join2 ? "at the lead" : JSON.stringify(held.second)) + ", second invitation "
+    + (held.spent2 ? "spent" : "not spent") + " and " + (held.used2 ? "used" : "not used"));
+  const reused = await liftChannel("plant:new-invite-session", async mod => {
+    const x = await heldInvite(mod);
+    return x.first && x.added && x.used1 && x.second !== x.join2 && !x.spent2 && !x.used2;
+  });
+  check(reused.turned && reused.back, "961i lifting plant:new-invite-session sends the second request over the first invitation's spent session,"
+    + " which the relay refuses, and the file is put back: " + reused.detail + ", sha " + (reused.back ? "restored" : "differs"));
+  const turn = await keyTurn(C);
+  check(turn.first && turn.enrolled && turn.hello && turn.keyed,
+    "961j after its invited upload the desk's next session is its key session: the lead enrols the key, and the desk's next cycle says hello with it"
+    + " and the relay holds a session for that key: first request " + (turn.first ? "at the lead" : "missing") + ", key " + (turn.enrolled ? "enrolled" : "not enrolled")
+    + ", hello " + (turn.hello ? "sent" : "not sent") + ", key session " + (turn.keyed ? "held" : "not held"));
+  const stayed = await liftChannel("plant:invite-id-sent", async mod => {
+    const x = await keyTurn(mod);
+    return x.first && x.enrolled && !x.hello && !x.keyed;
+  });
+  check(stayed.turned && stayed.back, "961k lifting plant:invite-id-sent keeps the desk on the invitation's session after its upload, with no hello"
+    + " by its key, and the file is put back: " + stayed.detail + ", sha " + (stayed.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 961h): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

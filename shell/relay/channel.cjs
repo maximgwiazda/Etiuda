@@ -987,7 +987,7 @@ function createProgram(opts) {
     waiting.delete(op.invite ? "invite:" + op.invite.id : k);
     if (op.byInvite) {
       st.invited = true;
-      if (HEX32.test(String(op.inviteId || ""))) st.invitedIds[String(op.inviteId)] = true;
+      if (HEX32.test(String(op.inviteId || ""))) st.invitedIds[String(op.inviteId)] = true; /* plant:invite-id-sent */
     }
     persist();
   }
@@ -1245,7 +1245,7 @@ function createChannel(opts) {
   /* An invitation's session serves one upload; once that is made, each cycle asks whether the lead has enrolled this key. */
   async function ensureSession() {
     const id = ctx().inviteId;
-    if (session && session.by === "invite" && id && prog.tokenSpent(id) === false && prog.inviteSent(id) === false) return openSession();
+    if (session && session.by === "invite" && id && prog.tokenSpent(id) === false && prog.inviteSent(id) === false) return openSession(); /* plant:new-invite-session */
     if (session && session.by === "invite" && (id ? prog.inviteSent(id) === true : prog.state().invited === true)) {
       const k = await keySession();
       if (k.ok || k.reason !== "not-enrolled") return k;
