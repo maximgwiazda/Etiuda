@@ -2459,6 +2459,11 @@ try {
       await lead.kick(); await lead.idle();
       return !!joinRel && !!read(mirrorL, joinRel);
     }, 8000);
+    /* The first request as the lead holds it. It stays in the lead's mirror, so the second is told from it by its body and
+       by the invitation it names. */
+    const inviteOf = text => { try { const d = JSON.parse(text); return d && d.invite && typeof d.invite.id === "string" ? d.invite.id : null; } catch { return null; } };
+    const firstBody = asked && joinRel ? read(mirrorL, joinRel) : null;
+    const firstInvite = firstBody === null ? null : inviteOf(firstBody);
     if (me) {
       const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: H.api.wrapTeamKey(key, me.box, team, 1, me.id) };
       put(mirrorL, C.TEAM_NAME, textOf(2, [entry]));
@@ -2473,6 +2478,10 @@ try {
       return !!(held && held[1]);
     }, 8000);
     await H.ask("etiuda:team-join", "leave", team);
+    /* Leaving asks the shell to stop the channel on its next turn (relaySoon), and a person takes the next invitation long
+       after that. Taken in the same turn, the invitation finds the old channel still there, holding the key that is about
+       to be removed, and keeps it. */
+    await wait(50);
     const teamFile = path.join(H.ud, "relay", rt, C.TEAM_NAME);
     const parked = !fs.existsSync(teamFile) && fs.existsSync(teamFile + ".aside");
     R.clock.now += 1;
@@ -2495,7 +2504,8 @@ try {
     const sent2 = await until(async () => {
       const ch = H.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
       await lead.kick(); await lead.idle();
-      return !!joinRel && read(mirrorL, joinRel) !== null;
+      const body = joinRel ? read(mirrorL, joinRel) : null;
+      return firstInvite !== null && body !== null && body !== firstBody && inviteOf(body) !== null && inviteOf(body) !== firstInvite;
     }, 8000);
     const ch = H.api.relayRun(); if (ch) await ch.stop();
     await lead.stop();
@@ -2507,7 +2517,7 @@ try {
       "961f a desk that left, was removed, and is invited again sends its request: taken " + left.taken
       + ", first request " + (left.asked ? "at the lead" : "missing") + ", admitted " + left.admitted
       + ", the old team file " + (left.parked ? "set aside" : "still in the mirror")
-      + ", the new request " + (left.sent2 ? "at the lead" : "missing"));
+      + ", the new request " + (left.sent2 ? "at the lead, other than the first" : "missing, or the first still there"));
   } catch (e) {
     check(false, "961f harness: " + (e && e.stack ? e.stack : e));
   }
