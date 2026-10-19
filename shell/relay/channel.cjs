@@ -94,6 +94,9 @@ const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 /* The label of the lead's answer to one invitation. One key, 32 bytes, and no place id: the blob's id is the invitation's. */
 const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
+/* The page already shows this while a request waits. After the one upload the channel says the same line, once, where an
+   enrolment fault would have been said. */
+const WAITING_SAID = "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.";
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
@@ -1258,7 +1261,10 @@ function createChannel(opts) {
   async function ensureSession() {
     if (session && session.by === "invite" && prog.state().invited) {
       const k = await keySession();
-      if (k.ok || k.reason !== "not-enrolled") return k;
+      if (k.ok) return k;
+      /* Not enrolled yet is the wait, said by the answer fetch, not a fault. */
+      if (k.reason === "not-enrolled") return { ok: true };
+      return k;
     }
     if (session && clock() - session.at < SESSION_KEEP_MS) return { ok: true };
     return openSession();
@@ -1495,6 +1501,7 @@ function createChannel(opts) {
     if (!invId || !session || answerHeld) return { ok: true };
     const r = await call("GET", "b/" + invId, { auth: true });
     const answer = r.status === 200 ? openAnswer(r, inv, invId) : null;
+    if (!answer) sayOnce(WAITING_SAID); /* plant:S3-wait */
     if (!answer) return { ok: true };
     answerHeld = invId;
     if (typeof o.onAnswer === "function") o.onAnswer(answer);
@@ -1637,6 +1644,7 @@ function createChannel(opts) {
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
+  SESSION_KEEP_MS, WAITING_SAID,
   canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   createProgram, createChannel,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */

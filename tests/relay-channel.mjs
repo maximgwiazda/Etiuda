@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 134;
+const EXPECTED = 138;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1848,6 +1848,63 @@ try {
   check(devicePlant.turned && devicePlant.back,
     "922c lifting plant:S3-device keeps the enrolled hello on the invitation's session, so a later file is not sent, and the file is put back: "
     + devicePlant.detail + ", sha " + (devicePlant.back ? "restored" : "differs"));
+
+  /* Past the session keep, the request is up and the key is not enrolled: the desk says it is waiting, not that the key
+     failed. The clock moves; nothing here waits on the wall. */
+  async function waitSaid(mod) {
+    const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), inv = hex(16);
+    const mirror = path.join(LAB, "wait-" + inv.slice(0, 8));
+    const said = [], puts = [];
+    let sessions = 0, now = 1700000000000, ch = null;
+    const request = async (method, url) => {
+      const u = String(url);
+      const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+      if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        sessions += 1;
+        if (sessions === 1) return json({ session: hex(32), invite: true });
+        return json({ error: "not-enrolled" }, 403);
+      }
+      if (method === "GET" && u.indexOf("/since/") >= 0) return json([]);
+      if (method === "GET" && u.indexOf("/b/") >= 0) return json({ error: "missing" }, 404);
+      if (method === "PUT") { puts.push(u); return json({ ok: true }); }
+      return json({ error: "missing" }, 404);
+    };
+    put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+    try {
+      ch = mod.createChannel({ rt, url: URLV1, mirror, stateFile: path.join(LAB, "wait-" + inv.slice(0, 8) + ".json"),
+        watch: false, pollMs: 1e9, clock: () => now,
+        pin: () => ({ teamId: "t-wait-said", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+        me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+        invite: () => ({ inv, token: hex(32), seal }),
+        keyFor: () => null, sealEpoch: () => null, request, connect: null, say: l => said.push(l) });
+      ch.start();
+      await ch.idle();
+      now += mod.SESSION_KEEP_MS + 1000;
+      said.length = 0;
+      ch.kick();
+      await ch.idle();
+      return { uploads: puts.length, said: said.slice() };
+    } finally {
+      if (ch) await ch.stop();
+    }
+  }
+  const waiting = await waitSaid(C);
+  const waitLine = "Waiting for the team's lead to let this desk in.";
+  const namedWait = waiting.said.some(l => l.indexOf(waitLine) >= 0);
+  const saidFault = waiting.said.some(l => l.indexOf("not enrolled") >= 0);
+  check(waiting.uploads === 1 && namedWait && !saidFault,
+    "922b past the session keep, invited and not enrolled, the desk says it is waiting for the lead: "
+    + "uploads " + waiting.uploads + ", said " + JSON.stringify(waiting.said));
+  const waitPlant = await liftChannel("plant:S3-wait", async () => {
+    const lifted = freshChannel();
+    const again = await waitSaid(lifted);
+    return again.uploads === 1 && !again.said.some(l => l.indexOf(waitLine) >= 0);
+  });
+  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  check(waitPlant.turned && waitPlant.back,
+    "922d lifting plant:S3-wait leaves the wait unsaid, and the file is put back: "
+    + waitPlant.detail + ", sha " + (waitPlant.back ? "restored" : "differs"));
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
   const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(K2, me.box, TEAM2, 1, me.id) };
