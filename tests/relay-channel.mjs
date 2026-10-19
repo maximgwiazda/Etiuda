@@ -2765,7 +2765,7 @@ try {
     "956b once the channel applied epoch 2, the older blob does not replace it: stayed epoch " + stayed
     + ", first applied " + JSON.stringify(landed.applied) + ", again " + JSON.stringify(again.applied));
 } catch (e) {
-  check(false, "harness: " + (e && e.stack ? e.stack : e));
+  check(false, "harness (the legs 956a and 956b): " + (e && e.stack ? e.stack : e));
 }
 
 /* plant:epoch-hold. Deleting that line, leaving the file valid script, writes an older epoch over the newer file on disk. */
