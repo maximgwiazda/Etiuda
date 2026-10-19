@@ -3847,7 +3847,7 @@ async function rejoinDesk(mod) {
 try {
   const again = await secondInvite(C);
   check(again.first && again.moved && again.second === again.join2 && again.spent && again.tokenUsed && again.third === again.join2,
-    "961a a new invitation is unspent after an earlier one was used and withdrawn, and the old id stays spent: first "
+    "961l a new invitation is unspent after an earlier one was used and withdrawn, and the old id stays spent: first "
     + (again.first ? "at the lead" : "missing") + ", second " + (again.second === again.join2 ? "at the lead" : JSON.stringify(again.second))
     + ", old id " + (again.spent ? "spent" : "not spent") + ", token used " + again.tokenUsed
     + ", presenting the old id " + (again.third === again.join2 ? "changes nothing" : "wrote " + JSON.stringify(again.third)));
@@ -3855,7 +3855,7 @@ try {
     const x = await secondInvite(mod);
     return x.first && x.moved && x.second !== x.join2;
   });
-  check(planted.turned && planted.back, "961b lifting plant:token-by-id blocks the new invitation, and the file is put back: "
+  check(planted.turned && planted.back, "961m lifting plant:token-by-id blocks the new invitation, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
   const back = await rejoinDesk(C);
   check(back.dropped && back.atLead && back.oldHeld && back.admitted,
@@ -3875,7 +3875,7 @@ try {
   check(asked.turned && asked.back, "961e lifting plant:ask-rejoin leaves the lead's mirror without the join, and the file is put back: "
     + asked.detail + ", sha " + (asked.back ? "restored" : "differs"));
 } catch (e) {
-  check(false, "harness (the leg 961a): " + (e && e.stack ? e.stack : e));
+  check(false, "harness (the leg 961l): " + (e && e.stack ? e.stack : e));
 }
 
 /* One channel across two invitations (board 918). A desk's invitation session serves one upload; after it the desk asks each
