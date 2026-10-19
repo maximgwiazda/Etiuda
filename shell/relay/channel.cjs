@@ -1394,6 +1394,7 @@ function createChannel(opts) {
       op.byInvite = !!sealing.byInvite;
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
+      if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
       if (u.ok) continue;
       if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) return u.why;
@@ -1436,21 +1437,29 @@ function createChannel(opts) {
     }
   }
 
-  /* The invitation's wrap, fetched once the session is open. This tree's relay has no wrap route, so a 404 is said as
-     nothing and the cycle goes on: the key still arrives by the roster's wrap. No answer, or a 500, stays "need" and is
-     asked again. A spent or ended token is the hello's refusal, returned here too. */
+  /* The invitation's wrap, fetched once the session is open, and only until the invitation's one upload: after it the wrap
+     is not asked for and its key is forgotten, since the relay deletes the wrap and an enrolled desk reads the team through
+     the roster's wrap. This tree's relay has no wrap route, so a 404 is said as nothing. No answer, or a 500, stays "need"
+     and is asked again. No refusal of this ask stops the cycle: a spent or ended token is the hello's refusal, said where
+     the hello is made, and here it only means there is no wrap to read. */
   async function pullWrap() {
     const inv = typeof o.invite === "function" ? o.invite() : null;
     const key = inv && toBytes(inv.wrapKey);
     if (!key || key.length !== 32 || wrapPhase !== "need") return { ok: true };
+    if (prog.state().invited) { forgetWrap(); return { ok: true }; } /* plant:S3-wrap-once */
     const r = await authed("GET", "wrap");
     if (r.status === 200 && table(r.json) && table(r.json.wrap)) { wrapHeld = r.json.wrap; wrapPhase = "held"; return { ok: true }; }
     if (!r.status || r.status >= 500) return { ok: true };
-    const why = r.refused || refusalOf(r);
-    if (why.reason === "token-spent") return why;
-    if (r.json && r.json.error === "invite-ended") return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false };
-    wrapPhase = "none";
+    wrapPhase = "none"; /* plant:S3-wrap-refused */
     return { ok: true };
+  }
+
+  /* The invitation's one upload is the end of the wrap: it is not asked for again and the shell is told to let its key go.
+     Said again after a restart, where the program remembers the upload and the shell may still hold the key. */
+  function forgetWrap() {
+    wrapPhase = "none";
+    wrapHeld = null;
+    if (typeof o.onWrapGone === "function") o.onWrapGone();
   }
 
   /* Opened against the team file this program holds. openInviteWrap refuses an epoch that file does not carry before it

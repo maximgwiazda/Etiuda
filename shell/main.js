@@ -3451,6 +3451,13 @@ function relayRun() {
       return out;
     },
     onTeam: () => { teamStamp = ""; heedTeam(); },
+    /* The invitation's one upload has gone, so its wrap is not asked for again and the key that opens it is forgotten. */
+    onWrapGone: () => {
+      const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+      if (!inv || !inv.wrap) return;
+      delete inv.wrap;
+      persistDeskEnvelope();
+    },
     /* The lead's answer to this request. Refused is said on the request. Joined is said once, and the request stays
        until the roster names this desk, which is still what lets it go. */
     onAnswer: answer => {

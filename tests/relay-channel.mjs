@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 138;
+const EXPECTED = 143;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1586,9 +1586,9 @@ try {
   const madeW = await admin("POST", "/relay/v1/teams", { rt: RTW, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
     sig: signHex(LEAD, core.createBytes(RTW, LEAD.keyId, R.clock.now)) });
   if (madeW.status !== 200) throw new Error("the wrap team was not made: " + JSON.stringify(madeW.json));
-  const teamDocW = rev => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMW, catalogs: ["quay-board"],
+  const teamDocW = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMW, catalogs: ["quay-board"],
     lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: rev,
-    channel: { kind: "relay", rt: RTW, url: URLW }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+    channel: { kind: "relay", rt: RTW, url: URLW }, ring: RING, roster: roster || [] }, LEAD), null, 1) + "\n";
   const studioWMirror = path.join(LAB, "wrap-studio");
   const invitesW = [];
   const studioWT = transport("wrap-studio");
@@ -1713,6 +1713,164 @@ try {
   check(openPlant.turned && openPlant.back,
     "965c lifting plant:wrap-open leaves the catalog unread, and the file is put back: "
     + openPlant.detail + ", sha " + (openPlant.back ? "restored" : "differs"));
+
+  /* Board 922, E2. The wrap is asked for only on the invitation's own session, before its one upload. A wrap refused for its
+     epoch, the upload, a restart, then enrolment, with the relay answering the wrap token-spent now that it has deleted it:
+     the enrolled desk must not ask for the wrap again, and must still read the team. */
+  async function plantChannel(edits, fn) {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const copy = path.join(APP, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(file);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = edits.map(e => lines.findIndex(l => l.indexOf(e.tag) >= 0));
+      if (at.every(i => i >= 0)) {
+        edits.forEach((e, k) => { lines[at[k]] = e.text; });
+        const next = lines.filter(l => l !== null).join("\n");
+        fs.writeFileSync(file, next);
+        fs.writeFileSync(copy, next);
+        dropCopiedChannel();
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(file, beforeBytes);
+      fs.writeFileSync(copy, beforeBytes);
+      dropCopiedChannel();
+    }
+    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
+  let devRevW = 0, teamRevW = 1;
+  const devKeysW = [];
+  async function wrapRestart(label, edition) {
+    const inv = await inviteOnW(2);
+    const seen = { asks: 0, afterUpload: 0 };
+    let mode = "serve", uploaded = false;
+    const hooks = { fetch: (url, init) => {
+      if (!(init && init.method === "GET" && String(url).endsWith("/wrap"))) return null;
+      seen.asks += 1;
+      if (uploaded) seen.afterUpload += 1;
+      const body = mode === "serve" ? { wrap: inv.wrap } : { error: "token-spent" };
+      return new Response(Buffer.from(JSON.stringify(body), "utf8"), { status: mode === "serve" ? 200 : 403, headers: { "content-type": "application/json" } });
+    } };
+    const folder = path.join(LAB, label + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    const first = newDesk(label, folder, hooks);
+    const taken = await first.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
+    const me = await first.ask("etiuda:branch-identity", false);
+    const joinRel = "desks/" + me.id + "/join.json";
+    const said = await until(async () => {
+      const ch = first.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      return first.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
+    }, 8000);
+    uploaded = await until(async () => {
+      const ch = first.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      await studioW.kick(); await studioW.idle();
+      return !!read(studioWMirror, joinRel);
+    }, 8000);
+    const keptAfterUpload = !!((((first.envelope().teamJoin || {}).invite || {}).relay || {}).wrap);
+    const stopFirst = first.api.relayRun();
+    if (stopFirst) await stopFirst.stop();
+    mode = "spent";
+    const second = loadDesk(first.ud, hooks);
+    const notYet = second.api.relayRun();
+    if (notYet) { notYet.kick(); await notYet.idle(); }
+    teamRevW += 1;
+    devRevW += 1;
+    devKeysW.push({ id: me.id, pub: me.key, desk: me.id });
+    const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(KW, me.box, TEAMW, 1, me.id) };
+    put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(edition))));
+    put(studioWMirror, C.TEAM_NAME, teamDocW(teamRevW, [entry]));
+    const t1 = R.clock.now, keys = devKeysW.slice();
+    await admin("POST", "/relay/v1/t/" + RTW + "/devices", { keys: keys, rev: devRevW, t: t1, sig: signHex(LEAD, core.devicesBytes(RTW, devRevW, t1, keys)) });
+    await studioW.kick(); await studioW.idle();
+    const read2 = await until(async () => {
+      const ch = second.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      return factsOf(second.api.readCatalog() || "") === edition;
+    }, 8000);
+    const stopSecond = second.api.relayRun();
+    if (stopSecond) await stopSecond.stop();
+    return { taken: taken, said: said, uploaded: uploaded, keptAfterUpload: keptAfterUpload, read: read2, asks: seen.asks, afterUpload: seen.afterUpload };
+  }
+  const e2 = await wrapRestart("wrap-restart", 3);
+  check(!!e2.taken && !e2.taken.refused && e2.said && e2.uploaded && !e2.keptAfterUpload && e2.read && e2.afterUpload === 0,
+    "966a a wrap refused for its epoch, the one upload, a restart, then enrolment with the relay answering the wrap token-spent: the wrap key is"
+    + " forgotten at the upload, the wrap is not asked for again, and the enrolled desk reads the team's edition: wrap "
+    + (e2.said ? "refused and said" : "not refused") + ", upload " + (e2.uploaded ? "at the lead" : "absent")
+    + ", wrap key " + (e2.keptAfterUpload ? "kept" : "forgotten") + ", asks after the upload " + e2.afterUpload
+    + ", edition " + (e2.read ? "read" : "unread"));
+  const PUT_BACK_REFUSED = '    const why = r.refused || refusalOf(r); if (why.reason === "token-spent") return why; wrapPhase = "none";';
+  const e2Plant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }, { tag: "plant:S3-wrap-gone", text: null },
+    { tag: "plant:S3-wrap-refused", text: PUT_BACK_REFUSED }], async () => {
+    const again = await wrapRestart("wrap-restart-plant", 4);
+    return !again.read;
+  });
+  check(e2Plant.turned && e2Plant.back,
+    "966b putting back the wrap ask after the upload, the kept wrap key and the early return on token-spent leaves the enrolled desk reading nothing,"
+    + " and the file is put back: " + e2Plant.detail + ", sha " + (e2Plant.back ? "restored" : "differs"));
+  /* The same on the channel alone, so that each line is held by a check of its own: before the upload a wrap answered
+     token-spent stops nothing, and once the upload is made the key is not asked for the wrap again. */
+  async function wrapStandIn(mod, label) {
+    const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), inv = hex(16), token = hex(32), wrapKey = crypto.randomBytes(32);
+    const mirror = path.join(LAB, label), stateFile = path.join(LAB, label + ".json");
+    const n = { wrap1: 0, since1: 0, put1: 0, wrap2: 0, since2: 0 };
+    let phase = 1;
+    const request = async (method, url, headers, body) => {
+      const u = String(url);
+      const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+      if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        const asked = JSON.parse(Buffer.from(body).toString("utf8"));
+        if (phase === 1 && !asked.invite) return json({ error: "not-enrolled" }, 403);
+        return json({ session: hex(32) });
+      }
+      if (method === "GET" && u.endsWith("/wrap")) { n["wrap" + phase] += 1; return json({ error: "token-spent" }, 403); }
+      if (method === "GET" && u.indexOf("/since/") >= 0) { n["since" + phase] += 1; return json([]); }
+      if (method === "PUT") { if (phase === 1) n.put1 += 1; return json({ ok: true }); }
+      return json({ error: "missing" }, 404);
+    };
+    put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+    const make = () => mod.createChannel({ rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9,
+      pin: () => ({ teamId: "t-wrap-stand-in", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+      me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+      invite: () => ({ inv, token, seal, wrapKey }),
+      keyFor: () => null, sealEpoch: () => null, request, connect: null });
+    let ch = make();
+    try { ch.start(); await ch.idle(); } finally { await ch.stop(); }
+    phase = 2;
+    ch = make();
+    try { ch.start(); await ch.idle(); } finally { await ch.stop(); }
+    return n;
+  }
+  const standIn = await wrapStandIn(C, "wrap-stand-in");
+  check(standIn.wrap1 === 1 && standIn.since1 === 1 && standIn.put1 === 1 && standIn.wrap2 === 0 && standIn.since2 >= 1,
+    "966c before the upload a wrap answered token-spent stops nothing (the team is read and the request goes), and once the request has gone the wrap"
+    + " is not asked for again: first cycle asks " + standIn.wrap1 + ", reads " + standIn.since1 + ", uploads " + standIn.put1
+    + "; after the upload asks " + standIn.wrap2 + ", reads " + standIn.since2);
+  const refusedPlant = await plantChannel([{ tag: "plant:S3-wrap-refused", text: PUT_BACK_REFUSED }], async () => {
+    const lifted = freshChannel();
+    const again = await wrapStandIn(lifted, "wrap-stand-in-refused");
+    return again.since1 === 0 && again.put1 === 0;
+  });
+  check(refusedPlant.turned && refusedPlant.back,
+    "966d putting back the early return on token-spent stops the first cycle before the team is read, and the file is put back: "
+    + refusedPlant.detail + ", sha " + (refusedPlant.back ? "restored" : "differs"));
+  const oncePlant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }], async () => {
+    const lifted = freshChannel();
+    const again = await wrapStandIn(lifted, "wrap-stand-in-once");
+    return again.wrap2 === 1;
+  });
+  check(oncePlant.turned && oncePlant.back,
+    "966e lifting plant:S3-wrap-once asks for the wrap again after the upload, and the file is put back: "
+    + oncePlant.detail + ", sha " + (oncePlant.back ? "restored" : "differs"));
+  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
   await studioW.stop();
 
   /* The lead's answer, sealed to the desk's box. Joined is said once and the request stays. Refused is said on the request. */
