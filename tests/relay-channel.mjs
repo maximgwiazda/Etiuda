@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 119;
+const EXPECTED = 123;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3037,34 +3037,45 @@ try {
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
-/* ---- four pairs NTFS holds as two files (board 915). Each pair is two path keys, so a cycle owes both
-   names and says neither as staying. Sharp s against ss, dotless i against i, the fi ligature against fi,
-   and the Kelvin sign against k. ---- */
+/* ---- four pairs NTFS holds as two files (board 915), and one pair it holds as one file (board 916).
+   Sharp s against ss, dotless i against i, the fi ligature against fi, and the Kelvin sign against k:
+   each pair is two path keys, so a cycle owes both names and says neither as staying. The iota-subscript
+   pair, U+1F80 against U+1F88, is one key, so one name is owed and the other is said as staying. ---- */
 const PAIRS_915 = [
   ["Stra\u00dfe.ec", "Strasse.ec"],
   ["\u0131dea.ec", "idea.ec"],
   ["\ufb01le.ec", "file.ec"],
   ["\u212aelvin.ec", "kelvin.ec"],
 ];
+const PAIR_916 = ["\u1f80x.ec", "\u1f88x.ec"];
 try {
   const said = [];
   const entries = [];
   for (const [a, b] of PAIRS_915) entries.push([a, "one"], [b, "two"]);
+  entries.push([PAIR_916[0], "sub"], [PAIR_916[1], "cap"]);
   const io = exactNames(entries);
   const prog = C.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {}, say: l => said.push(l) });
   const first = oweFiles(prog);
-  const got = first.map(op => op.rel).sort();
-  const want = entries.map(([name]) => name).sort();
+  const owed = new Set(first.map(op => op.rel));
   const keys = PAIRS_915.map(([a, b]) => {
     const ka = B.checkPath(a), kb = B.checkPath(b);
     return [ka.ok ? ka.folded.join("/") : "bad", kb.ok ? kb.folded.join("/") : "bad"];
   });
+  const forced = PAIR_916.map(name => {
+    const p = B.checkPath(name);
+    return p.ok ? p.folded.join("/") : "bad";
+  });
   const distinct = keys.every(([a, b]) => a !== b);
-  const same = got.length === want.length && got.every((name, i) => name === want[i]);
+  const shared = forced[0] !== "bad" && forced[0] === forced[1];
+  const fourOwed = PAIRS_915.every(([a, b]) => owed.has(a) && owed.has(b));
+  const forcedOwed = PAIR_916.filter(name => owed.has(name));
+  const forcedHeld = PAIR_916.filter(name => !owed.has(name));
   const stays = said.filter(l => l.indexOf("stays on this computer") >= 0 && l.indexOf("is not text") < 0);
-  check(distinct && same && stays.length === 0,
-    "959a the four pairs have two path keys, so both names are owed and neither is said as staying: keys "
-    + JSON.stringify(keys) + ", owed " + JSON.stringify(first.map(op => op.rel)) + ", said " + stays.length);
+  const stayHit = forcedHeld.length === 1 && stays.length === 1 && stays[0].indexOf(forcedHeld[0]) >= 0;
+  check(distinct && shared && fourOwed && forcedOwed.length === 1 && first.length === 9 && stayHit,
+    "959a the four pairs have two path keys and the iota-subscript pair has one: keys "
+    + JSON.stringify(keys) + ", shared " + JSON.stringify(forced)
+    + ", owed " + JSON.stringify(first.map(op => op.rel)) + ", said " + stays.length);
 } catch (e) {
   check(false, "harness (the leg 959a): " + (e && e.stack ? e.stack : e));
 }
@@ -3108,6 +3119,72 @@ try {
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
+/* The iota-subscript pair shares a key even when the runtime's own case maps throw. A fold that
+   still calls toUpperCase or toLowerCase fails this leg. */
+try {
+  const upper = String.prototype.toUpperCase, lower = String.prototype.toLowerCase;
+  let share = false, guide = false, apart = false, detail = "";
+  try {
+    String.prototype.toUpperCase = function () { throw new Error("toUpperCase"); };
+    String.prototype.toLowerCase = function () { throw new Error("toLowerCase"); };
+    const foldOf = rel => { const p = B.checkPath(rel); return p.ok ? p.folded.join("/") : "bad"; };
+    const g1 = foldOf(PAIR_916[0]), g2 = foldOf(PAIR_916[1]);
+    const a = foldOf("Guide.ec"), b = foldOf("guide.ec");
+    const k1 = foldOf("\u212aelvin.ec"), k2 = foldOf("kelvin.ec");
+    share = g1 !== "bad" && g1 === g2;
+    guide = a === "guide.ec" && b === "guide.ec";
+    apart = k1 !== "bad" && k2 !== "bad" && k1 !== k2;
+    detail = "greek " + g1 + " " + g2 + ", guide " + a + " " + b + ", kelvin " + k1 + " " + k2;
+  } finally {
+    String.prototype.toUpperCase = upper;
+    String.prototype.toLowerCase = lower;
+  }
+  check(share && guide && apart,
+    "961a the iota-subscript pair shares one key, Guide and guide share guide.ec, and the Kelvin sign stays apart from k, with the runtime case maps standing aside: "
+    + detail);
+} catch (e) {
+  check(false, "harness (the leg 961a): " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:upcase-table. Deleting that line, leaving the file valid script, leaves each unit itself,
+   so the iota-subscript pair no longer shares a key. */
+try {
+  const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+  const channel = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:upcase-table") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      delete nodeRequire.cache[nodeRequire.resolve(src)];
+      delete nodeRequire.cache[nodeRequire.resolve(channel)];
+      const lifted = nodeRequire(src);
+      const g1 = lifted.checkPath(PAIR_916[0]), g2 = lifted.checkPath(PAIR_916[1]);
+      const a = g1.ok ? g1.folded.join("/") : "bad", b = g2.ok ? g2.folded.join("/") : "bad";
+      turned = a !== "bad" && b !== "bad" && a !== b;
+      detail = "keys " + a + " " + b;
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try {
+      delete nodeRequire.cache[nodeRequire.resolve(src)];
+      delete nodeRequire.cache[nodeRequire.resolve(channel)];
+      nodeRequire(channel);
+    } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "961b lifting plant:upcase-table gives the iota-subscript pair two keys, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 961b): " + (e && e.stack ? e.stack : e));
+}
+
 /* A desk's relay socket closes. The channel sees that close, and the lead's next edition still arrives by the poll,
    which runs only while the desk holds no socket. */
 try {
@@ -3149,6 +3226,54 @@ try {
   await lead.ch.stop();
 } catch (e) {
   check(false, "harness (the leg 960a): " + (e && e.stack ? e.stack : e));
+}
+
+/* A batch that holds the Kelvin sign name and kelvin.ec lands both. They are two files on NTFS, and
+   two path keys. Keying the batch by toLowerCase drops one of them. */
+async function kelvinBatch(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const keys = new Map([[1, k1]]);
+  const tag = tm.rt.slice(0, 8);
+  const signName = "\u212aelvin.ec";
+  const SIGN = "sign-body\n", ASCII = "ascii-body\n";
+  const lead = opened(mod, "962-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+  });
+  put(lead.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  put(lead.mirror, signName, SIGN);
+  put(lead.mirror, "kelvin.ec", ASCII);
+  lead.ch.start();
+  await settle(lead);
+  const desk = opened(mod, "962-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+  });
+  desk.ch.start();
+  await settle(desk);
+  const sign = read(desk.mirror, signName);
+  const ascii = read(desk.mirror, "kelvin.ec");
+  await desk.ch.stop();
+  await lead.ch.stop();
+  return { sign, ascii, SIGN, ASCII };
+}
+try {
+  const got = await kelvinBatch(C);
+  check(got.sign === got.SIGN && got.ascii === got.ASCII,
+    "962a a batch lands both the Kelvin sign name and kelvin.ec: sign " + JSON.stringify(got.sign)
+    + ", ascii " + JSON.stringify(got.ascii));
+} catch (e) {
+  check(false, "harness (the leg 962a): " + (e && e.stack ? e.stack : e));
+}
+try {
+  const planted = await liftChannel("plant:land-fold", async mod => {
+    const x = await kelvinBatch(mod);
+    return (x.sign === x.SIGN) !== (x.ascii === x.ASCII);
+  });
+  check(planted.turned && planted.back, "962b lifting plant:land-fold drops one of the Kelvin sign name and kelvin.ec, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 962b): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
