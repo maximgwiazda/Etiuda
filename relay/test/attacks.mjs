@@ -233,6 +233,21 @@ function bindHello(t, relayTeamId, inv, key) {
   });
 }
 
+function presentToken(t, relayTeamId, inv, key, token) {
+  const ch = t.challenge({ relayTeamId: relayTeamId });
+  if (!ch || !ch.nonce) return { ok: false, reason: "no-hello", said: "That hello was not issued.", served: false };
+  const msg = t.helloMessage(relayTeamId, ch.nonce, key.keyId);
+  return t.hello({
+    relayTeamId: relayTeamId,
+    nonce: ch.nonce,
+    invitationId: inv.invitationId,
+    token: token,
+    key: key.keyId,
+    pub: key.publicKey,
+    sig: wire.sign(key.privateKey, msg),
+  });
+}
+
 function hasText(value, text) {
   return flatten(value).join("\n").indexOf(text) >= 0;
 }
@@ -483,10 +498,7 @@ function attacks() {
       if (!inv || !inv.token) return false;
       let twentieth = null;
       for (let i = 1; i <= wire.TOKEN_TRIES; i++) {
-        const ch = t.challenge({ relayTeamId: w.relayTeamId });
-        twentieth = t.hello({
-          relayTeamId: w.relayTeamId, nonce: ch.nonce, invitationId: inv.invitationId, token: "wrong-" + i,
-        });
+        twentieth = presentToken(t, w.relayTeamId, inv, wire.generateKey(), "wrong-" + i);
       }
       if (twentieth && twentieth.reason === "token-tries") return false;
       const joiner = wire.generateKey();
@@ -1279,10 +1291,7 @@ function attacks() {
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
       const hash = wire.tokenHash(inv.token);
-      const ch1 = t.challenge({ relayTeamId: w.relayTeamId });
-      const bad = t.hello({
-        relayTeamId: w.relayTeamId, nonce: ch1.nonce, invitationId: inv.invitationId, token: hash,
-      });
+      const bad = presentToken(t, w.relayTeamId, inv, wire.generateKey(), hash);
       const good = bindHello(t, w.relayTeamId, inv, wire.generateKey());
       return refused(bad, "not-enrolled") && good.ok === true;
     }, true],
