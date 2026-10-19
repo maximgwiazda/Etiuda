@@ -92,7 +92,7 @@ function teamObject(deps) {
     }
     const r = c.invites(rt, body);
     if (r.ok) closeWhere(a => !!a.inv && r.dropped.indexOf(a.inv) > -1, "no-hello"); /* plant:drop-sockets */
-    return answer(r, () => ({ ok: true }));
+    return answer(r, x => ({ ok: true, dropped: x.dropped, used: x.used }));
   }
 
   async function listSince(token, after) {

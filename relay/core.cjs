@@ -189,12 +189,16 @@ function createCore(deps) {
     const live = [...held].filter(([id, v]) => !v.spent && !drop.has(id)).length + added.size;
     if (live > INVITES_MAX) return no("team-size"); /* plant:invites-cap */
     const now = clock();
+    const used = [];
     store.atomic(() => {
       for (const [k, until] of store.list("seen:")) if (until < now) store.del(k);
       store.put(seen, b.t + CALL_SKEW_MS);
       for (const id of drop) {
         const was = held.get(id);
         store.del("inv:" + id);
+        let nameUsed = false;
+        nameUsed = !!(was && was.spent); /* plant:S3-cancel */
+        if (nameUsed) used.push(id);
         if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
@@ -217,7 +221,7 @@ function createCore(deps) {
         store.put("inv:" + entry.id, next);
       }
     });
-    return { ok: true, dropped: [...drop] };
+    return { ok: true, dropped: [...drop], used };
   }
 
   function challenge(rt) {
