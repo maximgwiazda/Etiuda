@@ -493,17 +493,23 @@ try {
   check(desk2.said.slice(quiet).length === 0 && desk2.prog.state().pending.length === 0,
     "941b a desk not joining by that invitation passes over its place and says nothing: lines " + desk2.said.slice(quiet).length);
 
-  /* A forged copy under the invitation's key, not signed by the pinned lead. */
+  /* After the one upload the desk fetches only the lead's answer, so a forged copy put in the invitation's place is not
+     fetched and not said. The team file stays as the invitation's own copy left it. */
   const forgedTeam = signDoc(JSON.parse(teamText(9, [member(NEWD)])), INTR);
   const fake = B.seal({ relayTeamId: RT, epoch: 1, teamKey: KI, writer: { keyId: LEAD.keyId, privateKey: INTR.privateKey },
     path: C.TEAM_NAME, body: JSON.stringify(forgedTeam), counter: Date.now() + 1e6, kind: "file" });
   inject({ id: fake.id, supersedes: null, epoch: 1, writer: LEAD.keyId, counter: fake.counter, del: false, sig: fake.signature, nonce: fake.nonce,
     place: "invite:" + INV, pub: INTR.pub }, fake.ciphertext);
   const forgedFrom = joinerSaid.length;
+  const forgedLog = joiner.t.log.length;
   const teamBefore = read(joiner.mirror, C.TEAM_NAME);
   await settle(joiner);
-  check(joinerSaid.slice(forgedFrom).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0) && read(joiner.mirror, C.TEAM_NAME) === teamBefore,
-    "941c a copy in the invitation's place sealed under its key but not signed by the pinned lead is refused and said, the team file as it was");
+  const forgedSaid = joinerSaid.slice(forgedFrom);
+  const forgedFetch = joiner.t.log.slice(forgedLog).some(l => l.indexOf(fake.id) >= 0);
+  const forgedFault = forgedSaid.some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0 || l.indexOf("not enrolled") >= 0);
+  check(!forgedFetch && !forgedFault && read(joiner.mirror, C.TEAM_NAME) === teamBefore,
+    "941c after the one upload a forged copy in the invitation's place is not fetched and not said, and the team file stays: "
+    + (forgedFetch ? "fetched" : "not fetched") + ", said " + JSON.stringify(forgedSaid));
 
   /* An invited desk not yet on the roster: from it the lead opens its own request alone, at most 64 KB. Put in by a hostile
      relay, since the relay itself takes one invitation upload of at most 64 KB. */
@@ -1631,16 +1637,14 @@ try {
     atLead = await until(async () => { await studioW.kick(); await studioW.idle(); return !!read(studioWMirror, joinA); }, 8000);
     put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(2))));
     await studioW.kick(); await studioW.idle();
-    later = await until(async () => {
-      const ch = Dw.api.relayRun();
-      if (ch) { ch.kick(); await ch.idle(); }
-      return factsOf(Dw.api.readCatalog() || "") === 2;
-    }, 8000);
+    const chLater = Dw.api.relayRun();
+    if (chLater) { chLater.kick(); await chLater.idle(); }
+    later = factsOf(Dw.api.readCatalog() || "") === 2;
     still = !!read(studioWMirror, joinA) && !!read(mirrorA, joinA);
   }
   const putsA = deskTransport.log.slice(markA).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + RTW + "/") >= 0).length;
-  check(!!takenA && !takenA.refused && readNow && putsA === 1 && atLead && later && still,
-    "965a yes opens the wrap and reads a catalog before the lead admits it, uploads join.json once, and a later catalog still arrives: "
+  check(!!takenA && !takenA.refused && readNow && putsA === 1 && atLead && !later && still,
+    "965a yes opens the wrap and reads a catalog before the lead admits it, uploads join.json once, and a later catalog stays unread: "
     + "yes " + (takenA && takenA.refused ? "refused " + takenA.refused : "taken")
     + ", catalog " + (readNow ? "read" : "unread") + ", uploads " + putsA
     + ", at the lead " + (atLead ? "yes" : "no") + ", later " + (later ? "read" : "unread")
@@ -1660,6 +1664,11 @@ try {
   function dropCopiedChannel() {
     const want = path.normalize(path.join(APP, "shell", "relay", "channel.cjs"));
     for (const k of Object.keys(nodeRequire.cache)) if (path.normalize(k) === want) delete nodeRequire.cache[k];
+  }
+  function freshChannel() {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    delete nodeRequire.cache[nodeRequire.resolve(file)];
+    return nodeRequire(file);
   }
   async function liftChannel(tag, fn) {
     const file = path.join(ROOT, "shell", "relay", "channel.cjs");
@@ -1705,6 +1714,140 @@ try {
     "965c lifting plant:wrap-open leaves the catalog unread, and the file is put back: "
     + openPlant.detail + ", sha " + (openPlant.back ? "restored" : "differs"));
   await studioW.stop();
+
+  /* The lead's answer, sealed to the desk's box. Joined is said once and the request stays. Refused is said on the request. */
+  {
+    const LBA = boxPair();
+    const RTA = hex(16), TEAMA = "t-" + hex(8), KA = crypto.randomBytes(32);
+    const madeA = await admin("POST", "/relay/v1/teams", { rt: RTA, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+      sig: signHex(LEAD, core.createBytes(RTA, LEAD.keyId, R.clock.now)) });
+    if (madeA.status !== 200) throw new Error("the answer team was not made: " + JSON.stringify(madeA.json));
+    const invitesA = [];
+    async function inviteA() {
+      const secret = hex(16), inv = hex(16), token = hex(32), hash = sha(Buffer.from(token, "utf8")), at = R.clock.now;
+      const res = await admin("POST", "/relay/v1/t/" + RTA + "/invites", { add: [{ id: inv, hash }], drop: [], t: at,
+        sig: signHex(LEAD, core.invitesBytes(RTA, at, [{ id: inv, hash }], [])) });
+      if (res.status !== 200) throw new Error("an answer invitation was not registered: " + JSON.stringify(res.json));
+      invitesA.push({ id: inv, key: C.inviteSealKey(secret) });
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAMA, relay: { rt: RTA, url: URLV1, token, inv },
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay", box: LBA.pub }, secret }), "utf8").toString("base64url");
+      return { inv, text };
+    }
+    const one = await inviteA(), two = await inviteA();
+    const leadMirror = path.join(LAB, "answer-lead");
+    const leadT = transport("answer-lead");
+    const teamDocA = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMA, catalogs: ["quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LBA.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+      channel: { kind: "relay", rt: RTA, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+    put(leadMirror, C.TEAM_NAME, teamDocA);
+    const leadA = C.createChannel({ rt: RTA, url: URLV1, mirror: leadMirror, stateFile: path.join(LAB, "answer-lead.json"),
+      pin: () => ({ teamId: TEAMA, rt: RTA, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+      me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: LBA.pub }),
+      agree: agreeWith(LBA), keyFor: e => (e === 1 ? KA : null), sealEpoch: () => 1, inviteKeys: () => invitesA,
+      request: leadT.request, connect: leadT.connect, pollMs: 1e9 });
+    leadA.start();
+    await leadA.idle();
+    async function takeOne(name, offer) {
+      const folder = path.join(LAB, name + "-share");
+      fs.mkdirSync(folder, { recursive: true });
+      const desk = newDesk(name, folder);
+      const taken = await desk.ask("etiuda:team-join", "invite", offer.text, "Desk Nine", "");
+      const who = await desk.ask("etiuda:branch-identity", false);
+      const rel = "desks/" + who.id + "/join.json";
+      const landed = await until(async () => {
+        const ch = desk.api.relayRun();
+        if (ch) { ch.kick(); await ch.idle(); }
+        await leadA.kick(); await leadA.idle();
+        return !!read(leadMirror, rel);
+      }, 8000);
+      const doc = landed ? JSON.parse(read(leadMirror, rel)) : null;
+      return { desk, taken, who, rel, doc };
+    }
+    const joined = await takeOne("answer-join", one);
+    const wroteJoin = joined.doc ? await leadA.writeAnswer({ inv: one.inv, deskId: joined.doc.desk.id, deskBox: joined.doc.desk.box,
+      leadBox: LBA.pub, answer: "joined" }) : { ok: false, reason: "no-request" };
+    const markJ = deskTransport.log.length;
+    let shownJ = null;
+    await until(async () => {
+      const ch = joined.desk.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      const v = await joined.desk.ask("etiuda:team-join", "view");
+      if (v && v.joined && v.joined.team === TEAMA) { shownJ = v; return true; }
+      return false;
+    }, 8000);
+    const afterJ = deskTransport.log.slice(markJ).filter(l => l.indexOf("/t/" + RTA + "/") >= 0);
+    const fetchedJ = afterJ.some(l => l.indexOf("/b/" + one.inv) >= 0);
+    const listedJ = afterJ.some(l => l.indexOf("/since/") >= 0 || l.indexOf("/socket") >= 0);
+    const keptJ = !!read(leadMirror, joined.rel) && !!read(path.join(joined.desk.ud, "relay", RTA), joined.rel);
+    const refused = await takeOne("answer-refuse", two);
+    const wroteNo = refused.doc ? await leadA.writeAnswer({ inv: two.inv, deskId: refused.doc.desk.id, deskBox: refused.doc.desk.box,
+      leadBox: LBA.pub, answer: "refused" }) : { ok: false, reason: "no-request" };
+    let shownNo = null;
+    await until(async () => {
+      const ch = refused.desk.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      const v = await refused.desk.ask("etiuda:team-join", "view");
+      if (v && v.join && v.join.state === "refused") { shownNo = v; return true; }
+      return false;
+    }, 8000);
+    const keptNo = !!read(leadMirror, refused.rel);
+    check(!!joined.taken && !joined.taken.refused && wroteJoin.ok === true && !!shownJ && shownJ.joined.team === TEAMA
+      && keptJ && fetchedJ && !listedJ && !!refused.taken && !refused.taken.refused && wroteNo.ok === true
+      && !!shownNo && shownNo.joined == null && keptNo,
+      "922a the lead's answer is opened by the desk that asked: joined is said and the request stays, refused is said and the request stays: "
+      + "joined " + (wroteJoin.ok ? "written" : (wroteJoin.reason || "not written"))
+      + ", view " + (shownJ && shownJ.joined ? shownJ.joined.team : "none")
+      + ", request " + (keptJ ? "kept" : "gone")
+      + ", fetch " + (fetchedJ ? "the answer" : "absent") + (listedJ ? ", and a team read" : "")
+      + "; refused " + (wroteNo.ok ? "written" : (wroteNo.reason || "not written"))
+      + ", view " + (shownNo && shownNo.join ? shownNo.join.state : "none")
+      + ", joined " + (shownNo && shownNo.joined ? "also said" : "not said")
+      + ", request " + (keptNo ? "kept" : "gone"));
+    await leadA.stop();
+  }
+  const devicePlant = await liftChannel("plant:S3-device", async () => {
+    const CC = freshChannel();
+    const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), teamKey = crypto.randomBytes(32);
+    const mirror = path.join(LAB, "device-plant");
+    const puts = [];
+    let sessions = 0;
+    const request = async (method, url) => {
+      const u = String(url);
+      const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+      if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        sessions += 1;
+        const out = { session: hex(32) };
+        if (sessions === 1) out.invite = true;
+        return json(out);
+      }
+      if (method === "GET" && u.indexOf("/since/") >= 0) return json([]);
+      if (method === "PUT") { puts.push(u); return json({ ok: true }); }
+      return json({ error: "missing" }, 404);
+    };
+    put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+    let ch = null;
+    try {
+      ch = CC.createChannel({ rt, url: URLV1, mirror, stateFile: path.join(LAB, "device-plant.json"), watch: false, pollMs: 1e9,
+        pin: () => ({ teamId: "t-device-plant", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+        me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+        invite: () => ({ inv: hex(16), token: hex(32), seal }),
+        keyFor: () => teamKey, sealEpoch: () => 1, request, connect: null });
+      ch.start();
+      await ch.idle();
+      if (puts.length !== 1) throw new Error("join uploads " + puts.length + ", sessions " + sessions);
+      put(mirror, "desks/" + who.keyId + "/note.txt", "A note after the request.\n");
+      ch.kick();
+      await ch.idle();
+      return puts.length === 1;
+    } finally {
+      if (ch) await ch.stop();
+    }
+  });
+  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  check(devicePlant.turned && devicePlant.back,
+    "922c lifting plant:S3-device keeps the enrolled hello on the invitation's session, so a later file is not sent, and the file is put back: "
+    + devicePlant.detail + ", sha " + (devicePlant.back ? "restored" : "differs"));
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
   const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(K2, me.box, TEAM2, 1, me.id) };
@@ -3506,10 +3649,13 @@ try {
     await registerInvite(rt2, inv2, token2);
     const a = await tokenHello(mod, rt2, token2, inv2, null);
     const b = await tokenHello(mod, rt2, token2, inv2, keyPair(true));
-    return a.sessions >= 1 && a.used === true && b.online === false;
+    /* The relay refuses a token hello that binds no key and spends nothing (plant:S3-unbound). The client line is what
+       stops the hello being sent; lifting it sends the hello, and a later hello that does bind still comes online. */
+    return a.sessions >= 1 && a.used === false && b.online === true && b.used === true
+      && a.said.some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
   });
   check(bindPlant.turned && bindPlant.back,
-    "962b lifting plant:invite-bind sends the unbound hello and spends the token, and the file is put back: "
+    "962b lifting plant:invite-bind sends the unbound hello, the relay refuses it and the token stays unspent, and the file is put back: "
     + bindPlant.detail + ", sha " + (bindPlant.back ? "restored" : "differs"));
   const rt3 = await relayTeam(), token3 = hex(32), inv3 = hex(16);
   await registerInvite(rt3, inv3, token3);
@@ -3571,11 +3717,13 @@ try {
     + ", later used " + ended.laterUsed);
   const endedPlant = await liftChannel("plant:invite-ended", async mod => {
     const x = await endedHello(mod);
+    /* The reason table carries the same sentence as the special return, so lifting the line does not bring the old
+       403 wording back. The token still stays unspent and a later hello still spends it. */
     return x.used === false && x.laterOnline && x.laterUsed
-      && x.said.some(l => l.indexOf(INVITE_ENDED_OLD) >= 0) && !x.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0);
+      && x.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0) && !x.said.some(l => l.indexOf(INVITE_ENDED_OLD) >= 0);
   });
   check(endedPlant.turned && endedPlant.back,
-    "963b lifting plant:invite-ended says the relay answered 403, and the file is put back: "
+    "963b lifting plant:invite-ended still says the invitation has expired, because the reason table carries that sentence, and the file is put back: "
     + endedPlant.detail + ", sha " + (endedPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));

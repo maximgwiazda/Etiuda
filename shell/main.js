@@ -2787,6 +2787,7 @@ function teamOpen(data) {
 let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?, invite?}
 let joinSent = "";
 let joinDone = null;                            // {team, file}: a request admitted, for the next joinView to say once
+let joinTold = false;                           // the lead's answer already queued joined, so a later admission does not say it again
 /* Admitted once this desk keeps a newer key for the team than when it asked, whether or not the Team cover is read: the
    request goes, which the relay carries to the lead as its signed deletion, and the invitation's address is no longer
    followed. The next joinView says so once, as it did when it was the one to find it. */
@@ -2799,7 +2800,8 @@ function finishJoin() {
   if (j.invite && j.invite.relay && !(roster && roster.desks.indexOf(branchIdOf(deskBranch.sign.pub)) >= 0)) return false;
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
-  joinDone = { team: j.team, file: j.file };
+  if (!joinTold) joinDone = { team: j.team, file: j.file };
+  joinTold = false;
   persistDeskEnvelope();
   if (j.invite && j.invite.relay) relaySoon();
   return true;
@@ -2993,6 +2995,7 @@ function askJoin(file, name) {
   try { writeJoin(joinRequestDoc(j, null)); }
   catch (e) { console.error("etiuda: the request to join could not be written - " + e.message); return joinView(); }
   teamJoin = j;
+  joinTold = false;
   persistDeskEnvelope();
   return joinView();
 }
@@ -3000,6 +3003,7 @@ function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   if (teamJoin && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
+  joinTold = false;
   persistDeskEnvelope();
   return joinView();
 }
@@ -3190,6 +3194,7 @@ async function takeInvite(text, name, check) {
     try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
   }
   teamJoin = j;
+  joinTold = false;
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
   if (!teamPins[parsed.team]) {
     teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public };
@@ -3248,6 +3253,7 @@ function takeRelayInvite(parsed, name, me) {
   }
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
   teamStamp = "";
+  joinTold = false;
   persistDeskEnvelope();
   relayRun();
   catalogFolderChanged();
@@ -3445,6 +3451,20 @@ function relayRun() {
       return out;
     },
     onTeam: () => { teamStamp = ""; heedTeam(); },
+    /* The lead's answer to this request. Refused is said on the request. Joined is said once, and the request stays
+       until the roster names this desk, which is still what lets it go. */
+    onAnswer: answer => {
+      const j = teamJoin;
+      if (!j || j.team !== team || !j.invite || !j.invite.relay) return;
+      if (answer === "refused") {
+        if (!j.refused) { j.refused = true; persistDeskEnvelope(); }
+        return;
+      }
+      if (answer === "joined" && !joinTold) {
+        joinTold = true;
+        joinDone = { team: j.team, file: j.file };
+      }
+    },
     /* The team key from the invitation's wrap, kept as a roster wrap is kept, and the wrap key forgotten. Not admission. */
     onTeamKey: (epoch, key) => {
       if (!Number.isInteger(epoch) || epoch < 1 || !Buffer.isBuffer(key) || key.length !== 32) return;

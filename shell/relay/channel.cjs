@@ -50,6 +50,11 @@
    the newest team file from its own copy, under the pinned lead's signature, as any desk does after a move. The box the
    signed team file names wins once the desk holds one; the invitation's serves only before that.
 
+   THE LEAD'S ANSWER. After its one upload, an invitation's session fetches a single blob and nothing else of the team:
+   answer:<invitation id>, which the lead writes on its own session, sealed to the desk's box. The desk opens that blob
+   with its own box and says joined or refused. It does not list the team and it does not keep a socket on that session.
+   Once the key is enrolled, the next hello is a device session and the invitation's token is dropped.
+
    THE LEAD'S EPOCH (F8 of the slice 1 review). A desk joining by invitation seals its one request at the newest epoch a
    verified lead blob has named. The relay's header names a writer and an epoch before any signature is checked, and that
    header moves nothing: leadEpoch rises only once the pinned lead's upload signature on the blob verifies.
@@ -86,6 +91,9 @@ const INVITE_USED_SAID = "This invitation was already used. Ask your lead for a 
 const INVITE_ENDED_SAID = "This invitation has expired. Ask your lead for a new one.";
 /* The label of a desk's own copy of the team file: its key and its place from one agreement of two boxes (deskCopyOf). */
 const DESK_COPY_INFO = "etiuda-relay-desk-copy";
+/* The label of the lead's answer to one invitation. One key, 32 bytes, and no place id: the blob's id is the invitation's. */
+const ANSWER_INFO = "etiuda-join-answer";
+const ANSWER_NAME = "join-answer.json";
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
@@ -176,6 +184,18 @@ function deskCopyOf(dh, f) {
   const info = Buffer.from([DESK_COPY_INFO, f.rt, f.teamId, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
   const okm = Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 48));
   return { id: okm.subarray(32).toString("hex"), key: okm.subarray(0, 32) };
+}
+
+/* The key the lead's answer is sealed under: 32 bytes of HKDF-SHA256 over the same agreement as a desk's copy, salt
+   empty. `dh` is that agreement; an all-zero agreement makes nothing. The rest binds it to this invitation alone:
+   the relay team, the invitation's id, the desk's id, the desk's box and the lead's box, all public. */
+function answerKey(dh, f) {
+  const d = toBytes(dh);
+  if (!d || d.length !== 32 || d.every(b => b === 0)) return null;
+  if (!table(f) || !HEX32.test(String(f.rt)) || !HEX32.test(String(f.inv)) || !/^k-[0-9a-f]{16}$/.test(String(f.deskId))
+    || !HEX64.test(String(f.deskBox)) || !HEX64.test(String(f.leadBox))) return null;
+  const info = Buffer.from([ANSWER_INFO, f.rt, f.inv, f.deskId, f.deskBox, f.leadBox].join("\n") + "\n", "utf8");
+  return Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 32));
 }
 
 /* The relay team id a team file's channel names: `rt`, as the engine writes it, or `relay`, as the harness's contract
@@ -961,7 +981,8 @@ function createProgram(opts) {
   function sealOut(op, me, sealing) {
     const was = lastSent(op);
     const blob = B.seal({ relayTeamId: pin.rt, epoch: sealing.epoch, teamKey: sealing.key, writer: { keyId: me.keyId, privateKey: me.privateKey },
-      path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind, supersedes: was ? was.id : null });
+      path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind, supersedes: was ? was.id : null,
+      id: op.id || null });
     if (op.place) blob.place = op.place;
     return blob;
   }
@@ -1106,7 +1127,8 @@ function createProgram(opts) {
    under; invite() on a desk joining by invitation as {inv, token, seal, box}, box the lead's box as 64 hex where the
    invitation names it; inviteKeys() on the lead's side, the live
    invitations as {id, key}; agree(box) the 32-byte X25519 agreement of this program's own box with another's, given as 64
-   hex, or null: the lead's with a desk's, a desk's with the lead's, for a desk's own copy of the team file; request(method,
+   hex, or null: the lead's with a desk's, a desk's with the lead's, for a desk's own copy of the team file and for the
+   lead's answer; onAnswer(answer) on a desk, "joined" or "refused", once the lead's answer opens; request(method,
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; clock. */
@@ -1124,7 +1146,7 @@ function createChannel(opts) {
   const prog = createProgram({ io, clock, say, load: () => readState(stateFile), save: stateFile ? saveState : null, pin: o.pin && o.pin() });
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
-  let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS;
+  let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -1214,7 +1236,8 @@ function createChannel(opts) {
     return t;
   }
 
-  /* A session by this program's own key alone, the one held kept where the relay does not know that key yet. */
+  /* A session by this program's own key. Where the relay still answers for the invitation, the session stays the
+     invitation's; a device session replaces it once the key is enrolled. */
   async function keySession() {
     const who = me();
     if (!who || !who.privateKey) return R("not-enrolled");
@@ -1223,11 +1246,15 @@ function createChannel(opts) {
     const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
     const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
     if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session))) return refusalOf(r);
-    session = { token: r.json.session, at: clock(), by: "key" };
+    let device = false;
+    device = r.json.invite !== true; /* plant:S3-device */
+    if (device) dropSocket();
+    session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
     return { ok: true };
   }
 
-  /* An invitation's session serves one upload; once that is made, each cycle asks whether the lead has enrolled this key. */
+  /* An invitation's session serves one upload. After that, each cycle asks whether this key is enrolled: a device
+     session goes on as any desk's, and the invitation's session reads only the lead's answer. */
   async function ensureSession() {
     if (session && session.by === "invite" && prog.state().invited) {
       const k = await keySession();
@@ -1375,7 +1402,18 @@ function createChannel(opts) {
     if (table(m) && m.type === "new") kick(); /* plant:socket-kick */
   }
 
+  function dropSocket() {
+    if (!sock) return;
+    const s = sock;
+    sock = null;
+    clearInterval(pingTimer);
+    pingTimer = null;
+    try { s.close(); } catch { /* gone */ }
+  }
+
   function ensureSocket() {
+    /* After the one upload the invitation's session fetches its answer and does not listen. */
+    if (session && session.by === "invite" && prog.state().invited) { dropSocket(); return; }
     if (sock || !running || !session || typeof o.connect !== "function") return;
     const url = base.replace(/^https:/, "wss:") + "socket";
     let s = null;
@@ -1426,9 +1464,72 @@ function createChannel(opts) {
     return { ok: true };
   }
 
+  /* The lead's answer opened, or null. The counters it returns are not kept: the blob is not a team file. A bad blob is
+     not a halt. */
+  function openAnswer(r, inv, invId) {
+    const who = me();
+    const pin = typeof o.pin === "function" ? o.pin() : null;
+    const lead = pin && pin.lead;
+    if (!who || !HEX64.test(String(who.box)) || !lead || !HEX64.test(String(inv && inv.box)) || !table(r.meta)) return null;
+    const m = r.meta;
+    if (m.id !== invId || !toBytes(r.bytes)) return null;
+    const dh = typeof o.agree === "function" ? o.agree(inv.box) : null;
+    const key = answerKey(dh, { rt: o.rt, inv: invId, deskId: who.keyId, deskBox: who.box, leadBox: inv.box });
+    if (!key) return null;
+    const blob = { id: m.id, epoch: m.epoch, supersedes: m.supersedes == null ? null : m.supersedes, writerKeyId: m.writer,
+      counter: m.counter, nonce: m.nonce, signature: m.sig, ciphertext: toBytes(r.bytes) };
+    const got = B.openBlob({ blob, relayTeamId: o.rt, epoch: m.epoch, teamKey: key, trust: { lead: { keyId: lead.keyId, public: lead.public } }, counters: {} });
+    if (!got.ok || got.kind !== "file" || got.path !== ANSWER_NAME || got.writerKeyId !== lead.keyId) return null;
+    let doc = null;
+    try { doc = JSON.parse(got.body); } catch { doc = null; }
+    if (!doc || doc.v !== 1 || doc.kind !== "etiuda-join-answer" || (doc.answer !== "joined" && doc.answer !== "refused")) return null;
+    if (doc.inv !== invId || doc.desk !== who.keyId) return null;
+    return doc.answer;
+  }
+
+  /* After the upload: one fetch, of the answer, on the session already held. Anything else, including a missing answer,
+     leaves the mirror as it is. */
+  async function pullAnswer() {
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    const invId = inv && HEX32.test(String(inv.inv)) ? String(inv.inv) : "";
+    if (!invId || !session || answerHeld) return { ok: true };
+    const r = await call("GET", "b/" + invId, { auth: true });
+    const answer = r.status === 200 ? openAnswer(r, inv, invId) : null;
+    if (!answer) return { ok: true };
+    answerHeld = invId;
+    if (typeof o.onAnswer === "function") o.onAnswer(answer);
+    return { ok: true };
+  }
+
+  /* The lead writes its answer on its own session. The blob's id is the invitation's, and its place is set after the
+     signature, as an invitation's copy is. It is not a file of the mirror. */
+  async function writeAnswer(spec) {
+    const who = me();
+    const s = spec || {};
+    if (!who || !who.privateKey || who.place !== "root") return R("not-enrolled");
+    if ((s.answer !== "joined" && s.answer !== "refused") || !HEX32.test(String(s.inv))
+      || !/^k-[0-9a-f]{16}$/.test(String(s.deskId)) || !HEX64.test(String(s.deskBox)) || !HEX64.test(String(s.leadBox)))
+      return R("bad-path");
+    const dh = typeof o.agree === "function" ? o.agree(s.deskBox) : null;
+    const key = answerKey(dh, { rt: o.rt, inv: String(s.inv), deskId: s.deskId, deskBox: s.deskBox, leadBox: s.leadBox });
+    if (!key) return R("bad-signature");
+    const named = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
+    const epoch = isCount(named) ? named : 1;
+    const body = JSON.stringify({ v: 1, kind: "etiuda-join-answer", answer: s.answer, inv: String(s.inv), desk: s.deskId });
+    const blob = prog.sealOut({ rel: ANSWER_NAME, kind: "file", body, sha: null, place: "answer:" + s.inv, id: String(s.inv) }, who, { epoch, key });
+    const lim = prog.allowUpload(blob, who.keyId);
+    if (!lim.ok) return lim;
+    const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
+      del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
+    const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
+    if (r.status === 200) return { ok: true };
+    return r.refused || refusalOf(r);
+  }
+
   async function cycle() {
     const s = await ensureSession();
     if (!s.ok) return s;
+    if (session && session.by === "invite" && prog.state().invited) return pullAnswer();
     const w = await pullWrap();
     if (!w.ok) return w;
     const c = await catchUp(); /* plant:catch-up-first */
@@ -1530,12 +1631,13 @@ function createChannel(opts) {
     watchMode: () => watchMode,
     online: () => !!session,
     socketOpen: () => !!sock,
+    writeAnswer,
   };
 }
 
 module.exports = {
-  TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, INVITE_UPLOAD_MAX,
-  canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
+  TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
+  canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   createProgram, createChannel,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),
