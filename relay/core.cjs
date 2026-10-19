@@ -356,6 +356,27 @@ function createCore(deps) {
     return { ok: true, wrap: { epoch: inv.wrap.epoch, ct: inv.wrap.ct } };
   }
 
+  /* The lead's session, and only the lead's, is told each invitation's state. The used time is the clock at the hello and stays after the upload. */
+  function statesFor(rt, token) {
+    const team = teamOf(rt);
+    if (!team) return no("not-enrolled");
+    const s = sessionOf(token);
+    if (!s.ok) return s;
+    if (s.inv || s.key !== team.lead.keyId) return no("not-enrolled");
+    const states = [];
+    for (const [k, v] of store.list("inv:")) {
+      const id = k.slice(4);
+      if (!v.spent) {
+        states.push({ id: id, state: "unused", usedAt: null });
+        continue;
+      }
+      let keepTime = false;
+      keepTime = true; /* plant:S3-states */
+      states.push({ id: id, state: v.uploaded ? "asked" : "used", usedAt: keepTime && v.spentAt !== undefined ? v.spentAt : null });
+    }
+    return { ok: true, states: states };
+  }
+
   function sessionByHash(h) {
     const s = is(HEX64, h) ? store.get("ses:" + h) : undefined;
     if (!s) return no("no-hello"); /* plant:session-known */
@@ -540,7 +561,7 @@ function createCore(deps) {
   }
 
   return { create, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, parseMeta, wrapFor };
+    prune, orphan, parseMeta, wrapFor, statesFor };
 }
 
 module.exports = {
