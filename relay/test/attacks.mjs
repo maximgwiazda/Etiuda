@@ -2289,6 +2289,24 @@ function attacks() {
       const good = upload(w, blob);
       return !!good && good.ok === true && good.id === blob.id;
     }, true],
+    ["S3-enrolled-up", "a desk that joined through an invitation uploads at its own place once it is enrolled", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId() });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
+      if (!joined.ok) return false;
+      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      if (!enrolled || enrolled.ok === false) return false;
+      const ownBlob = sealAt(w, joiner, "desks/" + deskId + "/notes.ec", 2, "desk:" + deskId, { body: "kept" });
+      const own = upload(w, ownBlob);
+      return !!own && own.ok === true && own.id === ownBlob.id;
+    }, true],
   ];
 }
 

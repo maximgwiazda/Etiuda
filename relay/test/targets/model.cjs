@@ -934,6 +934,9 @@ function createTarget(limits) {
     if (!blob) return null;
     const held = boundRecord(relayTeamId, blob.writerKeyId, false);
     if (!held) return null;
+    let claim = true;
+    claim = !enrolled.has(enrolKey(relayTeamId, blob.writerKeyId)); /* plant:S3-enrolled-up */
+    if (!claim) return null;
     if (held.inv.uploaded) return refuse("token-spent");
     const place = String(blob.place || "");
     let atDesk = true;
