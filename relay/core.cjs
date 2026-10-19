@@ -47,7 +47,9 @@ function canon(v) {
 
 const createBytes = (rt, keyId, t) => Buffer.from("etiuda-relay-create\n" + rt + "\n" + keyId + "\n" + t, "utf8");
 const devicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
-const invitesBytes = (rt, t, add, drop) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n" + canon({ add, drop }), "utf8");
+/* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
+const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
+  + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
 const helloBytes = (rt, nonce, keyId) => Buffer.from("etiuda-relay-hello\n" + rt + "\n" + nonce + "\n" + keyId + "\n", "utf8");
 
 /* blob.cjs verifies under the upload prefix alone, so the relay's own four signatures are verified here. */
@@ -127,25 +129,63 @@ function createCore(deps) {
     return { ok: true, rev: b.rev, withdrawn };
   }
 
+/* A wrap is {epoch, ct}. The relay keeps at most 1 KiB of its canonical JSON and cannot open it, so anything else on the
+     object, a team key among it, is not stored. */
+  function takeWrap(wrap) {
+    if (!wrap || typeof wrap !== "object" || Array.isArray(wrap)) return no("bad-signature");
+    if (!Number.isSafeInteger(wrap.epoch) || wrap.epoch < 1 || typeof wrap.ct !== "string" || wrap.ct.length < 1) return no("bad-signature");
+    const size = Buffer.byteLength(canon(wrap), "utf8");
+    let over = size > 1025;
+    over = size > 1024; /* plant:S3-wrap-cap */
+    if (over) return no("blob-size");
+    let kept = wrap;
+    kept = { epoch: wrap.epoch, ct: wrap.ct }; /* plant:S3-wrap-blind */
+    return { ok: true, wrap: kept };
+  }
+
   /* Invitations by their token's sha256 alone. The same call twice is refused while its time still holds. A spent
      invitation is never live again (F9 of the slice 1 review): once its keep is over, or the lead drops it, the relay keeps
      of it its id and that it was spent, and nothing else, so its token is token-spent for as long as the team lives and the
-     lead sending its id again adds nothing. */
+     lead sending its id again adds nothing. An add may carry one wrap for a new id. `wraps` replaces an invitation's one
+     wrap. A drop keeps its meaning, and an id dropped in the same call is not given a wrap. */
   function invites(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
     const b = bodyOf(body);
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
-    const bytes = invitesBytes(rt, b.t, b.add, b.drop);
+    if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
+    let covered = undefined;
+    covered = b.wraps; /* plant:S3-wrap-signed */
+    const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
     if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
     const seen = "seen:" + sha256(bytes);
     if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
-    const shaped = b.add.every(a => !!a && typeof a === "object" && is(HEX32, a.id) && is(HEX64, a.hash)) && b.drop.every(d => is(HEX32, d));
+    const wrapRows = b.wraps || [];
+    const shaped = b.add.every(a => !!a && typeof a === "object" && !Array.isArray(a) && is(HEX32, a.id) && is(HEX64, a.hash)
+      && (a.until === undefined || Number.isSafeInteger(a.until)))
+      && b.drop.every(d => is(HEX32, d))
+      && wrapRows.every(w => !!w && typeof w === "object" && !Array.isArray(w) && is(HEX32, w.id));
     if (!shaped) return no("bad-signature"); /* plant:invites-shape */
+    const prepared = [];
+    for (const a of b.add) {
+      let kept = null;
+      if (a.wrap !== undefined) {
+        const taken = takeWrap(a.wrap);
+        if (!taken.ok) return taken;
+        kept = taken.wrap;
+      }
+      prepared.push({ id: a.id, hash: a.hash, until: a.until, wrap: kept });
+    }
+    const replacing = [];
+    for (const w of wrapRows) {
+      const taken = takeWrap(w.wrap);
+      if (!taken.ok) return taken;
+      replacing.push({ id: w.id, wrap: taken.wrap });
+    }
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
-    const added = new Map(b.add.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a.hash]));
+    const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a]));
     const live = [...held].filter(([id, v]) => !v.spent && !drop.has(id)).length + added.size;
     if (live > INVITES_MAX) return no("team-size"); /* plant:invites-cap */
     const now = clock();
@@ -158,7 +198,24 @@ function createCore(deps) {
         if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
-      for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false });
+      for (const [id, row] of added) {
+        const rec = { hash: row.hash, fails: 0, spent: false, uploaded: false };
+        if (row.until !== undefined) rec.until = row.until;
+        if (row.wrap) rec.wrap = row.wrap;
+        store.put("inv:" + id, rec);
+      }
+      for (const entry of replacing) {
+        if (drop.has(entry.id)) continue;
+        const cur = store.get("inv:" + entry.id);
+        if (!cur || cur.spent || !cur.hash) continue;
+        let replace = false;
+        replace = true; /* plant:S3-reseal */
+        const next = Object.assign({}, cur);
+        if (replace) delete next.oldWrap;
+        else next.oldWrap = cur.wrap;
+        next.wrap = entry.wrap;
+        store.put("inv:" + entry.id, next);
+      }
     });
     return { ok: true, dropped: [...drop] };
   }
