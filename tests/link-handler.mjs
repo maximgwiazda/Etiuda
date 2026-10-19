@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 15;
+const EXPECTED = 22;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
 const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
@@ -58,6 +58,7 @@ const TAIL = "\nreturn { linkFromArg: typeof linkFromArg === \"function\" ? link
   + " acceptLink: typeof acceptLink === \"function\" ? acceptLink : null,"
   + " linkArgFrom: typeof linkArgFrom === \"function\" ? linkArgFrom : null,"
   + " ecFromArgv: ecFromArgv, handPendingLink: typeof handPendingLink === \"function\" ? handPendingLink : null,"
+  + " handHeldLink: typeof handHeldLink === \"function\" ? handHeldLink : null,"
   + " bindWindow: w => { theWindow = w; } };";
 
 let loadN = 0;
@@ -66,14 +67,20 @@ function loadShell(opts) {
   const ud = path.join(LAB, "desk-" + (loadN++));
   const cat = path.join(ud, "catalogs");
   fs.mkdirSync(cat, { recursive: true });
-  const desk = JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: cat, eUiLang: "en" } });
+  const deskObj = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: cat, eUiLang: "en" } };
+  if (o.pins) deskObj.teamPins = o.pins;
+  const desk = JSON.stringify(deskObj);
   fs.writeFileSync(path.join(ud, "desk.json"), desk, "utf8");
   const said = [], ons = {}, registered = [], sent = [];
-  let netHits = 0;
+  let netHits = 0, windows = 0;
   const win = {
     isDestroyed: () => false, isMinimized: () => false, restore: noop, focus: noop,
     webContents: { send: (ch, ...a) => sent.push([ch].concat(a)), once: noop, on: noop },
   };
+  const BrowserWindow = new Proxy(function () {}, {
+    get: () => inert, set: () => true, apply: () => undefined,
+    construct: () => { windows++; return inert; },
+  });
   const electron = {
     app: {
       getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => o.lock === true, quit: noop,
@@ -83,7 +90,7 @@ function loadShell(opts) {
       setAsDefaultProtocolClient: o.register ? (...args) => { registered.push(args); return o.register(); } : undefined,
     },
     ipcMain: { on: noop, handle: noop },
-    BrowserWindow: inert, Menu: inert, dialog: inert, protocol: inert, session: inert, shell: inert,
+    BrowserWindow: BrowserWindow, Menu: inert, dialog: inert, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     safeStorage: {
       isEncryptionAvailable: () => true,
@@ -100,7 +107,7 @@ function loadShell(opts) {
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", src + TAIL)(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
-  return { api, said, ons, registered, sent, win, ud, desk, netHits: () => netHits };
+  return { api, said, ons, registered, sent, win, ud, desk, netHits: () => netHits, windows: () => windows };
 }
 
 const FS_IO = ["statSync", "lstatSync", "readFileSync", "writeFileSync", "appendFileSync", "mkdirSync", "mkdtempSync",
@@ -128,6 +135,12 @@ function ioDuring(fn) {
 }
 function hasBoth(lines, en, pl) {
   return lines.some(l => l.indexOf(en) >= 0 && l.indexOf(pl) >= 0);
+}
+function withArgv(argv, fn) {
+  const prev = process.argv;
+  process.argv = argv;
+  try { return fn(); }
+  finally { process.argv = prev; }
 }
 function withEnv(name, value, fn) {
   const had = Object.prototype.hasOwnProperty.call(process.env, name);
@@ -307,6 +320,127 @@ try {
   check(packPlant.back && (process.platform === "win32" ? packPlant.turned : packLine),
     "3he lifting plant:link-pack lets an unpackaged start register etiuda:, and the file is put back: "
     + packPlant.detail + ", sha " + (packPlant.back ? "restored" : "differs"));
+
+  function formRefused(arg) {
+    const r = refused(arg);
+    return !!(r.run && r.run.result && r.run.result.confirm !== true && r.run.result.refused === LINK_FORM
+      && hasBoth(r.lines, LINK_FORM, LINK_FORM_PL) && r.run.hits === 0 && r.run.reg === 0);
+  }
+  let padded = "", slashed = "";
+  for (let i = 0; i < 40 && (padded.indexOf("+") < 0 || slashed.indexOf("/") < 0); i++) {
+    const plusDoc = relayDoc(); plusDoc.lead.name = "Nia " + "~".repeat(12);
+    const slashDoc = relayDoc(); slashDoc.lead.name = "Nia " + "?".repeat(12);
+    const pb = Buffer.from(JSON.stringify(plusDoc)).toString("base64");
+    const sb = Buffer.from(JSON.stringify(slashDoc)).toString("base64");
+    if (padded.indexOf("+") < 0 && pb.indexOf("+") >= 0) padded = pb;
+    if (slashed.indexOf("/") < 0 && sb.indexOf("/") >= 0) slashed = sb;
+  }
+  const equals = Buffer.from(JSON.stringify(doc)).toString("base64");
+  const newlineArg = exactArg + "\n";
+  const badAlphabet = formRefused("etiuda:join#" + padded) && padded.indexOf("+") >= 0
+    && formRefused("etiuda:join#" + slashed) && slashed.indexOf("/") >= 0
+    && formRefused("etiuda:join#" + equals) && equals.indexOf("=") >= 0
+    && formRefused(newlineArg);
+  const b64Plant = lift("plant:link-b64", src => {
+    const L = loadShell({ lock: false, src: src });
+    const a = L.api.acceptLink("etiuda:join#" + equals);
+    const n = L.api.acceptLink(newlineArg);
+    return !!(a && a.confirm === true && a.offer && a.offer.relay === HOST && n && n.confirm === true && n.offer && n.offer.relay === HOST);
+  });
+  check(badAlphabet && b64Plant.turned && b64Plant.back,
+    "3hf a payload with +, / or = padding, or a trailing newline, is refused, and lifting plant:link-b64 lets it through: "
+    + (padded.indexOf("+") >= 0) + "/" + (slashed.indexOf("/") >= 0) + "/" + (equals.indexOf("=") >= 0) + ", "
+    + b64Plant.detail + ", sha " + (b64Plant.back ? "restored" : "differs"));
+
+  const pasteArg = "etiuda-join:" + b64;
+  const pasted = refused(pasteArg);
+  const pasteOk = formRefused(pasteArg) && pasted.run.hits === 0;
+  const pastePlant = lift("plant:link-paste", src => {
+    const L = loadShell({ lock: false, src: src });
+    const snap = L.said.length;
+    const a = L.api.acceptLink(pasteArg);
+    return (!a || a.confirm !== true) && !hasBoth(L.said.slice(snap), LINK_FORM, LINK_FORM_PL);
+  });
+  check(pasteOk && pastePlant.turned && pastePlant.back,
+    "3hg an etiuda-join: argument is refused and said, and lifting plant:link-paste drops that refusal: "
+    + pastePlant.detail + ", sha " + (pastePlant.back ? "restored" : "differs"));
+
+  const otherPub = "ab".repeat(32);
+  const pinned = loadShell({ lock: false, pins: { [doc.team]: { keyId: "other-quay", public: otherPub } } });
+  const pinSnap = pinned.sent.length;
+  const pinAns = pinned.api.acceptLink(exactArg);
+  const pinOffers = pinned.sent.slice(pinSnap).filter(m => m[1] && m[1].offer);
+  const pinOk = doc.lead.public !== otherPub && pinAns && pinAns.confirm !== true && pinOffers.length === 0;
+  const offerPlant = lift("plant:link-offer", src => {
+    const L = loadShell({ lock: false, pins: { [doc.team]: { keyId: "other-quay", public: otherPub } }, src: src });
+    const a = L.api.acceptLink(exactArg);
+    return !!(a && a.confirm === true);
+  });
+  check(pinOk && offerPlant.turned && offerPlant.back,
+    "3hh a link readInvite refuses gives no confirm and sends no offer, and lifting plant:link-offer confirms: "
+    + (pinAns && pinAns.refused) + ", offers " + pinOffers.length + ", " + offerPlant.detail
+    + ", sha " + (offerPlant.back ? "restored" : "differs"));
+
+  const early = withArgv(["Etiuda.exe", fullUrl], () => loadShell({ lock: true, packaged: true }));
+  const earlyOffers = early.sent.filter(m => m[1] && m[1].offer);
+  const earlyOk = early.windows() === 0 && earlyOffers.length === 0 && hasBoth(early.said, LINK_FORM, LINK_FORM_PL);
+  const earlyPlant = lift("plant:link-early", src => {
+    const L = withArgv(["Etiuda.exe", fullUrl], () => loadShell({ lock: true, packaged: true, src: src }));
+    return L.windows() === 0 && !hasBoth(L.said, LINK_FORM, LINK_FORM_PL);
+  });
+  check(earlyOk && earlyPlant.turned && earlyPlant.back,
+    "3hi a refused link in argv is said before any window exists, and lifting plant:link-early says nothing: windows "
+    + early.windows() + ", " + earlyPlant.detail + ", sha " + (earlyPlant.back ? "restored" : "differs"));
+
+  const heldLoad = withArgv(["Etiuda.exe", exactArg], () => loadShell({ lock: true, packaged: true }));
+  heldLoad.api.bindWindow(heldLoad.win);
+  const beforeHold = heldLoad.sent.length;
+  const netHold = heldLoad.netHits();
+  heldLoad.api.handHeldLink(heldLoad.win);
+  const heldOffers = heldLoad.sent.slice(beforeHold).filter(m => m[0] === "etiuda:team-join" && m[1] && m[1].offer && m[1].offer.relay === HOST && m[1].offer.lead === LEAD);
+  const holdOk = beforeHold === 0 && heldOffers.length === 1 && heldLoad.netHits() === netHold && heldLoad.windows() === 0;
+  const holdPlant = lift("plant:link-hold", src => {
+    const L = withArgv(["Etiuda.exe", exactArg], () => loadShell({ lock: true, packaged: true, src: src }));
+    L.api.bindWindow(L.win);
+    const n = L.sent.length;
+    L.api.handHeldLink(L.win);
+    return L.sent.slice(n).filter(m => m[1] && m[1].offer).length === 0;
+  });
+  check(holdOk && holdPlant.turned && holdPlant.back,
+    "3hj a good link in argv calls nothing until the load handler, then sends one offer, and lifting plant:link-hold sends none: sent before "
+    + beforeHold + ", after " + heldOffers.length + ", " + holdPlant.detail + ", sha " + (holdPlant.back ? "restored" : "differs"));
+
+  function createRegisters(src) {
+    const at = src.indexOf("function createWindow(");
+    const end = src.indexOf("function routeTabChord(");
+    if (at < 0 || end < at) return false;
+    return src.slice(at, end).indexOf('on("did-finish-load", () => { handHeldLink(win); })') >= 0;
+  }
+  const registeredNow = createRegisters(fs.readFileSync(MAIN, "utf8"));
+  const loadPlant = lift("plant:link-load", src => !createRegisters(src));
+  check(registeredNow && loadPlant.turned && loadPlant.back,
+    "3hk createWindow registers the load handler that hands the held link, and lifting plant:link-load drops it: "
+    + loadPlant.detail + ", sha " + (loadPlant.back ? "restored" : "differs"));
+
+  const quietSecond = loadShell({ lock: true, packaged: true });
+  const secondHandler = (quietSecond.ons["second-instance"] || [])[0] || null;
+  if (secondHandler) secondHandler({}, ["Etiuda.exe", exactArg]);
+  const midOffers = quietSecond.sent.filter(m => m[1] && m[1].offer);
+  quietSecond.api.bindWindow(quietSecond.win);
+  quietSecond.api.handHeldLink(quietSecond.win);
+  const lateOffers = quietSecond.sent.filter(m => m[0] === "etiuda:team-join" && m[1] && m[1].offer && m[1].offer.lead === LEAD && m[1].offer.relay === HOST);
+  const pendingOk = !!secondHandler && midOffers.length === 0 && lateOffers.length === 1;
+  const pendingPlant = lift("plant:link-pending", src => {
+    const L = loadShell({ lock: true, packaged: true, src: src });
+    const h = (L.ons["second-instance"] || [])[0];
+    if (h) h({}, ["Etiuda.exe", exactArg]);
+    L.api.bindWindow(L.win);
+    L.api.handHeldLink(L.win);
+    return L.sent.filter(m => m[1] && m[1].offer).length === 0;
+  });
+  check(pendingOk && pendingPlant.turned && pendingPlant.back,
+    "3hl a second-instance link with no window is sent once the page loads, and lifting plant:link-pending sends none: mid "
+    + midOffers.length + ", later " + lateOffers.length + ", " + pendingPlant.detail + ", sha " + (pendingPlant.back ? "restored" : "differs"));
 
   const builder = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
   check(builder.indexOf("MimeType=x-scheme-handler/etiuda;") >= 0 && /schemes:\s*\[\s*"etiuda"\s*\]/.test(builder),

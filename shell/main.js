@@ -271,7 +271,8 @@ const LINK_LONG_PL = "Proszę poprosić lidera o nowe zaproszenie. To jest dłu�
 function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
 function linkLooks(s) {
   const head = s.slice(0, 12).toLowerCase();
-  return head.slice(0, 7) === "etiuda:" || head === "etiuda-join:" || s.slice(0, 8).toLowerCase() === "https://" || s.slice(0, 7).toLowerCase() === "http://";
+  if (head === "etiuda-join:") return true; /* plant:link-paste */
+  return head.slice(0, 7) === "etiuda:" || s.slice(0, 8).toLowerCase() === "https://" || s.slice(0, 7).toLowerCase() === "http://";
 }
 function linkFromArg(arg) {
   const s = typeof arg === "string" ? arg : "";
@@ -279,7 +280,8 @@ function linkFromArg(arg) {
   if (s.length > 8192) return linkRefusal(LINK_LONG, LINK_LONG_PL); /* plant:link-cap */
   const hash = s.lastIndexOf("#");
   const payload = hash >= 0 ? s.slice(hash + 1) : "";
-  if (s !== "etiuda:join#" + payload || !/^[A-Za-z0-9_-]+$/.test(payload)) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-form */
+  if (s !== "etiuda:join#" + payload) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-form */
+  if (!/^[A-Za-z0-9_-]+$/.test(payload)) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-b64 */
   const handed = "etiuda-join:" + payload;
   const parsed = inviteRead(handed, process.platform !== "win32");
   if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
@@ -297,7 +299,7 @@ function handLinkView(view) {
     try { win.webContents.send("etiuda:team-join", view); pendingLink = null; return; }
     catch (e) { /* the page is not there yet */ }
   }
-  pendingLink = view;
+  pendingLink = view; /* plant:link-pending */
 }
 function handPendingLink(win) {
   const view = pendingLink;
@@ -315,7 +317,7 @@ function acceptLink(arg) {
     return { refused: got.refused, said: got.saidEn };
   }
   const view = readInvite(got.text);
-  if (!view || !view.offer) return { refused: LINK_FORM, said: LINK_FORM };
+  if (!view || !view.offer) return { refused: LINK_FORM, said: LINK_FORM }; /* plant:link-offer */
   handLinkView(view);
   return { confirm: true, text: got.text, offer: view.offer };
 }
@@ -5747,7 +5749,7 @@ function createWindow() {
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryLiveStats(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
-  win.webContents.on("did-finish-load", () => { handHeldLink(win); });
+  win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
@@ -5910,8 +5912,8 @@ if (!theOnlyOne) {
   const link = linkArgFrom(process.argv);
   if (link) {
     const got = linkFromArg(link);
-    if (got && got.refused) acceptLink(link);
-    else if (got && got.text) pendingLinkArg = link;
+    if (got && got.refused) acceptLink(link); /* plant:link-early */
+    if (got && got.text) pendingLinkArg = link; /* plant:link-hold */
   }
   openedWith = ecFromArgv(process.argv);
   /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
