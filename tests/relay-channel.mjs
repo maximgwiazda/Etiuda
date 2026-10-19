@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 123;
+const EXPECTED = 125;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2114,6 +2114,136 @@ try {
       check(turned && back, "944s lifting plant:fk1-removed accepts the dropped desk's new file sealed at the old epoch, and the file is put back: "
         + detail + ", sha " + (back ? "restored" : "differs"));
     }
+  }
+
+  /* C7, board 921. A desk takes a relay invitation, the invitation's copy lands, and cancel must leave that relay:
+     relayHere is null, the folder is the one from before, and the channel has stopped. The desk holds no key. */
+  try {
+    function deskFrom(name, folder, src) {
+      const ud = path.join(LAB, name);
+      fs.mkdirSync(ud, { recursive: true });
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
+      const said = [];
+      const on = {}, invoke = {};
+      const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
+      const safeStorage = {
+        isEncryptionAvailable: () => true,
+        encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+        decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+      };
+      const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+      const electron = {
+        app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
+          getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+        ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
+        BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+        screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
+      };
+      process.env.XDG_CURRENT_DESKTOP = "GNOME";
+      const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+        src + "\nreturn { " + EXPOSE.join(", ") + " };")(
+        n => (n === "electron" ? electron : nodeRequire(n)),
+        path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+      const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+      const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
+      return { api, ask, said, ud, envelope };
+    }
+    async function cancelScene(src, tag) {
+      const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
+      const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+        sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+      if (made.status !== 200) throw new Error("the team for " + tag + " was not made");
+      const secret = hex(16), inv = hex(16), token = hex(32), sealKey = C.inviteSealKey(secret), t0 = R.clock.now;
+      const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+      await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: t0,
+        sig: signHex(LEAD, core.invitesBytes(rt, t0, add, [])) });
+      const pin = { teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+      const teamFile = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+        channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+      const live = [{ id: inv, key: sealKey }];
+      const studioT = transport("c7-" + tag), studioMirror = path.join(LAB, "c7-studio-" + tag);
+      const studio = C.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "c7-" + tag + ".json"),
+        pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+        keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1, inviteKeys: () => live,
+        request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
+      const share = path.join(LAB, "c7-share-" + tag);
+      fs.mkdirSync(share, { recursive: true });
+      put(studioMirror, C.TEAM_NAME, teamFile);
+      studio.start();
+      await studio.idle();
+      deskTransport.down = false;
+      const D = deskFrom("c7-desk-" + tag, share, src);
+      const before = D.api.catalogFolder();
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+      const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      const mirror = path.join(D.ud, "relay", rt);
+      const landed = await until(async () => {
+        const ch = D.api.relayRun();
+        if (ch) { ch.kick(); await ch.idle(); }
+        await studio.kick(); await studio.idle();
+        let env = {};
+        try { env = D.envelope(); } catch { env = {}; }
+        return read(mirror, C.TEAM_NAME) !== null && !!(env.teamChannel && env.teamChannel[team]) && !!(ch && ch.online());
+      }, 8000);
+      let env = {};
+      try { env = D.envelope(); } catch { env = {}; }
+      const noKey = !env.teamKeys || !env.teamKeys[team];
+      const pinned = !!(env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.pinned === true);
+      const onMirror = D.api.catalogFolder() === mirror;
+      const hereBefore = D.api.relayHere();
+      const running = D.api.relayRun();
+      const wasOnline = !!(running && running.online());
+      await D.ask("etiuda:team-join", "cancel");
+      const stopped = await until(() => !!(running && running.online() === false), 1500);
+      const here = D.api.relayHere();
+      const folder = D.api.catalogFolder();
+      if (running) { try { await running.stop(); } catch { /* already stopped */ } }
+      try { await studio.stop(); } catch { /* already stopped */ }
+      const pre = !taken.refused && before === share && landed && noKey && pinned && onMirror && wasOnline && !!hereBefore;
+      const said = D.said.filter(l => l.indexOf("relay") >= 0 || l.indexOf("team") >= 0).slice(-3).join(" / ");
+      return { pre, here, folder, share, stopped, refused: taken && taken.refused, said,
+        file: read(mirror, C.TEAM_NAME) !== null, named: !!(env.teamChannel && env.teamChannel[team]) };
+    }
+    const got = await cancelScene(fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"), "leg");
+    check(got.pre && got.here === null && got.folder === got.share && got.stopped,
+      "921a a desk takes a relay invitation, the invitation's copy lands, and cancel puts the folder back and stops the channel: "
+      + (got.pre ? "the copy had landed" : "the copy had not (" + (got.refused ? "refused " + got.refused : "file " + got.file + ", channel " + got.named) + ")")
+      + ", relayHere " + (got.here === null ? "null" : "still answers")
+      + ", folder " + (got.folder === got.share ? "the one from before" : "still the mirror")
+      + ", channel " + (got.stopped ? "stopped" : "still running")
+      + (got.said ? "; " + got.said : ""));
+    /* plant:c7-cancel. Deleting that line, leaving the file valid script, leaves the pin, the mirror and the channel. */
+    const mainFile = path.join(ROOT, "shell", "main.js");
+    const beforeBytes = fs.readFileSync(mainFile);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:c7-cancel") >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        fs.writeFileSync(mainFile, lines.join("\n"));
+        const lifted = await cancelScene(fs.readFileSync(mainFile, "utf8"), "plant");
+        turned = lifted.pre && lifted.here !== null && lifted.folder !== lifted.share && lifted.stopped === false;
+        detail = (lifted.pre ? "the copy had landed" : "the copy had not (" + (lifted.refused ? "refused " + lifted.refused : "file " + lifted.file + ", channel " + lifted.named) + ")")
+          + ", relayHere " + (lifted.here === null ? "null" : "answers")
+          + ", folder " + (lifted.folder === lifted.share ? "back" : "the mirror")
+          + ", channel " + (lifted.stopped ? "stopped" : "running");
+      }
+    } catch (e) {
+      detail = e && e.message ? e.message : String(e);
+    } finally {
+      fs.writeFileSync(mainFile, beforeBytes);
+    }
+    const back = sha(fs.readFileSync(mainFile)) === digest;
+    check(turned && back, "921b lifting plant:c7-cancel leaves the relay pin, the mirror and the channel after cancel, and the file is put back: "
+      + detail + ", sha " + (back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the leg 921a): " + (e && e.stack ? e.stack : e));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
