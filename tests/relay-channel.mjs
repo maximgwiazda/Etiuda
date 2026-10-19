@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 119;
+const EXPECTED = 123;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3149,6 +3149,84 @@ try {
   await lead.ch.stop();
 } catch (e) {
   check(false, "harness (the leg 960a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 1: the wrap's key, its associated data, and openWrap. The epoch line is the plant. ---- */
+function liftBlob(tag, fn) {
+  const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = sha(beforeBytes);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      turned = fn(nodeRequire(src));
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  } finally {
+    fs.writeFileSync(src, beforeBytes);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+}
+function wrapTeamDoc(id, rt, epoch) {
+  return { format: 1, kind: "etiuda-team", id: id, epoch: epoch, rev: 1, channel: { kind: "relay", rt: rt, url: URLV1 } };
+}
+try {
+  const secret = hex(16), rt = hex(16), team = "t-" + hex(8), inv = hex(16), epoch = 3;
+  const teamKey = crypto.randomBytes(32);
+  const nonce = Buffer.alloc(12, 9);
+  const key = B.inviteWrapKey(secret);
+    const expectKey = Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secret, "hex"), Buffer.alloc(0), Buffer.from("etiuda-invite-wrap", "utf8"), 32));
+    const aad = B.inviteWrapAad({ relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch });
+    const expectAad = Buffer.from(["etiuda-invite-wrap", rt, team, inv, String(epoch)].join("\n") + "\n", "utf8");
+    const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch, key: teamKey, nonce: nonce });
+    const raw = Buffer.from(wrap.ct, "hex");
+    const dec = crypto.createDecipheriv("aes-256-gcm", key, raw.subarray(0, 12), { authTagLength: 16 });
+    dec.setAAD(expectAad);
+    dec.setAuthTag(raw.subarray(raw.length - 16));
+    const plain = Buffer.concat([dec.update(raw.subarray(12, raw.length - 16)), dec.final()]).toString("utf8");
+    const wantPlain = JSON.stringify({ epoch: epoch, key: teamKey.toString("hex") });
+    const doc = wrapTeamDoc(team, rt, epoch);
+    const opened = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: doc });
+    const blind = wrap.ct.indexOf(teamKey.toString("hex")) < 0;
+    check(!!key && key.equals(expectKey) && key.length === 32 && !!aad && aad.equals(expectAad) && wrap.epoch === epoch
+      && plain === wantPlain && opened.ok === true && Buffer.isBuffer(opened.key) && opened.key.equals(teamKey) && blind,
+      "961a the wrap key, its associated data and the sealed JSON are the bytes item 1 names, and openWrap reads the team key back: "
+      + (key && key.equals(expectKey) ? "key matches" : "key differs")
+      + ", associated data " + (aad && aad.equals(expectAad) ? "matches" : "differs")
+      + ", plaintext " + (plain === wantPlain ? "matches" : JSON.stringify(plain))
+      + ", opened " + (opened.ok === true ? "yes" : (opened.reason || opened.ok))
+      + ", the ciphertext holds the key " + (blind ? "nowhere" : "in the clear"));
+    const otherTeam = "t-" + hex(8), otherRt = hex(16), otherInv = hex(16);
+    const movedInv = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: otherInv, wrap: wrap, teamDoc: doc });
+    const movedTeam = B.openWrap({ secret: secret, relayTeamId: rt, teamId: otherTeam, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(otherTeam, rt, epoch) });
+    const movedRelay = B.openWrap({ secret: secret, relayTeamId: otherRt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(team, otherRt, epoch) });
+    const movedEpoch = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: { epoch: epoch + 1, ct: wrap.ct }, teamDoc: wrapTeamDoc(team, rt, epoch + 1) });
+    const still = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: doc });
+    check(!movedInv.ok && !movedTeam.ok && !movedRelay.ok && !movedEpoch.ok && still.ok === true && still.key.equals(teamKey),
+      "961b a wrap moved to another invitation, team, relay team or epoch does not open, and the unmoved one does: "
+      + [movedInv.reason || movedInv.ok, movedTeam.reason || movedTeam.ok, movedRelay.reason || movedRelay.ok, movedEpoch.reason || movedEpoch.ok].join(" ")
+      + ", unmoved " + (still.ok === true ? "opens" : (still.reason || still.ok)));
+    const wrong = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(team, rt, epoch + 2) });
+    check(wrong.ok === false && wrong.reason === "epoch" && wrong.said === B.REASONS.epoch,
+      "961c a wrap whose epoch is not the team file's is refused and said: " + (wrong.reason || wrong.ok) + ", " + JSON.stringify(wrong.said));
+    const planted = liftBlob("plant:wrap-epoch", mod => {
+      const w = mod.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch, key: teamKey, nonce: nonce });
+      const got = mod.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: w, teamDoc: wrapTeamDoc(team, rt, epoch + 2) });
+      return got.ok === true && Buffer.isBuffer(got.key) && got.key.equals(teamKey);
+    });
+  check(planted.turned && planted.back,
+    "961d lifting plant:wrap-epoch opens that wrap, and the file is put back: " + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 961a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

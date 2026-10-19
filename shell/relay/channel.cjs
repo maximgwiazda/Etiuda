@@ -155,6 +155,9 @@ function inviteSealKey(secretHex) {
   return Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secretHex, "hex"), Buffer.alloc(0), Buffer.from(INVITE_SEAL_INFO, "utf8"), 32));
 }
 
+/* The wrap key of the same secret, under etiuda-invite-wrap. The desk derives it at yes and does not keep the secret. */
+function inviteWrapKey(secretHex) { return B.inviteWrapKey(secretHex); }
+
 /* A desk's own copy of the team file: {id, key}, the 32-hex id of its place (`invite:<id>`, the shape the relay takes
    from a lead) and the 32-byte key it is sealed under, or null. `dh` is the X25519 agreement of the lead's box and the
    desk's, which only the lead and that desk can make; an all-zero agreement, a low-order key's, makes nothing. The rest
@@ -1482,7 +1485,7 @@ function createChannel(opts) {
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, INVITE_UPLOAD_MAX,
-  canon, signedBytes, helloBytes, inviteSealKey, deskCopyOf, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
+  canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   createProgram, createChannel,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),
