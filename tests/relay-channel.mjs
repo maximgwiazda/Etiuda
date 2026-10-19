@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 131;
+const EXPECTED = 134;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1386,7 +1386,7 @@ try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
-  function loadDesk(ud) {
+  function loadDesk(ud, hooks) {
     const said = [], on = {}, invoke = {};
     const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
     const safeStorage = {
@@ -1394,7 +1394,12 @@ try {
       encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
-    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const net = { fetch: (url, init) => {
+      deskTransport.log.push((init && init.method) + " " + url);
+      if (deskTransport.down) return Promise.reject(new Error("down"));
+      if (hooks && typeof hooks.fetch === "function") { const alt = hooks.fetch(url, init); if (alt) return alt; }
+      return relayFetch(url, init);
+    } };
     const electron = {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
@@ -1412,11 +1417,11 @@ try {
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
     return { api, ask, sync, said, ud, envelope };
   }
-  const newDesk = (name, folder) => {
+  const newDesk = (name, folder, hooks) => {
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
-    return loadDesk(ud);
+    return loadDesk(ud, hooks);
   };
   const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
   const catalogText = (rev, key) => {
@@ -1568,6 +1573,138 @@ try {
   check(codePlant.turned && codePlant.back,
     "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the file is put back: "
     + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
+
+  /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
+     admission above still meets edition 1. This tree's relay has no wrap route; the stand-in below answers only this desk. */
+  const RTW = hex(16), TEAMW = "t-" + hex(8), KW = crypto.randomBytes(32), URLW = URLV1;
+  const madeW = await admin("POST", "/relay/v1/teams", { rt: RTW, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(RTW, LEAD.keyId, R.clock.now)) });
+  if (madeW.status !== 200) throw new Error("the wrap team was not made: " + JSON.stringify(madeW.json));
+  const teamDocW = rev => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMW, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: rev,
+    channel: { kind: "relay", rt: RTW, url: URLW }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+  const studioWMirror = path.join(LAB, "wrap-studio");
+  const invitesW = [];
+  const studioWT = transport("wrap-studio");
+  const studioW = C.createChannel({ rt: RTW, url: URLW, mirror: studioWMirror, stateFile: path.join(LAB, "wrap-studio.json"),
+    pin: () => ({ teamId: TEAMW, rt: RTW, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+    keyFor: e => (e === 1 ? KW : null), sealEpoch: () => 1, inviteKeys: () => invitesW,
+    request: studioWT.request, connect: studioWT.connect, pollMs: 1e9 });
+  put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(1))));
+  put(studioWMirror, C.TEAM_NAME, teamDocW(1));
+  studioW.start();
+  await studioW.idle();
+  async function inviteOnW(epoch) {
+    const secret = hex(16), inv = hex(16), token = hex(32), hash = sha(Buffer.from(token, "utf8")), at = R.clock.now;
+    const res = await admin("POST", "/relay/v1/t/" + RTW + "/invites", { add: [{ id: inv, hash: hash }], drop: [], t: at,
+      sig: signHex(LEAD, core.invitesBytes(RTW, at, [{ id: inv, hash: hash }], [])) });
+    if (res.status !== 200) throw new Error("a wrap invitation was not registered: " + JSON.stringify(res.json));
+    invitesW.push({ id: inv, key: C.inviteSealKey(secret) });
+    await studioW.kick(); await studioW.idle();
+    const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAMW, relay: { rt: RTW, url: URLW, token: token, inv: inv },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: secret }), "utf8").toString("base64url");
+    const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: RTW, teamId: TEAMW, invitationId: inv, epoch: epoch, key: KW });
+    return { text: text, wrap: wrap };
+  }
+  function deskOnWrap(name, wrap) {
+    const folder = path.join(LAB, name + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    return newDesk(name, folder, { fetch: (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
+      ? new Response(Buffer.from(JSON.stringify({ wrap: wrap }), "utf8"), { status: 200, headers: { "content-type": "application/json" } })
+      : null) });
+  }
+  const invA = await inviteOnW(1);
+  const markA = deskTransport.log.length;
+  const Dw = deskOnWrap("wrap-read", invA.wrap);
+  const takenA = await Dw.ask("etiuda:team-join", "invite", invA.text, "Desk Nine", "");
+  const meA = await Dw.ask("etiuda:branch-identity", false);
+  const joinA = "desks/" + meA.id + "/join.json";
+  const mirrorA = path.join(Dw.ud, "relay", RTW);
+  const readNow = await until(async () => {
+    const ch = Dw.api.relayRun();
+    if (ch) { ch.kick(); await ch.idle(); }
+    return factsOf(Dw.api.readCatalog() || "") === 1;
+  }, 8000);
+  let atLead = false, later = false, still = false;
+  if (readNow) {
+    atLead = await until(async () => { await studioW.kick(); await studioW.idle(); return !!read(studioWMirror, joinA); }, 8000);
+    put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(2))));
+    await studioW.kick(); await studioW.idle();
+    later = await until(async () => {
+      const ch = Dw.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      return factsOf(Dw.api.readCatalog() || "") === 2;
+    }, 8000);
+    still = !!read(studioWMirror, joinA) && !!read(mirrorA, joinA);
+  }
+  const putsA = deskTransport.log.slice(markA).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + RTW + "/") >= 0).length;
+  check(!!takenA && !takenA.refused && readNow && putsA === 1 && atLead && later && still,
+    "965a yes opens the wrap and reads a catalog before the lead admits it, uploads join.json once, and a later catalog still arrives: "
+    + "yes " + (takenA && takenA.refused ? "refused " + takenA.refused : "taken")
+    + ", catalog " + (readNow ? "read" : "unread") + ", uploads " + putsA
+    + ", at the lead " + (atLead ? "yes" : "no") + ", later " + (later ? "read" : "unread")
+    + ", request " + (still ? "kept" : "gone"));
+  const invE = await inviteOnW(2);
+  const De = deskOnWrap("wrap-epoch", invE.wrap);
+  const takenE = await De.ask("etiuda:team-join", "invite", invE.text, "Desk Nine", "");
+  const saidEpoch = await until(async () => {
+    const ch = De.api.relayRun();
+    if (ch) { ch.kick(); await ch.idle(); }
+    return De.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
+  }, 8000);
+  const unreadE = factsOf(De.api.readCatalog() || "") !== 1;
+  check(!!takenE && !takenE.refused && saidEpoch && unreadE,
+    "965b a wrap whose epoch is not the signed team file's is refused and said, and that catalog is not read: "
+    + (saidEpoch ? "said" : "not said") + ", catalog " + (unreadE ? "unread" : "read"));
+  function dropCopiedChannel() {
+    const want = path.normalize(path.join(APP, "shell", "relay", "channel.cjs"));
+    for (const k of Object.keys(nodeRequire.cache)) if (path.normalize(k) === want) delete nodeRequire.cache[k];
+  }
+  async function liftChannel(tag, fn) {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const copy = path.join(APP, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(file);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const next = lines.join("\n");
+        fs.writeFileSync(file, next);
+        fs.writeFileSync(copy, next);
+        dropCopiedChannel();
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(file, beforeBytes);
+      fs.writeFileSync(copy, beforeBytes);
+      dropCopiedChannel();
+    }
+    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
+  const openPlant = await liftChannel("plant:wrap-open", async () => {
+    const invP = await inviteOnW(1);
+    const Dp = deskOnWrap("wrap-plant", invP.wrap);
+    const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
+    const end = Date.now() + 4000;
+    while (Date.now() < end) {
+      const ch = Dp.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      if (factsOf(Dp.api.readCatalog() || "") === 1) return false;
+      await wait(40);
+    }
+    return !!(takenP && !takenP.refused) && factsOf(Dp.api.readCatalog() || "") !== 1;
+  });
+  check(openPlant.turned && openPlant.back,
+    "965c lifting plant:wrap-open leaves the catalog unread, and the file is put back: "
+    + openPlant.detail + ", sha " + (openPlant.back ? "restored" : "differs"));
+  await studioW.stop();
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
   const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(K2, me.box, TEAM2, 1, me.id) };

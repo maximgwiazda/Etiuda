@@ -1093,6 +1093,7 @@ function createProgram(opts) {
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed() { st.tokenUsed = true; persist(); },
+    heldTeam,
     pending: () => st.pending.slice(),
     unpend(id) { unpend(id); persist(); },
   };
@@ -1124,6 +1125,9 @@ function createChannel(opts) {
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS;
+  /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
+     keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
+  let wrapPhase = "need", wrapHeld = null;
   let watchers = [], settle = null, retryTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
   const said = new Set();
   const sayOnce = line => { if (!said.has(line)) { said.add(line); say(line); } };
@@ -1388,11 +1392,48 @@ function createChannel(opts) {
     }
   }
 
+  /* The invitation's wrap, fetched once the session is open. This tree's relay has no wrap route, so a 404 is said as
+     nothing and the cycle goes on: the key still arrives by the roster's wrap. No answer, or a 500, stays "need" and is
+     asked again. A spent or ended token is the hello's refusal, returned here too. */
+  async function pullWrap() {
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    const key = inv && toBytes(inv.wrapKey);
+    if (!key || key.length !== 32 || wrapPhase !== "need") return { ok: true };
+    const r = await authed("GET", "wrap");
+    if (r.status === 200 && table(r.json) && table(r.json.wrap)) { wrapHeld = r.json.wrap; wrapPhase = "held"; return { ok: true }; }
+    if (!r.status || r.status >= 500) return { ok: true };
+    const why = r.refused || refusalOf(r);
+    if (why.reason === "token-spent") return why;
+    if (r.json && r.json.error === "invite-ended") return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false };
+    wrapPhase = "none";
+    return { ok: true };
+  }
+
+  /* Opened against the team file this program holds. openInviteWrap refuses an epoch that file does not carry before it
+     decrypts. The team key is handed to the shell, which keeps it and forgets the wrap key. A refusal is said once and
+     the key is not installed; the invitation's one upload still goes. */
+  async function openHeldWrap() {
+    if (wrapPhase !== "held") return { ok: true };
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    const key = inv && toBytes(inv.wrapKey);
+    const team = prog.heldTeam();
+    if (!key || key.length !== 32 || !team || !team.doc) return { ok: true };
+    const opened = B.openInviteWrap(key, { wrap: wrapHeld, teamDoc: team.doc, teamId: team.doc.id, relayTeamId: o.rt, invitationId: inv.inv });
+    if (!opened.ok) { wrapPhase = "bad"; wrapHeld = null; sayOnce(opened.said); return { ok: true }; }
+    if (typeof o.onTeamKey === "function") o.onTeamKey(opened.epoch, opened.key); /* plant:wrap-open */
+    wrapPhase = "opened";
+    wrapHeld = null;
+    return { ok: true };
+  }
+
   async function cycle() {
     const s = await ensureSession();
     if (!s.ok) return s;
+    const w = await pullWrap();
+    if (!w.ok) return w;
     const c = await catchUp(); /* plant:catch-up-first */
     if (!c.ok) return c;
+    await openHeldWrap();
     await retryPending();
     const f = await flush();
     ensureSocket();

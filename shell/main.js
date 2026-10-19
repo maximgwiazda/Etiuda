@@ -2793,6 +2793,10 @@ let joinDone = null;                            // {team, file}: a request admit
 function finishJoin() {
   const j = teamJoin;
   if (!j || !deskBranch || !(newestEpoch(j.team) > j.held)) return false;
+  /* A key opened from the invitation's wrap lets this desk read before it is admitted. The request stays until the
+     roster of the epoch accepted names this desk, which is still what lets the request go. */
+  const roster = teamRoster[j.team];
+  if (j.invite && j.invite.relay && !(roster && roster.desks.indexOf(branchIdOf(deskBranch.sign.pub)) >= 0)) return false;
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
   joinDone = { team: j.team, file: j.file };
@@ -3441,6 +3445,22 @@ function relayRun() {
       return out;
     },
     onTeam: () => { teamStamp = ""; heedTeam(); },
+    /* The team key from the invitation's wrap, kept as a roster wrap is kept, and the wrap key forgotten. Not admission. */
+    onTeamKey: (epoch, key) => {
+      if (!Number.isInteger(epoch) || epoch < 1 || !Buffer.isBuffer(key) || key.length !== 32) return;
+      try {
+        if (!branchSealable()) throw new Error("safeStorage is not available");
+        const kept = teamKeys[team] || {};
+        kept[epoch] = safeStorage.encryptString(key.toString("base64")).toString("base64");
+        teamKeys[team] = kept;
+        const j = teamJoin;
+        if (j && j.team === team && j.invite && j.invite.relay) delete j.invite.relay.wrap;
+        ecFactsRead.clear();
+        teamStamp = "";
+        persistDeskEnvelope();
+        heedTeam();
+      } catch (e) { teamSay("the team key for " + team + " could not be kept - " + e.message); }
+    },
     request: relayRequest, connect: relayConnect,
     say: line => teamSay("relay of team " + team + ": " + line),
   });
