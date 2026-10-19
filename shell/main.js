@@ -3071,7 +3071,9 @@ function joinKept(j) {
 function relayKept(r) {
   const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
   return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
-    && typeof r.seal === "string" && r.seal !== "" && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
+    && typeof r.seal === "string" && r.seal !== ""
+    && (r.wrap === undefined || (typeof r.wrap === "string" && r.wrap !== ""))
+    && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
    "policy" while machine policy names a team folder or a lead, an invitation naming those very ones included. */
@@ -3115,9 +3117,10 @@ function readInvite(text) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, view, { refused: settled });
   const where = parsed.relay ? { host: "", cloud: "", local: false } : folderHost(parsed.folder, process.env);
-  const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
-    host: where.host, cloud: where.cloud, local: where.local };
-  if (parsed.relay) offer.relay = new URL(parsed.relay.url).host;
+  const offer = { folder: parsed.folder, lead: parsed.lead.name, host: where.host, cloud: where.cloud, local: where.local };
+  /* A relay link asks for no check code, and it names the team and the relay's host beside the lead. */
+  if (parsed.relay) { offer.relay = new URL(parsed.relay.url).host; offer.team = parsed.team; }
+  else offer.code = inviteCode(parsed.secret, parsed.lead.public);
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
   return Object.assign({}, view, { offer: offer });
 }
@@ -3132,8 +3135,11 @@ async function takeInvite(text, name, check) {
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, joinView(), { refused: settled });
-  const code = inviteCode(parsed.secret, parsed.lead.public);
-  if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
+  if (!parsed.relay) /* plant:relay-code */
+  {
+    const code = inviteCode(parsed.secret, parsed.lead.public);
+    if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
+  }
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   if (parsed.relay) return takeRelayInvite(parsed, name, me);
@@ -3201,11 +3207,14 @@ function takeRelayInvite(parsed, name, me) {
   const proof = memberProof(parsed.secret, commit);
   const incomingId = inviteIdOf(parsed.secret);
   const sealKey = RelayChannel().inviteSealKey(parsed.secret);
-  if (!proof || !incomingId || !sealKey) return Object.assign({}, joinView(), { refused: "unread" });
-  let token = "", seal = "";
+  const wrapKey = RelayChannel().inviteWrapKey(parsed.secret);
+  if (!proof || !incomingId || !sealKey || !wrapKey) return Object.assign({}, joinView(), { refused: "unread" });
+  let token = "", seal = "", wrap = "";
   try {
+    /* The link's token, as the lead registered its hash, and the two keys derived from the secret. The secret itself is not kept. */
     token = safeStorage.encryptString(parsed.relay.token).toString("base64");
     seal = safeStorage.encryptString(sealKey.toString("base64")).toString("base64");
+    wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
   } catch { return Object.assign({}, joinView(), { refused: "unread" }); }
   try { fs.mkdirSync(relayMirrorOf(parsed.relay.rt), { recursive: true }); }
   catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return Object.assign({}, joinView(), { refused: "silent" }); }
@@ -3215,7 +3224,7 @@ function takeRelayInvite(parsed, name, me) {
   const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
-      pinned: pinned, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal } } };
+      pinned: pinned, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal, wrap: wrap } } };
   if (parsed.lead.box) j.invite.relay.box = parsed.lead.box; /* plant:f6-box-kept */
   teamJoin = j;
   if (!teamPins[parsed.team]) { teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public }; teamSeen.delete(parsed.team); }
@@ -3424,6 +3433,9 @@ function relayRun() {
       const token = relayOpened(inv.token), seal = relayOpened(inv.seal);
       if (!token || !seal) return null;
       const out = { inv: inv.inv, token: token, seal: Buffer.from(seal, "base64") };
+      const wrapText = inv.wrap ? relayOpened(inv.wrap) : null;
+      const wrapKey = wrapText ? Buffer.from(wrapText, "base64") : null;
+      if (wrapKey && wrapKey.length === 32) out.wrapKey = wrapKey;
       /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
       return out;

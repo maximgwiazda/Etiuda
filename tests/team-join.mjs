@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 87;
+const EXPECTED = 88;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -630,6 +630,26 @@ try {
     + " match, four of the five are not yet said wrong, and the shut yes sends nothing: sent " + sentWhileShut);
   await press("back");
   const heldAfterBack = held();
+
+  const Dci = await deskWith("relay-confirm", folder("relay-confirm-own"));
+  await pageOn(Dci);
+  const relayTeamId = "t-" + crypto.randomBytes(8).toString("hex");
+  const relayBlob = inviteBlob({ team: relayTeamId, relay: { rt: crypto.randomBytes(16).toString("hex"),
+    url: "https://relay.test/relay/v1", token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") },
+    lead: lampLead, secret: crypto.randomBytes(16).toString("hex") });
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, relayBlob);
+  await press("read");
+  const relayHtml = TJ.teamJoinEmptyHtml();
+  const relayYes = yesOf(relayHtml);
+  check(relayHtml.indexOf("data-join-check") < 0 && relayHtml.indexOf("Lamp lead") >= 0 && relayHtml.indexOf(relayTeamId) >= 0
+      && relayHtml.indexOf("relay.test") >= 0 && relayHtml.indexOf("Folder:") < 0 && !!relayYes && !/ disabled/.test(relayYes),
+    "15ci a relay invitation's confirm asks for no check code and shows the lead, the team and the relay's host: "
+    + (relayHtml.indexOf("data-join-check") < 0 ? "no code box" : "a code box")
+    + ", lead " + (relayHtml.indexOf("Lamp lead") >= 0 ? "shown" : "absent")
+    + ", team " + (relayHtml.indexOf(relayTeamId) >= 0 ? "shown" : "absent")
+    + ", host " + (relayHtml.indexOf("relay.test") >= 0 ? "shown" : "absent"));
+  await press("back");
 
   const Dq = await deskWith("race", folder("race-own"));
   await pageOn(Dq);

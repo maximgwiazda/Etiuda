@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 129;
+const EXPECTED = 131;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1474,6 +1474,100 @@ try {
     "942a a desk takes a relay invitation: its team folder is the mirror, it reads the team file sealed for that invitation, and its"
     + " request reaches the lead's mirror as its one invitation upload: folder " + (folderNow === mirror ? "the mirror" : folderNow)
     + ", request " + (sent ? "at the lead" : "missing") + (taken.refused ? ", refused " + taken.refused : ""));
+
+  /* Slice 3, item 4: a read sends nothing, a no leaves the token, and yes asks for no check code. */
+  async function relayInviteOn(rt, teamId) {
+    const secret = hex(16), inv = hex(16), token = hex(32), at = R.clock.now;
+    const hash = sha(Buffer.from(token, "utf8"));
+    const res = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [{ id: inv, hash: hash }], drop: [], t: at,
+      sig: signHex(LEAD, core.invitesBytes(rt, at, [{ id: inv, hash: hash }], [])) });
+    if (res.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(res.json));
+    const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: teamId, relay: { rt: rt, url: URL2, token: token, inv: inv },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: secret }), "utf8").toString("base64url");
+    return { secret: secret, inv: inv, token: token, text: text };
+  }
+  function loadFrom(text, ud) {
+    const said = [], on = {}, invoke = {};
+    const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
+    const safeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+      decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+    };
+    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const electron = {
+      app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
+        getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+      ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+      screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
+    };
+    const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+      text + "\nreturn { " + EXPOSE.join(", ") + " };")(
+      n => (n === "electron" ? electron : nodeRequire(n)),
+      path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+    const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+    return { api, ask, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
+  }
+  async function liftDesk(tag, fn) {
+    const src = path.join(ROOT, "shell", "main.js");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const next = lines.join("\n");
+        fs.writeFileSync(src, next);
+        turned = await fn(next);
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  const quietInvite = await relayInviteOn(RT2, TEAM2);
+  const beforeRead = deskTransport.log.length;
+  const Dq = newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
+  fs.mkdirSync(path.join(LAB, "join-quiet-share"), { recursive: true });
+  const readQ = await Dq.ask("etiuda:team-join", "read", quietInvite.text);
+  const readCalls = deskTransport.log.length - beforeRead;
+  const laterQ = await tokenHello(C, RT2, quietInvite.token, quietInvite.inv, keyPair(true));
+  const yesInvite = await relayInviteOn(RT2, TEAM2);
+  const Dy = newDesk("join-yes", path.join(LAB, "join-yes-share"));
+  fs.mkdirSync(path.join(LAB, "join-yes-share"), { recursive: true });
+  const offerY = await Dy.ask("etiuda:team-join", "read", yesInvite.text);
+  const takenY = await Dy.ask("etiuda:team-join", "invite", yesInvite.text, "Desk Nine", "");
+  const envY = Dy.envelope();
+  const keptY = envY.teamJoin && envY.teamJoin.invite && envY.teamJoin.invite.relay;
+  const secretKept = JSON.stringify(envY).indexOf(yesInvite.secret) >= 0;
+  const oY = offerY && offerY.offer;
+  check(readCalls === 0 && laterQ.online === true && laterQ.used === true && !!oY && oY.lead === "Ada Quay" && oY.team === TEAM2
+    && oY.relay === "relay.test" && oY.code == null && takenY && !takenY.refused && !!keptY && typeof keptY.wrap === "string" && keptY.wrap !== ""
+    && !secretKept,
+    "964a before yes no relay call is made, a no leaves the token for a second computer, and yes asks for no check code: "
+    + "calls on read " + readCalls + ", the token then " + (laterQ.online ? "opened" : "not opened")
+    + ", offer " + JSON.stringify(oY && { lead: oY.lead, team: oY.team, relay: oY.relay, code: oY.code })
+    + ", yes " + (takenY && takenY.refused ? "refused " + takenY.refused : "taken")
+    + ", wrap " + (keptY && keptY.wrap ? "kept" : "absent") + ", secret " + (secretKept ? "kept" : "absent"));
+  const codePlant = await liftDesk("plant:relay-code", async text => {
+    const invP = await relayInviteOn(RT2, TEAM2);
+    const ud = path.join(LAB, "join-plant-" + hex(4));
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "join-plant-share"), eUiLang: "en" } }), "utf8");
+    fs.mkdirSync(path.join(LAB, "join-plant-share"), { recursive: true });
+    const Dp = loadFrom(text, ud);
+    const refused = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
+    return !!(refused && refused.refused === "check");
+  });
+  check(codePlant.turned && codePlant.back,
+    "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the file is put back: "
+    + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
   const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(K2, me.box, TEAM2, 1, me.id) };
