@@ -102,7 +102,7 @@ function seal(w, writer, path, counter, extra) {
    The target's own seal refuses any place but root or desk:<id> before the relay sees it. */
 function sealAt(w, writer, path, counter, place, extra) {
   const body = extra && Object.prototype.hasOwnProperty.call(extra, "body") ? extra.body : "v" + counter;
-  const id = wire.randomId();
+  const id = extra && extra.id ? extra.id : wire.randomId();
   const blob = {
     id: id,
     relayTeamId: w.relayTeamId,
@@ -248,6 +248,18 @@ function wrapGone(r) {
   return !!r && r.ok === false && r.served === false && r.ciphertext == null && r.wrap == null
     && typeof r.said === "string" && r.said.length > 0
     && r.said.indexOf("\u2014") < 0 && r.said.indexOf("\u2013") < 0 && r.said.indexOf("!") < 0;
+}
+
+/* A list, a fetch or a socket that hands this id to the caller. A refusal does not. */
+function servesId(result, id) {
+  if (!result || result.ok !== true) return false;
+  if (Array.isArray(result.ids) && result.ids.indexOf(id) >= 0) return true;
+  if (Array.isArray(result.events)) {
+    for (let i = 0; i < result.events.length; i++) {
+      if (result.events[i] && result.events[i].id === id) return true;
+    }
+  }
+  return result.ciphertext != null && result.id === id;
 }
 
 function openCatalog(t, w, session, id, key) {
@@ -2170,7 +2182,7 @@ function attacks() {
       const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: resumed.session });
       return !!served && served.ok === true && served.wrap && served.wrap.ct === earlyWrap.ct;
     }, true],
-    ["S3-read-on", "after the upload the bound key still reads at 25 and at 31 minutes, and a second upload is refused", function (create) {
+    ["S3-read-on", "after the upload the bound key fetches only the lead's answer at 25 and at 31 minutes, and a second upload is refused", function (create) {
       const t = create();
       const w = world(t);
       if (!w) return false;
@@ -2184,23 +2196,45 @@ function attacks() {
       const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
       if (!joined.ok) return false;
       t.advance(25 * 60 * 1000);
+      const heard = t.subscribe({ relayTeamId: w.relayTeamId, session: hello.session });
       const first = upload(w, seal(w, w.lead, "guide-a.ec", 1, { body: "edition-25" }));
       if (!first.ok) return false;
-      t.syncMirror({ relayTeamId: w.relayTeamId, session: hello.session, teamKey: w.teamKey, teamDoc: w.teamDoc });
-      if (t.readMirror("guide-a.ec") !== "edition-25") return false;
+      const listedEarly = t.list({ relayTeamId: w.relayTeamId, session: hello.session });
+      const fetchedEarly = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: first.id });
+      if (servesId(heard, first.id) || servesId(listedEarly, first.id) || !refused(fetchedEarly, "not-enrolled")) return false;
+      const answer = sealAt(w, w.lead, "join-answer.json", 2, "answer:" + invitationId, { body: "joined", id: invitationId });
+      const posted = upload(w, answer);
+      if (!posted.ok || posted.id !== invitationId) return false;
+      const listed = t.list({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!listed || listed.ok !== true || !Array.isArray(listed.ids)) return false;
+      if (listed.ids.indexOf(invitationId) < 0 || listed.ids.indexOf(first.id) >= 0) return false;
+      if (openCatalog(t, w, hello.session, invitationId, w.teamKey) !== "joined") return false;
+      if (!refused(t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: first.id }), "not-enrolled")) return false;
+      const lead = helloAs(t, w.relayTeamId, w.lead);
+      const leadList = lead.ok ? t.list({ relayTeamId: w.relayTeamId, session: lead.session }) : null;
+      const leadFetch = lead.ok ? t.fetch({ relayTeamId: w.relayTeamId, session: lead.session, id: invitationId }) : null;
+      if (!lead.ok || !leadList || leadList.ok !== true || leadList.ids.indexOf(first.id) < 0) return false;
+      if (leadList.ids.indexOf(invitationId) >= 0 || !refused(leadFetch, "missing")) return false;
+      const desk = helloAs(t, w.relayTeamId, w.desk);
+      if (!desk.ok || !refused(t.fetch({ relayTeamId: w.relayTeamId, session: desk.session, id: invitationId }), "missing")) return false;
       t.advance(6 * 60 * 1000);
-      const secondCatalog = upload(w, seal(w, w.lead, "guide-b.ec", 2, { body: "edition-31" }));
-      if (!secondCatalog.ok) return false;
       const resumed = helloAs(t, w.relayTeamId, joiner);
       if (!resumed.ok || resumed.invite !== true) return false;
-      t.syncMirror({ relayTeamId: w.relayTeamId, session: resumed.session, teamKey: w.teamKey, teamDoc: w.teamDoc });
-      if (t.readMirror("guide-b.ec") !== "edition-31") return false;
+      const heardLate = t.subscribe({ relayTeamId: w.relayTeamId, session: resumed.session });
+      const secondCatalog = upload(w, seal(w, w.lead, "guide-b.ec", 3, { body: "edition-31" }));
+      if (!secondCatalog.ok) return false;
+      const lateList = t.list({ relayTeamId: w.relayTeamId, session: resumed.session });
+      const lateTeam = t.fetch({ relayTeamId: w.relayTeamId, session: resumed.session, id: secondCatalog.id });
+      if (servesId(heardLate, secondCatalog.id) || servesId(heardLate, first.id)) return false;
+      if (!lateList || lateList.ok !== true || lateList.ids.indexOf(invitationId) < 0) return false;
+      if (lateList.ids.indexOf(first.id) >= 0 || lateList.ids.indexOf(secondCatalog.id) >= 0) return false;
+      if (!refused(lateTeam, "not-enrolled") || openCatalog(t, w, resumed.session, invitationId, w.teamKey) !== "joined") return false;
       const again = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 2, "desk:" + deskId, { body: "again" }));
       if (!refused(again, "token-spent")) return false;
       const dropped = t.drop({ relayTeamId: w.relayTeamId, ids: [invitationId] });
       if (!dropped || dropped.ok !== true) return false;
-      const closed = t.list({ relayTeamId: w.relayTeamId, session: resumed.session });
-      if (!refused(closed, "no-hello")) return false;
+      if (!refused(t.list({ relayTeamId: w.relayTeamId, session: resumed.session }), "no-hello")) return false;
+      if (!refused(t.fetch({ relayTeamId: w.relayTeamId, session: resumed.session, id: invitationId }), "no-hello")) return false;
       const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
       if (!enrolled || enrolled.ok === false) return false;
       const device = helloAs(t, w.relayTeamId, joiner);

@@ -316,13 +316,17 @@ function createTarget(limits) {
     return blob.place === "desk:" + en.deskId;
   }
 
-  /* root, a desk place, or the lead's invite:. Anything else is refused, including a desk's invite:. */
+  /* root, a desk place, the lead's invite:, or the lead's one answer to an invitation. */
   function relayOtherPlace(relayTeamId, blob) {
     const place = String(blob && blob.place || "");
     if (place === "root" || place.indexOf("desk:") === 0) return true;
     if (/^invite:[0-9a-f]{32}$/.test(place)) {
       const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
       return !!(en && en.role === "lead");
+    }
+    if (/^answer:[0-9a-f]{32}$/.test(place)) {
+      const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+      return !!(en && en.role === "lead" && blob.id === place.slice(7));
     }
     return false;
   }
@@ -460,6 +464,7 @@ function createTarget(limits) {
       deletion: !!blob.deletion,
       epoch: blob.epoch,
       superseded: false,
+      place: typeof blob.place === "string" ? blob.place : "",
     };
     rec.carryPath = blob.path;
     rec.carryBody = blob.body;
@@ -596,6 +601,7 @@ function createTarget(limits) {
     );
   }
 
+  /* The plant keeps the resume after the upload, which is how the bound key reaches the answer. */
   function resumeBound(input, nonceKey) {
     let skipUploaded = true;
     skipUploaded = false; /* plant:S3-read-on */
@@ -843,6 +849,20 @@ function createTarget(limits) {
     return issueSession(input.relayTeamId, input.keyId, nonceKey);
   }
 
+  /* After the one upload, and until that key is enrolled, its session is served only its answer. */
+  function answerOnly(session, relayTeamId) {
+    const s = sessions.get(session);
+    if (!s || s.relayTeamId !== relayTeamId || !s.inviteId || !s.boundKey) return null;
+    const inv = invites.get(s.inviteId);
+    if (!inv || !inv.uploaded || inv.key !== s.boundKey) return null;
+    if (enrolled.has(enrolKey(relayTeamId, s.boundKey))) return null;
+    return { id: s.inviteId };
+  }
+
+  function answerPlace(place) {
+    return typeof place === "string" && /^answer:[0-9a-f]{32}$/.test(place);
+  }
+
   function list({ relayTeamId, session }) {
     let allowed = true;
     if (session == null) allowed = false; /* plant:F1-list */
@@ -851,8 +871,11 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    const only = answerOnly(session, relayTeamId);
     const ids = listRecords(relayTeamId).filter(function (r) {
-      return !r.superseded && !r.deletion;
+      if (r.superseded || r.deletion) return false;
+      if (only) return r.place === "answer:" + only.id;
+      return !answerPlace(r.place);
     }).map(function (r) { return r.id; });
     return { ok: true, served: true, ids: ids };
   }
@@ -865,7 +888,14 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    const only = answerOnly(session, relayTeamId);
     const rec = findRecord(relayTeamId, id);
+    if (only) {
+      const own = rec && rec.id === only.id && rec.place === "answer:" + only.id;
+      if (!own) return rec ? refuse("not-enrolled") : refuse("missing");
+    } else if (rec && answerPlace(rec.place)) {
+      return refuse("missing");
+    }
     if (!rec) return refuse("missing");
     if (rec.superseded) return refuse("superseded");
     const material = sealed.get(relayTeamId + ":" + id);
@@ -894,6 +924,7 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    if (answerOnly(session, relayTeamId)) return { ok: true, served: true, events: [] };
     const sub = { relayTeamId: relayTeamId, keyId: s ? s.keyId : "", events: [] };
     subscribers.push(sub);
     return { ok: true, served: true, events: sub.events };
