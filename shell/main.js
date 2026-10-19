@@ -328,16 +328,15 @@ function handHeldLink(win) {
   }
   handPendingLink(win);
 }
-/* Windows names this desk as the program for an etiuda: link. Checked, and a start that cannot
-   take the scheme still opens. The Ubuntu line is written from electron-builder.js. */
+/* An installed desk registers etiuda: on Windows. A dev start and a harness start leave the
+   machine's registration as they found it, and a start that cannot take the scheme still opens.
+   The Ubuntu line is written from electron-builder.js. */
 function registerEtiudaLink() {
   if (process.platform !== "win32" || typeof app.setAsDefaultProtocolClient !== "function") return;
+  if (!app.isPackaged || process.env.ETIUDA_TEST_DOCUMENTS) return; /* plant:link-pack */
   let ok = false;
   try {
-    const dev = process.defaultApp && process.argv.length >= 2;
-    ok = dev
-      ? app.setAsDefaultProtocolClient("etiuda", process.execPath, [path.resolve(process.argv[1])]) === true
-      : app.setAsDefaultProtocolClient("etiuda") === true;
+    ok = app.setAsDefaultProtocolClient("etiuda") === true;
   } catch (e) { ok = false; }
   if (!ok) console.error("etiuda: Windows did not make this desk the program that opens an etiuda: link");
 }

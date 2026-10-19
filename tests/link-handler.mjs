@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 14;
+const EXPECTED = 15;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
 const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
@@ -79,6 +79,7 @@ function loadShell(opts) {
       getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => o.lock === true, quit: noop,
       on: (ev, fn) => { (ons[ev] = ons[ev] || []).push(fn); }, getVersion: () => "0.0.0",
       whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false, removeSwitch: noop },
+      isPackaged: o.packaged === true,
       setAsDefaultProtocolClient: o.register ? (...args) => { registered.push(args); return o.register(); } : undefined,
     },
     ipcMain: { on: noop, handle: noop },
@@ -127,6 +128,14 @@ function ioDuring(fn) {
 }
 function hasBoth(lines, en, pl) {
   return lines.some(l => l.indexOf(en) >= 0 && l.indexOf(pl) >= 0);
+}
+function withEnv(name, value, fn) {
+  const had = Object.prototype.hasOwnProperty.call(process.env, name);
+  const prev = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+  try { return fn(); }
+  finally { if (had) process.env[name] = prev; else delete process.env[name]; }
 }
 function lift(tag, fn) {
   const beforeBytes = fs.readFileSync(MAIN);
@@ -264,25 +273,40 @@ try {
     "3h7 a second launch hands the link to the running desk and a refused one is said with no I/O ("
     + secondNo.hits + " fs, " + offered.length + " confirm(s))" + (secondError ? " " + secondError : ""));
 
-  let winFalse = "", winTrue = "", regError = "";
+  function regLine(L) {
+    const n = L.registered.length;
+    const scheme = n && L.registered[0] ? String(L.registered[0][0]) : "";
+    const argc = n && L.registered[0] ? L.registered[0].length : 0;
+    const saidNo = L.said.some(l => l.indexOf(WIN_LOG) >= 0);
+    return n + ":" + scheme + ":" + argc + ":" + saidNo;
+  }
+  let packedNo = "", packedYes = "", loose = "", harness = "", regError = "";
   try {
-    const bad = loadShell({ lock: true, register: () => false });
-    const good = loadShell({ lock: true, register: () => true });
-    const falseSaid = bad.said.some(l => l.indexOf(WIN_LOG) >= 0);
-    const trueSaid = good.said.some(l => l.indexOf(WIN_LOG) >= 0);
-    if (process.platform === "win32") {
-      winFalse = bad.registered.length + ":" + (bad.registered[0] ? bad.registered[0][0] : "") + ":" + falseSaid;
-      winTrue = good.registered.length + ":" + (good.registered[0] ? good.registered[0][0] : "") + ":" + trueSaid;
-    } else {
-      winFalse = bad.registered.length + ":skip:" + falseSaid;
-      winTrue = good.registered.length + ":skip:" + trueSaid;
-    }
+    const no = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: true, register: () => false }));
+    const yes = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: true, register: () => true }));
+    const dev = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: false, register: () => true }));
+    const lab = loadShell({ lock: true, packaged: true, register: () => true });
+    packedNo = regLine(no);
+    packedYes = regLine(yes);
+    loose = regLine(dev);
+    harness = regLine(lab);
   } catch (e) { regError = e && e.message ? e.message : String(e); }
+  const quiet = "0::0:false";
   const winOk = process.platform === "win32"
-    ? winFalse === "1:etiuda:true" && winTrue === "1:etiuda:false"
-    : winFalse === "0:skip:false" && winTrue === "0:skip:false";
-  check(winOk && !regError, "3h8 Windows is asked at start to open etiuda:, and a no is said (" + process.platform + ", " + winFalse + " / " + winTrue + ")"
+    ? packedNo === "1:etiuda:1:true" && packedYes === "1:etiuda:1:false" && loose === quiet && harness === quiet
+    : packedNo === quiet && packedYes === quiet && loose === quiet && harness === quiet;
+  check(winOk && !regError, "3h8 a packaged start asks once to open etiuda:, an unpackaged start does not, and a packaged start under the harness does not ("
+    + process.platform + ", " + packedNo + " / " + packedYes + " / " + loose + " / " + harness + ")"
     + (regError ? " " + regError : ""));
+
+  const packPlant = lift("plant:link-pack", src => {
+    const dev = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: false, register: () => true, src: src }));
+    return process.platform === "win32" && dev.registered.length === 1;
+  });
+  const packLine = packPlant.detail !== "plant line absent";
+  check(packPlant.back && (process.platform === "win32" ? packPlant.turned : packLine),
+    "3he lifting plant:link-pack lets an unpackaged start register etiuda:, and the file is put back: "
+    + packPlant.detail + ", sha " + (packPlant.back ? "restored" : "differs"));
 
   const builder = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
   check(builder.indexOf("MimeType=x-scheme-handler/etiuda;") >= 0 && /schemes:\s*\[\s*"etiuda"\s*\]/.test(builder),
