@@ -409,11 +409,12 @@ function main() {
   check(plainOk === plain.length, "5k an ordinary path is kept, a . segment dropped and its case and letters kept: " + plainOk + " of " + plain.length);
 
   /* ---- 6: the writer's place ---- */
-  const leadIn = ["guide.ec", "etiuda-team.json", "catalog-asks/" + deskId + ".json"].filter(p => take(sealAs(lead, p, 1)).ok).length;
+  const leadIn = ["guide.ec", "etiuda-team.json", "catalog-asks/" + deskId + ".json",
+    "de\u017fks/" + deskId + "/in-use.ec"].filter(p => take(sealAs(lead, p, 1)).ok).length;
   const leadOut = [own("notes.ec"), "Desks/" + deskId + "/in-use.ec", "./desks/" + deskId + "/in-use.ec", "DESKS/x.ec",
-    "de\u017fks/" + deskId + "/in-use.ec", "desks"].filter(p => refused(take(sealAs(lead, p, 1)), "outside-place")).length;
-  check(leadIn === 3 && leadOut === 6, "6a the lead writes anywhere but desks/, which is desks/ in any case, after a . segment, with a long s,"
-    + " or as a bare name: " + leadIn + " of 3 in, " + leadOut + " of 6 outside-place");
+    "desks"].filter(p => refused(take(sealAs(lead, p, 1)), "outside-place")).length;
+  check(leadIn === 4 && leadOut === 5, "6a the lead writes anywhere but desks/, which is desks/ in any case, after a . segment,"
+    + " or as a bare name, and a long s is a different folder: " + leadIn + " of 4 in, " + leadOut + " of 5 outside-place");
   const lands = [[own("join.json"), own("join.json")], ["Desks/" + deskId + "/in-use.ec", own("in-use.ec")],
     ["./desks/" + deskId.toUpperCase() + "/x.ec", own("x.ec")]].filter(([p, at]) => { const r = take(sealAs(desk, p, 1)); return r.ok && r.path === at; }).length;
   const deskOut = ["guide.ec", "desks/" + otherId + "/join.json", "desks/" + deskId + "x/join.json", "desks/" + deskId]

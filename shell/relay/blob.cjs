@@ -203,8 +203,80 @@ function seal(opts) {
   };
 }
 
-/* Case folded both ways, so a letter whose capital is ASCII compares as that letter. */
-const fold = s => s.toUpperCase().toLowerCase();
+/* A path key, by NTFS's rule. NTFS uppercases each UTF-16 code unit through one fixed
+   table and compares those units. One unit goes in and one unit comes out: the table
+   does not expand a unit into several (sharp s stays sharp s, the fi ligature stays a
+   ligature) and it does not fold one character onto a different letter (the Kelvin
+   sign stays the Kelvin sign, dotless i stays dotless i). toUpperCase is that simple
+   map where it leaves one unit, except the runs in KEPT, which the table leaves
+   unchanged, and the runs in FORCED, which the table uppercases and toUpperCase
+   expands. Both lists were measured from RtlUpcaseUnicodeChar, the table NTFS
+   compares with. A run is first unit, last unit, and for FORCED the uppercase of the
+   first; every unit in the run maps by the same distance. A surrogate stays itself,
+   so a character outside the basic plane is not folded. The key is the lowercase of
+   that uppercase where the lowercase is one unit and uppercases back to the same
+   unit, so a letter and its capital share a key and an ASCII name's key stays the
+   lower one the maps already store (desks, guide.ec). */
+const KEPT = [
+  [0xb5, 0xb5], [0x131, 0x131], [0x17f, 0x17f], [0x19b, 0x19b], [0x1c5, 0x1c5], [0x1c8, 0x1c8],
+  [0x1cb, 0x1cb], [0x1f2, 0x1f2], [0x23f, 0x240], [0x252, 0x252], [0x25c, 0x25c], [0x261, 0x261],
+  [0x264, 0x266], [0x26a, 0x26a], [0x26c, 0x26c], [0x282, 0x282], [0x287, 0x287], [0x29d, 0x29e],
+  [0x345, 0x345], [0x3c2, 0x3c2], [0x3d0, 0x3d1], [0x3d5, 0x3d6], [0x3f0, 0x3f1], [0x3f3, 0x3f3],
+  [0x3f5, 0x3f5], [0x525, 0x525], [0x527, 0x527], [0x529, 0x529], [0x52b, 0x52b], [0x52d, 0x52d],
+  [0x52f, 0x52f], [0x10d0, 0x10fa], [0x10fd, 0x10ff], [0x13f8, 0x13fd], [0x1c80, 0x1c88], [0x1c8a, 0x1c8a],
+  [0x1d8e, 0x1d8e], [0x1e9b, 0x1e9b], [0x1fbe, 0x1fbe], [0x2c5f, 0x2c5f], [0x2cec, 0x2cec], [0x2cee, 0x2cee],
+  [0x2cf3, 0x2cf3], [0x2d27, 0x2d27], [0x2d2d, 0x2d2d], [0xa661, 0xa661], [0xa699, 0xa699], [0xa69b, 0xa69b],
+  [0xa791, 0xa791], [0xa793, 0xa794], [0xa797, 0xa797], [0xa799, 0xa799], [0xa79b, 0xa79b], [0xa79d, 0xa79d],
+  [0xa79f, 0xa79f], [0xa7a1, 0xa7a1], [0xa7a3, 0xa7a3], [0xa7a5, 0xa7a5], [0xa7a7, 0xa7a7], [0xa7a9, 0xa7a9],
+  [0xa7b5, 0xa7b5], [0xa7b7, 0xa7b7], [0xa7b9, 0xa7b9], [0xa7bb, 0xa7bb], [0xa7bd, 0xa7bd], [0xa7bf, 0xa7bf],
+  [0xa7c1, 0xa7c1], [0xa7c3, 0xa7c3], [0xa7c8, 0xa7c8], [0xa7ca, 0xa7ca], [0xa7cd, 0xa7cd], [0xa7d1, 0xa7d1],
+  [0xa7d7, 0xa7d7], [0xa7d9, 0xa7d9], [0xa7db, 0xa7db], [0xa7f6, 0xa7f6], [0xab53, 0xab53], [0xab70, 0xabbf],
+];
+const FORCED = [
+  [0x1f80, 0x1f87, 0x1f88],
+  [0x1f90, 0x1f97, 0x1f98],
+  [0x1fa0, 0x1fa7, 0x1fa8],
+  [0x1fb3, 0x1fb3, 0x1fbc],
+  [0x1fc3, 0x1fc3, 0x1fcc],
+  [0x1ff3, 0x1ff3, 0x1ffc],
+];
+function runAt(runs, u) {
+  let lo = 0, hi = runs.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const run = runs[mid];
+    if (u < run[0]) hi = mid - 1;
+    else if (u > run[1]) lo = mid + 1;
+    else return run;
+  }
+  return null;
+}
+function upcaseUnit(u) {
+  if (u >= 0xD800 && u <= 0xDFFF) return u;
+  const forced = runAt(FORCED, u);
+  if (forced) return forced[2] + (u - forced[0]);
+  if (runAt(KEPT, u)) return u;
+  const up = String.fromCharCode(u).toUpperCase();
+  if (up.length !== 1) return u;
+  return up.charCodeAt(0);
+}
+function ntfsKey(s) {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const up = upcaseUnit(s.charCodeAt(i));
+    const low = String.fromCharCode(up).toLowerCase();
+    if (low.length === 1 && upcaseUnit(low.charCodeAt(0)) === up) out += low;
+    else out += String.fromCharCode(up);
+  }
+  return out;
+}
+/* The full Unicode fold, which NTFS does not use. The assignment after it replaces
+   that fold, and lifting the assignment returns it. */
+function fold(s) {
+  let key = s.toUpperCase().toLowerCase();
+  key = ntfsKey(s); /* plant:ntfs-fold */
+  return key;
+}
 
 /* { ok, path, segments, folded } for a path inside the mirror, `.` segments dropped and case kept, or bad-path. */
 function checkPath(path) {

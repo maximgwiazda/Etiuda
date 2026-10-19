@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 116;
+const EXPECTED = 118;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3034,6 +3034,77 @@ try {
   }
   const back = sha(fs.readFileSync(src)) === digest;
   check(turned && back, "958c lifting plant:case-one sends a case variant on later cycles, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
+}
+
+/* ---- four pairs NTFS holds as two files (board 915). Each pair is two path keys, so a cycle owes both
+   names and says neither as staying. Sharp s against ss, dotless i against i, the fi ligature against fi,
+   and the Kelvin sign against k. ---- */
+const PAIRS_915 = [
+  ["Stra\u00dfe.ec", "Strasse.ec"],
+  ["\u0131dea.ec", "idea.ec"],
+  ["\ufb01le.ec", "file.ec"],
+  ["\u212aelvin.ec", "kelvin.ec"],
+];
+try {
+  const said = [];
+  const entries = [];
+  for (const [a, b] of PAIRS_915) entries.push([a, "one"], [b, "two"]);
+  const io = exactNames(entries);
+  const prog = C.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {}, say: l => said.push(l) });
+  const first = oweFiles(prog);
+  const got = first.map(op => op.rel).sort();
+  const want = entries.map(([name]) => name).sort();
+  const keys = PAIRS_915.map(([a, b]) => {
+    const ka = B.checkPath(a), kb = B.checkPath(b);
+    return [ka.ok ? ka.folded.join("/") : "bad", kb.ok ? kb.folded.join("/") : "bad"];
+  });
+  const distinct = keys.every(([a, b]) => a !== b);
+  const same = got.length === want.length && got.every((name, i) => name === want[i]);
+  const stays = said.filter(l => l.indexOf("stays on this computer") >= 0 && l.indexOf("is not text") < 0);
+  check(distinct && same && stays.length === 0,
+    "959a the four pairs have two path keys, so both names are owed and neither is said as staying: keys "
+    + JSON.stringify(keys) + ", owed " + JSON.stringify(first.map(op => op.rel)) + ", said " + stays.length);
+} catch (e) {
+  check(false, "harness (the leg 959a): " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:ntfs-fold. Deleting that line, leaving the file valid script, folds the four pairs together again. */
+{
+  const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+  const channel = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:ntfs-fold") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      delete nodeRequire.cache[nodeRequire.resolve(src)];
+      delete nodeRequire.cache[nodeRequire.resolve(channel)];
+      const lifted = nodeRequire(channel);
+      const entries = [];
+      for (const [a, b] of PAIRS_915) entries.push([a, "one"], [b, "two"]);
+      const io = exactNames(entries);
+      const prog = lifted.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {} });
+      const ops = prog.owed(LEAD_ME, null).filter(op => op.kind === "file");
+      turned = ops.length < entries.length;
+      detail = "owed " + ops.length + " " + JSON.stringify(ops.map(op => op.rel));
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try {
+      delete nodeRequire.cache[nodeRequire.resolve(src)];
+      delete nodeRequire.cache[nodeRequire.resolve(channel)];
+      nodeRequire(channel);
+    } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "959b lifting plant:ntfs-fold gives the four pairs one key again, and the file is put back: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
