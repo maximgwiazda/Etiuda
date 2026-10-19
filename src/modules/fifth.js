@@ -221,6 +221,12 @@ function wireFifth(opts){
   // Band classes land on body. A root watch never sees them, so the ink would stay.
   if(document.body) new MutationObserver(()=>{ if(paint) paint.readInk(); }).observe(document.body,{attributes:true, attributeFilter:["class"]});
   new MutationObserver(()=>{ if(paint) paint.readInk(); sync(); }).observe(document.documentElement,{attributes:true, attributeFilter:["class","data-theme"]});
+  // Forced colours set no class. The watches never see the switch, so the ink would stay.
+  try{
+    const mq=matchMedia("(forced-colors: active)");
+    if(mq.addEventListener) mq.addEventListener("change",()=>{ if(paint) paint.readInk(); });
+    else if(mq.addListener) mq.addListener(()=>{ if(paint) paint.readInk(); });
+  }catch(e){}
   sync();
 }
 

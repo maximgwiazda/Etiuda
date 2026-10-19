@@ -36,6 +36,11 @@
  * The stand-in records each ResizeObserver box and fires device-pixel-content-box
  * on its own. That fire resizes the bitmap, and the repaints after it read no
  * size and lay nothing out.
+ *
+ * FORCED COLOURS SET NO CLASS. The stand-in's computed colour is black while
+ * its forced-colours query matches, and the band's ink otherwise. A leg flips
+ * that match and fires the change listener the query recorded. The read is the
+ * listener's, so the stroke that follows lays nothing out and reads no style.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -43,7 +48,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 5;
+const EXPECTED = 6;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -131,6 +136,8 @@ function makeLab() {
   };
   const mos = [];
   const ros = [];
+  let forced = false;
+  const media = [];
   const doc = {
     hidden: false,
     body,
@@ -145,7 +152,17 @@ function makeLab() {
     Path2D: class { constructor(d) { this.d = d; } },
     getComputedStyle: () => {
       if (lab.arm) lab.styleReads++;
+      if (forced) return { color: "rgb(0, 0, 0)" };
       return { color: body.classes.has("e-band-deep") ? "rgb(255, 255, 255)" : "rgb(15, 23, 42)" };
+    },
+    matchMedia: q => {
+      const rec = { q, listeners: [] };
+      media.push(rec);
+      return {
+        get matches() { return q === "(forced-colors: active)" ? forced : false; },
+        addEventListener(type, fn) { if (type === "change") rec.listeners.push(fn); },
+        addListener(fn) { rec.listeners.push(fn); }
+      };
     },
     requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
@@ -178,6 +195,10 @@ function makeLab() {
   };
   lab.fireBox = box => {
     ros.forEach(r => { if (r.box === box) r.cb(); });
+  };
+  lab.flipForced = () => { forced = !forced; };
+  lab.fireMedia = q => {
+    media.forEach(r => { if (r.q === q) r.listeners.forEach(fn => fn()); });
   };
   lab.wire = o => sb.__f.wireFifth(o);
   lab.play = ms => {
@@ -257,6 +278,22 @@ check(beforeBmp === 25 && afterBmp === 50 && ratio.draws.length >= 30 && ratio.d
   "898e a ratio change resizes the bitmap from " + beforeBmp + " to " + afterBmp
   + " and the next window strokes at " + (ratioLast ? ratioLast.a : "nothing")
   + ", with " + ratio.layouts + " layout(s) and " + ratio.clientReads + " size read(s)");
+
+const force = makeLab();
+force.wire();
+force.play(SETTLE);
+const beforeInk = force.draws.length ? force.draws[force.draws.length - 1].ink : "";
+force.zero();
+force.flipForced();
+force.fireMedia("(forced-colors: active)");
+force.arm = true;
+force.play(80);
+const forceInk = force.draws.length ? force.draws[force.draws.length - 1].ink : "";
+check(beforeInk === "rgb(15, 23, 42)" && force.draws.length === 1 && forceInk === "rgb(0, 0, 0)"
+  && force.styleReads === 0 && force.layouts === 0 && force.clientReads === 0,
+  "898f a live forced-colours switch turns the stroke from " + (beforeInk || "nothing") + " to " + (forceInk || "nothing")
+  + ", and that repaint lays out " + force.layouts + " time(s), reads style " + force.styleReads
+  + " time(s) and reads a size " + force.clientReads + " time(s)");
 
 if (asserted !== EXPECTED) {
   failed++;
