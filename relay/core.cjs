@@ -28,6 +28,8 @@ const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 /* The lead's place for what it seals under one invitation's key alone (step 4's joining bootstrap): served in the clear,
    so a desk not joining by that invitation passes over it without trying to open it. */
 const INVITE_PLACE = /^invite:[0-9a-f]{32}$/;
+/* The one blob an uploaded invitation may fetch. Its id is the invitation's, and no list serves it. */
+const ANSWER_PLACE = /^answer:[0-9a-f]{32}$/;
 
 const is = (re, v) => typeof v === "string" && re.test(v);
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
@@ -72,7 +74,7 @@ function parseMeta(header) {
   if (!m || typeof m !== "object" || Array.isArray(m) || m.v !== 1) return null;
   const out = { id: m.id, supersedes: m.supersedes === undefined ? null : m.supersedes, epoch: m.epoch, writer: m.writer,
     counter: m.counter, del: m.del, sig: m.sig, nonce: m.nonce, place: m.place, pub: m.pub === undefined ? null : m.pub };
-  const placed = out.place === "root" || INVITE_PLACE.test(String(out.place))
+  const placed = out.place === "root" || INVITE_PLACE.test(String(out.place)) || ANSWER_PLACE.test(String(out.place))
     || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
   if (!is(HEX32, out.id) || (out.supersedes !== null && (!is(HEX32, out.supersedes) || out.supersedes === out.id))
     || !isCount(out.epoch) || !isId(out.writer) || !isCount(out.counter) || typeof out.del !== "boolean"
@@ -103,7 +105,8 @@ function createCore(deps) {
     return { ok: true, rt };
   }
 
-  /* The lead's enrolled set replaces the last; a key it leaves out is withdrawn, and every session it holds with it. */
+  /* The lead's enrolled set replaces the last; a key it leaves out is withdrawn, and every session it holds with it.
+     A key it adds lets that key's invitation sessions go, so the next hello is the device's own. */
   function devices(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
@@ -124,7 +127,10 @@ function createCore(deps) {
       for (const id of withdrawn) { store.put("gone:" + id, store.get("dev:" + id)); store.del("dev:" + id); }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       store.put("devrev", b.rev);
-      for (const [k, s] of store.list("ses:")) if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+      for (const [k, s] of store.list("ses:")) {
+        if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+        if (s.bound && next.has(s.bound)) store.del(k);
+      }
     });
     return { ok: true, rev: b.rev, withdrawn };
   }
@@ -289,11 +295,10 @@ function createCore(deps) {
 
   /* An invitation spent by a token hello that bound this key, inside its keep: the binding ends when the keep does, at the
      time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). After the one upload the
-     same key still opens a session for reads, until it is enrolled, the invitation is dropped or the keep ends. */
+     same key still opens a session, until it is enrolled, the invitation is dropped or the keep ends. */
   function boundInvite(key) {
     const now = clock();
-    let skipUploaded = true;
-    skipUploaded = false; /* plant:S3-read-on */
+    const skipUploaded = false;
     for (const [k, v] of store.list("inv:")) {
       if (!v.spent || v.key !== key || !is(HEX64, v.pub)) continue;
       if (skipUploaded && v.uploaded) continue;
@@ -319,7 +324,7 @@ function createCore(deps) {
     if (!dev && gone && !verified(gone.pub, msg, b.sig)) return no("bad-signature"); /* plant:removed-sig */
     if (!dev && gone) return no("removed"); /* plant:removed-key */
     if (!dev) {
-      /* A key on no list that a token hello bound: the invitation's session again, for its one upload and for reads after it, and only one held. */
+      /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
       if (held && verified(held.inv.pub, msg, b.sig)) /* plant:invite-resume */
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
@@ -403,13 +408,36 @@ function createCore(deps) {
     return out;
   }
 
+  /* An uploaded invitation's session, while its key is not enrolled, fetches only its answer. Lifting the plant opens the team. */
+  function answerOnly(s) {
+    let gate = false;
+    gate = true; /* plant:S3-read-on */
+    if (!gate || !s || !s.inv) return false;
+    const inv = store.get("inv:" + s.inv);
+    if (!inv || !inv.uploaded) return false;
+    if (s.bound && store.get("dev:" + s.bound)) return false;
+    return true;
+  }
+
+  function readGate(token) {
+    const s = sessionOf(token);
+    if (!s.ok) return s;
+    if (answerOnly(s)) return no("not-enrolled");
+    return null;
+  }
+
+  function isAnswer(m) {
+    return !!(m && ANSWER_PLACE.test(String(m.place || "")) && m.id === String(m.place).slice(7));
+  }
+
   function since(token, after) {
     const s = sessionOf(token);
     if (!s.ok) return s;
+    if (answerOnly(s)) return no("not-enrolled");
     const now = clock(), items = [];
     for (const [, id] of store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX })) {
       const m = store.get("blob:" + id);
-      if (m && !expired(m, now)) items.push({ seq: m.seq, meta: served(m) });
+      if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
     }
     return { ok: true, items };
   }
@@ -420,6 +448,15 @@ function createCore(deps) {
     const now = clock();
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
     if (m && expired(m, now)) return no("expired");
+    const ownAnswer = answerOnly(s) && isAnswer(m) && m.place === "answer:" + s.inv;
+    if (ownAnswer) return { ok: true, meta: served(m), obj: m.obj };
+    if (answerOnly(s)) {
+      if (m) return no("not-enrolled");
+      const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
+      if (tomb && now <= tomb.until) return no(tomb.why);
+      return no("missing");
+    }
+    if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
     const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
     if (tomb && now <= tomb.until) return no(tomb.why);
@@ -438,6 +475,10 @@ function createCore(deps) {
     const lead = m.writer === team.lead.keyId;
     const dev = lead ? null : store.get("dev:" + m.writer);
     if (!lead && !dev) return no("removed");
+    if (lead && ANSWER_PLACE.test(String(m.place))) {
+      if (m.id !== String(m.place).slice(7)) return no("outside-place");
+      return { ok: true, team, s, max: B.BLOB_MAX, pub: team.lead.pub, lead: true, invite: null };
+    }
     if (m.place !== (lead ? "root" : "desk:" + dev.desk) && !(lead && INVITE_PLACE.test(m.place))) return no("outside-place"); /* plant:put-place */
     return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null };
   }
@@ -518,12 +559,12 @@ function createCore(deps) {
       const rec = { id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
         size: ct.length, sig: m.sig, nonce: m.nonce, seq, at: now, obj };
       if (j.a.invite) rec.pub = j.a.pub;
-      if (INVITE_PLACE.test(m.place)) rec.place = m.place;
+      if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
     });
-    return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop };
+    return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop, uploadedInv: j.a.invite || null };
   }
 
   /* A blob no longer served: its bytes given back, its object for the caller to delete, and its id kept 30 days as a
@@ -566,7 +607,7 @@ function createCore(deps) {
   }
 
   return { create, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, parseMeta, wrapFor, statesFor };
+    prune, orphan, parseMeta, wrapFor, statesFor, readGate };
 }
 
 module.exports = {

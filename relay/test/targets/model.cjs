@@ -324,6 +324,10 @@ function createTarget(limits) {
       const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
       return !!(en && en.role === "lead");
     }
+    if (/^answer:[0-9a-f]{32}$/.test(place)) {
+      const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+      return !!(en && en.role === "lead" && blob.id === place.slice(7));
+    }
     return false;
   }
 
@@ -460,6 +464,7 @@ function createTarget(limits) {
       deletion: !!blob.deletion,
       epoch: blob.epoch,
       superseded: false,
+      place: blob.place || null,
     };
     rec.carryPath = blob.path;
     rec.carryBody = blob.body;
@@ -597,8 +602,7 @@ function createTarget(limits) {
   }
 
   function resumeBound(input, nonceKey) {
-    let skipUploaded = true;
-    skipUploaded = false; /* plant:S3-read-on */
+    const skipUploaded = false;
     const held = boundRecord(input.relayTeamId, input.keyId, skipUploaded);
     if (!held) return null;
     const msg = helloMessage(input.relayTeamId, input.nonce, input.keyId);
@@ -642,6 +646,9 @@ function createTarget(limits) {
     const k = enrolKey(relayTeamId, keyId);
     enrolled.set(k, { role: "desk", deskId: deskId });
     wasEnrolled.add(k);
+    sessions.forEach(function (s, token) {
+      if (s.relayTeamId === relayTeamId && s.inviteId && s.boundKey === keyId) sessions.delete(token);
+    });
     return { ok: true };
   }
 
@@ -843,6 +850,23 @@ function createTarget(limits) {
     return issueSession(input.relayTeamId, input.keyId, nonceKey);
   }
 
+  /* An uploaded invitation's session fetches only its answer. Lifting the plant opens the team. */
+  function inviteAnswer(session, relayTeamId) {
+    let gate = false;
+    gate = true; /* plant:S3-read-on */
+    if (!gate) return null;
+    const s = sessions.get(session);
+    if (!s || s.relayTeamId !== relayTeamId || !s.inviteId) return null;
+    const inv = invites.get(s.inviteId);
+    if (!inv || !inv.uploaded) return null;
+    if (s.boundKey && enrolled.has(enrolKey(relayTeamId, s.boundKey))) return { ended: true, id: s.inviteId };
+    return { ended: false, id: s.inviteId };
+  }
+
+  function answerPlace(place) {
+    return typeof place === "string" && /^answer:[0-9a-f]{32}$/.test(place);
+  }
+
   function list({ relayTeamId, session }) {
     let allowed = true;
     if (session == null) allowed = false; /* plant:F1-list */
@@ -851,8 +875,9 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    if (inviteAnswer(session, relayTeamId)) return refuse("not-enrolled");
     const ids = listRecords(relayTeamId).filter(function (r) {
-      return !r.superseded && !r.deletion;
+      return !r.superseded && !r.deletion && !answerPlace(r.place);
     }).map(function (r) { return r.id; });
     return { ok: true, served: true, ids: ids };
   }
@@ -865,7 +890,12 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    const only = inviteAnswer(session, relayTeamId);
     const rec = findRecord(relayTeamId, id);
+    if (only) {
+      const own = !only.ended && rec && id === only.id && rec.place === "answer:" + only.id;
+      if (!own) return rec ? refuse("not-enrolled") : refuse("missing");
+    } else if (rec && answerPlace(rec.place)) return refuse("missing");
     if (!rec) return refuse("missing");
     if (rec.superseded) return refuse("superseded");
     const material = sealed.get(relayTeamId + ":" + id);
@@ -894,6 +924,7 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    if (inviteAnswer(session, relayTeamId)) return refuse("not-enrolled");
     const sub = { relayTeamId: relayTeamId, keyId: s ? s.keyId : "", events: [] };
     subscribers.push(sub);
     return { ok: true, served: true, events: sub.events };

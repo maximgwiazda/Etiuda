@@ -660,12 +660,25 @@ async function main() {
     const afterToken = afterUp.json && afterUp.json.session;
     const listed = await since(w, afterToken);
     const fetched = await getBlob(w, afterToken, askBlob.id);
+    const heard = await socket(w, afterToken);
+    const answer = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey }, path: "join-answer.json", body: "joined", counter: 1,
+      place: null, kind: "file", id: id3 });
+    answer.place = "answer:" + id3;
+    const posted = await put(w, lead, answer);
+    const opened = await getBlob(w, afterToken, id3);
+    const leadSees = await getBlob(w, lead, id3);
+    const leadList = await since(w, lead);
+    const onList = leadList.status === 200 && Array.isArray(leadList.json) && leadList.json.some(e => e.meta && e.meta.id === id3);
     check(refused(byUsurper, "no-hello") && askUp.status === 200 && refused(askSecond, "token-spent")
-      && afterUp.status === 200 && afterUp.json.invite === true && listed.status === 200 && fetched.status === 200,
+      && afterUp.status === 200 && afterUp.json.invite === true
+      && refused(listed, "not-enrolled") && refused(fetched, "not-enrolled") && refused(heard, "not-enrolled")
+      && posted.status === 200 && opened.status === 200 && opened.meta && opened.meta.place === "answer:" + id3
+      && refused(leadSees, "missing") && leadList.status === 200 && !onList,
       "10g the session a bound key opens again makes the invitation's one upload, by that key alone, and once it is made that key"
-      + " still reads and a second upload is refused: another writer " + (byUsurper.json && byUsurper.json.error) + ", a second upload "
+      + " reads only the answer and a second upload is refused: another writer " + (byUsurper.json && byUsurper.json.error) + ", a second upload "
       + (askSecond.json && askSecond.json.error) + ", the key's hello after " + afterUp.status + ", the list " + listed.status
-      + ", the fetch " + fetched.status);
+      + ", the join fetch " + fetched.status + ", the answer " + (opened.status) + (opened.json && opened.json.error ? " " + opened.json.error : ""));
     const t4 = hex(32), id4 = hex(16), unsigned = keyPair(true);
     await invites(w, [{ id: id4, hash: sha(t4) }], []);
     const n4 = await challenge(w);

@@ -88,6 +88,7 @@ function teamObject(deps) {
     if (what === "devices") {
       const r = c.devices(rt, body);
       if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
+      if (r.ok) closeWhere(a => !!a.inv && !c.sessionByHash(a.ses).ok, "no-hello");
       return answer(r, x => ({ rev: x.rev }));
     }
     const r = c.invites(rt, body);
@@ -125,6 +126,7 @@ function teamObject(deps) {
     await r2.put(obj, ct);
     const done = c.commit(rt, token, m, id, ct, obj);
     if (!done.ok) { await dropObjects([obj]); return refused(done); }
+    if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, "not-enrolled");
     announce(done);
     await dropObjects(done.drop.concat(c.prune()));
     return reply(200, { seq: done.seq, id: done.id });
@@ -139,6 +141,8 @@ function teamObject(deps) {
   function openSocket(request, token) {
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
+    const blocked = c.readGate(token);
+    if (blocked) return refused(blocked);
     if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") return missing();
     return sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
   }
