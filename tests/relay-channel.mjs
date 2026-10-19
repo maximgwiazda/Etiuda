@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 119;
+const EXPECTED = 134;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1386,7 +1386,7 @@ try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
-  function loadDesk(ud) {
+  function loadDesk(ud, hooks) {
     const said = [], on = {}, invoke = {};
     const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
     const safeStorage = {
@@ -1394,7 +1394,12 @@ try {
       encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
-    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const net = { fetch: (url, init) => {
+      deskTransport.log.push((init && init.method) + " " + url);
+      if (deskTransport.down) return Promise.reject(new Error("down"));
+      if (hooks && typeof hooks.fetch === "function") { const alt = hooks.fetch(url, init); if (alt) return alt; }
+      return relayFetch(url, init);
+    } };
     const electron = {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
@@ -1412,11 +1417,11 @@ try {
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
     return { api, ask, sync, said, ud, envelope };
   }
-  const newDesk = (name, folder) => {
+  const newDesk = (name, folder, hooks) => {
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
-    return loadDesk(ud);
+    return loadDesk(ud, hooks);
   };
   const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
   const catalogText = (rev, key) => {
@@ -1474,6 +1479,232 @@ try {
     "942a a desk takes a relay invitation: its team folder is the mirror, it reads the team file sealed for that invitation, and its"
     + " request reaches the lead's mirror as its one invitation upload: folder " + (folderNow === mirror ? "the mirror" : folderNow)
     + ", request " + (sent ? "at the lead" : "missing") + (taken.refused ? ", refused " + taken.refused : ""));
+
+  /* Slice 3, item 4: a read sends nothing, a no leaves the token, and yes asks for no check code. */
+  async function relayInviteOn(rt, teamId) {
+    const secret = hex(16), inv = hex(16), token = hex(32), at = R.clock.now;
+    const hash = sha(Buffer.from(token, "utf8"));
+    const res = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [{ id: inv, hash: hash }], drop: [], t: at,
+      sig: signHex(LEAD, core.invitesBytes(rt, at, [{ id: inv, hash: hash }], [])) });
+    if (res.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(res.json));
+    const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: teamId, relay: { rt: rt, url: URL2, token: token, inv: inv },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: secret }), "utf8").toString("base64url");
+    return { secret: secret, inv: inv, token: token, text: text };
+  }
+  function loadFrom(text, ud) {
+    const said = [], on = {}, invoke = {};
+    const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
+    const safeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+      decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+    };
+    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const electron = {
+      app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
+        getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+      ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+      screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
+    };
+    const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+      text + "\nreturn { " + EXPOSE.join(", ") + " };")(
+      n => (n === "electron" ? electron : nodeRequire(n)),
+      path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+    const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+    return { api, ask, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
+  }
+  async function liftDesk(tag, fn) {
+    const src = path.join(ROOT, "shell", "main.js");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const next = lines.join("\n");
+        fs.writeFileSync(src, next);
+        turned = await fn(next);
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  const quietInvite = await relayInviteOn(RT2, TEAM2);
+  const beforeRead = deskTransport.log.length;
+  const Dq = newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
+  fs.mkdirSync(path.join(LAB, "join-quiet-share"), { recursive: true });
+  const readQ = await Dq.ask("etiuda:team-join", "read", quietInvite.text);
+  const readCalls = deskTransport.log.length - beforeRead;
+  const laterQ = await tokenHello(C, RT2, quietInvite.token, quietInvite.inv, keyPair(true));
+  const yesInvite = await relayInviteOn(RT2, TEAM2);
+  const Dy = newDesk("join-yes", path.join(LAB, "join-yes-share"));
+  fs.mkdirSync(path.join(LAB, "join-yes-share"), { recursive: true });
+  const offerY = await Dy.ask("etiuda:team-join", "read", yesInvite.text);
+  const takenY = await Dy.ask("etiuda:team-join", "invite", yesInvite.text, "Desk Nine", "");
+  const envY = Dy.envelope();
+  const keptY = envY.teamJoin && envY.teamJoin.invite && envY.teamJoin.invite.relay;
+  const secretKept = JSON.stringify(envY).indexOf(yesInvite.secret) >= 0;
+  const oY = offerY && offerY.offer;
+  check(readCalls === 0 && laterQ.online === true && laterQ.used === true && !!oY && oY.lead === "Ada Quay" && oY.team === TEAM2
+    && oY.relay === "relay.test" && oY.code == null && takenY && !takenY.refused && !!keptY && typeof keptY.wrap === "string" && keptY.wrap !== ""
+    && !secretKept,
+    "964a before yes no relay call is made, a no leaves the token for a second computer, and yes asks for no check code: "
+    + "calls on read " + readCalls + ", the token then " + (laterQ.online ? "opened" : "not opened")
+    + ", offer " + JSON.stringify(oY && { lead: oY.lead, team: oY.team, relay: oY.relay, code: oY.code })
+    + ", yes " + (takenY && takenY.refused ? "refused " + takenY.refused : "taken")
+    + ", wrap " + (keptY && keptY.wrap ? "kept" : "absent") + ", secret " + (secretKept ? "kept" : "absent"));
+  const codePlant = await liftDesk("plant:relay-code", async text => {
+    const invP = await relayInviteOn(RT2, TEAM2);
+    const ud = path.join(LAB, "join-plant-" + hex(4));
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "join-plant-share"), eUiLang: "en" } }), "utf8");
+    fs.mkdirSync(path.join(LAB, "join-plant-share"), { recursive: true });
+    const Dp = loadFrom(text, ud);
+    const refused = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
+    return !!(refused && refused.refused === "check");
+  });
+  check(codePlant.turned && codePlant.back,
+    "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the file is put back: "
+    + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
+
+  /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
+     admission above still meets edition 1. This tree's relay has no wrap route; the stand-in below answers only this desk. */
+  const RTW = hex(16), TEAMW = "t-" + hex(8), KW = crypto.randomBytes(32), URLW = URLV1;
+  const madeW = await admin("POST", "/relay/v1/teams", { rt: RTW, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(RTW, LEAD.keyId, R.clock.now)) });
+  if (madeW.status !== 200) throw new Error("the wrap team was not made: " + JSON.stringify(madeW.json));
+  const teamDocW = rev => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMW, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: rev,
+    channel: { kind: "relay", rt: RTW, url: URLW }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+  const studioWMirror = path.join(LAB, "wrap-studio");
+  const invitesW = [];
+  const studioWT = transport("wrap-studio");
+  const studioW = C.createChannel({ rt: RTW, url: URLW, mirror: studioWMirror, stateFile: path.join(LAB, "wrap-studio.json"),
+    pin: () => ({ teamId: TEAMW, rt: RTW, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+    keyFor: e => (e === 1 ? KW : null), sealEpoch: () => 1, inviteKeys: () => invitesW,
+    request: studioWT.request, connect: studioWT.connect, pollMs: 1e9 });
+  put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(1))));
+  put(studioWMirror, C.TEAM_NAME, teamDocW(1));
+  studioW.start();
+  await studioW.idle();
+  async function inviteOnW(epoch) {
+    const secret = hex(16), inv = hex(16), token = hex(32), hash = sha(Buffer.from(token, "utf8")), at = R.clock.now;
+    const res = await admin("POST", "/relay/v1/t/" + RTW + "/invites", { add: [{ id: inv, hash: hash }], drop: [], t: at,
+      sig: signHex(LEAD, core.invitesBytes(RTW, at, [{ id: inv, hash: hash }], [])) });
+    if (res.status !== 200) throw new Error("a wrap invitation was not registered: " + JSON.stringify(res.json));
+    invitesW.push({ id: inv, key: C.inviteSealKey(secret) });
+    await studioW.kick(); await studioW.idle();
+    const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAMW, relay: { rt: RTW, url: URLW, token: token, inv: inv },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: secret }), "utf8").toString("base64url");
+    const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: RTW, teamId: TEAMW, invitationId: inv, epoch: epoch, key: KW });
+    return { text: text, wrap: wrap };
+  }
+  function deskOnWrap(name, wrap) {
+    const folder = path.join(LAB, name + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    return newDesk(name, folder, { fetch: (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
+      ? new Response(Buffer.from(JSON.stringify({ wrap: wrap }), "utf8"), { status: 200, headers: { "content-type": "application/json" } })
+      : null) });
+  }
+  const invA = await inviteOnW(1);
+  const markA = deskTransport.log.length;
+  const Dw = deskOnWrap("wrap-read", invA.wrap);
+  const takenA = await Dw.ask("etiuda:team-join", "invite", invA.text, "Desk Nine", "");
+  const meA = await Dw.ask("etiuda:branch-identity", false);
+  const joinA = "desks/" + meA.id + "/join.json";
+  const mirrorA = path.join(Dw.ud, "relay", RTW);
+  const readNow = await until(async () => {
+    const ch = Dw.api.relayRun();
+    if (ch) { ch.kick(); await ch.idle(); }
+    return factsOf(Dw.api.readCatalog() || "") === 1;
+  }, 8000);
+  let atLead = false, later = false, still = false;
+  if (readNow) {
+    atLead = await until(async () => { await studioW.kick(); await studioW.idle(); return !!read(studioWMirror, joinA); }, 8000);
+    put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(2))));
+    await studioW.kick(); await studioW.idle();
+    later = await until(async () => {
+      const ch = Dw.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      return factsOf(Dw.api.readCatalog() || "") === 2;
+    }, 8000);
+    still = !!read(studioWMirror, joinA) && !!read(mirrorA, joinA);
+  }
+  const putsA = deskTransport.log.slice(markA).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + RTW + "/") >= 0).length;
+  check(!!takenA && !takenA.refused && readNow && putsA === 1 && atLead && later && still,
+    "965a yes opens the wrap and reads a catalog before the lead admits it, uploads join.json once, and a later catalog still arrives: "
+    + "yes " + (takenA && takenA.refused ? "refused " + takenA.refused : "taken")
+    + ", catalog " + (readNow ? "read" : "unread") + ", uploads " + putsA
+    + ", at the lead " + (atLead ? "yes" : "no") + ", later " + (later ? "read" : "unread")
+    + ", request " + (still ? "kept" : "gone"));
+  const invE = await inviteOnW(2);
+  const De = deskOnWrap("wrap-epoch", invE.wrap);
+  const takenE = await De.ask("etiuda:team-join", "invite", invE.text, "Desk Nine", "");
+  const saidEpoch = await until(async () => {
+    const ch = De.api.relayRun();
+    if (ch) { ch.kick(); await ch.idle(); }
+    return De.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
+  }, 8000);
+  const unreadE = factsOf(De.api.readCatalog() || "") !== 1;
+  check(!!takenE && !takenE.refused && saidEpoch && unreadE,
+    "965b a wrap whose epoch is not the signed team file's is refused and said, and that catalog is not read: "
+    + (saidEpoch ? "said" : "not said") + ", catalog " + (unreadE ? "unread" : "read"));
+  function dropCopiedChannel() {
+    const want = path.normalize(path.join(APP, "shell", "relay", "channel.cjs"));
+    for (const k of Object.keys(nodeRequire.cache)) if (path.normalize(k) === want) delete nodeRequire.cache[k];
+  }
+  async function liftChannel(tag, fn) {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const copy = path.join(APP, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(file);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const next = lines.join("\n");
+        fs.writeFileSync(file, next);
+        fs.writeFileSync(copy, next);
+        dropCopiedChannel();
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(file, beforeBytes);
+      fs.writeFileSync(copy, beforeBytes);
+      dropCopiedChannel();
+    }
+    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
+  const openPlant = await liftChannel("plant:wrap-open", async () => {
+    const invP = await inviteOnW(1);
+    const Dp = deskOnWrap("wrap-plant", invP.wrap);
+    const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
+    const end = Date.now() + 4000;
+    while (Date.now() < end) {
+      const ch = Dp.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      if (factsOf(Dp.api.readCatalog() || "") === 1) return false;
+      await wait(40);
+    }
+    return !!(takenP && !takenP.refused) && factsOf(Dp.api.readCatalog() || "") !== 1;
+  });
+  check(openPlant.turned && openPlant.back,
+    "965c lifting plant:wrap-open leaves the catalog unread, and the file is put back: "
+    + openPlant.detail + ", sha " + (openPlant.back ? "restored" : "differs"));
+  await studioW.stop();
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
   const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(K2, me.box, TEAM2, 1, me.id) };
@@ -3149,6 +3380,205 @@ try {
   await lead.ch.stop();
 } catch (e) {
   check(false, "harness (the leg 960a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 1: the wrap's key, its associated data, and openWrap. The epoch line is the plant. ---- */
+function liftBlob(tag, fn) {
+  const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = sha(beforeBytes);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      turned = fn(nodeRequire(src));
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  } finally {
+    fs.writeFileSync(src, beforeBytes);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+}
+function wrapTeamDoc(id, rt, epoch) {
+  return { format: 1, kind: "etiuda-team", id: id, epoch: epoch, rev: 1, channel: { kind: "relay", rt: rt, url: URLV1 } };
+}
+try {
+  const secret = hex(16), rt = hex(16), team = "t-" + hex(8), inv = hex(16), epoch = 3;
+  const teamKey = crypto.randomBytes(32);
+  const nonce = Buffer.alloc(12, 9);
+  const key = B.inviteWrapKey(secret);
+    const expectKey = Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secret, "hex"), Buffer.alloc(0), Buffer.from("etiuda-invite-wrap", "utf8"), 32));
+    const aad = B.inviteWrapAad({ relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch });
+    const expectAad = Buffer.from(["etiuda-invite-wrap", rt, team, inv, String(epoch)].join("\n") + "\n", "utf8");
+    const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch, key: teamKey, nonce: nonce });
+    const raw = Buffer.from(wrap.ct, "hex");
+    const dec = crypto.createDecipheriv("aes-256-gcm", key, raw.subarray(0, 12), { authTagLength: 16 });
+    dec.setAAD(expectAad);
+    dec.setAuthTag(raw.subarray(raw.length - 16));
+    const plain = Buffer.concat([dec.update(raw.subarray(12, raw.length - 16)), dec.final()]).toString("utf8");
+    const wantPlain = JSON.stringify({ epoch: epoch, key: teamKey.toString("hex") });
+    const doc = wrapTeamDoc(team, rt, epoch);
+    const opened = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: doc });
+    const blind = wrap.ct.indexOf(teamKey.toString("hex")) < 0;
+    check(!!key && key.equals(expectKey) && key.length === 32 && !!aad && aad.equals(expectAad) && wrap.epoch === epoch
+      && plain === wantPlain && opened.ok === true && Buffer.isBuffer(opened.key) && opened.key.equals(teamKey) && blind,
+      "961a the wrap key, its associated data and the sealed JSON are the bytes item 1 names, and openWrap reads the team key back: "
+      + (key && key.equals(expectKey) ? "key matches" : "key differs")
+      + ", associated data " + (aad && aad.equals(expectAad) ? "matches" : "differs")
+      + ", plaintext " + (plain === wantPlain ? "matches" : JSON.stringify(plain))
+      + ", opened " + (opened.ok === true ? "yes" : (opened.reason || opened.ok))
+      + ", the ciphertext holds the key " + (blind ? "nowhere" : "in the clear"));
+    const otherTeam = "t-" + hex(8), otherRt = hex(16), otherInv = hex(16);
+    const movedInv = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: otherInv, wrap: wrap, teamDoc: doc });
+    const movedTeam = B.openWrap({ secret: secret, relayTeamId: rt, teamId: otherTeam, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(otherTeam, rt, epoch) });
+    const movedRelay = B.openWrap({ secret: secret, relayTeamId: otherRt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(team, otherRt, epoch) });
+    const movedEpoch = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: { epoch: epoch + 1, ct: wrap.ct }, teamDoc: wrapTeamDoc(team, rt, epoch + 1) });
+    const still = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: doc });
+    check(!movedInv.ok && !movedTeam.ok && !movedRelay.ok && !movedEpoch.ok && still.ok === true && still.key.equals(teamKey),
+      "961b a wrap moved to another invitation, team, relay team or epoch does not open, and the unmoved one does: "
+      + [movedInv.reason || movedInv.ok, movedTeam.reason || movedTeam.ok, movedRelay.reason || movedRelay.ok, movedEpoch.reason || movedEpoch.ok].join(" ")
+      + ", unmoved " + (still.ok === true ? "opens" : (still.reason || still.ok)));
+    const wrong = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(team, rt, epoch + 2) });
+    check(wrong.ok === false && wrong.reason === "epoch" && wrong.said === B.REASONS.epoch,
+      "961c a wrap whose epoch is not the team file's is refused and said: " + (wrong.reason || wrong.ok) + ", " + JSON.stringify(wrong.said));
+    const planted = liftBlob("plant:wrap-epoch", mod => {
+      const w = mod.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch, key: teamKey, nonce: nonce });
+      const got = mod.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: w, teamDoc: wrapTeamDoc(team, rt, epoch + 2) });
+      return got.ok === true && Buffer.isBuffer(got.key) && got.key.equals(teamKey);
+    });
+  check(planted.turned && planted.back,
+    "961d lifting plant:wrap-epoch opens that wrap, and the file is put back: " + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 961a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 2: a token hello that binds no key is not sent; a second use is said as already used. ---- */
+const INVITE_USED_NEW = "This invitation was already used. Ask your lead for a new one.";
+const INVITE_USED_OLD = "This invitation has already been used.";
+async function relayTeam() {
+  const rt = hex(16);
+  const made = await admin("POST", "/relay/v1/teams", { rt: rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+  if (made.status !== 200) throw new Error("a team was not made: " + made.status);
+  return rt;
+}
+async function registerInvite(rt, id, token) {
+  const t = R.clock.now, hash = sha(Buffer.from(token, "utf8"));
+  const res = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [{ id: id, hash: hash }], drop: [], t: t,
+    sig: signHex(LEAD, core.invitesBytes(rt, t, [{ id: id, hash: hash }], [])) });
+  if (res.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(res.json));
+}
+async function tokenHello(mod, rt, token, inv, who) {
+  const said = [];
+  const place = who ? "desk:" + who.keyId : "desk:k-hollow";
+  const extra = {
+    invite: () => ({ inv: inv, token: token, seal: crypto.randomBytes(32) }),
+    say: l => said.push(l),
+  };
+  if (!who) extra.me = () => ({ keyId: "k-" + hex(8), public: hex(32), place: place });
+  const desk = opened(mod, "tok-" + hex(4), { rt: rt, id: "t-" + hex(8) }, who || LEAD, place, extra);
+  desk.ch.start();
+  await desk.ch.idle();
+  const sessions = desk.t.log.filter(l => l.indexOf("POST session") === 0).length;
+  const used = desk.prog.state().tokenUsed === true;
+  const online = desk.ch.online();
+  await desk.ch.stop();
+  return { sessions: sessions, used: used, said: said, online: online };
+}
+try {
+  const rt = await relayTeam(), token = hex(32), inv = hex(16);
+  await registerInvite(rt, inv, token);
+  const bare = await tokenHello(C, rt, token, inv, null);
+  const later = await tokenHello(C, rt, token, inv, keyPair(true));
+  check(bare.sessions === 0 && bare.used === false && later.online === true && later.used === true,
+    "962a a token hello that binds no key is not sent and spends nothing, and a later hello that binds a key spends the token: "
+    + "bare sessions " + bare.sessions + ", bare used " + bare.used + ", later online " + later.online + ", later used " + later.used);
+  const bindPlant = await liftChannel("plant:invite-bind", async mod => {
+    const rt2 = await relayTeam(), token2 = hex(32), inv2 = hex(16);
+    await registerInvite(rt2, inv2, token2);
+    const a = await tokenHello(mod, rt2, token2, inv2, null);
+    const b = await tokenHello(mod, rt2, token2, inv2, keyPair(true));
+    return a.sessions >= 1 && a.used === true && b.online === false;
+  });
+  check(bindPlant.turned && bindPlant.back,
+    "962b lifting plant:invite-bind sends the unbound hello and spends the token, and the file is put back: "
+    + bindPlant.detail + ", sha " + (bindPlant.back ? "restored" : "differs"));
+  const rt3 = await relayTeam(), token3 = hex(32), inv3 = hex(16);
+  await registerInvite(rt3, inv3, token3);
+  const first = await tokenHello(C, rt3, token3, inv3, keyPair(true));
+  const again = await tokenHello(C, rt3, token3, inv3, keyPair(true));
+  const saidNew = again.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
+  check(first.online === true && saidNew,
+    "962c a second key is told the invitation was already used: first online " + first.online + ", said " + JSON.stringify(again.said));
+  const saidPlant = await liftChannel("plant:invite-used", async mod => {
+    const rt4 = await relayTeam(), token4 = hex(32), inv4 = hex(16);
+    await registerInvite(rt4, inv4, token4);
+    await tokenHello(mod, rt4, token4, inv4, keyPair(true));
+    const b = await tokenHello(mod, rt4, token4, inv4, keyPair(true));
+    return b.said.some(l => l.indexOf(INVITE_USED_OLD) >= 0) && !b.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
+  });
+  check(saidPlant.turned && saidPlant.back,
+    "962d lifting plant:invite-used says the old sentence, and the file is put back: "
+    + saidPlant.detail + ", sha " + (saidPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 962a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 3: a token hello the relay ends is said as expired, and the token stays unspent. ---- */
+const INVITE_ENDED_NEW = "This invitation has expired. Ask your lead for a new one.";
+const INVITE_ENDED_OLD = "The relay answered 403.";
+async function endedHello(mod) {
+  const rt = await relayTeam(), token = hex(32), inv = hex(16);
+  await registerInvite(rt, inv, token);
+  const who = keyPair(true), said = [], tag = hex(4);
+  const deskT = transport("end-" + tag);
+  const desk = opened(mod, "end-" + tag, { rt: rt, id: "t-" + hex(8) }, who, "desk:" + who.keyId, {
+    invite: () => ({ inv: inv, token: token, seal: crypto.randomBytes(32) }),
+    say: l => said.push(l),
+    connect: deskT.connect,
+    request: async (m, u, h, b) => {
+      if (m === "POST" && /\/session$/.test(String(u))) {
+        let body = null;
+        try { body = JSON.parse(Buffer.from(b || "").toString("utf8")); } catch { body = null; }
+        if (body && typeof body.invite === "string") {
+          return { status: 403, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "invite-ended" })) };
+        }
+      }
+      return deskT.request(m, u, h, b);
+    },
+  });
+  desk.ch.start();
+  await desk.ch.idle();
+  const used = desk.prog.state().tokenUsed === true;
+  await desk.ch.stop();
+  const later = await tokenHello(mod, rt, token, inv, keyPair(true));
+  return { used: used, said: said, laterOnline: later.online === true, laterUsed: later.used === true };
+}
+try {
+  const ended = await endedHello(C);
+  const saidNew = ended.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0);
+  check(ended.used === false && saidNew && ended.laterOnline && ended.laterUsed,
+    "963a a token hello the relay ends is said as expired, the token stays unspent, and a later hello spends it: "
+    + "used " + ended.used + ", said " + JSON.stringify(ended.said) + ", later online " + ended.laterOnline
+    + ", later used " + ended.laterUsed);
+  const endedPlant = await liftChannel("plant:invite-ended", async mod => {
+    const x = await endedHello(mod);
+    return x.used === false && x.laterOnline && x.laterUsed
+      && x.said.some(l => l.indexOf(INVITE_ENDED_OLD) >= 0) && !x.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0);
+  });
+  check(endedPlant.turned && endedPlant.back,
+    "963b lifting plant:invite-ended says the relay answered 403, and the file is put back: "
+    + endedPlant.detail + ", sha " + (endedPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

@@ -472,8 +472,94 @@ function opened(input) {
   return out;
 }
 
+/* An invitation's wrap of one epoch's team key. The wrap key is 32 bytes of HKDF-SHA256 over the invitation's
+   16-byte secret, salt empty, info etiuda-invite-wrap. The associated data is UTF-8 etiuda-invite-wrap, the relay
+   team, the team id, the relay's invitation id and the epoch, each on its own line, so a wrap moved to any other
+   of those does not open. ct is hex of a 12-byte nonce, then AES-256-GCM of the JSON {epoch, key} with key as 64
+   hex, then the 16-byte tag. The relay keeps that ciphertext and cannot open it. A wrap whose epoch is not the
+   team file's is refused before it is decrypted, and said with the epoch reason. */
+const INVITE_WRAP_INFO = "etiuda-invite-wrap";
+
+function inviteWrapKey(secretHex) {
+  if (typeof secretHex !== "string" || !HEX32.test(secretHex)) return null;
+  return Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secretHex, "hex"), Buffer.alloc(0), Buffer.from(INVITE_WRAP_INFO, "utf8"), 32));
+}
+
+function inviteWrapAad(fields) {
+  if (!fields || typeof fields !== "object") return null;
+  const rt = fields.relayTeamId, team = fields.teamId, inv = fields.invitationId, epoch = fields.epoch;
+  if (typeof rt !== "string" || !HEX32.test(rt) || !isId(team) || typeof inv !== "string" || !HEX32.test(inv) || !isCount(epoch)) return null;
+  return Buffer.from([INVITE_WRAP_INFO, rt, team, inv, String(epoch)].join("\n") + "\n", "utf8");
+}
+
+/* The team file the wrap is opened against, by its shape alone: this team, this relay, an epoch. The signature
+   is the caller's, judged before the file is passed here, so a file is not trusted for naming its own signer. */
+function inviteTeamDoc(doc, teamId, relayTeamId) {
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+  if (doc.kind !== "etiuda-team" || doc.id !== teamId) return null;
+  const c = doc.channel;
+  if (!c || typeof c !== "object" || Array.isArray(c) || c.kind !== "relay") return null;
+  if (c.rt !== undefined && c.relay !== undefined && c.rt !== c.relay) return null;
+  const rt = c.rt !== undefined ? c.rt : c.relay;
+  if (rt !== relayTeamId || !isCount(doc.epoch)) return null;
+  return doc;
+}
+
+function sealInviteWrap(opts) {
+  const o = opts || {};
+  const epoch = o.epoch;
+  const keyBytes = bytesOf(o.key) || (typeof o.key === "string" && HEX64.test(o.key) ? Buffer.from(o.key, "hex") : null);
+  const given = bytesOf(o.wrapKey);
+  const wrapKey = given && given.length === KEY_BYTES ? given : inviteWrapKey(o.secret);
+  const aad = inviteWrapAad({ relayTeamId: o.relayTeamId, teamId: o.teamId, invitationId: o.invitationId, epoch: epoch });
+  const nonce = o.nonce == null ? crypto.randomBytes(NONCE_BYTES) : bytesOf(o.nonce);
+  if (!aad || !wrapKey || wrapKey.length !== KEY_BYTES || !keyBytes || keyBytes.length !== KEY_BYTES || !nonce || nonce.length !== NONCE_BYTES)
+    throw new TypeError("relay blob: an invitation wrap takes a 32-byte team key, a 32-byte wrap key and fields the associated data can carry");
+  const plain = Buffer.from(JSON.stringify({ epoch: epoch, key: keyBytes.toString("hex") }), "utf8");
+  const cipher = crypto.createCipheriv("aes-256-gcm", wrapKey, nonce, { authTagLength: TAG_BYTES });
+  cipher.setAAD(aad);
+  const ct = Buffer.concat([nonce, cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
+  return { epoch: epoch, ct: ct.toString("hex") };
+}
+
+function openInviteWrap(wrapKey, input) {
+  const o = input || {};
+  const key = bytesOf(wrapKey);
+  const wrap = o.wrap;
+  const doc = inviteTeamDoc(o.teamDoc, o.teamId, o.relayTeamId);
+  if (!key || key.length !== KEY_BYTES || !wrap || typeof wrap !== "object" || Array.isArray(wrap) || !doc) return refusal("bad-signature");
+  if (!isCount(wrap.epoch) || typeof wrap.ct !== "string" || !/^[0-9a-f]+$/.test(wrap.ct) || wrap.ct.length % 2 !== 0 || wrap.ct.length < (NONCE_BYTES + TAG_BYTES) * 2)
+    return refusal("bad-signature");
+  if (wrap.epoch !== doc.epoch) return refusal("epoch"); /* plant:wrap-epoch */
+  const aad = inviteWrapAad({ relayTeamId: o.relayTeamId, teamId: o.teamId, invitationId: o.invitationId, epoch: wrap.epoch });
+  if (!aad) return refusal("bad-signature");
+  const raw = Buffer.from(wrap.ct, "hex");
+  let plain;
+  try {
+    const d = crypto.createDecipheriv("aes-256-gcm", key, raw.subarray(0, NONCE_BYTES), { authTagLength: TAG_BYTES });
+    d.setAAD(aad);
+    d.setAuthTag(raw.subarray(raw.length - TAG_BYTES));
+    plain = Buffer.concat([d.update(raw.subarray(NONCE_BYTES, raw.length - TAG_BYTES)), d.final()]);
+  } catch { return refusal("bad-signature"); }
+  let body;
+  try { body = JSON.parse(UTF8.decode(plain)); } catch { return refusal("bad-signature"); }
+  if (!body || typeof body !== "object" || Array.isArray(body) || body.epoch !== wrap.epoch || typeof body.key !== "string" || !HEX64.test(body.key))
+    return refusal("bad-signature");
+  return { ok: true, epoch: wrap.epoch, key: Buffer.from(body.key, "hex") };
+}
+
+/* The contract's open: the secret in, the team key out, or a refusal. The desk, which does not keep the secret,
+   opens with the wrap key it derived at yes (openInviteWrap). */
+function openWrap(input) {
+  const i = input || {};
+  const key = inviteWrapKey(i.secret);
+  if (!key) return refusal("bad-signature");
+  return openInviteWrap(key, i);
+}
+
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, PAD_FLOOR, NONCE_BYTES, TAG_BYTES, KEY_BYTES, AAD_LABEL, UPLOAD_PREFIX,
   REASONS, refusal, isId, isDeskId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySigned, seal, openBlob,
+  inviteWrapKey, inviteWrapAad, sealInviteWrap, openInviteWrap, openWrap,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
 };

@@ -78,6 +78,12 @@ const HELLO_LABEL = "etiuda-relay-hello";
 /* The key a desk joining by invitation seals its one request under, and reads the lead's team file with, before it holds
    the team key: HKDF-SHA256 of the invitation's 128-bit secret, which only the lead and the invited hold. */
 const INVITE_SEAL_INFO = "etiuda-relay-invite-seal";
+/* What a desk says when its token hello is answered token-spent. An upload refused token-spent keeps the contract
+   sentence: that refusal can lift (F4), and blob.REASONS stays the older wording. */
+const INVITE_USED_SAID = "This invitation was already used. Ask your lead for a new one.";
+/* What a desk says when its token hello is answered invite-ended. The token is not spent: the end bounds an unused
+   invitation only. This tree's relay does not say it yet; the desk says it when the answer names that error. */
+const INVITE_ENDED_SAID = "This invitation has expired. Ask your lead for a new one.";
 /* The label of a desk's own copy of the team file: its key and its place from one agreement of two boxes (deskCopyOf). */
 const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 const INVITE_UPLOAD_MAX = 64 * 1024;
@@ -154,6 +160,9 @@ function inviteSealKey(secretHex) {
   if (typeof secretHex !== "string" || !HEX32.test(secretHex)) return null;
   return Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secretHex, "hex"), Buffer.alloc(0), Buffer.from(INVITE_SEAL_INFO, "utf8"), 32));
 }
+
+/* The wrap key of the same secret, under etiuda-invite-wrap. The desk derives it at yes and does not keep the secret. */
+function inviteWrapKey(secretHex) { return B.inviteWrapKey(secretHex); }
 
 /* A desk's own copy of the team file: {id, key}, the 32-hex id of its place (`invite:<id>`, the shape the relay takes
    from a lead) and the 32-byte key it is sealed under, or null. `dh` is the X25519 agreement of the lead's box and the
@@ -1084,6 +1093,7 @@ function createProgram(opts) {
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed() { st.tokenUsed = true; persist(); },
+    heldTeam,
     pending: () => st.pending.slice(),
     unpend(id) { unpend(id); persist(); },
   };
@@ -1115,6 +1125,9 @@ function createChannel(opts) {
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS;
+  /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
+     keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
+  let wrapPhase = "need", wrapHeld = null;
   let watchers = [], settle = null, retryTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
   const said = new Set();
   const sayOnce = line => { if (!said.has(line)) { said.add(line); say(line); } };
@@ -1182,10 +1195,11 @@ function createChannel(opts) {
     }
     const inv = typeof o.invite === "function" ? o.invite() : null;
     if (!inv || prog.state().tokenUsed || !HEX32.test(String(inv.inv)) || typeof inv.token !== "string") return why;
-    /* The token's hello names this desk's key and is signed by it, so the relay binds that key to the invitation it spends. */
-    const bind = who && who.privateKey && /^[0-9a-f]{64}$/.test(String(who.public))
-      ? { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") }
-      : {};
+    /* A token hello that binds no key is not sent. Sending it would spend the invitation with nobody bound to it. */
+    let bind = {};
+    const canBind = who && who.privateKey && HEX64.test(String(who.public));
+    if (canBind) bind = { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") };
+    else return why; /* plant:invite-bind */
     const r = await call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind) });
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed();
@@ -1193,8 +1207,10 @@ function createChannel(opts) {
       return { ok: true };
     }
     const t = refusalOf(r);
+    if (r.json && r.json.error === "invite-ended") return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed();
+    t.said = INVITE_USED_SAID; /* plant:invite-used */
     return t;
   }
 
@@ -1376,11 +1392,48 @@ function createChannel(opts) {
     }
   }
 
+  /* The invitation's wrap, fetched once the session is open. This tree's relay has no wrap route, so a 404 is said as
+     nothing and the cycle goes on: the key still arrives by the roster's wrap. No answer, or a 500, stays "need" and is
+     asked again. A spent or ended token is the hello's refusal, returned here too. */
+  async function pullWrap() {
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    const key = inv && toBytes(inv.wrapKey);
+    if (!key || key.length !== 32 || wrapPhase !== "need") return { ok: true };
+    const r = await authed("GET", "wrap");
+    if (r.status === 200 && table(r.json) && table(r.json.wrap)) { wrapHeld = r.json.wrap; wrapPhase = "held"; return { ok: true }; }
+    if (!r.status || r.status >= 500) return { ok: true };
+    const why = r.refused || refusalOf(r);
+    if (why.reason === "token-spent") return why;
+    if (r.json && r.json.error === "invite-ended") return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false };
+    wrapPhase = "none";
+    return { ok: true };
+  }
+
+  /* Opened against the team file this program holds. openInviteWrap refuses an epoch that file does not carry before it
+     decrypts. The team key is handed to the shell, which keeps it and forgets the wrap key. A refusal is said once and
+     the key is not installed; the invitation's one upload still goes. */
+  async function openHeldWrap() {
+    if (wrapPhase !== "held") return { ok: true };
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    const key = inv && toBytes(inv.wrapKey);
+    const team = prog.heldTeam();
+    if (!key || key.length !== 32 || !team || !team.doc) return { ok: true };
+    const opened = B.openInviteWrap(key, { wrap: wrapHeld, teamDoc: team.doc, teamId: team.doc.id, relayTeamId: o.rt, invitationId: inv.inv });
+    if (!opened.ok) { wrapPhase = "bad"; wrapHeld = null; sayOnce(opened.said); return { ok: true }; }
+    if (typeof o.onTeamKey === "function") o.onTeamKey(opened.epoch, opened.key); /* plant:wrap-open */
+    wrapPhase = "opened";
+    wrapHeld = null;
+    return { ok: true };
+  }
+
   async function cycle() {
     const s = await ensureSession();
     if (!s.ok) return s;
+    const w = await pullWrap();
+    if (!w.ok) return w;
     const c = await catchUp(); /* plant:catch-up-first */
     if (!c.ok) return c;
+    await openHeldWrap();
     await retryPending();
     const f = await flush();
     ensureSocket();
@@ -1482,7 +1535,7 @@ function createChannel(opts) {
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, INVITE_UPLOAD_MAX,
-  canon, signedBytes, helloBytes, inviteSealKey, deskCopyOf, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
+  canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   createProgram, createChannel,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),

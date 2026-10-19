@@ -1032,6 +1032,8 @@ UI_STRINGS.pl={
   "Join this team":"Dołącz do tego zespołu",
   "Folder: {FOLDER}":"Folder: {FOLDER}",
   "Lead: {NAME}":"Lider zespołu: {NAME}",
+  "Team: {TEAM}":"Zespół: {TEAM}",
+  "Relay: {HOST}":"Przekaźnik: {HOST}",
   "This invitation cannot be read, so nothing was changed.":"Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
   "This folder is on the computer {HOST}.":"Ten folder znajduje się na komputerze {HOST}.",
   "This folder could not be reached, so nothing was written.":"Ten folder jest teraz niedostępny, więc nic nie zapisano.",
