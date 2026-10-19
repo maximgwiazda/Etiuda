@@ -252,10 +252,94 @@ let offeredLead = null;
 function ecFromArgv(argv) {
   for (const a of (argv || []).slice(1)) {
     const s = String(a);
+    if (s.slice(0, 7).toLowerCase() === "etiuda:") continue; /* plant:link-file */
     if (s.charAt(0) === "-" || !/\.ec$/i.test(s)) continue;
     try { if (fs.statSync(s).isFile()) return path.resolve(s); } catch { /* not a file from here */ }
   }
   return "";
+}
+/* AN etiuda: LINK IS NOT A FILE. The only argument that is an invitation is etiuda:join# and
+   base64url, handed to inviteRead as etiuda-join: and the same text. A folder invitation, a page
+   address, a link wrapped twice and anything longer than 8192 characters are said and dropped,
+   and a refusal reads nothing from disk. Nothing joins: the confirm is still the person's yes. */
+const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link";
+const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie, a nie otwiera z odnośnika.";
+const LINK_FORM = "Paste the invitation in Etiuda, which opens an invitation only from its own link.";
+const LINK_FORM_PL = "Proszę wkleić zaproszenie w Etiudzie. Etiuda otwiera zaproszenie tylko ze swojego odnośnika.";
+const LINK_LONG = "Ask your lead for a new invitation. This one is longer than Etiuda opens.";
+const LINK_LONG_PL = "Proszę poprosić lidera o nowe zaproszenie. To jest dłuższe, niż Etiuda otwiera.";
+function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
+function linkLooks(s) {
+  const head = s.slice(0, 12).toLowerCase();
+  return head.slice(0, 7) === "etiuda:" || head === "etiuda-join:" || s.slice(0, 8).toLowerCase() === "https://" || s.slice(0, 7).toLowerCase() === "http://";
+}
+function linkFromArg(arg) {
+  const s = typeof arg === "string" ? arg : "";
+  if (!linkLooks(s)) return null;
+  if (s.length > 8192) return linkRefusal(LINK_LONG, LINK_LONG_PL); /* plant:link-cap */
+  const hash = s.lastIndexOf("#");
+  const payload = hash >= 0 ? s.slice(hash + 1) : "";
+  if (s !== "etiuda:join#" + payload || !/^[A-Za-z0-9_-]+$/.test(payload)) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-form */
+  const handed = "etiuda-join:" + payload;
+  const parsed = inviteRead(handed, process.platform !== "win32");
+  if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
+  if (!parsed.relay) return linkRefusal(LINK_FOLDER, LINK_FOLDER_PL); /* plant:link-folder */
+  return { text: handed, parsed: parsed };
+}
+function linkArgFrom(argv) {
+  for (const a of (argv || []).slice(1)) { if (linkFromArg(a)) return String(a); }
+  return "";
+}
+let pendingLink = null, pendingLinkArg = "";
+function handLinkView(view) {
+  const win = theWindow;
+  if (win && !win.isDestroyed() && win.webContents && typeof win.webContents.send === "function") {
+    try { win.webContents.send("etiuda:team-join", view); pendingLink = null; return; }
+    catch (e) { /* the page is not there yet */ }
+  }
+  pendingLink = view;
+}
+function handPendingLink(win) {
+  const view = pendingLink;
+  if (!view) return;
+  pendingLink = null;
+  if (!win || win.isDestroyed() || !win.webContents || typeof win.webContents.send !== "function") { pendingLink = view; return; }
+  try { win.webContents.send("etiuda:team-join", view); }
+  catch (e) { pendingLink = view; }
+}
+function acceptLink(arg) {
+  const got = linkFromArg(arg);
+  if (!got) return null;
+  if (got.refused) {
+    console.error("etiuda: " + got.saidEn + " " + got.saidPl);
+    return { refused: got.refused, said: got.saidEn };
+  }
+  const view = readInvite(got.text);
+  if (!view || !view.offer) return { refused: LINK_FORM, said: LINK_FORM };
+  handLinkView(view);
+  return { confirm: true, text: got.text, offer: view.offer };
+}
+function handHeldLink(win) {
+  if (pendingLinkArg) {
+    const arg = pendingLinkArg;
+    pendingLinkArg = "";
+    acceptLink(arg);
+    return;
+  }
+  handPendingLink(win);
+}
+/* Windows names this desk as the program for an etiuda: link. Checked, and a start that cannot
+   take the scheme still opens. The Ubuntu line is written from electron-builder.js. */
+function registerEtiudaLink() {
+  if (process.platform !== "win32" || typeof app.setAsDefaultProtocolClient !== "function") return;
+  let ok = false;
+  try {
+    const dev = process.defaultApp && process.argv.length >= 2;
+    ok = dev
+      ? app.setAsDefaultProtocolClient("etiuda", process.execPath, [path.resolve(process.argv[1])]) === true
+      : app.setAsDefaultProtocolClient("etiuda") === true;
+  } catch (e) { ok = false; }
+  if (!ok) console.error("etiuda: Windows did not make this desk the program that opens an etiuda: link");
 }
 /* The lead's standing span, at the root of the team's folder. It replaces the old request file, which nothing here reads. */
 const SPAN_NAME = "stats-span.json";
@@ -5664,6 +5748,7 @@ function createWindow() {
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryLiveStats(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
+  win.webContents.on("did-finish-load", () => { handHeldLink(win); });
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
@@ -5810,16 +5895,25 @@ const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne) {
   app.quit();
 } else {
+  registerEtiudaLink();
   app.on("second-instance", (e, argv) => {
     const win = theWindow;
     if (win && !win.isDestroyed() && !PLACED_ASIDE) {
       if (win.isMinimized()) win.restore();
       win.focus();
     }
+    const link = linkArgFrom(argv);
+    if (link) acceptLink(link);
     const file = ecFromArgv(argv);
     if (!file) return;
     offerFile(win, file);
   });
+  const link = linkArgFrom(process.argv);
+  if (link) {
+    const got = linkFromArg(link);
+    if (got && got.refused) acceptLink(link);
+    else if (got && got.text) pendingLinkArg = link;
+  }
   openedWith = ecFromArgv(process.argv);
   /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
      synchronous read of a share that is not there. */
