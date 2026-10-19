@@ -119,9 +119,11 @@ function createCore(deps) {
     }
     const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
     store.atomic(() => {
+      const ord = (store.get("ord") || 0) + 1;
+      if (withdrawn.length) store.put("ord", ord); /* plant:order-gone */
       for (const id of withdrawn) {
         const was = store.get("dev:" + id);
-        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock() }));
+        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock(), ord }));
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
@@ -154,6 +156,8 @@ function createCore(deps) {
     if (live > INVITES_MAX) return no("team-size"); /* plant:invites-cap */
     const now = clock();
     store.atomic(() => {
+      const ord = (store.get("ord") || 0) + 1;
+      if (added.size) store.put("ord", ord); /* plant:order-invite */
       for (const [k, until] of store.list("seen:")) if (until < now) store.del(k);
       store.put(seen, b.t + CALL_SKEW_MS);
       for (const id of drop) {
@@ -162,7 +166,7 @@ function createCore(deps) {
         if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
-      for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false, at: now });
+      for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false, at: now, ord });
     });
     return { ok: true, dropped: [...drop] };
   }
@@ -208,7 +212,7 @@ function createCore(deps) {
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
     if (bound.key) {
       const gone = store.get("gone:" + bound.key);
-      if (gone && !registeredAfter(inv, gone)) return no("removed");
+      if (gone && !registeredAfter(inv, gone)) return no("removed"); /* plant:token-removed */
     }
     return issue(b.challenge, { key: null, inv: b.inv }, () => {
       store.put("inv:" + b.inv, Object.assign({}, inv, { spent: true, spentAt: clock() }, bound)); /* plant:token-spend */
@@ -276,9 +280,12 @@ function createCore(deps) {
     return who.inv ? { ok: true, session: token, until, invite: true } : { ok: true, session: token, until };
   }
 
-  /* An invitation registered strictly after the key was withdrawn. A missing time, or the same time, is not after. */
+  /* An invitation registered strictly after the key was withdrawn, by the order the relay itself keeps: "ord", raised in
+     the same atomic write as the gone row (devices) and as the invitation (invites), so a relay clock stepping back cannot
+     make an invitation the lead registered before a removal read as after it. A row with no order, written before the
+     counter existed, is not after. */
   function registeredAfter(inv, gone) {
-    return !!inv && !!gone && Number.isSafeInteger(inv.at) && Number.isSafeInteger(gone.at) && inv.at > gone.at;
+    return !!inv && !!gone && Number.isSafeInteger(inv.ord) && Number.isSafeInteger(gone.ord) && inv.ord > gone.ord;
   }
 
   /* An invitation's session bound to a key removed earlier may put its one request and may not read. */

@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 104;
+const EXPECTED = 112;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -933,6 +933,35 @@ async function main() {
     const hello = await boundHello(w, w.desk, id, token);
     return { w, hello, id };
   }
+  /* As liftCore, with a text swapped in place of a whole line lifted: for a guard that is part of a line. */
+  async function swapCore(from, to, fn) {
+    const src = path.join(ROOT, "relay", "core.cjs");
+    const resolved = require.resolve(src);
+    if (!heldCore) heldCore = require(resolved);
+    const liveExports = heldCore;
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "swap text absent";
+    try {
+      const text = beforeBytes.toString("utf8");
+      if (text.split(from).length === 2) {
+        fs.writeFileSync(src, text.split(from).join(to));
+        delete require.cache[resolved];
+        liveExports.createCore = require(resolved).createCore;
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
+      try {
+        delete require.cache[resolved];
+        liveExports.createCore = require(resolved).createCore;
+      } catch { /* the next world loads the restored file */ }
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
   /* The team's module keeps the first exports object. A later require, after the cache is cleared, is a new
      object, so every lift patches the first. */
   let heldCore = null;
@@ -1007,6 +1036,87 @@ async function main() {
     });
     check(quietPlant.turned && quietPlant.back, "962d lifting plant:rejoin-quiet lets that session list, and the file is put back: "
       + quietPlant.detail + ", sha " + (quietPlant.back ? "restored" : "differs"));
+
+    /* A key removed after an invitation was registered, the token not yet used: its bound token hello is answered
+       removed and spends nothing (edit 2 of the read of ae3b1c5). */
+    const unusedFirst = async () => {
+      const y = await world();
+      const token = hex(32), id = hex(16);
+      await invites(y, [{ id, hash: sha(token) }], []);
+      y.R.clock.now += 1;
+      await devices(y, y.devs.slice(1));
+      const hello = await boundHello(y, y.desk, id, token);
+      const inv = y.R.stores.get(y.rt).get("inv:" + id);
+      return { hello, spent: !!(inv && inv.spent) };
+    };
+    const unused = await unusedFirst();
+    check(refused(unused.hello, "removed") && !unused.spent,
+      "962e a removed key's bound token hello on an invitation registered before the removal is answered removed, the token unspent: "
+      + said(unused.hello) + ", spent " + unused.spent);
+    const unusedPlant = await liftCore("plant:token-removed", async () => {
+      const y = await unusedFirst();
+      return y.hello.status === 200 || y.spent;
+    });
+    check(unusedPlant.turned && unusedPlant.back, "962f lifting plant:token-removed opens that hello or spends its token, and the file is put back: "
+      + unusedPlant.detail + ", sha " + (unusedPlant.back ? "restored" : "differs"));
+
+    /* A key removed while holding a bound, unuploaded invitation registered before the removal: its key hello is answered
+       removed, never the invitation's session again (edit 3). */
+    const heldFirst = async () => {
+      const y = await removedThen(false);
+      return helloAs(y.w, y.w.desk);
+    };
+    const heldHello = await heldFirst();
+    check(refused(heldHello, "removed"),
+      "962g a removed key holding a bound invitation registered before its removal is answered removed on a key hello: " + said(heldHello));
+    const heldPlant = await swapCore("registeredAfter(held.inv, gone) && ", "", async () => {
+      const r = await heldFirst();
+      return r.status === 200 && !!r.json && r.json.invite === true;
+    });
+    check(heldPlant.turned && heldPlant.back, "962h dropping registeredAfter from the removed key's resume reopens that invitation's session, and the file is put back: "
+      + heldPlant.detail + ", sha " + (heldPlant.back ? "restored" : "differs"));
+
+    /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
+       registration and a removal changes neither answer. */
+    const stepBack = async before => {
+      const y = await world();
+      const token = hex(32), id = hex(16);
+      if (before) {
+        await invites(y, [{ id, hash: sha(token) }], []);
+        y.R.clock.now -= MIN;
+        await devices(y, y.devs.slice(1));
+      } else {
+        await devices(y, y.devs.slice(1));
+        y.R.clock.now -= MIN;
+        await invites(y, [{ id, hash: sha(token) }], []);
+      }
+      const hello = await boundHello(y, y.desk, id, token);
+      const s = hello.json && hello.json.session;
+      const up = s ? await put(y, s, sealJoin(y, y.desk, 1, "desk:" + y.deskId), { extra: { pub: y.desk.pub } }) : null;
+      const inv = y.R.stores.get(y.rt).get("inv:" + id);
+      return { hello, up, spent: !!(inv && inv.spent) };
+    };
+    const early2 = await stepBack(true);
+    check(refused(early2.hello, "removed") && !early2.spent,
+      "962i with the relay's clock stepped back a minute between an invitation and a removal, the removed key's token hello is answered removed, the token unspent: "
+      + said(early2.hello) + ", spent " + early2.spent);
+    const late2 = await stepBack(false);
+    check(late2.hello.status === 200 && late2.hello.json.invite === true && !!late2.up && late2.up.status === 200,
+      "962j with the clock stepped back a minute between a removal and a later invitation, that invitation opens and takes the one join: hello "
+      + said(late2.hello) + ", upload " + said(late2.up));
+    const clockPlant = await swapCore("Number.isSafeInteger(inv.ord) && Number.isSafeInteger(gone.ord) && inv.ord > gone.ord",
+      "Number.isSafeInteger(inv.at) && Number.isSafeInteger(gone.at) && inv.at > gone.at", async () => {
+        const r = await stepBack(true);
+        return r.hello.status === 200 || r.spent;
+      });
+    check(clockPlant.turned && clockPlant.back, "962k ordering by the clock again opens that earlier invitation to the removed key, and the file is put back: "
+      + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
+    const gonePlant = await liftCore("plant:order-gone", async () => {
+      const r = await stepBack(false);
+      return refused(r.hello, "removed");
+    });
+    check(gonePlant.turned && gonePlant.back, "962l lifting plant:order-gone leaves a later invitation unordered after the removal, so it is refused, and the file is put back: "
+      + gonePlant.detail + ", sha " + (gonePlant.back ? "restored" : "differs"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
