@@ -14,7 +14,7 @@ const STATUS = {
   "replay-rev": 409, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
-const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
+const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|wrap|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 
 const reply = (status, value) => new Response(JSON.stringify(value), { status, headers: HEADERS });
@@ -75,6 +75,7 @@ function teamObject(deps) {
       if (method === "GET") return getBlob(bearer(request), m[4]);
       return method === "PUT" ? putBlob(request, rt, bearer(request), m[4]) : missing();
     }
+    if (what === "wrap") return method === "GET" ? answer(c.wrapFor(bearer(request)), r => ({ ok: true, wrap: r.wrap })) : missing();
     if (method !== "POST") return missing();
     if (what === "hello") return answer(c.challenge(rt), r => ({ challenge: r.challenge, until: r.until }));
     const bytes = await readCapped(request, JSON_MAX);

@@ -253,13 +253,18 @@ function createCore(deps) {
     const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
     if (!right) return failedTry(b.inv, inv); /* plant:token-match */
-    /* The desk's own key, where its hello is signed by it, is bound to the invitation as it is spent (N4): until the one
-       upload is made, that key and no token opens the invitation's session again, so a request lost on the way is sent
-       again without a second use of the token. */
-    const bound = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig)
-      ? { key: b.key, pub: b.pub } : {};
-    return issue(b.challenge, { key: null, inv: b.inv }, () => {
-      store.put("inv:" + b.inv, Object.assign({}, inv, { spent: true, spentAt: clock() }, bound)); /* plant:token-spend */
+    /* The first use is this hello, and only where it binds the desk's own key. A right token that binds no key is refused
+       and spends nothing: the token stays unspent, the failure is not one of the 20 tries, and the challenge is kept. */
+    const binds = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
+    let allowUnbound = true;
+    allowUnbound = false; /* plant:S3-unbound */
+    if (!binds && !allowUnbound) return no("bad-signature");
+    const who = { key: null, inv: b.inv };
+    if (binds) who.bound = b.key;
+    return issue(b.challenge, who, () => {
+      const next = Object.assign({}, inv, { spent: true, spentAt: clock() }); /* plant:token-spend */
+      if (binds) { next.key = b.key; next.pub = b.pub; }
+      store.put("inv:" + b.inv, next);
     });
   }
 
@@ -314,6 +319,23 @@ function createCore(deps) {
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
     });
     return who.inv ? { ok: true, session: token, until, invite: true } : { ok: true, session: token, until };
+  }
+
+  /* The wrap, and only to the session whose hello bound the invitation's key. Gone once the upload or a drop deletes it. */
+  function wrapFor(token) {
+    const s = sessionOf(token);
+    if (!s.ok) return s;
+    let onlyBound = false;
+    onlyBound = true; /* plant:S3-wrap-session */
+    if (!onlyBound) {
+      for (const [, v] of store.list("inv:")) if (v.wrap) return { ok: true, wrap: { epoch: v.wrap.epoch, ct: v.wrap.ct } };
+      return no("missing");
+    }
+    if (!s.inv || !s.bound) return no("not-enrolled");
+    const inv = store.get("inv:" + s.inv);
+    if (!inv || inv.key !== s.bound) return no("not-enrolled");
+    if (!inv.wrap) return no("missing");
+    return { ok: true, wrap: { epoch: inv.wrap.epoch, ct: inv.wrap.ct } };
   }
 
   function sessionByHash(h) {
@@ -440,7 +462,13 @@ function createCore(deps) {
       store.put("bytes", (store.get("bytes") || 0) + ct.length);
       if (j.old) bury(j.old, "superseded", now, drop); /* plant:supersede-drop */
       if (j.a.lead && m.epoch > j.a.team.epoch) store.put("team", Object.assign({}, j.a.team, { epoch: m.epoch }));
-      if (j.a.invite) store.put("inv:" + j.a.invite, Object.assign({}, j.a.inv, { uploaded: true })); /* plant:invite-mark */
+      if (j.a.invite) {
+        const next = Object.assign({}, j.a.inv, { uploaded: true });
+        let clear = false;
+        clear = true; /* plant:S3-burn */
+        if (clear) delete next.wrap;
+        store.put("inv:" + j.a.invite, next); /* plant:invite-mark */
+      }
       const rec = { id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
         size: ct.length, sig: m.sig, nonce: m.nonce, seq, at: now, obj };
       if (j.a.invite) rec.pub = j.a.pub;
@@ -492,7 +520,7 @@ function createCore(deps) {
   }
 
   return { create, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, parseMeta };
+    prune, orphan, parseMeta, wrapFor };
 }
 
 module.exports = {

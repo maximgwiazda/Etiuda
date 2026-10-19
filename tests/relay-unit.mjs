@@ -115,9 +115,12 @@ async function helloAs(w, key, o) {
   if (opts.pub) body.pub = opts.pub;
   return call(w.R, "POST", "/relay/v1/t/" + rt + "/session", { json: body });
 }
-async function tokenHello(w, inv, token, nonce) {
+async function tokenHello(w, inv, token, nonce, key) {
   const n = nonce || await challenge(w);
-  return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv } });
+  const who = key || keyPair(true);
+  const body = { challenge: n, invite: token, inv, key: who.keyId, pub: who.pub,
+    sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) };
+  return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: body });
 }
 async function sessionOf(w, key) {
   const r = await helloAs(w, key);
@@ -594,10 +597,9 @@ async function main() {
   /* ---- 10: the one invitation upload ---- */
   {
     const w = await world();
-    const token = hex(32), id = hex(16);
+    const token = hex(32), id = hex(16), joiner = keyPair(true), newDesk = "k-" + hex(8);
     await invites(w, [{ id, hash: sha(token) }], []);
-    const s = (await tokenHello(w, id, token)).json.session;
-    const joiner = keyPair(true), newDesk = "k-" + hex(8);
+    const s = (await tokenHello(w, id, token, null, joiner)).json.session;
     const sealJoin = (who, counter, extra) => B.seal(Object.assign({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
       writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + newDesk + "/join.json", body: "ask", counter,
       place: "desk:" + newDesk, kind: "file" }, extra || {}));
@@ -622,7 +624,7 @@ async function main() {
     check(read.status === 200 && read.meta.pub === joiner.pub && read.meta.writer === joiner.keyId, "10d the lead reads the join file with the public key it was signed under");
     const t2 = hex(32), id2 = hex(16);
     await invites(w, [{ id: id2, hash: sha(t2) }], []);
-    const s2 = (await tokenHello(w, id2, t2)).json.session;
+    const s2 = (await tokenHello(w, id2, t2, null, w.desk)).json.session;
     await devices(w, w.devs.slice(1));
     const removedVia = await put(w, s2, B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
       writer: { keyId: w.desk.keyId, privateKey: w.desk.privateKey }, path: "desks/k-new/x.json", body: "x", counter: 3,
@@ -664,8 +666,13 @@ async function main() {
     const loose = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4, invite: t4, inv: id4,
       key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)) } });
     const looseKey = await helloAs(w, unsigned);
-    check(loose.status === 200 && refused(looseKey, "not-enrolled") && !("key" in (w.R.stores.get(w.rt).get("inv:" + id4) || {})),
-      "10h a token hello naming a key it is not signed by binds nothing: the session opens as before, and that key opens nothing");
+    const held4 = w.R.stores.get(w.rt).get("inv:" + id4) || {};
+    const n4b = await challenge(w);
+    const later = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4b, invite: t4, inv: id4,
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(unsigned, C.helloBytes(w.rt, n4b, unsigned.keyId)) } });
+    check(refused(loose, "bad-signature") && refused(looseKey, "not-enrolled") && held4.spent !== true && !("key" in held4)
+      && later.status === 200 && later.json.invite === true,
+      "10h a token hello naming a key it is not signed by is refused and spends nothing, and a later hello signed by that key opens");
 
     /* The resume's own signature (C1 of the test architect's read of cf90c15): a hello naming a bound key, signed by another
        key or by none, opens nothing and lets no session go, so the desk's resumed session still lists. Were the resume to stop
