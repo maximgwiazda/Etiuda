@@ -3121,10 +3121,23 @@ function askJoin(file, name) {
 }
 function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (teamJoin && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
+  const j = teamJoin;
+  if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
+  /* The invitation pinned this team and this desk holds no key for it: cancelling undoes that pin. */
+  if (j && j.invite && j.invite.pinned === true && newestEpoch(j.team) === 0) undoInvitePin(j.team); /* plant:c7-cancel */
   teamJoin = null;
   persistDeskEnvelope();
   return joinView();
+}
+/* An invitation that pinned a team this desk holds no key for is let go with the request: the pin, the folder it
+   showed and the channel go, and the watch is told the folder changed. */
+function undoInvitePin(team) {
+  delete teamPins[team];
+  delete teamPinFrom[team];
+  delete teamShown[team];
+  delete teamChannel[team];
+  relaySoon();
+  catalogFolderChanged();
 }
 /* Moves the request on and says where it stands: admitted once this desk keeps a newer key for the team than when it
    asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so.
