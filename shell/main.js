@@ -2531,7 +2531,7 @@ let teamPins = {};                             // team id -> {keyId, public}: th
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
 let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
-let teamRevSeen = {};                          // team id -> {lead public -> {epoch, rev}}: the highest rev heeded at that key's highest epoch, above 0
+let teamRevSeen = {};                          // team id -> {lead public -> {epoch, rev}}: the highest rev heeded at that key's highest epoch; above 0, or 0 where a newer epoch with no rev raised a floor already kept
 let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
 let teamPinFrom = {};                          // team id -> "invite", "policy" or "answer": what pinned its lead; none is the file's own vouching
 let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
@@ -3004,10 +3004,14 @@ function heedTeam() {
     if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
     teamRingAt = { root: root, relay: channel.kind === "relay", ring: channel.kind === "relay" ? teamRingIn(doc) : null };
   }
-  // The floor rises with a newer epoch or a higher rev at its own; a floor of 0 refuses nothing and is not kept.
+  // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
+  // that epoch at rev 0, since deleting it would let the older epoch back (board 931); with no floor kept, a floor of 0
+  // refuses nothing and is not kept.
   if (!floor || r.epoch > floor.epoch || (r.epoch === floor.epoch && rev > floor.rev)) {
     const kept = Object.assign({}, floors);
-    if (rev > 0) kept[doc.lead.public] = { epoch: r.epoch, rev: rev }; else delete kept[doc.lead.public];
+    if (rev > 0) kept[doc.lead.public] = { epoch: r.epoch, rev: rev };
+    else if (floor) kept[doc.lead.public] = { epoch: r.epoch, rev: 0 }; /* plant:floor-raise */
+    else delete kept[doc.lead.public];
     if (JSON.stringify(kept) !== JSON.stringify(floors)) {
       if (Object.keys(kept).length) teamRevSeen[r.team] = kept; else delete teamRevSeen[r.team];
       changed = true;
@@ -4338,7 +4342,7 @@ function readDesk() {
       if (!SEALED_TEAM_RE.test(t) || !table(byKey)) return;
       Object.keys(byKey).forEach(pub => {
         const v = byKey[pub], had = (teamRevSeen[t] || {})[pub];
-        if (!/^[0-9a-f]{64}$/.test(pub) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Number.isSafeInteger(v.rev) || v.rev < 1) return;
+        if (!/^[0-9a-f]{64}$/.test(pub) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Number.isSafeInteger(v.rev) || v.rev < 0) return;
         if (had && (v.epoch < had.epoch || (v.epoch === had.epoch && v.rev <= had.rev))) return;
         (teamRevSeen[t] = teamRevSeen[t] || {})[pub] = { epoch: v.epoch, rev: v.rev };
       });

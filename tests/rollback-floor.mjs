@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 71;
+const EXPECTED = 77;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -51,7 +51,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-function loadDesk(ud) {
+function loadDesk(ud, src = SRC) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
   const safeStorage = {
@@ -68,7 +68,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(
+    src + "\nreturn { " + EXPOSE.join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -1657,6 +1657,93 @@ try {
     const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
     check(turned && restored,
       "900p lifting plant:epoch-rev lets a lower epoch through, the same-epoch floor still refuses, and the file is put back: "
+      + detail + ", sha " + (restored ? "restored" : "differs"));
+  }
+  /* Board 931 (6): a lead-signed team file at a newer epoch with no rev raises the floor to that epoch at rev 0 and does
+     not delete it, so an older epoch put back on the share is still refused. With no floor kept, a file with no rev
+     still keeps none (900a). */
+  const risen = (name, load) => {
+    const SHARE = folder(name);
+    put(SHARE, "etiuda-ring.json", RING);
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"),
+      JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+    const D = load(ud);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const at = path.join(SHARE, "etiuda-team.json");
+    let t = Date.now();
+    const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(at, t); desk.api.readCatalog(); };
+    heed(D, revTeam(TEAM, 1, [member(1)], { rev: 3 }));
+    const was = floorNow(D, TEAM);
+    heed(D, revTeam(TEAM, 2, [member(2)]));
+    const raised = floorNow(D, TEAM), rosterRaised = rosterNow(D, TEAM);
+    const from = D.said.length;
+    heed(D, revTeam(TEAM, 1, [member(1)]));
+    const back = rosterNow(D, TEAM), saidBack = saidSince(D, from, at, "key number 1, below 2");
+    return { D, TEAM, heed, at, load, was, raised, rosterRaised, back, saidBack };
+  };
+  {
+    const R = risen("floor-raise", ud => loadDesk(ud));
+    check(R.was === JSON.stringify({ epoch: 1, rev: 3 }) && R.raised === JSON.stringify({ epoch: 2, rev: 0 })
+      && R.rosterRaised === ids(2),
+      "931a a lead-signed team file at a newer epoch with no rev is taken and raises the floor to that epoch at rev 0, and does"
+      + " not delete it: floor " + R.was + " then " + R.raised + ", roster " + R.rosterRaised);
+    check(R.back === ids(2) && R.saidBack,
+      "931b the epoch 1 file put back after that is not taken, its roster unused, and the desk says the key number is below: roster "
+      + R.back + ", said " + R.saidBack);
+
+    const D2 = loadDesk(R.D.ud);
+    const fromR = D2.said.length;
+    R.heed(D2, revTeam(R.TEAM, 1, [member(1)], { rev: 9 }));
+    const rosterBack = rosterNow(D2, R.TEAM), floorBack = floorNow(D2, R.TEAM), saidBelow = saidSince(D2, fromR, R.at, "key number 1, below 2");
+    check(rosterBack === ids(2) && floorBack === JSON.stringify({ epoch: 2, rev: 0 }) && saidBelow,
+      "931c a floor at rev 0 survives a restart: the next process refuses an epoch 1 file, whatever its rev, and keeps the floor: roster "
+      + rosterBack + ", floor " + floorBack + ", said " + saidBelow);
+
+    R.heed(D2, revTeam(R.TEAM, 2, [member(3)], { rev: 1 }));
+    const u1 = rosterNow(D2, R.TEAM), fu = floorNow(D2, R.TEAM);
+    check(u1 === ids(3) && fu === JSON.stringify({ epoch: 2, rev: 1 }),
+      "931d a file at that epoch with a rev is taken and raises the floor from rev 0 as before: roster " + u1 + ", floor " + fu);
+
+    const SHARE = folder("floor-none");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D3 = newDesk("floor-none", SHARE), TEAM3 = "t-" + crypto.randomBytes(8).toString("hex");
+    const at3 = path.join(SHARE, "etiuda-team.json");
+    put(SHARE, "etiuda-team.json", revTeam(TEAM3, 2, [member(1)]));
+    touch(at3, Date.now() + 5000);
+    D3.api.readCatalog();
+    const kept3 = floorNow(D3, TEAM3), roster3 = rosterNow(D3, TEAM3);
+    check(kept3 === "null" && roster3 === ids(1),
+      "931e a team file with no rev and no floor kept is taken and keeps no floor, as before: roster " + roster3 + ", floor " + kept3);
+  }
+  /* plant:floor-raise. Lifting the tagged line in shell/main.js, leaving the file valid script, brings back the delete: the
+     floor is then deleted again and the epoch 1 file put back is not refused at it (its roster stays out either way, by the
+     epoch seen). The file is put back by sha256. */
+  {
+    const src = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(src);
+    const digest = crypto.createHash("sha256").update(before).digest("hex");
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:floor-raise") >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        fs.writeFileSync(src, lines.join("\n"));
+        const lifted = fs.readFileSync(src, "utf8");
+        const R = risen("floor-raise-lifted", ud => loadDesk(ud, lifted));
+        turned = R.raised === "null" && !R.saidBack;
+        detail = "floor " + R.raised + ", epoch 1 file put back gives roster " + R.back + ", said below " + R.saidBack;
+      }
+    } catch (e) {
+      detail = e && e.message ? e.message : String(e);
+    } finally {
+      fs.writeFileSync(src, before);
+    }
+    const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
+    check(turned && restored,
+      "931p lifting plant:floor-raise deletes the floor again, so the epoch 1 file is no longer refused at it, and the file is put back: "
       + detail + ", sha " + (restored ? "restored" : "differs"));
   }
   {
