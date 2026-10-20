@@ -3064,8 +3064,9 @@ function finishJoin() {
   if (j.invite && j.invite.relay) relaySoon();
   return true;
 }
-function newestEpoch(team) {
-  return Object.keys(teamKeys[team] || {}).reduce((hi, n) => Math.max(hi, +n || 0), 0);
+/* The newest epoch this desk keeps a key for, leaving out the epochs in `skip` where it is given. */
+function newestEpoch(team, skip) {
+  return Object.keys(teamKeys[team] || {}).reduce((hi, n) => (skip && skip.indexOf(+n) >= 0 ? hi : Math.max(hi, +n || 0)), 0);
 }
 /* The newest envelope in the catalog folder whose epoch this desk keeps no key for, as {file, team}, or null. */
 function sealedOutside() {
@@ -3264,20 +3265,54 @@ function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
   if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
-  /* The invitation pinned this team and this desk holds no key for it: cancelling undoes that pin. */
-  if (j && j.invite && j.invite.pinned === true && newestEpoch(j.team) === 0) undoInvitePin(j.team); /* plant:c7-cancel */
   teamJoin = null;
   joinTold = false;
+  /* An invitation, by folder or by relay, changed this team's pin, where it came from, the folder it showed, the channel and the
+     leave record (and a folder invitation the desk's own folder setting), and kept what each was in `before`, with the newest
+     key the desk held then (`epoch`). Cancelling puts each back as it was while the desk keeps no newer key than that mark: a
+     desk that held none goes back off the team, and a member that held the key goes back to the folder and the shown team it
+     had, with its pin and its key (921e). A key this invitation's own wrap opened before the lead admitted the desk (marked in
+     the join as `wrapped`) was not there before and does not hold the restore back: it is forgotten with the rest (921u). A
+     newer key from elsewhere, one the roster's wrap gave, means the desk is admitted, and Cancel leaves what it set (921n). */
+  const b = j && j.invite && j.invite.before, wrapped = (j && j.invite && j.invite.relay && j.invite.relay.wrapped) || [];
+  if (b && newestEpoch(j.team, wrapped) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
 }
-/* An invitation that pinned a team this desk holds no key for is let go with the request: the pin, the folder it
-   showed and the channel go, and the watch is told the folder changed. */
-function undoInvitePin(team) {
-  delete teamPins[team];
-  delete teamPinFrom[team];
-  delete teamShown[team];
-  delete teamChannel[team];
+/* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out, and `epoch`
+   is the newest key it held, the mark Cancel compares the key it holds then with. */
+function inviteBefore(team) {
+  return JSON.parse(JSON.stringify({ pin: teamPins[team], from: teamPinFrom[team], shown: teamShown[team], channel: teamChannel[team],
+    left: teamLeft[team], barred: teamBarred.has(team), epoch: newestEpoch(team) })); /* plant:c7-mark */
+}
+/* What Cancel puts back for an invitation taken now. An invitation taken over a pending one for the same team keeps the first's,
+   which is what the desk held. `keptJoin` is the request standing when the invitation is taken. */
+function inviteBeforeFor(team, keptJoin) {
+  const kept = keptJoin && keptJoin.team === team && keptJoin.invite && keptJoin.invite.before;
+  return kept || inviteBefore(team); /* plant:c7-chain */
+}
+/* The keys this invitation's wrap gave the desk, which it did not hold before the invitation: forgotten, as the wrap's own key was.
+   A key the desk held before, at an epoch the wrap opened again, was never marked and stays. */
+function forgetWrapped(team, inv) {
+  const wrapped = inv && inv.relay && inv.relay.wrapped, kept = teamKeys[team];
+  if (!Array.isArray(wrapped) || !kept) return;
+  wrapped.forEach(n => { delete kept[n]; });
+  if (!Object.keys(kept).length) delete teamKeys[team];
+  ecFactsRead.clear();
+}
+/* An invitation let go before the lead admitted this desk puts back each thing it changed for `team`, deleting where the desk
+   held none, and the watch is told the folder changed. `b` is inviteBefore's, kept in the join, and `inv` the join's invitation:
+   a folder invitation moved the desk's own folder setting to its folder, and that goes back to what it was while it is still there. */
+function undoInvite(team, b, inv) {
+  forgetWrapped(team, inv); /* plant:e4-forget */
+  if (b.pin) teamPins[team] = b.pin; else delete teamPins[team];
+  if (b.from) teamPinFrom[team] = b.from; else delete teamPinFrom[team];
+  if (b.shown) teamShown[team] = b.shown; else delete teamShown[team];
+  if (b.channel) teamChannel[team] = b.channel; else delete teamChannel[team];
+  if (b.left) teamLeft[team] = b.left; else delete teamLeft[team];
+  if (b.barred) teamBarred.add(team); else teamBarred.delete(team);
+  if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder) deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined); /* plant:c8-own */
+  teamStamp = "";
   relaySoon();
   catalogFolderChanged();
 }
@@ -3347,16 +3382,33 @@ function joinKept(j) {
     && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
     && (inv.folder === undefined || typeof inv.folder === "string") && (inv.was === undefined || typeof inv.was === "string")
-    && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay));
+    && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay))
+    && (inv.before === undefined || beforeKept(inv.before)); /* plant:c7-kept */
   return inviteOk ? j : null;
 }
+/* An invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts; `epoch`
+   is a count of the epochs a key is held for, absent in an envelope written before the mark was taken. */
+function beforeKept(b) {
+  const table = v => !!v && typeof v === "object" && !Array.isArray(v);
+  if (!table(b) || typeof b.barred !== "boolean") return false;
+  const c = b.channel === undefined ? null : teamChannelOf({ channel: b.channel }), s = b.shown;
+  return (b.pin === undefined || (table(b.pin) && typeof b.pin.keyId === "string" && JOIN_HEX_RE.test(String(b.pin.public))))
+    && (b.from === undefined || PIN_FROM.indexOf(b.from) >= 0)
+    && (s === undefined || (table(s) && (s.lead === undefined || shownName(s.lead))
+      && (s.folder === undefined || (typeof s.folder === "string" && s.folder.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(s.folder)))))
+    && (b.channel === undefined || (!!c && c.kind === "relay"))
+    && (b.left === undefined || (typeof b.left === "string" && /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/.test(b.left)))
+    && (b.epoch === undefined || (Number.isInteger(b.epoch) && b.epoch >= 0)); /* plant:c7-epoch */
+}
 /* A relay invitation as the envelope keeps it: the relay team id, the address and the invitation's id in the open, the
-   token and the seal key sealed by safeStorage. */
+   token and the seal key sealed by safeStorage, and `wrapped`, the epochs the invitation's wrap gave a key for (whole numbers
+   from 1), which Cancel forgets. */
 function relayKept(r) {
   const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
   return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
     && typeof r.seal === "string" && r.seal !== ""
     && (r.wrap === undefined || (typeof r.wrap === "string" && r.wrap !== ""))
+    && (r.wrapped === undefined || (Array.isArray(r.wrapped) && r.wrapped.length <= 64 && r.wrapped.every(n => Number.isInteger(n) && n >= 1))) /* plant:e4-wrapped */
     && (r.end === undefined || r.end === "used" || r.end === "ended")
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
@@ -3459,10 +3511,11 @@ async function takeInvite(text, name, check) {
   const seen = sealedOutside();
   const file = seen && seen.team === parsed.team ? seen.file : "";
   const pinned = !teamPins[parsed.team] || (!!earlier && keptJoin.team === parsed.team && earlier.pinned === true);
+  const before = inviteBeforeFor(parsed.team, keptJoin); /* plant:c8-before */
   const j = { team: parsed.team, file: file, nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
-      folder: parsed.folder, was: was, pinned: pinned } };
+      folder: parsed.folder, was: was, pinned: pinned, before: before } };
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
@@ -3509,11 +3562,15 @@ function takeRelayInvite(parsed, name, me) {
   const keptJoin = teamJoin, previous = catalogFolder();
   const was = { join: teamJoin, pin: teamPins[parsed.team], from: teamPinFrom[parsed.team], shown: teamShown[parsed.team] };
   const pinned = !teamPins[parsed.team] || (!!(keptJoin && keptJoin.invite) && keptJoin.team === parsed.team && keptJoin.invite.pinned === true);
+  const before = inviteBeforeFor(parsed.team, keptJoin);
   const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
-      pinned: pinned, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal, wrap: wrap } } };
+      pinned: pinned, before: before, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal, wrap: wrap } } };
   if (parsed.lead.box) j.invite.relay.box = parsed.lead.box; /* plant:f6-box-kept */
+  /* An invitation taken over a pending one for the same team keeps the epochs the first's wrap gave a key for, as it keeps the first's snapshot. */
+  const gave = keptJoin && keptJoin.team === parsed.team && keptJoin.invite && keptJoin.invite.relay && keptJoin.invite.relay.wrapped;
+  if (gave && gave.length) j.invite.relay.wrapped = gave.slice(); /* plant:e4-chain */
   teamJoin = j;
   if (!teamPins[parsed.team]) { teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public }; teamSeen.delete(parsed.team); }
   teamPinFrom[parsed.team] = "invite";
@@ -3769,16 +3826,19 @@ function relayRun() {
         joinDone = { team: j.team, file: j.file };
       }
     },
-    /* The team key from the invitation's wrap, kept as a roster wrap is kept, and the wrap key forgotten. Not admission. */
+    /* The team key from the invitation's wrap, kept as a roster wrap is kept, and the wrap key forgotten. Not admission. The
+       epoch is marked in the join as the invitation's (`wrapped`) unless the desk held a key at it before, so that Cancel
+       before admission forgets what the wrap gave and keeps what the desk had. */
     onTeamKey: (epoch, key) => {
       if (!Number.isInteger(epoch) || epoch < 1 || !Buffer.isBuffer(key) || key.length !== 32) return;
       try {
         if (!branchSealable()) throw new Error("safeStorage is not available");
-        const kept = teamKeys[team] || {};
+        const kept = teamKeys[team] || {}, had = !!kept[epoch];
         kept[epoch] = safeStorage.encryptString(key.toString("base64")).toString("base64");
         teamKeys[team] = kept;
         const j = teamJoin;
         if (j && j.team === team && j.invite && j.invite.relay) delete j.invite.relay.wrap;
+        if (j && j.team === team && j.invite && j.invite.relay && !had) j.invite.relay.wrapped = (j.invite.relay.wrapped || []).concat(epoch); /* plant:e4-mark */
         ecFactsRead.clear();
         teamStamp = "";
         persistDeskEnvelope();
