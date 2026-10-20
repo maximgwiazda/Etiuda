@@ -347,7 +347,7 @@ function heldLinkAnswer() {
   return joinView();
 }
 function declineHeldLink() {
-  heldLinkText = "";
+  heldLinkText = ""; /* plant:link-decline */
   heldLinkView = null;
   pendingLink = null;
   pendingLinkArg = "";
@@ -4763,7 +4763,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
-  : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView()));
+  : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in

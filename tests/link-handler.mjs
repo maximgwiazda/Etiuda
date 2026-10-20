@@ -10,6 +10,7 @@
  * its sha256.
  *
  * A relay invitation pasted in the paste box is asked the lead's check code; the same invitation from a link is asked none (3hp).
+ * The person's Cancel on a link confirm lets the link go in the shell (3hq).
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -25,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 26;
+const EXPECTED = 27;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -741,6 +742,41 @@ try {
     + sayTaken(codeNow.none) + ", wrong " + sayTaken(codeNow.wrong) + ", right " + sayTaken(codeNow.right) + "; link "
     + (codeNow.link.confirmed ? "" : "unconfirmed, ") + sayTaken(codeNow.link) + "; " + codePlant.detail + " (" + codeLifted + "), sha "
     + (codePlant.back ? "restored" : "differs"));
+
+  /* The person's Cancel on a link confirm. The shell lets the link go: the `held` answer then names no offer, the held text is empty,
+     and a later `link` op is refused with nothing sent (no relay call, nothing to the page, the desk's file untouched, no mirror). */
+  async function cancelRun(src) {
+    const L = loadShell({ lock: false, src: src });
+    L.api.bindWindow(L.win);
+    const first = L.api.acceptLink(exactArg);
+    const before = await L.join("held");
+    const confirmed = !!(first && first.confirm === true && before && before.offer && before.offer.lead === LEAD
+      && before.offer.relay === HOST && before.offer.team === doc.team && L.api.heldText() === first.text);
+    const net0 = L.netHits(), sent0 = L.sent.length;
+    const no = await L.join("link-no");
+    const textAfter = L.api.heldText(), viewAfter = L.api.heldView();
+    const after = await L.join("held");
+    const yes = await L.join("link", "", "Ola");
+    const taken = takenOf(L, yes);
+    const viewGone = !!(no && !no.offer && viewAfter === null && after && !after.offer && !after.linkRefusal);
+    const textGone = textAfter === "";
+    const nothing = yes && yes.refused === "unread" && !taken.kept && !taken.mirror && L.netHits() === net0
+      && L.sent.length === sent0 && fs.readFileSync(path.join(L.ud, "desk.json"), "utf8") === L.desk;
+    const red = [confirmed ? "" : "no confirm to cancel", viewGone ? "" : "the held answer still names the offer",
+      textGone ? "" : "the link's text stays held",
+      nothing ? "" : "a later yes is not refused with nothing sent (" + sayTaken(taken) + ")"].filter(Boolean).join("; ");
+    return { ok: confirmed && viewGone && textGone && !!nothing, red };
+  }
+  const cancelNow = await cancelRun(undefined);
+  let redNo = "", redDecline = "";
+  const noPlant = await liftAsync("plant:link-no", async src => { const r = await cancelRun(src); redNo = r.red; return !r.ok; }, MAIN,
+    '  : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : joinView()));');
+  const declinePlant = await liftAsync("plant:link-decline", async src => { const r = await cancelRun(src); redDecline = r.red; return !r.ok; }, MAIN);
+  check(cancelNow.ok && noPlant.turned && noPlant.back && declinePlant.turned && declinePlant.back,
+    "3hq the person's Cancel on a link confirm lets the link go in the shell, the held answer then names no offer and a link op is refused with nothing sent, "
+    + "and taking out the link-no op at plant:link-no or declineHeldLink's heldLinkText = \"\" at plant:link-decline each undoes that: now "
+    + (cancelNow.ok ? "held and let go" : cancelNow.red) + "; link-no out: " + noPlant.detail + " (" + redNo + "), sha " + (noPlant.back ? "restored" : "differs")
+    + "; decline out: " + declinePlant.detail + " (" + redDecline + "), sha " + (declinePlant.back ? "restored" : "differs"));
 
   check(regStand.held(), "3h0 every reg call was answered by the stand-in (" + regStand.said() + ")");
 } finally {
