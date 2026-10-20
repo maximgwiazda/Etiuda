@@ -18,7 +18,11 @@
  * relay team the desk also reads the
  * head the lead's Studio writes (etiuda-head.json): a genuine one is shown with its newest edition, when that edition
  * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
- * other team's head is dropped and said. A folder team shows nothing new. Throwaway keys and invented words only;
+ * other team's head is dropped and said. A folder team shows nothing new. A catch-up passes over a blob as the program's
+ * own only where its own record shows it sent that id: a lead restored to a fresh profile catches up its team file and the
+ * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched (970c), and
+ * an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e) and, older than the last sent,
+ * changes nothing (970f). Throwaway keys and invented words only;
  * nothing contacts a host.
  *
  *     node tests/relay-channel.mjs     exit code is the number of failed checks, capped at 63; 78 where it did not complete
@@ -42,7 +46,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 196;
+const EXPECTED = 205;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3752,9 +3756,10 @@ async function liftChannel(tag, fn) {
   let turned = false, detail = "plant line absent";
   try {
     const lines = beforeBytes.toString("utf8").split(/\n/);
-    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
-    if (at >= 0) {
-      lines.splice(at, 1);
+    /* A tag, or a list of tags whose lines are lifted together (953c: the guards of one edit are three). */
+    const at = (Array.isArray(tag) ? tag : [tag]).map(tg => lines.findIndex(l => l.indexOf(tg) >= 0));
+    if (at.every(i => i >= 0)) {
+      at.sort((x, y) => y - x).forEach(i => lines.splice(i, 1));
       fs.writeFileSync(src, lines.join("\n"));
       const resolved = nodeRequire.resolve(src);
       delete nodeRequire.cache[resolved];
@@ -3869,7 +3874,9 @@ try {
 
 /* ---- an edit of this program's own file, one cycle (S2). The catch-up skips what this desk, or the lead, just sent,
    so the cycle that the edit starts does not write the older bytes back over it. Three cycles would hide the loss:
-   the second would consume the program's own blob before the edit. ---- */
+   the second would consume the program's own blob before the edit. The edit has three guards now: the record that shows
+   the blob sent (plant:own-skip), the refusal of a blob not later than the last one sent (plant:own-older), and the edit
+   kept where the mirror holds neither the blob's bytes nor the last sent (plant:own-edit); 953c lifts all three. ---- */
 async function once(p) { p.ch.kick(); await p.ch.idle(); }
 async function keptEdit(mod) {
   const k1 = crypto.randomBytes(32);
@@ -3922,15 +3929,220 @@ try {
   check(edit.leadMirror === "e2\n" && edit.deskOfLead === "e2\n" && edit.guideAtDesk === "e2\n" && edit.leadSent === 1,
     "953b the lead's edition is sent, edited, and one cycle run: the edit is kept and sent: mirror " + JSON.stringify(edit.leadMirror)
     + ", at the desk " + JSON.stringify(edit.deskOfLead) + ", uploads on that cycle " + edit.leadSent);
-  const planted = await liftChannel("plant:own-skip", async mod => {
+  const planted = await liftChannel(["plant:own-skip", "plant:own-older", "plant:own-edit"], async mod => {
     const x = await keptEdit(mod);
     return x.deskMirror === "v1\n" && x.leadOfDesk === "v1\n" && x.deskSent === 0
       && x.leadMirror === "e1\n" && x.deskOfLead === "e1\n" && x.leadSent === 0;
   });
-  check(planted.turned && planted.back, "953c lifting plant:own-skip writes the sent copy over the edit, on the desk and on the lead, and the file is put back: "
+  check(planted.turned && planted.back, "953c lifting plant:own-skip, plant:own-older and plant:own-edit together writes the sent copy over the edit, on the desk and on the lead, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 953a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a catch-up skips a blob as this computer's own only when this computer's own record shows it wrote that id, never
+   because the writer is this key (board 932 (2), engine half). A lead restored to a fresh profile has no record, so it
+   fetches its team file and its other files back; one key on two computers has two records, so each fetches the other's
+   uploads. An own blob fetched this way is judged and applied as anyone's is: one not later than what this computer last
+   sent for that path is refused as older and changes nothing, and one that would overwrite an edit still waiting to go up
+   leaves the edit where it is and becomes the blob that edit replaces. ---- */
+const OWN_G1 = "guide one, written before the profile was lost\n", OWN_G2 = "guide two, an edit made on the new profile\n";
+const OWN_N1 = "notes, kept beside the guide\n";
+async function ownSetup(mod) {
+  const deskKey = keyPair(true), keys = new Map([[1, crypto.randomBytes(32)]]);
+  const tm = await freshTeam([deskKey]);
+  const tag = tm.rt.slice(0, 8);
+  const mk = (name, place) => opened(mod, name + "-" + tag, tm, LEAD, place || "root", { keyFor: e => keys.get(e) || null, sealEpoch: () => 1 });
+  return { tm, mk, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
+}
+const putsOf = p => p.t.log.filter(l => /^PUT b\//.test(l)).length;
+const liveBy = (tm, writer) => blobsOn(tm.rt, writer).filter(v => !v.del).length;
+/* The lead uploads its team file, a guide and a note, and its profile is lost: a new profile of the same key, an empty
+   mirror and an empty record, catches up. */
+async function ownRestore(mod) {
+  const { tm, mk, teamText } = await ownSetup(mod);
+  const first = mk("own-r1");
+  put(first.mirror, C.TEAM_NAME, teamText);
+  put(first.mirror, "guide.ec", OWN_G1);
+  put(first.mirror, "notes.ec", OWN_N1);
+  first.ch.start();
+  await first.ch.idle();
+  await once(first);
+  const uploaded = liveBy(tm, LEAD.keyId);
+  await first.ch.stop();
+  const again = mk("own-r2");
+  again.ch.start();
+  await again.ch.idle();
+  await once(again);
+  const back = { team: read(again.mirror, C.TEAM_NAME) === teamText, guide: read(again.mirror, "guide.ec") === OWN_G1,
+    notes: read(again.mirror, "notes.ec") === OWN_N1 };
+  const putsAtRestore = putsOf(again);
+  put(again.mirror, "guide.ec", OWN_G2);
+  await once(again);
+  const chain = liveBy(tm, LEAD.keyId);
+  await again.ch.stop();
+  return { uploaded, back, restored: back.team && back.guide && back.notes, putsAtRestore, chain, said: again.said };
+}
+/* One key on two computers, each with a mirror and a record of its own. */
+async function ownTwo(mod) {
+  const { tm, mk, teamText } = await ownSetup(mod);
+  const a = mk("own-t1"), b = mk("own-t2");
+  put(a.mirror, C.TEAM_NAME, teamText);
+  put(a.mirror, "guide.ec", OWN_G1);
+  a.ch.start(); b.ch.start();
+  await a.ch.idle(); await b.ch.idle();
+  await once(a);
+  await once(b);
+  const second = { guide: read(b.mirror, "guide.ec"), team: read(b.mirror, C.TEAM_NAME) };
+  put(a.mirror, "guide.ec", OWN_G2);
+  await once(a);
+  await once(b);
+  const edited = read(b.mirror, "guide.ec");
+  put(b.mirror, "guide.ec", "guide three, from the second computer\n");
+  put(b.mirror, "second.ec", "a file only the second computer wrote\n");
+  await once(b);
+  await once(a);
+  const out = { first: second.guide === OWN_G1 && second.team === teamText, edited: edited === OWN_G2,
+    back: read(a.mirror, "guide.ec") === "guide three, from the second computer\n"
+      && read(a.mirror, "second.ec") === "a file only the second computer wrote\n",
+    chain: liveBy(tm, LEAD.keyId), said: a.said.concat(b.said) };
+  out.crossed = out.first && out.edited && out.back;
+  await a.ch.stop(); await b.ch.stop();
+  return out;
+}
+/* A program's own upload, in its record, is not fetched again. */
+async function ownRecorded(mod) {
+  const { mk, teamText } = await ownSetup(mod);
+  const lead = mk("own-s1");
+  put(lead.mirror, C.TEAM_NAME, teamText);
+  put(lead.mirror, "guide.ec", OWN_G1);
+  lead.ch.start();
+  await lead.ch.idle();
+  await once(lead);
+  const since = lead.t.log.length;
+  await once(lead);
+  const after = lead.t.log.slice(since);
+  await lead.ch.stop();
+  return { listed: after.some(l => /^GET since\//.test(l)), fetched: after.filter(l => /^GET b\//.test(l)).length,
+    puts: after.filter(l => /^PUT b\//.test(l)).length, guide: read(lead.mirror, "guide.ec") };
+}
+/* A restored profile whose mirror already holds a newer edit of the guide: the edit stays, goes up, and replaces the blob
+   it was not told of. A third profile then reads the edit from the relay. */
+async function ownKeptRestore(mod) {
+  const { tm, mk, teamText } = await ownSetup(mod);
+  const first = mk("own-k1");
+  put(first.mirror, C.TEAM_NAME, teamText);
+  put(first.mirror, "guide.ec", OWN_G1);
+  first.ch.start();
+  await first.ch.idle();
+  await once(first);
+  await first.ch.stop();
+  const again = mk("own-k2");
+  put(again.mirror, "guide.ec", OWN_G2);
+  again.ch.start();
+  await again.ch.idle();
+  await once(again);
+  await once(again);
+  const mirror = read(again.mirror, "guide.ec"), team = read(again.mirror, C.TEAM_NAME) === teamText, puts = putsOf(again);
+  const chain = liveBy(tm, LEAD.keyId);
+  await again.ch.stop();
+  const third = mk("own-k3");
+  third.ch.start();
+  await third.ch.idle();
+  await once(third);
+  const relayHolds = read(third.mirror, "guide.ec");
+  await third.ch.stop();
+  return { mirror, team, puts, chain, relayHolds };
+}
+/* One key on two computers: the second's upload arrives while the first holds an edit not yet sent. */
+async function ownKeptTwo(mod) {
+  const { tm, mk, teamText } = await ownSetup(mod);
+  const a = mk("own-w1"), b = mk("own-w2");
+  put(a.mirror, C.TEAM_NAME, teamText);
+  put(a.mirror, "guide.ec", OWN_G1);
+  a.ch.start(); b.ch.start();
+  await a.ch.idle(); await b.ch.idle();
+  await once(a);
+  await once(b);
+  const fromB = "the second computer's guide\n", fromA = "the first computer's edit, not yet sent\n";
+  put(b.mirror, "guide.ec", fromB);
+  await once(b);
+  put(a.mirror, "guide.ec", fromA);
+  await once(a);
+  const keptA = read(a.mirror, "guide.ec");
+  await once(b);
+  const out = { keptA, atB: read(b.mirror, "guide.ec"), chain: liveBy(tm, LEAD.keyId), fromA };
+  await a.ch.stop(); await b.ch.stop();
+  return out;
+}
+/* An own blob older than the one this program last sent for its path, put back by a relay that kept it: fetched, judged as
+   anyone's is, refused as older, and nothing is changed. */
+async function ownOlder(mod) {
+  const { tm, mk, teamText } = await ownSetup(mod);
+  const lead = mk("own-o1");
+  put(lead.mirror, C.TEAM_NAME, teamText);
+  put(lead.mirror, "guide.ec", OWN_G1);
+  lead.ch.start();
+  await lead.ch.idle();
+  await once(lead);
+  const s = relayStore(tm.rt);
+  const id1 = lead.prog.state().sent["guide.ec"].id, rec1 = s.get("blob:" + id1), ct1 = Buffer.from(R.bucket.objects.get(rec1.obj));
+  put(lead.mirror, "guide.ec", OWN_G2);
+  await once(lead);
+  const seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + id1 + "/" + hex(8);
+  R.bucket.objects.set(obj, ct1);
+  s.put("blob:" + id1, Object.assign({}, rec1, { seq, obj }));
+  s.put("seq:" + String(seq).padStart(16, "0"), id1);
+  s.put("seq", seq);
+  const st = lead.prog.state(), mark = () => JSON.stringify({ sent: st.sent, applied: st.applied, counters: st.counters, bytes: st.bytes });
+  const before = mark(), at = lead.t.log.length;
+  await once(lead);
+  const fetched = lead.t.log.slice(at).some(l => l === "GET b/" + id1);
+  const out = { fetched, mirror: read(lead.mirror, "guide.ec"), unchanged: mark() === before, puts: lead.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length };
+  await lead.ch.stop();
+  return out;
+}
+try {
+  const r = await ownRestore(C);
+  check(r.uploaded === 3 && r.restored && r.putsAtRestore === 0 && r.chain === 3,
+    "970a a lead restored to a fresh profile (the same key, an empty record, an empty mirror) catches up its own team file and its other files, sends nothing for them, and its next edit replaces the blob it caught up instead of forking the chain: uploaded " + r.uploaded
+    + ", team " + r.back.team + ", guide " + r.back.guide + ", notes " + r.back.notes + ", uploads at the restore " + r.putsAtRestore + ", live blobs after the edit " + r.chain);
+  const t = await ownTwo(C);
+  check(t.crossed && t.chain === 3,
+    "970b two programs holding one key each apply the other's upload, in both directions and again after an edit, and the relay keeps one blob for each of the three files: first " + t.first
+    + ", edit " + t.edited + ", back " + t.back + ", live blobs " + t.chain);
+  const k = await ownRecorded(C);
+  check(k.listed && k.fetched === 0 && k.puts === 0 && k.guide === OWN_G1,
+    "970c a program's own upload, in its record, is listed on the next catch-up and not fetched, and nothing is sent or changed: listed " + k.listed + ", fetched " + k.fetched + ", uploads " + k.puts);
+  const e = await ownKeptRestore(C);
+  check(e.mirror === OWN_G2 && e.team && e.puts === 1 && e.chain === 2 && e.relayHolds === OWN_G2,
+    "970d an own blob fetched on a restored profile does not overwrite a newer edit already in its mirror: the edit stays, goes up once as the replacement of that blob, and a third profile reads it from the relay: mirror "
+    + JSON.stringify(e.mirror) + ", uploads " + e.puts + ", live blobs " + e.chain + ", the relay holds " + JSON.stringify(e.relayHolds));
+  const w = await ownKeptTwo(C);
+  check(w.keptA === w.fromA && w.atB === w.fromA && w.chain === 2,
+    "970e the second computer's upload does not overwrite the first's edit still waiting to go up: the edit stays, replaces that upload, and reaches the second computer: first " + JSON.stringify(w.keptA)
+    + ", second " + JSON.stringify(w.atB) + ", live blobs " + w.chain);
+  const o = await ownOlder(C);
+  check(o.fetched && o.mirror === OWN_G2 && o.unchanged && o.puts === 0,
+    "970f an own blob older than the one last sent for its path, put back by the relay, is fetched, refused as older and changes nothing: fetched " + o.fetched + ", mirror "
+    + JSON.stringify(o.mirror) + ", record and floors " + (o.unchanged ? "unchanged" : "changed") + ", uploads " + o.puts);
+  const recordPlant = await liftChannel("plant:own-record", async mod => {
+    const x = await ownRestore(mod), y = await ownTwo(mod);
+    return !x.restored && !y.crossed;
+  });
+  check(recordPlant.turned && recordPlant.back, "970g lifting plant:own-record skips every blob this key wrote, so the restored profile catches up nothing and the two computers never meet, and the file is put back: "
+    + recordPlant.detail + ", sha " + (recordPlant.back ? "restored" : "differs"));
+  const olderPlant = await liftChannel("plant:own-older", async mod => (await ownOlder(mod)).mirror === OWN_G1);
+  check(olderPlant.turned && olderPlant.back, "970h lifting plant:own-older writes the older own blob over the newer guide, and the file is put back: "
+    + olderPlant.detail + ", sha " + (olderPlant.back ? "restored" : "differs"));
+  const editPlant = await liftChannel("plant:own-edit", async mod => {
+    const x = await ownKeptRestore(mod), y = await ownKeptTwo(mod);
+    return x.mirror !== OWN_G2 && y.keptA !== y.fromA;
+  });
+  check(editPlant.turned && editPlant.back, "970i lifting plant:own-edit writes the fetched own blob over the edit waiting to go up, on the restored profile and on the first computer, and the file is put back: "
+    + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a joining desk that also owes another file. Only join.json may be sealed under the invitation, so the other
