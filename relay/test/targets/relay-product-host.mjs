@@ -5,10 +5,11 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { shared, port } = workerData;
-let worker = null, standIns = null, loadError = null;
+let worker = null, standIns = null, kit = null, loadError = null;
 try {
   standIns = require("../stand-ins.cjs");
-  worker = (await import("../../worker.mjs")).default;
+  kit = require("../grant-kit.cjs");
+  worker = (await import("../../worker.mjs")).routeWith(kit.ROOTS, env => env.NOW());
 } catch (e) { loadError = String(e && e.stack ? e.stack : e); }
 
 const instances = new Map();
@@ -58,7 +59,7 @@ async function handle(op, a) {
   if (op === "new") {
     next += 1;
     const limits = a.teamMax != null ? { teamMax: a.teamMax } : undefined;
-    instances.set(next, { R: standIns.relayEnv({ limits }), sockets: new Map(), seen: new Map() });
+    instances.set(next, { R: standIns.relayEnv({ limits, roots: kit.ROOTS }), sockets: new Map(), seen: new Map() });
     return next;
   }
   const inst = instances.get(a.inst);

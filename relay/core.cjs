@@ -48,6 +48,8 @@ function canon(v) {
 }
 
 const createBytes = (rt, keyId, t) => Buffer.from("etiuda-relay-create\n" + rt + "\n" + keyId + "\n" + t, "utf8");
+/* A create is signed over the hash of the grant it carries, so a grant lifted from another create does not fit. */
+const create2Bytes = (rt, keyId, t, grant) => Buffer.from("etiuda-relay-create-2\n" + rt + "\n" + keyId + "\n" + t + "\n" + sha256(grantBytes(grant)), "utf8");
 const devicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
 /* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
 const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
@@ -65,6 +67,83 @@ function verified(pubHex, bytes, sigHex) {
 
 /* A device's key id is its public key, or the branch id shell/main.js makes of it (branchIdOf). */
 const keyMatches = (id, pub) => is(HEX64, pub) && (id === pub || id === "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16));
+
+/* The vendor's root key, public half: the one key a grant, or the delegation a grant names, must trace to. A constant of this
+   file and read from no environment. Only a leg hands the relay other roots, through `roots`, and production code never does. */
+const ROOT_PUB = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
+const GRANT_KIND = "etiuda-relay-grant", DELEGATION_KIND = "etiuda-delegation";
+const GRANT_MAX_MS = 45 * 24 * 60 * 60 * 1000;
+const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig", "via"];
+const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
+const SIG_FIELDS = ["alg", "keyId", "value"];
+const MAY_MAX = 16;
+
+const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+const only = (o, names) => Object.keys(o).every(k => names.indexOf(k) > -1);
+const exactly = (o, names) => only(o, names) && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
+const sigShaped = s => plain(s) && exactly(s, SIG_FIELDS) && s.alg === "ed25519" && isId(s.keyId) && is(HEX128, s.value);
+
+/* A document without its signature's value: what its signer signed, after the label of its own domain. */
+function unsigned(doc) {
+  if (!plain(doc)) return doc;
+  const out = Object.assign({}, doc);
+  if (plain(doc.sig)) { out.sig = Object.assign({}, doc.sig); delete out.sig.value; }
+  return out;
+}
+function grantBytes(grant) { return Buffer.from(GRANT_KIND + "\n" + canon(unsigned(grant)), "utf8"); }
+function delegationBytes(d) { return Buffer.from(DELEGATION_KIND + "\n" + canon(unsigned(d)), "utf8"); }
+
+/* The delegation a grant names, judged against that grant: its kind and shape, then what it lets its key do and when, and the
+   root's signature last. A reason is a short word for a leg to read; the relay answers every one of them bad-grant. */
+function delegationWhy(d, grant, roots) {
+  if (!plain(d)) return "via-shape";
+  if (d.kind !== DELEGATION_KIND) return "via-kind"; /* plant:via-kind */
+  if (d.format !== 1) return "via-shape";
+  if (!exactly(d, DELEGATION_FIELDS) || !plain(d.key) || !exactly(d.key, ["id", "pub"]) || !isId(d.key.id) || !is(HEX64, d.key.pub)
+    || !Array.isArray(d.may) || d.may.length < 1 || d.may.length > MAY_MAX || !d.may.every(m => typeof m === "string")
+    || !Number.isSafeInteger(d.from) || !Number.isSafeInteger(d.until) || !sigShaped(d.sig)) return "via-shape";
+  if (d.may.indexOf("relay-grant") < 0) return "via-may"; /* plant:grant-may */
+  if (!(d.from <= grant.issued && grant.until <= d.until)) return "via-window"; /* plant:grant-window */
+  if (!roots.some(root => verified(root, delegationBytes(d), d.sig.value))) return "via-signature"; /* plant:via-sig */
+  return null;
+}
+
+/* Why a grant does not hold for this lead at this instant, or null where it does. Every check of kind, shape, window and bound
+   comes before the signature, and a document of another kind is refused by its kind alone. */
+function grantWhy(grant, leadPub, now, roots) {
+  const rs = roots === undefined ? [ROOT_PUB] : roots;
+  if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, leadPub)) return "setup";
+  if (!plain(grant)) return "shape";
+  if (grant.kind !== GRANT_KIND) return "kind"; /* plant:grant-kind */
+  if (grant.format !== 1) return "shape"; /* plant:grant-format */
+  if (!only(grant, GRANT_FIELDS)) return "fields"; /* plant:grant-fields */
+  if (!is(HEX64, grant.lead) || !Number.isSafeInteger(grant.issued) || !Number.isSafeInteger(grant.until) || !sigShaped(grant.sig)) return "shape";
+  if (typeof grant.paid !== "boolean") return "shape"; /* plant:grant-paid */
+  if (grant.lead !== leadPub) return "lead"; /* plant:grant-lead */
+  if (grant.until <= grant.issued || grant.until - grant.issued > GRANT_MAX_MS) return "span"; /* plant:grant-span */
+  if (grant.issued > now + CALL_SKEW_MS) return "future"; /* plant:grant-future */
+  if (now >= grant.until) return "ended"; /* plant:grant-ended */
+  let signers = rs;
+  if (grant.via !== undefined) {
+    const why = delegationWhy(grant.via, grant, rs);
+    if (why !== null) return why;
+    if (grant.sig.keyId !== grant.via.key.id) return "via-key";
+    signers = [grant.via.key.pub];
+  }
+  if (!signers.some(pub => verified(pub, grantBytes(grant), grant.sig.value))) return "signature"; /* plant:grant-sig */
+  return null;
+}
+const grantOk = (grant, leadPub, now, roots) => grantWhy(grant, leadPub, now, roots) === null;
+
+/* A create's judgement that waits on no team and no store, so the Worker runs it before any object wakes and the object runs
+   it again: its shape, its grant for its lead, and the lead's signature over the create and that grant's hash. */
+function judgeCreate(rt, body, now, roots) {
+  const b = plain(body) ? body : {}, lead = plain(b.lead) ? b.lead : {};
+  if (!is(HEX32, rt) || b.rt !== rt || !isId(lead.keyId) || !is(HEX64, lead.pub) || !Number.isSafeInteger(b.t)) return no("bad-signature");
+  if (!grantOk(b.grant, lead.pub, now, roots)) return no("bad-grant"); /* plant:create-grant */
+  if (!verified(lead.pub, create2Bytes(rt, lead.keyId, b.t, b.grant), b.sig)) return no("bad-signature"); /* plant:create-sig */
+  return { ok: true };
+}
 
 /* The Etiuda-Blob header, base64url of JSON, as the fields the relay judges; anything else in it is dropped. */
 function parseMeta(header) {
@@ -85,6 +164,8 @@ function parseMeta(header) {
 function createCore(deps) {
   const store = deps.store, clock = deps.clock;
   const teamMax = deps.limits && Number.isSafeInteger(deps.limits.teamMax) ? deps.limits.teamMax : B.TEAM_MAX;
+  /* For legs only: the roots a grant may trace to. Production code passes none, so the constant stands. */
+  const roots = deps.roots === undefined ? [ROOT_PUB] : deps.roots;
   const random = n => crypto.randomBytes(n).toString("hex");
   const fresh = t => Math.abs(clock() - t) <= CALL_SKEW_MS;
   const bodyOf = b => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
@@ -94,14 +175,18 @@ function createCore(deps) {
     return team && team.rt === rt ? team : null;
   }
 
+  /* The grant is judged first, and the object judges it again after the Worker did. The team keeps the grant's until and paid and
+     nothing else of it: a repeat create by the same lead keeps the later until, and the paid of the grant that gave it. */
   function create(rt, body) {
+    const judged = judgeCreate(rt, body, clock(), roots);
+    if (!judged.ok) return judged;
     const b = bodyOf(body), lead = bodyOf(b.lead);
-    if (!is(HEX32, rt) || b.rt !== rt || !isId(lead.keyId) || !is(HEX64, lead.pub) || !Number.isSafeInteger(b.t)) return no("bad-signature");
-    if (!verified(lead.pub, createBytes(rt, lead.keyId, b.t), b.sig)) return no("bad-signature"); /* plant:create-sig */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:create-fresh */
     const team = store.get("team");
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
-    store.atomic(() => store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0 }));
+    let until = b.grant.until, paid = b.grant.paid;
+    if (team && Number.isSafeInteger(team.until) && team.until >= until) { until = team.until; paid = team.paid === true; } /* plant:until-later */
+    store.atomic(() => store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }));
     return { ok: true, rt };
   }
 
@@ -666,6 +751,7 @@ function createCore(deps) {
 
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
-  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, canon, createBytes, devicesBytes, invitesBytes, helloBytes, keyMatches, parseMeta,
+  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, keyMatches, parseMeta,
   createCore,
 };

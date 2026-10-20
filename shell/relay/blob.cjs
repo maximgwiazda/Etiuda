@@ -46,6 +46,7 @@ const REASONS = Object.freeze({
   "missing": "The relay has no such blob.",
   "tmp": "A temporary file stays on this desk.",
   "echo": "A file just received stays as it is.",
+  "bad-grant": "That team needs a valid grant, so the relay did not make it.",
 });
 
 function refusal(reason) {

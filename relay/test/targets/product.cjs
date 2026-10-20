@@ -8,6 +8,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { Worker, MessageChannel, receiveMessageOnPort } = require("node:worker_threads");
 const core = require("../../core.cjs");
+const K = require("../grant-kit.cjs");
 const B = require("../../../shell/relay/blob.cjs");
 const C = require("../../../shell/relay/channel.cjs");
 
@@ -273,8 +274,9 @@ function createTarget(limits) {
 
     createTeam({ teamId, lead }) {
       const rt = crypto.randomBytes(16).toString("hex");
-      const sig = sign(lead.privateKey, core.createBytes(rt, lead.keyId, now));
-      const r = http("POST", "/relay/v1/teams", { json: { rt, lead: { keyId: lead.keyId, pub: lead.publicKey }, t: now, sig } });
+      /* The relay here is built with the test root, and the create carries a grant of it for this lead. */
+      const json = K.createBody(rt, { keyId: lead.keyId, pub: lead.publicKey }, now, bytes => sign(lead.privateKey, bytes));
+      const r = http("POST", "/relay/v1/teams", { json });
       if (r.status !== 200) return refusalOf(r);
       keys.set(lead.keyId, lead.privateKey);
       teams.set(rt, { lead, rev: 0, devices: new Map() });

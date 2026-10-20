@@ -11,7 +11,7 @@ const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
   "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
-  "replay-rev": 409, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
+  "replay-rev": 409, "bad-grant": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
 const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|wrap|states|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
@@ -56,7 +56,7 @@ function shut(ws, reason) {
 }
 
 function teamObject(deps) {
-  const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits });
+  const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots });
   const r2 = deps.r2, sockets = deps.sockets;
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
 

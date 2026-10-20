@@ -85,7 +85,8 @@ function socketHub() {
 }
 
 /* The Worker's env: TEAMS a namespace whose objects run relay/team.cjs over the stores here, BLOBS the bucket.
-   `restart()` drops every live object and its sockets; storage and the bucket stay. */
+   `restart()` drops every live object and its sockets; storage and the bucket stay. `opts.roots` are the roots its team objects
+   accept a grant under, and NOW is the clock a leg gives the Worker. */
 function relayEnv(opts) {
   const o = opts || {};
   const clock = { now: 0 };
@@ -97,7 +98,7 @@ function relayEnv(opts) {
     if (!stores.has(name)) stores.set(name, memoryStore());
     const hub = socketHub();
     hubs.set(name, hub);
-    const obj = team.teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits });
+    const obj = team.teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots });
     live.set(name, obj);
     return obj;
   }
@@ -108,6 +109,7 @@ function relayEnv(opts) {
   const env = {
     TEAMS: { jurisdiction(j) { asked.push(j); return j === "eu" ? scoped : null; } },
     BLOBS: bucket,
+    NOW: () => clock.now,
   };
   return {
     env, clock, bucket, asked, stores, hubs,

@@ -74,19 +74,20 @@ function keyPair(branch, keyId) {
 }
 const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
 
-let C = null, B = null, S = null, W = null, core = null;
+let C = null, B = null, S = null, W = null, core = null, K = null;
 try {
   C = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
   B = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
   core = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
   S = nodeRequire(path.join(ROOT, "relay", "test", "stand-ins.cjs"));
-  W = (await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href)).default;
+  K = nodeRequire(path.join(ROOT, "relay", "test", "grant-kit.cjs"));
+  W = (await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href)).routeWith(K.ROOTS, env => env.NOW());
 } catch (e) {
   console.log("  FAIL harness: the channel layer or the relay did not load - " + (e && e.message));
 }
 
 /* ---- the relay in memory, and each program's way to it -------------------------------------------------------- */
-const R = S ? S.relayEnv() : null;
+const R = S && K ? S.relayEnv({ roots: K.ROOTS }) : null;
 const foreign = [];
 function findSocket(id) {
   for (const hub of R.hubs.values()) { const s = hub.byId(id); if (s) return s; }
@@ -132,6 +133,8 @@ async function admin(method, p, json) {
 
 /* ---- the team: its lead, its desks, its key and its files ------------------------------------------------------- */
 const LEAD = keyPair(false, "quay-lead");
+/* A create's body for LEAD: the grant of the test root the relay here is built with, and the create-2 signature. */
+const createBody = (rt, t) => K.createBody(rt, LEAD, t, bytes => signHex(LEAD, bytes));
 const DESK = keyPair(true), OTHER = keyPair(true), STRAY = keyPair(true), NEWD = keyPair(true), INTR = keyPair(false, "quay-lead");
 const TEAM = "t-" + hex(8), RT = hex(16), K1 = crypto.randomBytes(32);
 const RING = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "quay-board", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.pub }] };
@@ -223,8 +226,7 @@ function idsBy(writer) {
 
 try {
   if (!W) throw new Error("no relay to drive");
-  const made = await admin("POST", "/relay/v1/teams", { rt: RT, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-    sig: signHex(LEAD, core.createBytes(RT, LEAD.keyId, R.clock.now)) });
+  const made = await admin("POST", "/relay/v1/teams", createBody(RT, R.clock.now));
   if (made.status !== 200) throw new Error("the team was not made on the relay: " + JSON.stringify(made.json));
   await enrol(DESK, OTHER);
 
@@ -640,8 +642,7 @@ try {
   const LB = boxPair();
   const makeTeam = async () => {
     const rt = hex(16);
-    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+    const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
     if (made.status !== 200) throw new Error("a team for the epoch move was not made: " + JSON.stringify(made.json));
     let rev = 0;
     return { rt, id: "t-" + hex(8), enrol: async (...keys) => {
@@ -1294,8 +1295,7 @@ async function relayRefusal(mod, tag) {
     const rt = hex(16), teamId = "t-" + hex(8), deskKey = keyPair(true), key = crypto.randomBytes(32);
     const joinRel = "desks/" + deskKey.keyId + "/join.json";
     const t0 = R.clock.now;
-    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: t0,
-      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, t0)) });
+    const made = await admin("POST", "/relay/v1/teams", createBody(rt, t0));
     if (made.status !== 200) return { detail: label + " team " + made.status, bad: true };
     const list = [{ id: deskKey.keyId, pub: deskKey.pub, desk: deskKey.keyId }], t1 = R.clock.now;
     const en = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: 1, t: t1,
@@ -1450,8 +1450,7 @@ try {
      (method, url, the count of fetches of that blob so far) answering a reply, or null to reach the relay. */
   async function laneTeam(name) {
     const rt = hex(16), teamId = "t-" + hex(8), D = keyPair(true);
-    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+    const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
     if (made.status !== 200) throw new Error("a team for N6 was not made: " + JSON.stringify(made.json));
     const list = [{ id: D.keyId, pub: D.pub, desk: D.keyId }], t = R.clock.now;
     await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, list)) });
@@ -1616,8 +1615,7 @@ try {
 
   /* A second team on the relay, for the desk joining by invitation. */
   const RT2 = hex(16), TEAM2 = "t-" + hex(8), K2 = crypto.randomBytes(32);
-  const made = await admin("POST", "/relay/v1/teams", { rt: RT2, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-    sig: signHex(LEAD, core.createBytes(RT2, LEAD.keyId, R.clock.now)) });
+  const made = await admin("POST", "/relay/v1/teams", createBody(RT2, R.clock.now));
   if (made.status !== 200) throw new Error("the second team was not made");
   const SECRET = hex(16), INV = hex(16), TOKEN = hex(32), KI = C.inviteSealKey(SECRET);
   const t0 = R.clock.now;
@@ -1757,8 +1755,7 @@ try {
   /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
      admission above still meets edition 1. This tree's relay has no wrap route; the stand-in below answers only this desk. */
   const RTW = hex(16), TEAMW = "t-" + hex(8), KW = crypto.randomBytes(32), URLW = URLV1;
-  const madeW = await admin("POST", "/relay/v1/teams", { rt: RTW, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-    sig: signHex(LEAD, core.createBytes(RTW, LEAD.keyId, R.clock.now)) });
+  const madeW = await admin("POST", "/relay/v1/teams", createBody(RTW, R.clock.now));
   if (madeW.status !== 200) throw new Error("the wrap team was not made: " + JSON.stringify(madeW.json));
   const teamDocW = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMW, catalogs: ["quay-board"],
     lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: rev,
@@ -2101,8 +2098,7 @@ try {
   {
     const LBA = boxPair();
     const RTA = hex(16), TEAMA = "t-" + hex(8), KA = crypto.randomBytes(32);
-    const madeA = await admin("POST", "/relay/v1/teams", { rt: RTA, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-      sig: signHex(LEAD, core.createBytes(RTA, LEAD.keyId, R.clock.now)) });
+    const madeA = await admin("POST", "/relay/v1/teams", createBody(RTA, R.clock.now));
     if (madeA.status !== 200) throw new Error("the answer team was not made: " + JSON.stringify(madeA.json));
     const invitesA = [];
     async function inviteA() {
@@ -2702,8 +2698,7 @@ try {
      any copy up, goes offline, is admitted, its invitation let go meanwhile, and joins by itself when it is back. */
   {
     const RT4 = hex(16), TEAM4 = "t-" + hex(8), K4 = crypto.randomBytes(32);
-    const made4 = await admin("POST", "/relay/v1/teams", { rt: RT4, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-      sig: signHex(LEAD, core.createBytes(RT4, LEAD.keyId, R.clock.now)) });
+    const made4 = await admin("POST", "/relay/v1/teams", createBody(RT4, R.clock.now));
     if (made4.status !== 200) throw new Error("the team for 945c was not made");
     const SEC4 = hex(16), INV4 = hex(16), TOK4 = hex(32), KI4 = C.inviteSealKey(SEC4), t4 = R.clock.now;
     const add4 = [{ id: INV4, hash: sha(Buffer.from(TOK4, "utf8")) }];
@@ -2980,8 +2975,7 @@ try {
     async function cancelScene(src, tag, opt) {
       opt = opt || {};
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
-      const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-        sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+      const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
       if (made.status !== 200) throw new Error("the team for " + tag + " was not made");
       const secret = hex(16), inv = hex(16), token = hex(32), sealKey = C.inviteSealKey(secret), t0 = R.clock.now;
       const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
@@ -3341,8 +3335,7 @@ try {
   async function relayLeft(make) {
     const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
     const secret = hex(16), inv = hex(16), token = hex(32);
-    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+    const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
     if (made.status !== 200) return { fail: "team " + JSON.stringify(made.json) };
     const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
     const t0 = R.clock.now;
@@ -3782,8 +3775,7 @@ function blobsOn(rt, writer) {
 }
 async function freshTeam(keys) {
   const rt = hex(16), id = "t-" + hex(8);
-  const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-    sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
   if (made.status !== 200) throw new Error("a team was not made: " + JSON.stringify(made.json));
   const list = keys.map(k => ({ id: k.keyId, pub: k.pub, desk: k.keyId })), t = R.clock.now;
   const enrolled = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: 1, t,
@@ -4982,8 +4974,7 @@ const INVITE_USED_NEW = "This invitation has already been used. Ask your lead fo
 const INVITE_USED_OLD = "This invitation has already been used.";
 async function relayTeam() {
   const rt = hex(16);
-  const made = await admin("POST", "/relay/v1/teams", { rt: rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
-    sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
   if (made.status !== 200) throw new Error("a team was not made: " + made.status);
   return rt;
 }

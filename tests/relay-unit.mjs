@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 114;
+const EXPECTED = 164;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -38,7 +38,7 @@ function keyPair(branch) {
 }
 const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
 
-let W = null, C = null, B = null, S = null;
+let W = null, C = null, B = null, S = null, K = null, WORKER = null;
 
 function metaOf(blob, extra) {
   return Object.assign({ v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId,
@@ -55,7 +55,9 @@ async function call(R, method, p, o) {
   const body = opts.json !== undefined ? JSON.stringify(opts.json) : opts.body;
   const init = { method, headers };
   if (body !== undefined && method !== "GET") { init.body = body; init.duplex = "half"; }
-  const res = await W.fetch(new Request((opts.scheme || "https") + "://relay.test" + p, init), R.env);
+  /* `opts.worker` and `opts.env` stand in for the default Worker and the relay's env: a leg that lifts a line of the Worker, or counts
+     the object lookups, passes its own. */
+  const res = await (opts.worker || W).fetch(new Request((opts.scheme || "https") + "://relay.test" + p, init), opts.env || R.env);
   const bytes = Buffer.from(await res.arrayBuffer());
   let json = null;
   try { json = JSON.parse(bytes.toString("utf8")); } catch { json = null; }
@@ -68,9 +70,13 @@ async function call(R, method, p, o) {
 const refused = (r, reason) => !!r && r.status >= 400 && r.status < 500 && !!r.json && r.json.error === reason
   && r.json.said === B.REASONS[reason] && Object.keys(r.json).sort().join() === "error,said" && !r.meta && !r.socket;
 
+/* The relay's env with the test root its team objects accept a grant under, and a create's body carrying a grant of that root. */
+const relayEnv = o => S.relayEnv(Object.assign({ roots: K.ROOTS }, o || {}));
+const createBody = (rt, lead, t, o) => K.createBody(rt, lead, t, bytes => signHex(lead, bytes), o);
+
 /* A team with its lead, and two desks enrolled: `desk` by its branch id, `other` by its public key. */
 async function world(opts) {
-  const R = S.relayEnv(opts);
+  const R = relayEnv(opts);
   const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(false), rev: 0, devs: [] };
   w.deskId = "k-" + hex(8);
   w.otherId = "k-" + hex(8);
@@ -82,8 +88,7 @@ async function world(opts) {
   return w;
 }
 function create(w, lead, t, extra) {
-  const sig = signHex(lead, C.createBytes(w.rt, lead.keyId, t));
-  return call(w.R, "POST", "/relay/v1/teams", { json: Object.assign({ rt: w.rt, lead: { keyId: lead.keyId, pub: lead.pub }, t, sig }, extra || {}) });
+  return call(w.R, "POST", "/relay/v1/teams", { json: createBody(w.rt, lead, t, { extra }) });
 }
 function devices(w, keys, o) {
   const opts = o || {};
@@ -150,7 +155,9 @@ async function main() {
     B = require(path.join(ROOT, "shell", "relay", "blob.cjs"));
     C = require(path.join(ROOT, "relay", "core.cjs"));
     S = require(path.join(ROOT, "relay", "test", "stand-ins.cjs"));
-    W = (await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href)).default;
+    K = require(path.join(ROOT, "relay", "test", "grant-kit.cjs"));
+    WORKER = await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href);
+    W = WORKER.routeWith(K.ROOTS, env => env.NOW());
   } catch (e) { check(false, "0a the relay's modules load - " + e.message); return; }
 
   /* ---- 1: the bytes and the routes ---- */
@@ -184,16 +191,15 @@ async function main() {
     const text = dumpText(w);
     const team = w.R.stores.get(w.rt).get("team");
     check(!!team && team.rt === w.rt && team.lead.keyId === w.lead.keyId && team.lead.pub === w.lead.pub
-      && Object.keys(team).sort().join() === "epoch,lead,rt",
-      "2a a lead makes its team, and the object keeps its id, the lead's key and the epoch floor only");
-    const v = { R: S.relayEnv(), rt: hex(16), lead: keyPair(false) };
+      && Object.keys(team).sort().join() === "epoch,lead,paid,rt,until",
+      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor and the grant's until and paid only");
+    const v = { R: relayEnv(), rt: hex(16), lead: keyPair(false) };
     const marker = "TeamName" + hex(4);
     const named = await create(v, v.lead, 0, { name: marker, teamId: marker });
     check(named.status === 200 && named.json.rt === v.rt && dumpText(v).indexOf(marker) < 0 && text.indexOf("TeamName") < 0,
       "2b a name or a team id sent beside the create is never kept");
-    const x = { R: S.relayEnv(), rt: hex(16), lead: keyPair(false) };
-    const forged = await call(x.R, "POST", "/relay/v1/teams", { json: { rt: x.rt, lead: { keyId: x.lead.keyId, pub: x.lead.pub }, t: 0,
-      sig: signHex(keyPair(false), C.createBytes(x.rt, x.lead.keyId, 0)) } });
+    const x = { R: relayEnv(), rt: hex(16), lead: keyPair(false) };
+    const forged = await call(x.R, "POST", "/relay/v1/teams", { json: K.createBody(x.rt, x.lead, 0, bytes => signHex(keyPair(false), bytes)) });
     check(refused(forged, "bad-signature") && (x.R.stores.get(x.rt) || S.memoryStore()).get("team") === undefined,
       "2c a create signed by another key is refused, and nothing is kept");
     const late = await create(x, x.lead, -5 * MIN - 1), early = await create(x, x.lead, 5 * MIN + 1);
@@ -959,6 +965,10 @@ async function main() {
     const hello = await boundHello(w, w.desk, id, token);
     return { w, hello, id };
   }
+  /* What a lifted copy of relay/core.cjs hands the first exports object, which the team's module and the Worker keep: the object's
+     factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
+  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "create2Bytes", "ROOT_PUB"];
+  const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
   /* As liftCore, with a text swapped in place of a whole line lifted: for a guard that is part of a line. */
   async function swapCore(from, to, fn) {
     const src = path.join(ROOT, "relay", "core.cjs");
@@ -973,7 +983,7 @@ async function main() {
       if (text.split(from).length === 2) {
         fs.writeFileSync(src, text.split(from).join(to));
         delete require.cache[resolved];
-        liveExports.createCore = require(resolved).createCore;
+        adopt(liveExports, require(resolved));
         turned = await fn();
         detail = turned ? "the check lifted" : "the check still held";
       }
@@ -983,7 +993,7 @@ async function main() {
       fs.writeFileSync(src, beforeBytes);
       try {
         delete require.cache[resolved];
-        liveExports.createCore = require(resolved).createCore;
+        adopt(liveExports, require(resolved));
       } catch { /* the next world loads the restored file */ }
     }
     return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
@@ -1006,7 +1016,7 @@ async function main() {
         lines.splice(at, 1);
         fs.writeFileSync(src, lines.join("\n"));
         delete require.cache[resolved];
-        liveExports.createCore = require(resolved).createCore;
+        adopt(liveExports, require(resolved));
         turned = await fn();
         detail = turned ? "the check lifted" : "the check still held";
       }
@@ -1016,8 +1026,39 @@ async function main() {
       fs.writeFileSync(src, beforeBytes);
       try {
         delete require.cache[resolved];
-        liveExports.createCore = require(resolved).createCore;
+        adopt(liveExports, require(resolved));
       } catch { /* the next world loads the restored file */ }
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  /* As liftCore for relay/worker.mjs, a module evaluated once per address: the edited file is imported under a query of its own and
+     `fn` is handed that module, so the Worker the legs hold is untouched. `edit` maps the file's text to the edited text, or to null
+     where what it means to change is absent; `lineLifted(tag)` is the edit that lifts the line carrying a plant tag. */
+  let editedWorkers = 0;
+  const lineLifted = tag => text => {
+    const lines = text.split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at < 0) return null;
+    lines.splice(at, 1);
+    return lines.join("\n");
+  };
+  async function editWorker(edit, fn) {
+    const src = path.join(ROOT, "relay", "worker.mjs");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const edited = edit(beforeBytes.toString("utf8"));
+      if (edited !== null) {
+        fs.writeFileSync(src, edited);
+        const mod = await import(pathToFileURL(src).href + "?edited=" + (++editedWorkers));
+        turned = await fn(mod);
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
     }
     return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
   }
@@ -1178,6 +1219,250 @@ async function main() {
     });
     check(cutPlant.turned && cutPlant.back, "962n lifting plant:withdraw-invite-sessions lets that session list again, and the file is put back: "
       + cutPlant.detail + ", sha " + (cutPlant.back ? "restored" : "differs"));
+  }
+
+  /* ---- 17: a team is made only under a grant, judged in the Worker before any object wakes (board 935, slice G1) ---- */
+  {
+    const T0 = 1800000000000, SKEW = C.CALL_SKEW_MS, HOUR = K.HOUR, GD = K.DAY, SPAN = 45 * GD;
+    const stray = () => { const k = keyPair(false); return { id: "stray-1", pub: k.pub, privateKey: k.privateKey }; };
+    const ctxOf = () => ({ rt: hex(16), lead: keyPair(false), now: T0 });
+    const bodyFor = (ctx, o) => K.createBody(ctx.rt, ctx.lead, ctx.now, bytes => signHex(ctx.lead, bytes), o);
+    const fresh = () => { const R = relayEnv(); R.clock.now = T0; return R; };
+    const teamOf = (R, rt) => { const st = R.stores.get(rt); return st ? st.get("team") : undefined; };
+    /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
+    function counted(R) {
+      const gets = { n: 0 };
+      const env = Object.assign({}, R.env, { TEAMS: { jurisdiction(j) {
+        const s = R.env.TEAMS.jurisdiction(j);
+        return s && { idFromName: n => s.idFromName(n), get: id => { gets.n++; return s.get(id); } };
+      } } });
+      return { env, gets };
+    }
+    async function viaWorker(worker, R, body) {
+      const c = counted(R);
+      const r = await call(R, "POST", "/relay/v1/teams", { json: body, worker, env: c.env });
+      return { r, gets: c.gets.n };
+    }
+    /* The same body handed straight to the team's object, as the Worker would after judging it. */
+    async function viaObject(R, rt, body) {
+      const res = await R.object(rt).fetch(new Request("https://relay.test/relay/v1/teams", { method: "POST", body: JSON.stringify(body) }));
+      let json = null;
+      try { json = await res.json(); } catch { json = null; }
+      return { status: res.status, json, meta: null, socket: null };
+    }
+
+    /* Each way a create can fail its grant, as the probes that must be refused (with the reason the relay answers and, where the
+       grant itself is at fault, the short word of C.grantWhy) and the probes at the edge that must be made. A scene is true while
+       the relay holds all of them: the Worker answers each refusal with no object fetched and nothing stored, the object answers
+       the same body the same way and keeps nothing, and each edge probe reaches the object once and keeps the grant's until and paid. */
+    const gf = (fields, o) => ctx => K.grantFor(ctx.lead.pub, ctx.now, Object.assign({ fields }, o || {}));
+    const via = (viaOpts, o) => ctx => K.grantFor(ctx.lead.pub, ctx.now, Object.assign({ signer: K.DELEGATE,
+      via: K.delegationFor(ctx.now, viaOpts) }, o || {}));
+    const grantProbe = (short, make) => ctx => { const grant = make(ctx); return { grant, short, reason: "bad-grant", body: bodyFor(ctx, { grant }) }; };
+    const ROWS = [
+      { tag: "create-grant", say: "a create with no grant",
+        bad: [ctx => ({ grant: undefined, short: "shape", reason: "bad-grant", body: bodyFor(ctx, { grant: null }) })] },
+      { tag: "create-grant", say: "a create in today's bytes, the old label and no grant",
+        bad: [ctx => ({ grant: undefined, short: "shape", reason: "bad-grant", body: { rt: ctx.rt, lead: { keyId: ctx.lead.keyId, pub: ctx.lead.pub },
+          t: ctx.now, sig: signHex(ctx.lead, C.createBytes(ctx.rt, ctx.lead.keyId, ctx.now)) } })] },
+      { tag: "grant-lead", say: "a grant that names another key",
+        bad: [grantProbe("lead", ctx => K.grantFor(keyPair(false).pub, ctx.now))] },
+      { tag: "grant-ended", say: "a grant that has ended (until before or at the relay's now)", edge: "a grant that ends a moment on",
+        bad: [grantProbe("ended", gf({ issued: T0 - 10 * GD, until: T0 - 1 })), grantProbe("ended", gf({ until: T0 }))],
+        good: [gf({ until: T0 + 1 })] },
+      { tag: "grant-future", say: "a grant issued in the future (past the skew)", edge: "a grant issued at the skew",
+        bad: [grantProbe("future", gf({ issued: T0 + SKEW + 1, until: T0 + SKEW + 1 + GD }))],
+        good: [gf({ issued: T0 + SKEW, until: T0 + SKEW + GD })] },
+      { tag: "grant-span", say: "a grant longer than 45 days, signed by the root or by a delegated key, or ending as it begins", edge: "a grant of exactly 45 days",
+        bad: [grantProbe("span", gf({ issued: T0 - HOUR, until: T0 - HOUR + SPAN + 1 })),
+          grantProbe("span", ctx => K.delegatedGrantFor(ctx.lead.pub, ctx.now, { fields: { issued: T0 - HOUR, until: T0 - HOUR + SPAN + 1 } })),
+          grantProbe("span", gf({ issued: T0 - HOUR, until: T0 - HOUR }))],
+        good: [gf({ issued: T0 - HOUR, until: T0 - HOUR + SPAN })] },
+      { tag: "grant-sig", say: "a grant signed by a key the root did not certify, by the delegated key with no delegation, or changed after it was signed",
+        bad: [grantProbe("signature", ctx => K.grantFor(ctx.lead.pub, ctx.now, { signer: stray() })),
+          grantProbe("signature", ctx => K.grantFor(ctx.lead.pub, ctx.now, { signer: K.DELEGATE })),
+          grantProbe("signature", ctx => { const g = K.grantFor(ctx.lead.pub, ctx.now); g.paid = !g.paid; return g; })] },
+      { tag: "via-sig", say: "a delegation the root did not sign, or one the delegated key signed for itself",
+        bad: [grantProbe("via-signature", via({ signer: stray() })), grantProbe("via-signature", via({ signer: K.DELEGATE }))] },
+      { tag: "grant-may", say: "a delegation whose may lacks relay-grant",
+        bad: [grantProbe("via-may", via({ fields: { may: ["licence-issue"] } }))] },
+      { tag: "grant-window", say: "a grant outside its delegation's window", edge: "a grant that fills the window exactly",
+        bad: [grantProbe("via-window", via({ fields: { until: T0 + 20 * GD } })), grantProbe("via-window", via({ fields: { from: T0 } }))],
+        good: [via({ fields: { from: T0 - HOUR, until: T0 + 30 * GD } })] },
+      { tag: "via-kind", say: "a delegation of another kind",
+        bad: [grantProbe("via-kind", via({ fields: { kind: "etiuda-licence" } }))] },
+      { tag: "grant-kind", say: "a licence-shaped document presented as a grant, otherwise made as one",
+        bad: [grantProbe("kind", gf({ kind: "etiuda-licence" }))] },
+      { tag: "grant-fields", say: "a grant carrying a field it does not allow",
+        bad: [grantProbe("fields", gf({ note: "extra" }))] },
+      { tag: "grant-format", say: "a grant of another format",
+        bad: [grantProbe("shape", gf({ format: 2 }))] },
+      { tag: "grant-paid", say: "a grant whose paid is neither true nor false, or is left out",
+        bad: [grantProbe("shape", gf({ paid: "yes" })), grantProbe("shape", ctx => K.grantFor(ctx.lead.pub, ctx.now, { omit: ["paid"] }))] },
+      { tag: "create-sig", say: "a grant lifted from another create, the lead's signature covering another grant's hash",
+        bad: [ctx => { const grant = K.grantFor(ctx.lead.pub, ctx.now), other = K.grantFor(ctx.lead.pub, ctx.now, { fields: { paid: false } });
+          return { grant, short: null, reason: "bad-signature", body: bodyFor(ctx, { grant, signedGrant: other }) }; }] },
+      { tag: "create-sig", say: "a create signed in today's bytes beside a good grant",
+        bad: [ctx => { const grant = K.grantFor(ctx.lead.pub, ctx.now);
+          return { grant, short: null, reason: "bad-signature", body: bodyFor(ctx, { grant, bytes: C.createBytes(ctx.rt, ctx.lead.keyId, ctx.now) }) }; }] },
+    ];
+    async function scene(row, worker) {
+      for (const make of row.bad || []) {
+        const ctx = ctxOf(), p = make(ctx);
+        if (p.short !== undefined && C.grantWhy(p.grant, ctx.lead.pub, ctx.now, K.ROOTS) !== p.short) return false;
+        const R = fresh(), w = await viaWorker(worker, R, p.body);
+        if (!refused(w.r, p.reason) || w.gets !== 0 || R.stores.has(ctx.rt)) return false;
+        const R2 = fresh(), o = await viaObject(R2, ctx.rt, p.body);
+        if (!refused(o, p.reason) || teamOf(R2, ctx.rt) !== undefined) return false;
+      }
+      for (const make of row.good || []) {
+        const ctx = ctxOf(), grant = make(ctx), R = fresh();
+        const w = await viaWorker(worker, R, bodyFor(ctx, { grant })), kept = teamOf(R, ctx.rt);
+        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.until !== grant.until || kept.paid !== grant.paid) return false;
+      }
+      return true;
+    }
+
+    /* ---- 964: the root, the shared vector, and a team made under a grant ---- */
+    const ROOT_LITERAL = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
+    const rootHolds = () => C.ROOT_PUB === ROOT_LITERAL && /^[0-9a-f]{64}$/.test(C.ROOT_PUB) && C.ROOT_PUB !== K.ROOT.pub && K.ROOTS.indexOf(C.ROOT_PUB) < 0;
+    const baseA = rootHolds();
+    check(baseA,
+      "964a the vendor's root is the constant ROOT_PUB of relay/core.cjs, the value the design names, and not the test root a leg builds the relay with");
+
+    /* A core built with no roots trusts the constant alone: a create under the test root is refused as a grant that does not hold. */
+    const noRoots = () => {
+      const ctx = ctxOf(), store = S.memoryStore();
+      const r = C.createCore({ store, clock: () => T0 }).create(ctx.rt, bodyFor(ctx, {}));
+      return r.ok === false && r.reason === "bad-grant" && store.get("team") === undefined;
+    };
+    const baseB = noRoots();
+    check(baseB,
+      "964b a team object built with no roots trusts ROOT_PUB alone, so a create under the test root is refused bad-grant and keeps nothing");
+
+    /* The default export is the Worker over the constant: given a create under the test root, at the real time, it refuses it for its signature. */
+    const defaultRefuses = async worker => {
+      const now = Date.now(), ctx = { rt: hex(16), lead: keyPair(false), now }, R = relayEnv();
+      R.clock.now = now;
+      const body = bodyFor(ctx, {});
+      const w = await viaWorker(worker, R, body);
+      return C.grantWhy(body.grant, ctx.lead.pub, now, [C.ROOT_PUB]) === "signature" && refused(w.r, "bad-grant") && w.gets === 0 && !R.stores.has(ctx.rt);
+    };
+    const baseC = await defaultRefuses(WORKER.default);
+    check(baseC,
+      "964c the Worker as deployed (its default export) takes the constant root and no other: a create under the test root is refused bad-grant with no object fetched");
+
+    /* The shared vector (relay/test/grant-vector.json): the bytes each signer signed, built by hand when it was made, against the functions here. */
+    const V = JSON.parse(fs.readFileSync(path.join(ROOT, "relay", "test", "grant-vector.json"), "utf8"));
+    const pubKey = pub => crypto.createPublicKey({ key: Buffer.concat([SPKI, Buffer.from(pub, "hex")]), format: "der", type: "spki" });
+    const verifies = (pub, bytesHex, sig) => crypto.verify(null, Buffer.from(bytesHex, "hex"), pubKey(pub), Buffer.from(sig, "hex"));
+    const vectorHolds = () => {
+      const g = V.grants, c = V.create, text = hexs => Buffer.from(hexs, "hex").toString("utf8");
+      return /TEST KEYS ONLY/.test(V.note) && text(g.root.bytes).startsWith("etiuda-relay-grant\n") && text(V.delegation.bytes).startsWith("etiuda-delegation\n")
+        && text(c.bytes).startsWith("etiuda-relay-create-2\n" + c.rt + "\n" + c.keyId + "\n" + c.t + "\n")
+        && C.grantBytes(g.root.grant).toString("hex") === g.root.bytes && C.grantBytes(g.delegated.grant).toString("hex") === g.delegated.bytes
+        && C.delegationBytes(V.delegation.doc).toString("hex") === V.delegation.bytes
+        && C.create2Bytes(c.rt, c.keyId, c.t, g[c.grant].grant).toString("hex") === c.bytes
+        && verifies(V.root.pub, g.root.bytes, g.root.sig) && verifies(V.delegate.pub, g.delegated.bytes, g.delegated.sig)
+        && verifies(V.root.pub, V.delegation.bytes, V.delegation.sig) && verifies(V.lead.pub, c.bytes, c.sig)
+        && g.root.grant.sig.value === g.root.sig && g.delegated.grant.sig.value === g.delegated.sig && V.delegation.doc.sig.value === V.delegation.sig
+        && C.grantOk(g.root.grant, V.lead.pub, V.now, [V.root.pub]) && C.grantOk(g.delegated.grant, V.lead.pub, V.now, [V.root.pub])
+        && !C.grantOk(g.root.grant, V.lead.pub, V.now) && !C.grantOk(g.delegated.grant, V.lead.pub, V.now, [V.delegate.pub])
+        && !C.grantOk(g.root.grant, V.lead.pub, g.root.grant.until, [V.root.pub]) && !C.grantOk(g.root.grant, K.ROOT.pub, V.now, [V.root.pub]);
+    };
+    const baseD = vectorHolds();
+    check(baseD,
+      "964d the shared vector holds: the grant, delegation and create bytes equal what its maker built by hand, each signature verifies, and grantOk takes both grants"
+      + " under the vector's root and neither under the vendor's, nor at their end, nor for another lead");
+
+    /* A team made under a grant keeps the grant's until and paid, and nothing else of it. */
+    const madeUnder = async make => {
+      const ctx = ctxOf(), grant = make(ctx), R = fresh(), w = await viaWorker(W, R, bodyFor(ctx, { grant })), kept = teamOf(R, ctx.rt);
+      const dump = JSON.stringify(R.stores.get(ctx.rt).dump());
+      const leaks = [grant.sig.value, grant.kind].concat(grant.via ? [grant.via.sig.value] : []).filter(s => dump.indexOf(s) > -1).length;
+      return { w, kept, grant, ctx, leaks };
+    };
+    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,paid,rt,until"
+      && x.kept.until === x.grant.until && x.kept.paid === x.grant.paid && x.kept.lead.keyId === x.ctx.lead.keyId && x.leaks === 0;
+    const byRoot = await madeUnder(gf({ paid: true })), byDelegate = await madeUnder(ctx => K.delegatedGrantFor(ctx.lead.pub, ctx.now, { fields: { paid: false } }));
+    check(keptFor(byRoot) && byRoot.kept.paid === true,
+      "964e a create under a grant signed by the root makes the team through the Worker with one object fetch, and the team keeps the grant's until and paid and nothing else of it");
+    check(keptFor(byDelegate) && byDelegate.kept.paid === false,
+      "964f a create under a grant signed by a delegated key, with the root's delegation inside it, makes the team the same way, keeping that grant's paid: false");
+    /* The same lead creating again keeps the later until, and the paid of the grant that gave it. */
+    const repeatHolds = async () => {
+      const ctx = ctxOf(), R = fresh();
+      const g = (days, paid) => K.grantFor(ctx.lead.pub, ctx.now, { fields: { until: ctx.now + days * GD, paid } });
+      const make = async grant => { const w = await viaWorker(W, R, bodyFor(ctx, { grant })); return w.r.status === 200 ? teamOf(R, ctx.rt) : null; };
+      const g1 = g(20, true), g2 = g(40, false), g3 = g(10, true), g4 = g(40, true);
+      const a = await make(g1), b = await make(g2), c = await make(g3), d = await make(g4);
+      return !!a && !!b && !!c && !!d && a.until === g1.until && a.paid === true && b.until === g2.until && b.paid === false
+        && c.until === g2.until && c.paid === false && d.until === g2.until && d.paid === false;
+    };
+    const baseG = await repeatHolds();
+    check(baseG,
+      "964g a repeat create by the same lead keeps the later until with the paid of the grant that gave it: an earlier grant changes neither, an equal one keeps the first's paid");
+
+    /* ---- 965: each way a create fails its grant is refused in the Worker before any object, and again by the object ---- */
+    const letter = i => String.fromCharCode(97 + i);
+    const sceneOk = [];
+    for (let i = 0; i < ROWS.length; i++) {
+      sceneOk[i] = await scene(ROWS[i], W);
+      check(sceneOk[i],
+        "965" + letter(i) + " " + ROWS[i].say + " is refused by the Worker with no object fetched and nothing stored, and by the object with nothing kept"
+        + (ROWS[i].edge ? "; " + ROWS[i].edge + " is made, reaching the object once and keeping the grant's until and paid" : ""));
+    }
+    /* ---- 966: the line each one guards, lifted in turn, lets the same probes through, and the file is put back ---- */
+    for (let i = 0; i < ROWS.length; i++) {
+      const p = await liftCore("plant:" + ROWS[i].tag, async () => !(await scene(ROWS[i], W)));
+      check(sceneOk[i] && p.turned && p.back, "966" + letter(i) + " lifting plant:" + ROWS[i].tag + " lets " + ROWS[i].say.split(",")[0] + " through, and the file is put back: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+
+    /* ---- 967: the remaining plants ---- */
+    const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
+    const rootDecl = 'const ROOT_PUB = "' + ROOT_LITERAL + '";', testDecl = 'const ROOT_PUB = "' + K.ROOT.pub + '";';
+    const rootPlant = await swapCore(rootDecl, testDecl, async () => !noRoots());
+    check(baseB && rootPlant.turned && rootPlant.back, "967a changing ROOT_PUB to the test root lets a team object built with no roots take its grant, and the file is put back: "
+      + rootPlant.detail + ", sha " + (rootPlant.back ? "restored" : "differs"));
+    const rootRead = await swapCore(rootDecl, testDecl, async () => !rootHolds());
+    check(baseA && rootRead.turned && rootRead.back, "967b changing ROOT_PUB makes 964a read another value, and the file is put back: "
+      + rootRead.detail + ", sha " + (rootRead.back ? "restored" : "differs"));
+    const workerRoot = await editWorker(swapped("export default routeWith([core.ROOT_PUB]);", 'export default routeWith(["' + K.ROOT.pub + '"]);'),
+      async mod => !(await defaultRefuses(mod.default)));
+    check(baseC && workerRoot.turned && workerRoot.back, "967c giving the default Worker the test root takes the test root's create to the object, and the file is put back: "
+      + workerRoot.detail + ", sha " + (workerRoot.back ? "restored" : "differs"));
+    const labelPlant = await swapCore('return Buffer.from(GRANT_KIND + "\\n" + canon(unsigned(grant)), "utf8");',
+      'return Buffer.from(canon(unsigned(grant)), "utf8");', async () => !vectorHolds());
+    check(baseD && labelPlant.turned && labelPlant.back, "967d dropping the grant's domain label from its signed bytes fails the vector, and the file is put back: "
+      + labelPlant.detail + ", sha " + (labelPlant.back ? "restored" : "differs"));
+    const delegLabel = await swapCore('return Buffer.from(DELEGATION_KIND + "\\n" + canon(unsigned(d)), "utf8");',
+      'return Buffer.from(canon(unsigned(d)), "utf8");', async () => !vectorHolds());
+    check(baseD && delegLabel.turned && delegLabel.back, "967e dropping the delegation's domain label from its signed bytes fails the vector, and the file is put back: "
+      + delegLabel.detail + ", sha " + (delegLabel.back ? "restored" : "differs"));
+    const createLabel = await swapCore('"etiuda-relay-create-2\\n" + rt', '"etiuda-relay-create\\n" + rt', async () => !vectorHolds());
+    check(baseD && createLabel.turned && createLabel.back, "967f the create-2 label turned back to today's fails the vector, and the file is put back: "
+      + createLabel.detail + ", sha " + (createLabel.back ? "restored" : "differs"));
+    const untilPlant = await liftCore("plant:until-later", async () => !(await repeatHolds()));
+    check(baseG && untilPlant.turned && untilPlant.back, "967g lifting plant:until-later lets an earlier grant's repeat create lower the team's until, and the file is put back: "
+      + untilPlant.detail + ", sha " + (untilPlant.back ? "restored" : "differs"));
+    const keptPlant = await swapCore("epoch: team ? team.epoch : 0, until, paid }", "epoch: team ? team.epoch : 0 }",
+      async () => !keptFor(await madeUnder(gf({ paid: true }))));
+    check(keptFor(byRoot) && keptPlant.turned && keptPlant.back, "967h leaving until and paid out of the team row fails the kept-grant leg, and the file is put back: "
+      + keptPlant.detail + ", sha " + (keptPlant.back ? "restored" : "differs"));
+    /* With the Worker's own line lifted a refused create wakes the object, which refuses it itself: the Worker's line is what spares the object. */
+    const endedVia = async worker => {
+      const ctx = ctxOf(), R = fresh(), grant = K.grantFor(ctx.lead.pub, ctx.now, { fields: { until: ctx.now - 1 } });
+      const w = await viaWorker(worker, R, bodyFor(ctx, { grant }));
+      return { gets: w.gets, refusedBad: refused(w.r, "bad-grant"), kept: teamOf(R, ctx.rt) };
+    };
+    const baseI = await endedVia(W);
+    const workerPlant = await editWorker(lineLifted("plant:worker-grant"), async mod => {
+      const w = await endedVia(mod.routeWith(K.ROOTS, env => env.NOW()));
+      return w.gets === 1 && w.refusedBad && w.kept === undefined;
+    });
+    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create wake its object once, which refuses it itself, and the file is put back: "
+      + workerPlant.detail + ", sha " + (workerPlant.back ? "restored" : "differs"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

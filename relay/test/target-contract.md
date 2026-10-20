@@ -165,6 +165,7 @@ The relay and the program each apply the blob, team and rate limits. An incoming
 | `missing` | The relay has no such blob. |
 | `tmp` | A temporary file stays on this desk. |
 | `echo` | A file just received stays as it is. |
+| `bad-grant` | That team needs a valid grant, so the relay did not make it. |
 
 A swap of id, team, epoch, counter or `supersedes` fails closed as `bad-signature`. A path written onto the blob is not where the file lands. A blob sealed for an epoch the team file does not carry is `epoch`.
 
