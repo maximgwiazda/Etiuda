@@ -464,7 +464,7 @@ function createTarget(limits) {
       deletion: !!blob.deletion,
       epoch: blob.epoch,
       superseded: false,
-      place: typeof blob.place === "string" ? blob.place : "",
+      place: blob.place || null,
     };
     rec.carryPath = blob.path;
     rec.carryBody = blob.body;
@@ -601,10 +601,8 @@ function createTarget(limits) {
     );
   }
 
-  /* The plant keeps the resume after the upload, which is how the bound key reaches the answer. */
   function resumeBound(input, nonceKey) {
-    let skipUploaded = true;
-    skipUploaded = false; /* plant:S3-read-on */
+    const skipUploaded = false;
     const held = boundRecord(input.relayTeamId, input.keyId, skipUploaded);
     if (!held) return null;
     const msg = helloMessage(input.relayTeamId, input.nonce, input.keyId);
@@ -648,6 +646,9 @@ function createTarget(limits) {
     const k = enrolKey(relayTeamId, keyId);
     enrolled.set(k, { role: "desk", deskId: deskId });
     wasEnrolled.add(k);
+    sessions.forEach(function (s, token) {
+      if (s.relayTeamId === relayTeamId && s.inviteId && s.boundKey === keyId) sessions.delete(token);
+    });
     return { ok: true };
   }
 
@@ -849,14 +850,17 @@ function createTarget(limits) {
     return issueSession(input.relayTeamId, input.keyId, nonceKey);
   }
 
-  /* After the one upload, and until that key is enrolled, its session is served only its answer. */
-  function answerOnly(session, relayTeamId) {
+  /* An uploaded invitation's session fetches only its answer. Lifting the plant opens the team. */
+  function inviteAnswer(session, relayTeamId) {
+    let gate = false;
+    gate = true; /* plant:S3-read-on */
+    if (!gate) return null;
     const s = sessions.get(session);
-    if (!s || s.relayTeamId !== relayTeamId || !s.inviteId || !s.boundKey) return null;
+    if (!s || s.relayTeamId !== relayTeamId || !s.inviteId) return null;
     const inv = invites.get(s.inviteId);
-    if (!inv || !inv.uploaded || inv.key !== s.boundKey) return null;
-    if (enrolled.has(enrolKey(relayTeamId, s.boundKey))) return null;
-    return { id: s.inviteId };
+    if (!inv || !inv.uploaded) return null;
+    if (s.boundKey && enrolled.has(enrolKey(relayTeamId, s.boundKey))) return { ended: true, id: s.inviteId };
+    return { ended: false, id: s.inviteId };
   }
 
   function answerPlace(place) {
@@ -871,11 +875,9 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
-    const only = answerOnly(session, relayTeamId);
+    if (inviteAnswer(session, relayTeamId)) return refuse("not-enrolled");
     const ids = listRecords(relayTeamId).filter(function (r) {
-      if (r.superseded || r.deletion) return false;
-      if (only) return r.place === "answer:" + only.id;
-      return !answerPlace(r.place);
+      return !r.superseded && !r.deletion && !answerPlace(r.place);
     }).map(function (r) { return r.id; });
     return { ok: true, served: true, ids: ids };
   }
@@ -888,14 +890,12 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
-    const only = answerOnly(session, relayTeamId);
+    const only = inviteAnswer(session, relayTeamId);
     const rec = findRecord(relayTeamId, id);
     if (only) {
-      const own = rec && rec.id === only.id && rec.place === "answer:" + only.id;
+      const own = !only.ended && rec && id === only.id && rec.place === "answer:" + only.id;
       if (!own) return rec ? refuse("not-enrolled") : refuse("missing");
-    } else if (rec && answerPlace(rec.place)) {
-      return refuse("missing");
-    }
+    } else if (rec && answerPlace(rec.place)) return refuse("missing");
     if (!rec) return refuse("missing");
     if (rec.superseded) return refuse("superseded");
     const material = sealed.get(relayTeamId + ":" + id);
@@ -924,7 +924,7 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
-    if (answerOnly(session, relayTeamId)) return { ok: true, served: true, events: [] };
+    if (inviteAnswer(session, relayTeamId)) return refuse("not-enrolled");
     const sub = { relayTeamId: relayTeamId, keyId: s ? s.keyId : "", events: [] };
     subscribers.push(sub);
     return { ok: true, served: true, events: sub.events };
