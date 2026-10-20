@@ -129,6 +129,12 @@ function createCore(deps) {
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       store.put("devrev", b.rev);
       for (const [k, s] of store.list("ses:")) if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+      /* An invitation's session is held by no key of its own, so the key it binds is read from the session or the invitation:
+         every invitation standing now was registered before this removal, and its session reads nothing from here on. */
+      for (const [k, s] of store.list("ses:")) {
+        const bound = s.inv ? s.bound || (store.get("inv:" + s.inv) || {}).key : null;
+        if (bound && withdrawn.indexOf(bound) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-invite-sessions */
+      }
     });
     return { ok: true, rev: b.rev, withdrawn };
   }

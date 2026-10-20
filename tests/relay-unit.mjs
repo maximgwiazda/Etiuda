@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 112;
+const EXPECTED = 114;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1020,14 +1020,19 @@ async function main() {
     const earlyUp = await put(early.w, early.hello.json && early.hello.json.session, earlyBlob, { extra: { pub: early.w.desk.pub } });
     check(early.hello.status === 200 && refused(earlyUp, "removed"),
       "962b the same key presenting an invitation registered before its removal is refused: upload " + said(earlyUp));
+    /* Two guards stand on this upload since 962m: the removal marks the bound session removed, and the upload's own check
+       refuses an invitation registered before the removal. Either alone holds, so both are lifted here. */
     const planted = await liftCore("plant:invite-removed", async () => {
-      const y = await removedThen(false);
-      const place = "desk:k-" + hex(8);
-      const yBlob = sealJoin(y.w, y.w.desk, 1, place);
-      const yUp = await put(y.w, y.hello.json && y.hello.json.session, yBlob, { extra: { pub: y.w.desk.pub } });
-      return y.hello.status === 200 && yUp.status === 200;
+      const inner = await liftCore("plant:withdraw-invite-sessions", async () => {
+        const y = await removedThen(false);
+        const place = "desk:k-" + hex(8);
+        const yBlob = sealJoin(y.w, y.w.desk, 1, place);
+        const yUp = await put(y.w, y.hello.json && y.hello.json.session, yBlob, { extra: { pub: y.w.desk.pub } });
+        return y.hello.status === 200 && yUp.status === 200;
+      });
+      return inner.turned && inner.back;
     });
-    check(planted.turned && planted.back, "962c lifting plant:invite-removed accepts that earlier invitation's upload, and the file is put back: "
+    check(planted.turned && planted.back, "962c lifting plant:invite-removed with plant:withdraw-invite-sessions accepts that earlier invitation's upload, and the file is put back: "
       + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
     const quietPlant = await liftCore("plant:rejoin-quiet", async () => {
       const y = await removedThen(true);
@@ -1117,6 +1122,32 @@ async function main() {
     });
     check(gonePlant.turned && gonePlant.back, "962l lifting plant:order-gone leaves a later invitation unordered after the removal, so it is refused, and the file is put back: "
       + gonePlant.detail + ", sha " + (gonePlant.back ? "restored" : "differs"));
+
+    /* A desk enrolled as D binds an invitation's session, and the lead then withdraws D: that session reads nothing more,
+       since, a blob and the socket each refused removed, as D's own hello is (Claude alpha's edit to 918, 2026-10-20). */
+    const boundThenGone = async () => {
+      const y = await world();
+      const token = hex(32), id = hex(16);
+      await invites(y, [{ id, hash: sha(token) }], []);
+      const hello = await boundHello(y, y.desk, id, token);
+      const s = hello.json && hello.json.session;
+      const before = await since(y, s);
+      await devices(y, y.devs.slice(1));
+      return { hello, before, list: await since(y, s), fetched: await getBlob(y, s, hex(16)), sock: await socket(y, s),
+        again: await helloAs(y, y.desk) };
+    };
+    const cut = await boundThenGone();
+    check(cut.hello.status === 200 && cut.before.status === 200 && refused(cut.list, "removed") && refused(cut.fetched, "removed")
+      && refused(cut.sock, "removed") && refused(cut.again, "removed"),
+      "962m an invitation's session bound to a key the lead then withdraws reads nothing: list " + said(cut.list) + ", fetch "
+      + said(cut.fetched) + ", socket " + said(cut.sock) + ", the key's own hello " + said(cut.again) + " (before the removal, list "
+      + said(cut.before) + ")");
+    const cutPlant = await liftCore("plant:withdraw-invite-sessions", async () => {
+      const r = await boundThenGone();
+      return r.list.status === 200;
+    });
+    check(cutPlant.turned && cutPlant.back, "962n lifting plant:withdraw-invite-sessions lets that session list again, and the file is put back: "
+      + cutPlant.detail + ", sha " + (cutPlant.back ? "restored" : "differs"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
