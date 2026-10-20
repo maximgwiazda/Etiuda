@@ -3267,19 +3267,21 @@ function cancelJoin() {
   teamJoin = null;
   joinTold = false;
   /* An invitation, by folder or by relay, changed this team's pin, where it came from, the folder it showed, the channel and the
-     leave record (and a folder invitation the desk's own folder setting), and kept what each was in `before`. While this desk
-     holds no key for the team, cancelling puts each back as it was.
-     A desk that already keeps the team's key may take an invitation for it all the same, since inviteSettled looks at a
-     bar and another lead's pin and not at a key, and that join stands until a newer key arrives (finishJoin compares with
-     `held`). That desk is a member, not a request waiting, so Cancel leaves what its invitation set (921e). */
-  if (j && j.invite && j.invite.before && newestEpoch(j.team) === 0) undoInvite(j.team, j.invite.before, j.invite); /* plant:c7-cancel */
+     leave record (and a folder invitation the desk's own folder setting), and kept what each was in `before`, with the newest
+     key the desk held then (`epoch`). Cancelling puts each back as it was while the desk keeps no newer key than that mark: a
+     desk that held none goes back off the team, and a member that held the key goes back to the folder and the shown team it
+     had, with its pin and its key (921e). A newer key, which the invitation's wrap opens before the lead admits the desk
+     (finishJoin compares with `held`), means the desk now reads the team through the invitation, and Cancel leaves what it set. */
+  const b = j && j.invite && j.invite.before;
+  if (b && newestEpoch(j.team) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
 }
-/* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out. */
+/* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out, and `epoch`
+   is the newest key it held, the mark Cancel compares the key it holds then with. */
 function inviteBefore(team) {
   return JSON.parse(JSON.stringify({ pin: teamPins[team], from: teamPinFrom[team], shown: teamShown[team], channel: teamChannel[team],
-    left: teamLeft[team], barred: teamBarred.has(team) }));
+    left: teamLeft[team], barred: teamBarred.has(team), epoch: newestEpoch(team) })); /* plant:c7-mark */
 }
 /* What Cancel puts back for an invitation taken now. An invitation taken over a pending one for the same team keeps the first's,
    which is what the desk held. `keptJoin` is the request standing when the invitation is taken. */
@@ -3372,7 +3374,8 @@ function joinKept(j) {
     && (inv.before === undefined || beforeKept(inv.before)); /* plant:c7-kept */
   return inviteOk ? j : null;
 }
-/* An invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts. */
+/* An invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts; `epoch`
+   is a count of the epochs a key is held for, absent in an envelope written before the mark was taken. */
 function beforeKept(b) {
   const table = v => !!v && typeof v === "object" && !Array.isArray(v);
   if (!table(b) || typeof b.barred !== "boolean") return false;
@@ -3382,7 +3385,8 @@ function beforeKept(b) {
     && (s === undefined || (table(s) && (s.lead === undefined || shownName(s.lead))
       && (s.folder === undefined || (typeof s.folder === "string" && s.folder.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(s.folder)))))
     && (b.channel === undefined || (!!c && c.kind === "relay"))
-    && (b.left === undefined || (typeof b.left === "string" && /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/.test(b.left)));
+    && (b.left === undefined || (typeof b.left === "string" && /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/.test(b.left)))
+    && (b.epoch === undefined || (Number.isInteger(b.epoch) && b.epoch >= 0)); /* plant:c7-epoch */
 }
 /* A relay invitation as the envelope keeps it: the relay team id, the address and the invitation's id in the open, the
    token and the seal key sealed by safeStorage. */

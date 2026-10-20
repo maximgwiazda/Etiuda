@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 181;
+const EXPECTED = 185;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3139,6 +3139,11 @@ try {
          that came by an answered request and the team it showed, so the snapshot read back carries every table beforeKept checks. */
       restart: { restart: true, unpinned: true, held: (team, key, share) => ({ teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
         teamShown: { [team]: { lead: "Ada Quay", folder: share } } }) },
+      /* A key newer than the one held at the invitation is in the envelope when the desk comes back, as the invitation's wrap
+         gives one before the lead admits the desk. */
+      admit: { restart: true, edit: (doc, team, key) => { doc.teamKeys = Object.assign({}, doc.teamKeys, { [team]: { 1: sealedKey(key) } }); } },
+      /* A snapshot whose mark is not a count. */
+      tamper: { restart: true, view: true, edit: doc => { doc.teamJoin.invite.before.epoch = "1"; } },
     };
     const runScene = (src, tag, name) => (asked[name].folder ? folderScene : cancelScene)(src, tag, asked[name]);
     const gone = g => g.here === null && g.folder === g.share && g.stopped;
@@ -3148,8 +3153,8 @@ try {
       pin: g => gone(g) && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === undefined
         && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined,
       left: g => gone(g) && slot(g, "teamLeft") === LEFT_AT && barredHere(g) && slot(g, "teamPins") === undefined,
-      key: g => g.here !== null && g.folder !== g.share && g.still && !g.stopped && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin)
-        && slot(g, "teamPinFrom") === "invite" && !!slot(g, "teamChannel") && g.after.teamJoin === undefined,
+      key: g => gone(g) && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === undefined
+        && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined && !!slot(g, "teamKeys") && g.after.teamJoin === undefined,
       twice: g => gone(g) && slot(g, "teamPins") === undefined && slot(g, "teamPinFrom") === undefined && slot(g, "teamShown") === undefined
         && slot(g, "teamChannel") === undefined,
       fresh: g => folderBack(g) && slot(g, "teamPins") === undefined,
@@ -3158,6 +3163,9 @@ try {
       restart: g => gone(g) && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === "answer"
         && !!slot(g, "teamShown") && slot(g, "teamShown").lead === "Ada Quay" && slot(g, "teamShown").folder === g.share
         && slot(g, "teamChannel") === undefined && g.after.teamJoin === undefined,
+      admit: g => g.here !== null && g.folder !== g.share && g.still && !g.stopped && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin)
+        && slot(g, "teamPinFrom") === "invite" && !!slot(g, "teamChannel") && !!slot(g, "teamKeys") && g.after.teamJoin === undefined,
+      tamper: g => g.kept === false,
     };
     const told = g => (g.pre ? "the copy had landed" : "the copy had not (" + (g.refused ? "refused " + g.refused : "file " + g.file + ", channel " + g.named) + ")")
       + ", relayHere " + (g.here === null ? "null" : "answers")
@@ -3167,6 +3175,7 @@ try {
       + ", from " + (slot(g, "teamPinFrom") || "gone")
       + ", shown " + (slot(g, "teamShown") ? "kept" : "gone")
       + ", channel named " + (slot(g, "teamChannel") ? "yes" : "no")
+      + ", key " + (slot(g, "teamKeys") ? "kept" : "gone")
       + ", left " + (slot(g, "teamLeft") ? "kept" : "gone")
       + ", barred " + (barredHere(g) ? "yes" : "no")
       + ", join " + (g.after.teamJoin === undefined ? "gone" : "standing");
@@ -3188,8 +3197,8 @@ try {
       "921d a desk that had left the team, and cancels the invitation before it is admitted, has its leave record and its bar again: "
       + told(scenes.left));
     check(scenes.key.pre && verdict.key(scenes.key),
-      "921e a desk that keeps the team's key, and cancels an invitation it took, is left on the relay with the pin, the invitation's from and"
-      + " the channel: " + told(scenes.key));
+      "921e a desk that held the team's key before a relay invitation, and cancels it, goes back to the folder and the shown team it had, off the relay,"
+      + " keeping its pin and its key: " + told(scenes.key));
     check(scenes.twice.pre && verdict.twice(scenes.twice),
       "921f a desk that takes the same invitation twice and cancels is back as it was before the first: " + told(scenes.twice));
     check(scenes.fresh.pre && verdict.fresh(scenes.fresh),
@@ -3202,6 +3211,11 @@ try {
     check(scenes.restart.pre && verdict.restart(scenes.restart),
       "921m a desk stopped and loaded again from desk.json between a relay invitation and its Cancel reads the snapshot back and still puts back the pin,"
       + " where it came from, the shown team and the folder: " + told(scenes.restart));
+    check(scenes.admit.pre && verdict.admit(scenes.admit),
+      "921n a desk that keeps a key newer than the one it held at the invitation, and cancels, is left on the relay as the invitation set it: " + told(scenes.admit));
+    check(scenes.tamper.pre && verdict.tamper(scenes.tamper),
+      "921o a snapshot whose mark of the key held is not a count is not read back from desk.json, and the request that carried it is not kept: the request "
+      + (scenes.tamper.kept ? "was kept" : "was dropped"));
 
     /* The plants. Each leg above is red where the line it guards is lifted, the file is read back from disk and put back byte for byte. */
     async function planted(edit, names) {
@@ -3226,15 +3240,18 @@ try {
     const dropLine = mark => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
     const swapText = (mark, part, to) => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0 || lines[at].indexOf(part) < 0) return null; lines[at] = lines[at].replace(part, to); return lines.join("\n"); };
     const dropText = (mark, part) => swapText(mark, part, "");
-    const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice", "fresh"]);
-    check(red(lifted, ["pin", "left", "twice", "fresh"]) && lifted.back,
-      "921g lifting plant:c7-cancel reddens 921c, 921d, 921f and 921j, and the file is put back: " + redTold(lifted, ["pin", "left", "twice", "fresh"]) + ", sha " + (lifted.back ? "restored" : "differs"));
-    const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team) === 0"), ["key"]);
-    check(red(clause, ["key"]) && clause.back,
-      "921h lifting the clause that holds the restore to a desk with no key reddens 921e, and the file is put back: " + redTold(clause, ["key"]) + ", sha " + (clause.back ? "restored" : "differs"));
+    const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice", "key", "fresh"]);
+    check(red(lifted, ["pin", "left", "twice", "key", "fresh"]) && lifted.back,
+      "921g lifting plant:c7-cancel reddens 921c, 921d, 921e, 921f and 921j, and the file is put back: " + redTold(lifted, ["pin", "left", "twice", "key", "fresh"]) + ", sha " + (lifted.back ? "restored" : "differs"));
+    const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team) === (b.epoch || 0)"), ["admit"]);
+    check(red(clause, ["admit"]) && clause.back,
+      "921h lifting the clause that holds the restore to a desk with no newer key than at the invitation reddens 921n, and the file is put back: " + redTold(clause, ["admit"]) + ", sha " + (clause.back ? "restored" : "differs"));
     const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice", "ftwice"]);
     check(red(chain, ["twice", "ftwice"]) && chain.back,
       "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f and 921k, and the file is put back: " + redTold(chain, ["twice", "ftwice"]) + ", sha " + (chain.back ? "restored" : "differs"));
+    const mark = await planted(dropText("plant:c7-mark", ", epoch: newestEpoch(team)"), ["key"]);
+    check(red(mark, ["key"]) && mark.back,
+      "921p lifting plant:c7-mark, the key held at the invitation, reddens 921e, and the file is put back: " + redTold(mark, ["key"]) + ", sha " + (mark.back ? "restored" : "differs"));
     const folderSnap = await planted(swapText("plant:c8-before", "inviteBeforeFor(parsed.team, keptJoin)", "undefined"), ["fresh", "ftwice", "fleft"]);
     check(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
       "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the file is put back: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
@@ -3244,6 +3261,9 @@ try {
     const kept = await planted(swapText("plant:c7-kept", "beforeKept(inv.before)", "false"), ["restart"]);
     check(red(kept, ["restart"]) && kept.back,
       "921s lifting plant:c7-kept, so the envelope refuses every snapshot, reddens 921m, and the file is put back: " + redTold(kept, ["restart"]) + ", sha " + (kept.back ? "restored" : "differs"));
+    const epoch = await planted(swapText("plant:c7-epoch", "(Number.isInteger(b.epoch) && b.epoch >= 0)", "true"), ["tamper"]);
+    check(red(epoch, ["tamper"]) && epoch.back,
+      "921t lifting plant:c7-epoch, the check that the mark is a count, reddens 921o, and the file is put back: " + redTold(epoch, ["tamper"]) + ", sha " + (epoch.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs 921a to 921t): " + (e && e.stack ? e.stack : e));
   }
