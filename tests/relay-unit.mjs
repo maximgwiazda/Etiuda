@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 182;
+const EXPECTED = 198;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1031,6 +1031,22 @@ async function main() {
     }
     return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
   }
+  /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
+  function counted(R) {
+    const gets = { n: 0 };
+    const env = Object.assign({}, R.env, { TEAMS: { jurisdiction(j) {
+      const s = R.env.TEAMS.jurisdiction(j);
+      return s && { idFromName: n => s.idFromName(n), get: id => { gets.n++; return s.get(id); } };
+    } } });
+    return { env, gets };
+  }
+  /* A request through a Worker, with the object lookups it made counted. */
+  async function countedCall(worker, R, method, p, o) {
+    const c = counted(R);
+    const r = await call(R, method, p, Object.assign({}, o, { worker, env: c.env }));
+    return { r, gets: c.gets.n };
+  }
+  const viaWorker = (worker, R, body) => countedCall(worker, R, "POST", "/relay/v1/teams", { json: body });
   /* As liftCore for relay/worker.mjs, a module evaluated once per address: the edited file is imported under a query of its own and
      `fn` is handed that module, so the Worker the legs hold is untouched. `edit` maps the file's text to the edited text, or to null
      where what it means to change is absent; `lineLifted(tag)` is the edit that lifts the line carrying a plant tag. */
@@ -1546,7 +1562,7 @@ async function main() {
     const pPut = await swapTeam("DO UPDATE SET v = excluded.v", "DO NOTHING", async T => !same(sqlKv(T), WANT_KV));
     check(back(pPut),
       "963o lifting put's overwrite turns 963e red, and the file is put back: " + how(pPut));
-    const pAtomic = await swapTeam("atomic(fn) { return storage.transactionSync(fn); }", "atomic(fn) { return fn(); }", async T => !same(sqlAtomic(T), WANT_ATOMIC));
+    const pAtomic = await swapTeam("atomic(fn) { make(); return storage.transactionSync(fn); }", "atomic(fn) { return fn(); }", async T => !same(sqlAtomic(T), WANT_ATOMIC));
     check(back(pAtomic),
       "963p lifting atomic's transaction turns 963f red, and the file is put back: " + how(pAtomic));
     const pAttach = await swapTeam("pair[1].serializeAttachment(attachment);", "/* lifted */", async T => { const r = await safe(() => hibernated(T)); return !r || !sockOk(r); });
@@ -1555,6 +1571,217 @@ async function main() {
     const pAccept = await swapTeam("ctx.acceptWebSocket(pair[1]);", "/* lifted */", async T => { const r = await safe(() => hibernated(T)); return !r || !sockOk(r); });
     check(back(pAccept),
       "963r lifting the accept onto the ctx turns 963k red, and the file is put back: " + how(pAccept));
+
+    /* ---- 968: a team never made costs the relay nothing, and no body is awaited before the team is known (board 934, the test
+       architect's conditions 2 and 3), over RelayTeam on real SQLite through the Worker ---- */
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+    const tablesOf = ctx => ctx.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
+    const rowsOf = ctx => (tablesOf(ctx).indexOf("kv") > -1 ? ctx.db.prepare("SELECT k FROM kv").all().map(r => r.k) : []);
+    const workerOver = mod => mod.routeWith(K.ROOTS, env => env.NOW());
+    const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
+
+    /* Every route a stranger can name, each with GET and POST (and the blob route's PUT), for an id nobody made. */
+    function strangerCalls(rt) {
+      const id = hex(16), tok = hex(32), p = "/relay/v1/t/" + rt;
+      const meta = { v: 1, id, supersedes: null, epoch: 1, writer: "k-" + hex(8), counter: 1, del: false, sig: hex(64), nonce: hex(12), place: "root" };
+      const out = [];
+      for (const route of ["hello", "session", "devices", "invites", "socket", "wrap", "states", "since/0", "b/" + id]) {
+        out.push(["GET", p + "/" + route, { token: tok }], ["POST", p + "/" + route, { token: tok, json: {} }]);
+      }
+      out.push(["PUT", p + "/b/" + id, { token: tok, meta, body: Buffer.alloc(8) }], ["GET", p + "/since/0", {}]);
+      return out;
+    }
+    const neverMade = async T => {
+      const R = sqlRelay(T), rt = hex(16), seen = [];
+      for (const [method, p, o] of strangerCalls(rt)) { const w = await countedCall(W, R, method, p, o); seen.push(w.r.status); }
+      const woken = [...R.teams.values()];
+      return { calls: seen.length, bad: seen.filter(s => s < 400 || s >= 500).length, woke: woken.length, tables: [].concat(...woken.map(t => tablesOf(t.ctx))),
+        rows: [].concat(...woken.map(t => rowsOf(t.ctx))) };
+    };
+    const nm = await neverMade(T0);
+    const baseNever = nm.calls === 20 && nm.bad === 0 && nm.woke === 1 && nm.tables.length === 0 && nm.rows.length === 0;
+    check(baseNever,
+      "968a every route a stranger can name, by GET and by POST, for a team id never made is answered 4xx and leaves the object with no kv table and no row: "
+      + JSON.stringify(nm));
+
+    /* The table is made by the create, and the rows with it; a read before it leaves none. */
+    const created = async T => {
+      const R = sqlRelay(T), rt = hex(16), lead = keyPair(false), p = "/relay/v1/t/" + rt;
+      await countedCall(W, R, "POST", p + "/hello", { json: {} });
+      const held = R.teams.get(rt), before = [tablesOf(held.ctx), rowsOf(held.ctx)];
+      const made = await viaWorker(W, R, createBody(rt, lead, Date.now()));
+      const after = [tablesOf(held.ctx), rowsOf(held.ctx)];
+      const again = await countedCall(W, R, "POST", p + "/hello", { json: {} });
+      return { before, made: [made.r.status, made.gets], after, again: again.r.status };
+    };
+    const WANT_CREATED = { before: [[], []], made: [200, 1], after: [["kv"], ["team"]], again: 200 };
+    const cr = await created(T0);
+    check(same(cr, WANT_CREATED),
+      "968b a read before the create leaves no table, the create makes the kv table and the team row through one object fetch, and the team then answers: " + JSON.stringify(cr));
+
+    /* The store itself: a table that is not there reads as empty and is not made by a read or a delete; the first write makes it. */
+    const lazyStore = T => {
+      const { store, ctx } = raise(T, X.doCtx(), { BLOBS: S.memoryBucket() });
+      const out = {};
+      out.get = store.get("team") === undefined;
+      out.list = [store.list("ses:").length, store.list("ses:", { after: "ses:5", limit: 3 }).length];
+      store.del("team");
+      out.untouched = tablesOf(ctx);
+      store.put("k1", { a: 1 });
+      out.written = [tablesOf(ctx), store.get("k1"), keysOf(store.list("k"))];
+      return out;
+    };
+    const WANT_LAZY = { get: true, list: [0, 0], untouched: [], written: [["kv"], { a: 1 }, ["k1"]] };
+    const lz = lazyStore(T0);
+    check(same(lz, WANT_LAZY),
+      "968c over real SQLite a store with no table reads a key as absent and a list as empty, a delete does nothing, none of them makes the table, and the first put does: "
+      + JSON.stringify(lz));
+
+    /* The Worker answers missing for any path or method outside the routes, and wakes no object to do it. */
+    function outsideCalls(rt) {
+      const p = "/relay/v1/t/" + rt, id = hex(16), methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"], out = [];
+      const answers = { hello: ["POST"], session: ["POST"], devices: ["POST"], invites: ["POST"], socket: ["GET"], wrap: ["GET"], states: ["GET"],
+        "since/0": ["GET"], ["b/" + id]: ["GET", "PUT"] };
+      for (const [route, ok] of Object.entries(answers)) for (const m of methods) if (ok.indexOf(m) < 0) out.push([m, p + "/" + route]);
+      for (const m of methods) {
+        if (m !== "POST") out.push([m, "/relay/v1/teams"]);
+        out.push([m, p + "/nowhere"], [m, p + "/"], [m, p], [m, p + "/hello/extra"], [m, p + "/since/x"], [m, p + "/b/" + id.slice(1)],
+          [m, "/relay/v1/t/" + rt.slice(1) + "/hello"], [m, "/relay/v1/t/" + rt.toUpperCase() + "/hello"], [m, "/relay/v1/teams/"],
+          [m, "/relay/v1/teams/x"], [m, "/relay/v2/t/" + rt + "/hello"]);
+      }
+      return out;
+    }
+    const outside = async (T, worker) => {
+      const R = sqlRelay(T), madeRt = "ab" + hex(15), lead = keyPair(false);
+      await viaWorker(W, R, createBody(madeRt, lead, Date.now()));
+      let wrong = 0, fetched = 0, total = 0;
+      for (const rt of [madeRt, "cd" + hex(15)]) {
+        for (const [method, p] of outsideCalls(rt)) {
+          const w = await countedCall(worker, R, method, p, {});
+          total++;
+          if (!refused(w.r, "missing")) wrong++;
+          fetched += w.gets;
+        }
+      }
+      return { total, wrong, fetched };
+    };
+    const out0 = await outside(T0, W);
+    const baseOutside = out0.total > 100 && out0.wrong === 0 && out0.fetched === 0;
+    check(baseOutside,
+      "968d a path or a method outside the relay's routes, for a team made and one never made, is answered missing by the Worker with no object fetched: "
+      + out0.total + " requests, " + out0.wrong + " not missing, " + out0.fetched + " object fetches");
+
+    /* The Worker reads each POST body to its cap before it wakes the object: a body that never ends costs no object. */
+    const stall = () => {
+      let ctl;
+      const reads = { n: 0 };
+      const stream = new ReadableStream({ start(c) { ctl = c; }, pull() { reads.n++; } }, { highWaterMark: 0 });
+      return { stream, reads, end() { try { ctl.error(new Error("the client went away")); } catch { /* closed already */ } } };
+    };
+    const bodyFirst = async (T, worker) => {
+      const R = sqlRelay(T), rt = hex(16), lead = keyPair(false), out = {};
+      await viaWorker(W, R, createBody(rt, lead, Date.now()));
+      for (const route of ["hello", "session", "devices", "invites"]) {
+        const c = counted(R), s = stall();
+        let settled = false;
+        const pending = call(R, "POST", "/relay/v1/t/" + rt + "/" + route, { body: s.stream, worker, env: c.env }).then(r => { settled = true; return r; }, () => { settled = true; return null; });
+        await delay(150);
+        const during = [c.gets.n, settled];
+        s.end();
+        const after = await Promise.race([pending, delay(3000).then(() => "hung")]);
+        const big = await countedCall(worker, R, "POST", "/relay/v1/t/" + rt + "/" + route, { body: Buffer.alloc(300 * 1024) });
+        out[route] = { during, after: after === "hung" ? "hung" : (after ? after.status : "reset"), gets: c.gets.n, big: [refused(big.r, "blob-size"), big.gets] };
+      }
+      const fine = await countedCall(worker, R, "POST", "/relay/v1/t/" + rt + "/hello", { json: {} });
+      out.fine = [fine.r.status, fine.gets];
+      return out;
+    };
+    const WANT_FIRST = { during: [0, false], after: 500, gets: 0, big: [true, 0] };
+    const bodyHolds = r => ["hello", "session", "devices", "invites"].every(k => same(r[k], WANT_FIRST)) && same(r.fine, [200, 1]);
+    const bf = await bodyFirst(T0, W);
+    const baseBody = bodyHolds(bf);
+    check(baseBody,
+      "968e a POST body that never ends, to hello, session, devices or invites of a team that exists, is awaited by the Worker with no object fetched, and ends without waking one;"
+      + " a body over the cap is refused blob-size with none; a short body reaches the object once: " + JSON.stringify(bf));
+
+    /* The object checks the team before it reads a body: a stalled body for a team never made is never touched. */
+    const objectFirst = async (T, made) => {
+      const out = {};
+      for (const route of ["session", "devices", "invites"]) {
+        const env = { BLOBS: S.memoryBucket() }, { team } = raise(T, X.doCtx(), env), rt = hex(16);
+        if (made) await ask(team, "POST", "/relay/v1/teams", { json: createBody(rt, keyPair(false), Date.now()) });
+        const s = stall();
+        let answer = "pending";
+        const done = team.fetch(new Request("https://relay.test/relay/v1/t/" + rt + "/" + route, { method: "POST", body: s.stream, duplex: "half" }))
+          .then(async res => { answer = [res.status, JSON.parse(await res.text()).error]; }, () => { answer = "threw"; });
+        await Promise.race([done, delay(300)]);
+        const early = answer, reads = s.reads.n;
+        s.end();
+        await Promise.race([done, delay(2000)]);
+        out[route] = [early, reads > 0];
+      }
+      return out;
+    };
+    const ofNever = await objectFirst(T0, false);
+    const ofMade = await objectFirst(T0, true);
+    const baseFirst = ["session", "devices", "invites"].every(k => same(ofNever[k], [[403, "not-enrolled"], false]));
+    const controlFirst = ["session", "devices", "invites"].every(k => ofMade[k][0] === "pending" && ofMade[k][1] === true);
+    check(baseFirst && controlFirst,
+      "968f the object answers not-enrolled to a session, devices or invites call for a team never made without touching its body, where for a team that exists it waits on the body: "
+      + JSON.stringify(ofNever) + " against " + JSON.stringify(ofMade));
+
+    /* RelayTeam's constructor passes no roots, so a create under the test root is refused by the object and leaves it with no table. */
+    const bareRefused = async T => {
+      const env = { BLOBS: S.memoryBucket() }, ctx = X.doCtx(), rt = hex(16), lead = keyPair(false);
+      const team = new T.RelayTeam(ctx, env);
+      const r = await ask(team, "POST", "/relay/v1/teams", { json: createBody(rt, lead, Date.now()) });
+      return { status: r.status, error: r.json.error, tables: tablesOf(ctx) };
+    };
+    const br = await bareRefused(T0);
+    const baseBare = same(br, { status: 403, error: "bad-grant", tables: [] });
+    check(baseBare,
+      "968g RelayTeam as the namespace builds it (no roots handed) trusts the vendor's root alone: a create under the test root is refused bad-grant and leaves no table: " + JSON.stringify(br));
+
+    /* ---- plants for 968 ---- */
+    const pCtor = await swapTeam("let made = false;", "let made = (sql.exec(MAKE), true);", async T => {
+      const r = await safe(() => neverMade(T)), l = await safe(() => lazyStore(T));
+      return !r || r.tables.length > 0 || !l || l.untouched.length > 0;
+    });
+    check(baseNever && same(lz, WANT_LAZY) && back(pCtor),
+      "968h making the table in the constructor again (the old line) turns 968a and 968c red, and the file is put back: " + how(pCtor));
+    const pGet = await swapTeam("if (!has()) return undefined;", "", async T => !same(await safe(() => neverMade(T)), nm) && !same(await safe(() => lazyStore(T)), WANT_LAZY));
+    check(baseNever && back(pGet),
+      "968i lifting the missing-table answer from get turns 968a and 968c red, and the file is put back: " + how(pGet));
+    const pList = await swapTeam("if (!has()) return [];", "", async T => !same(await safe(() => lazyStore(T)), WANT_LAZY));
+    check(same(lz, WANT_LAZY) && back(pList),
+      "968j lifting the missing-table answer from list turns 968c red, and the file is put back: " + how(pList));
+    const pDel = await swapTeam("if (!has()) return;", "", async T => !same(await safe(() => lazyStore(T)), WANT_LAZY));
+    check(same(lz, WANT_LAZY) && back(pDel),
+      "968k lifting the missing-table answer from del turns 968c red, and the file is put back: " + how(pDel));
+    const pMake = await swapTeam("sql.exec(MAKE); made = true;", "made = true;", async T => !same(await safe(() => created(T)), WANT_CREATED) && !same(await safe(() => lazyStore(T)), WANT_LAZY));
+    check(same(cr, WANT_CREATED) && same(lz, WANT_LAZY) && back(pMake),
+      "968l never making the table turns 968b and 968c red, and the file is put back: " + how(pMake));
+    const pRoute = await editWorker(swapped("if (!hit) return team.missing(); /* plant:worker-route */", ""), async mod => {
+      const r = await safe(() => outside(T0, workerOver(mod)));
+      return !r || r.wrong > 0 || r.fetched > 0;
+    });
+    check(baseOutside && pRoute.turned && pRoute.back,
+      "968m lifting the Worker's route check lets paths and methods outside the routes past it, and the file is put back: " + pRoute.detail + ", sha " + (pRoute.back ? "restored" : "differs"));
+    const pBody = await editWorker(swapped("if (request.method === \"POST\") { /* plant:worker-body */", "if (false) {"), async mod => {
+      const r = await safe(() => bodyFirst(T0, workerOver(mod)));
+      return !r || !bodyHolds(r);
+    });
+    check(baseBody && pBody.turned && pBody.back,
+      "968n leaving a POST body unread in the Worker wakes the object while the body is still arriving, and the file is put back: " + pBody.detail + ", sha " + (pBody.back ? "restored" : "differs"));
+    const pFirst = await swapTeam("if (what !== \"teams\" && !c.hasTeam(rt)) return refusedFor(\"not-enrolled\"); /* plant:team-first */", "", async T => {
+      const r = await safe(() => objectFirst(T, false));
+      return !r || !["session", "devices", "invites"].every(k => same(r[k], [[403, "not-enrolled"], false]));
+    });
+    check(baseFirst && back(pFirst),
+      "968o lifting the object's team check before it reads turns 968f red, and the file is put back: " + how(pFirst));
+    const pRoots = await swapTeam("clock: () => Date.now(), sockets: hibernating(ctx) }", "clock: () => Date.now(), sockets: hibernating(ctx), roots: [\"" + K.ROOT.pub + "\"] }", async T => !same(await safe(() => bareRefused(T)), { status: 403, error: "bad-grant", tables: [] }));
+    check(baseBare && back(pRoots),
+      "968p handing RelayTeam's object the test root turns 968g red, and the file is put back: " + how(pRoots));
   }
 
   /* ---- 17: a team is made only under a grant, judged in the Worker before any object wakes (board 935, slice G1) ---- */
@@ -1565,20 +1792,6 @@ async function main() {
     const bodyFor = (ctx, o) => K.createBody(ctx.rt, ctx.lead, ctx.now, bytes => signHex(ctx.lead, bytes), o);
     const fresh = () => { const R = relayEnv(); R.clock.now = T0; return R; };
     const teamOf = (R, rt) => { const st = R.stores.get(rt); return st ? st.get("team") : undefined; };
-    /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
-    function counted(R) {
-      const gets = { n: 0 };
-      const env = Object.assign({}, R.env, { TEAMS: { jurisdiction(j) {
-        const s = R.env.TEAMS.jurisdiction(j);
-        return s && { idFromName: n => s.idFromName(n), get: id => { gets.n++; return s.get(id); } };
-      } } });
-      return { env, gets };
-    }
-    async function viaWorker(worker, R, body) {
-      const c = counted(R);
-      const r = await call(R, "POST", "/relay/v1/teams", { json: body, worker, env: c.env });
-      return { r, gets: c.gets.n };
-    }
     /* The same body handed straight to the team's object, as the Worker would after judging it. */
     async function viaObject(R, rt, body) {
       const res = await R.object(rt).fetch(new Request("https://relay.test/relay/v1/teams", { method: "POST", body: JSON.stringify(body) }));

@@ -745,8 +745,11 @@ function createCore(deps) {
     store.atomic(() => store.put("orphan:" + obj, 1));
   }
 
+  /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
+  const hasTeam = rt => teamOf(rt) !== null;
+
   return { create, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, parseMeta, wrapFor, statesFor, readGate };
+    prune, orphan, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
 module.exports = {

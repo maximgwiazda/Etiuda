@@ -16,6 +16,17 @@ const STATUS = {
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
 const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|wrap|states|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
+/* The methods each route answers, in one table the Worker and the object both ask, so that a path or a method no route answers
+   is missing before any object is woken to say so. `since` and `b` are the two routes whose names carry an argument. */
+const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], hello: ["POST"], session: ["POST"], socket: ["GET"],
+  wrap: ["GET"], states: ["GET"], since: ["GET"], b: ["GET", "PUT"] };
+/* The route a method and a path name, as { rt, what }, or null where none answers them. */
+function routeOf(method, pathname) {
+  const m = ROUTE.exec(pathname);
+  if (!m) return null;
+  const what = m[3] !== undefined ? "since" : m[4] !== undefined ? "b" : (m[2] || "teams");
+  return METHODS[what].indexOf(method) > -1 ? { rt: m[1] || null, what } : null;
+}
 
 const reply = (status, value) => new Response(JSON.stringify(value), { status, headers: HEADERS });
 const refused = r => reply(STATUS[r.reason] || 400, { error: r.reason, said: r.said });
@@ -67,7 +78,7 @@ function teamObject(deps) {
   async function route(request) {
     const url = new URL(request.url);
     const m = ROUTE.exec(url.pathname);
-    if (!m || url.protocol !== "https:" || url.search !== "") return missing();
+    if (!m || !routeOf(request.method, url.pathname) || url.protocol !== "https:" || url.search !== "") return missing();
     const rt = m[1], what = m[2] || "teams", method = request.method;
     if (what === "socket") return method === "GET" ? openSocket(request, bearer(request)) : missing();
     if (m[3] !== undefined) return method === "GET" ? listSince(bearer(request), Number(m[3])) : missing();
@@ -79,6 +90,8 @@ function teamObject(deps) {
     if (what === "states") return method === "GET" ? answer(c.statesFor(rt, bearer(request)), r => ({ ok: true, states: r.states })) : missing();
     if (method !== "POST") return missing();
     if (what === "hello") return answer(c.challenge(rt), r => ({ challenge: r.challenge, until: r.until }));
+    /* A body is awaited for a team that exists, or for the create that makes one; for any other id nothing is read. */
+    if (what !== "teams" && !c.hasTeam(rt)) return refusedFor("not-enrolled"); /* plant:team-first */
     const bytes = await readCapped(request, JSON_MAX);
     if (!bytes) return refusedFor("blob-size");
     let body = null;
@@ -178,23 +191,33 @@ function teamObject(deps) {
   return { fetch, webSocketMessage, webSocketClose };
 }
 
-/* The object's storage as the core's store, over its SQLite: one table of keys and JSON values. */
+/* The object's storage as the core's store, over its SQLite: one table of keys and JSON values. The table is made by the first
+   write and by nothing before it: a read of a table that is not there finds no key and no list, and a delete finds nothing to
+   delete, so a request for a team never made leaves the object's storage as empty as it found it. */
 function sqlStore(storage) {
   const sql = storage.sql;
-  sql.exec("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
+  const MAKE = "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)";
+  let made = false;
+  const has = () => made || (made = sql.exec("SELECT 1 AS one FROM sqlite_master WHERE type = 'table' AND name = 'kv'").toArray().length > 0);
+  const make = () => { if (!made) { sql.exec(MAKE); made = true; } };
   return {
     get(k) {
+      if (!has()) return undefined; /* plant:store-get */
       const row = sql.exec("SELECT v FROM kv WHERE k = ?", k).toArray()[0];
       return row ? JSON.parse(row.v) : undefined;
     },
-    put(k, v) { sql.exec("INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, JSON.stringify(v)); },
-    del(k) { sql.exec("DELETE FROM kv WHERE k = ?", k); },
+    put(k, v) { make(); sql.exec("INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, JSON.stringify(v)); },
+    del(k) {
+      if (!has()) return; /* plant:store-del */
+      sql.exec("DELETE FROM kv WHERE k = ?", k);
+    },
     list(prefix, opts) {
+      if (!has()) return []; /* plant:store-list */
       const after = opts && opts.after ? opts.after : prefix, limit = opts && opts.limit ? opts.limit : -1;
       return sql.exec("SELECT k, v FROM kv WHERE k > ? AND k < ? ORDER BY k LIMIT ?", after, prefix + "￿", limit)
         .toArray().map(row => [row.k, JSON.parse(row.v)]);
     },
-    atomic(fn) { return storage.transactionSync(fn); },
+    atomic(fn) { make(); return storage.transactionSync(fn); },
   };
 }
 
@@ -220,4 +243,4 @@ class RelayTeam {
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }
 
-module.exports = { JSON_MAX, teamObject, RelayTeam, readCapped, refusedFor, missing, fault };
+module.exports = { JSON_MAX, teamObject, RelayTeam, routeOf, readCapped, refusedFor, missing, fault };
