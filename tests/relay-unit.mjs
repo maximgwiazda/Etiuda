@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 114;
+const EXPECTED = 132;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -70,7 +70,7 @@ const refused = (r, reason) => !!r && r.status >= 400 && r.status < 500 && !!r.j
 
 /* A team with its lead, and two desks enrolled: `desk` by its branch id, `other` by its public key. */
 async function world(opts) {
-  const R = S.relayEnv(opts);
+  const R = (opts && opts.R) || S.relayEnv(opts);
   const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(false), rev: 0, devs: [] };
   w.deskId = "k-" + hex(8);
   w.otherId = "k-" + hex(8);
@@ -1178,6 +1178,341 @@ async function main() {
     });
     check(cutPlant.turned && cutPlant.back, "962n lifting plant:withdraw-invite-sessions lets that session list again, and the file is put back: "
       + cutPlant.detail + ", sha " + (cutPlant.back ? "restored" : "differs"));
+  }
+
+  /* ---- 963: the code that runs on Cloudflare: sqlStore over real SQLite, RelayTeam's constructor, hibernating sockets ----
+     Board 934 (5). relay/test/stand-ins.cjs runs teamObject over a memory store; here RelayTeam (relay/team.cjs) is built over
+     relay/test/do-ctx.cjs, whose ctx.storage.sql is node:sqlite, so sqlStore's own SQL, its bounds and limit, runs as written.
+     The store under test is the one RelayTeam's constructor hands the core, taken as it passes. */
+  {
+    const X = require(path.join(ROOT, "relay", "test", "do-ctx.cjs"));
+    const TEAM_SRC = path.join(ROOT, "relay", "team.cjs");
+    const CORE_SRC = path.join(ROOT, "relay", "core.cjs");
+    const FFFF = String.fromCharCode(0xffff);
+    const pad16 = n => String(n).padStart(16, "0");
+    const idN = n => n.toString(16).padStart(32, "0");
+    const keysOf = rows => rows.map(([k]) => k);
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const T0 = require(TEAM_SRC);
+
+    /* RelayTeam over a ctx, and the store it gave the core: createCore is wrapped on every copy of the core module the
+       team module might hold, for the length of the constructor. */
+    function raise(T, ctx, env) {
+      const cores = [...new Set([C, require(CORE_SRC)])], reals = cores.map(c => c.createCore);
+      let store = null;
+      cores.forEach((c, i) => { c.createCore = deps => { store = deps.store; return reals[i](deps); }; });
+      try {
+        const team = new T.RelayTeam(ctx, env);
+        if (!store) throw new Error("the store RelayTeam built was not seen");
+        return { team, store, ctx };
+      } finally { cores.forEach((c, i) => { c.createCore = reals[i]; }); }
+    }
+    const sqlStoreOf = T => raise(T, X.doCtx(), { BLOBS: S.memoryBucket() }).store;
+
+    /* The Worker's env with each team's object a RelayTeam over a ctx of its own, as the namespace makes them. */
+    function sqlRelay(T) {
+      const env = { BLOBS: S.memoryBucket() }, teams = new Map(), clock = { now: Date.now() };
+      const scoped = {
+        idFromName(name) { return { name: String(name) }; },
+        get(id) {
+          return { fetch: request => {
+            if (!teams.has(id.name)) teams.set(id.name, raise(T, X.doCtx(), env));
+            return teams.get(id.name).team.fetch(request);
+          } };
+        },
+      };
+      env.TEAMS = { jurisdiction(j) { return j === "eu" ? scoped : null; } };
+      return { env, clock, teams, bucket: env.BLOBS };
+    }
+    const memoryRelay = () => { const R = S.relayEnv(); R.clock.now = Date.now(); return R; };
+
+    /* ---- the store's own legs, run over the memory store and over sqlStore ---- */
+    function listProbe(store) {
+      for (const k of ["ab:1", "ab:2", "ab:3", "ab:", "ab", "ab9", "ab;", "aa:9", "ac:0", "a"]) store.put(k, { k, n: k.length });
+      const out = {};
+      out.prefix = keysOf(store.list("ab:"));
+      out.wide = keysOf(store.list("ab"));
+      out.value = store.list("ab:").map(([, v]) => v)[1];
+      out.after = [keysOf(store.list("ab:", { after: "ab:2" })), keysOf(store.list("ab:", { after: "ab:3" })), keysOf(store.list("ab:", { after: "ab:0" }))];
+      out.limit = [keysOf(store.list("ab:", { limit: 2 })), keysOf(store.list("ab:", { after: "ab:1", limit: 1 })), keysOf(store.list("ab:", { limit: 10 }))];
+      for (let i = 1; i <= 25; i++) store.put("seq:" + pad16(i), idN(i));
+      let after = "seq:" + pad16(0);
+      const pages = [];
+      for (let n = 0; n < 10; n++) {
+        const page = store.list("seq:", { after, limit: 7 });
+        if (!page.length) break;
+        pages.push(page.map(([, v]) => v));
+        after = page[page.length - 1][0];
+      }
+      out.walk = { sizes: pages.map(p => p.length), flat: [].concat(...pages) };
+      return out;
+    }
+    const WANT = {
+      prefix: ["ab:1", "ab:2", "ab:3"], wide: ["ab9", "ab:", "ab:1", "ab:2", "ab:3", "ab;"], value: { k: "ab:2", n: 4 },
+      after: [["ab:3"], [], ["ab:1", "ab:2", "ab:3"]],
+      limit: [["ab:1", "ab:2"], ["ab:2"], ["ab:1", "ab:2", "ab:3"]],
+      walk: { sizes: [7, 7, 7, 4], flat: Array.from({ length: 25 }, (_, i) => idN(i + 1)) },
+    };
+    function kvProbe(store) {
+      store.put("k1", { a: 1 });
+      store.put("k1", { a: 2, s: "caf\u00e9 \"quoted\"" });
+      const out = { over: store.get("k1"), absent: store.get("nope") === undefined };
+      store.put("k2", [1, 2]);
+      store.del("k2");
+      store.del("never");
+      out.deleted = store.get("k2") === undefined;
+      out.keys = keysOf(store.list("k"));
+      return out;
+    }
+    const WANT_KV = { over: { a: 2, s: "caf\u00e9 \"quoted\"" }, absent: true, deleted: true, keys: ["k1"] };
+    function atomicProbe(store) {
+      const out = {};
+      out.value = store.atomic(() => { store.put("t1", 1); return "done"; });
+      try { store.atomic(() => { store.put("t2", 1); store.put("t1", 99); throw new Error("stop"); }); out.threw = false; }
+      catch (e) { out.threw = e.message; }
+      out.t1 = store.get("t1");
+      out.t2 = store.get("t2") === undefined;
+      return out;
+    }
+    const WANT_ATOMIC = { value: "done", threw: "stop", t1: 1, t2: true };
+
+    const memList = listProbe(S.memoryStore()), memKv = kvProbe(S.memoryStore()), memAtomic = atomicProbe(S.memoryStore());
+    const sqlList = T => listProbe(sqlStoreOf(T)), sqlKv = T => kvProbe(sqlStoreOf(T)), sqlAtomic = T => atomicProbe(sqlStoreOf(T));
+
+    const sl = sqlList(T0);
+    const okA = (m, s) => same(m.prefix, WANT.prefix) && same(s.prefix, WANT.prefix) && same(m.wide, WANT.wide) && same(s.wide, WANT.wide)
+      && same(m.value, WANT.value) && same(s.value, WANT.value);
+    const okB = (m, s) => same(m.after, WANT.after) && same(s.after, WANT.after);
+    const okC = (m, s) => same(m.limit, WANT.limit) && same(s.limit, WANT.limit);
+    const okD = (m, s) => same(m.walk, WANT.walk) && same(s.walk, WANT.walk);
+    check(okA(memList, sl),
+      "963a list over sqlStore on real SQLite bounds its keys by the prefix as the memory store does: a key just outside it, below or above,"
+      + " the prefix itself and a longer neighbour are not returned: " + JSON.stringify(sl.prefix) + ", wider prefix " + JSON.stringify(sl.wide));
+    check(okB(memList, sl),
+      "963b list's after resumes strictly after the key given, over sqlStore as over memory: after the middle key, after the last, and before the first: "
+      + JSON.stringify(sl.after));
+    check(okC(memList, sl),
+      "963c list's limit cuts at the count, alone and with an after, over sqlStore as over memory: " + JSON.stringify(sl.limit));
+    check(okD(memList, sl),
+      "963d paging seq keys by after and a limit of 7 over sqlStore reads 25 rows as pages of " + sl.walk.sizes.join("+")
+      + ", missing none, repeating none, in order, as the memory store does");
+    const sk = sqlKv(T0);
+    check(same(memKv, WANT_KV) && same(sk, WANT_KV),
+      "963e sqlStore's put overwrites a key and keeps its JSON exactly, an absent key reads undefined and a deleted one is gone, as in memory: "
+      + JSON.stringify(sk));
+    const sa = sqlAtomic(T0);
+    check(same(memAtomic, WANT_ATOMIC) && same(sa, WANT_ATOMIC),
+      "963f sqlStore's atomic returns its function's value, and when the function throws it rolls every write back and rethrows, as in memory: "
+      + JSON.stringify(sa));
+
+    /* ---- the core's paths that read through list, over RelayTeam on real SQLite and over the memory object ---- */
+    async function trace(w) {
+      const out = {}, tail = r => r.json && r.json.error ? r.json.error : r.status;
+      const ids = [4, 2, 5, 1, 3].map(idN), toks = {};
+      for (const id of ids) toks[id] = hex(32);
+      const added = await invites(w, ids.map(id => ({ id, hash: sha(toks[id]) })), []);
+      const h2 = await tokenHello(w, idN(2), toks[idN(2)]), h4 = await tokenHello(w, idN(4), toks[idN(4)]);
+      const lead = await sessionOf(w, w.lead), deskS = await sessionOf(w, w.desk);
+      const states = async () => (await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", { token: lead })).json.states;
+      const last = id => id.slice(-1);
+      const before = await states();
+      out.added = [added.status, h2.status, h4.status];
+      out.states = before.map(s => last(s.id) + ":" + s.state);
+      out.usedAt = before.filter(s => s.state === "used").map(s => typeof s.usedAt);
+      const dropped = await invites(w, [], [idN(1), idN(2)]);
+      out.dropped = [dropped.status, dropped.json.dropped.map(last), dropped.json.used.map(last)];
+      const wrap = token => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/wrap", { token });
+      out.wraps = [tail(await wrap(h2.json.session)), tail(await wrap(h4.json.session))];
+      out.states2 = (await states()).map(s => last(s.id) + ":" + s.state);
+      const read = await since(w, deskS, 0);
+      const gone = await devices(w, w.devs.slice(1));
+      out.desk = [read.status, gone.status, tail(await since(w, deskS, 0))];
+      for (let i = 1; i <= 3; i++) await put(w, lead, sealAs(w, w.lead, "guide" + i + ".ec", i));
+      out.since = [];
+      for (const n of [0, 1, 3]) out.since.push((await since(w, lead, n)).json.map(x => x.seq));
+      return out;
+    }
+    const WANT_TRACE = {
+      added: [200, 200, 200], states: ["1:unused", "2:used", "3:unused", "4:used", "5:unused"], usedAt: ["number", "number"],
+      dropped: [200, ["1", "2"], ["2"]], wraps: ["no-hello", "missing"], states2: ["2:used", "3:unused", "4:used", "5:unused"],
+      desk: [200, 200, "removed"], since: [[1, 2, 3], [2, 3], []],
+    };
+    async function pruneProbe(w, store, at) {
+      const A = idN(0xa), B = idN(0xb), Cc = idN(0xc), D = idN(0xd), E = idN(0xe);
+      const tomb = (id, t) => { store.put("kx:" + pad16(t) + ":" + id, "tomb"); store.put("tomb:" + id, { writer: "k-x", why: "superseded", until: t }); };
+      tomb(Cc, at + 24 * 60 * 60 * 1000);
+      tomb(A, at - 5000);
+      tomb(B, at - 9000);
+      const spent = (id, when) => store.put("inv:" + id, { hash: sha(id), fails: 0, spent: true, spentAt: when, uploaded: false, at: when, key: "k-x" });
+      spent(D, at - C.KEEP_MS - 1000);
+      spent(E, at - 1000);
+      store.put("orphan:objects/x", 1);
+      const lead = await sessionOf(w, w.lead);
+      const r = await since(w, lead, 0);
+      return { status: r.status, kx: store.list("kx:").map(([k]) => k.slice(20)), tombs: [A, B, Cc].map(id => store.get("tomb:" + id) !== undefined),
+        spentOld: store.get("inv:" + D), spentNew: (store.get("inv:" + E) || {}).hash === sha(E), orphan: store.get("orphan:objects/x") === undefined,
+        team: store.get("team") !== undefined };
+    }
+    const wantPrune = { status: 200, kx: [idN(0xc)], tombs: [false, false, true], spentOld: { spent: true }, spentNew: true, orphan: true, team: true };
+    const traceSql = async T => trace(await world({ R: sqlRelay(T) }));
+    const pruneSql = async T => { const R = sqlRelay(T), w = await world({ R }); return pruneProbe(w, R.teams.get(w.rt).store, Date.now()); };
+    const traceMem = await trace(await world({ R: memoryRelay() }));
+    const traceReal = await traceSql(T0);
+    check(same(traceMem, WANT_TRACE) && same(traceReal, WANT_TRACE),
+      "963g the invitation scans, the states, a withdrawal's sweep of sessions and since read through list over RelayTeam on real SQLite as over memory,"
+      + " in key order: " + JSON.stringify(traceReal));
+    const wm = await world({ R: memoryRelay() });
+    const pm = await pruneProbe(wm, wm.R.stores.get(wm.rt), wm.R.clock.now), ps = await pruneSql(T0);
+    check(same(pm, wantPrune) && same(ps, wantPrune),
+      "963h prune, reading deletion records, spent invitations and orphans through list, drops the expired and keeps the rest and the team over RelayTeam on"
+      + " real SQLite as over memory: " + JSON.stringify(ps));
+
+    /* A since page across more rows than one: seeded to 1002 rows through the store, then one real upload as the 1003rd. */
+    async function sincePages(T) {
+      const R = sqlRelay(T), w = await world({ R }), store = R.teams.get(w.rt).store;
+      store.atomic(() => {
+        for (let i = 1; i <= 1002; i++) {
+          const id = idN(0x100 + i);
+          store.put("blob:" + id, { id, supersedes: null, epoch: 1, writer: w.lead.keyId, counter: i, del: false, size: 10, sig: "00", nonce: "00", seq: i, at: Date.now(), obj: "o/" + id });
+          store.put("seq:" + pad16(i), id);
+        }
+        store.put("seq", 1002);
+      });
+      const lead = await sessionOf(w, w.lead);
+      const first = (await since(w, lead, 0)).json.map(x => x.seq);
+      const second = (await since(w, lead, 1000)).json.map(x => x.seq);
+      const up = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
+      const third = (await since(w, lead, 1000)).json.map(x => x.seq);
+      const walk = [];
+      for (let after = 0, n = 0; n < 6; n++) {
+        const page = (await since(w, lead, after)).json.map(x => x.seq);
+        if (!page.length) break;
+        walk.push(...page);
+        after = page[page.length - 1];
+      }
+      return { first: [first.length, first[0], first[first.length - 1]], second, up: up.status, third,
+        walk: [walk.length, walk.every((s, i) => s === i + 1)] };
+    }
+    const WANT_PAGES = { first: [1000, 1, 1000], second: [1001, 1002], up: 200, third: [1001, 1002, 1003], walk: [1003, true] };
+    const pagesReal = await sincePages(T0);
+    check(same(pagesReal, WANT_PAGES),
+      "963i a since page over RelayTeam on real SQLite holds 1000 rows and the next resumes after the last, over 1003 rows, missing none: "
+      + JSON.stringify(pagesReal));
+
+    /* The constructor: a create and a since answered through fetch, and the same storage woken by a second construction. */
+    const ask = async (team, method, p, o) => {
+      const opts = o || {};
+      const res = await team.fetch(new Request("https://relay.test" + p, { method, headers: opts.token ? { authorization: "Bearer " + opts.token } : {},
+        body: opts.json !== undefined ? JSON.stringify(opts.json) : undefined }));
+      return { status: res.status, json: JSON.parse(await res.text()) };
+    };
+    async function bareTeam(T) {
+      const ctx = X.doCtx(), env = { BLOBS: S.memoryBucket() }, { team } = raise(T, ctx, env);
+      const rt = hex(16), lead = keyPair(false), t = Date.now(), base = "/relay/v1/t/" + rt;
+      const made = await ask(team, "POST", "/relay/v1/teams", { json: { rt, lead: { keyId: lead.keyId, pub: lead.pub }, t, sig: signHex(lead, C.createBytes(rt, lead.keyId, t)) } });
+      const n = (await ask(team, "POST", base + "/hello", { json: {} })).json.challenge;
+      const ses = await ask(team, "POST", base + "/session", { json: { challenge: n, key: lead.keyId, sig: signHex(lead, C.helloBytes(rt, n, lead.keyId)) } });
+      const token = ses.json.session;
+      const none = await ask(team, "GET", base + "/since/0"), list = await ask(team, "GET", base + "/since/0", { token });
+      const woken = raise(T, ctx, env).team;
+      const again = await ask(woken, "GET", base + "/since/0", { token });
+      const row = ctx.db.prepare("SELECT v FROM kv WHERE k = 'team'").all();
+      return { made: [made.status, made.json.rt === rt], session: ses.status, none: [none.status, none.json.error], list: [list.status, list.json],
+        again: [again.status, again.json], rows: row.length, lead: row.length === 1 && JSON.parse(row[0].v).lead.keyId === lead.keyId,
+        tables: ctx.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name) };
+    }
+    const WANT_BARE = { made: [200, true], session: 200, none: [401, "no-hello"], list: [200, []], again: [200, []], rows: 1, lead: true, tables: ["kv"] };
+    const bare = await bareTeam(T0);
+    check(same(bare, WANT_BARE),
+      "963j new RelayTeam(ctx, env) over real SQLite answers a create and a since through fetch, keeps the team in its kv table, and a second"
+      + " construction over the same storage answers the same session: " + JSON.stringify(bare));
+
+    /* Hibernating: the socket accepted onto the ctx with its attachment kept, announced to, and woken by a later construction. */
+    async function hibernated(T) {
+      const realResponse = globalThis.Response, hadPair = "WebSocketPair" in globalThis;
+      const out = await X.withWorkersGlobals(async () => {
+        const R = sqlRelay(T), w = await world({ R });
+        const lead = await sessionOf(w, w.lead), desk = await sessionOf(w, w.desk), held = R.teams.get(w.rt), ctx = held.ctx;
+        const res = await held.team.fetch(new Request("https://relay.test/relay/v1/t/" + w.rt + "/socket", { headers: { authorization: "Bearer " + lead, upgrade: "websocket" } }));
+        const server = ctx.accepted[0];
+        const made = { status: res.status, client: !!res.webSocket && res.webSocket.role === "client", accepted: ctx.accepted.length };
+        made.attachment = server ? server.deserializeAttachment() : null;
+        held.team = raise(T, ctx, R.env).team;
+        if (server) {
+          await held.team.webSocketMessage(server, JSON.stringify({ type: "ping" }));
+          const up = await put(w, desk, sealAs(w, w.desk, "guide.ec", 1));
+          made.upload = up.status;
+          made.heard = server.sent.map(m => JSON.parse(m)).map(m => m.type === "new" ? [m.type, m.seq] : [m.type]);
+          held.team.webSocketClose(server);
+          made.closed = server.closed ? server.closed.code : null;
+          made.listed = ctx.getWebSockets().length;
+        }
+        made.want = { ses: sha(lead), key: w.lead.keyId, inv: null };
+        return made;
+      });
+      out.restored = globalThis.Response === realResponse && ("WebSocketPair" in globalThis) === hadPair;
+      return out;
+    }
+    const sockOk = r => r.status === 101 && r.client && r.accepted === 1 && same(r.attachment, r.want) && same(r.heard, [["pong"], ["new", 1]])
+      && r.upload === 200 && r.closed === 1000 && r.listed === 0 && r.restored;
+    const hib = await hibernated(T0);
+    check(sockOk(hib) && typeof WebSocketPair === "undefined",
+      "963k a socket opened on RelayTeam is accepted through hibernating as a 101 with its client end, its attachment kept as the session's hash, key"
+      + " and invitation, a construction woken over the same ctx answers its ping, an upload is announced to it, and its close ends its listing;"
+      + " the globals stood in for are put back: " + JSON.stringify(hib));
+
+    /* ---- plants: a guarded text of team.cjs swapped, the legs run over the swapped module, the file put back ---- */
+    async function swapTeam(from, to, fn) {
+      const resolved = require.resolve(TEAM_SRC);
+      const beforeBytes = fs.readFileSync(TEAM_SRC);
+      const digest = sha(beforeBytes);
+      let turned = false, detail = "swap text absent";
+      try {
+        const text = beforeBytes.toString("utf8");
+        if (text.split(from).length === 2) {
+          fs.writeFileSync(TEAM_SRC, text.split(from).join(to));
+          delete require.cache[resolved];
+          turned = await fn(require(resolved));
+          detail = turned ? "the checks lifted" : "a check still held";
+        }
+      } catch (e) {
+        detail = e && e.stack ? e.stack : String(e);
+      } finally {
+        fs.writeFileSync(TEAM_SRC, beforeBytes);
+        delete require.cache[resolved];
+      }
+      return { turned, back: sha(fs.readFileSync(TEAM_SRC)) === digest, detail };
+    }
+    const safe = async f => { try { return await f(); } catch { return null; } };
+    const back = p => p.turned && p.back;
+    const how = p => p.detail + ", sha " + (p.back ? "restored" : "differs");
+
+    const pBound = await swapTeam("prefix + \"" + FFFF + "\"", "\"" + FFFF + "\"", async T => !okA(memList, sqlList(T)) && !same(await safe(() => pruneSql(T)), wantPrune)
+      && !same(await safe(() => traceSql(T)), WANT_TRACE));
+    check(back(pBound),
+      "963l lifting the prefix from list's upper bound turns 963a, 963g and 963h red, and the file is put back: " + how(pBound));
+    const pAfter = await swapTeam("opts && opts.after ? opts.after : prefix", "prefix", async T => {
+      const l = sqlList(T);
+      return !okB(memList, l) && !okD(memList, l) && !same(await safe(() => traceSql(T)), WANT_TRACE)
+        && !same(await safe(() => sincePages(T)), WANT_PAGES);
+    });
+    check(back(pAfter),
+      "963m lifting list's after turns 963b, 963d, 963g and 963i red, and the file is put back: " + how(pAfter));
+    const pLimit = await swapTeam("opts && opts.limit ? opts.limit : -1", "-1", async T => !okC(memList, sqlList(T)) && !same(await safe(() => sincePages(T)), WANT_PAGES));
+    check(back(pLimit),
+      "963n lifting list's limit turns 963c and 963i red, and the file is put back: " + how(pLimit));
+    const pPut = await swapTeam("DO UPDATE SET v = excluded.v", "DO NOTHING", async T => !same(sqlKv(T), WANT_KV));
+    check(back(pPut),
+      "963o lifting put's overwrite turns 963e red, and the file is put back: " + how(pPut));
+    const pAtomic = await swapTeam("atomic(fn) { return storage.transactionSync(fn); }", "atomic(fn) { return fn(); }", async T => !same(sqlAtomic(T), WANT_ATOMIC));
+    check(back(pAtomic),
+      "963p lifting atomic's transaction turns 963f red, and the file is put back: " + how(pAtomic));
+    const pAttach = await swapTeam("pair[1].serializeAttachment(attachment);", "/* lifted */", async T => { const r = await safe(() => hibernated(T)); return !r || !sockOk(r); });
+    check(back(pAttach),
+      "963q lifting the attachment a hibernating socket keeps turns 963k red, and the file is put back: " + how(pAttach));
+    const pAccept = await swapTeam("ctx.acceptWebSocket(pair[1]);", "/* lifted */", async T => { const r = await safe(() => hibernated(T)); return !r || !sockOk(r); });
+    check(back(pAccept),
+      "963r lifting the accept onto the ctx turns 963k red, and the file is put back: " + how(pAccept));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
