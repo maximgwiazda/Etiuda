@@ -326,7 +326,11 @@ function createTarget(limits) {
     }
     if (/^answer:[0-9a-f]{32}$/.test(place)) {
       const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
-      return !!(en && en.role === "lead" && blob.id === place.slice(7));
+      let leads = true;
+      leads = !!(en && en.role === "lead"); /* plant:S3-answer-place */
+      let ownId = true;
+      ownId = blob.id === place.slice(7); /* plant:S3-answer-id */
+      return leads && ownId;
     }
     return false;
   }

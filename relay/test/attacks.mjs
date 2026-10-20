@@ -2345,6 +2345,33 @@ function attacks() {
       const own = upload(w, ownBlob);
       return !!own && own.ok === true && own.id === ownBlob.id;
     }, true],
+    ["S3-answer-place", "an enrolled desk's upload at answer:<invitation id> and a lead's answer whose blob id is not the place's are outside its place, the bound session is served neither, and the lead's own answer is kept", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const invitationId = wire.randomId();
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
+      if (!joined.ok) return false;
+      const place = "answer:" + invitationId;
+      /* The product records a desk key when its seal runs. The odd place is not that call. */
+      seal(w, w.desk, deskFile(w, "edit.ec"), 1, { body: "key" });
+      const byDesk = upload(w, sealAt(w, w.desk, "join-answer.json", 1, place, { body: "forged", id: invitationId }));
+      const strayId = sealAt(w, w.lead, "join-answer.json", 1, place, { body: "stray" });
+      const byLead = upload(w, strayId);
+      if (!refused(byDesk, "outside-place") || !refused(byLead, "outside-place")) return false;
+      const servedDesk = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: invitationId });
+      const servedStray = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: strayId.id });
+      if (!refusedOneOf(servedDesk, ["missing", "not-enrolled"]) || !refusedOneOf(servedStray, ["missing", "not-enrolled"])) return false;
+      const answer = sealAt(w, w.lead, "join-answer.json", 2, place, { body: "joined", id: invitationId });
+      const posted = upload(w, answer);
+      return !!posted && posted.ok === true && posted.id === invitationId;
+    }, true],
   ];
 }
 
