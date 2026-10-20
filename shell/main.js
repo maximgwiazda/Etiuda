@@ -3264,7 +3264,7 @@ async function takeInvite(text, name, check, fromLink) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, joinView(), { refused: settled });
   const code = inviteCode(parsed.secret, parsed.lead.public);
-  if (!(fromLink === true && parsed.relay)) {
+  if (!(fromLink === true && parsed.relay)) { /* plant:link-code */
     if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
   }
   const me = branchIdentity();

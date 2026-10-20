@@ -8,6 +8,8 @@
  * document are said and refused, with no I/O and the token unspent. An etiuda: argument is never
  * read as a file. A plant deletes the one line that holds each guard and the file is put back by
  * its sha256.
+ *
+ * A relay invitation pasted in the paste box is asked the lead's check code; the same invitation from a link is asked none (3hp).
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -23,7 +25,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 25;
+const EXPECTED = 26;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -55,6 +57,7 @@ const pristine = fs.readFileSync(MAIN);
 const pristineSha = crypto.createHash("sha256").update(pristine).digest("hex");
 
 const noop = () => {};
+const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const TAIL = "\nreturn { linkFromArg: typeof linkFromArg === \"function\" ? linkFromArg : null,"
   + " acceptLink: typeof acceptLink === \"function\" ? acceptLink : null,"
@@ -63,6 +66,7 @@ const TAIL = "\nreturn { linkFromArg: typeof linkFromArg === \"function\" ? link
   + " handHeldLink: typeof handHeldLink === \"function\" ? handHeldLink : null,"
   + " heldView: typeof heldLinkView !== \"undefined\" ? () => heldLinkView : () => null,"
   + " heldText: typeof heldLinkText !== \"undefined\" ? () => heldLinkText : () => null,"
+  + " inviteCode: typeof inviteCode === \"function\" ? inviteCode : null,"
   + " bindWindow: w => { theWindow = w; } };";
 
 let loadN = 0;
@@ -75,7 +79,7 @@ function loadShell(opts) {
   if (o.pins) deskObj.teamPins = o.pins;
   const desk = JSON.stringify(deskObj);
   fs.writeFileSync(path.join(ud, "desk.json"), desk, "utf8");
-  const said = [], ons = {}, registered = [], sent = [];
+  const said = [], ons = {}, registered = [], sent = [], invoke = {};
   let netHits = 0, windows = 0;
   const win = {
     isDestroyed: () => false, isMinimized: () => false, restore: noop, focus: noop,
@@ -93,7 +97,7 @@ function loadShell(opts) {
       isPackaged: o.packaged === true,
       setAsDefaultProtocolClient: o.register ? (...args) => { registered.push(args); return o.register(); } : undefined,
     },
-    ipcMain: { on: noop, handle: noop },
+    ipcMain: { on: noop, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: BrowserWindow, Menu: inert, dialog: inert, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     safeStorage: {
@@ -101,7 +105,8 @@ function loadShell(opts) {
       encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     },
-    net: { request: () => { netHits++; return inert; } },
+    net: { request: () => { netHits++; return inert; },
+      fetch: () => { netHits++; return Promise.reject(new Error("no network in the link-handler leg")); } },
   };
   const quiet = {
     log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
@@ -111,7 +116,10 @@ function loadShell(opts) {
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", src + TAIL)(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
-  return { api, said, ons, registered, sent, win, ud, desk, netHits: () => netHits, windows: () => windows };
+  /* The page's side of the channel the shell answers on: an event from the engine's own frame, as fromEngine reads it. */
+  const ask = (ch, ...args) => Promise.resolve(invoke[ch]({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME }, ...args));
+  return { api, said, ons, registered, sent, win, ud, desk, netHits: () => netHits, windows: () => windows,
+    ask, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
 }
 
 const FS_IO = ["statSync", "lstatSync", "readFileSync", "writeFileSync", "appendFileSync", "mkdirSync", "mkdtempSync",
@@ -177,7 +185,7 @@ function lift(tag, fn, file, replacement) {
   const back = crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex") === digest;
   return { turned, back, detail };
 }
-async function liftAsync(tag, fn, file) {
+async function liftAsync(tag, fn, file, replacement) {
   const target = file || MAIN;
   const beforeBytes = fs.readFileSync(target);
   const digest = crypto.createHash("sha256").update(beforeBytes).digest("hex");
@@ -186,7 +194,8 @@ async function liftAsync(tag, fn, file) {
     const lines = beforeBytes.toString("utf8").split(/\n/);
     const at = lines.findIndex(l => l.indexOf(tag) >= 0);
     if (at >= 0) {
-      lines.splice(at, 1);
+      if (typeof replacement === "string") lines.splice(at, 1, replacement);
+      else lines.splice(at, 1);
       fs.writeFileSync(target, lines.join("\n"));
       turned = (await fn(fs.readFileSync(target, "utf8"))) === true;
       detail = turned ? "the check lifted" : "the check still held";
@@ -680,6 +689,58 @@ try {
     "3ho a readable invitation that names no team this desk can join is said in its own two sentences to the console and the page, nothing sent and the held link let go, "
     + "and putting back the old answer at plant:link-offer is heard: answer " + JSON.stringify(noTeamNow.answer) + ", page " + noPageNote
     + ", " + noTeamPlant.detail + ", sha " + (noTeamPlant.back ? "restored" : "differs"));
+
+  /* The two roads in with one invitation. A relay invitation pasted in the paste box goes through the `invite` op and is asked the
+     check code the lead reads out; the same invitation from a link goes through the held link and the `link` op and is asked none,
+     and that is decided by takeInvite's `fromLink === true` clause alone. Each question gets a desk of its own, so no answer rides on
+     another's. These two guard behaviour that was already there, so they were never red on the code before them: a plant shows each. */
+  const pastedText = "etiuda-join:" + b64;
+  const rightCode = api && api.inviteCode ? api.inviteCode(doc.secret, doc.lead.public) : "";
+  const wrongCode = /^[0-9]{5}$/.test(rightCode) ? String((Number(rightCode) + 1) % 100000).padStart(5, "0") : "x";
+  /* What the shell answered and what the desk now holds: a join is the team named in the desk's own file under this relay, and its mirror made. */
+  function takenOf(L, ans) {
+    let env = null;
+    try { env = JSON.parse(fs.readFileSync(path.join(L.ud, "desk.json"), "utf8")); } catch (e) { env = null; }
+    const kept = env && env.teamJoin ? env.teamJoin : null;
+    return {
+      refused: ans && typeof ans.refused === "string" ? ans.refused : "",
+      kept: !!(kept && kept.team === doc.team && kept.invite && kept.invite.relay && kept.invite.relay.rt === doc.relay.rt),
+      mirror: fs.existsSync(path.join(L.ud, "relay", doc.relay.rt)),
+    };
+  }
+  const refusedCheck = r => r.refused === "check" && !r.kept && !r.mirror;
+  const joinedClean = r => r.refused === "" && r.kept && r.mirror;
+  const sayTaken = r => (r.refused ? "refused " + r.refused : r.kept && r.mirror ? "joined" : "nothing") + (r.kept && r.refused ? " (kept)" : "");
+  async function pasteRun(src, typed) {
+    const L = loadShell({ lock: false, src: src });
+    L.api.bindWindow(L.win);
+    return takenOf(L, await L.join("invite", pastedText, "Ola", typed));
+  }
+  async function linkRun(src) {
+    const L = loadShell({ lock: false, src: src });
+    L.api.bindWindow(L.win);
+    const first = L.api.acceptLink(exactArg);
+    const taken = takenOf(L, await L.join("link", "", "Ola"));
+    taken.confirmed = !!(first && first.confirm === true);
+    return taken;
+  }
+  const codeNow = { none: await pasteRun(undefined, ""), wrong: await pasteRun(undefined, wrongCode),
+    right: await pasteRun(undefined, rightCode), link: await linkRun(undefined) };
+  const codeOk = /^[0-9]{5}$/.test(rightCode) && rightCode !== wrongCode
+    && refusedCheck(codeNow.none) && refusedCheck(codeNow.wrong) && joinedClean(codeNow.right)
+    && codeNow.link.confirmed && joinedClean(codeNow.link);
+  let codeLifted = "";
+  const codePlant = await liftAsync("plant:link-code", async src => {
+    const none = await pasteRun(src, ""), wrong = await pasteRun(src, wrongCode);
+    codeLifted = "pasted with none " + sayTaken(none) + ", with a wrong code " + sayTaken(wrong);
+    return joinedClean(none) && joinedClean(wrong);
+  }, MAIN, "  if (!(parsed.relay)) {");
+  check(codeOk && codePlant.turned && codePlant.back,
+    "3hp a relay invitation pasted in the paste box is refused check with no code and with a wrong one and joins with the right one, "
+    + "the same invitation from the held link joins with none, and taking out takeInvite's fromLink clause at plant:link-code lets the pasted one in: pasted none "
+    + sayTaken(codeNow.none) + ", wrong " + sayTaken(codeNow.wrong) + ", right " + sayTaken(codeNow.right) + "; link "
+    + (codeNow.link.confirmed ? "" : "unconfirmed, ") + sayTaken(codeNow.link) + "; " + codePlant.detail + " (" + codeLifted + "), sha "
+    + (codePlant.back ? "restored" : "differs"));
 
   check(regStand.held(), "3h0 every reg call was answered by the stand-in (" + regStand.said() + ")");
 } finally {
