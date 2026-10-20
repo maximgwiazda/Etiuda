@@ -1032,15 +1032,19 @@ async function main() {
     const fetched = await getBlob(x.w, rs, blob.id);
     const sock = await socket(x.w, rs);
     const second = await put(x.w, rs, sealJoin(x.w, x.w.desk, 2, "desk:" + x.w.deskId), { extra: { pub: x.w.desk.pub } });
+    /* Since board 922 the key's hello after the upload reopens the invitation's session, for the lead's answer alone: it is no
+       key session, and it reads nothing of the team. */
     const later = await helloAs(x.w, x.w.desk);
+    const laterSession = later.json && later.json.session;
+    const laterList = laterSession ? await since(x.w, laterSession) : null;
     const said = r => (r && r.json && r.json.error) || (r && r.status);
     check(x.hello.status === 200 && x.hello.json.invite === true && resumed.status === 200 && resumed.json.invite === true
       && up.status === 200 && refused(quiet, "removed") && refused(fetched, "removed") && refused(sock, "removed")
-      && refused(second, "token-spent") && refused(later, "removed"),
+      && refused(second, "token-spent") && later.status === 200 && later.json.invite === true && refused(laterList, "removed"),
       "962a a key removed earlier uploads one join through an invitation registered after its removal, and neither reads, nor uploads"
       + " again, nor opens a key session after: token " + said(x.hello) + ", resume " + said(resumed) + ", upload " + said(up)
       + ", list " + said(quiet) + ", fetch " + said(fetched) + ", socket " + said(sock) + ", second " + said(second)
-      + ", key after " + said(later) + ", first session " + (session ? "open" : "none"));
+      + ", key after " + said(later) + (later.json && later.json.invite === true ? " (the invitation's session)" : "") + ", its list " + said(laterList) + ", first session " + (session ? "open" : "none"));
     const early = await removedThen(false);
     const earlyBlob = sealJoin(early.w, early.w.desk, 1, "desk:" + early.w.deskId);
     const earlyUp = await put(early.w, early.hello.json && early.hello.json.session, earlyBlob, { extra: { pub: early.w.desk.pub } });

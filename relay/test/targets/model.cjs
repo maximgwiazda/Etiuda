@@ -316,7 +316,7 @@ function createTarget(limits) {
     return blob.place === "desk:" + en.deskId;
   }
 
-  /* root, a desk place, or the lead's invite:. Anything else is refused, including a desk's invite:. */
+  /* root, a desk place, the lead's invite:, or the lead's one answer to an invitation. */
   function relayOtherPlace(relayTeamId, blob) {
     const place = String(blob && blob.place || "");
     if (place === "root" || place.indexOf("desk:") === 0) return true;
@@ -326,7 +326,11 @@ function createTarget(limits) {
     }
     if (/^answer:[0-9a-f]{32}$/.test(place)) {
       const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
-      return !!(en && en.role === "lead" && blob.id === place.slice(7));
+      let leads = true;
+      leads = !!(en && en.role === "lead"); /* plant:S3-answer-place */
+      let ownId = true;
+      ownId = blob.id === place.slice(7); /* plant:S3-answer-id */
+      return leads && ownId;
     }
     return false;
   }
@@ -642,12 +646,13 @@ function createTarget(limits) {
     return { ok: true, relayTeamId: relayTeamId, epoch: epoch };
   }
 
+  /* Enrolling the bound key ends its invitation sessions, as a drop does: the key's next hello is its own. */
   function enrol({ relayTeamId, deskId, keyId }) {
     const k = enrolKey(relayTeamId, keyId);
     enrolled.set(k, { role: "desk", deskId: deskId });
     wasEnrolled.add(k);
     sessions.forEach(function (s, token) {
-      if (s.relayTeamId === relayTeamId && s.inviteId && s.boundKey === keyId) sessions.delete(token);
+      if (s.relayTeamId === relayTeamId && s.inviteId && s.boundKey === keyId) sessions.delete(token); /* plant:S3-enrol-ends */
     });
     return { ok: true };
   }
@@ -850,17 +855,17 @@ function createTarget(limits) {
     return issueSession(input.relayTeamId, input.keyId, nonceKey);
   }
 
-  /* An uploaded invitation's session fetches only its answer. Lifting the plant opens the team. */
+  /* An uploaded invitation's session fetches only its answer. Lifting the plant opens the team. Enrolling the bound key
+     deletes its invitation sessions (enrol), so no session reaching here belongs to an enrolled key. */
   function inviteAnswer(session, relayTeamId) {
     let gate = false;
     gate = true; /* plant:S3-read-on */
     if (!gate) return null;
     const s = sessions.get(session);
-    if (!s || s.relayTeamId !== relayTeamId || !s.inviteId) return null;
+    if (!s || s.relayTeamId !== relayTeamId) return null;
     const inv = invites.get(s.inviteId);
     if (!inv || !inv.uploaded) return null;
-    if (s.boundKey && enrolled.has(enrolKey(relayTeamId, s.boundKey))) return { ended: true, id: s.inviteId };
-    return { ended: false, id: s.inviteId };
+    return { id: s.inviteId };
   }
 
   function answerPlace(place) {
@@ -893,7 +898,7 @@ function createTarget(limits) {
     const only = inviteAnswer(session, relayTeamId);
     const rec = findRecord(relayTeamId, id);
     if (only) {
-      const own = !only.ended && rec && id === only.id && rec.place === "answer:" + only.id;
+      const own = rec && id === only.id && rec.place === "answer:" + only.id;
       if (!own) return rec ? refuse("not-enrolled") : refuse("missing");
     } else if (rec && answerPlace(rec.place)) return refuse("missing");
     if (!rec) return refuse("missing");
@@ -934,6 +939,9 @@ function createTarget(limits) {
     if (!blob) return null;
     const held = boundRecord(relayTeamId, blob.writerKeyId, false);
     if (!held) return null;
+    let claim = true;
+    claim = !enrolled.has(enrolKey(relayTeamId, blob.writerKeyId)); /* plant:S3-enrolled-up */
+    if (!claim) return null;
     if (held.inv.uploaded) return refuse("token-spent");
     const place = String(blob.place || "");
     let atDesk = true;
