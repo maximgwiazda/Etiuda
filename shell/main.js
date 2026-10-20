@@ -3266,29 +3266,38 @@ function cancelJoin() {
   if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
-  /* A relay invitation changed this team's pin, where it came from, the folder it showed, the channel and the leave record,
-     and kept what each was in `before`. While this desk holds no key for the team, cancelling puts each back as it was.
+  /* An invitation, by folder or by relay, changed this team's pin, where it came from, the folder it showed, the channel and the
+     leave record (and a folder invitation the desk's own folder setting), and kept what each was in `before`. While this desk
+     holds no key for the team, cancelling puts each back as it was.
      A desk that already keeps the team's key may take an invitation for it all the same, since inviteSettled looks at a
      bar and another lead's pin and not at a key, and that join stands until a newer key arrives (finishJoin compares with
      `held`). That desk is a member, not a request waiting, so Cancel leaves what its invitation set (921e). */
-  if (j && j.invite && j.invite.before && newestEpoch(j.team) === 0) undoInvite(j.team, j.invite.before); /* plant:c7-cancel */
+  if (j && j.invite && j.invite.before && newestEpoch(j.team) === 0) undoInvite(j.team, j.invite.before, j.invite); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
 }
-/* What a relay invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out. */
+/* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out. */
 function inviteBefore(team) {
   return JSON.parse(JSON.stringify({ pin: teamPins[team], from: teamPinFrom[team], shown: teamShown[team], channel: teamChannel[team],
     left: teamLeft[team], barred: teamBarred.has(team) }));
 }
+/* What Cancel puts back for an invitation taken now. An invitation taken over a pending one for the same team keeps the first's,
+   which is what the desk held. `keptJoin` is the request standing when the invitation is taken. */
+function inviteBeforeFor(team, keptJoin) {
+  const kept = keptJoin && keptJoin.team === team && keptJoin.invite && keptJoin.invite.before;
+  return kept || inviteBefore(team); /* plant:c7-chain */
+}
 /* An invitation let go before the lead admitted this desk puts back each thing it changed for `team`, deleting where the desk
-   held none, and the watch is told the folder changed. `b` is inviteBefore's, kept in the join. */
-function undoInvite(team, b) {
+   held none, and the watch is told the folder changed. `b` is inviteBefore's, kept in the join, and `inv` the join's invitation:
+   a folder invitation moved the desk's own folder setting to its folder, and that goes back to what it was while it is still there. */
+function undoInvite(team, b, inv) {
   if (b.pin) teamPins[team] = b.pin; else delete teamPins[team];
   if (b.from) teamPinFrom[team] = b.from; else delete teamPinFrom[team];
   if (b.shown) teamShown[team] = b.shown; else delete teamShown[team];
   if (b.channel) teamChannel[team] = b.channel; else delete teamChannel[team];
   if (b.left) teamLeft[team] = b.left; else delete teamLeft[team];
   if (b.barred) teamBarred.add(team); else teamBarred.delete(team);
+  if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder) deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined); /* plant:c8-own */
   teamStamp = "";
   relaySoon();
   catalogFolderChanged();
@@ -3363,7 +3372,7 @@ function joinKept(j) {
     && (inv.before === undefined || beforeKept(inv.before));
   return inviteOk ? j : null;
 }
-/* A relay invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts. */
+/* An invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts. */
 function beforeKept(b) {
   const table = v => !!v && typeof v === "object" && !Array.isArray(v);
   if (!table(b) || typeof b.barred !== "boolean") return false;
@@ -3484,10 +3493,11 @@ async function takeInvite(text, name, check) {
   const seen = sealedOutside();
   const file = seen && seen.team === parsed.team ? seen.file : "";
   const pinned = !teamPins[parsed.team] || (!!earlier && keptJoin.team === parsed.team && earlier.pinned === true);
+  const before = inviteBeforeFor(parsed.team, keptJoin); /* plant:c8-before */
   const j = { team: parsed.team, file: file, nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
-      folder: parsed.folder, was: was, pinned: pinned } };
+      folder: parsed.folder, was: was, pinned: pinned, before: before } };
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
@@ -3534,9 +3544,7 @@ function takeRelayInvite(parsed, name, me) {
   const keptJoin = teamJoin, previous = catalogFolder();
   const was = { join: teamJoin, pin: teamPins[parsed.team], from: teamPinFrom[parsed.team], shown: teamShown[parsed.team] };
   const pinned = !teamPins[parsed.team] || (!!(keptJoin && keptJoin.invite) && keptJoin.team === parsed.team && keptJoin.invite.pinned === true);
-  /* What Cancel puts back. An invitation taken over a pending one for the same team keeps the first's, which is what the desk held. */
-  const kept = keptJoin && keptJoin.team === parsed.team && keptJoin.invite && keptJoin.invite.before;
-  const before = kept || inviteBefore(parsed.team); /* plant:c7-chain */
+  const before = inviteBeforeFor(parsed.team, keptJoin);
   const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },

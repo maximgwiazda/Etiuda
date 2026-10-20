@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 167;
+const EXPECTED = 179;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3075,22 +3075,59 @@ try {
     const leadPin = { keyId: LEAD.keyId, public: LEAD.pub };
     const sealedKey = k => Buffer.from(Buffer.from(k.toString("base64"), "utf8").map(b => b ^ 0x5a)).toString("base64");
     const slot = (g, name) => (g.after[name] || {})[g.team];
+    const barredHere = g => Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0;
+    /* A folder invitation (E1): the desk works in its own folder `own`, takes an invitation naming `yard`, and cancels. The
+       request it writes lands on the yard and the desk's own folder setting moves there; Cancel puts both back. */
+    async function folderScene(src, tag, opt) {
+      opt = opt || {};
+      const team = "t-" + hex(8), secret = hex(16);
+      const own = path.join(LAB, "c8-own-" + tag), yard = path.join(LAB, "c8-yard-" + tag);
+      fs.mkdirSync(yard, { recursive: true });
+      const D = deskFrom("c8-desk-" + tag, own, src, opt.held ? opt.held(team) : null);
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, folder: yard,
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+      const requests = () => {
+        try { return fs.readdirSync(path.join(yard, "desks")).filter(d => fs.existsSync(path.join(yard, "desks", d, "join.json"))).length; }
+        catch { return 0; }
+      };
+      const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      if (opt.twice) await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      let env = {};
+      try { env = D.envelope(); } catch { env = {}; }
+      const pre = !taken.refused && requests() === 1 && !!env.teamJoin && env.keys.eCatalogFolder === yard && D.api.catalogFolder() === yard
+        && JSON.stringify((env.teamPins || {})[team]) === JSON.stringify(leadPin)
+        && !!(env.teamShown && env.teamShown[team] && env.teamShown[team].folder === yard)
+        && !(env.teamLeft && env.teamLeft[team]) && !(Array.isArray(env.teamBarred) && env.teamBarred.indexOf(team) >= 0);
+      await D.ask("etiuda:team-join", "cancel");
+      let after = {};
+      try { after = D.envelope(); } catch { after = {}; }
+      return { pre, team, own, yard, after, refused: taken && taken.refused, folder: D.api.catalogFolder(),
+        set: after.keys && after.keys.eCatalogFolder, asks: requests() };
+    }
     const asked = {
       pin: { held: team => ({ teamPins: { [team]: leadPin } }), unpinned: true },
       left: { held: team => ({ teamLeft: { [team]: LEFT_AT }, teamBarred: [team] }) },
       key: { held: (team, key) => ({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } }), keep: true, unpinned: true },
       twice: { twice: true },
+      fresh: { folder: true },
+      ftwice: { folder: true, twice: true },
+      fleft: { folder: true, held: team => ({ teamLeft: { [team]: LEFT_AT }, teamBarred: [team] }) },
     };
+    const runScene = (src, tag, name) => (asked[name].folder ? folderScene : cancelScene)(src, tag, asked[name]);
     const gone = g => g.here === null && g.folder === g.share && g.stopped;
+    const folderBack = g => g.folder === g.own && g.set === g.own && g.asks === 0 && g.after.teamJoin === undefined
+      && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined && slot(g, "teamPinFrom") === undefined;
     const verdict = {
       pin: g => gone(g) && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === undefined
         && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined,
-      left: g => gone(g) && slot(g, "teamLeft") === LEFT_AT && Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0
-        && slot(g, "teamPins") === undefined,
+      left: g => gone(g) && slot(g, "teamLeft") === LEFT_AT && barredHere(g) && slot(g, "teamPins") === undefined,
       key: g => g.here !== null && g.folder !== g.share && g.still && !g.stopped && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin)
         && slot(g, "teamPinFrom") === "invite" && !!slot(g, "teamChannel") && g.after.teamJoin === undefined,
       twice: g => gone(g) && slot(g, "teamPins") === undefined && slot(g, "teamPinFrom") === undefined && slot(g, "teamShown") === undefined
         && slot(g, "teamChannel") === undefined,
+      fresh: g => folderBack(g) && slot(g, "teamPins") === undefined,
+      ftwice: g => folderBack(g) && slot(g, "teamPins") === undefined,
+      fleft: g => folderBack(g) && slot(g, "teamPins") === undefined && slot(g, "teamLeft") === LEFT_AT && barredHere(g),
     };
     const told = g => (g.pre ? "the copy had landed" : "the copy had not (" + (g.refused ? "refused " + g.refused : "file " + g.file + ", channel " + g.named) + ")")
       + ", relayHere " + (g.here === null ? "null" : "answers")
@@ -3101,10 +3138,19 @@ try {
       + ", shown " + (slot(g, "teamShown") ? "kept" : "gone")
       + ", channel named " + (slot(g, "teamChannel") ? "yes" : "no")
       + ", left " + (slot(g, "teamLeft") ? "kept" : "gone")
-      + ", barred " + (Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0 ? "yes" : "no")
+      + ", barred " + (barredHere(g) ? "yes" : "no")
+      + ", join " + (g.after.teamJoin === undefined ? "gone" : "standing");
+    const toldFolder = g => (g.pre ? "the invitation had been taken" : "the invitation had not (" + (g.refused ? "refused " + g.refused : "its state was not as taken") + ")")
+      + ", folder " + (g.folder === g.own ? "the one from before" : g.folder === g.yard ? "the invited one" : "another")
+      + ", setting " + (g.set === g.own ? "back" : g.set === g.yard ? "the invited one" : "other")
+      + ", request " + (g.asks ? "still on the share" : "off the share")
+      + ", pin " + (slot(g, "teamPins") ? "kept" : "gone")
+      + ", shown " + (slot(g, "teamShown") ? "kept" : "gone")
+      + ", left " + (slot(g, "teamLeft") ? "kept" : "gone")
+      + ", barred " + (barredHere(g) ? "yes" : "no")
       + ", join " + (g.after.teamJoin === undefined ? "gone" : "standing");
     const scenes = {};
-    for (const name of Object.keys(asked)) scenes[name] = await cancelScene(fs.readFileSync(mainFile, "utf8"), name, asked[name]);
+    for (const name of Object.keys(asked)) scenes[name] = await runScene(fs.readFileSync(mainFile, "utf8"), name, name);
     check(scenes.pin.pre && verdict.pin(scenes.pin),
       "921c a desk that held the lead's pin before the invitation, and cancels before it is admitted, is off the relay with the pin still there"
       + " and the invitation's from, folder and channel gone: " + told(scenes.pin));
@@ -3116,6 +3162,13 @@ try {
       + " the channel: " + told(scenes.key));
     check(scenes.twice.pre && verdict.twice(scenes.twice),
       "921f a desk that takes the same invitation twice and cancels is back as it was before the first: " + told(scenes.twice));
+    check(scenes.fresh.pre && verdict.fresh(scenes.fresh),
+      "921j a desk that takes a folder invitation and cancels it before the lead admits it is back as before: the pin, the shown team and the request on the"
+      + " share gone, and its own folder setting again: " + toldFolder(scenes.fresh));
+    check(scenes.ftwice.pre && verdict.ftwice(scenes.ftwice),
+      "921k a desk that takes the same folder invitation twice and cancels is back as it was before the first: " + toldFolder(scenes.ftwice));
+    check(scenes.fleft.pre && verdict.fleft(scenes.fleft),
+      "921l a desk that had left the team, and cancels a folder invitation before it is admitted, has its leave record and its bar again: " + toldFolder(scenes.fleft));
 
     /* The plants. Each leg above is red where the line it guards is lifted, the file is read back from disk and put back byte for byte. */
     async function planted(edit, names) {
@@ -3126,7 +3179,7 @@ try {
         if (text !== null) {
           fs.writeFileSync(mainFile, text);
           said = "";
-          for (const name of names) got[name] = await cancelScene(fs.readFileSync(mainFile, "utf8"), "plant-" + name, asked[name]);
+          for (const name of names) got[name] = await runScene(fs.readFileSync(mainFile, "utf8"), "plant-" + name, name);
         }
       } catch (e) {
         said = e && e.message ? e.message : String(e);
@@ -3138,18 +3191,25 @@ try {
     const red = (r, names) => names.every(n => r.got[n] && r.got[n].pre && !verdict[n](r.got[n]));
     const redTold = (r, names) => r.said || names.map(n => n + " " + (r.got[n] ? (r.got[n].pre ? (verdict[n](r.got[n]) ? "green" : "red") : "not reached") : "not run")).join(", ");
     const dropLine = mark => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
-    const dropText = (mark, part) => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0 || lines[at].indexOf(part) < 0) return null; lines[at] = lines[at].replace(part, ""); return lines.join("\n"); };
-    const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice"]);
-    check(red(lifted, ["pin", "left", "twice"]) && lifted.back,
-      "921g lifting plant:c7-cancel reddens 921c, 921d and 921f, and the file is put back: " + redTold(lifted, ["pin", "left", "twice"]) + ", sha " + (lifted.back ? "restored" : "differs"));
+    const swapText = (mark, part, to) => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0 || lines[at].indexOf(part) < 0) return null; lines[at] = lines[at].replace(part, to); return lines.join("\n"); };
+    const dropText = (mark, part) => swapText(mark, part, "");
+    const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice", "fresh"]);
+    check(red(lifted, ["pin", "left", "twice", "fresh"]) && lifted.back,
+      "921g lifting plant:c7-cancel reddens 921c, 921d, 921f and 921j, and the file is put back: " + redTold(lifted, ["pin", "left", "twice", "fresh"]) + ", sha " + (lifted.back ? "restored" : "differs"));
     const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team) === 0"), ["key"]);
     check(red(clause, ["key"]) && clause.back,
       "921h lifting the clause that holds the restore to a desk with no key reddens 921e, and the file is put back: " + redTold(clause, ["key"]) + ", sha " + (clause.back ? "restored" : "differs"));
-    const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice"]);
-    check(red(chain, ["twice"]) && chain.back,
-      "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f, and the file is put back: " + redTold(chain, ["twice"]) + ", sha " + (chain.back ? "restored" : "differs"));
+    const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice", "ftwice"]);
+    check(red(chain, ["twice", "ftwice"]) && chain.back,
+      "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f and 921k, and the file is put back: " + redTold(chain, ["twice", "ftwice"]) + ", sha " + (chain.back ? "restored" : "differs"));
+    const folderSnap = await planted(swapText("plant:c8-before", "inviteBeforeFor(parsed.team, keptJoin)", "undefined"), ["fresh", "ftwice", "fleft"]);
+    check(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
+      "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the file is put back: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
+    const ownSet = await planted(dropLine("plant:c8-own"), ["fresh"]);
+    check(red(ownSet, ["fresh"]) && ownSet.back,
+      "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the file is put back: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
   } catch (e) {
-    check(false, "harness (the legs 921a to 921i): " + (e && e.stack ? e.stack : e));
+    check(false, "harness (the legs 921a to 921t): " + (e && e.stack ? e.stack : e));
   }
 
   /* A desk that left a relay team, was removed after, and is invited again. Leaving sets the mirror's team file aside,
