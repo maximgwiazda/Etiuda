@@ -2934,12 +2934,13 @@ try {
   /* C7, board 921. A desk takes a relay invitation, the invitation's copy lands, and cancel must leave that relay:
      relayHere is null, the folder is the one from before, and the channel has stopped. The desk holds no key. */
   try {
-    function deskFrom(name, folder, src) {
+    function deskFrom(name, folder, src, held) {
       const ud = path.join(LAB, name);
       fs.mkdirSync(ud, { recursive: true });
       fs.mkdirSync(folder, { recursive: true });
-      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-        keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
+      /* `held` is what the desk's envelope already keeps before any invitation: a pin, a key, a leave record. */
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: folder, eUiLang: "en" } }, held || {})), "utf8");
       const said = [];
       const on = {}, invoke = {};
       const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -2965,7 +2966,10 @@ try {
       const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
       return { api, ask, said, ud, envelope };
     }
-    async function cancelScene(src, tag) {
+    /* `opt.held(team)` is the envelope the desk starts with, `opt.unpinned` that the invitation finds a pin already there and
+       so makes none, and `opt.twice` that it takes the invitation a second time before cancelling. With no `opt` it is 921a's desk. */
+    async function cancelScene(src, tag, opt) {
+      opt = opt || {};
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
       const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
         sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
@@ -2990,11 +2994,12 @@ try {
       studio.start();
       await studio.idle();
       deskTransport.down = false;
-      const D = deskFrom("c7-desk-" + tag, share, src);
+      const D = deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key) : null);
       const before = D.api.catalogFolder();
       const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
         lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
       const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      if (opt.twice) await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       const mirror = path.join(D.ud, "relay", rt);
       const landed = await until(async () => {
         const ch = D.api.relayRun();
@@ -3016,11 +3021,14 @@ try {
       const stopped = await until(() => !!(running && running.online() === false), 1500);
       const here = D.api.relayHere();
       const folder = D.api.catalogFolder();
+      let after = {};
+      try { after = D.envelope(); } catch { after = {}; }
       if (running) { try { await running.stop(); } catch { /* already stopped */ } }
       try { await studio.stop(); } catch { /* already stopped */ }
-      const pre = !taken.refused && before === share && landed && noKey && pinned && onMirror && wasOnline && !!hereBefore;
+      const pre = !taken.refused && before === share && landed && noKey && pinned === !opt.unpinned
+        && onMirror && wasOnline && !!hereBefore;
       const said = D.said.filter(l => l.indexOf("relay") >= 0 || l.indexOf("team") >= 0).slice(-3).join(" / ");
-      return { pre, here, folder, share, stopped, refused: taken && taken.refused, said,
+      return { pre, here, folder, share, stopped, refused: taken && taken.refused, said, team, after,
         file: read(mirror, C.TEAM_NAME) !== null, named: !!(env.teamChannel && env.teamChannel[team]) };
     }
     const got = await cancelScene(fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"), "leg");
@@ -3057,8 +3065,78 @@ try {
     const back = sha(fs.readFileSync(mainFile)) === digest;
     check(turned && back, "921b lifting plant:c7-cancel leaves the relay pin, the mirror and the channel after cancel, and the file is put back: "
       + detail + ", sha " + (back ? "restored" : "differs"));
+
+    /* Board 921, the test architect's edits. Cancel before admission puts back what the invitation changed, whatever the desk
+       held before it, so each scene starts the desk from a different envelope. A leg reads the envelope the cancel wrote. */
+    const LEFT_AT = "2026-09-01T08:30:00.000Z";
+    const leadPin = { keyId: LEAD.keyId, public: LEAD.pub };
+    const slot = (g, name) => (g.after[name] || {})[g.team];
+    const asked = {
+      pin: { held: team => ({ teamPins: { [team]: leadPin } }), unpinned: true },
+      left: { held: team => ({ teamLeft: { [team]: LEFT_AT }, teamBarred: [team] }) },
+      twice: { twice: true },
+    };
+    const gone = g => g.here === null && g.folder === g.share && g.stopped;
+    const verdict = {
+      pin: g => gone(g) && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === undefined
+        && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined,
+      left: g => gone(g) && slot(g, "teamLeft") === LEFT_AT && Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0
+        && slot(g, "teamPins") === undefined,
+      twice: g => gone(g) && slot(g, "teamPins") === undefined && slot(g, "teamPinFrom") === undefined && slot(g, "teamShown") === undefined
+        && slot(g, "teamChannel") === undefined,
+    };
+    const told = g => (g.pre ? "the copy had landed" : "the copy had not (" + (g.refused ? "refused " + g.refused : "file " + g.file + ", channel " + g.named) + ")")
+      + ", relayHere " + (g.here === null ? "null" : "answers")
+      + ", folder " + (g.folder === g.share ? "the share" : "the mirror")
+      + ", channel " + (g.stopped ? "stopped" : "running")
+      + ", pin " + (slot(g, "teamPins") ? "kept" : "gone")
+      + ", from " + (slot(g, "teamPinFrom") || "gone")
+      + ", shown " + (slot(g, "teamShown") ? "kept" : "gone")
+      + ", channel named " + (slot(g, "teamChannel") ? "yes" : "no")
+      + ", left " + (slot(g, "teamLeft") ? "kept" : "gone")
+      + ", barred " + (Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0 ? "yes" : "no")
+      + ", join " + (g.after.teamJoin === undefined ? "gone" : "standing");
+    const scenes = {};
+    for (const name of Object.keys(asked)) scenes[name] = await cancelScene(fs.readFileSync(mainFile, "utf8"), name, asked[name]);
+    check(scenes.pin.pre && verdict.pin(scenes.pin),
+      "921c a desk that held the lead's pin before the invitation, and cancels before it is admitted, is off the relay with the pin still there"
+      + " and the invitation's from, folder and channel gone: " + told(scenes.pin));
+    check(scenes.left.pre && verdict.left(scenes.left),
+      "921d a desk that had left the team, and cancels the invitation before it is admitted, has its leave record and its bar again: "
+      + told(scenes.left));
+    check(scenes.twice.pre && verdict.twice(scenes.twice),
+      "921f a desk that takes the same invitation twice and cancels is back as it was before the first: " + told(scenes.twice));
+
+    /* The plants. Each leg above is red where the line it guards is lifted, the file is read back from disk and put back byte for byte. */
+    async function planted(edit, names) {
+      const bytes = fs.readFileSync(mainFile), sum = sha(bytes), got = {};
+      let said = "plant line absent";
+      try {
+        const text = edit(bytes.toString("utf8"));
+        if (text !== null) {
+          fs.writeFileSync(mainFile, text);
+          said = "";
+          for (const name of names) got[name] = await cancelScene(fs.readFileSync(mainFile, "utf8"), "plant-" + name, asked[name]);
+        }
+      } catch (e) {
+        said = e && e.message ? e.message : String(e);
+      } finally {
+        fs.writeFileSync(mainFile, bytes);
+      }
+      return { got, said, back: sha(fs.readFileSync(mainFile)) === sum };
+    }
+    const red = (r, names) => names.every(n => r.got[n] && r.got[n].pre && !verdict[n](r.got[n]));
+    const redTold = (r, names) => r.said || names.map(n => n + " " + (r.got[n] ? (r.got[n].pre ? (verdict[n](r.got[n]) ? "green" : "red") : "not reached") : "not run")).join(", ");
+    const dropLine = mark => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
+    const dropText = (mark, part) => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf(mark) >= 0); if (at < 0 || lines[at].indexOf(part) < 0) return null; lines[at] = lines[at].replace(part, ""); return lines.join("\n"); };
+    const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice"]);
+    check(red(lifted, ["pin", "left", "twice"]) && lifted.back,
+      "921g lifting plant:c7-cancel reddens 921c, 921d and 921f, and the file is put back: " + redTold(lifted, ["pin", "left", "twice"]) + ", sha " + (lifted.back ? "restored" : "differs"));
+    const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice"]);
+    check(red(chain, ["twice"]) && chain.back,
+      "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f, and the file is put back: " + redTold(chain, ["twice"]) + ", sha " + (chain.back ? "restored" : "differs"));
   } catch (e) {
-    check(false, "harness (the leg 921a): " + (e && e.stack ? e.stack : e));
+    check(false, "harness (the legs 921a to 921i): " + (e && e.stack ? e.stack : e));
   }
 
   /* A desk that left a relay team, was removed after, and is invited again. Leaving sets the mirror's team file aside,

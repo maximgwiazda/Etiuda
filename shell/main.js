@@ -3264,20 +3264,29 @@ function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
   if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
-  /* The invitation pinned this team and this desk holds no key for it: cancelling undoes that pin. */
-  if (j && j.invite && j.invite.pinned === true && newestEpoch(j.team) === 0) undoInvitePin(j.team); /* plant:c7-cancel */
   teamJoin = null;
   joinTold = false;
+  /* A relay invitation changed this team's pin, where it came from, the folder it showed, the channel and the leave record,
+     and kept what each was in `before`. While this desk holds no key for the team, cancelling puts each back as it was. */
+  if (j && j.invite && j.invite.before && newestEpoch(j.team) === 0) undoInvite(j.team, j.invite.before); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
 }
-/* An invitation that pinned a team this desk holds no key for is let go with the request: the pin, the folder it
-   showed and the channel go, and the watch is told the folder changed. */
-function undoInvitePin(team) {
-  delete teamPins[team];
-  delete teamPinFrom[team];
-  delete teamShown[team];
-  delete teamChannel[team];
+/* What a relay invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out. */
+function inviteBefore(team) {
+  return JSON.parse(JSON.stringify({ pin: teamPins[team], from: teamPinFrom[team], shown: teamShown[team], channel: teamChannel[team],
+    left: teamLeft[team], barred: teamBarred.has(team) }));
+}
+/* An invitation let go before the lead admitted this desk puts back each thing it changed for `team`, deleting where the desk
+   held none, and the watch is told the folder changed. `b` is inviteBefore's, kept in the join. */
+function undoInvite(team, b) {
+  if (b.pin) teamPins[team] = b.pin; else delete teamPins[team];
+  if (b.from) teamPinFrom[team] = b.from; else delete teamPinFrom[team];
+  if (b.shown) teamShown[team] = b.shown; else delete teamShown[team];
+  if (b.channel) teamChannel[team] = b.channel; else delete teamChannel[team];
+  if (b.left) teamLeft[team] = b.left; else delete teamLeft[team];
+  if (b.barred) teamBarred.add(team); else teamBarred.delete(team);
+  teamStamp = "";
   relaySoon();
   catalogFolderChanged();
 }
@@ -3347,8 +3356,21 @@ function joinKept(j) {
     && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
     && (inv.folder === undefined || typeof inv.folder === "string") && (inv.was === undefined || typeof inv.was === "string")
-    && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay));
+    && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay))
+    && (inv.before === undefined || beforeKept(inv.before));
   return inviteOk ? j : null;
+}
+/* A relay invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts. */
+function beforeKept(b) {
+  const table = v => !!v && typeof v === "object" && !Array.isArray(v);
+  if (!table(b) || typeof b.barred !== "boolean") return false;
+  const c = b.channel === undefined ? null : teamChannelOf({ channel: b.channel }), s = b.shown;
+  return (b.pin === undefined || (table(b.pin) && typeof b.pin.keyId === "string" && JOIN_HEX_RE.test(String(b.pin.public))))
+    && (b.from === undefined || PIN_FROM.indexOf(b.from) >= 0)
+    && (s === undefined || (table(s) && (s.lead === undefined || shownName(s.lead))
+      && (s.folder === undefined || (typeof s.folder === "string" && s.folder.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(s.folder)))))
+    && (b.channel === undefined || (!!c && c.kind === "relay"))
+    && (b.left === undefined || (typeof b.left === "string" && /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/.test(b.left)));
 }
 /* A relay invitation as the envelope keeps it: the relay team id, the address and the invitation's id in the open, the
    token and the seal key sealed by safeStorage. */
@@ -3509,10 +3531,13 @@ function takeRelayInvite(parsed, name, me) {
   const keptJoin = teamJoin, previous = catalogFolder();
   const was = { join: teamJoin, pin: teamPins[parsed.team], from: teamPinFrom[parsed.team], shown: teamShown[parsed.team] };
   const pinned = !teamPins[parsed.team] || (!!(keptJoin && keptJoin.invite) && keptJoin.team === parsed.team && keptJoin.invite.pinned === true);
+  /* What Cancel puts back. An invitation taken over a pending one for the same team keeps the first's, which is what the desk held. */
+  const kept = keptJoin && keptJoin.team === parsed.team && keptJoin.invite && keptJoin.invite.before;
+  const before = kept || inviteBefore(parsed.team); /* plant:c7-chain */
   const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
-      pinned: pinned, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal, wrap: wrap } } };
+      pinned: pinned, before: before, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal, wrap: wrap } } };
   if (parsed.lead.box) j.invite.relay.box = parsed.lead.box; /* plant:f6-box-kept */
   teamJoin = j;
   if (!teamPins[parsed.team]) { teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public }; teamSeen.delete(parsed.team); }
