@@ -2966,8 +2966,9 @@ try {
       const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
       return { api, ask, said, ud, envelope };
     }
-    /* `opt.held(team)` is the envelope the desk starts with, `opt.unpinned` that the invitation finds a pin already there and
-       so makes none, and `opt.twice` that it takes the invitation a second time before cancelling. With no `opt` it is 921a's desk. */
+    /* `opt.held(team)` is the envelope the desk starts with, `opt.keep` that it holds the team's key before the invitation,
+       `opt.unpinned` that the invitation finds a pin already there and so makes none, and `opt.twice` that it takes the
+       invitation a second time before cancelling. With no `opt` it is 921a's desk. */
     async function cancelScene(src, tag, opt) {
       opt = opt || {};
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
@@ -3012,6 +3013,7 @@ try {
       let env = {};
       try { env = D.envelope(); } catch { env = {}; }
       const noKey = !env.teamKeys || !env.teamKeys[team];
+      const standing = !!env.teamJoin;
       const pinned = !!(env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.pinned === true);
       const onMirror = D.api.catalogFolder() === mirror;
       const hereBefore = D.api.relayHere();
@@ -3023,12 +3025,13 @@ try {
       const folder = D.api.catalogFolder();
       let after = {};
       try { after = D.envelope(); } catch { after = {}; }
+      const still = running && running.online();
       if (running) { try { await running.stop(); } catch { /* already stopped */ } }
       try { await studio.stop(); } catch { /* already stopped */ }
-      const pre = !taken.refused && before === share && landed && noKey && pinned === !opt.unpinned
+      const pre = !taken.refused && before === share && landed && (opt.keep ? !noKey && standing : noKey) && pinned === !opt.unpinned
         && onMirror && wasOnline && !!hereBefore;
       const said = D.said.filter(l => l.indexOf("relay") >= 0 || l.indexOf("team") >= 0).slice(-3).join(" / ");
-      return { pre, here, folder, share, stopped, refused: taken && taken.refused, said, team, after,
+      return { pre, here, folder, share, stopped, still: !!still, refused: taken && taken.refused, said, team, after,
         file: read(mirror, C.TEAM_NAME) !== null, named: !!(env.teamChannel && env.teamChannel[team]) };
     }
     const got = await cancelScene(fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"), "leg");
@@ -3070,10 +3073,12 @@ try {
        held before it, so each scene starts the desk from a different envelope. A leg reads the envelope the cancel wrote. */
     const LEFT_AT = "2026-09-01T08:30:00.000Z";
     const leadPin = { keyId: LEAD.keyId, public: LEAD.pub };
+    const sealedKey = k => Buffer.from(Buffer.from(k.toString("base64"), "utf8").map(b => b ^ 0x5a)).toString("base64");
     const slot = (g, name) => (g.after[name] || {})[g.team];
     const asked = {
       pin: { held: team => ({ teamPins: { [team]: leadPin } }), unpinned: true },
       left: { held: team => ({ teamLeft: { [team]: LEFT_AT }, teamBarred: [team] }) },
+      key: { held: (team, key) => ({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } }), keep: true, unpinned: true },
       twice: { twice: true },
     };
     const gone = g => g.here === null && g.folder === g.share && g.stopped;
@@ -3082,6 +3087,8 @@ try {
         && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined,
       left: g => gone(g) && slot(g, "teamLeft") === LEFT_AT && Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0
         && slot(g, "teamPins") === undefined,
+      key: g => g.here !== null && g.folder !== g.share && g.still && !g.stopped && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin)
+        && slot(g, "teamPinFrom") === "invite" && !!slot(g, "teamChannel") && g.after.teamJoin === undefined,
       twice: g => gone(g) && slot(g, "teamPins") === undefined && slot(g, "teamPinFrom") === undefined && slot(g, "teamShown") === undefined
         && slot(g, "teamChannel") === undefined,
     };
@@ -3104,6 +3111,9 @@ try {
     check(scenes.left.pre && verdict.left(scenes.left),
       "921d a desk that had left the team, and cancels the invitation before it is admitted, has its leave record and its bar again: "
       + told(scenes.left));
+    check(scenes.key.pre && verdict.key(scenes.key),
+      "921e a desk that keeps the team's key, and cancels an invitation it took, is left on the relay with the pin, the invitation's from and"
+      + " the channel: " + told(scenes.key));
     check(scenes.twice.pre && verdict.twice(scenes.twice),
       "921f a desk that takes the same invitation twice and cancels is back as it was before the first: " + told(scenes.twice));
 
@@ -3132,6 +3142,9 @@ try {
     const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice"]);
     check(red(lifted, ["pin", "left", "twice"]) && lifted.back,
       "921g lifting plant:c7-cancel reddens 921c, 921d and 921f, and the file is put back: " + redTold(lifted, ["pin", "left", "twice"]) + ", sha " + (lifted.back ? "restored" : "differs"));
+    const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team) === 0"), ["key"]);
+    check(red(clause, ["key"]) && clause.back,
+      "921h lifting the clause that holds the restore to a desk with no key reddens 921e, and the file is put back: " + redTold(clause, ["key"]) + ", sha " + (clause.back ? "restored" : "differs"));
     const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice"]);
     check(red(chain, ["twice"]) && chain.back,
       "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f, and the file is put back: " + redTold(chain, ["twice"]) + ", sha " + (chain.back ? "restored" : "differs"));

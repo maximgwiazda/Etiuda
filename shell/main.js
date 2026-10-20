@@ -3267,7 +3267,10 @@ function cancelJoin() {
   teamJoin = null;
   joinTold = false;
   /* A relay invitation changed this team's pin, where it came from, the folder it showed, the channel and the leave record,
-     and kept what each was in `before`. While this desk holds no key for the team, cancelling puts each back as it was. */
+     and kept what each was in `before`. While this desk holds no key for the team, cancelling puts each back as it was.
+     A desk that already keeps the team's key may take an invitation for it all the same, since inviteSettled looks at a
+     bar and another lead's pin and not at a key, and that join stands until a newer key arrives (finishJoin compares with
+     `held`). That desk is a member, not a request waiting, so Cancel leaves what its invitation set (921e). */
   if (j && j.invite && j.invite.before && newestEpoch(j.team) === 0) undoInvite(j.team, j.invite.before); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
