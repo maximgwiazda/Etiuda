@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 185;
+const EXPECTED = 196;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2935,7 +2935,7 @@ try {
      relayHere is null, the folder is the one from before, and the channel has stopped. The desk holds no key. */
   try {
     /* The shell `src` loaded over the desk folder `ud` and the envelope already in it, as a restarted desk loads. */
-    function deskLoad(ud, src) {
+    function deskLoad(ud, src, serve) {
       const said = [];
       const on = {}, invoke = {};
       const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -2944,7 +2944,7 @@ try {
         encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
         decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
       };
-      const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+      const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
       const electron = {
         app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
@@ -2961,20 +2961,22 @@ try {
       const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
       return { api, ask, said, ud, envelope };
     }
-    function deskFrom(name, folder, src, held) {
+    function deskFrom(name, folder, src, held, serve) {
       const ud = path.join(LAB, name);
       fs.mkdirSync(ud, { recursive: true });
       fs.mkdirSync(folder, { recursive: true });
       /* `held` is what the desk's envelope already keeps before any invitation: a pin, a key, a leave record. */
       fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
         keys: { eCatalogFolder: folder, eUiLang: "en" } }, held || {})), "utf8");
-      return deskLoad(ud, src);
+      return deskLoad(ud, src, serve);
     }
     /* `opt.held(team, key, share)` is the envelope the desk starts with, `opt.keep` that it holds the team's key before the
        invitation, `opt.unpinned` that the invitation finds a pin already there and so makes none, and `opt.twice` that it
        takes the invitation a second time before cancelling. `opt.restart` stops the desk once the invitation's copy has
        landed and loads it again from the envelope on disk, after `opt.edit(envelope, team, key)` has changed that envelope;
-       `opt.view` then asks only whether the restarted desk kept the request. With no `opt` it is 921a's desk. */
+       `opt.view` then asks only whether the restarted desk kept the request. `opt.wrap` serves the invitation's wrap, as slice 3's
+       relay does, so the desk opens the team key on yes before the lead admits it and the scene waits for that key, and
+       `opt.retake` takes the invitation a second time once that key is in. With no `opt` it is 921a's desk. */
     async function cancelScene(src, tag, opt) {
       opt = opt || {};
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
@@ -2990,6 +2992,10 @@ try {
         lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
         channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
       const live = [{ id: inv, key: sealKey }];
+      const wrapDoc = opt.wrap ? B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: 1, key: key }) : null;
+      const serve = wrapDoc ? (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
+        ? new Response(Buffer.from(JSON.stringify({ wrap: wrapDoc }), "utf8"), { status: 200, headers: { "content-type": "application/json" } })
+        : null) : null;
       const studioT = transport("c7-" + tag), studioMirror = path.join(LAB, "c7-studio-" + tag);
       const studio = C.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "c7-" + tag + ".json"),
         pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
@@ -3001,7 +3007,7 @@ try {
       studio.start();
       await studio.idle();
       deskTransport.down = false;
-      let D = deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key, share) : null);
+      let D = deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key, share) : null, serve);
       const before = D.api.catalogFolder();
       const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
         lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
@@ -3014,12 +3020,17 @@ try {
         await studio.kick(); await studio.idle();
         let env = {};
         try { env = D.envelope(); } catch { env = {}; }
-        return read(mirror, C.TEAM_NAME) !== null && !!(env.teamChannel && env.teamChannel[team]) && !!(ch && ch.online());
+        return read(mirror, C.TEAM_NAME) !== null && !!(env.teamChannel && env.teamChannel[team]) && !!(ch && ch.online())
+          && (!opt.wrap || !!(env.teamKeys && env.teamKeys[team]));
       }, 8000);
       let landed = await landing();
+      if (opt.retake) await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       let env = {};
       try { env = D.envelope(); } catch { env = {}; }
       const noKey = !env.teamKeys || !env.teamKeys[team];
+      /* With the wrap served, it was asked for and the team's key is in the envelope. */
+      const wrapAsked = deskTransport.log.some(l => l.indexOf("GET ") === 0 && l.indexOf(rt) >= 0 && l.endsWith("/wrap"));
+      const keyIn = opt.wrap ? !noKey && wrapAsked : (opt.keep ? !noKey : noKey);
       const standing = !!env.teamJoin;
       const pinned = !!(env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.pinned === true);
       if (opt.restart) {
@@ -3030,7 +3041,7 @@ try {
           opt.edit(doc, team, key);
           fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(doc), "utf8");
         }
-        D = deskLoad(D.ud, src);
+        D = deskLoad(D.ud, src, serve);
         if (opt.view) {
           const seen = await D.ask("etiuda:team-join", "read", "no invitation");
           try { await studio.stop(); } catch { /* already stopped */ }
@@ -3051,7 +3062,7 @@ try {
       const still = running && running.online();
       if (running) { try { await running.stop(); } catch { /* already stopped */ } }
       try { await studio.stop(); } catch { /* already stopped */ }
-      const pre = !taken.refused && before === share && landed && (opt.keep ? !noKey && standing : noKey) && pinned === !opt.unpinned
+      const pre = !taken.refused && before === share && landed && keyIn && standing && pinned === !opt.unpinned
         && onMirror && wasOnline && !!hereBefore;
       const said = D.said.filter(l => l.indexOf("relay") >= 0 || l.indexOf("team") >= 0).slice(-3).join(" / ");
       return { pre, here, folder, share, stopped, still: !!still, refused: taken && taken.refused, said, team, after,
@@ -3139,11 +3150,23 @@ try {
          that came by an answered request and the team it showed, so the snapshot read back carries every table beforeKept checks. */
       restart: { restart: true, unpinned: true, held: (team, key, share) => ({ teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
         teamShown: { [team]: { lead: "Ada Quay", folder: share } } }) },
-      /* A key newer than the one held at the invitation is in the envelope when the desk comes back, as the invitation's wrap
-         gives one before the lead admits the desk. */
+      /* A key newer than the one held at the invitation, which the invitation's wrap did not give, is in the envelope when the
+         desk comes back: what the roster's wrap gives on admission, which the join does not list as wrapped (921n). */
       admit: { restart: true, edit: (doc, team, key) => { doc.teamKeys = Object.assign({}, doc.teamKeys, { [team]: { 1: sealedKey(key) } }); } },
       /* A snapshot whose mark is not a count. */
       tamper: { restart: true, view: true, edit: doc => { doc.teamJoin.invite.before.epoch = "1"; } },
+      /* E4: slice 3's ordinary flow. The invitation's wrap is served, so the desk opens the team key on yes, before the lead
+         admits it. A desk that had left the team (921u), one that held its pin and its shown team and the key (921v), one stopped
+         and loaded again between the wrap and the Cancel (921w) and one that takes the invitation a second time after the wrap
+         (921y) each cancel before admission. */
+      wrap: { wrap: true, held: team => ({ teamLeft: { [team]: LEFT_AT }, teamBarred: [team] }) },
+      wraphold: { wrap: true, keep: true, unpinned: true, held: (team, key, share) => ({ teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        teamShown: { [team]: { lead: "Ada Quay", folder: share } }, teamKeys: { [team]: { 1: sealedKey(key) } } }) },
+      wraprestart: { wrap: true, restart: true, unpinned: true, held: (team, key, share) => ({ teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        teamShown: { [team]: { lead: "Ada Quay", folder: share } } }) },
+      wrapretake: { wrap: true, retake: true },
+      /* The list of epochs the wrap gave a key for is not a list of counts. */
+      wrapbad: { restart: true, view: true, edit: doc => { doc.teamJoin.invite.relay.wrapped = "1"; } },
     };
     const runScene = (src, tag, name) => (asked[name].folder ? folderScene : cancelScene)(src, tag, asked[name]);
     const gone = g => g.here === null && g.folder === g.share && g.stopped;
@@ -3166,6 +3189,16 @@ try {
       admit: g => g.here !== null && g.folder !== g.share && g.still && !g.stopped && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin)
         && slot(g, "teamPinFrom") === "invite" && !!slot(g, "teamChannel") && !!slot(g, "teamKeys") && g.after.teamJoin === undefined,
       tamper: g => g.kept === false,
+      /* E4. Back to the folder and off the relay, the leave record and the bar again, nothing else the invitation set, and no key from its wrap. */
+      wrap: g => gone(g) && slot(g, "teamPins") === undefined && slot(g, "teamPinFrom") === undefined && slot(g, "teamShown") === undefined
+        && slot(g, "teamChannel") === undefined && slot(g, "teamLeft") === LEFT_AT && barredHere(g) && slot(g, "teamKeys") === undefined
+        && g.after.teamJoin === undefined,
+      wraphold: g => verdict.restart(g) && typeof (slot(g, "teamKeys") || {})[1] === "string",
+      wraprestart: g => verdict.restart(g) && slot(g, "teamKeys") === undefined,
+      wrapretake: g => gone(g) && slot(g, "teamPins") === undefined && slot(g, "teamPinFrom") === undefined && slot(g, "teamShown") === undefined
+        && slot(g, "teamChannel") === undefined && slot(g, "teamLeft") === undefined && !barredHere(g) && slot(g, "teamKeys") === undefined
+        && g.after.teamJoin === undefined,
+      wrapbad: g => g.kept === false,
     };
     const told = g => (g.pre ? "the copy had landed" : "the copy had not (" + (g.refused ? "refused " + g.refused : "file " + g.file + ", channel " + g.named) + ")")
       + ", relayHere " + (g.here === null ? "null" : "answers")
@@ -3212,10 +3245,27 @@ try {
       "921m a desk stopped and loaded again from desk.json between a relay invitation and its Cancel reads the snapshot back and still puts back the pin,"
       + " where it came from, the shown team and the folder: " + told(scenes.restart));
     check(scenes.admit.pre && verdict.admit(scenes.admit),
-      "921n a desk that keeps a key newer than the one it held at the invitation, and cancels, is left on the relay as the invitation set it: " + told(scenes.admit));
+      "921n a desk that keeps a key newer than the one it held at the invitation which the invitation's wrap did not give (one the roster's wrap gave),"
+      + " and cancels, is left on the relay as the invitation set it: " + told(scenes.admit));
     check(scenes.tamper.pre && verdict.tamper(scenes.tamper),
       "921o a snapshot whose mark of the key held is not a count is not read back from desk.json, and the request that carried it is not kept: the request "
       + (scenes.tamper.kept ? "was kept" : "was dropped"));
+    check(scenes.wrap.pre && verdict.wrap(scenes.wrap),
+      "921u a desk that had left the team, takes a relay invitation whose wrap opens the team key on yes, and cancels before the lead admits it, has all seven"
+      + " things back (the pin, where it came from, the shown team, the channel, the leave record, the bar and its folder) and no key from that wrap in the envelope: "
+      + told(scenes.wrap));
+    check(scenes.wraphold.pre && verdict.wraphold(scenes.wraphold),
+      "921v a desk that held the team's key before the invitation, and cancels after the invitation's wrap opened that epoch again, has its pin, where it came from,"
+      + " its shown team and its key: " + told(scenes.wraphold));
+    check(scenes.wraprestart.pre && verdict.wraprestart(scenes.wraprestart),
+      "921w a desk stopped and loaded again from desk.json after the invitation's wrap opened the team key still forgets that key on Cancel and puts back the pin,"
+      + " where it came from, the shown team and the folder: " + told(scenes.wraprestart));
+    check(scenes.wrapbad.pre && verdict.wrapbad(scenes.wrapbad),
+      "921x a list of the epochs the wrap gave a key for that is not a list of counts is not read back from desk.json, and the request that carried it is not kept: the request "
+      + (scenes.wrapbad.kept ? "was kept" : "was dropped"));
+    check(scenes.wrapretake.pre && verdict.wrapretake(scenes.wrapretake),
+      "921y a desk that takes the invitation a second time after its wrap opened the team key, and cancels, is back as it was before the first, with no key from that wrap: "
+      + told(scenes.wrapretake));
 
     /* The plants. Each leg above is red where the line it guards is lifted, the file is read back from disk and put back byte for byte. */
     async function planted(edit, names) {
@@ -3243,7 +3293,7 @@ try {
     const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice", "key", "fresh"]);
     check(red(lifted, ["pin", "left", "twice", "key", "fresh"]) && lifted.back,
       "921g lifting plant:c7-cancel reddens 921c, 921d, 921e, 921f and 921j, and the file is put back: " + redTold(lifted, ["pin", "left", "twice", "key", "fresh"]) + ", sha " + (lifted.back ? "restored" : "differs"));
-    const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team) === (b.epoch || 0)"), ["admit"]);
+    const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team, wrapped) === (b.epoch || 0)"), ["admit"]);
     check(red(clause, ["admit"]) && clause.back,
       "921h lifting the clause that holds the restore to a desk with no newer key than at the invitation reddens 921n, and the file is put back: " + redTold(clause, ["admit"]) + ", sha " + (clause.back ? "restored" : "differs"));
     const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice", "ftwice"]);
@@ -3264,8 +3314,26 @@ try {
     const epoch = await planted(swapText("plant:c7-epoch", "(Number.isInteger(b.epoch) && b.epoch >= 0)", "true"), ["tamper"]);
     check(red(epoch, ["tamper"]) && epoch.back,
       "921t lifting plant:c7-epoch, the check that the mark is a count, reddens 921o, and the file is put back: " + redTold(epoch, ["tamper"]) + ", sha " + (epoch.back ? "restored" : "differs"));
+    const markLift = await planted(dropLine("plant:e4-mark"), ["wrap", "wraprestart", "wrapretake"]);
+    check(red(markLift, ["wrap", "wraprestart", "wrapretake"]) && markLift.back,
+      "921z lifting plant:e4-mark, the epoch the wrap gave marked in the join, reddens 921u, 921w and 921y, and the file is put back: " + redTold(markLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (markLift.back ? "restored" : "differs"));
+    const hadLift = await planted(dropText("plant:e4-mark", " && !had"), ["wraphold"]);
+    check(red(hadLift, ["wraphold"]) && hadLift.back,
+      "921aa lifting the clause that leaves a key the desk held before unmarked reddens 921v, and the file is put back: " + redTold(hadLift, ["wraphold"]) + ", sha " + (hadLift.back ? "restored" : "differs"));
+    const skipLift = await planted(swapText("plant:c7-cancel", "newestEpoch(j.team, wrapped)", "newestEpoch(j.team)"), ["wrap", "wraprestart", "wrapretake"]);
+    check(red(skipLift, ["wrap", "wraprestart", "wrapretake"]) && skipLift.back,
+      "921ab lifting the leaving out of the wrap's epochs when Cancel compares with the mark reddens 921u, 921w and 921y, and the file is put back: " + redTold(skipLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (skipLift.back ? "restored" : "differs"));
+    const forgetLift = await planted(dropLine("plant:e4-forget"), ["wrap", "wraprestart", "wrapretake"]);
+    check(red(forgetLift, ["wrap", "wraprestart", "wrapretake"]) && forgetLift.back,
+      "921ac lifting plant:e4-forget, the wrap's keys let go on Cancel, reddens 921u, 921w and 921y, and the file is put back: " + redTold(forgetLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (forgetLift.back ? "restored" : "differs"));
+    const wrappedLift = await planted(swapText("plant:e4-wrapped", "(Array.isArray(r.wrapped) && r.wrapped.length <= 64 && r.wrapped.every(n => Number.isInteger(n) && n >= 1))", "true"), ["wrapbad"]);
+    check(red(wrappedLift, ["wrapbad"]) && wrappedLift.back,
+      "921ad lifting plant:e4-wrapped, the check that the wrap's epochs are counts, reddens 921x, and the file is put back: " + redTold(wrappedLift, ["wrapbad"]) + ", sha " + (wrappedLift.back ? "restored" : "differs"));
+    const gaveLift = await planted(dropLine("plant:e4-chain"), ["wrapretake"]);
+    check(red(gaveLift, ["wrapretake"]) && gaveLift.back,
+      "921ae lifting plant:e4-chain, the epochs the first invitation's wrap gave kept by the second, reddens 921y, and the file is put back: " + redTold(gaveLift, ["wrapretake"]) + ", sha " + (gaveLift.back ? "restored" : "differs"));
   } catch (e) {
-    check(false, "harness (the legs 921a to 921t): " + (e && e.stack ? e.stack : e));
+    check(false, "harness (the legs 921a to 921ae): " + (e && e.stack ? e.stack : e));
   }
 
   /* A desk that left a relay team, was removed after, and is invited again. Leaving sets the mirror's team file aside,
