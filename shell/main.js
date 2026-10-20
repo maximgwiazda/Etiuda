@@ -252,10 +252,141 @@ let offeredLead = null;
 function ecFromArgv(argv) {
   for (const a of (argv || []).slice(1)) {
     const s = String(a);
+    if (s.slice(0, 7).toLowerCase() === "etiuda:") continue; /* plant:link-file */
     if (s.charAt(0) === "-" || !/\.ec$/i.test(s)) continue;
     try { if (fs.statSync(s).isFile()) return path.resolve(s); } catch { /* not a file from here */ }
   }
   return "";
+}
+/* AN etiuda: LINK IS NOT A FILE. The only argument that is an invitation is etiuda:join# and
+   base64url, handed to inviteRead as etiuda-join: and the same text. A folder invitation, a page
+   address, a link wrapped twice and anything longer than 8192 characters are said and dropped,
+   and a refusal reads nothing from disk. Nothing joins: the confirm is still the person's yes. */
+const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
+const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
+const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
+const LINK_FORM_PL = "Etiuda nie potrafi odczytać tego odnośnika, więc niczego nie otwarto ani nie wysłano. Zaproszenie można zamiast tego wkleić w Etiudzie.";
+const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothing was sent. Ask your lead for a new one.";
+const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
+const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
+const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
+function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
+function linkLooks(s) {
+  const head = s.slice(0, 12).toLowerCase();
+  if (head === "etiuda-join:") return true; /* plant:link-paste */
+  return head.slice(0, 7) === "etiuda:" || s.slice(0, 8).toLowerCase() === "https://" || s.slice(0, 7).toLowerCase() === "http://";
+}
+function linkFromArg(arg) {
+  const s = typeof arg === "string" ? arg : "";
+  if (!linkLooks(s)) return null;
+  if (s.length > 8192) return linkRefusal(LINK_LONG, LINK_LONG_PL); /* plant:link-cap */
+  const hash = s.lastIndexOf("#");
+  const payload = hash >= 0 ? s.slice(hash + 1) : "";
+  if (s !== "etiuda:join#" + payload) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-form */
+  if (!/^[A-Za-z0-9_-]+$/.test(payload)) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-b64 */
+  const handed = "etiuda-join:" + payload;
+  const parsed = inviteRead(handed, process.platform !== "win32");
+  if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
+  if (!parsed.relay) return linkRefusal(LINK_FOLDER, LINK_FOLDER_PL); /* plant:link-folder */
+  return { text: handed, parsed: parsed };
+}
+function linkArgFrom(argv) {
+  for (const a of (argv || []).slice(1)) { if (linkFromArg(a)) return String(a); }
+  return "";
+}
+let pendingLink = null, pendingLinkArg = "";
+let heldLinkText = "", heldLinkView = null;
+/* What the page may see of a link: the lead's name, the team and the relay's host. The invitation
+   text stays here, so a yes can name it and the secret never enters the renderer. */
+function linkOfferView(view, parsed) {
+  const base = view && typeof view === "object" ? Object.assign({}, view) : {};
+  base.offer = {
+    lead: String(view && view.offer && view.offer.lead || ""),
+    team: String(parsed && parsed.team || ""),
+    relay: String(view && view.offer && view.offer.relay || ""),
+    link: true,
+  };
+  return base;
+}
+function handLinkView(view) {
+  heldLinkView = view;
+  const win = theWindow;
+  if (win && !win.isDestroyed() && win.webContents && typeof win.webContents.send === "function") {
+    try { win.webContents.send("etiuda:team-join", view); pendingLink = null; return; }
+    catch (e) { /* the page is not there yet */ }
+  }
+  pendingLink = view; /* plant:link-pending */
+}
+function handPendingLink(win) {
+  const view = pendingLink;
+  if (!view) return;
+  pendingLink = null;
+  if (!win || win.isDestroyed() || !win.webContents || typeof win.webContents.send !== "function") { pendingLink = view; return; }
+  try { win.webContents.send("etiuda:team-join", view); }
+  catch (e) { pendingLink = view; }
+}
+function sayLinkRefusal(got) {
+  console.error("etiuda: " + got.saidEn + " " + got.saidPl);
+  heldLinkText = "";
+  handLinkView({ linkRefusal: { en: got.saidEn, pl: got.saidPl } });
+  return { refused: got.refused, said: got.saidEn };
+}
+function acceptLink(arg) {
+  const got = linkFromArg(arg);
+  if (!got) return null;
+  if (got.refused) return sayLinkRefusal(got);
+  const view = readInvite(got.text);
+  if (!view || !view.offer) return sayLinkRefusal(linkRefusal(LINK_NO_TEAM, LINK_NO_TEAM_PL)); /* plant:link-offer */
+  const clean = linkOfferView(view, got.parsed);
+  heldLinkText = got.text;
+  handLinkView(clean);
+  return { confirm: true, text: got.text, offer: clean.offer };
+}
+function heldLinkAnswer() {
+  if (heldLinkView) return heldLinkView;
+  return joinView();
+}
+function declineHeldLink() {
+  heldLinkText = ""; /* plant:link-decline */
+  heldLinkView = null;
+  pendingLink = null;
+  pendingLinkArg = "";
+  return joinView();
+}
+async function takeHeldLink(name) {
+  const text = heldLinkText;
+  if (!text) return Object.assign({}, joinView(), { refused: "unread" });
+  const parsed = inviteParse(text);
+  if (!parsed || !parsed.relay) return Object.assign({}, joinView(), { refused: "unread" });
+  const ans = await takeInvite(text, name, "");
+  if (!ans || !ans.refused) {
+    heldLinkText = "";
+    heldLinkView = null;
+    pendingLink = null;
+    pendingLinkArg = "";
+  }
+  return ans;
+}
+function handHeldLink(win) {
+  if (pendingLinkArg) {
+    const arg = pendingLinkArg;
+    pendingLinkArg = "";
+    acceptLink(arg);
+    return;
+  }
+  handPendingLink(win);
+}
+/* An installed desk registers etiuda: on Windows. A dev start and a harness start leave the
+   machine's registration as they found it, and a start that cannot take the scheme still opens.
+   The Ubuntu line is written from electron-builder.js. */
+function registerEtiudaLink() {
+  if (process.platform !== "win32" || typeof app.setAsDefaultProtocolClient !== "function") return;
+  if (!app.isPackaged || process.env.ETIUDA_TEST_DOCUMENTS) return; /* plant:link-pack */
+  let ok = false;
+  try {
+    ok = app.setAsDefaultProtocolClient("etiuda") === true;
+  } catch (e) { ok = false; }
+  if (!ok) console.error("etiuda: Windows did not make this desk the program that opens an etiuda: link");
 }
 /* The lead's standing span, at the root of the team's folder. It replaces the old request file, which nothing here reads. */
 const SPAN_NAME = "stats-span.json";
@@ -2969,7 +3100,7 @@ function memberProof(secret, commit) {
   if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(com)) return "";
   return crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(com, "utf8").digest("hex");
 }
-/* The check code the lead reads out and the agent types before yes: HMAC-SHA256 under the invitation's 128-bit secret
+/* The check code the lead reads out and the agent types before yes, for a folder invitation: HMAC-SHA256 under the invitation's 128-bit secret
    over the lead's 32-byte public key (the bytes, not their hex), its first six bytes read big-endian modulo 100000, as
    five digits. "" where either is not the shape an invitation carries. Only the invitation that was issued gives it. */
 function inviteCode(secret, leadPublic) {
@@ -3012,11 +3143,14 @@ function inviteFolder(folder, posix) {
   return parts.length >= 2 && parts.every(kept) ? "\\\\" + parts.join("\\") : "";
 }
 /* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the folder, the lead and a
-   128-bit secret. Null where it is not that shape, and the folder as inviteFolder reaches it. Nothing is read from
+   128-bit secret, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as
+   the same invitation. Null where it is not that shape, and the folder as inviteFolder reaches it. Nothing is read from
    the folder: a path on another computer answers a stat by connecting, and the confirm exists so that connection is
    a choice. `posix` is true where the system is not Windows. */
 function inviteRead(text, posix) {
-  const raw = String(text == null ? "" : text).trim();
+  let raw = String(text == null ? "" : text).trim();
+  const page = "https://etiuda.dev/join#";
+  if (raw.length <= 8192 && raw.slice(0, page.length) === page && /^[A-Za-z0-9_-]+$/.test(raw.slice(page.length))) raw = "etiuda-join:" + raw.slice(page.length); /* plant:paste-https */
   if (raw.length < 16 || raw.length > 8192 || raw.slice(0, 12) !== "etiuda-join:") return null;
   let b64 = raw.slice(12).replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]+=*$/.test(b64)) return null;
@@ -3267,15 +3401,17 @@ function readInvite(text) {
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, view, { refused: settled });
-  const where = parsed.relay ? { host: "", cloud: "", local: false } : folderHost(parsed.folder, process.env);
-  const offer = { folder: parsed.folder, lead: parsed.lead.name, host: where.host, cloud: where.cloud, local: where.local };
-  /* A relay link asks for no check code, and it names the team and the relay's host beside the lead. */
-  if (parsed.relay) { offer.relay = new URL(parsed.relay.url).host; offer.team = parsed.team; }
-  else offer.code = inviteCode(parsed.secret, parsed.lead.public);
+  /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
+     code and no folder, as the link's confirm offers it. */
+  if (parsed.relay) return Object.assign({}, view, { offer: { lead: parsed.lead.name, team: parsed.team, relay: new URL(parsed.relay.url).host } }); /* plant:relay-offer */
+  const where = folderHost(parsed.folder, process.env);
+  const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
+    host: where.host, cloud: where.cloud, local: where.local };
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
   return Object.assign({}, view, { offer: offer });
 }
-/* The person's yes, with the check code they typed. The folder is asked before anything is written, and one that
+/* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
+   whatever either came by. The folder is asked before anything is written, and one that
    does not answer, or whose team file is not the invited team's, is put back as it was. A pin the invitation sets is
    a key not yet shown; the request carries the proof, never the secret. */
 async function takeInvite(text, name, check) {
@@ -3286,9 +3422,9 @@ async function takeInvite(text, name, check) {
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, joinView(), { refused: settled });
-  if (!parsed.relay) /* plant:relay-code */
+  const code = inviteCode(parsed.secret, parsed.lead.public);
+  if (!parsed.relay) /* plant:relay-code */ /* plant:folder-code */
   {
-    const code = inviteCode(parsed.secret, parsed.lead.public);
     if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
   }
   const me = branchIdentity();
@@ -4855,11 +4991,13 @@ ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRe
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen", "forget" and "leave" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
-// adds the check code the agent typed, and "leads" answers the pinned leads alone.
+// adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
+// "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check) : joinView()));
+  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
+  : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in
@@ -5895,6 +6033,7 @@ function createWindow() {
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryLiveStats(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
+  win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
@@ -6041,16 +6180,25 @@ const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne) {
   app.quit();
 } else {
+  registerEtiudaLink();
   app.on("second-instance", (e, argv) => {
     const win = theWindow;
     if (win && !win.isDestroyed() && !PLACED_ASIDE) {
       if (win.isMinimized()) win.restore();
       win.focus();
     }
+    const link = linkArgFrom(argv);
+    if (link) acceptLink(link);
     const file = ecFromArgv(argv);
     if (!file) return;
     offerFile(win, file);
   });
+  const link = linkArgFrom(process.argv);
+  if (link) {
+    const got = linkFromArg(link);
+    if (got && got.refused) acceptLink(link); /* plant:link-early */
+    if (got && got.text) pendingLinkArg = link; /* plant:link-hold */
+  }
   openedWith = ecFromArgv(process.argv);
   /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
      synchronous read of a share that is not there. */

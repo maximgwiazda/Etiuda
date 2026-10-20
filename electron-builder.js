@@ -120,6 +120,11 @@ module.exports = {
     icon: "shell/etiuda.ico",
     role: "Editor",
   }],
+  // THE etiuda: LINK. electron-builder writes the scheme into the macOS and AppX manifests.
+  // It does not register a URL protocol in the Windows installer; the desk checks
+  // app.setAsDefaultProtocolClient at start (shell/main.js). On Ubuntu the same list is what
+  // puts MimeType=x-scheme-handler/etiuda; on the desktop entry, after the catalog's own type.
+  protocols: [{ name: "Etiuda", schemes: ["etiuda"] }], /* plant:link-protocols */
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
     // Generated, not drawn here: the family's app icon, whose build renders every
@@ -153,6 +158,7 @@ module.exports = {
     fileAssociations: [{ ext: "ec", name: "Etiuda catalog", description: "Etiuda catalog",
       mimeType: "application/x-etiuda-catalog" }],
     // The class the window is measured to carry (tests/linux-desk.js 5a), so a dock groups it under this entry.
+    // The scheme joins this entry from protocols above: MimeType=x-scheme-handler/etiuda;
     desktop: { entry: { StartupWMClass: "etiuda" } },
     // Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
     extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }],

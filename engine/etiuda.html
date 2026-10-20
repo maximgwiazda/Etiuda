@@ -7579,6 +7579,7 @@ What you type stays in this browser only.`;
     "Join this team": "Dołącz do tego zespołu",
     "Folder: {FOLDER}": "Folder: {FOLDER}",
     "Lead: {NAME}": "Lider zespołu: {NAME}",
+    "{LEAD} invites this desk to join the team through {HOST}.": "{LEAD} zaprasza to stanowisko do zespołu przez przekaźnik {HOST}.",
     "Team: {TEAM}": "Zespół: {TEAM}",
     "Relay: {HOST}": "Przekaźnik: {HOST}",
     "This invitation cannot be read, so nothing was changed.": "Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
@@ -14866,6 +14867,7 @@ What you type stays in this browser only.`;
   var joinRead = "";
   var joinTyped = "";
   var joinWhy = "";
+  var joinLinkSaid = null;
   var joinReads = 0;
   function eHasJoin() {
     const h = eHost();
@@ -14894,17 +14896,12 @@ What you type stays in this browser only.`;
     joinRead = "";
     joinTyped = "";
     joinWhy = "";
+    joinLinkSaid = null;
     joinReads++;
   }
   function typedOk() {
     const want = joinOffer ? joinOffer.code : "";
     return /^[0-9]{5}$/.test(want) && joinTyped.replace(/\s+/g, "") === want;
-  }
-  function relayConfirm() {
-    return !!(joinOffer && joinOffer.relay);
-  }
-  function confirmReady() {
-    return relayConfirm() || typedOk();
   }
   function typedWrong() {
     return joinTyped.replace(/\s+/g, "").length >= 5 && !typedOk();
@@ -14946,7 +14943,14 @@ What you type stays in this browser only.`;
   function readTook(v, n, sent) {
     if (n !== joinReads || joinMode !== "paste") return false;
     const o = v && typeof v === "object" ? v.offer : null;
-    if (o && typeof o.folder === "string") {
+    if (o && typeof o.relay === "string" && o.relay) {
+      joinOffer = { lead: String(o.lead || ""), team: String(o.team || ""), relay: String(o.relay), code: "" };
+      joinRead = sent;
+      joinBlob = "";
+      joinTyped = "";
+      joinWhy = "";
+      joinMode = "confirm";
+    } else if (o && typeof o.folder === "string") {
       joinOffer = {
         folder: String(o.folder),
         lead: String(o.lead || ""),
@@ -15032,6 +15036,27 @@ What you type stays in this browser only.`;
       if (wholeThingEmpty()) hooks.loadCatalogFromFolder(String(s.joined.file), 0);
     }
     syncJoinDoor();
+    const refusal = s.linkRefusal;
+    if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
+      dropInvite();
+      joinLinkSaid = { en: String(refusal.en), pl: typeof refusal.pl === "string" ? String(refusal.pl) : "" };
+      joinWhy = "link";
+      joinMode = "refused";
+      paintJoin();
+      return joinNow;
+    }
+    const offer = s.offer;
+    if (offer && offer.link === true && typeof offer.relay === "string" && offer.relay) {
+      joinOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "" };
+      joinRead = "link";
+      joinBlob = "";
+      joinTyped = "";
+      joinWhy = "";
+      joinLinkSaid = null;
+      joinMode = "confirm";
+      paintJoin();
+      return joinNow;
+    }
     if (changed === true || JSON.stringify(joinNow) !== was) paintJoin();
     return joinNow;
   }
@@ -15043,6 +15068,7 @@ What you type stays in this browser only.`;
     if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
     if (typeof eHost().onCatalogCopy === "function") eOnCatalogCopy(noteCatalogCopy);
     joinAsk("state");
+    joinAsk("held");
   }
   function paintJoin() {
     if (wholeThingEmpty()) {
@@ -15106,6 +15132,16 @@ What you type stays in this browser only.`;
       body: '<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(joinBlob) + "</textarea>" + joinDisclosure(),
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
+    if (joinMode === "confirm" && joinOffer && joinOffer.relay) {
+      const o = joinOffer;
+      const line = t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
+      return {
+        title: t("Join this team?"),
+        line,
+        body: '<div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-meta">' + esc(t("Team: {TEAM}").split("{TEAM}").join(o.team)) + '</div><div class="e-join-meta">' + esc(t("Relay: {HOST}").split("{HOST}").join(o.relay)) + "</div>",
+        acts: [["invite", t("Join this team")], ["back", t("Cancel")]]
+      };
+    }
     if (joinMode === "confirm" && joinOffer) {
       const o = joinOffer, ask = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
       const title = o.left ? t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)) : t("Join this team?");
@@ -15121,6 +15157,10 @@ What you type stays in this browser only.`;
         body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
         acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
       };
+    }
+    if (joinMode === "refused" && joinWhy === "link" && joinLinkSaid) {
+      const said = uiLang() === "pl" && joinLinkSaid.pl ? joinLinkSaid.pl : joinLinkSaid.en;
+      return { title: t("Join a team"), line: said, body: "", acts: [["back", t("Cancel")]] };
     }
     if (joinMode === "refused") return {
       title: t("Join a team"),
@@ -15203,16 +15243,25 @@ What you type stays in this browser only.`;
   function joinAct(act) {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
     if (act === "join") return Promise.resolve(openJoinPaste());
-    if (act === "back") return Promise.resolve(clearJoinAsk());
+    if (act === "back") {
+      if (joinOffer && joinOffer.link || joinMode === "refused" && joinWhy === "link")
+        return joinAsk("link-no", "", "", "", () => {
+          dropInvite();
+          return true;
+        });
+      return Promise.resolve(clearJoinAsk());
+    }
     if (act === "read") {
       const sent = pastedText(), n = ++joinReads;
       joinBlob = sent;
       return joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
     }
     if (act === "invite") {
-      if (joinMode !== "confirm" || !joinRead || !confirmReady()) return Promise.resolve(null);
+      if (joinMode !== "confirm" || !joinOffer) return Promise.resolve(null);
+      if (joinOffer.link) return joinAsk("link", "", agentName(), "", (v) => yesTook(v, "link"));
+      if (!joinRead || !joinOffer.relay && !typedOk()) return Promise.resolve(null);
       const sent = joinRead;
-      return joinAsk("invite", sent, agentName(), joinTyped, (v) => yesTook(v, sent));
+      return joinAsk("invite", sent, agentName(), joinOffer.relay ? "" : joinTyped, (v) => yesTook(v, sent));
     }
     if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
     if (act === "cancel") return joinAsk("cancel");
