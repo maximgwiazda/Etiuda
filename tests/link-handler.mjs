@@ -9,7 +9,9 @@
  * read as a file. A plant deletes the one line that holds each guard and the file is put back by
  * its sha256.
  *
- * A relay invitation pasted in the paste box is asked the lead's check code; the same invitation from a link is asked none (3hp).
+ * A relay invitation is judged by what it is: pasted as etiuda-join:<payload> or as https://etiuda.dev/join#<payload>, or opened by
+ * the link, it shows the link's confirm, asks no check code and joins on yes; a folder invitation keeps its code (3hp). The paste box
+ * reads the https form as the same invitation, and no other https address (3hr).
  * The person's Cancel on a link confirm lets the link go in the shell (3hq).
  */
 process.removeAllListeners("warning");
@@ -26,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 27;
+const EXPECTED = 28;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -691,11 +693,16 @@ try {
     + "and putting back the old answer at plant:link-offer is heard: answer " + JSON.stringify(noTeamNow.answer) + ", page " + noPageNote
     + ", " + noTeamPlant.detail + ", sha " + (noTeamPlant.back ? "restored" : "differs"));
 
-  /* The two roads in with one invitation. A relay invitation pasted in the paste box goes through the `invite` op and is asked the
-     check code the lead reads out; the same invitation from a link goes through the held link and the `link` op and is asked none,
-     and that is decided by takeInvite's `fromLink === true` clause alone. Each question gets a desk of its own, so no answer rides on
-     another's. These two guard behaviour that was already there, so they were never red on the code before them: a plant shows each. */
+  /* One relay invitation, three roads in: pasted as etiuda-join:<payload>, pasted as https://etiuda.dev/join#<payload>, and opened
+     by the link. It is judged by what it is and not by how it arrived: each shows the link's confirm (the lead, the team and the
+     relay's host), asks no check code, sends nothing before yes and joins on yes. The page is the page's own module, a fresh copy
+     for each run and wired to the shell through the real IPC: every call it makes reaches the shell's team-join handler and is
+     written down, and a view the shell hands the window reaches the page's own onTeamJoin. A folder invitation keeps its code
+     whatever it came by: the page asks it, and the shell refuses check on a wrong one and on none. Each question gets a desk of its
+     own, so no answer rides on another's. The relay roads were red on 727539b (a pasted relay invitation was asked a code nobody
+     could read out); the folder refusal was already there, and its plant shows it. */
   const pastedText = "etiuda-join:" + b64;
+  const httpsText = "https://etiuda.dev/join#" + b64;
   const rightCode = api && api.inviteCode ? api.inviteCode(doc.secret, doc.lead.public) : "";
   const wrongCode = /^[0-9]{5}$/.test(rightCode) ? String((Number(rightCode) + 1) % 100000).padStart(5, "0") : "x";
   /* What the shell answered and what the desk now holds: a join is the team named in the desk's own file under this relay, and its mirror made. */
@@ -712,36 +719,180 @@ try {
   const refusedCheck = r => r.refused === "check" && !r.kept && !r.mirror;
   const joinedClean = r => r.refused === "" && r.kept && r.mirror;
   const sayTaken = r => (r.refused ? "refused " + r.refused : r.kept && r.mirror ? "joined" : "nothing") + (r.kept && r.refused ? " (kept)" : "");
-  async function pasteRun(src, typed) {
+  /* A folder invitation naming a real folder of this lab, so a join that is let through is seen to be one. */
+  const share = path.join(LAB, "share");
+  fs.mkdirSync(share, { recursive: true });
+  const shareDoc = relayDoc();
+  delete shareDoc.relay;
+  shareDoc.folder = share;
+  const shareB64 = pack(shareDoc);
+  const sharePasted = "etiuda-join:" + shareB64;
+  const shareRight = api && api.inviteCode ? api.inviteCode(shareDoc.secret, shareDoc.lead.public) : "";
+  const shareWrong = /^[0-9]{5}$/.test(shareRight) ? String((Number(shareRight) + 1) % 100000).padStart(5, "0") : "x";
+  function takenFolder(L, ans) {
+    let env = null;
+    try { env = JSON.parse(fs.readFileSync(path.join(L.ud, "desk.json"), "utf8")); } catch (e) { env = null; }
+    const kept = env && env.teamJoin ? env.teamJoin : null;
+    return {
+      refused: ans && typeof ans.refused === "string" ? ans.refused : "",
+      kept: !!(kept && kept.team === shareDoc.team && kept.invite && kept.invite.folder === share),
+      mirror: false,
+    };
+  }
+  const joinedFolder = r => r.refused === "" && r.kept;
+  const sayFolder = r => (r.refused ? "refused " + r.refused : r.kept ? "joined" : "nothing") + (r.kept && r.refused ? " (kept)" : "");
+
+  const settle = () => new Promise(r => setTimeout(r, 25));
+  const pageMod = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
+  let pageCopies = 0;
+  /* One road from the person's side. `how` is "paste" (the text typed in the paste box, then Continue) or "link" (the link already
+     held by the shell and handed to the window). Answers the page's copy, its buttons as the page wires them, the calls it made,
+     the confirm it painted and whether the shell had written or sent anything before yes. */
+  async function pageRoad(L, how, text) {
+    if (!globalThis.window) globalThis.window = { addEventListener: noop, removeEventListener: noop };
+    if (!globalThis.document) globalThis.document = {
+      addEventListener: noop, removeEventListener: noop,
+      getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+      body: { appendChild: noop, classList: { contains: () => false, add: noop, remove: noop } },
+    };
+    const HK = await import(pageMod("hooks.js"));
+    HK.hooks.render = noop;
+    const calls = [];
+    let took = null, pushed = null;
+    window.E_HOST = {
+      onTeamJoin: fn => { took = fn; },
+      teamJoin: async (op, file, name, check) => {
+        const ans = await L.join(op, file, name, check);
+        calls.push({ op: op, file: String(file || ""), check: String(check || ""), ans: ans });
+        return ans;
+      },
+    };
+    const TJ = await import(pageMod("team-join.js") + "?road=" + (pageCopies++) + "-" + Date.now());
+    const net0 = L.netHits();
+    TJ.wireTeamJoin();
+    await settle();
+    const rootOf = els => ({ querySelectorAll: () => els });
+    const press = async act => {
+      const b = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? act : null) };
+      TJ.wireTeamJoinEmpty(rootOf([b]));
+      if (b.onclick) await b.onclick();
+      await settle();
+    };
+    const type = typed => {
+      const c = { hasAttribute: a => a === "data-join-check", value: typed };
+      TJ.wireTeamJoinEmpty(rootOf([c]));
+      c.oninput();
+    };
+    if (how === "link") {
+      L.api.acceptLink(text);
+      pushed = L.sent.filter(m => m[0] === "etiuda:team-join").pop() || null;
+      if (pushed && took) await took(pushed[1]);
+      await settle();
+    } else {
+      TJ.openJoinPaste();
+      const box = { hasAttribute: a => a === "data-join-paste", value: text };
+      TJ.wireTeamJoinEmpty(rootOf([box]));
+      box.oninput();
+      await press("read");
+    }
+    const html = TJ.teamJoinEmptyHtml();
+    const readCall = calls.filter(c => c.op === "read")[0] || null;
+    const offerSeen = how === "link" ? (pushed && pushed[1] ? pushed[1].offer : null) : (readCall && readCall.ans ? readCall.ans.offer : null);
+    const deskText = () => fs.readFileSync(path.join(L.ud, "desk.json"), "utf8");
+    const quiet = !calls.some(c => c.op === "invite" || c.op === "link") && deskText() === L.desk
+      && !fs.existsSync(path.join(L.ud, "relay", doc.relay.rt)) && L.netHits() === net0;
+    return { TJ, press, type, calls, html, offerSeen, quiet,
+      yesTag: (/<button[^>]*data-join="invite"[^>]*>/.exec(html) || [""])[0] };
+  }
+  /* A relay invitation by one road, to its yes. */
+  async function relayRoad(src, how, text) {
     const L = loadShell({ lock: false, src: src });
     L.api.bindWindow(L.win);
-    return takenOf(L, await L.join("invite", pastedText, "Ola", typed));
+    const r = await pageRoad(L, how, text);
+    const html = r.html;
+    const shown = html.indexOf(LEAD + " invites this desk to join the team through " + HOST + ".") >= 0
+      && html.indexOf("Team: " + doc.team) >= 0 && html.indexOf("Relay: " + HOST) >= 0
+      && !/data-join-check/.test(html) && html.indexOf("Folder:") < 0 && html.indexOf("check code") < 0
+      && r.yesTag !== "" && !/ disabled/.test(r.yesTag)
+      && html.indexOf(token) < 0 && html.indexOf("etiuda-join:") < 0 && html.indexOf(b64) < 0;
+    const o = r.offerSeen;
+    const clean = !!(o && o.relay === HOST && o.lead === LEAD && o.team === doc.team
+      && !Object.prototype.hasOwnProperty.call(o, "code") && !Object.prototype.hasOwnProperty.call(o, "folder"));
+    await r.press("invite");
+    const yes = r.calls.filter(c => c.op === "invite" || c.op === "link");
+    const one = yes.length === 1 ? yes[0] : null;
+    const sent = how === "link" ? !!one && one.op === "link" && one.file === "" && one.check === ""
+      : !!one && one.op === "invite" && one.file === text && one.check === "";
+    return { shown, clean, quiet: r.quiet, sent, taken: takenOf(L, one ? one.ans : null), ops: r.calls.map(c => c.op).join(","),
+      letGo: r.TJ.inviteHeld().mode === "" };
   }
-  async function linkRun(src) {
+  const roadOk = r => r.shown && r.clean && r.quiet && r.sent && joinedClean(r.taken) && r.letGo;
+  const sayRoad = r => (r.shown ? "confirm" : "no relay confirm") + (r.clean ? "" : ", offer carries a code or folder") + (r.quiet ? "" : ", not quiet")
+    + (r.sent ? "" : ", yes not as wired") + ", " + sayTaken(r.taken) + (r.letGo ? "" : ", page holds it") + " [" + r.ops + "]";
+  /* A folder invitation pasted: the page still asks the code (yes disabled until it matches), and the shell refuses check on
+     none and on a wrong one, whatever the page sent. */
+  async function folderRoad(src) {
     const L = loadShell({ lock: false, src: src });
     L.api.bindWindow(L.win);
-    const first = L.api.acceptLink(exactArg);
-    const taken = takenOf(L, await L.join("link", "", "Ola"));
-    taken.confirmed = !!(first && first.confirm === true);
-    return taken;
+    const r = await pageRoad(L, "paste", sharePasted);
+    const asks = () => {
+      const h = r.TJ.teamJoinEmptyHtml();
+      const tag = (/<button[^>]*data-join="invite"[^>]*>/.exec(h) || [""])[0];
+      return { box: /data-join-check/.test(h), disabled: / disabled/.test(tag), folder: h.indexOf("Folder: " + share) >= 0 };
+    };
+    const none = asks();
+    r.type(shareWrong);
+    const wrong = asks();
+    r.type(shareRight);
+    const right = asks();
+    await r.press("invite");
+    const yes = r.calls.filter(c => c.op === "invite");
+    const page = none.box && none.disabled && none.folder && wrong.box && wrong.disabled && right.box && !right.disabled
+      && yes.length === 1 && yes[0].check === shareRight;
+    return { page, taken: takenFolder(L, yes.length ? yes[0].ans : null) };
   }
-  const codeNow = { none: await pasteRun(undefined, ""), wrong: await pasteRun(undefined, wrongCode),
-    right: await pasteRun(undefined, rightCode), link: await linkRun(undefined) };
-  const codeOk = /^[0-9]{5}$/.test(rightCode) && rightCode !== wrongCode
-    && refusedCheck(codeNow.none) && refusedCheck(codeNow.wrong) && joinedClean(codeNow.right)
-    && codeNow.link.confirmed && joinedClean(codeNow.link);
-  let codeLifted = "";
-  const codePlant = await liftAsync("plant:link-code", async src => {
-    const none = await pasteRun(src, ""), wrong = await pasteRun(src, wrongCode);
-    codeLifted = "pasted with none " + sayTaken(none) + ", with a wrong code " + sayTaken(wrong);
-    return joinedClean(none) && joinedClean(wrong);
-  }, MAIN, "  if (!(parsed.relay)) {");
-  check(codeOk && codePlant.turned && codePlant.back,
-    "3hp a relay invitation pasted in the paste box is refused check with no code and with a wrong one and joins with the right one, "
-    + "the same invitation from the held link joins with none, and taking out takeInvite's fromLink clause at plant:link-code lets the pasted one in: pasted none "
-    + sayTaken(codeNow.none) + ", wrong " + sayTaken(codeNow.wrong) + ", right " + sayTaken(codeNow.right) + "; link "
-    + (codeNow.link.confirmed ? "" : "unconfirmed, ") + sayTaken(codeNow.link) + "; " + codePlant.detail + " (" + codeLifted + "), sha "
-    + (codePlant.back ? "restored" : "differs"));
+  async function folderIpc(src, typed) {
+    const L = loadShell({ lock: false, src: src });
+    L.api.bindWindow(L.win);
+    return takenFolder(L, await L.join("invite", sharePasted, "Ola", typed));
+  }
+  const roadsNow = { pasted: await relayRoad(undefined, "paste", pastedText), https: await relayRoad(undefined, "paste", httpsText),
+    link: await relayRoad(undefined, "link", exactArg) };
+  const folderNow = { none: await folderIpc(undefined, ""), wrong: await folderIpc(undefined, shareWrong),
+    right: await folderIpc(undefined, shareRight), road: await folderRoad(undefined) };
+  const codeOk = /^[0-9]{5}$/.test(rightCode) && rightCode !== wrongCode && /^[0-9]{5}$/.test(shareRight) && shareRight !== shareWrong
+    && roadOk(roadsNow.pasted) && roadOk(roadsNow.https) && roadOk(roadsNow.link)
+    && refusedCheck(folderNow.none) && refusedCheck(folderNow.wrong) && joinedFolder(folderNow.right)
+    && folderNow.road.page && joinedFolder(folderNow.road.taken);
+  let folderLifted = "";
+  const shareCodePlant = await liftAsync("plant:folder-code", async src => {
+    const none = await folderIpc(src, ""), wrong = await folderIpc(src, shareWrong);
+    folderLifted = "pasted with none " + sayFolder(none) + ", with a wrong code " + sayFolder(wrong);
+    return joinedFolder(none) && joinedFolder(wrong);
+  }, MAIN, "  if (false) {");
+  const pageFile = path.join(ROOT, "src", "modules", "team-join.js");
+  let pageLifted = "";
+  const pastePagePlant = await liftAsync("plant:paste-relay", async () => {
+    const r = await relayRoad(undefined, "paste", pastedText);
+    pageLifted = sayRoad(r);
+    return !r.shown && !joinedClean(r.taken);
+  }, pageFile);
+  let offerLifted = "";
+  const relayOfferPlant = await liftAsync("plant:relay-offer", async src => {
+    const r = await relayRoad(src, "paste", pastedText);
+    offerLifted = sayRoad(r);
+    return !r.clean;
+  }, MAIN);
+  check(codeOk && shareCodePlant.turned && shareCodePlant.back && pastePagePlant.turned && pastePagePlant.back && relayOfferPlant.turned && relayOfferPlant.back,
+    "3hp a relay invitation pasted as etiuda-join:, pasted as https://etiuda.dev/join# and opened by the link each shows the link's confirm with no code box, sends nothing before yes "
+    + "and joins on yes, through the real IPC and the page's own readTook and invite act, and a folder invitation keeps its code (the page asks it, the shell refuses check on a wrong one and on none, "
+    + "the right one joins); pasted " + sayRoad(roadsNow.pasted) + "; https " + sayRoad(roadsNow.https) + "; link " + sayRoad(roadsNow.link)
+    + "; folder none " + sayFolder(folderNow.none) + ", wrong " + sayFolder(folderNow.wrong) + ", right " + sayFolder(folderNow.right)
+    + ", page " + folderNow.road.page + "/" + sayFolder(folderNow.road.taken)
+    + "; taking out takeInvite's folder clause at plant:folder-code lets the pasted folder invitation in: " + shareCodePlant.detail + " (" + folderLifted
+    + "), sha " + (shareCodePlant.back ? "restored" : "differs")
+    + "; taking out the page's relay confirm at plant:paste-relay: " + pastePagePlant.detail + " (" + pageLifted + "), sha " + (pastePagePlant.back ? "restored" : "differs")
+    + "; taking out readInvite's clean relay offer at plant:relay-offer: " + relayOfferPlant.detail + " (" + offerLifted + "), sha " + (relayOfferPlant.back ? "restored" : "differs"));
 
   /* The person's Cancel on a link confirm. The shell lets the link go: the `held` answer then names no offer, the held text is empty,
      and a later `link` op is refused with nothing sent (no relay call, nothing to the page, the desk's file untouched, no mirror). */
@@ -777,6 +928,73 @@ try {
     + "and taking out the link-no op at plant:link-no or declineHeldLink's heldLinkText = \"\" at plant:link-decline each undoes that: now "
     + (cancelNow.ok ? "held and let go" : cancelNow.red) + "; link-no out: " + noPlant.detail + " (" + redNo + "), sha " + (noPlant.back ? "restored" : "differs")
     + "; decline out: " + declinePlant.detail + " (" + redDecline + "), sha " + (declinePlant.back ? "restored" : "differs"));
+
+  /* E3. The paste box reads https://etiuda.dev/join#<payload>, that host and that path and a base64url fragment, as the same
+     invitation as etiuda-join:<payload> (what Studio's relay invitation link is); any other https address is not an invitation and is
+     said as today's unreadable paste is. The cap is the pasted text's own 8192, as the other form's. Red on 727539b, where the https
+     form was unreadable. The link handler's own refusal of the full URL stays 3h2. */
+  const httpsOf = payload => "https://etiuda.dev/join#" + payload;
+  /* A valid relay invitation padded with a field the reader ignores until its https form is `len` characters long. */
+  function httpsOfLength(len) {
+    const padded = relayDoc();
+    for (let k = 0; k < 9000; k++) {
+      padded.pad = "p".repeat(k);
+      const payload = pack(padded);
+      if (httpsOf(payload).length === len) return { url: httpsOf(payload), payload };
+      if (httpsOf(payload).length > len) return null;
+    }
+    return null;
+  }
+  const capIn = httpsOfLength(8192), capOut = httpsOfLength(8194);
+  const notInvitations = [
+    ["another host", "https://etiuda.example/join#" + b64], ["a sub-domain", "https://www.etiuda.dev/join#" + b64],
+    ["another path", "https://etiuda.dev/invite#" + b64], ["a deeper path", "https://etiuda.dev/join/#" + b64],
+    ["a query", "https://etiuda.dev/join?x=1#" + b64], ["a port", "https://etiuda.dev:8443/join#" + b64],
+    ["a user", "https://nia@etiuda.dev/join#" + b64], ["http", "http://etiuda.dev/join#" + b64],
+    ["a padded fragment", httpsOf(b64 + "=")], ["a wrapped fragment", httpsOf(pastedText)], ["no fragment", "https://etiuda.dev/join"],
+    ["an empty fragment", "https://etiuda.dev/join#"],
+  ];
+  async function pasteReads(src) {
+    const L = loadShell({ lock: false, src: src });
+    const read = text => L.join("read", text);
+    const plainRelay = await read(pastedText), httpsRelay = await read(httpsText);
+    const plainFolder = await read(sharePasted), httpsFolder = await read(httpsOf(shareB64));
+    const same = !plainRelay.refused && !!plainRelay.offer && plainRelay.offer.relay === HOST && JSON.stringify(httpsRelay) === JSON.stringify(plainRelay)
+      && !plainFolder.refused && !!plainFolder.offer && plainFolder.offer.folder === share && JSON.stringify(httpsFolder) === JSON.stringify(plainFolder);
+    const spaced = await read("  \n" + httpsText + "\n ");
+    const trimmed = !spaced.refused && JSON.stringify(spaced) === JSON.stringify(plainRelay);
+    const wrong = [];
+    for (const [name, text] of notInvitations) {
+      const a = await read(text);
+      if (!(a && a.refused === "unread" && !a.offer)) wrong.push(name);
+    }
+    const inA = capIn ? await read(capIn.url) : null, outA = capOut ? await read(capOut.url) : null;
+    const outPlain = capOut ? await read("etiuda-join:" + capOut.payload) : null;
+    const cap = !!(capIn && capOut && capIn.url.length === 8192 && capOut.url.length === 8194 && inA && !inA.refused && inA.offer
+      && outA && outA.refused === "unread" && !outA.offer && outPlain && !outPlain.refused && outPlain.offer);
+    return { same, trimmed, wrong, others: wrong.length === 0, cap };
+  }
+  const readsNow = await pasteReads(undefined);
+  const httpsLift = await liftAsync("plant:paste-https", async src => !(await pasteReads(src)).same, MAIN);
+  let hostLifted = "", capLifted = "";
+  const hostLoose = await liftAsync("plant:paste-https", async src => {
+    const r = await pasteReads(src);
+    hostLifted = r.wrong.join(", ") || "none let in";
+    return !r.others;
+  }, MAIN, '  if (raw.length <= 8192 && /^https:\\/\\/[^#]*#[A-Za-z0-9_-]+$/.test(raw)) raw = "etiuda-join:" + raw.slice(raw.indexOf("#") + 1);');
+  const capLoose = await liftAsync("plant:paste-https", async src => {
+    const r = await pasteReads(src);
+    capLifted = r.cap ? "the cap held" : "8194 read";
+    return !r.cap;
+  }, MAIN, '  if (raw.slice(0, page.length) === page && /^[A-Za-z0-9_-]+$/.test(raw.slice(page.length))) raw = "etiuda-join:" + raw.slice(page.length);');
+  check(readsNow.same && readsNow.trimmed && readsNow.others && readsNow.cap
+    && httpsLift.turned && httpsLift.back && hostLoose.turned && hostLoose.back && capLoose.turned && capLoose.back,
+    "3hr https://etiuda.dev/join#<payload> pasted reads as the same invitation as etiuda-join:<payload> (a relay one and a folder one, trimmed as the other is, "
+    + "8192 characters read and 8194 not), and an https address on another host or path, with a query, a port, a user, a padded or wrapped fragment, or http, is unreadable: "
+    + "same " + readsNow.same + ", trimmed " + readsNow.trimmed + ", let in " + (readsNow.wrong.join(", ") || "none") + ", cap " + readsNow.cap
+    + "; lifting the https line at plant:paste-https: " + httpsLift.detail + ", sha " + (httpsLift.back ? "restored" : "differs")
+    + "; loosening its host and path there: " + hostLoose.detail + " (" + hostLifted + "), sha " + (hostLoose.back ? "restored" : "differs")
+    + "; lifting its cap there: " + capLoose.detail + " (" + capLifted + "), sha " + (capLoose.back ? "restored" : "differs"));
 
   check(regStand.held(), "3h0 every reg call was answered by the stand-in (" + regStand.said() + ")");
 } finally {

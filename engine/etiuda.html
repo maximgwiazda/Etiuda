@@ -14931,7 +14931,14 @@ What you type stays in this browser only.`;
   function readTook(v, n, sent) {
     if (n !== joinReads || joinMode !== "paste") return false;
     const o = v && typeof v === "object" ? v.offer : null;
-    if (o && typeof o.folder === "string") {
+    if (o && typeof o.relay === "string" && o.relay) {
+      joinOffer = { lead: String(o.lead || ""), team: String(o.team || ""), relay: String(o.relay), code: "" };
+      joinRead = sent;
+      joinBlob = "";
+      joinTyped = "";
+      joinWhy = "";
+      joinMode = "confirm";
+    } else if (o && typeof o.folder === "string") {
       joinOffer = {
         folder: String(o.folder),
         lead: String(o.lead || ""),
@@ -15110,7 +15117,7 @@ What you type stays in this browser only.`;
       body: '<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(joinBlob) + "</textarea>" + joinDisclosure(),
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
-    if (joinMode === "confirm" && joinOffer && joinOffer.link) {
+    if (joinMode === "confirm" && joinOffer && joinOffer.relay) {
       const o = joinOffer;
       const line = t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
       return {
@@ -15225,9 +15232,9 @@ What you type stays in this browser only.`;
     if (act === "invite") {
       if (joinMode !== "confirm" || !joinOffer) return Promise.resolve(null);
       if (joinOffer.link) return joinAsk("link", "", agentName(), "", (v) => yesTook(v, "link"));
-      if (!joinRead || !typedOk()) return Promise.resolve(null);
+      if (!joinRead || !joinOffer.relay && !typedOk()) return Promise.resolve(null);
       const sent = joinRead;
-      return joinAsk("invite", sent, agentName(), joinTyped, (v) => yesTook(v, sent));
+      return joinAsk("invite", sent, agentName(), joinOffer.relay ? "" : joinTyped, (v) => yesTook(v, sent));
     }
     if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
     if (act === "cancel") return joinAsk("cancel");

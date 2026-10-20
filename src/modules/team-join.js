@@ -16,7 +16,7 @@ import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
 let joinMode="";                  // "" | "paste" | "confirm" | "refused": the invitation, held on the page until it is answered
-let joinOffer=null;               // {folder, lead, code, host, cloud, local, left} the shell read from joinRead
+let joinOffer=null;               // {folder, lead, code, host, cloud, local, left} the shell read from joinRead; {lead, team, relay} for a relay invitation, with link:true where the shell holds the link
 let joinBlob="";                  // the paste box's text while it is open, so a repaint keeps it
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
 let joinTyped="";                 // the check code the agent typed on the confirm
@@ -90,11 +90,15 @@ function keyTipHtml(tip,print,kind){
   return fours && String(tip).indexOf(fours)>=0 ? String(tip).split(fours).map(esc).join(keySignHtml(kind,print)) : null;
 }
 /* The shell's answer to a read: the confirm for exactly the text that was read, or the refusal. An answer to an older
-   read, or one that comes after the paste box was left, shows nothing. */
+   read, or one that comes after the paste box was left, shows nothing. A relay invitation is judged by what it is and not by
+   how it arrived: its offer names the lead, the team and the relay's host, and it gets the link's confirm and no check code. */
 function readTook(v,n,sent){
   if(n!==joinReads || joinMode!=="paste") return false;
   const o=v&&typeof v==="object"?v.offer:null;
-  if(o && typeof o.folder==="string"){
+  if(o && typeof o.relay==="string" && o.relay){
+    joinOffer={lead:String(o.lead||""),team:String(o.team||""),relay:String(o.relay),code:""};
+    joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm"; /* plant:paste-relay */
+  }else if(o && typeof o.folder==="string"){
     joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
       host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true,left:String(o.left||"")};
     joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm";
@@ -244,8 +248,8 @@ function joinInviteParts(){
     body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
       +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>'+joinDisclosure(),
     acts:[["read",t("Continue")],["back",t("Cancel")]]};
-  /* A link names its lead, its team and the relay's host, and it asks for no check code. */
-  if(joinMode==="confirm" && joinOffer && joinOffer.link){
+  /* A relay invitation, opened by a link or pasted, names its lead, its team and the relay's host, and it asks for no check code. */
+  if(joinMode==="confirm" && joinOffer && joinOffer.relay){
     const o=joinOffer;
     const line=t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
     return {title:t("Join this team?"), line:line,
@@ -343,9 +347,10 @@ function joinAct(act){
   if(act==="invite"){
     if(joinMode!=="confirm" || !joinOffer) return Promise.resolve(null);
     if(joinOffer.link) return joinAsk("link","",agentName(),"",v=>yesTook(v,"link"));
-    if(!joinRead || !typedOk()) return Promise.resolve(null);
+    /* A pasted relay invitation sends the text that was read and no code; a folder invitation sends the code the agent typed. */
+    if(!joinRead || (!joinOffer.relay && !typedOk())) return Promise.resolve(null);
     const sent=joinRead;
-    return joinAsk("invite",sent,agentName(),joinTyped,v=>yesTook(v,sent));
+    return joinAsk("invite",sent,agentName(),joinOffer.relay?"":joinTyped,v=>yesTook(v,sent));
   }
   if(act==="ask") return joinAsk("ask",(j&&j.file)||(s&&s.file)||"",agentName());
   if(act==="cancel") return joinAsk("cancel");

@@ -358,7 +358,7 @@ async function takeHeldLink(name) {
   if (!text) return Object.assign({}, joinView(), { refused: "unread" });
   const parsed = inviteParse(text);
   if (!parsed || !parsed.relay) return Object.assign({}, joinView(), { refused: "unread" });
-  const ans = await takeInvite(text, name, "", true);
+  const ans = await takeInvite(text, name, "");
   if (!ans || !ans.refused) {
     heldLinkText = "";
     heldLinkView = null;
@@ -2967,7 +2967,7 @@ function memberProof(secret, commit) {
   if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(com)) return "";
   return crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(com, "utf8").digest("hex");
 }
-/* The check code the lead reads out and the agent types before yes: HMAC-SHA256 under the invitation's 128-bit secret
+/* The check code the lead reads out and the agent types before yes, for a folder invitation: HMAC-SHA256 under the invitation's 128-bit secret
    over the lead's 32-byte public key (the bytes, not their hex), its first six bytes read big-endian modulo 100000, as
    five digits. "" where either is not the shape an invitation carries. Only the invitation that was issued gives it. */
 function inviteCode(secret, leadPublic) {
@@ -3010,11 +3010,14 @@ function inviteFolder(folder, posix) {
   return parts.length >= 2 && parts.every(kept) ? "\\\\" + parts.join("\\") : "";
 }
 /* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the folder, the lead and a
-   128-bit secret. Null where it is not that shape, and the folder as inviteFolder reaches it. Nothing is read from
+   128-bit secret, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as
+   the same invitation. Null where it is not that shape, and the folder as inviteFolder reaches it. Nothing is read from
    the folder: a path on another computer answers a stat by connecting, and the confirm exists so that connection is
    a choice. `posix` is true where the system is not Windows. */
 function inviteRead(text, posix) {
-  const raw = String(text == null ? "" : text).trim();
+  let raw = String(text == null ? "" : text).trim();
+  const page = "https://etiuda.dev/join#";
+  if (raw.length <= 8192 && raw.slice(0, page.length) === page && /^[A-Za-z0-9_-]+$/.test(raw.slice(page.length))) raw = "etiuda-join:" + raw.slice(page.length); /* plant:paste-https */
   if (raw.length < 16 || raw.length > 8192 || raw.slice(0, 12) !== "etiuda-join:") return null;
   let b64 = raw.slice(12).replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]+=*$/.test(b64)) return null;
@@ -3245,17 +3248,20 @@ function readInvite(text) {
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, view, { refused: settled });
-  const where = parsed.relay ? { host: "", cloud: "", local: false } : folderHost(parsed.folder, process.env);
+  /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
+     code and no folder, as the link's confirm offers it. */
+  if (parsed.relay) return Object.assign({}, view, { offer: { lead: parsed.lead.name, team: parsed.team, relay: new URL(parsed.relay.url).host } }); /* plant:relay-offer */
+  const where = folderHost(parsed.folder, process.env);
   const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
     host: where.host, cloud: where.cloud, local: where.local };
-  if (parsed.relay) offer.relay = new URL(parsed.relay.url).host;
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
   return Object.assign({}, view, { offer: offer });
 }
-/* The person's yes, with the check code they typed. The folder is asked before anything is written, and one that
+/* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
+   whatever either came by. The folder is asked before anything is written, and one that
    does not answer, or whose team file is not the invited team's, is put back as it was. A pin the invitation sets is
    a key not yet shown; the request carries the proof, never the secret. */
-async function takeInvite(text, name, check, fromLink) {
+async function takeInvite(text, name, check) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const shut = inviteDoor();
   if (shut) return Object.assign({}, joinView(), { refused: shut });
@@ -3264,7 +3270,7 @@ async function takeInvite(text, name, check, fromLink) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, joinView(), { refused: settled });
   const code = inviteCode(parsed.secret, parsed.lead.public);
-  if (!(fromLink === true && parsed.relay)) { /* plant:link-code */
+  if (!parsed.relay) { /* plant:folder-code */
     if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
   }
   const me = branchIdentity();
@@ -4757,7 +4763,7 @@ ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRe
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen", "forget" and "leave" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
-// adds the check code the agent typed, and "leads" answers the pinned leads alone. "held" is a link waiting here,
+// adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
