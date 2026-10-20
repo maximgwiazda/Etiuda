@@ -102,7 +102,7 @@ function seal(w, writer, path, counter, extra) {
    The target's own seal refuses any place but root or desk:<id> before the relay sees it. */
 function sealAt(w, writer, path, counter, place, extra) {
   const body = extra && Object.prototype.hasOwnProperty.call(extra, "body") ? extra.body : "v" + counter;
-  const id = wire.randomId();
+  const id = extra && typeof extra.id === "string" ? extra.id : wire.randomId();
   const blob = {
     id: id,
     relayTeamId: w.relayTeamId,
@@ -196,6 +196,77 @@ function bigBlob(w, writer, counter) {
 
 function deskFile(w, name) {
   return "desks/" + w.deskId + "/" + name;
+}
+
+const DAY = 24 * 60 * 60 * 1000;
+
+function sizedWrap(bytes) {
+  const overhead = Buffer.byteLength(wire.canon({ epoch: 1, ct: "" }), "utf8");
+  return { epoch: 1, ct: "a".repeat(Math.max(0, bytes - overhead)) };
+}
+
+/* The invitation wrap, sealed here and not by the relay: one hex of nonce, ciphertext and tag. */
+function sealInviteWrap(secret, relayTeamId, teamId, invitationId, epoch, keyBytes) {
+  const ikm = Buffer.isBuffer(secret) ? secret : Buffer.from(String(secret), "hex");
+  const wrapKey = Buffer.from(crypto.hkdfSync("sha256", ikm, Buffer.alloc(0), Buffer.from("etiuda-invite-wrap", "utf8"), 32));
+  const ad = Buffer.from(["etiuda-invite-wrap", relayTeamId, teamId, invitationId, String(epoch), ""].join("\n"), "utf8");
+  const plain = Buffer.from(JSON.stringify({ epoch: epoch, key: keyBytes.toString("hex") }), "utf8");
+  const nonce = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", wrapKey, nonce);
+  cipher.setAAD(ad);
+  const body = Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
+  return { epoch: epoch, ct: Buffer.concat([nonce, body]).toString("hex") };
+}
+
+function bindHello(t, relayTeamId, inv, key) {
+  const ch = t.challenge({ relayTeamId: relayTeamId });
+  if (!ch || !ch.nonce) return { ok: false, reason: "no-hello", said: "That hello was not issued.", served: false };
+  const msg = t.helloMessage(relayTeamId, ch.nonce, key.keyId);
+  return t.hello({
+    relayTeamId: relayTeamId,
+    nonce: ch.nonce,
+    invitationId: inv.invitationId,
+    token: inv.token,
+    key: key.keyId,
+    pub: key.publicKey,
+    sig: wire.sign(key.privateKey, msg),
+  });
+}
+
+function hasText(value, text) {
+  return flatten(value).join("\n").indexOf(text) >= 0;
+}
+
+function leaksKey(value, keyBytes) {
+  const flat = flatten(value).join("\n");
+  if (flat.indexOf(keyBytes.toString("hex")) >= 0) return true;
+  if (flat.indexOf(keyBytes.toString("utf8")) >= 0) return true;
+  return false;
+}
+
+function wrapGone(r) {
+  return !!r && r.ok === false && r.served === false && r.ciphertext == null && r.wrap == null
+    && typeof r.said === "string" && r.said.length > 0
+    && r.said.indexOf("\u2014") < 0 && r.said.indexOf("\u2013") < 0 && r.said.indexOf("!") < 0;
+}
+
+function openCatalog(t, w, session, id, key) {
+  const got = t.fetch({ relayTeamId: w.relayTeamId, session: session, id: id });
+  if (!got || got.ok !== true || got.ciphertext == null) return null;
+  try {
+    const aad = wire.aadBytes({
+      relayTeamId: w.relayTeamId,
+      epoch: got.epoch,
+      id: got.id,
+      supersedes: got.supersedes,
+      writerKeyId: got.writerKeyId,
+      counter: got.counter,
+    });
+    const opened = wire.open(key, aad, got.nonce, got.ciphertext);
+    return opened ? opened.body : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 function e2eDesk(id, fileName) {
@@ -372,14 +443,9 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
-      const a = t.challenge({ relayTeamId: w.relayTeamId });
-      const first = t.hello({
-        relayTeamId: w.relayTeamId, nonce: a.nonce, invitationId: inv.invitationId, token: inv.token,
-      });
-      const b = t.challenge({ relayTeamId: w.relayTeamId });
-      const second = t.hello({
-        relayTeamId: w.relayTeamId, nonce: b.nonce, invitationId: inv.invitationId, token: inv.token,
-      });
+      const joiner = wire.generateKey();
+      const first = bindHello(t, w.relayTeamId, inv, joiner);
+      const second = bindHello(t, w.relayTeamId, inv, joiner);
       return first.ok === true && refused(second, "token-spent");
     }, true],
     ["F1-spent-keep", "a spent invitation token is still refused after the 30-day keep, and the first use worked", function (create) {
@@ -388,18 +454,13 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
-      const a = t.challenge({ relayTeamId: w.relayTeamId });
-      const first = t.hello({
-        relayTeamId: w.relayTeamId, nonce: a.nonce, invitationId: inv.invitationId, token: inv.token,
-      });
+      const joiner = wire.generateKey();
+      const first = bindHello(t, w.relayTeamId, inv, joiner);
       t.advance(31 * 24 * 60 * 60 * 1000);
       const lead = helloAs(t, w.relayTeamId, w.lead);
       if (!lead || lead.ok !== true) return false;
       const listed = t.list({ relayTeamId: w.relayTeamId, session: lead.session });
-      const b = t.challenge({ relayTeamId: w.relayTeamId });
-      const later = t.hello({
-        relayTeamId: w.relayTeamId, nonce: b.nonce, invitationId: inv.invitationId, token: inv.token,
-      });
+      const later = bindHello(t, w.relayTeamId, inv, joiner);
       return first.ok === true && listed.ok === true && refused(later, "token-spent");
     }, true],
     ["F1-tries", "the right token is refused after 20 failures, and a fresh invitation still works", function (create) {
@@ -416,15 +477,10 @@ function attacks() {
         });
       }
       if (twentieth && twentieth.reason === "token-tries") return false;
-      const ch = t.challenge({ relayTeamId: w.relayTeamId });
-      const last = t.hello({
-        relayTeamId: w.relayTeamId, nonce: ch.nonce, invitationId: inv.invitationId, token: inv.token,
-      });
+      const joiner = wire.generateKey();
+      const last = bindHello(t, w.relayTeamId, inv, joiner);
       const inv2 = t.invite({ relayTeamId: w.relayTeamId });
-      const ch2 = t.challenge({ relayTeamId: w.relayTeamId });
-      const other = t.hello({
-        relayTeamId: w.relayTeamId, nonce: ch2.nonce, invitationId: inv2.invitationId, token: inv2.token,
-      });
+      const other = bindHello(t, w.relayTeamId, inv2, wire.generateKey());
       return refused(last, "token-tries") && other.ok === true;
     }, true],
     ["F1-removed", "a removed desk is refused, and the lead is still served", function (create) {
@@ -1215,10 +1271,7 @@ function attacks() {
       const bad = t.hello({
         relayTeamId: w.relayTeamId, nonce: ch1.nonce, invitationId: inv.invitationId, token: hash,
       });
-      const ch2 = t.challenge({ relayTeamId: w.relayTeamId });
-      const good = t.hello({
-        relayTeamId: w.relayTeamId, nonce: ch2.nonce, invitationId: inv.invitationId, token: inv.token,
-      });
+      const good = bindHello(t, w.relayTeamId, inv, wire.generateKey());
       return refused(bad, "not-enrolled") && good.ok === true;
     }, true],
     ["P16", "a hello on a nonce past its life is refused, and a hello inside the life works", function (create) {
@@ -1780,6 +1833,447 @@ function attacks() {
     e2eDesk("S2-e2e-answer", "catalog-answer.ec"),
     e2eDesk("S2-e2e-stats", "stats.estat"),
     e2eDesk("S2-e2e-edit", "edit.ec"),
+    ["S3-burn", "the bound hello is served the wrap once per ask until the upload, and a second token hello is spent", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const first = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!first.ok) return false;
+      const served = [];
+      served.push(t.fetchWrap({ relayTeamId: w.relayTeamId, session: first.session }));
+      const again = helloAs(t, w.relayTeamId, joiner);
+      if (!again.ok) return false;
+      served.push(t.fetchWrap({ relayTeamId: w.relayTeamId, session: again.session }));
+      served.push(t.fetchWrap({ relayTeamId: w.relayTeamId, session: again.session }));
+      if (served.length !== 3) return false;
+      for (let i = 0; i < served.length; i++) {
+        if (!served[i] || served[i].ok !== true || !served[i].wrap || served[i].wrap.ct !== wrap.ct) return false;
+      }
+      const second = bindHello(t, w.relayTeamId, inv, joiner);
+      const stranger = bindHello(t, w.relayTeamId, inv, wire.generateKey());
+      if (!refused(second, "token-spent") || second.ciphertext != null) return false;
+      if (!refused(stranger, "token-spent") || stranger.ciphertext != null) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
+      if (!joined.ok) return false;
+      const after = t.fetchWrap({ relayTeamId: w.relayTeamId, session: again.session });
+      const seen = t.inspect({ relayTeamId: w.relayTeamId, id: joined.id });
+      return wrapGone(after) && !!seen && !hasText(seen, wrap.ct);
+    }, true],
+    ["S3-unbound", "an unbound token hello is refused and spends nothing, and a later bound hello is served", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const ch = t.challenge({ relayTeamId: w.relayTeamId });
+      const loose = t.hello({
+        relayTeamId: w.relayTeamId, nonce: ch.nonce, invitationId: inv.invitationId, token: inv.token,
+      });
+      if (!refused(loose, "bad-signature") || loose.wrap != null) return false;
+      const joiner = wire.generateKey();
+      const bound = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!bound.ok) return false;
+      const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: bound.session });
+      return !!served && served.ok === true && served.wrap && served.wrap.ct === wrap.ct;
+    }, true],
+    ["S3-wrap-session", "only the bound session is served the wrap, and only the lead is told the states", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      const lead = helloAs(t, w.relayTeamId, w.lead);
+      const desk = helloAs(t, w.relayTeamId, w.desk);
+      if (!hello.ok || !lead.ok || !desk.ok) return false;
+      const own = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      const leadWrap = t.fetchWrap({ relayTeamId: w.relayTeamId, session: lead.session });
+      const deskWrap = t.fetchWrap({ relayTeamId: w.relayTeamId, session: desk.session });
+      if (!own || own.ok !== true || !own.wrap || own.wrap.ct !== wrap.ct) return false;
+      if (!refused(leadWrap, "not-enrolled") || leadWrap.wrap != null) return false;
+      if (!refused(deskWrap, "not-enrolled") || deskWrap.wrap != null) return false;
+      const listed = t.list({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!listed.ok || listed.ids.indexOf(invitationId) >= 0) return false;
+      const byId = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: invitationId });
+      if (!refused(byId, "missing") && !refused(byId, "bad-signature")) return false;
+      for (let i = 0; i < listed.ids.length; i++) {
+        const row = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: listed.ids[i] });
+        if (hasText(row, wrap.ct)) return false;
+      }
+      const states = t.inviteStates({ relayTeamId: w.relayTeamId, session: lead.session });
+      const inviteStates = t.inviteStates({ relayTeamId: w.relayTeamId, session: hello.session });
+      const deskStates = t.inviteStates({ relayTeamId: w.relayTeamId, session: desk.session });
+      return !!states && states.ok === true && Array.isArray(states.states)
+        && refused(inviteStates, "not-enrolled") && refused(deskStates, "not-enrolled");
+    }, true],
+    ["S3-wrap-cap", "a wrap of 1024 bytes is kept and a wrap of 1025 bytes is refused", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const fit = sizedWrap(1024);
+      const over = sizedWrap(1025);
+      const kept = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId(), wrap: fit });
+      if (!kept || !kept.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, kept, joiner);
+      if (!hello.ok) return false;
+      const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!served || served.ok !== true || !served.wrap || served.wrap.ct !== fit.ct) return false;
+      if (Buffer.byteLength(wire.canon(served.wrap), "utf8") !== 1024) return false;
+      const rejected = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId(), wrap: over });
+      return refused(rejected, "blob-size");
+    }, true],
+    ["S3-wrap-signed", "an unsigned wrap or re-seal is refused and the stored wrap is unchanged", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const before = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!before || before.ok !== true || !before.wrap || before.wrap.ct !== wrap.ct) return false;
+      const other = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, wire.teamKey());
+      const unsigned = t.reseal({
+        relayTeamId: w.relayTeamId, signed: false, drop: [], wraps: [{ id: invitationId, wrap: other }],
+      });
+      const stranger = wire.generateKey();
+      const wrongKey = t.reseal({
+        relayTeamId: w.relayTeamId, signer: stranger, drop: [], wraps: [{ id: invitationId, wrap: other }],
+      });
+      const bare = t.reseal({
+        relayTeamId: w.relayTeamId, cover: "bare", drop: [], wraps: [{ id: invitationId, wrap: other }],
+      });
+      const fresh = t.invite({
+        relayTeamId: w.relayTeamId, invitationId: wire.randomId(), wrap: other, signed: false,
+      });
+      if (!refused(unsigned, "bad-signature") || !refused(wrongKey, "bad-signature")) return false;
+      if (!refused(bare, "bad-signature") || !refused(fresh, "bad-signature")) return false;
+      const after = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      return !!after && after.ok === true && after.wrap && after.wrap.ct === wrap.ct;
+    }, true],
+    ["S3-wrap-moved", "a wrap moved to another id, team, relay team or epoch does not open, and the real one opens a catalog", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const published = upload(w, seal(w, w.lead, "field-guide.ec", 1, { body: "field-guide" }));
+      if (!published.ok) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!served || served.ok !== true || !served.wrap || served.wrap.ct !== wrap.ct) return false;
+      const opened = t.openWrap({
+        secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: invitationId,
+        wrap: served.wrap, teamDoc: w.teamDoc,
+      });
+      if (!opened || opened.ok !== true || openCatalog(t, w, hello.session, published.id, opened.key) !== "field-guide") return false;
+      const args = { secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: invitationId, wrap: served.wrap, teamDoc: w.teamDoc };
+      const movedId = t.openWrap(Object.assign({}, args, { invitationId: wire.randomId() }));
+      const movedTeam = t.openWrap(Object.assign({}, args, { teamId: "t-other-team" }));
+      const movedRelay = t.openWrap(Object.assign({}, args, { relayTeamId: wire.randomId() }));
+      const movedEpoch = t.openWrap(Object.assign({}, args, {
+        wrap: Object.assign({}, served.wrap, { epoch: 2 }),
+        teamDoc: Object.assign({}, w.teamDoc, { epoch: 2 }),
+      }));
+      return refused(movedId, "bad-signature") && refused(movedTeam, "bad-signature")
+        && refused(movedRelay, "bad-signature") && refused(movedEpoch, "bad-signature");
+    }, true],
+    ["S3-wrap-blind", "the team key is not in the wrap the relay stores or in what inspect shows", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const published = upload(w, seal(w, w.lead, "field-guide.ec", 1, { body: "field-guide" }));
+      if (!published.ok) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      wrap.key = w.teamKey.toString("hex");
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!served || served.ok !== true || !served.wrap || typeof served.wrap.ct !== "string" || served.wrap.ct.length < 32) return false;
+      const opened = t.openWrap({
+        secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: invitationId,
+        wrap: served.wrap, teamDoc: w.teamDoc,
+      });
+      if (!opened || opened.ok !== true || !opened.key || !opened.key.equals(w.teamKey)) return false;
+      if (leaksKey(served, w.teamKey) || leaksKey(served.wrap, w.teamKey)) return false;
+      const seen = t.inspect({ relayTeamId: w.relayTeamId, id: published.id });
+      return !!seen && !leaksKey(seen, w.teamKey) && hasText(seen, served.wrap.ct);
+    }, true],
+    ["S3-epoch", "a wrap from another epoch is refused, and the honest wrap reads a catalog with no later lead call", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const published = upload(w, seal(w, w.lead, "field-guide.ec", 1, { body: "field-guide" }));
+      if (!published.ok) return false;
+      const secret = crypto.randomBytes(16);
+      const invitationId = wire.randomId();
+      const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!served || served.ok !== true) return false;
+      const opened = t.openWrap({
+        secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: invitationId,
+        wrap: served.wrap, teamDoc: w.teamDoc,
+      });
+      if (!opened || opened.ok !== true || openCatalog(t, w, hello.session, published.id, opened.key) !== "field-guide") return false;
+      const bad = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 2, w.teamKey);
+      const wrong = t.openWrap({
+        secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: invitationId,
+        wrap: bad, teamDoc: w.teamDoc,
+      });
+      return refused(wrong, "epoch");
+    }, true],
+    ["S3-reseal", "after a move a welcome invitation is served only the new wrap, and a dropped one gets nothing", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const secret = crypto.randomBytes(16);
+      const openedId = wire.randomId();
+      const quietId = wire.randomId();
+      const dropId = wire.randomId();
+      const oldOpened = sealInviteWrap(secret, w.relayTeamId, w.teamId, openedId, 1, w.teamKey);
+      const oldQuiet = sealInviteWrap(secret, w.relayTeamId, w.teamId, quietId, 1, w.teamKey);
+      const oldDrop = sealInviteWrap(secret, w.relayTeamId, w.teamId, dropId, 1, w.teamKey);
+      const opened = t.invite({ relayTeamId: w.relayTeamId, invitationId: openedId, wrap: oldOpened });
+      const quiet = t.invite({ relayTeamId: w.relayTeamId, invitationId: quietId, wrap: oldQuiet });
+      const dropped = t.invite({ relayTeamId: w.relayTeamId, invitationId: dropId, wrap: oldDrop });
+      if (!opened || !opened.token || !quiet || !quiet.token || !dropped || !dropped.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, opened, joiner);
+      if (!hello.ok) return false;
+      const before = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!before || before.ok !== true || before.wrap.ct !== oldOpened.ct) return false;
+      const nextKey = wire.teamKey();
+      const epochDoc = teamRev(w, 1, { epoch: 2 });
+      const published = upload(w, seal(w, w.lead, "field-guide.ec", 1, { body: "field-guide", epoch: 2, teamKey: nextKey }));
+      if (!published.ok) return false;
+      const newOpened = sealInviteWrap(secret, w.relayTeamId, w.teamId, openedId, 2, nextKey);
+      const newQuiet = sealInviteWrap(secret, w.relayTeamId, w.teamId, quietId, 2, nextKey);
+      const stray = sealInviteWrap(secret, w.relayTeamId, w.teamId, dropId, 2, nextKey);
+      const moved = t.reseal({
+        relayTeamId: w.relayTeamId,
+        drop: [dropId],
+        wraps: [
+          { id: openedId, wrap: newOpened },
+          { id: quietId, wrap: newQuiet },
+          { id: dropId, wrap: stray },
+        ],
+      });
+      if (!moved || moved.ok !== true) return false;
+      const after = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!after || after.ok !== true || after.wrap.ct !== newOpened.ct) return false;
+      const openedKey = t.openWrap({
+        secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: openedId,
+        wrap: after.wrap, teamDoc: epochDoc,
+      });
+      if (!openedKey || openedKey.ok !== true || openCatalog(t, w, hello.session, published.id, openedKey.key) !== "field-guide") return false;
+      const helloQuiet = bindHello(t, w.relayTeamId, quiet, wire.generateKey());
+      if (!helloQuiet.ok) return false;
+      const quietServed = t.fetchWrap({ relayTeamId: w.relayTeamId, session: helloQuiet.session });
+      if (!quietServed || quietServed.ok !== true || quietServed.wrap.ct !== newQuiet.ct) return false;
+      const quietKey = t.openWrap({
+        secret: secret, relayTeamId: w.relayTeamId, teamId: w.teamId, invitationId: quietId,
+        wrap: quietServed.wrap, teamDoc: epochDoc,
+      });
+      if (!quietKey || quietKey.ok !== true || openCatalog(t, w, helloQuiet.session, published.id, quietKey.key) !== "field-guide") return false;
+      const helloDrop = bindHello(t, w.relayTeamId, dropped, wire.generateKey());
+      if (helloDrop.ok === true) return false;
+      const seen = t.inspect({ relayTeamId: w.relayTeamId, id: published.id });
+      if (!seen || hasText(seen, oldOpened.ct) || hasText(seen, oldQuiet.ct) || hasText(seen, oldDrop.ct) || hasText(seen, stray.ct)) return false;
+      return hasText(seen, newOpened.ct) && hasText(seen, newQuiet.ct);
+    }, true],
+    ["S3-cancel", "a drop after a use names that invitation, and the wrap is gone at once", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const marker = upload(w, seal(w, w.lead, "field-guide.ec", 1, { body: "field-guide" }));
+      if (!marker.ok) return false;
+      const secret = crypto.randomBytes(16);
+      const usedId = wire.randomId();
+      const unusedId = wire.randomId();
+      const usedWrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, usedId, 1, w.teamKey);
+      const unusedWrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, unusedId, 1, w.teamKey);
+      const used = t.invite({ relayTeamId: w.relayTeamId, invitationId: usedId, wrap: usedWrap });
+      const unused = t.invite({ relayTeamId: w.relayTeamId, invitationId: unusedId, wrap: unusedWrap });
+      if (!used || !used.token || !unused || !unused.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, used, joiner);
+      if (!hello.ok) return false;
+      const before = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!before || before.ok !== true || before.wrap.ct !== usedWrap.ct) return false;
+      const answer = t.drop({ relayTeamId: w.relayTeamId, ids: [usedId, unusedId] });
+      if (!answer || answer.ok !== true || !Array.isArray(answer.used) || answer.used.length !== 1 || answer.used[0] !== usedId) return false;
+      if (answer.used.indexOf(unusedId) >= 0) return false;
+      const after = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      const seen = t.inspect({ relayTeamId: w.relayTeamId, id: marker.id });
+      return wrapGone(after) && !!seen && !hasText(seen, usedWrap.ct) && !hasText(seen, unusedWrap.ct);
+    }, true],
+    ["S3-lapse", "a hello on day 6 is served, a first hello on day 8 is refused unspent, and the bound re-fetch is served", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const secret = crypto.randomBytes(16);
+      const earlyId = wire.randomId();
+      const lateId = wire.randomId();
+      const until = 7 * DAY;
+      const earlyWrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, earlyId, 1, w.teamKey);
+      const lateWrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, lateId, 1, w.teamKey);
+      const early = t.invite({ relayTeamId: w.relayTeamId, invitationId: earlyId, wrap: earlyWrap, until: until });
+      const late = t.invite({ relayTeamId: w.relayTeamId, invitationId: lateId, wrap: lateWrap, until: until });
+      if (!early || !early.token || !late || !late.token) return false;
+      t.advance(6 * DAY);
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, early, joiner);
+      if (!hello.ok) return false;
+      const firstServe = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!firstServe || firstServe.ok !== true || firstServe.wrap.ct !== earlyWrap.ct) return false;
+      t.advance(2 * DAY);
+      const lapsed = bindHello(t, w.relayTeamId, late, wire.generateKey());
+      if (!refused(lapsed, "invite-ended")) return false;
+      const again = bindHello(t, w.relayTeamId, late, wire.generateKey());
+      if (!refused(again, "invite-ended")) return false;
+      const resumed = helloAs(t, w.relayTeamId, joiner);
+      if (!resumed.ok) return false;
+      const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: resumed.session });
+      return !!served && served.ok === true && served.wrap && served.wrap.ct === earlyWrap.ct;
+    }, true],
+    ["S3-read-on", "after the upload the bound key reads only its answer, and a second upload is refused", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const invitationId = wire.randomId();
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
+      if (!joined.ok) return false;
+      t.advance(25 * 60 * 1000);
+      const first = upload(w, seal(w, w.lead, "guide-a.ec", 1, { body: "edition-25" }));
+      if (!first.ok) return false;
+      const listed = t.list({ relayTeamId: w.relayTeamId, session: hello.session });
+      const fetched = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: first.id });
+      const heard = t.subscribe({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!refused(listed, "not-enrolled") || !refused(fetched, "not-enrolled") || !refused(heard, "not-enrolled")) return false;
+      const answer = sealAt(w, w.lead, "join-answer.json", 2, "answer:" + invitationId, { body: "joined", id: invitationId });
+      const posted = upload(w, answer);
+      if (!posted.ok || posted.id !== invitationId) return false;
+      const opened = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: invitationId });
+      if (!opened || opened.ok !== true || opened.id !== invitationId) return false;
+      if (!refused(t.list({ relayTeamId: w.relayTeamId, session: hello.session }), "not-enrolled")) return false;
+      const lead = helloAs(t, w.relayTeamId, w.lead);
+      const leadList = t.list({ relayTeamId: w.relayTeamId, session: lead.session });
+      const leadFetch = t.fetch({ relayTeamId: w.relayTeamId, session: lead.session, id: invitationId });
+      if (!lead.ok || !leadList || leadList.ok !== true || leadList.ids.indexOf(first.id) < 0 || leadList.ids.indexOf(invitationId) >= 0) return false;
+      if (!refused(leadFetch, "missing")) return false;
+      const desk = helloAs(t, w.relayTeamId, w.desk);
+      if (!desk.ok || !refused(t.fetch({ relayTeamId: w.relayTeamId, session: desk.session, id: invitationId }), "missing")) return false;
+      t.advance(6 * 60 * 1000);
+      const secondCatalog = upload(w, seal(w, w.lead, "guide-b.ec", 3, { body: "edition-31" }));
+      if (!secondCatalog.ok) return false;
+      const resumed = helloAs(t, w.relayTeamId, joiner);
+      if (!resumed.ok || resumed.invite !== true) return false;
+      const againAnswer = t.fetch({ relayTeamId: w.relayTeamId, session: resumed.session, id: invitationId });
+      const againCatalog = t.fetch({ relayTeamId: w.relayTeamId, session: resumed.session, id: secondCatalog.id });
+      if (!againAnswer || againAnswer.ok !== true || !refused(againCatalog, "not-enrolled")) return false;
+      if (!refused(t.list({ relayTeamId: w.relayTeamId, session: resumed.session }), "not-enrolled")) return false;
+      const again = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 2, "desk:" + deskId, { body: "again" }));
+      if (!refused(again, "token-spent")) return false;
+      const dropped = t.drop({ relayTeamId: w.relayTeamId, ids: [invitationId] });
+      if (!dropped || dropped.ok !== true) return false;
+      if (!refused(t.list({ relayTeamId: w.relayTeamId, session: resumed.session }), "no-hello")) return false;
+      if (!refused(t.fetch({ relayTeamId: w.relayTeamId, session: resumed.session, id: invitationId }), "no-hello")) return false;
+      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      if (!enrolled || enrolled.ok === false) return false;
+      const device = helloAs(t, w.relayTeamId, joiner);
+      if (!device.ok || device.invite === true) return false;
+      const live = t.list({ relayTeamId: w.relayTeamId, session: device.session });
+      const deviceAnswer = t.fetch({ relayTeamId: w.relayTeamId, session: device.session, id: invitationId });
+      return !!live && live.ok === true && live.ids.indexOf(first.id) >= 0 && live.ids.indexOf(secondCatalog.id) >= 0
+        && live.ids.indexOf(invitationId) < 0 && refused(deviceAnswer, "missing");
+    }, true],
+    ["S3-states", "an invitation reads unused, then used at the relay's time, then asked, and the time stays", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      t.advance(5000);
+      const lead = helloAs(t, w.relayTeamId, w.lead);
+      if (!lead.ok) return false;
+      const invitationId = wire.randomId();
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
+      if (!inv || !inv.token) return false;
+      const unused = t.inviteStates({ relayTeamId: w.relayTeamId, session: lead.session });
+      if (!unused || unused.ok !== true) return false;
+      const row0 = unused.states.filter(function (s) { return s.id === invitationId; })[0];
+      if (!row0 || row0.state !== "unused" || row0.usedAt !== null) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const used = t.inviteStates({ relayTeamId: w.relayTeamId, session: lead.session });
+      const row1 = used && used.states ? used.states.filter(function (s) { return s.id === invitationId; })[0] : null;
+      if (!row1 || row1.state !== "used" || row1.usedAt !== 5000) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
+      if (!joined.ok) return false;
+      const asked = t.inviteStates({ relayTeamId: w.relayTeamId, session: lead.session });
+      const row2 = asked && asked.states ? asked.states.filter(function (s) { return s.id === invitationId; })[0] : null;
+      if (!row2 || row2.state !== "asked" || row2.usedAt !== 5000) return false;
+      const own = t.inviteStates({ relayTeamId: w.relayTeamId, session: hello.session });
+      const desk = helloAs(t, w.relayTeamId, w.desk);
+      const deskStates = t.inviteStates({ relayTeamId: w.relayTeamId, session: desk.session });
+      return refused(own, "not-enrolled") && desk.ok === true && refused(deskStates, "not-enrolled");
+    }, true],
+    ["S3-invite-place", "an invitation upload at invite:<id> is outside its place, and the same bytes at desk:<id> are kept", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId() });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const blob = sealAt(w, joiner, "join.json", 1, "invite:" + wire.randomId(), { body: "join" });
+      const bad = upload(w, blob);
+      if (!refused(bad, "outside-place")) return false;
+      blob.place = "desk:" + ("k-" + wire.randomId().slice(0, 16));
+      const good = upload(w, blob);
+      return !!good && good.ok === true && good.id === blob.id;
+    }, true],
   ];
 }
 

@@ -71,6 +71,7 @@ const SAID = {
   "echo": "A file just received stays as it is.",
   "wrong-team": "That team file is not this desk's pinned team.",
   "epoch": "That file names an epoch this team file does not carry.",
+  "invite-ended": "This invitation has expired. Ask your lead for a new one.",
 };
 
 function refuse(reason) {
@@ -323,6 +324,10 @@ function createTarget(limits) {
       const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
       return !!(en && en.role === "lead");
     }
+    if (/^answer:[0-9a-f]{32}$/.test(place)) {
+      const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+      return !!(en && en.role === "lead" && blob.id === place.slice(7));
+    }
     return false;
   }
 
@@ -459,6 +464,7 @@ function createTarget(limits) {
       deletion: !!blob.deletion,
       epoch: blob.epoch,
       superseded: false,
+      place: blob.place || null,
     };
     rec.carryPath = blob.path;
     rec.carryBody = blob.body;
@@ -483,11 +489,67 @@ function createTarget(limits) {
     return rec;
   }
 
-  function issueSession(relayTeamId, keyId, nonceKey) {
+  function issueSession(relayTeamId, keyId, nonceKey, extra) {
     nonceAt.delete(nonceKey);
     const session = wire.randomId();
-    sessions.set(session, { relayTeamId: relayTeamId, keyId: keyId });
-    return { ok: true, session: session };
+    const row = { relayTeamId: relayTeamId, keyId: keyId };
+    if (extra && extra.inviteId) {
+      row.inviteId = extra.inviteId;
+      row.boundKey = extra.boundKey || null;
+    }
+    sessions.set(session, row);
+    const out = { ok: true, session: session };
+    if (row.inviteId) {
+      out.invite = true;
+      out.until = now + 30 * 60 * 1000;
+    }
+    return out;
+  }
+
+  function leadOf(relayTeamId) {
+    let id = null;
+    enrolled.forEach(function (v, key) {
+      if (key.indexOf(relayTeamId + ":") === 0 && v.role === "lead") id = key.slice(relayTeamId.length + 1);
+    });
+    return id;
+  }
+
+  function takeWrap(wrap) {
+    if (!wrap || typeof wrap !== "object" || Array.isArray(wrap)) return { error: "bad-signature" };
+    if (!Number.isSafeInteger(wrap.epoch) || wrap.epoch < 1 || typeof wrap.ct !== "string" || wrap.ct.length < 1) return { error: "bad-signature" };
+    const size = Buffer.byteLength(wire.canon(wrap), "utf8");
+    let over = size > 1025;
+    over = size > 1024; /* plant:S3-wrap-cap */
+    if (over) return { error: "blob-size" };
+    let kept = wrap;
+    kept = { epoch: wrap.epoch, ct: wrap.ct }; /* plant:S3-wrap-blind */
+    return { wrap: kept };
+  }
+
+  function signatureHolds(input, relayTeamId) {
+    const lead = leadOf(relayTeamId);
+    let ok = true;
+    ok = input.signed !== false && input.cover !== "bare" && (!input.signer || input.signer.keyId === lead); /* plant:S3-wrap-signed */
+    return ok;
+  }
+
+  function boundRecord(relayTeamId, keyId, skipUploaded) {
+    let found = null;
+    invites.forEach(function (inv, id) {
+      if (found || inv.relayTeamId !== relayTeamId || inv.key !== keyId || !inv.spent) return;
+      if (skipUploaded && inv.uploaded) return;
+      if (inv.spentAt != null && now - inv.spentAt > wire.DELETE_KEEP_MS) return;
+      found = { id: id, inv: inv };
+    });
+    return found;
+  }
+
+  function deskHeld(relayTeamId, deskId) {
+    let held = false;
+    enrolled.forEach(function (v, key) {
+      if (key.indexOf(relayTeamId + ":") === 0 && v.deskId === deskId) held = true;
+    });
+    return held;
   }
 
   function helloToken(input, nonceKey) {
@@ -505,8 +567,47 @@ function createTarget(limits) {
       inv.fails = (inv.fails || 0) + 1;
       return refuse("not-enrolled");
     }
+    let ended = false;
+    ended = inv.until != null && now > inv.until; /* plant:S3-lapse */
+    if (ended) {
+      delete inv.wrap;
+      return refuse("invite-ended");
+    }
+    const key = input.key !== undefined ? input.key : input.keyId;
+    const pub = input.pub !== undefined ? input.pub : input.publicKey;
+    const sig = input.sig !== undefined ? input.sig : input.signature;
+    const msg = helloMessage(input.relayTeamId, input.nonce, key);
+    let bound = false;
+    try {
+      const pubHash = pub ? crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex") : "";
+      bound = !!(key && pub && sig && (key === pub || key === "k-" + pubHash.slice(0, 16)) && wire.verify(pub, msg, sig));
+    } catch (e) {
+      bound = false;
+    }
+    let allowUnbound = true;
+    allowUnbound = false; /* plant:S3-unbound */
+    if (!bound && !allowUnbound) return refuse("bad-signature");
     inv.spent = true;
-    return issueSession(input.relayTeamId, "invite:" + input.invitationId, nonceKey);
+    inv.spentAt = now;
+    if (bound) {
+      inv.key = key;
+      inv.pub = pub;
+    }
+    return issueSession(
+      input.relayTeamId,
+      bound ? key : ("invite:" + input.invitationId),
+      nonceKey,
+      bound ? { inviteId: input.invitationId, boundKey: key } : { inviteId: input.invitationId }
+    );
+  }
+
+  function resumeBound(input, nonceKey) {
+    const skipUploaded = false;
+    const held = boundRecord(input.relayTeamId, input.keyId, skipUploaded);
+    if (!held) return null;
+    const msg = helloMessage(input.relayTeamId, input.nonce, input.keyId);
+    if (!wire.verify(held.inv.pub, msg, input.signature)) return refuse("not-enrolled");
+    return issueSession(input.relayTeamId, input.keyId, nonceKey, { inviteId: held.id, boundKey: input.keyId });
   }
 
   function verified(publicKey, message, signature) {
@@ -545,6 +646,9 @@ function createTarget(limits) {
     const k = enrolKey(relayTeamId, keyId);
     enrolled.set(k, { role: "desk", deskId: deskId });
     wasEnrolled.add(k);
+    sessions.forEach(function (s, token) {
+      if (s.relayTeamId === relayTeamId && s.inviteId && s.boundKey === keyId) sessions.delete(token);
+    });
     return { ok: true };
   }
 
@@ -560,16 +664,154 @@ function createTarget(limits) {
     return { ok: true };
   }
 
-  function invite({ relayTeamId }) {
+  function invite(input) {
+    const relayTeamId = input.relayTeamId;
+    if (!signatureHolds(input, relayTeamId)) return refuse("bad-signature");
+    let kept = null;
+    if (input.wrap !== undefined) {
+      const taken = takeWrap(input.wrap);
+      if (taken.error) return refuse(taken.error);
+      kept = taken.wrap;
+    }
+    if (input.until !== undefined && !Number.isSafeInteger(input.until)) return refuse("bad-signature");
+    const invitationId = input.invitationId || wire.randomId();
+    if (!/^[0-9a-f]{32}$/.test(invitationId)) return refuse("bad-signature");
     const token = wire.randomId() + wire.randomId();
-    const invitationId = wire.randomId();
-    invites.set(invitationId, {
+    const row = {
       hash: wire.tokenHash(token),
       relayTeamId: relayTeamId,
       fails: 0,
       spent: false,
-    });
+      uploaded: false,
+    };
+    if (input.until !== undefined) row.until = input.until;
+    if (kept) row.wrap = kept;
+    invites.set(invitationId, row);
     return { token: token, invitationId: invitationId };
+  }
+
+  function reseal(input) {
+    const relayTeamId = input.relayTeamId;
+    if (!signatureHolds(input, relayTeamId)) return refuse("bad-signature");
+    const dropIds = Array.isArray(input.drop) ? input.drop : [];
+    const wraps = Array.isArray(input.wraps) ? input.wraps : [];
+    for (let i = 0; i < wraps.length; i++) {
+      const taken = takeWrap(wraps[i] && wraps[i].wrap);
+      if (taken.error) return refuse(taken.error);
+    }
+    const used = [];
+    const dropped = [];
+    dropIds.forEach(function (id) {
+      const inv = invites.get(id);
+      dropped.push(id);
+      if (!inv || inv.relayTeamId !== relayTeamId) return;
+      let nameUsed = false;
+      nameUsed = !!inv.spent; /* plant:S3-cancel */
+      if (nameUsed) used.push(id);
+      sessions.forEach(function (s, token) {
+        if (s.inviteId === id) sessions.delete(token);
+      });
+      if (inv.spent) {
+        invites.set(id, {
+          relayTeamId: relayTeamId,
+          hash: inv.hash,
+          spent: true,
+          spentAt: inv.spentAt,
+          uploaded: !!inv.uploaded,
+          fails: inv.fails || 0,
+        });
+      } else {
+        invites.delete(id);
+      }
+    });
+    let replace = false;
+    replace = true; /* plant:S3-reseal */
+    wraps.forEach(function (entry) {
+      if (dropIds.indexOf(entry.id) >= 0) return;
+      const inv = invites.get(entry.id);
+      if (!inv || inv.relayTeamId !== relayTeamId || !inv.hash) return;
+      const taken = takeWrap(entry.wrap);
+      if (!taken.wrap) return;
+      if (replace) inv.wrap = taken.wrap;
+      else {
+        inv.oldWrap = inv.wrap;
+        inv.wrap = taken.wrap;
+      }
+    });
+    return { ok: true, dropped: dropped, used: used };
+  }
+
+  function drop(input) {
+    return reseal({
+      relayTeamId: input.relayTeamId,
+      drop: input.ids,
+      wraps: [],
+      signed: input.signed,
+      signer: input.signer,
+      cover: input.cover,
+    });
+  }
+
+  function fetchWrap({ relayTeamId, session }) {
+    if (!sessionLive(session, relayTeamId)) return refuse("no-hello");
+    const s = sessions.get(session);
+    let onlyBound = false;
+    onlyBound = true; /* plant:S3-wrap-session */
+    let inv = s && s.inviteId ? invites.get(s.inviteId) : null;
+    if (!onlyBound) {
+      invites.forEach(function (row) {
+        if (row.relayTeamId === relayTeamId && row.wrap) inv = row;
+      });
+    }
+    if (onlyBound && (!s || !s.boundKey || !inv || inv.key !== s.boundKey)) return refuse("not-enrolled");
+    if (!inv || !inv.wrap) return refuse("missing");
+    return { ok: true, served: true, wrap: inv.wrap };
+  }
+
+  function inviteStates({ relayTeamId, session }) {
+    if (!sessionLive(session, relayTeamId)) return refuse("no-hello");
+    const s = sessions.get(session);
+    if (!s || s.inviteId || s.keyId !== leadOf(relayTeamId)) return refuse("not-enrolled");
+    const states = [];
+    invites.forEach(function (inv, id) {
+      if (inv.relayTeamId !== relayTeamId || !inv.hash) return;
+      if (!inv.spent) {
+        states.push({ id: id, state: "unused", usedAt: null });
+        return;
+      }
+      let keepTime = false;
+      keepTime = true; /* plant:S3-states */
+      states.push({
+        id: id,
+        state: inv.uploaded ? "asked" : "used",
+        usedAt: keepTime ? inv.spentAt : null,
+      });
+    });
+    return { ok: true, served: true, states: states };
+  }
+
+  function openWrap(input) {
+    const wrap = input && input.wrap;
+    const teamDoc = input && input.teamDoc;
+    if (!wrap || typeof wrap.ct !== "string") return refuse("bad-signature");
+    let epochOk = true;
+    epochOk = Number(wrap.epoch) === Number(teamDoc && teamDoc.epoch); /* plant:S3-epoch */
+    if (!epochOk) return refuse("epoch");
+    try {
+      const secret = Buffer.isBuffer(input.secret) ? input.secret : Buffer.from(String(input.secret), "hex");
+      const wrapKey = Buffer.from(crypto.hkdfSync("sha256", secret, Buffer.alloc(0), Buffer.from("etiuda-invite-wrap", "utf8"), 32));
+      let idLine = "-";
+      idLine = String(input.invitationId); /* plant:S3-wrap-moved */
+      const ad = Buffer.from(["etiuda-invite-wrap", String(input.relayTeamId), String(input.teamId), idLine, String(wrap.epoch), ""].join("\n"), "utf8");
+      const raw = Buffer.from(wrap.ct, "hex");
+      const decipher = crypto.createDecipheriv("aes-256-gcm", wrapKey, raw.subarray(0, 12));
+      decipher.setAAD(ad);
+      decipher.setAuthTag(raw.subarray(raw.length - 16));
+      const plain = JSON.parse(Buffer.concat([decipher.update(raw.subarray(12, raw.length - 16)), decipher.final()]).toString("utf8"));
+      return { ok: true, epoch: plain.epoch, key: Buffer.from(plain.key, "hex") };
+    } catch (e) {
+      return refuse("bad-signature");
+    }
   }
 
   function challenge({ relayTeamId }) {
@@ -599,9 +841,30 @@ function createTarget(limits) {
       if (!signed) return refuse("bad-signature");
       return refuse("removed");
     }
-    if (!keyHex) return refuse("not-enrolled"); /* plant:F1-unenrolled */
+    if (!keyHex) {
+      const resumed = resumeBound(input, nonceKey);
+      if (resumed) return resumed;
+      return refuse("not-enrolled"); /* plant:F1-unenrolled */
+    }
     if (!wire.verify(keyHex, msg, input.signature)) return refuse("bad-signature");
     return issueSession(input.relayTeamId, input.keyId, nonceKey);
+  }
+
+  /* An uploaded invitation's session fetches only its answer. Lifting the plant opens the team. */
+  function inviteAnswer(session, relayTeamId) {
+    let gate = false;
+    gate = true; /* plant:S3-read-on */
+    if (!gate) return null;
+    const s = sessions.get(session);
+    if (!s || s.relayTeamId !== relayTeamId || !s.inviteId) return null;
+    const inv = invites.get(s.inviteId);
+    if (!inv || !inv.uploaded) return null;
+    if (s.boundKey && enrolled.has(enrolKey(relayTeamId, s.boundKey))) return { ended: true, id: s.inviteId };
+    return { ended: false, id: s.inviteId };
+  }
+
+  function answerPlace(place) {
+    return typeof place === "string" && /^answer:[0-9a-f]{32}$/.test(place);
   }
 
   function list({ relayTeamId, session }) {
@@ -612,8 +875,9 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    if (inviteAnswer(session, relayTeamId)) return refuse("not-enrolled");
     const ids = listRecords(relayTeamId).filter(function (r) {
-      return !r.superseded && !r.deletion;
+      return !r.superseded && !r.deletion && !answerPlace(r.place);
     }).map(function (r) { return r.id; });
     return { ok: true, served: true, ids: ids };
   }
@@ -626,7 +890,12 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    const only = inviteAnswer(session, relayTeamId);
     const rec = findRecord(relayTeamId, id);
+    if (only) {
+      const own = !only.ended && rec && id === only.id && rec.place === "answer:" + only.id;
+      if (!own) return rec ? refuse("not-enrolled") : refuse("missing");
+    } else if (rec && answerPlace(rec.place)) return refuse("missing");
     if (!rec) return refuse("missing");
     if (rec.superseded) return refuse("superseded");
     const material = sealed.get(relayTeamId + ":" + id);
@@ -655,9 +924,30 @@ function createTarget(limits) {
     const s = sessions.get(session);
     const gone = s ? withdrawn(relayTeamId, s.keyId) : null;
     if (gone) return gone;
+    if (inviteAnswer(session, relayTeamId)) return refuse("not-enrolled");
     const sub = { relayTeamId: relayTeamId, keyId: s ? s.keyId : "", events: [] };
     subscribers.push(sub);
     return { ok: true, served: true, events: sub.events };
+  }
+
+  function admitModelInvite(relayTeamId, blob) {
+    if (!blob) return null;
+    const held = boundRecord(relayTeamId, blob.writerKeyId, false);
+    if (!held) return null;
+    if (held.inv.uploaded) return refuse("token-spent");
+    const place = String(blob.place || "");
+    let atDesk = true;
+    atDesk = place.indexOf("desk:") === 0; /* plant:S3-invite-place */
+    const deskId = place.slice(5);
+    if (place === "root" || !atDesk || deskHeld(relayTeamId, deskId)) return refuse("outside-place");
+    const ct = blob.ciphertext || Buffer.alloc(0);
+    if (!wire.verify(blob.writerKeyId, wire.uploadMessage(aadBytes(blob), ct), blob.signature)) return refuse("bad-signature");
+    let clear = false;
+    clear = true; /* plant:S3-burn */
+    held.inv.uploaded = true;
+    if (clear) delete held.inv.wrap;
+    const rec = storeBlob(relayTeamId, blob, ct);
+    return { ok: true, seq: rec.seq, id: rec.id };
   }
 
   function upload({ relayTeamId, blob }) {
@@ -673,6 +963,15 @@ function createTarget(limits) {
     let hot = false;
     hot = stamps.length >= wire.RATE_MAX; /* plant:E6-rate-relay */
     if (hot) return refuse("rate");
+    const invited = admitModelInvite(relayTeamId, blob);
+    if (invited) {
+      if (invited.ok) {
+        stamps.push(now);
+        rates.set(blob.writerKeyId, stamps);
+        teamBytes.set(relayTeamId, used + ct.length);
+      }
+      return invited;
+    }
     const ek = enrolKey(relayTeamId, blob.writerKeyId);
     let known = true;
     known = enrolled.has(ek) || wasEnrolled.has(ek); /* plant:E1-stranger */
@@ -735,7 +1034,18 @@ function createTarget(limits) {
   function inspect({ relayTeamId, id }) {
     const rec = findRecord(relayTeamId, id);
     if (!rec) return null;
-    return Object.assign({}, rec);
+    const raw = [];
+    invites.forEach(function (inv, invId) {
+      raw.push({
+        id: invId,
+        relayTeamId: inv.relayTeamId,
+        wrap: inv.wrap || null,
+        oldWrap: inv.oldWrap || null,
+        spent: !!inv.spent,
+        uploaded: !!inv.uploaded,
+      });
+    });
+    return Object.assign({}, rec, { raw: raw });
   }
 
   function seal(opts) {
@@ -1193,7 +1503,8 @@ function createTarget(limits) {
 
   start();
   return {
-    start, pin, createTeam, addEpoch, enrol, removeDesk, invite, challenge, hello, helloMessage,
+    start, pin, createTeam, addEpoch, enrol, removeDesk, invite, reseal, drop, fetchWrap, inviteStates, openWrap,
+    challenge, hello, helloMessage,
     list, fetch, subscribe, upload, fetchDeletion, epochMove, inspect, seal, acceptBlob, acceptDeskFile,
     loadTeamFile, showFreshness, syncMirror, sealTeam, takeCopy, considerOutgoing, readRing,
     verifyDeskSignature, verifyUploadSignature, programAllowUpload, restart,

@@ -10,11 +10,11 @@ const core = require("./core.cjs");
 const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
-  "outside-place": 403, "token-spent": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
+  "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
   "replay-rev": 409, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
-const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
+const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|wrap|states|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 
 const reply = (status, value) => new Response(JSON.stringify(value), { status, headers: HEADERS });
@@ -75,6 +75,8 @@ function teamObject(deps) {
       if (method === "GET") return getBlob(bearer(request), m[4]);
       return method === "PUT" ? putBlob(request, rt, bearer(request), m[4]) : missing();
     }
+    if (what === "wrap") return method === "GET" ? answer(c.wrapFor(bearer(request)), r => ({ ok: true, wrap: r.wrap })) : missing();
+    if (what === "states") return method === "GET" ? answer(c.statesFor(rt, bearer(request)), r => ({ ok: true, states: r.states })) : missing();
     if (method !== "POST") return missing();
     if (what === "hello") return answer(c.challenge(rt), r => ({ challenge: r.challenge, until: r.until }));
     const bytes = await readCapped(request, JSON_MAX);
@@ -86,11 +88,12 @@ function teamObject(deps) {
     if (what === "devices") {
       const r = c.devices(rt, body);
       if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
+      if (r.ok) closeWhere(a => !!a.inv && !c.sessionByHash(a.ses).ok, "no-hello");
       return answer(r, x => ({ rev: x.rev }));
     }
     const r = c.invites(rt, body);
     if (r.ok) closeWhere(a => !!a.inv && r.dropped.indexOf(a.inv) > -1, "no-hello"); /* plant:drop-sockets */
-    return answer(r, () => ({ ok: true }));
+    return answer(r, x => ({ ok: true, dropped: x.dropped, used: x.used }));
   }
 
   async function listSince(token, after) {
@@ -123,6 +126,7 @@ function teamObject(deps) {
     await r2.put(obj, ct);
     const done = c.commit(rt, token, m, id, ct, obj);
     if (!done.ok) { await dropObjects([obj]); return refused(done); }
+    if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, "not-enrolled");
     announce(done);
     await dropObjects(done.drop.concat(c.prune()));
     return reply(200, { seq: done.seq, id: done.id });
@@ -138,6 +142,8 @@ function teamObject(deps) {
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
     if (s.quiet) return refusedFor("removed");
+    const blocked = c.readGate(token);
+    if (blocked) return refused(blocked);
     if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") return missing();
     return sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
   }

@@ -8,6 +8,7 @@ const JUDGED = [
   "hello", "list", "fetch", "subscribe", "upload", "acceptBlob", "acceptDeskFile", "loadTeamFile",
   "showFreshness", "syncMirror", "verifyDeskSignature", "verifyUploadSignature",
   "programAllowUpload", "fetchDeletion", "considerOutgoing", "readRing",
+  "fetchWrap", "inviteStates", "openWrap", "reseal", "drop",
 ];
 
 function generic(name) {

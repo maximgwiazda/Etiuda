@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 138;
+const EXPECTED = 167;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -493,17 +493,23 @@ try {
   check(desk2.said.slice(quiet).length === 0 && desk2.prog.state().pending.length === 0,
     "941b a desk not joining by that invitation passes over its place and says nothing: lines " + desk2.said.slice(quiet).length);
 
-  /* A forged copy under the invitation's key, not signed by the pinned lead. */
+  /* After the one upload the desk fetches only the lead's answer, so a forged copy put in the invitation's place is not
+     fetched and not said. The team file stays as the invitation's own copy left it. */
   const forgedTeam = signDoc(JSON.parse(teamText(9, [member(NEWD)])), INTR);
   const fake = B.seal({ relayTeamId: RT, epoch: 1, teamKey: KI, writer: { keyId: LEAD.keyId, privateKey: INTR.privateKey },
     path: C.TEAM_NAME, body: JSON.stringify(forgedTeam), counter: Date.now() + 1e6, kind: "file" });
   inject({ id: fake.id, supersedes: null, epoch: 1, writer: LEAD.keyId, counter: fake.counter, del: false, sig: fake.signature, nonce: fake.nonce,
     place: "invite:" + INV, pub: INTR.pub }, fake.ciphertext);
   const forgedFrom = joinerSaid.length;
+  const forgedLog = joiner.t.log.length;
   const teamBefore = read(joiner.mirror, C.TEAM_NAME);
   await settle(joiner);
-  check(joinerSaid.slice(forgedFrom).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0) && read(joiner.mirror, C.TEAM_NAME) === teamBefore,
-    "941c a copy in the invitation's place sealed under its key but not signed by the pinned lead is refused and said, the team file as it was");
+  const forgedSaid = joinerSaid.slice(forgedFrom);
+  const forgedFetch = joiner.t.log.slice(forgedLog).some(l => l.indexOf(fake.id) >= 0);
+  const forgedFault = forgedSaid.some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0 || l.indexOf("not enrolled") >= 0);
+  check(!forgedFetch && !forgedFault && read(joiner.mirror, C.TEAM_NAME) === teamBefore,
+    "941c after the one upload a forged copy in the invitation's place is not fetched and not said, and the team file stays: "
+    + (forgedFetch ? "fetched" : "not fetched") + ", said " + JSON.stringify(forgedSaid));
 
   /* An invited desk not yet on the roster: from it the lead opens its own request alone, at most 64 KB. Put in by a hostile
      relay, since the relay itself takes one invitation upload of at most 64 KB. */
@@ -1557,8 +1563,10 @@ try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
-  function loadDesk(ud, src) {
-    const source = src || SRC;
+  /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in). */
+  function loadDesk(ud, arg) {
+    const hooks = arg && typeof arg === "object" ? arg : null;
+    const source = typeof arg === "string" ? arg : SRC;
     const said = [], on = {}, invoke = {};
     const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
     const safeStorage = {
@@ -1566,7 +1574,12 @@ try {
       encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
-    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const net = { fetch: (url, init) => {
+      deskTransport.log.push((init && init.method) + " " + url);
+      if (deskTransport.down) return Promise.reject(new Error("down"));
+      if (hooks && typeof hooks.fetch === "function") { const alt = hooks.fetch(url, init); if (alt) return alt; }
+      return relayFetch(url, init);
+    } };
     const electron = {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
@@ -1584,11 +1597,11 @@ try {
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
     return { api, ask, sync, said, ud, envelope };
   }
-  const newDesk = (name, folder) => {
+  const newDesk = (name, folder, hooks) => {
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
-    return loadDesk(ud);
+    return loadDesk(ud, hooks);
   };
   const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
   const catalogText = (rev, key) => {
@@ -1646,6 +1659,636 @@ try {
     "942a a desk takes a relay invitation: its team folder is the mirror, it reads the team file sealed for that invitation, and its"
     + " request reaches the lead's mirror as its one invitation upload: folder " + (folderNow === mirror ? "the mirror" : folderNow)
     + ", request " + (sent ? "at the lead" : "missing") + (taken.refused ? ", refused " + taken.refused : ""));
+
+  /* Slice 3, item 4: a read sends nothing, a no leaves the token, and yes asks for no check code. */
+  async function relayInviteOn(rt, teamId) {
+    const secret = hex(16), inv = hex(16), token = hex(32), at = R.clock.now;
+    const hash = sha(Buffer.from(token, "utf8"));
+    const res = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [{ id: inv, hash: hash }], drop: [], t: at,
+      sig: signHex(LEAD, core.invitesBytes(rt, at, [{ id: inv, hash: hash }], [])) });
+    if (res.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(res.json));
+    const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: teamId, relay: { rt: rt, url: URL2, token: token, inv: inv },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: secret }), "utf8").toString("base64url");
+    return { secret: secret, inv: inv, token: token, text: text };
+  }
+  function loadFrom(text, ud) {
+    const said = [], on = {}, invoke = {};
+    const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
+    const safeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+      decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+    };
+    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const electron = {
+      app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
+        getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+      ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+      screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
+    };
+    const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+      text + "\nreturn { " + EXPOSE.join(", ") + " };")(
+      n => (n === "electron" ? electron : nodeRequire(n)),
+      path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+    const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+    return { api, ask, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
+  }
+  async function liftDesk(tag, fn) {
+    const src = path.join(ROOT, "shell", "main.js");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const next = lines.join("\n");
+        fs.writeFileSync(src, next);
+        turned = await fn(next);
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  const quietInvite = await relayInviteOn(RT2, TEAM2);
+  const beforeRead = deskTransport.log.length;
+  const Dq = newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
+  fs.mkdirSync(path.join(LAB, "join-quiet-share"), { recursive: true });
+  const readQ = await Dq.ask("etiuda:team-join", "read", quietInvite.text);
+  const readCalls = deskTransport.log.length - beforeRead;
+  const laterQ = await tokenHello(C, RT2, quietInvite.token, quietInvite.inv, keyPair(true));
+  const yesInvite = await relayInviteOn(RT2, TEAM2);
+  const Dy = newDesk("join-yes", path.join(LAB, "join-yes-share"));
+  fs.mkdirSync(path.join(LAB, "join-yes-share"), { recursive: true });
+  const offerY = await Dy.ask("etiuda:team-join", "read", yesInvite.text);
+  const takenY = await Dy.ask("etiuda:team-join", "invite", yesInvite.text, "Desk Nine", "");
+  const envY = Dy.envelope();
+  const keptY = envY.teamJoin && envY.teamJoin.invite && envY.teamJoin.invite.relay;
+  const secretKept = JSON.stringify(envY).indexOf(yesInvite.secret) >= 0;
+  const oY = offerY && offerY.offer;
+  check(readCalls === 0 && laterQ.online === true && laterQ.used === true && !!oY && oY.lead === "Ada Quay" && oY.team === TEAM2
+    && oY.relay === "relay.test" && oY.code == null && takenY && !takenY.refused && !!keptY && typeof keptY.wrap === "string" && keptY.wrap !== ""
+    && !secretKept,
+    "964a before yes no relay call is made, a no leaves the token for a second computer, and yes asks for no check code: "
+    + "calls on read " + readCalls + ", the token then " + (laterQ.online ? "opened" : "not opened")
+    + ", offer " + JSON.stringify(oY && { lead: oY.lead, team: oY.team, relay: oY.relay, code: oY.code })
+    + ", yes " + (takenY && takenY.refused ? "refused " + takenY.refused : "taken")
+    + ", wrap " + (keptY && keptY.wrap ? "kept" : "absent") + ", secret " + (secretKept ? "kept" : "absent"));
+  const codePlant = await liftDesk("plant:relay-code", async text => {
+    const invP = await relayInviteOn(RT2, TEAM2);
+    const ud = path.join(LAB, "join-plant-" + hex(4));
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "join-plant-share"), eUiLang: "en" } }), "utf8");
+    fs.mkdirSync(path.join(LAB, "join-plant-share"), { recursive: true });
+    const Dp = loadFrom(text, ud);
+    const refused = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
+    return !!(refused && refused.refused === "check");
+  });
+  check(codePlant.turned && codePlant.back,
+    "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the file is put back: "
+    + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
+
+  /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
+     admission above still meets edition 1. This tree's relay has no wrap route; the stand-in below answers only this desk. */
+  const RTW = hex(16), TEAMW = "t-" + hex(8), KW = crypto.randomBytes(32), URLW = URLV1;
+  const madeW = await admin("POST", "/relay/v1/teams", { rt: RTW, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(RTW, LEAD.keyId, R.clock.now)) });
+  if (madeW.status !== 200) throw new Error("the wrap team was not made: " + JSON.stringify(madeW.json));
+  const teamDocW = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMW, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: rev,
+    channel: { kind: "relay", rt: RTW, url: URLW }, ring: RING, roster: roster || [] }, LEAD), null, 1) + "\n";
+  const studioWMirror = path.join(LAB, "wrap-studio");
+  const invitesW = [];
+  const studioWT = transport("wrap-studio");
+  const studioW = C.createChannel({ rt: RTW, url: URLW, mirror: studioWMirror, stateFile: path.join(LAB, "wrap-studio.json"),
+    pin: () => ({ teamId: TEAMW, rt: RTW, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+    keyFor: e => (e === 1 ? KW : null), sealEpoch: () => 1, inviteKeys: () => invitesW,
+    request: studioWT.request, connect: studioWT.connect, pollMs: 1e9 });
+  put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(1))));
+  put(studioWMirror, C.TEAM_NAME, teamDocW(1));
+  studioW.start();
+  await studioW.idle();
+  async function inviteOnW(epoch) {
+    const secret = hex(16), inv = hex(16), token = hex(32), hash = sha(Buffer.from(token, "utf8")), at = R.clock.now;
+    const res = await admin("POST", "/relay/v1/t/" + RTW + "/invites", { add: [{ id: inv, hash: hash }], drop: [], t: at,
+      sig: signHex(LEAD, core.invitesBytes(RTW, at, [{ id: inv, hash: hash }], [])) });
+    if (res.status !== 200) throw new Error("a wrap invitation was not registered: " + JSON.stringify(res.json));
+    invitesW.push({ id: inv, key: C.inviteSealKey(secret) });
+    await studioW.kick(); await studioW.idle();
+    const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAMW, relay: { rt: RTW, url: URLW, token: token, inv: inv },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: secret }), "utf8").toString("base64url");
+    const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: RTW, teamId: TEAMW, invitationId: inv, epoch: epoch, key: KW });
+    return { text: text, wrap: wrap };
+  }
+  function deskOnWrap(name, wrap) {
+    const folder = path.join(LAB, name + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    return newDesk(name, folder, { fetch: (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
+      ? new Response(Buffer.from(JSON.stringify({ wrap: wrap }), "utf8"), { status: 200, headers: { "content-type": "application/json" } })
+      : null) });
+  }
+  const invA = await inviteOnW(1);
+  const markA = deskTransport.log.length;
+  const Dw = deskOnWrap("wrap-read", invA.wrap);
+  const takenA = await Dw.ask("etiuda:team-join", "invite", invA.text, "Desk Nine", "");
+  const meA = await Dw.ask("etiuda:branch-identity", false);
+  const joinA = "desks/" + meA.id + "/join.json";
+  const mirrorA = path.join(Dw.ud, "relay", RTW);
+  const readNow = await until(async () => {
+    const ch = Dw.api.relayRun();
+    if (ch) { ch.kick(); await ch.idle(); }
+    return factsOf(Dw.api.readCatalog() || "") === 1;
+  }, 8000);
+  let atLead = false, later = false, still = false;
+  if (readNow) {
+    atLead = await until(async () => { await studioW.kick(); await studioW.idle(); return !!read(studioWMirror, joinA); }, 8000);
+    put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(2))));
+    await studioW.kick(); await studioW.idle();
+    const chLater = Dw.api.relayRun();
+    if (chLater) { chLater.kick(); await chLater.idle(); }
+    later = factsOf(Dw.api.readCatalog() || "") === 2;
+    still = !!read(studioWMirror, joinA) && !!read(mirrorA, joinA);
+  }
+  const putsA = deskTransport.log.slice(markA).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + RTW + "/") >= 0).length;
+  check(!!takenA && !takenA.refused && readNow && putsA === 1 && atLead && !later && still,
+    "965a yes opens the wrap and reads a catalog before the lead admits it, uploads join.json once, and a later catalog stays unread: "
+    + "yes " + (takenA && takenA.refused ? "refused " + takenA.refused : "taken")
+    + ", catalog " + (readNow ? "read" : "unread") + ", uploads " + putsA
+    + ", at the lead " + (atLead ? "yes" : "no") + ", later " + (later ? "read" : "unread")
+    + ", request " + (still ? "kept" : "gone"));
+  const invE = await inviteOnW(2);
+  const De = deskOnWrap("wrap-epoch", invE.wrap);
+  const takenE = await De.ask("etiuda:team-join", "invite", invE.text, "Desk Nine", "");
+  const saidEpoch = await until(async () => {
+    const ch = De.api.relayRun();
+    if (ch) { ch.kick(); await ch.idle(); }
+    return De.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
+  }, 8000);
+  const unreadE = factsOf(De.api.readCatalog() || "") !== 1;
+  check(!!takenE && !takenE.refused && saidEpoch && unreadE,
+    "965b a wrap whose epoch is not the signed team file's is refused and said, and that catalog is not read: "
+    + (saidEpoch ? "said" : "not said") + ", catalog " + (unreadE ? "unread" : "read"));
+  function dropCopiedChannel() {
+    const want = path.normalize(path.join(APP, "shell", "relay", "channel.cjs"));
+    for (const k of Object.keys(nodeRequire.cache)) if (path.normalize(k) === want) delete nodeRequire.cache[k];
+  }
+  function freshChannel() {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    delete nodeRequire.cache[nodeRequire.resolve(file)];
+    return nodeRequire(file);
+  }
+  async function liftChannel(tag, fn) {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const copy = path.join(APP, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(file);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const next = lines.join("\n");
+        fs.writeFileSync(file, next);
+        fs.writeFileSync(copy, next);
+        dropCopiedChannel();
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(file, beforeBytes);
+      fs.writeFileSync(copy, beforeBytes);
+      dropCopiedChannel();
+    }
+    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
+  const openPlant = await liftChannel("plant:wrap-open", async () => {
+    const invP = await inviteOnW(1);
+    const Dp = deskOnWrap("wrap-plant", invP.wrap);
+    const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
+    const end = Date.now() + 4000;
+    while (Date.now() < end) {
+      const ch = Dp.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      if (factsOf(Dp.api.readCatalog() || "") === 1) return false;
+      await wait(40);
+    }
+    return !!(takenP && !takenP.refused) && factsOf(Dp.api.readCatalog() || "") !== 1;
+  });
+  check(openPlant.turned && openPlant.back,
+    "965c lifting plant:wrap-open leaves the catalog unread, and the file is put back: "
+    + openPlant.detail + ", sha " + (openPlant.back ? "restored" : "differs"));
+
+  /* Board 922, E2. The wrap is asked for only on the invitation's own session, before its one upload. A wrap refused for its
+     epoch, the upload, a restart, then enrolment, with the relay answering the wrap token-spent now that it has deleted it:
+     the enrolled desk must not ask for the wrap again, and must still read the team. */
+  async function plantChannel(edits, fn) {
+    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const copy = path.join(APP, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(file);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = edits.map(e => lines.findIndex(l => l.indexOf(e.tag) >= 0));
+      if (at.every(i => i >= 0)) {
+        edits.forEach((e, k) => { lines[at[k]] = e.text; });
+        const next = lines.filter(l => l !== null).join("\n");
+        fs.writeFileSync(file, next);
+        fs.writeFileSync(copy, next);
+        dropCopiedChannel();
+        turned = await fn();
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    } finally {
+      fs.writeFileSync(file, beforeBytes);
+      fs.writeFileSync(copy, beforeBytes);
+      dropCopiedChannel();
+    }
+    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
+  let devRevW = 0, teamRevW = 1;
+  const devKeysW = [];
+  async function wrapRestart(label, edition) {
+    const inv = await inviteOnW(2);
+    const seen = { asks: 0, afterUpload: 0 };
+    let mode = "serve", uploaded = false;
+    const hooks = { fetch: (url, init) => {
+      if (!(init && init.method === "GET" && String(url).endsWith("/wrap"))) return null;
+      seen.asks += 1;
+      if (uploaded) seen.afterUpload += 1;
+      const body = mode === "serve" ? { wrap: inv.wrap } : { error: "token-spent" };
+      return new Response(Buffer.from(JSON.stringify(body), "utf8"), { status: mode === "serve" ? 200 : 403, headers: { "content-type": "application/json" } });
+    } };
+    const folder = path.join(LAB, label + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    const first = newDesk(label, folder, hooks);
+    const taken = await first.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
+    const me = await first.ask("etiuda:branch-identity", false);
+    const joinRel = "desks/" + me.id + "/join.json";
+    const said = await until(async () => {
+      const ch = first.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      return first.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
+    }, 8000);
+    uploaded = await until(async () => {
+      const ch = first.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      await studioW.kick(); await studioW.idle();
+      return !!read(studioWMirror, joinRel);
+    }, 8000);
+    const keptAfterUpload = !!((((first.envelope().teamJoin || {}).invite || {}).relay || {}).wrap);
+    const stopFirst = first.api.relayRun();
+    if (stopFirst) await stopFirst.stop();
+    mode = "spent";
+    const second = loadDesk(first.ud, hooks);
+    const notYet = second.api.relayRun();
+    if (notYet) { notYet.kick(); await notYet.idle(); }
+    teamRevW += 1;
+    devRevW += 1;
+    devKeysW.push({ id: me.id, pub: me.key, desk: me.id });
+    const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(KW, me.box, TEAMW, 1, me.id) };
+    put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(edition))));
+    put(studioWMirror, C.TEAM_NAME, teamDocW(teamRevW, [entry]));
+    const t1 = R.clock.now, keys = devKeysW.slice();
+    await admin("POST", "/relay/v1/t/" + RTW + "/devices", { keys: keys, rev: devRevW, t: t1, sig: signHex(LEAD, core.devicesBytes(RTW, devRevW, t1, keys)) });
+    await studioW.kick(); await studioW.idle();
+    const read2 = await until(async () => {
+      const ch = second.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      return factsOf(second.api.readCatalog() || "") === edition;
+    }, 8000);
+    const stopSecond = second.api.relayRun();
+    if (stopSecond) await stopSecond.stop();
+    return { taken: taken, said: said, uploaded: uploaded, keptAfterUpload: keptAfterUpload, read: read2, asks: seen.asks, afterUpload: seen.afterUpload };
+  }
+  const e2 = await wrapRestart("wrap-restart", 3);
+  check(!!e2.taken && !e2.taken.refused && e2.said && e2.uploaded && !e2.keptAfterUpload && e2.read && e2.afterUpload === 0,
+    "966a a wrap refused for its epoch, the one upload, a restart, then enrolment with the relay answering the wrap token-spent: the wrap key is"
+    + " forgotten at the upload, the wrap is not asked for again, and the enrolled desk reads the team's edition: wrap "
+    + (e2.said ? "refused and said" : "not refused") + ", upload " + (e2.uploaded ? "at the lead" : "absent")
+    + ", wrap key " + (e2.keptAfterUpload ? "kept" : "forgotten") + ", asks after the upload " + e2.afterUpload
+    + ", edition " + (e2.read ? "read" : "unread"));
+  const PUT_BACK_REFUSED = '    const why = r.refused || refusalOf(r); if (why.reason === "token-spent") return why; wrapPhase = "none";';
+  const e2Plant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }, { tag: "plant:S3-wrap-gone", text: null },
+    { tag: "plant:S3-wrap-refused", text: PUT_BACK_REFUSED }], async () => {
+    const again = await wrapRestart("wrap-restart-plant", 4);
+    return !again.read;
+  });
+  check(e2Plant.turned && e2Plant.back,
+    "966b putting back the wrap ask after the upload, the kept wrap key and the early return on token-spent leaves the enrolled desk reading nothing,"
+    + " and the file is put back: " + e2Plant.detail + ", sha " + (e2Plant.back ? "restored" : "differs"));
+  /* The same on the channel alone, so that each line is held by a check of its own: before the upload a wrap answered
+     token-spent stops nothing, and once the upload is made the key is not asked for the wrap again. */
+  async function wrapStandIn(mod, label) {
+    const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), inv = hex(16), token = hex(32), wrapKey = crypto.randomBytes(32);
+    const mirror = path.join(LAB, label), stateFile = path.join(LAB, label + ".json");
+    const n = { wrap1: 0, since1: 0, put1: 0, wrap2: 0, since2: 0 };
+    let phase = 1;
+    const request = async (method, url, headers, body) => {
+      const u = String(url);
+      const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+      if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        const asked = JSON.parse(Buffer.from(body).toString("utf8"));
+        if (phase === 1 && !asked.invite) return json({ error: "not-enrolled" }, 403);
+        return json({ session: hex(32) });
+      }
+      if (method === "GET" && u.endsWith("/wrap")) { n["wrap" + phase] += 1; return json({ error: "token-spent" }, 403); }
+      if (method === "GET" && u.indexOf("/since/") >= 0) { n["since" + phase] += 1; return json([]); }
+      if (method === "PUT") { if (phase === 1) n.put1 += 1; return json({ ok: true }); }
+      return json({ error: "missing" }, 404);
+    };
+    put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+    const make = () => mod.createChannel({ rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9,
+      pin: () => ({ teamId: "t-wrap-stand-in", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+      me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+      invite: () => ({ inv, token, seal, wrapKey }),
+      keyFor: () => null, sealEpoch: () => null, request, connect: null });
+    let ch = make();
+    try { ch.start(); await ch.idle(); } finally { await ch.stop(); }
+    phase = 2;
+    ch = make();
+    try { ch.start(); await ch.idle(); } finally { await ch.stop(); }
+    return n;
+  }
+  const standIn = await wrapStandIn(C, "wrap-stand-in");
+  check(standIn.wrap1 === 1 && standIn.since1 === 1 && standIn.put1 === 1 && standIn.wrap2 === 0 && standIn.since2 >= 1,
+    "966c before the upload a wrap answered token-spent stops nothing (the team is read and the request goes), and once the request has gone the wrap"
+    + " is not asked for again: first cycle asks " + standIn.wrap1 + ", reads " + standIn.since1 + ", uploads " + standIn.put1
+    + "; after the upload asks " + standIn.wrap2 + ", reads " + standIn.since2);
+  const refusedPlant = await plantChannel([{ tag: "plant:S3-wrap-refused", text: PUT_BACK_REFUSED }], async () => {
+    const lifted = freshChannel();
+    const again = await wrapStandIn(lifted, "wrap-stand-in-refused");
+    return again.since1 === 0 && again.put1 === 0;
+  });
+  check(refusedPlant.turned && refusedPlant.back,
+    "966d putting back the early return on token-spent stops the first cycle before the team is read, and the file is put back: "
+    + refusedPlant.detail + ", sha " + (refusedPlant.back ? "restored" : "differs"));
+  const oncePlant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }], async () => {
+    const lifted = freshChannel();
+    const again = await wrapStandIn(lifted, "wrap-stand-in-once");
+    return again.wrap2 === 1;
+  });
+  check(oncePlant.turned && oncePlant.back,
+    "966e lifting plant:S3-wrap-once asks for the wrap again after the upload, and the file is put back: "
+    + oncePlant.detail + ", sha " + (oncePlant.back ? "restored" : "differs"));
+  /* Board 922, F1. A relay invitation the relay answers token-spent, or invite-ended, is kept with the request and said in its view,
+     which the page draws, and not only in the console. */
+  async function endedJoin(label, error) {
+    const inv = await inviteOnW(1);
+    const hooks = { fetch: (url, init) => (init && init.method === "POST" && String(url).endsWith("/session") && init.body
+      && String(init.body).indexOf('"invite"') >= 0
+      ? new Response(Buffer.from(JSON.stringify({ error: error }), "utf8"), { status: 403, headers: { "content-type": "application/json" } })
+      : null) };
+    const folder = path.join(LAB, label + "-share");
+    fs.mkdirSync(folder, { recursive: true });
+    const desk = newDesk(label, folder, hooks);
+    const taken = await desk.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
+    let view = null;
+    const shown = await until(async () => {
+      const ch = desk.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      view = await desk.ask("etiuda:team-join", "view");
+      return !!(view && view.join && view.join.state !== "waiting");
+    }, 6000);
+    const kept = (((((desk.envelope().teamJoin || {}).invite || {}).relay || {}).end)) || "";
+    const again = loadDesk(desk.ud);
+    const after = await again.ask("etiuda:team-join", "view");
+    const stop = desk.api.relayRun();
+    if (stop) await stop.stop();
+    return { taken: taken, shown: shown, view: view, kept: kept, reloaded: after && after.join ? after.join.state : "none" };
+  }
+  const viewSays = (r, state) => !!(r.taken && !r.taken.refused && r.shown && r.view && r.view.join && r.view.join.state === state
+    && r.view.join.invite && r.view.join.invite.relay === new URL(URLW).host && r.view.join.team === TEAMW);
+  const usedJoin = await endedJoin("ended-used", "token-spent");
+  check(viewSays(usedJoin, "used") && usedJoin.kept === "used" && usedJoin.reloaded === "used",
+    "967a a relay invitation answered token-spent is said in the request's view, naming the relay, and kept with the request through a restart: view "
+    + (usedJoin.view && usedJoin.view.join ? usedJoin.view.join.state : "none") + ", kept " + JSON.stringify(usedJoin.kept) + ", after a restart " + usedJoin.reloaded);
+  const endedJoined = await endedJoin("ended-expired", "invite-ended");
+  check(viewSays(endedJoined, "ended") && endedJoined.kept === "ended" && endedJoined.reloaded === "ended",
+    "967b a relay invitation answered invite-ended is said in the request's view, naming the relay, and kept with the request through a restart: view "
+    + (endedJoined.view && endedJoined.view.join ? endedJoined.view.join.state : "none") + ", kept " + JSON.stringify(endedJoined.kept) + ", after a restart " + endedJoined.reloaded);
+  const usedLift = await liftChannel("plant:S3-page-used", async () => {
+    const again = await endedJoin("ended-used-plant", "token-spent");
+    return !again.shown && again.kept === "";
+  });
+  check(usedLift.turned && usedLift.back,
+    "967c lifting plant:S3-page-used leaves the used invitation unsaid in the view, and the file is put back: "
+    + usedLift.detail + ", sha " + (usedLift.back ? "restored" : "differs"));
+  const endedLift = await liftChannel("plant:S3-page-ended", async () => {
+    const again = await endedJoin("ended-expired-plant", "invite-ended");
+    return !again.shown && again.kept === "";
+  });
+  check(endedLift.turned && endedLift.back,
+    "967d lifting plant:S3-page-ended leaves the expired invitation unsaid in the view, and the file is put back: "
+    + endedLift.detail + ", sha " + (endedLift.back ? "restored" : "differs"));
+  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  await studioW.stop();
+
+  /* The lead's answer, sealed to the desk's box. Joined is said once and the request stays. Refused is said on the request. */
+  {
+    const LBA = boxPair();
+    const RTA = hex(16), TEAMA = "t-" + hex(8), KA = crypto.randomBytes(32);
+    const madeA = await admin("POST", "/relay/v1/teams", { rt: RTA, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+      sig: signHex(LEAD, core.createBytes(RTA, LEAD.keyId, R.clock.now)) });
+    if (madeA.status !== 200) throw new Error("the answer team was not made: " + JSON.stringify(madeA.json));
+    const invitesA = [];
+    async function inviteA() {
+      const secret = hex(16), inv = hex(16), token = hex(32), hash = sha(Buffer.from(token, "utf8")), at = R.clock.now;
+      const res = await admin("POST", "/relay/v1/t/" + RTA + "/invites", { add: [{ id: inv, hash }], drop: [], t: at,
+        sig: signHex(LEAD, core.invitesBytes(RTA, at, [{ id: inv, hash }], [])) });
+      if (res.status !== 200) throw new Error("an answer invitation was not registered: " + JSON.stringify(res.json));
+      invitesA.push({ id: inv, key: C.inviteSealKey(secret) });
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAMA, relay: { rt: RTA, url: URLV1, token, inv },
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay", box: LBA.pub }, secret }), "utf8").toString("base64url");
+      return { inv, text };
+    }
+    const one = await inviteA(), two = await inviteA();
+    const leadMirror = path.join(LAB, "answer-lead");
+    const leadT = transport("answer-lead");
+    const teamDocA = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMA, catalogs: ["quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LBA.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+      channel: { kind: "relay", rt: RTA, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+    put(leadMirror, C.TEAM_NAME, teamDocA);
+    const leadA = C.createChannel({ rt: RTA, url: URLV1, mirror: leadMirror, stateFile: path.join(LAB, "answer-lead.json"),
+      pin: () => ({ teamId: TEAMA, rt: RTA, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+      me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: LBA.pub }),
+      agree: agreeWith(LBA), keyFor: e => (e === 1 ? KA : null), sealEpoch: () => 1, inviteKeys: () => invitesA,
+      request: leadT.request, connect: leadT.connect, pollMs: 1e9 });
+    leadA.start();
+    await leadA.idle();
+    async function takeOne(name, offer) {
+      const folder = path.join(LAB, name + "-share");
+      fs.mkdirSync(folder, { recursive: true });
+      const desk = newDesk(name, folder);
+      const taken = await desk.ask("etiuda:team-join", "invite", offer.text, "Desk Nine", "");
+      const who = await desk.ask("etiuda:branch-identity", false);
+      const rel = "desks/" + who.id + "/join.json";
+      const landed = await until(async () => {
+        const ch = desk.api.relayRun();
+        if (ch) { ch.kick(); await ch.idle(); }
+        await leadA.kick(); await leadA.idle();
+        return !!read(leadMirror, rel);
+      }, 8000);
+      const doc = landed ? JSON.parse(read(leadMirror, rel)) : null;
+      return { desk, taken, who, rel, doc };
+    }
+    const joined = await takeOne("answer-join", one);
+    const wroteJoin = joined.doc ? await leadA.writeAnswer({ inv: one.inv, deskId: joined.doc.desk.id, deskBox: joined.doc.desk.box,
+      leadBox: LBA.pub, answer: "joined" }) : { ok: false, reason: "no-request" };
+    const markJ = deskTransport.log.length;
+    let shownJ = null;
+    await until(async () => {
+      const ch = joined.desk.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      const v = await joined.desk.ask("etiuda:team-join", "view");
+      if (v && v.joined && v.joined.team === TEAMA) { shownJ = v; return true; }
+      return false;
+    }, 8000);
+    const afterJ = deskTransport.log.slice(markJ).filter(l => l.indexOf("/t/" + RTA + "/") >= 0);
+    const fetchedJ = afterJ.some(l => l.indexOf("/b/" + one.inv) >= 0);
+    const listedJ = afterJ.some(l => l.indexOf("/since/") >= 0 || l.indexOf("/socket") >= 0);
+    const keptJ = !!read(leadMirror, joined.rel) && !!read(path.join(joined.desk.ud, "relay", RTA), joined.rel);
+    const refused = await takeOne("answer-refuse", two);
+    const wroteNo = refused.doc ? await leadA.writeAnswer({ inv: two.inv, deskId: refused.doc.desk.id, deskBox: refused.doc.desk.box,
+      leadBox: LBA.pub, answer: "refused" }) : { ok: false, reason: "no-request" };
+    let shownNo = null;
+    await until(async () => {
+      const ch = refused.desk.api.relayRun();
+      if (ch) { ch.kick(); await ch.idle(); }
+      const v = await refused.desk.ask("etiuda:team-join", "view");
+      if (v && v.join && v.join.state === "refused") { shownNo = v; return true; }
+      return false;
+    }, 8000);
+    const keptNo = !!read(leadMirror, refused.rel);
+    check(!!joined.taken && !joined.taken.refused && wroteJoin.ok === true && !!shownJ && shownJ.joined.team === TEAMA
+      && keptJ && fetchedJ && !listedJ && !!refused.taken && !refused.taken.refused && wroteNo.ok === true
+      && !!shownNo && shownNo.joined == null && keptNo,
+      "922a the lead's answer is opened by the desk that asked: joined is said and the request stays, refused is said and the request stays: "
+      + "joined " + (wroteJoin.ok ? "written" : (wroteJoin.reason || "not written"))
+      + ", view " + (shownJ && shownJ.joined ? shownJ.joined.team : "none")
+      + ", request " + (keptJ ? "kept" : "gone")
+      + ", fetch " + (fetchedJ ? "the answer" : "absent") + (listedJ ? ", and a team read" : "")
+      + "; refused " + (wroteNo.ok ? "written" : (wroteNo.reason || "not written"))
+      + ", view " + (shownNo && shownNo.join ? shownNo.join.state : "none")
+      + ", joined " + (shownNo && shownNo.joined ? "also said" : "not said")
+      + ", request " + (keptNo ? "kept" : "gone"));
+    await leadA.stop();
+  }
+  const devicePlant = await liftChannel("plant:S3-device", async () => {
+    const CC = freshChannel();
+    const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), teamKey = crypto.randomBytes(32);
+    /* One invitation for the whole scene, as a desk holds one: its id is what the channel's per-invitation marks key on. */
+    const devInvite = { inv: hex(16), token: hex(32), seal };
+    const mirror = path.join(LAB, "device-plant");
+    const puts = [];
+    let sessions = 0;
+    const request = async (method, url) => {
+      const u = String(url);
+      const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+      if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        sessions += 1;
+        const out = { session: hex(32) };
+        if (sessions === 1) out.invite = true;
+        return json(out);
+      }
+      if (method === "GET" && u.indexOf("/since/") >= 0) return json([]);
+      if (method === "PUT") { puts.push(u); return json({ ok: true }); }
+      return json({ error: "missing" }, 404);
+    };
+    put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+    let ch = null;
+    try {
+      ch = CC.createChannel({ rt, url: URLV1, mirror, stateFile: path.join(LAB, "device-plant.json"), watch: false, pollMs: 1e9,
+        pin: () => ({ teamId: "t-device-plant", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+        me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+        invite: () => devInvite,
+        keyFor: () => teamKey, sealEpoch: () => 1, request, connect: null });
+      ch.start();
+      await ch.idle();
+      if (puts.length !== 1) throw new Error("join uploads " + puts.length + ", sessions " + sessions);
+      put(mirror, "desks/" + who.keyId + "/note.txt", "A note after the request.\n");
+      ch.kick();
+      await ch.idle();
+      return puts.length === 1;
+    } finally {
+      if (ch) await ch.stop();
+    }
+  });
+  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  check(devicePlant.turned && devicePlant.back,
+    "922c lifting plant:S3-device keeps the enrolled hello on the invitation's session, so a later file is not sent, and the file is put back: "
+    + devicePlant.detail + ", sha " + (devicePlant.back ? "restored" : "differs"));
+
+  /* Past the session keep, the request is up and the key is not enrolled: the desk says it is waiting, not that the key
+     failed. The clock moves; nothing here waits on the wall. */
+  async function waitSaid(mod) {
+    const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), inv = hex(16);
+    const mirror = path.join(LAB, "wait-" + inv.slice(0, 8));
+    const said = [], puts = [];
+    let sessions = 0, now = 1700000000000, ch = null;
+    const request = async (method, url) => {
+      const u = String(url);
+      const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+      if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        sessions += 1;
+        if (sessions === 1) return json({ session: hex(32), invite: true });
+        return json({ error: "not-enrolled" }, 403);
+      }
+      if (method === "GET" && u.indexOf("/since/") >= 0) return json([]);
+      if (method === "GET" && u.indexOf("/b/") >= 0) return json({ error: "missing" }, 404);
+      if (method === "PUT") { puts.push(u); return json({ ok: true }); }
+      return json({ error: "missing" }, 404);
+    };
+    put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+    try {
+      ch = mod.createChannel({ rt, url: URLV1, mirror, stateFile: path.join(LAB, "wait-" + inv.slice(0, 8) + ".json"),
+        watch: false, pollMs: 1e9, clock: () => now,
+        pin: () => ({ teamId: "t-wait-said", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+        me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+        invite: () => ({ inv, token: hex(32), seal }),
+        keyFor: () => null, sealEpoch: () => null, request, connect: null, say: l => said.push(l) });
+      ch.start();
+      await ch.idle();
+      now += mod.SESSION_KEEP_MS + 1000;
+      said.length = 0;
+      ch.kick();
+      await ch.idle();
+      return { uploads: puts.length, said: said.slice() };
+    } finally {
+      if (ch) await ch.stop();
+    }
+  }
+  const waiting = await waitSaid(C);
+  const waitLine = "Waiting for the team's lead to let this desk in.";
+  const namedWait = waiting.said.some(l => l.indexOf(waitLine) >= 0);
+  const saidFault = waiting.said.some(l => l.indexOf("not enrolled") >= 0);
+  check(waiting.uploads === 1 && namedWait && !saidFault,
+    "922b past the session keep, invited and not enrolled, the desk says it is waiting for the lead: "
+    + "uploads " + waiting.uploads + ", said " + JSON.stringify(waiting.said));
+  const waitPlant = await liftChannel("plant:S3-wait", async () => {
+    const lifted = freshChannel();
+    const again = await waitSaid(lifted);
+    return again.uploads === 1 && !again.said.some(l => l.indexOf(waitLine) >= 0);
+  });
+  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  check(waitPlant.turned && waitPlant.back,
+    "922d lifting plant:S3-wait leaves the wait unsaid, and the file is put back: "
+    + waitPlant.detail + ", sha " + (waitPlant.back ? "restored" : "differs"));
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
   const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(K2, me.box, TEAM2, 1, me.id) };
@@ -3929,12 +4572,16 @@ async function heldInvite(mod) {
 /* The first request lands and the lead enrols the desk's key. The desk's next cycle, with no change to the invitation. */
 async function keyTurn(mod) {
   const x = await invitedDesk(mod, "961j");
+  /* Before the key is enrolled, a cycle after the upload fetches the lead's answer and nothing of the team (no since call). */
+  const pre = x.desk.t.log.length;
+  await once(x.desk);
+  const asked = x.desk.t.log.slice(pre).some(l => /since/.test(String(l)));
   const list = [{ id: x.deskKey.keyId, pub: x.deskKey.pub, desk: x.deskKey.keyId }], t = R.clock.now;
   const enrolled = await admin("POST", "/relay/v1/t/" + x.tm.rt + "/devices", { keys: list, rev: 2, t,
     sig: signHex(LEAD, core.devicesBytes(x.tm.rt, 2, t, list)) });
   const mark = x.desk.t.log.length;
   await once(x.desk);
-  const out = { first: x.first, enrolled: enrolled.status === 200, hello: x.desk.t.log.slice(mark).indexOf("POST hello") >= 0,
+  const out = { first: x.first, asked, enrolled: enrolled.status === 200, hello: x.desk.t.log.slice(mark).indexOf("POST hello") >= 0,
     keyed: relayStore(x.tm.rt).dump().some(([k, v]) => k.startsWith("ses:") && JSON.parse(v).key === x.deskKey.keyId) };
   await x.lead.ch.stop();
   await x.desk.ch.stop();
@@ -3954,19 +4601,231 @@ try {
   });
   check(reused.turned && reused.back, "961i lifting plant:new-invite-session sends the second request over the first invitation's spent session,"
     + " which the relay refuses, and the file is put back: " + reused.detail + ", sha " + (reused.back ? "restored" : "differs"));
+  const older = await liftChannel("plant:fresh-first", async mod => {
+    const x = await heldInvite(mod);
+    return x.first && x.used1 && !x.used2;
+  });
+  check(older.turned && older.back, "961n lifting plant:fresh-first takes the first invitation's session, which the relay still gives the bound key for"
+    + " the lead's answer, so the second request never goes, and the file is put back: " + older.detail + ", sha " + (older.back ? "restored" : "differs"));
   const turn = await keyTurn(C);
-  check(turn.first && turn.enrolled && turn.hello && turn.keyed,
+  check(turn.first && !turn.asked && turn.enrolled && turn.hello && turn.keyed,
     "961j after its invited upload the desk's next session is its key session: the lead enrols the key, and the desk's next cycle says hello with it"
-    + " and the relay holds a session for that key: first request " + (turn.first ? "at the lead" : "missing") + ", key " + (turn.enrolled ? "enrolled" : "not enrolled")
+    + " and the relay holds a session for that key: first request " + (turn.first ? "at the lead" : "missing") + ", before enrolment " + (turn.asked ? "asked for the team's files" : "the answer alone") + ", key " + (turn.enrolled ? "enrolled" : "not enrolled")
     + ", hello " + (turn.hello ? "sent" : "not sent") + ", key session " + (turn.keyed ? "held" : "not held"));
   const stayed = await liftChannel("plant:invite-id-sent", async mod => {
     const x = await keyTurn(mod);
-    return x.first && x.enrolled && !x.hello && !x.keyed;
+    return x.first && x.asked;
   });
-  check(stayed.turned && stayed.back, "961k lifting plant:invite-id-sent keeps the desk on the invitation's session after its upload, with no hello"
-    + " by its key, and the file is put back: " + stayed.detail + ", sha " + (stayed.back ? "restored" : "differs"));
+  /* Since slice 3 the relay ends an invitation's sessions when it enrols the bound key, so the turn to the key session no longer
+     rests on this line alone; what it alone keeps is the answer-only cycle between the upload and the enrolment. */
+  check(stayed.turned && stayed.back, "961k lifting plant:invite-id-sent leaves the desk, after its upload and before its key is enrolled, asking"
+    + " the relay for the team's files where it should fetch the lead's answer alone, and the file is put back: " + stayed.detail + ", sha " + (stayed.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 961h): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 1: the wrap's key, its associated data, and openWrap. The epoch line is the plant. ---- */
+function liftBlob(tag, fn) {
+  const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = sha(beforeBytes);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      turned = fn(nodeRequire(src));
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  } finally {
+    fs.writeFileSync(src, beforeBytes);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+}
+function wrapTeamDoc(id, rt, epoch) {
+  return { format: 1, kind: "etiuda-team", id: id, epoch: epoch, rev: 1, channel: { kind: "relay", rt: rt, url: URLV1 } };
+}
+try {
+  const secret = hex(16), rt = hex(16), team = "t-" + hex(8), inv = hex(16), epoch = 3;
+  const teamKey = crypto.randomBytes(32);
+  const nonce = Buffer.alloc(12, 9);
+  const key = B.inviteWrapKey(secret);
+    const expectKey = Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secret, "hex"), Buffer.alloc(0), Buffer.from("etiuda-invite-wrap", "utf8"), 32));
+    const aad = B.inviteWrapAad({ relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch });
+    const expectAad = Buffer.from(["etiuda-invite-wrap", rt, team, inv, String(epoch)].join("\n") + "\n", "utf8");
+    const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch, key: teamKey, nonce: nonce });
+    const raw = Buffer.from(wrap.ct, "hex");
+    const dec = crypto.createDecipheriv("aes-256-gcm", key, raw.subarray(0, 12), { authTagLength: 16 });
+    dec.setAAD(expectAad);
+    dec.setAuthTag(raw.subarray(raw.length - 16));
+    const plain = Buffer.concat([dec.update(raw.subarray(12, raw.length - 16)), dec.final()]).toString("utf8");
+    const wantPlain = JSON.stringify({ epoch: epoch, key: teamKey.toString("hex") });
+    const doc = wrapTeamDoc(team, rt, epoch);
+    const opened = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: doc });
+    const blind = wrap.ct.indexOf(teamKey.toString("hex")) < 0;
+    check(!!key && key.equals(expectKey) && key.length === 32 && !!aad && aad.equals(expectAad) && wrap.epoch === epoch
+      && plain === wantPlain && opened.ok === true && Buffer.isBuffer(opened.key) && opened.key.equals(teamKey) && blind,
+      "968a the wrap key, its associated data and the sealed JSON are the bytes item 1 names, and openWrap reads the team key back: "
+      + (key && key.equals(expectKey) ? "key matches" : "key differs")
+      + ", associated data " + (aad && aad.equals(expectAad) ? "matches" : "differs")
+      + ", plaintext " + (plain === wantPlain ? "matches" : JSON.stringify(plain))
+      + ", opened " + (opened.ok === true ? "yes" : (opened.reason || opened.ok))
+      + ", the ciphertext holds the key " + (blind ? "nowhere" : "in the clear"));
+    const otherTeam = "t-" + hex(8), otherRt = hex(16), otherInv = hex(16);
+    const movedInv = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: otherInv, wrap: wrap, teamDoc: doc });
+    const movedTeam = B.openWrap({ secret: secret, relayTeamId: rt, teamId: otherTeam, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(otherTeam, rt, epoch) });
+    const movedRelay = B.openWrap({ secret: secret, relayTeamId: otherRt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(team, otherRt, epoch) });
+    const movedEpoch = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: { epoch: epoch + 1, ct: wrap.ct }, teamDoc: wrapTeamDoc(team, rt, epoch + 1) });
+    const still = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: doc });
+    check(!movedInv.ok && !movedTeam.ok && !movedRelay.ok && !movedEpoch.ok && still.ok === true && still.key.equals(teamKey),
+      "968b a wrap moved to another invitation, team, relay team or epoch does not open, and the unmoved one does: "
+      + [movedInv.reason || movedInv.ok, movedTeam.reason || movedTeam.ok, movedRelay.reason || movedRelay.ok, movedEpoch.reason || movedEpoch.ok].join(" ")
+      + ", unmoved " + (still.ok === true ? "opens" : (still.reason || still.ok)));
+    const wrong = B.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: wrap, teamDoc: wrapTeamDoc(team, rt, epoch + 2) });
+    check(wrong.ok === false && wrong.reason === "epoch" && wrong.said === B.REASONS.epoch,
+      "968c a wrap whose epoch is not the team file's is refused and said: " + (wrong.reason || wrong.ok) + ", " + JSON.stringify(wrong.said));
+    const planted = liftBlob("plant:wrap-epoch", mod => {
+      const w = mod.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: epoch, key: teamKey, nonce: nonce });
+      const got = mod.openWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, wrap: w, teamDoc: wrapTeamDoc(team, rt, epoch + 2) });
+      return got.ok === true && Buffer.isBuffer(got.key) && got.key.equals(teamKey);
+    });
+  check(planted.turned && planted.back,
+    "968d lifting plant:wrap-epoch opens that wrap, and the file is put back: " + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 968a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 2: a token hello that binds no key is not sent; a second use is said as already used. ---- */
+const INVITE_USED_NEW = "This invitation has already been used. Ask your lead for a new one.";
+const INVITE_USED_OLD = "This invitation has already been used.";
+async function relayTeam() {
+  const rt = hex(16);
+  const made = await admin("POST", "/relay/v1/teams", { rt: rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+  if (made.status !== 200) throw new Error("a team was not made: " + made.status);
+  return rt;
+}
+async function registerInvite(rt, id, token) {
+  const t = R.clock.now, hash = sha(Buffer.from(token, "utf8"));
+  const res = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [{ id: id, hash: hash }], drop: [], t: t,
+    sig: signHex(LEAD, core.invitesBytes(rt, t, [{ id: id, hash: hash }], [])) });
+  if (res.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(res.json));
+}
+async function tokenHello(mod, rt, token, inv, who) {
+  const said = [];
+  const place = who ? "desk:" + who.keyId : "desk:k-hollow";
+  const extra = {
+    invite: () => ({ inv: inv, token: token, seal: crypto.randomBytes(32) }),
+    say: l => said.push(l),
+  };
+  if (!who) extra.me = () => ({ keyId: "k-" + hex(8), public: hex(32), place: place });
+  const desk = opened(mod, "tok-" + hex(4), { rt: rt, id: "t-" + hex(8) }, who || LEAD, place, extra);
+  desk.ch.start();
+  await desk.ch.idle();
+  const sessions = desk.t.log.filter(l => l.indexOf("POST session") === 0).length;
+  const used = desk.prog.state().tokenUsed === true;
+  const online = desk.ch.online();
+  await desk.ch.stop();
+  return { sessions: sessions, used: used, said: said, online: online };
+}
+try {
+  const rt = await relayTeam(), token = hex(32), inv = hex(16);
+  await registerInvite(rt, inv, token);
+  const bare = await tokenHello(C, rt, token, inv, null);
+  const later = await tokenHello(C, rt, token, inv, keyPair(true));
+  check(bare.sessions === 0 && bare.used === false && later.online === true && later.used === true,
+    "969a a token hello that binds no key is not sent and spends nothing, and a later hello that binds a key spends the token: "
+    + "bare sessions " + bare.sessions + ", bare used " + bare.used + ", later online " + later.online + ", later used " + later.used);
+  const bindPlant = await liftChannel("plant:invite-bind", async mod => {
+    const rt2 = await relayTeam(), token2 = hex(32), inv2 = hex(16);
+    await registerInvite(rt2, inv2, token2);
+    const a = await tokenHello(mod, rt2, token2, inv2, null);
+    const b = await tokenHello(mod, rt2, token2, inv2, keyPair(true));
+    /* The relay refuses a token hello that binds no key and spends nothing (plant:S3-unbound). The client line is what
+       stops the hello being sent; lifting it sends the hello, and a later hello that does bind still comes online. */
+    return a.sessions >= 1 && a.used === false && b.online === true && b.used === true
+      && a.said.some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
+  });
+  check(bindPlant.turned && bindPlant.back,
+    "969b lifting plant:invite-bind sends the unbound hello, the relay refuses it and the token stays unspent, and the file is put back: "
+    + bindPlant.detail + ", sha " + (bindPlant.back ? "restored" : "differs"));
+  const rt3 = await relayTeam(), token3 = hex(32), inv3 = hex(16);
+  await registerInvite(rt3, inv3, token3);
+  const first = await tokenHello(C, rt3, token3, inv3, keyPair(true));
+  const again = await tokenHello(C, rt3, token3, inv3, keyPair(true));
+  const saidNew = again.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
+  check(first.online === true && saidNew,
+    "969c a second key is told the invitation was already used: first online " + first.online + ", said " + JSON.stringify(again.said));
+  const saidPlant = await liftChannel("plant:invite-used", async mod => {
+    const rt4 = await relayTeam(), token4 = hex(32), inv4 = hex(16);
+    await registerInvite(rt4, inv4, token4);
+    await tokenHello(mod, rt4, token4, inv4, keyPair(true));
+    const b = await tokenHello(mod, rt4, token4, inv4, keyPair(true));
+    return b.said.some(l => l.indexOf(INVITE_USED_OLD) >= 0) && !b.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
+  });
+  check(saidPlant.turned && saidPlant.back,
+    "969d lifting plant:invite-used says the old sentence, and the file is put back: "
+    + saidPlant.detail + ", sha " + (saidPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 969a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- slice 3, item 3: a token hello the relay ends is said as expired, and the token stays unspent. ---- */
+const INVITE_ENDED_NEW = "This invitation has expired. Ask your lead for a new one.";
+const INVITE_ENDED_OLD = "The relay answered 403.";
+async function endedHello(mod) {
+  const rt = await relayTeam(), token = hex(32), inv = hex(16);
+  await registerInvite(rt, inv, token);
+  const who = keyPair(true), said = [], tag = hex(4);
+  const deskT = transport("end-" + tag);
+  const desk = opened(mod, "end-" + tag, { rt: rt, id: "t-" + hex(8) }, who, "desk:" + who.keyId, {
+    invite: () => ({ inv: inv, token: token, seal: crypto.randomBytes(32) }),
+    say: l => said.push(l),
+    connect: deskT.connect,
+    request: async (m, u, h, b) => {
+      if (m === "POST" && /\/session$/.test(String(u))) {
+        let body = null;
+        try { body = JSON.parse(Buffer.from(b || "").toString("utf8")); } catch { body = null; }
+        if (body && typeof body.invite === "string") {
+          return { status: 403, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "invite-ended" })) };
+        }
+      }
+      return deskT.request(m, u, h, b);
+    },
+  });
+  desk.ch.start();
+  await desk.ch.idle();
+  const used = desk.prog.state().tokenUsed === true;
+  await desk.ch.stop();
+  const later = await tokenHello(mod, rt, token, inv, keyPair(true));
+  return { used: used, said: said, laterOnline: later.online === true, laterUsed: later.used === true };
+}
+try {
+  const ended = await endedHello(C);
+  const saidNew = ended.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0);
+  check(ended.used === false && saidNew && ended.laterOnline && ended.laterUsed,
+    "963a a token hello the relay ends is said as expired, the token stays unspent, and a later hello spends it: "
+    + "used " + ended.used + ", said " + JSON.stringify(ended.said) + ", later online " + ended.laterOnline
+    + ", later used " + ended.laterUsed);
+  const endedPlant = await liftChannel("plant:invite-ended", async mod => {
+    const x = await endedHello(mod);
+    /* The reason table carries the same sentence as the special return, so lifting the line does not bring the old
+       403 wording back. The token still stays unspent and a later hello still spends it. */
+    return x.used === false && x.laterOnline && x.laterUsed
+      && x.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0) && !x.said.some(l => l.indexOf(INVITE_ENDED_OLD) >= 0);
+  });
+  check(endedPlant.turned && endedPlant.back,
+    "963b lifting plant:invite-ended still says the invitation has expired, because the reason table carries that sentence, and the file is put back: "
+    + endedPlant.detail + ", sha " + (endedPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

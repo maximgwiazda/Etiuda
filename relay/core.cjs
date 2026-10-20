@@ -28,6 +28,8 @@ const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 /* The lead's place for what it seals under one invitation's key alone (step 4's joining bootstrap): served in the clear,
    so a desk not joining by that invitation passes over it without trying to open it. */
 const INVITE_PLACE = /^invite:[0-9a-f]{32}$/;
+/* The one blob an uploaded invitation may fetch. Its id is the invitation's, and no list serves it. */
+const ANSWER_PLACE = /^answer:[0-9a-f]{32}$/;
 
 const is = (re, v) => typeof v === "string" && re.test(v);
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
@@ -47,7 +49,9 @@ function canon(v) {
 
 const createBytes = (rt, keyId, t) => Buffer.from("etiuda-relay-create\n" + rt + "\n" + keyId + "\n" + t, "utf8");
 const devicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
-const invitesBytes = (rt, t, add, drop) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n" + canon({ add, drop }), "utf8");
+/* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
+const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
+  + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
 const helloBytes = (rt, nonce, keyId) => Buffer.from("etiuda-relay-hello\n" + rt + "\n" + nonce + "\n" + keyId + "\n", "utf8");
 
 /* blob.cjs verifies under the upload prefix alone, so the relay's own four signatures are verified here. */
@@ -70,7 +74,7 @@ function parseMeta(header) {
   if (!m || typeof m !== "object" || Array.isArray(m) || m.v !== 1) return null;
   const out = { id: m.id, supersedes: m.supersedes === undefined ? null : m.supersedes, epoch: m.epoch, writer: m.writer,
     counter: m.counter, del: m.del, sig: m.sig, nonce: m.nonce, place: m.place, pub: m.pub === undefined ? null : m.pub };
-  const placed = out.place === "root" || INVITE_PLACE.test(String(out.place))
+  const placed = out.place === "root" || INVITE_PLACE.test(String(out.place)) || ANSWER_PLACE.test(String(out.place))
     || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
   if (!is(HEX32, out.id) || (out.supersedes !== null && (!is(HEX32, out.supersedes) || out.supersedes === out.id))
     || !isCount(out.epoch) || !isId(out.writer) || !isCount(out.counter) || typeof out.del !== "boolean"
@@ -101,7 +105,8 @@ function createCore(deps) {
     return { ok: true, rt };
   }
 
-  /* The lead's enrolled set replaces the last; a key it leaves out is withdrawn, and every session it holds with it. */
+  /* The lead's enrolled set replaces the last; a key it leaves out is withdrawn, and every session it holds with it.
+     A key it adds lets that key's invitation sessions go, so the next hello is the device's own. */
   function devices(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
@@ -128,7 +133,10 @@ function createCore(deps) {
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       store.put("devrev", b.rev);
-      for (const [k, s] of store.list("ses:")) if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+      for (const [k, s] of store.list("ses:")) {
+        if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+        if (s.bound && next.has(s.bound)) store.del(k);
+      }
       /* An invitation's session is held by no key of its own, so the key it binds is read from the session or the invitation:
          every invitation standing now was registered before this removal, and its session reads nothing from here on. */
       for (const [k, s] of store.list("ses:")) {
@@ -139,28 +147,67 @@ function createCore(deps) {
     return { ok: true, rev: b.rev, withdrawn };
   }
 
+/* A wrap is {epoch, ct}. The relay keeps at most 1 KiB of its canonical JSON and cannot open it, so anything else on the
+     object, a team key among it, is not stored. */
+  function takeWrap(wrap) {
+    if (!wrap || typeof wrap !== "object" || Array.isArray(wrap)) return no("bad-signature");
+    if (!Number.isSafeInteger(wrap.epoch) || wrap.epoch < 1 || typeof wrap.ct !== "string" || wrap.ct.length < 1) return no("bad-signature");
+    const size = Buffer.byteLength(canon(wrap), "utf8");
+    let over = size > 1025;
+    over = size > 1024; /* plant:S3-wrap-cap */
+    if (over) return no("blob-size");
+    let kept = wrap;
+    kept = { epoch: wrap.epoch, ct: wrap.ct }; /* plant:S3-wrap-blind */
+    return { ok: true, wrap: kept };
+  }
+
   /* Invitations by their token's sha256 alone. The same call twice is refused while its time still holds. A spent
      invitation is never live again (F9 of the slice 1 review): once its keep is over, or the lead drops it, the relay keeps
      of it its id and that it was spent, and nothing else, so its token is token-spent for as long as the team lives and the
-     lead sending its id again adds nothing. */
+     lead sending its id again adds nothing. An add may carry one wrap for a new id. `wraps` replaces an invitation's one
+     wrap. A drop keeps its meaning, and an id dropped in the same call is not given a wrap. */
   function invites(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
     const b = bodyOf(body);
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
-    const bytes = invitesBytes(rt, b.t, b.add, b.drop);
+    if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
+    let covered = undefined;
+    covered = b.wraps; /* plant:S3-wrap-signed */
+    const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
     if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
     const seen = "seen:" + sha256(bytes);
     if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
-    const shaped = b.add.every(a => !!a && typeof a === "object" && is(HEX32, a.id) && is(HEX64, a.hash)) && b.drop.every(d => is(HEX32, d));
+    const wrapRows = b.wraps || [];
+    const shaped = b.add.every(a => !!a && typeof a === "object" && !Array.isArray(a) && is(HEX32, a.id) && is(HEX64, a.hash)
+      && (a.until === undefined || Number.isSafeInteger(a.until)))
+      && b.drop.every(d => is(HEX32, d))
+      && wrapRows.every(w => !!w && typeof w === "object" && !Array.isArray(w) && is(HEX32, w.id));
     if (!shaped) return no("bad-signature"); /* plant:invites-shape */
+    const prepared = [];
+    for (const a of b.add) {
+      let kept = null;
+      if (a.wrap !== undefined) {
+        const taken = takeWrap(a.wrap);
+        if (!taken.ok) return taken;
+        kept = taken.wrap;
+      }
+      prepared.push({ id: a.id, hash: a.hash, until: a.until, wrap: kept });
+    }
+    const replacing = [];
+    for (const w of wrapRows) {
+      const taken = takeWrap(w.wrap);
+      if (!taken.ok) return taken;
+      replacing.push({ id: w.id, wrap: taken.wrap });
+    }
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
-    const added = new Map(b.add.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a.hash]));
+    const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a]));
     const live = [...held].filter(([id, v]) => !v.spent && !drop.has(id)).length + added.size;
     if (live > INVITES_MAX) return no("team-size"); /* plant:invites-cap */
     const now = clock();
+    const used = [];
     store.atomic(() => {
       const ord = (store.get("ord") || 0) + 1;
       if (added.size) store.put("ord", ord); /* plant:order-invite */
@@ -169,12 +216,33 @@ function createCore(deps) {
       for (const id of drop) {
         const was = held.get(id);
         store.del("inv:" + id);
+        let nameUsed = false;
+        nameUsed = !!(was && was.spent); /* plant:S3-cancel */
+        if (nameUsed) used.push(id);
         if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
-      for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false, at: now, ord });
+      for (const [id, row] of added) {
+        const rec = { hash: row.hash, fails: 0, spent: false, uploaded: false, at: now, ord };
+        if (row.until !== undefined) rec.until = row.until;
+        if (row.wrap) rec.wrap = row.wrap;
+        store.put("inv:" + id, rec);
+      }
+      for (const entry of replacing) {
+        if (drop.has(entry.id)) continue;
+        const cur = store.get("inv:" + entry.id);
+        /* Opened, so spent, and not yet admitted: the new wrap replaces the old. An admitted invitation, or one kept only as spent, is left. */
+        if (!cur || cur.uploaded || !cur.hash) continue;
+        let replace = false;
+        replace = true; /* plant:S3-reseal */
+        const next = Object.assign({}, cur);
+        if (replace) delete next.oldWrap;
+        else next.oldWrap = cur.wrap;
+        next.wrap = entry.wrap;
+        store.put("inv:" + entry.id, next);
+      }
     });
-    return { ok: true, dropped: [...drop] };
+    return { ok: true, dropped: [...drop], used };
   }
 
   function challenge(rt) {
@@ -210,27 +278,49 @@ function createCore(deps) {
     const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
     if (!right) return failedTry(b.inv, inv); /* plant:token-match */
-    /* The desk's own key, where its hello is signed by it, is bound to the invitation as it is spent (N4): until the one
-       upload is made, that key and no token opens the invitation's session again, so a request lost on the way is sent
-       again without a second use of the token. */
-    const bound = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig)
-      ? { key: b.key, pub: b.pub } : {};
+    /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
+       still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
+    let ended = false;
+    ended = inv.until != null && clock() > inv.until; /* plant:S3-lapse */
+    if (ended) {
+      store.atomic(() => {
+        const cur = store.get("inv:" + b.inv);
+        if (!cur || cur.spent) return;
+        const next = Object.assign({}, cur);
+        delete next.wrap;
+        store.put("inv:" + b.inv, next);
+      });
+      return no("invite-ended");
+    }
+    /* The first use is this hello, and only where it binds the desk's own key. A right token that binds no key is refused
+       and spends nothing: the token stays unspent, the failure is not one of the 20 tries, and the challenge is kept. */
+    const binds = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
+    let allowUnbound = true;
+    allowUnbound = false; /* plant:S3-unbound */
+    if (!binds && !allowUnbound) return no("bad-signature");
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
-    if (bound.key) {
-      const gone = store.get("gone:" + bound.key);
+    if (binds) {
+      const gone = store.get("gone:" + b.key);
       if (gone && !registeredAfter(inv, gone)) return no("removed"); /* plant:token-removed */
     }
-    return issue(b.challenge, { key: null, inv: b.inv }, () => {
-      store.put("inv:" + b.inv, Object.assign({}, inv, { spent: true, spentAt: clock() }, bound)); /* plant:token-spend */
+    const who = { key: null, inv: b.inv };
+    if (binds) who.bound = b.key;
+    return issue(b.challenge, who, () => {
+      const next = Object.assign({}, inv, { spent: true, spentAt: clock() }); /* plant:token-spend */
+      if (binds) { next.key = b.key; next.pub = b.pub; }
+      store.put("inv:" + b.inv, next);
     });
   }
 
-  /* An invitation spent by a token hello that bound this key, its one upload not yet made, inside its keep: the binding ends
-     when the keep does, at the time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). */
+  /* An invitation spent by a token hello that bound this key, inside its keep: the binding ends when the keep does, at the
+     time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). After the one upload the
+     same key still opens a session, until it is enrolled, the invitation is dropped or the keep ends. */
   function boundInvite(key) {
     const now = clock();
+    const skipUploaded = false;
     for (const [k, v] of store.list("inv:")) {
-      if (!v.spent || v.uploaded || v.key !== key || !is(HEX64, v.pub)) continue;
+      if (!v.spent || v.key !== key || !is(HEX64, v.pub)) continue;
+      if (skipUploaded && v.uploaded) continue;
       if (now - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
       return { id: k.slice(4), inv: v };
     }
@@ -261,7 +351,7 @@ function createCore(deps) {
       return no("removed"); /* plant:removed-key */
     }
     if (!dev) {
-      /* A key on no list that a token hello bound: the invitation's session again, for its one upload, and only one held. */
+      /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
       if (held && verified(held.inv.pub, msg, b.sig)) /* plant:invite-resume */
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
@@ -305,6 +395,44 @@ function createCore(deps) {
     return registeredAfter(inv, gone);
   }
 
+  /* The wrap, and only to the session whose hello bound the invitation's key. Gone once the upload or a drop deletes it. */
+  function wrapFor(token) {
+    const s = sessionOf(token);
+    if (!s.ok) return s;
+    let onlyBound = false;
+    onlyBound = true; /* plant:S3-wrap-session */
+    if (!onlyBound) {
+      for (const [, v] of store.list("inv:")) if (v.wrap) return { ok: true, wrap: { epoch: v.wrap.epoch, ct: v.wrap.ct } };
+      return no("missing");
+    }
+    if (!s.inv || !s.bound) return no("not-enrolled");
+    const inv = store.get("inv:" + s.inv);
+    if (!inv || inv.key !== s.bound) return no("not-enrolled");
+    if (!inv.wrap) return no("missing");
+    return { ok: true, wrap: { epoch: inv.wrap.epoch, ct: inv.wrap.ct } };
+  }
+
+  /* The lead's session, and only the lead's, is told each invitation's state. The used time is the clock at the hello and stays after the upload. */
+  function statesFor(rt, token) {
+    const team = teamOf(rt);
+    if (!team) return no("not-enrolled");
+    const s = sessionOf(token);
+    if (!s.ok) return s;
+    if (s.inv || s.key !== team.lead.keyId) return no("not-enrolled");
+    const states = [];
+    for (const [k, v] of store.list("inv:")) {
+      const id = k.slice(4);
+      if (!v.spent) {
+        states.push({ id: id, state: "unused", usedAt: null });
+        continue;
+      }
+      let keepTime = false;
+      keepTime = true; /* plant:S3-states */
+      states.push({ id: id, state: v.uploaded ? "asked" : "used", usedAt: keepTime && v.spentAt !== undefined ? v.spentAt : null });
+    }
+    return { ok: true, states: states };
+  }
+
   function sessionByHash(h) {
     const s = is(HEX64, h) ? store.get("ses:" + h) : undefined;
     if (!s) return no("no-hello"); /* plant:session-known */
@@ -328,14 +456,37 @@ function createCore(deps) {
     return out;
   }
 
+  /* An uploaded invitation's session, while its key is not enrolled, fetches only its answer. Lifting the plant opens the team. */
+  function answerOnly(s) {
+    let gate = false;
+    gate = true; /* plant:S3-read-on */
+    if (!gate || !s || !s.inv) return false;
+    const inv = store.get("inv:" + s.inv);
+    if (!inv || !inv.uploaded) return false;
+    if (s.bound && store.get("dev:" + s.bound)) return false;
+    return true;
+  }
+
+  function readGate(token) {
+    const s = sessionOf(token);
+    if (!s.ok) return s;
+    if (answerOnly(s)) return no("not-enrolled");
+    return null;
+  }
+
+  function isAnswer(m) {
+    return !!(m && ANSWER_PLACE.test(String(m.place || "")) && m.id === String(m.place).slice(7));
+  }
+
   function since(token, after) {
     const s = sessionOf(token);
     if (!s.ok) return s;
     if (s.quiet) return no("removed");
+    if (answerOnly(s)) return no("not-enrolled");
     const now = clock(), items = [];
     for (const [, id] of store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX })) {
       const m = store.get("blob:" + id);
-      if (m && !expired(m, now)) items.push({ seq: m.seq, meta: served(m) });
+      if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
     }
     return { ok: true, items };
   }
@@ -343,10 +494,21 @@ function createCore(deps) {
   function blobFor(token, id) {
     const s = sessionOf(token);
     if (!s.ok) return s;
-    if (s.quiet) return no("removed");
     const now = clock();
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
     if (m && expired(m, now)) return no("expired");
+    /* The lead's answer to its own request reaches even a desk rejoining after its removal (the quiet session of board
+       918): after its one upload it reads that answer and nothing else, as board 922 rules for every invitation. */
+    const ownAnswer = answerOnly(s) && isAnswer(m) && m.place === "answer:" + s.inv;
+    if (ownAnswer) return { ok: true, meta: served(m), obj: m.obj };
+    if (s.quiet) return no("removed");
+    if (answerOnly(s)) {
+      if (m) return no("not-enrolled");
+      const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
+      if (tomb && now <= tomb.until) return no(tomb.why);
+      return no("missing");
+    }
+    if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
     const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
     if (tomb && now <= tomb.until) return no(tomb.why);
@@ -365,6 +527,10 @@ function createCore(deps) {
     const lead = m.writer === team.lead.keyId;
     const dev = lead ? null : store.get("dev:" + m.writer);
     if (!lead && !dev) return no("removed");
+    if (lead && ANSWER_PLACE.test(String(m.place))) {
+      if (m.id !== String(m.place).slice(7)) return no("outside-place");
+      return { ok: true, team, s, max: B.BLOB_MAX, pub: team.lead.pub, lead: true, invite: null };
+    }
     if (m.place !== (lead ? "root" : "desk:" + dev.desk) && !(lead && INVITE_PLACE.test(m.place))) return no("outside-place"); /* plant:put-place */
     return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null };
   }
@@ -386,7 +552,9 @@ function createCore(deps) {
     const pub = m.pub !== null ? m.pub : m.writer;
     if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
     const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
-    if (m.place === "root" || !ownDesk && deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
+    let atDesk = true;
+    atDesk = typeof m.place === "string" && m.place.indexOf("desk:") === 0; /* plant:S3-invite-place */
+    if (!atDesk || m.place === "root" || !ownDesk && deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
     return { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub, lead: false, invite: s.inv, inv };
   }
 
@@ -435,16 +603,22 @@ function createCore(deps) {
       store.put("bytes", (store.get("bytes") || 0) + ct.length);
       if (j.old) bury(j.old, "superseded", now, drop); /* plant:supersede-drop */
       if (j.a.lead && m.epoch > j.a.team.epoch) store.put("team", Object.assign({}, j.a.team, { epoch: m.epoch }));
-      if (j.a.invite) store.put("inv:" + j.a.invite, Object.assign({}, j.a.inv, { uploaded: true })); /* plant:invite-mark */
+      if (j.a.invite) {
+        const next = Object.assign({}, j.a.inv, { uploaded: true });
+        let clear = false;
+        clear = true; /* plant:S3-burn */
+        if (clear) delete next.wrap;
+        store.put("inv:" + j.a.invite, next); /* plant:invite-mark */
+      }
       const rec = { id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
         size: ct.length, sig: m.sig, nonce: m.nonce, seq, at: now, obj };
       if (j.a.invite) rec.pub = j.a.pub;
-      if (INVITE_PLACE.test(m.place)) rec.place = m.place;
+      if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
     });
-    return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop };
+    return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop, uploadedInv: j.a.invite || null };
   }
 
   /* A blob no longer served: its bytes given back, its object for the caller to delete, and its id kept 30 days as a
@@ -487,7 +661,7 @@ function createCore(deps) {
   }
 
   return { create, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, parseMeta };
+    prune, orphan, parseMeta, wrapFor, statesFor, readGate };
 }
 
 module.exports = {
