@@ -287,7 +287,11 @@ function createTarget(limits) {
       if (!team) return { ok: false, reason: "not-enrolled", said: "", served: false };
       const nextDevices = new Map(team.devices);
       nextDevices.set(keyId, { pub: keyId, desk: deskId });
-      return postDevices(relayTeamId, team, nextDevices);
+      const posted = postDevices(relayTeamId, team, nextDevices);
+      /* Enrolling the bound key ends its invitation sessions at the relay, so the desk's next call says hello as itself. */
+      const held = sessions.get(relayTeamId + ":" + keyId);
+      if (posted.ok !== false && held && held.invite) sessions.delete(relayTeamId + ":" + keyId);
+      return posted;
     },
     removeDesk({ relayTeamId, deskId }) {
       const team = teams.get(relayTeamId);

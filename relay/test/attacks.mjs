@@ -2327,7 +2327,7 @@ function attacks() {
       const good = upload(w, blob);
       return !!good && good.ok === true && good.id === blob.id;
     }, true],
-    ["S3-enrolled-up", "a desk that joined through an invitation uploads at its own place once it is enrolled", function (create) {
+    ["S3-enrolled-up", "a desk that joined through an invitation uploads at its own place, through its own hello, once it is enrolled", function (create) {
       const t = create();
       const w = world(t);
       if (!w) return false;
@@ -2341,7 +2341,8 @@ function attacks() {
       if (!joined.ok) return false;
       const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
       if (!enrolled || enrolled.ok === false) return false;
-      const ownBlob = sealAt(w, joiner, "desks/" + deskId + "/notes.ec", 2, "desk:" + deskId, { body: "kept" });
+      /* The product records a desk key when its seal runs, and says hello as that desk to make this upload. */
+      const ownBlob = seal(w, joiner, "desks/" + deskId + "/notes.ec", 2, { body: "kept", place: "desk:" + deskId });
       const own = upload(w, ownBlob);
       return !!own && own.ok === true && own.id === ownBlob.id;
     }, true],
@@ -2371,6 +2372,36 @@ function attacks() {
       const answer = sealAt(w, w.lead, "join-answer.json", 2, place, { body: "joined", id: invitationId });
       const posted = upload(w, answer);
       return !!posted && posted.ok === true && posted.id === invitationId;
+    }, true],
+    ["S3-enrol-ends", "enrolling the bound key with no drop ends its invitation session, and the key's own hello opens a device session that lists the team", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const invitationId = wire.randomId();
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
+      if (!joined.ok) return false;
+      const catalogBlob = seal(w, w.lead, "guide-a.ec", 1, { body: "edition" });
+      const catalog = upload(w, catalogBlob);
+      if (!catalog.ok) return false;
+      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      if (!enrolled || enrolled.ok === false) return false;
+      const ended = t.list({ relayTeamId: w.relayTeamId, session: hello.session });
+      const endedFetch = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: catalog.id });
+      const endedSocket = t.subscribe({ relayTeamId: w.relayTeamId, session: hello.session });
+      if (!refused(ended, "no-hello") || !refused(endedFetch, "no-hello") || !refused(endedSocket, "no-hello")) return false;
+      const device = helloAs(t, w.relayTeamId, joiner);
+      if (!device.ok || device.invite === true) return false;
+      const live = t.list({ relayTeamId: w.relayTeamId, session: device.session });
+      const got = t.fetch({ relayTeamId: w.relayTeamId, session: device.session, id: catalog.id });
+      if (!live || live.ok !== true || live.ids.indexOf(catalog.id) < 0) return false;
+      if (!got || got.ok !== true || !sameBytes(got.ciphertext, catalogBlob.ciphertext)) return false;
+      return refused(t.list({ relayTeamId: w.relayTeamId, session: hello.session }), "no-hello");
     }, true],
   ];
 }
