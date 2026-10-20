@@ -3369,7 +3369,7 @@ function joinKept(j) {
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
     && (inv.folder === undefined || typeof inv.folder === "string") && (inv.was === undefined || typeof inv.was === "string")
     && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay))
-    && (inv.before === undefined || beforeKept(inv.before));
+    && (inv.before === undefined || beforeKept(inv.before)); /* plant:c7-kept */
   return inviteOk ? j : null;
 }
 /* An invitation's snapshot as the envelope keeps it, the shapes inviteBefore writes and the reader of each table accepts. */

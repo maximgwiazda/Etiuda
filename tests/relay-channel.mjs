@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 179;
+const EXPECTED = 181;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2934,13 +2934,8 @@ try {
   /* C7, board 921. A desk takes a relay invitation, the invitation's copy lands, and cancel must leave that relay:
      relayHere is null, the folder is the one from before, and the channel has stopped. The desk holds no key. */
   try {
-    function deskFrom(name, folder, src, held) {
-      const ud = path.join(LAB, name);
-      fs.mkdirSync(ud, { recursive: true });
-      fs.mkdirSync(folder, { recursive: true });
-      /* `held` is what the desk's envelope already keeps before any invitation: a pin, a key, a leave record. */
-      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
-        keys: { eCatalogFolder: folder, eUiLang: "en" } }, held || {})), "utf8");
+    /* The shell `src` loaded over the desk folder `ud` and the envelope already in it, as a restarted desk loads. */
+    function deskLoad(ud, src) {
       const said = [];
       const on = {}, invoke = {};
       const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -2966,9 +2961,20 @@ try {
       const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
       return { api, ask, said, ud, envelope };
     }
-    /* `opt.held(team)` is the envelope the desk starts with, `opt.keep` that it holds the team's key before the invitation,
-       `opt.unpinned` that the invitation finds a pin already there and so makes none, and `opt.twice` that it takes the
-       invitation a second time before cancelling. With no `opt` it is 921a's desk. */
+    function deskFrom(name, folder, src, held) {
+      const ud = path.join(LAB, name);
+      fs.mkdirSync(ud, { recursive: true });
+      fs.mkdirSync(folder, { recursive: true });
+      /* `held` is what the desk's envelope already keeps before any invitation: a pin, a key, a leave record. */
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: folder, eUiLang: "en" } }, held || {})), "utf8");
+      return deskLoad(ud, src);
+    }
+    /* `opt.held(team, key, share)` is the envelope the desk starts with, `opt.keep` that it holds the team's key before the
+       invitation, `opt.unpinned` that the invitation finds a pin already there and so makes none, and `opt.twice` that it
+       takes the invitation a second time before cancelling. `opt.restart` stops the desk once the invitation's copy has
+       landed and loads it again from the envelope on disk, after `opt.edit(envelope, team, key)` has changed that envelope;
+       `opt.view` then asks only whether the restarted desk kept the request. With no `opt` it is 921a's desk. */
     async function cancelScene(src, tag, opt) {
       opt = opt || {};
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
@@ -2995,14 +3001,14 @@ try {
       studio.start();
       await studio.idle();
       deskTransport.down = false;
-      const D = deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key) : null);
+      let D = deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key, share) : null);
       const before = D.api.catalogFolder();
       const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
         lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
       const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       if (opt.twice) await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       const mirror = path.join(D.ud, "relay", rt);
-      const landed = await until(async () => {
+      const landing = () => until(async () => {
         const ch = D.api.relayRun();
         if (ch) { ch.kick(); await ch.idle(); }
         await studio.kick(); await studio.idle();
@@ -3010,11 +3016,28 @@ try {
         try { env = D.envelope(); } catch { env = {}; }
         return read(mirror, C.TEAM_NAME) !== null && !!(env.teamChannel && env.teamChannel[team]) && !!(ch && ch.online());
       }, 8000);
+      let landed = await landing();
       let env = {};
       try { env = D.envelope(); } catch { env = {}; }
       const noKey = !env.teamKeys || !env.teamKeys[team];
       const standing = !!env.teamJoin;
       const pinned = !!(env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.pinned === true);
+      if (opt.restart) {
+        const old = D.api.relayRun();
+        if (old) { try { await old.stop(); } catch { /* already stopped */ } }
+        if (opt.edit) {
+          const doc = D.envelope();
+          opt.edit(doc, team, key);
+          fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(doc), "utf8");
+        }
+        D = deskLoad(D.ud, src);
+        if (opt.view) {
+          const seen = await D.ask("etiuda:team-join", "read", "no invitation");
+          try { await studio.stop(); } catch { /* already stopped */ }
+          return { pre: !taken.refused && landed && noKey && standing && pinned === !opt.unpinned, kept: !!(seen && seen.join), team };
+        }
+        landed = landed && await landing();
+      }
       const onMirror = D.api.catalogFolder() === mirror;
       const hereBefore = D.api.relayHere();
       const running = D.api.relayRun();
@@ -3112,6 +3135,10 @@ try {
       fresh: { folder: true },
       ftwice: { folder: true, twice: true },
       fleft: { folder: true, held: team => ({ teamLeft: { [team]: LEFT_AT }, teamBarred: [team] }) },
+      /* E2: the desk is stopped and loaded again from desk.json between the invitation and the Cancel. Its envelope held a pin
+         that came by an answered request and the team it showed, so the snapshot read back carries every table beforeKept checks. */
+      restart: { restart: true, unpinned: true, held: (team, key, share) => ({ teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        teamShown: { [team]: { lead: "Ada Quay", folder: share } } }) },
     };
     const runScene = (src, tag, name) => (asked[name].folder ? folderScene : cancelScene)(src, tag, asked[name]);
     const gone = g => g.here === null && g.folder === g.share && g.stopped;
@@ -3128,6 +3155,9 @@ try {
       fresh: g => folderBack(g) && slot(g, "teamPins") === undefined,
       ftwice: g => folderBack(g) && slot(g, "teamPins") === undefined,
       fleft: g => folderBack(g) && slot(g, "teamPins") === undefined && slot(g, "teamLeft") === LEFT_AT && barredHere(g),
+      restart: g => gone(g) && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === "answer"
+        && !!slot(g, "teamShown") && slot(g, "teamShown").lead === "Ada Quay" && slot(g, "teamShown").folder === g.share
+        && slot(g, "teamChannel") === undefined && g.after.teamJoin === undefined,
     };
     const told = g => (g.pre ? "the copy had landed" : "the copy had not (" + (g.refused ? "refused " + g.refused : "file " + g.file + ", channel " + g.named) + ")")
       + ", relayHere " + (g.here === null ? "null" : "answers")
@@ -3169,6 +3199,9 @@ try {
       "921k a desk that takes the same folder invitation twice and cancels is back as it was before the first: " + toldFolder(scenes.ftwice));
     check(scenes.fleft.pre && verdict.fleft(scenes.fleft),
       "921l a desk that had left the team, and cancels a folder invitation before it is admitted, has its leave record and its bar again: " + toldFolder(scenes.fleft));
+    check(scenes.restart.pre && verdict.restart(scenes.restart),
+      "921m a desk stopped and loaded again from desk.json between a relay invitation and its Cancel reads the snapshot back and still puts back the pin,"
+      + " where it came from, the shown team and the folder: " + told(scenes.restart));
 
     /* The plants. Each leg above is red where the line it guards is lifted, the file is read back from disk and put back byte for byte. */
     async function planted(edit, names) {
@@ -3208,6 +3241,9 @@ try {
     const ownSet = await planted(dropLine("plant:c8-own"), ["fresh"]);
     check(red(ownSet, ["fresh"]) && ownSet.back,
       "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the file is put back: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
+    const kept = await planted(swapText("plant:c7-kept", "beforeKept(inv.before)", "false"), ["restart"]);
+    check(red(kept, ["restart"]) && kept.back,
+      "921s lifting plant:c7-kept, so the envelope refuses every snapshot, reddens 921m, and the file is put back: " + redTold(kept, ["restart"]) + ", sha " + (kept.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs 921a to 921t): " + (e && e.stack ? e.stack : e));
   }
