@@ -2368,7 +2368,7 @@ function attacks() {
       if (!refused(byDesk, "outside-place") || !refused(byLead, "outside-place")) return false;
       const servedDesk = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: invitationId });
       const servedStray = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: strayId.id });
-      if (!refusedOneOf(servedDesk, ["missing", "not-enrolled"]) || !refusedOneOf(servedStray, ["missing", "not-enrolled"])) return false;
+      if (!refused(servedDesk, "missing") || !refusedOneOf(servedStray, ["missing", "not-enrolled"])) return false;
       const answer = sealAt(w, w.lead, "join-answer.json", 2, place, { body: "joined", id: invitationId });
       const posted = upload(w, answer);
       return !!posted && posted.ok === true && posted.id === invitationId;
