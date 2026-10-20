@@ -137,6 +137,7 @@ function teamObject(deps) {
   function openSocket(request, token) {
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
+    if (s.quiet) return refusedFor("removed");
     if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") return missing();
     return sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
   }

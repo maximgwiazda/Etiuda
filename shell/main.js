@@ -3427,10 +3427,20 @@ function leadSeen(team) {
    agent makes is answered: the file that pinned it is likely still on the share. The file this desk opened from outside
    the folder is let go with the lead: the shell stops holding it, and this call does not hand the page another catalog.
    `left` is Leave this team, which is the same act, remembered as a leave so a later invitation's refusal says so. */
+/* The mirror's team file, set aside on leaving a relay team, so a later invitation does not read the old wrap. */
+function setRelayTeamAside(rt) {
+  if (!/^[0-9a-f]{32}$/.test(String(rt))) return;
+  const file = path.join(relayMirrorOf(rt), TEAM_NAME);
+  const aside = file + ".aside";
+  try { fs.unlinkSync(aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
+  try { fs.renameSync(file, aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
+}
 function forgetLead(team, left) {
   team = String(team || "");
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
+  const ch = teamChannel[team];
+  if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
