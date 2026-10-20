@@ -28,6 +28,15 @@
    floors (each writer's counter per epoch, the team file's rev per team, lead key and epoch) and the place in the relay's
    sequence survive a restart.
 
+   ITS OWN BLOBS (board 932 (2)). A blob is passed over in the catch-up as this computer's own only when this computer's own
+   record shows it sent that blob id (the last upload of each path and of each copy), never because its writer is this key:
+   a profile restored with no record fetches the team file and the rest back, and one key on two computers fetches the
+   other's uploads. A blob of this key that the record does not show is judged and applied as anyone's is, and once more
+   against the record: not later than what this computer last sent for the path, it is older and changes nothing; later,
+   but the mirror holds neither its bytes nor what was last sent there, an edit is waiting to go up, which stays, the blob
+   becoming the one that edit replaces. Else it is written and recorded as sent, so the next edit replaces it and the chain
+   stays one. The record is the sent paths as before; no field is added, and a state written earlier reads as it did.
+
    AN EPOCH MOVE (F1 of the slice 1 review). The team file of a new epoch carries each remaining desk's wrap of the new key,
    and at the root it is sealed under that key, which a desk holding only the old one cannot open. So the lead also seals
    the team file once for each desk its roster names, under a key only the lead and that desk can make: the X25519
@@ -560,10 +569,12 @@ function createProgram(opts) {
 
   /* A judged blob into the mirror, whole, by the host's atomic write; a deletion removes the file. The writer's floor rises
      only once the mirror holds it. */
-  function land(r) {
+  function land(r, own) {
     const key = pathKey(r.path);
     const prev = has(st.applied, key) ? st.applied[key] : null;
     if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true }; /* plant:stale-epoch */
+    const held = own === true ? ownHeld(r, key) : null;
+    if (held) return held;
     /* Judged before the write, and said here: the batch's landing of a root file does not say a refusal of its own.
        The counter stays where it was, so a later genuine head is not refused as a replay of one that was left out.
        A deletion keeps the t already taken, so the same older head does not come back after the file is gone. */
@@ -585,9 +596,49 @@ function createProgram(opts) {
       sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")), del: r.kind === "delete" };
     remember(r.id, { path: r.path, writer: r.writerKeyId });
     if (r.path === TEAM_NAME && r.kind === "file") st.leadEpoch = Math.max(st.leadEpoch, r.epoch);
+    if (own === true) sentFrom(r, key);
     persist();
     return r.kind === "delete" ? { ok: true, deleted: true, path: r.path } : { ok: true, path: r.path };
   }
+
+  /* A blob of this program's own key that its record does not show it sent, judged against that record before it is written.
+     Not later than the last upload recorded for the path: older, and nothing changes. Later, but the mirror holds neither
+     its bytes nor the bytes last sent there: an edit waits to go up. That edit stays; the blob is taken as the last sent,
+     so the edit's upload replaces it and the path keeps one chain. Null: it is written as any blob is. The record keeps one
+     upload a path, and the relay keeps one live blob a chain and takes a key's counters in order, so an older own blob is
+     only ever one a relay put back or a fork a lost state left. */
+  function ownHeld(r, key) {
+    const base = has(st.sent, key) ? st.sent[key] : null;
+    if (base && !later(r, base)) return { ok: true, path: r.path, stale: true }; /* plant:own-older */
+    const now = io.read(r.path);
+    const have = now == null ? null : sha256(toBytes(now));
+    const want = r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8"));
+    const sent = base && !base.del ? base.sha : null;
+    const edit = have !== want && have !== sent;
+    if (edit) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
+    return null;
+  }
+
+  /* This program's record taken to show it sent this blob, as sentOut does for an upload: the path's last upload, the bytes
+     the team holds of it, and a counter the next upload will pass. */
+  function sentFrom(r, key) {
+    const was = has(st.sent, key) ? st.sent[key] : null;
+    const rec = { id: r.id, epoch: r.epoch, counter: r.counter, sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")),
+      size: Number.isSafeInteger(r.size) && r.size >= 0 ? r.size : 0, del: r.kind === "delete" };
+    st.sent[key] = rec;
+    st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
+    delete st.refused[key];
+    st.own = Math.max(st.own, r.counter);
+  }
+
+  /* The blob ids this program's record shows it sent: the last upload of each path and of each invitation's or desk's copy. */
+  function wroteIds() {
+    const ids = new Set();
+    for (const k of Object.keys(st.sent)) ids.add(st.sent[k].id);
+    for (const h of Object.keys(st.sentInv)) for (const k of Object.keys(st.sentInv[h])) ids.add(st.sentInv[h][k].id);
+    return ids;
+  }
+  const ownOf = (c, r) => !!c && typeof c.mine === "string" && c.mine === r.writerKeyId;
 
   /* A team file this program is told to judge by, as a caller holding it: signed under the pin for this team and relay,
      its rev at or above the floor. Its roster becomes the trust of its epoch; the floor is not raised. */
@@ -649,7 +700,7 @@ function createProgram(opts) {
     if (held && t.epoch < held.epoch) return R("replay-rev"); /* plant:epoch-hold */
     const lr = B.revLoad(st.revs, revKey(t));
     if (!lr.ok) return lr; /* plant:team-rev */
-    const landed = land(r);
+    const landed = land(r, ownOf(ctx, r));
     if (!landed.ok || landed.stale) return landed;
     st.revs = lr.revs;
     keepTrust(t);
@@ -819,7 +870,7 @@ function createProgram(opts) {
       const r = judge(blob, x.trust, m.epoch, x.key, floors, x.asked === true);
       if (r.ok && x.asked && !(r.kind === "file" && r.path.toLowerCase() === ("desks/" + m.writer + "/join.json").toLowerCase()
         && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX)) { last = R("outside-place"); break; }
-      if (r.ok) return { it, r };
+      if (r.ok) { r.size = blob.ciphertext.length; return { it, r }; }
       last = r;
       if (r.reason !== "bad-signature") break;
     }
@@ -859,7 +910,7 @@ function createProgram(opts) {
   /* The newest of each path in `list` (by epoch, then counter), the rest of that path left: older copies in one batch.
      The key is the path key, the same fold as the mirror. toLowerCase would join the Kelvin sign with k and drop one
      of them. The assignment after the lowercase key replaces it, and lifting the assignment returns that lowercase. */
-  function landNewest(list, out) {
+  function landNewest(list, out, ctx) {
     const best = new Map();
     let keyOf = x => x.r.path.toLowerCase();
     keyOf = x => pathKey(x.r.path); /* plant:land-fold */
@@ -871,7 +922,7 @@ function createProgram(opts) {
     for (const x of list) {
       if (best.get(keyOf(x)) !== x) { unpend(x.r.id); continue; }
       unpend(x.r.id);
-      const landed = land(x.r);
+      const landed = land(x.r, ownOf(ctx, x.r));
       if (landed.ok && !landed.stale) out.applied.push(x.r.path);
     }
   }
@@ -903,10 +954,10 @@ function createProgram(opts) {
       if (!landed.ok) dropSaid(TEAM_NAME, landed);
       else if (!landed.same && !landed.stale) { out.team = true; out.applied.push(TEAM_NAME); }
     }
-    landNewest(opened.filter(x => !(x.r.kind === "file" && x.r.path === TEAM_NAME)), out);
+    landNewest(opened.filter(x => !(x.r.kind === "file" && x.r.path === TEAM_NAME)), out, ctx);
     const desks = [];
     for (const it of rest) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
-    landNewest(desks, out);
+    landNewest(desks, out, ctx);
     persist();
     return out;
   }
@@ -1134,7 +1185,7 @@ function createProgram(opts) {
 
   return {
     setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
-    sentDeletion, unchain, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
+    sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed(id) {
@@ -1190,6 +1241,7 @@ function createChannel(opts) {
     return {
       agree: typeof o.agree === "function" ? peer => o.agree(peer) : null,
       self: who && typeof who.place === "string" ? { place: who.place, box: typeof who.box === "string" ? who.box : "" } : null,
+      mine: mineId(),
       keyFor: e => (typeof o.keyFor === "function" ? o.keyFor(e) : null),
       inviteSeal: inv && toBytes(inv.seal) && inv.seal.length === 32 ? toBytes(inv.seal) : null,
       inviteId: inv && HEX32.test(String(inv.inv)) ? inv.inv : null,
@@ -1201,6 +1253,11 @@ function createChannel(opts) {
     };
   }
   const me = () => (typeof o.me === "function" ? o.me() : null);
+  /* The key id of this program's own signing key, or null: a blob it names as writer is this key's. */
+  function mineId() {
+    const w = me();
+    return w && typeof w.keyId === "string" && w.keyId ? w.keyId : null;
+  }
 
   function refusalOf(r) {
     const j = r && r.json;
@@ -1347,12 +1404,14 @@ function createChannel(opts) {
     return r;
   }
 
-  /* Everything after this program's place in the sequence, fetched, then judged and applied in the catch-up's order. Its
-     own uploads are skipped: the mirror already holds them. */
+  /* Everything after this program's place in the sequence, fetched, then judged and applied in the catch-up's order. A blob
+     is passed over only where this program's own record shows it sent that id: the mirror holds it. One of this key's that
+     the record does not show is fetched, and the program judges it as it judges anyone's (board 932 (2)). */
   async function catchUp() {
     const who = me();
     for (let round = 0; round < 1000; round++) {
       const st = prog.state();
+      const wrote = prog.wroteIds();
       const r = await authed("GET", "since/" + st.seq);
       if (r.status !== 200 || !Array.isArray(r.json)) {
         const why = r.refused || refusalOf(r);
@@ -1367,7 +1426,9 @@ function createChannel(opts) {
         const before = top;
         top = e.seq;
         const m = e.meta;
-        if (who && m.writer === who.keyId) continue; /* plant:own-skip */
+        let own = !!who && m.writer === who.keyId;
+        own = wrote.has(m.id); /* plant:own-record */
+        if (own) continue; /* plant:own-skip */
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
         const got = await authed("GET", "b/" + m.id);
