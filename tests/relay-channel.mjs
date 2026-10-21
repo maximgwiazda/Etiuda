@@ -122,6 +122,12 @@ function loadPlantedBlob(code) {
   fs.writeFileSync(path.join(dir, "blob.cjs"), code, "utf8");
   return nodeRequire(path.join(dir, "blob.cjs"));
 }
+function loadPlantedBlobChannel(code) {
+  const dir = fs.mkdtempSync(path.join(LAB, "blob-channel-plant-"));
+  fs.writeFileSync(path.join(dir, "blob.cjs"), code, "utf8");
+  fs.copyFileSync(path.join(ROOT, "shell", "relay", "channel.cjs"), path.join(dir, "channel.cjs"));
+  return nodeRequire(path.join(dir, "channel.cjs"));
+}
 async function loadPlantedSettings(code) {
   const dir = fs.mkdtempSync(path.join(LAB, "settings-plant-"));
   const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
@@ -1976,8 +1982,6 @@ try {
     }
     return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
   }
-    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
-  }
   let devRevW = 0, teamRevW = 1;
   const devKeysW = [];
   async function wrapRestart(label, edition) {
@@ -3484,7 +3488,6 @@ try {
       const at = lines.findIndex(l => l.indexOf("plant:leave-aside") >= 0);
       if (at >= 0) {
         lines.splice(at, 1);
-        fs.writeFileSync(src, lines.join("\n"));
         const spliced = lines.join("\n");
         const out = await relayLeft((share, tag) => {
           const ud = path.join(LAB, "961g-desk-" + tag);
@@ -3498,11 +3501,9 @@ try {
       }
     } catch (e) {
       detail = e && e.message ? e.message : String(e);
-    } finally {
-      fs.writeFileSync(src, beforeBytes);
     }
     const back = sha(fs.readFileSync(src)) === digest;
-    check(turned && back, "961g lifting plant:leave-aside leaves the old team file in the mirror, and the file is put back: "
+    check(turned && back, "961g lifting plant:leave-aside leaves the old team file in the mirror, and the product file is never written: "
       + detail + ", sha " + (back ? "restored" : "differs"));
   }
 } catch (e) {
@@ -4366,10 +4367,7 @@ try {
     const at = lines.findIndex(l => l.indexOf("plant:epoch-hold") >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = nodeRequire.resolve(src);
-      delete nodeRequire.cache[resolved];
-      const lifted = nodeRequire(src);
+      const lifted = loadPlantedChannel(lines.join("\n"));
       const root = path.join(LAB, "f5-plant-" + hex(4));
       fs.mkdirSync(root, { recursive: true });
       const mirror = lifted.diskIO(root, lifted.writeWhole);
@@ -4393,12 +4391,9 @@ try {
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
-  } finally {
-    fs.writeFileSync(src, before);
-    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
   }
   const back = sha(fs.readFileSync(src)) === digest;
-  check(turned && back, "956e lifting plant:epoch-hold writes the older epoch over the newer file, and the file is put back: "
+  check(turned && back, "956e lifting plant:epoch-hold writes the older epoch over the newer file, and the product file is never written: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
@@ -4487,10 +4482,7 @@ try {
     const at = lines.findIndex(l => l.indexOf("plant:path-key") >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = nodeRequire.resolve(src);
-      delete nodeRequire.cache[resolved];
-      const lifted = nodeRequire(src);
+      const lifted = loadPlantedChannel(lines.join("\n"));
       const root = path.join(LAB, "f3-plant-" + hex(4));
       fs.mkdirSync(root, { recursive: true });
       const prog = lifted.createProgram({ io: lifted.diskIO(root, lifted.writeWhole), pin: PIN, clock: () => 1700000000000, save() {} });
@@ -4513,12 +4505,9 @@ try {
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
-  } finally {
-    fs.writeFileSync(src, before);
-    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
   }
   const back = sha(fs.readFileSync(src)) === digest;
-  check(turned && back, "957d lifting plant:path-key lets the older case replace the file, and the file is put back: "
+  check(turned && back, "957d lifting plant:path-key lets the older case replace the file, and the product file is never written: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
@@ -4594,10 +4583,7 @@ try {
     const at = lines.findIndex(l => l.indexOf("plant:case-one") >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = nodeRequire.resolve(src);
-      delete nodeRequire.cache[resolved];
-      const lifted = nodeRequire(src);
+      const lifted = loadPlantedChannel(lines.join("\n"));
       const io = exactNames([["Guide.ec", "alpha"], ["guide.ec", "beta"]]);
       const prog = lifted.createProgram({ io, pin: PIN, clock: () => 1700000000000, save() {} });
       const names = [];
@@ -4615,12 +4601,9 @@ try {
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
-  } finally {
-    fs.writeFileSync(src, before);
-    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
   }
   const back = sha(fs.readFileSync(src)) === digest;
-  check(turned && back, "958c lifting plant:case-one sends a case variant on later cycles, and the file is put back: "
+  check(turned && back, "958c lifting plant:case-one sends a case variant on later cycles, and the product file is never written: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
@@ -4679,10 +4662,7 @@ try {
     const at = lines.findIndex(l => l.indexOf("plant:ntfs-fold") >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      delete nodeRequire.cache[nodeRequire.resolve(src)];
-      delete nodeRequire.cache[nodeRequire.resolve(channel)];
-      const lifted = nodeRequire(channel);
+      const lifted = loadPlantedBlobChannel(lines.join("\n"));
       const entries = [];
       for (const [a, b] of PAIRS_915) entries.push([a, "one"], [b, "two"]);
       const io = exactNames(entries);
@@ -4693,16 +4673,9 @@ try {
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
-  } finally {
-    fs.writeFileSync(src, before);
-    try {
-      delete nodeRequire.cache[nodeRequire.resolve(src)];
-      delete nodeRequire.cache[nodeRequire.resolve(channel)];
-      nodeRequire(channel);
-    } catch { /* the copy this suite holds is untouched */ }
   }
   const back = sha(fs.readFileSync(src)) === digest;
-  check(turned && back, "959b lifting plant:ntfs-fold gives the four pairs one key again, and the file is put back: "
+  check(turned && back, "959b lifting plant:ntfs-fold gives the four pairs one key again, and the product file is never written: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
@@ -4746,10 +4719,7 @@ try {
     const at = lines.findIndex(l => l.indexOf("plant:upcase-table") >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      delete nodeRequire.cache[nodeRequire.resolve(src)];
-      delete nodeRequire.cache[nodeRequire.resolve(channel)];
-      const lifted = nodeRequire(src);
+      const lifted = loadPlantedBlob(lines.join("\n"));
       const g1 = lifted.checkPath(PAIR_916[0]), g2 = lifted.checkPath(PAIR_916[1]);
       const a = g1.ok ? g1.folded.join("/") : "bad", b = g2.ok ? g2.folded.join("/") : "bad";
       turned = a !== "bad" && b !== "bad" && a !== b;
@@ -4757,16 +4727,9 @@ try {
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
-  } finally {
-    fs.writeFileSync(src, before);
-    try {
-      delete nodeRequire.cache[nodeRequire.resolve(src)];
-      delete nodeRequire.cache[nodeRequire.resolve(channel)];
-      nodeRequire(channel);
-    } catch { /* the copy this suite holds is untouched */ }
   }
   const back = sha(fs.readFileSync(src)) === digest;
-  check(turned && back, "961b lifting plant:upcase-table gives the iota-subscript pair two keys, and the file is put back: "
+  check(turned && back, "961b lifting plant:upcase-table gives the iota-subscript pair two keys, and the product file is never written: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 961b): " + (e && e.stack ? e.stack : e));
@@ -4857,7 +4820,7 @@ try {
     const x = await kelvinBatch(mod);
     return (x.sign === x.SIGN) !== (x.ascii === x.ASCII);
   });
-  check(planted.turned && planted.back, "962b lifting plant:land-fold drops one of the Kelvin sign name and kelvin.ec, and the file is put back: "
+  check(planted.turned && planted.back, "962b lifting plant:land-fold drops one of the Kelvin sign name and kelvin.ec, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 962b): " + (e && e.stack ? e.stack : e));
@@ -5005,7 +4968,7 @@ try {
     const x = await secondInvite(mod);
     return x.first && x.moved && x.second !== x.join2;
   });
-  check(planted.turned && planted.back, "961m lifting plant:token-by-id blocks the new invitation, and the file is put back: "
+  check(planted.turned && planted.back, "961m lifting plant:token-by-id blocks the new invitation, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
   const back = await rejoinDesk(C);
   check(back.dropped && back.atLead && back.oldHeld && back.admitted,
@@ -5016,13 +4979,13 @@ try {
     const x = await rejoinDesk(mod);
     return x.atLead === false;
   });
-  check(removed.turned && removed.back, "961d lifting plant:removed-token sends no join after removal, and the file is put back: "
+  check(removed.turned && removed.back, "961d lifting plant:removed-token sends no join after removal, and the product file is never written: "
     + removed.detail + ", sha " + (removed.back ? "restored" : "differs"));
   const asked = await liftChannel("plant:ask-rejoin", async mod => {
     const x = await rejoinDesk(mod);
     return x.atLead === false;
   });
-  check(asked.turned && asked.back, "961e lifting plant:ask-rejoin leaves the lead's mirror without the join, and the file is put back: "
+  check(asked.turned && asked.back, "961e lifting plant:ask-rejoin leaves the lead's mirror without the join, and the product file is never written: "
     + asked.detail + ", sha " + (asked.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 961l): " + (e && e.stack ? e.stack : e));
@@ -5107,13 +5070,13 @@ try {
     return x.first && x.added && x.used1 && x.second !== x.join2 && !x.spent2 && !x.used2;
   });
   check(reused.turned && reused.back, "961i lifting plant:new-invite-session sends the second request over the first invitation's spent session,"
-    + " which the relay refuses, and the file is put back: " + reused.detail + ", sha " + (reused.back ? "restored" : "differs"));
+    + " which the relay refuses, and the product file is never written: " + reused.detail + ", sha " + (reused.back ? "restored" : "differs"));
   const older = await liftChannel("plant:fresh-first", async mod => {
     const x = await heldInvite(mod);
     return x.first && x.used1 && !x.used2;
   });
   check(older.turned && older.back, "961n lifting plant:fresh-first takes the first invitation's session, which the relay still gives the bound key for"
-    + " the lead's answer, so the second request never goes, and the file is put back: " + older.detail + ", sha " + (older.back ? "restored" : "differs"));
+    + " the lead's answer, so the second request never goes, and the product file is never written: " + older.detail + ", sha " + (older.back ? "restored" : "differs"));
   const turn = await keyTurn(C);
   check(turn.first && !turn.asked && turn.enrolled && turn.hello && turn.keyed,
     "961j after its invited upload the desk's next session is its key session: the lead enrols the key, and the desk's next cycle says hello with it"
@@ -5126,7 +5089,7 @@ try {
   /* Since slice 3 the relay ends an invitation's sessions when it enrols the bound key, so the turn to the key session no longer
      rests on this line alone; what it alone keeps is the answer-only cycle between the upload and the enrolment. */
   check(stayed.turned && stayed.back, "961k lifting plant:invite-id-sent leaves the desk, after its upload and before its key is enrolled, asking"
-    + " the relay for the team's files where it should fetch the lead's answer alone, and the file is put back: " + stayed.detail + ", sha " + (stayed.back ? "restored" : "differs"));
+    + " the relay for the team's files where it should fetch the lead's answer alone, and the product file is never written: " + stayed.detail + ", sha " + (stayed.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 961h): " + (e && e.stack ? e.stack : e));
 }
@@ -5142,17 +5105,11 @@ function liftBlob(tag, fn) {
     const at = lines.findIndex(l => l.indexOf(tag) >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = nodeRequire.resolve(src);
-      delete nodeRequire.cache[resolved];
-      turned = fn(nodeRequire(src));
+      turned = fn(loadPlantedBlob(lines.join("\n")));
       detail = turned ? "the check lifted" : "the check still held";
     }
   } catch (e) {
     detail = e && e.stack ? e.stack : String(e);
-  } finally {
-    fs.writeFileSync(src, beforeBytes);
-    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
   }
   return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
 }
@@ -5204,7 +5161,7 @@ try {
       return got.ok === true && Buffer.isBuffer(got.key) && got.key.equals(teamKey);
     });
   check(planted.turned && planted.back,
-    "968d lifting plant:wrap-epoch opens that wrap, and the file is put back: " + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+    "968d lifting plant:wrap-epoch opens that wrap, and the product file is never written: " + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 968a): " + (e && e.stack ? e.stack : e));
 }
@@ -5260,7 +5217,7 @@ try {
       && a.said.some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
   });
   check(bindPlant.turned && bindPlant.back,
-    "969b lifting plant:invite-bind sends the unbound hello, the relay refuses it and the token stays unspent, and the file is put back: "
+    "969b lifting plant:invite-bind sends the unbound hello, the relay refuses it and the token stays unspent, and the product file is never written: "
     + bindPlant.detail + ", sha " + (bindPlant.back ? "restored" : "differs"));
   const rt3 = await relayTeam(), token3 = hex(32), inv3 = hex(16);
   await registerInvite(rt3, inv3, token3);
@@ -5277,7 +5234,7 @@ try {
     return b.said.some(l => l.indexOf(INVITE_USED_OLD) >= 0) && !b.said.some(l => l.indexOf(INVITE_USED_NEW) >= 0);
   });
   check(saidPlant.turned && saidPlant.back,
-    "969d lifting plant:invite-used says the old sentence, and the file is put back: "
+    "969d lifting plant:invite-used says the old sentence, and the product file is never written: "
     + saidPlant.detail + ", sha " + (saidPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 969a): " + (e && e.stack ? e.stack : e));
@@ -5328,7 +5285,7 @@ try {
       && x.said.some(l => l.indexOf(INVITE_ENDED_NEW) >= 0) && !x.said.some(l => l.indexOf(INVITE_ENDED_OLD) >= 0);
   });
   check(endedPlant.turned && endedPlant.back,
-    "963b lifting plant:invite-ended still says the invitation has expired, because the reason table carries that sentence, and the file is put back: "
+    "963b lifting plant:invite-ended still says the invitation has expired, because the reason table carries that sentence, and the product file is never written: "
     + endedPlant.detail + ", sha " + (endedPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));
