@@ -111,6 +111,25 @@ const initialDigests = new Map();
 for (const f of trackedProductFiles) {
   initialDigests.set(path.relative(ROOT, f).replace(/\\/g, "/"), sha(fs.readFileSync(f)));
 }
+function loadPlantedChannel(code) {
+  const dir = fs.mkdtempSync(path.join(LAB, "channel-plant-"));
+  fs.writeFileSync(path.join(dir, "channel.cjs"), code, "utf8");
+  fs.writeFileSync(path.join(dir, "blob.cjs"), "module.exports = require(" + JSON.stringify(path.join(ROOT, "shell", "relay", "blob.cjs")) + ");\n", "utf8");
+  return nodeRequire(path.join(dir, "channel.cjs"));
+}
+function loadPlantedBlob(code) {
+  const dir = fs.mkdtempSync(path.join(LAB, "blob-plant-"));
+  fs.writeFileSync(path.join(dir, "blob.cjs"), code, "utf8");
+  return nodeRequire(path.join(dir, "blob.cjs"));
+}
+async function loadPlantedSettings(code) {
+  const dir = fs.mkdtempSync(path.join(LAB, "settings-plant-"));
+  const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+  const rewritten = code.replace(/from "\.\//g, 'from "' + modulesUrl + '/');
+  const target = path.join(dir, "settings.js");
+  fs.writeFileSync(target, rewritten, "utf8");
+  return import(pathToFileURL(target).href);
+}
 const wait = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, ms) {
   const end = Date.now() + (ms || 4000);
@@ -1475,22 +1494,16 @@ try {
     const at = lines.findIndex(l => l.indexOf("plant:relay-waits") >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = nodeRequire.resolve(src);
-      delete nodeRequire.cache[resolved];
-      const lifted = nodeRequire(src);
+      const lifted = loadPlantedChannel(lines.join("\n"));
       const scene = await relayRefusal(lifted, "c2p-" + hex(3));
       turned = scene.bug === true;
       detail = scene.detail;
     }
   } catch (e) {
     detail = e && e.message ? e.message : String(e);
-  } finally {
-    fs.writeFileSync(src, before);
-    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
   }
   const back = sha(fs.readFileSync(src)) === digest;
-  check(turned && back, "919b lifting plant:relay-waits keeps the relay's refusal as a stop, and the file is put back: "
+  check(turned && back, "919b lifting plant:relay-waits keeps the relay's refusal as a stop, and the product file is never written: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
@@ -1758,14 +1771,11 @@ try {
       if (at >= 0) {
         lines.splice(at, 1);
         const next = lines.join("\n");
-        fs.writeFileSync(src, next);
         turned = await fn(next);
         detail = turned ? "the check lifted" : "the check still held";
       }
     } catch (e) {
       detail = e && e.stack ? e.stack : String(e);
-    } finally {
-      fs.writeFileSync(src, beforeBytes);
     }
     return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
   }
@@ -1804,7 +1814,7 @@ try {
     return !!(refused && refused.refused === "check");
   });
   check(codePlant.turned && codePlant.back,
-    "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the file is put back: "
+    "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written: "
     + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
 
   /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
@@ -1892,8 +1902,8 @@ try {
     for (const k of Object.keys(nodeRequire.cache)) if (path.normalize(k) === want) delete nodeRequire.cache[k];
   }
   function freshChannel() {
-    const file = path.join(ROOT, "shell", "relay", "channel.cjs");
-    delete nodeRequire.cache[nodeRequire.resolve(file)];
+    const file = path.join(APP, "shell", "relay", "channel.cjs");
+    dropCopiedChannel();
     return nodeRequire(file);
   }
   async function liftChannel(tag, fn) {
@@ -1908,7 +1918,6 @@ try {
       if (at >= 0) {
         lines.splice(at, 1);
         const next = lines.join("\n");
-        fs.writeFileSync(file, next);
         fs.writeFileSync(copy, next);
         dropCopiedChannel();
         turned = await fn();
@@ -1917,7 +1926,6 @@ try {
     } catch (e) {
       detail = e && e.stack ? e.stack : String(e);
     } finally {
-      fs.writeFileSync(file, beforeBytes);
       fs.writeFileSync(copy, beforeBytes);
       dropCopiedChannel();
     }
@@ -1937,7 +1945,7 @@ try {
     return !!(takenP && !takenP.refused) && factsOf(Dp.api.readCatalog() || "") !== 1;
   });
   check(openPlant.turned && openPlant.back,
-    "965c lifting plant:wrap-open leaves the catalog unread, and the file is put back: "
+    "965c lifting plant:wrap-open leaves the catalog unread, and the product file is never written: "
     + openPlant.detail + ", sha " + (openPlant.back ? "restored" : "differs"));
 
   /* Board 922, E2. The wrap is asked for only on the invitation's own session, before its one upload. A wrap refused for its
@@ -1955,7 +1963,6 @@ try {
       if (at.every(i => i >= 0)) {
         edits.forEach((e, k) => { lines[at[k]] = e.text; });
         const next = lines.filter(l => l !== null).join("\n");
-        fs.writeFileSync(file, next);
         fs.writeFileSync(copy, next);
         dropCopiedChannel();
         turned = await fn();
@@ -1964,10 +1971,11 @@ try {
     } catch (e) {
       detail = e && e.stack ? e.stack : String(e);
     } finally {
-      fs.writeFileSync(file, beforeBytes);
       fs.writeFileSync(copy, beforeBytes);
       dropCopiedChannel();
     }
+    return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
     return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
   }
   let devRevW = 0, teamRevW = 1;
@@ -2040,7 +2048,7 @@ try {
   });
   check(e2Plant.turned && e2Plant.back,
     "966b putting back the wrap ask after the upload, the kept wrap key and the early return on token-spent leaves the enrolled desk reading nothing,"
-    + " and the file is put back: " + e2Plant.detail + ", sha " + (e2Plant.back ? "restored" : "differs"));
+    + " and the product file is never written: " + e2Plant.detail + ", sha " + (e2Plant.back ? "restored" : "differs"));
   /* The same on the channel alone, so that each line is held by a check of its own: before the upload a wrap answered
      token-spent stops nothing, and once the upload is made the key is not asked for the wrap again. */
   async function wrapStandIn(mod, label) {
@@ -2086,7 +2094,7 @@ try {
     return again.since1 === 0 && again.put1 === 0;
   });
   check(refusedPlant.turned && refusedPlant.back,
-    "966d putting back the early return on token-spent stops the first cycle before the team is read, and the file is put back: "
+    "966d putting back the early return on token-spent stops the first cycle before the team is read, and the product file is never written: "
     + refusedPlant.detail + ", sha " + (refusedPlant.back ? "restored" : "differs"));
   const oncePlant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }], async () => {
     const lifted = freshChannel();
@@ -2094,7 +2102,7 @@ try {
     return again.wrap2 === 1;
   });
   check(oncePlant.turned && oncePlant.back,
-    "966e lifting plant:S3-wrap-once asks for the wrap again after the upload, and the file is put back: "
+    "966e lifting plant:S3-wrap-once asks for the wrap again after the upload, and the product file is never written: "
     + oncePlant.detail + ", sha " + (oncePlant.back ? "restored" : "differs"));
   /* Board 922, F1. A relay invitation the relay answers token-spent, or invite-ended, is kept with the request and said in its view,
      which the page draws, and not only in the console. */
@@ -2137,16 +2145,16 @@ try {
     return !again.shown && again.kept === "";
   });
   check(usedLift.turned && usedLift.back,
-    "967c lifting plant:S3-page-used leaves the used invitation unsaid in the view, and the file is put back: "
+    "967c lifting plant:S3-page-used leaves the used invitation unsaid in the view, and the product file is never written: "
     + usedLift.detail + ", sha " + (usedLift.back ? "restored" : "differs"));
   const endedLift = await liftChannel("plant:S3-page-ended", async () => {
     const again = await endedJoin("ended-expired-plant", "invite-ended");
     return !again.shown && again.kept === "";
   });
   check(endedLift.turned && endedLift.back,
-    "967d lifting plant:S3-page-ended leaves the expired invitation unsaid in the view, and the file is put back: "
+    "967d lifting plant:S3-page-ended leaves the expired invitation unsaid in the view, and the product file is never written: "
     + endedLift.detail + ", sha " + (endedLift.back ? "restored" : "differs"));
-  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  dropCopiedChannel();
   await studioW.stop();
 
   /* The lead's answer, sealed to the desk's box. Joined is said once and the request stays. Refused is said on the request. */
@@ -2279,9 +2287,9 @@ try {
       if (ch) await ch.stop();
     }
   });
-  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  dropCopiedChannel();
   check(devicePlant.turned && devicePlant.back,
-    "922c lifting plant:S3-device keeps the enrolled hello on the invitation's session, so a later file is not sent, and the file is put back: "
+    "922c lifting plant:S3-device keeps the enrolled hello on the invitation's session, so a later file is not sent, and the product file is never written: "
     + devicePlant.detail + ", sha " + (devicePlant.back ? "restored" : "differs"));
 
   /* Past the session keep, the request is up and the key is not enrolled: the desk says it is waiting, not that the key
@@ -2336,9 +2344,9 @@ try {
     const again = await waitSaid(lifted);
     return again.uploads === 1 && !again.said.some(l => l.indexOf(waitLine) >= 0);
   });
-  delete nodeRequire.cache[nodeRequire.resolve(path.join(ROOT, "shell", "relay", "channel.cjs"))];
+  dropCopiedChannel();
   check(waitPlant.turned && waitPlant.back,
-    "922d lifting plant:S3-wait leaves the wait unsaid, and the file is put back: "
+    "922d lifting plant:S3-wait leaves the wait unsaid, and the product file is never written: "
     + waitPlant.detail + ", sha " + (waitPlant.back ? "restored" : "differs"));
 
   /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
@@ -2598,10 +2606,7 @@ try {
         const at = lines.findIndex(l => l.indexOf("plant:head-sig") >= 0);
         if (at >= 0) {
           lines.splice(at, 1);
-          fs.writeFileSync(src, lines.join("\n"));
-          const resolved = nodeRequire.resolve(src);
-          delete nodeRequire.cache[resolved];
-          const lifted = nodeRequire(src);
+          const lifted = loadPlantedChannel(lines.join("\n"));
           const dir = path.join(LAB, "head-plant-" + hex(4));
           fs.mkdirSync(dir, { recursive: true });
           const said = [];
@@ -2621,12 +2626,9 @@ try {
         }
       } catch (e) {
         detail = e && e.message ? e.message : String(e);
-      } finally {
-        fs.writeFileSync(src, before);
-        try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
       }
       const back = sha(fs.readFileSync(src)) === digest;
-      check(turned && back, "948g lifting plant:head-sig lets a forged head through, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
+      check(turned && back, "948g lifting plant:head-sig lets a forged head through, and the product file is never written: " + detail + ", sha " + (back ? "restored" : "differs"));
     }
     /* plant:head-show. Deleting that line, leaving the file valid script, drops the sentence. */
     {
@@ -2640,8 +2642,7 @@ try {
         const at = lines.findIndex(l => l.indexOf("plant:head-show") >= 0);
         if (at >= 0 && pageMod) {
           lines.splice(at, 1);
-          fs.writeFileSync(src, lines.join("\n"));
-          const SET2 = await import(pathToFileURL(src).href + "?plant=" + Date.now());
+          const SET2 = await loadPlantedSettings(lines.join("\n"));
           pageMod.ST.lsSet("eUiLang", "en");
           const html = shownText(SET2.settingsBodyHtml());
           turned = html.indexOf("Newest edition Quay three") < 0;
@@ -2649,11 +2650,9 @@ try {
         }
       } catch (e) {
         detail = e && e.message ? e.message : String(e);
-      } finally {
-        fs.writeFileSync(src, before);
       }
       const back = sha(fs.readFileSync(src)) === digest;
-      check(turned && back, "948h lifting plant:head-show drops the sentence, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
+      check(turned && back, "948h lifting plant:head-show drops the sentence, and the product file is never written: " + detail + ", sha " + (back ? "restored" : "differs"));
     }
     const shareH = path.join(LAB, "head-folder");
     fs.mkdirSync(shareH, { recursive: true });
@@ -2959,10 +2958,7 @@ try {
         const at = lines.findIndex(l => l.indexOf("plant:fk1-removed") >= 0);
         if (at >= 0) {
           lines.splice(at, 1);
-          fs.writeFileSync(src, lines.join("\n"));
-          const resolved = nodeRequire.resolve(src);
-          delete nodeRequire.cache[resolved];
-          const lifted = nodeRequire(src);
+          const lifted = loadPlantedChannel(lines.join("\n"));
           const lateTaken = x => !!(x && x.loadedOld.ok === true && x.loadedNew.ok === true && x.before.ok === true
             && x.stayR.ok === true && x.stayBody === "kept-on" && x.late.ok === true && x.goneBody === "late-after");
           const plantedBlob = epochRoute(lifted, "plant-blob"), plantedDesk = epochRoute(lifted, "plant-desk");
@@ -2971,12 +2967,9 @@ try {
         }
       } catch (e) {
         detail = e && e.message ? e.message : String(e);
-      } finally {
-        fs.writeFileSync(src, beforeBytes);
-        try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
       }
       const back = sha(fs.readFileSync(src)) === digest;
-      check(turned && back, "944s lifting plant:fk1-removed accepts the dropped desk's new file sealed at the old epoch, and the file is put back: "
+      check(turned && back, "944s lifting plant:fk1-removed accepts the dropped desk's new file sealed at the old epoch, and the product file is never written: "
         + detail + ", sha " + (back ? "restored" : "differs"));
     }
   }
@@ -3135,8 +3128,7 @@ try {
       const at = lines.findIndex(l => l.indexOf("plant:c7-cancel") >= 0);
       if (at >= 0) {
         lines.splice(at, 1);
-        fs.writeFileSync(mainFile, lines.join("\n"));
-        const lifted = await cancelScene(fs.readFileSync(mainFile, "utf8"), "plant");
+        const lifted = await cancelScene(lines.join("\n"), "plant");
         turned = lifted.pre && lifted.here !== null && lifted.folder !== lifted.share && lifted.stopped === false;
         detail = (lifted.pre ? "the copy had landed" : "the copy had not (" + (lifted.refused ? "refused " + lifted.refused : "file " + lifted.file + ", channel " + lifted.named) + ")")
           + ", relayHere " + (lifted.here === null ? "null" : "answers")
@@ -3145,11 +3137,9 @@ try {
       }
     } catch (e) {
       detail = e && e.message ? e.message : String(e);
-    } finally {
-      fs.writeFileSync(mainFile, beforeBytes);
     }
     const back = sha(fs.readFileSync(mainFile)) === digest;
-    check(turned && back, "921b lifting plant:c7-cancel leaves the relay pin, the mirror and the channel after cancel, and the file is put back: "
+    check(turned && back, "921b lifting plant:c7-cancel leaves the relay pin, the mirror and the channel after cancel, and the product file is never written: "
       + detail + ", sha " + (back ? "restored" : "differs"));
 
     /* Board 921, the test architect's edits. Cancel before admission puts back what the invitation changed, whatever the desk
@@ -3323,14 +3313,11 @@ try {
       try {
         const text = edit(bytes.toString("utf8"));
         if (text !== null) {
-          fs.writeFileSync(mainFile, text);
           said = "";
-          for (const name of names) got[name] = await runScene(fs.readFileSync(mainFile, "utf8"), "plant-" + name, name);
+          for (const name of names) got[name] = await runScene(text, "plant-" + name, name);
         }
       } catch (e) {
         said = e && e.message ? e.message : String(e);
-      } finally {
-        fs.writeFileSync(mainFile, bytes);
       }
       return { got, said, back: sha(fs.readFileSync(mainFile)) === sum };
     }
@@ -3341,46 +3328,46 @@ try {
     const dropText = (mark, part) => swapText(mark, part, "");
     const lifted = await planted(dropLine("plant:c7-cancel"), ["pin", "left", "twice", "key", "fresh"]);
     check(red(lifted, ["pin", "left", "twice", "key", "fresh"]) && lifted.back,
-      "921g lifting plant:c7-cancel reddens 921c, 921d, 921e, 921f and 921j, and the file is put back: " + redTold(lifted, ["pin", "left", "twice", "key", "fresh"]) + ", sha " + (lifted.back ? "restored" : "differs"));
+      "921g lifting plant:c7-cancel reddens 921c, 921d, 921e, 921f and 921j, and the product file is never written: " + redTold(lifted, ["pin", "left", "twice", "key", "fresh"]) + ", sha " + (lifted.back ? "restored" : "differs"));
     const clause = await planted(dropText("plant:c7-cancel", " && newestEpoch(j.team, wrapped) === (b.epoch || 0)"), ["admit"]);
     check(red(clause, ["admit"]) && clause.back,
-      "921h lifting the clause that holds the restore to a desk with no newer key than at the invitation reddens 921n, and the file is put back: " + redTold(clause, ["admit"]) + ", sha " + (clause.back ? "restored" : "differs"));
+      "921h lifting the clause that holds the restore to a desk with no newer key than at the invitation reddens 921n, and the product file is never written: " + redTold(clause, ["admit"]) + ", sha " + (clause.back ? "restored" : "differs"));
     const chain = await planted(dropText("plant:c7-chain", "kept || "), ["twice", "ftwice"]);
     check(red(chain, ["twice", "ftwice"]) && chain.back,
-      "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f and 921k, and the file is put back: " + redTold(chain, ["twice", "ftwice"]) + ", sha " + (chain.back ? "restored" : "differs"));
+      "921i lifting plant:c7-chain, the snapshot the first invitation took, reddens 921f and 921k, and the product file is never written: " + redTold(chain, ["twice", "ftwice"]) + ", sha " + (chain.back ? "restored" : "differs"));
     const mark = await planted(dropText("plant:c7-mark", ", epoch: newestEpoch(team)"), ["key"]);
     check(red(mark, ["key"]) && mark.back,
-      "921p lifting plant:c7-mark, the key held at the invitation, reddens 921e, and the file is put back: " + redTold(mark, ["key"]) + ", sha " + (mark.back ? "restored" : "differs"));
+      "921p lifting plant:c7-mark, the key held at the invitation, reddens 921e, and the product file is never written: " + redTold(mark, ["key"]) + ", sha " + (mark.back ? "restored" : "differs"));
     const folderSnap = await planted(swapText("plant:c8-before", "inviteBeforeFor(parsed.team, keptJoin)", "undefined"), ["fresh", "ftwice", "fleft"]);
     check(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
-      "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the file is put back: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
+      "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the product file is never written: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
     const ownSet = await planted(dropLine("plant:c8-own"), ["fresh"]);
     check(red(ownSet, ["fresh"]) && ownSet.back,
-      "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the file is put back: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
+      "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the product file is never written: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
     const kept = await planted(swapText("plant:c7-kept", "beforeKept(inv.before)", "false"), ["restart"]);
     check(red(kept, ["restart"]) && kept.back,
-      "921s lifting plant:c7-kept, so the envelope refuses every snapshot, reddens 921m, and the file is put back: " + redTold(kept, ["restart"]) + ", sha " + (kept.back ? "restored" : "differs"));
+      "921s lifting plant:c7-kept, so the envelope refuses every snapshot, reddens 921m, and the product file is never written: " + redTold(kept, ["restart"]) + ", sha " + (kept.back ? "restored" : "differs"));
     const epoch = await planted(swapText("plant:c7-epoch", "(Number.isInteger(b.epoch) && b.epoch >= 0)", "true"), ["tamper"]);
     check(red(epoch, ["tamper"]) && epoch.back,
-      "921t lifting plant:c7-epoch, the check that the mark is a count, reddens 921o, and the file is put back: " + redTold(epoch, ["tamper"]) + ", sha " + (epoch.back ? "restored" : "differs"));
+      "921t lifting plant:c7-epoch, the check that the mark is a count, reddens 921o, and the product file is never written: " + redTold(epoch, ["tamper"]) + ", sha " + (epoch.back ? "restored" : "differs"));
     const markLift = await planted(dropLine("plant:e4-mark"), ["wrap", "wraprestart", "wrapretake"]);
     check(red(markLift, ["wrap", "wraprestart", "wrapretake"]) && markLift.back,
-      "921z lifting plant:e4-mark, the epoch the wrap gave marked in the join, reddens 921u, 921w and 921y, and the file is put back: " + redTold(markLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (markLift.back ? "restored" : "differs"));
+      "921z lifting plant:e4-mark, the epoch the wrap gave marked in the join, reddens 921u, 921w and 921y, and the product file is never written: " + redTold(markLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (markLift.back ? "restored" : "differs"));
     const hadLift = await planted(dropText("plant:e4-mark", " && !had"), ["wraphold"]);
     check(red(hadLift, ["wraphold"]) && hadLift.back,
-      "921aa lifting the clause that leaves a key the desk held before unmarked reddens 921v, and the file is put back: " + redTold(hadLift, ["wraphold"]) + ", sha " + (hadLift.back ? "restored" : "differs"));
+      "921aa lifting the clause that leaves a key the desk held before unmarked reddens 921v, and the product file is never written: " + redTold(hadLift, ["wraphold"]) + ", sha " + (hadLift.back ? "restored" : "differs"));
     const skipLift = await planted(swapText("plant:c7-cancel", "newestEpoch(j.team, wrapped)", "newestEpoch(j.team)"), ["wrap", "wraprestart", "wrapretake"]);
     check(red(skipLift, ["wrap", "wraprestart", "wrapretake"]) && skipLift.back,
-      "921ab lifting the leaving out of the wrap's epochs when Cancel compares with the mark reddens 921u, 921w and 921y, and the file is put back: " + redTold(skipLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (skipLift.back ? "restored" : "differs"));
+      "921ab lifting the leaving out of the wrap's epochs when Cancel compares with the mark reddens 921u, 921w and 921y, and the product file is never written: " + redTold(skipLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (skipLift.back ? "restored" : "differs"));
     const forgetLift = await planted(dropLine("plant:e4-forget"), ["wrap", "wraprestart", "wrapretake"]);
     check(red(forgetLift, ["wrap", "wraprestart", "wrapretake"]) && forgetLift.back,
-      "921ac lifting plant:e4-forget, the wrap's keys let go on Cancel, reddens 921u, 921w and 921y, and the file is put back: " + redTold(forgetLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (forgetLift.back ? "restored" : "differs"));
+      "921ac lifting plant:e4-forget, the wrap's keys let go on Cancel, reddens 921u, 921w and 921y, and the product file is never written: " + redTold(forgetLift, ["wrap", "wraprestart", "wrapretake"]) + ", sha " + (forgetLift.back ? "restored" : "differs"));
     const wrappedLift = await planted(swapText("plant:e4-wrapped", "(Array.isArray(r.wrapped) && r.wrapped.length <= 64 && r.wrapped.every(n => Number.isInteger(n) && n >= 1))", "true"), ["wrapbad"]);
     check(red(wrappedLift, ["wrapbad"]) && wrappedLift.back,
-      "921ad lifting plant:e4-wrapped, the check that the wrap's epochs are counts, reddens 921x, and the file is put back: " + redTold(wrappedLift, ["wrapbad"]) + ", sha " + (wrappedLift.back ? "restored" : "differs"));
+      "921ad lifting plant:e4-wrapped, the check that the wrap's epochs are counts, reddens 921x, and the product file is never written: " + redTold(wrappedLift, ["wrapbad"]) + ", sha " + (wrappedLift.back ? "restored" : "differs"));
     const gaveLift = await planted(dropLine("plant:e4-chain"), ["wrapretake"]);
     check(red(gaveLift, ["wrapretake"]) && gaveLift.back,
-      "921ae lifting plant:e4-chain, the epochs the first invitation's wrap gave kept by the second, reddens 921y, and the file is put back: " + redTold(gaveLift, ["wrapretake"]) + ", sha " + (gaveLift.back ? "restored" : "differs"));
+      "921ae lifting plant:e4-chain, the epochs the first invitation's wrap gave kept by the second, reddens 921y, and the product file is never written: " + redTold(gaveLift, ["wrapretake"]) + ", sha " + (gaveLift.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs 921a to 921ae): " + (e && e.stack ? e.stack : e));
   }
@@ -3762,17 +3749,12 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
       const at = lines.findIndex(l => l.indexOf(tag) >= 0);
       if (at >= 0) {
         lines.splice(at, 1);
-        fs.writeFileSync(src, lines.join("\n"));
-        const resolved = nodeRequire.resolve(src);
-        delete nodeRequire.cache[resolved];
-        turned = fn(nodeRequire(src));
+        const lifted = loadPlantedChannel(lines.join("\n"));
+        turned = fn(lifted);
         detail = turned ? "the check lifted" : "the check still held";
       }
     } catch (e) {
       detail = e && e.message ? e.message : String(e);
-    } finally {
-      fs.writeFileSync(src, beforeBytes);
-      try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
     }
     return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
   }
@@ -3780,21 +3762,21 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
     const x = counted(mod);
     return x.loaded.ok === true && x.r.ok === true && x.r.deskId === x.other && x.r.keyId === x.signer;
   });
-  check(countPlant.turned && countPlant.back, "944u lifting plant:s2-count counts the file under the place the blob carries, and the file is put back: "
+  check(countPlant.turned && countPlant.back, "944u lifting plant:s2-count counts the file under the place the blob carries, and the product file is never written: "
     + countPlant.detail + ", sha " + (countPlant.back ? "restored" : "differs"));
   const removePlant = liftPlant("plant:s2-remove", mod => {
     const x = sameEpoch(mod);
     return x.loaded1.ok === true && x.before.ok === true && x.after.ok === false && x.after.reason === "not-roster"
       && x.goneBody === "before" && x.stray.reason === "not-roster";
   });
-  check(removePlant.turned && removePlant.back, "944w lifting plant:s2-remove leaves the dropped desk's file not-roster, and the file is put back: "
+  check(removePlant.turned && removePlant.back, "944w lifting plant:s2-remove leaves the dropped desk's file not-roster, and the product file is never written: "
     + removePlant.detail + ", sha " + (removePlant.back ? "restored" : "differs"));
   const parkPlant = liftPlant("plant:pending-roster", mod => {
     const x = parkArm(mod, "member");
     return x.loaded && x.pending === 1000 && x.junk === 1000 && x.honest === false;
   });
   check(parkPlant.turned && parkPlant.back, "951h lifting plant:pending-roster lets a thousand blobs past the lead's epoch fill pending and push the"
-    + " honest wait out, and the file is put back: " + parkPlant.detail + ", sha " + (parkPlant.back ? "restored" : "differs"));
+    + " honest wait out, and the product file is never written: " + parkPlant.detail + ", sha " + (parkPlant.back ? "restored" : "differs"));
 }
 
 /* ---- a withheld older epoch must not roll a file back (S1). A desk that holds both epochs' keys catches up the
@@ -3811,17 +3793,12 @@ async function liftChannel(tag, fn) {
     const at = (Array.isArray(tag) ? tag : [tag]).map(tg => lines.findIndex(l => l.indexOf(tg) >= 0));
     if (at.every(i => i >= 0)) {
       at.sort((x, y) => y - x).forEach(i => lines.splice(i, 1));
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = nodeRequire.resolve(src);
-      delete nodeRequire.cache[resolved];
-      turned = await fn(nodeRequire(src));
+      const lifted = loadPlantedChannel(lines.join("\n"));
+      turned = await fn(lifted);
       detail = turned ? "the check lifted" : "the check still held";
     }
   } catch (e) {
     detail = e && e.stack ? e.stack : String(e);
-  } finally {
-    fs.writeFileSync(src, beforeBytes);
-    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
   }
   return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
 }
@@ -3917,7 +3894,7 @@ try {
     const x = await withheldEpoch(mod);
     return x.caught && x.withheld && x.kept === "old-epoch-1\n";
   });
-  check(planted.turned && planted.back, "952b lifting plant:stale-epoch writes the withheld epoch-1 bytes over the epoch-2 edition, and the file is put back: "
+  check(planted.turned && planted.back, "952b lifting plant:stale-epoch writes the withheld epoch-1 bytes over the epoch-2 edition, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 952a): " + (e && e.stack ? e.stack : e));
@@ -3985,7 +3962,7 @@ try {
     return x.deskMirror === "v1\n" && x.leadOfDesk === "v1\n" && x.deskSent === 0
       && x.leadMirror === "e1\n" && x.deskOfLead === "e1\n" && x.leadSent === 0;
   });
-  check(planted.turned && planted.back, "953c lifting plant:own-skip, plant:own-older and plant:own-edit together writes the sent copy over the edit, on the desk and on the lead, and the file is put back: "
+  check(planted.turned && planted.back, "953c lifting plant:own-skip, plant:own-older and plant:own-edit together writes the sent copy over the edit, on the desk and on the lead, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 953a): " + (e && e.stack ? e.stack : e));
@@ -4181,16 +4158,16 @@ try {
     const x = await ownRestore(mod), y = await ownTwo(mod);
     return !x.restored && !y.crossed;
   });
-  check(recordPlant.turned && recordPlant.back, "970g lifting plant:own-record skips every blob this key wrote, so the restored profile catches up nothing and the two computers never meet, and the file is put back: "
+  check(recordPlant.turned && recordPlant.back, "970g lifting plant:own-record skips every blob this key wrote, so the restored profile catches up nothing and the two computers never meet, and the product file is never written: "
     + recordPlant.detail + ", sha " + (recordPlant.back ? "restored" : "differs"));
   const olderPlant = await liftChannel("plant:own-older", async mod => (await ownOlder(mod)).mirror === OWN_G1);
-  check(olderPlant.turned && olderPlant.back, "970h lifting plant:own-older writes the older own blob over the newer guide, and the file is put back: "
+  check(olderPlant.turned && olderPlant.back, "970h lifting plant:own-older writes the older own blob over the newer guide, and the product file is never written: "
     + olderPlant.detail + ", sha " + (olderPlant.back ? "restored" : "differs"));
   const editPlant = await liftChannel("plant:own-edit", async mod => {
     const x = await ownKeptRestore(mod), y = await ownKeptTwo(mod);
     return x.mirror !== OWN_G2 && y.keptA !== y.fromA;
   });
-  check(editPlant.turned && editPlant.back, "970i lifting plant:own-edit writes the fetched own blob over the edit waiting to go up, on the restored profile and on the first computer, and the file is put back: "
+  check(editPlant.turned && editPlant.back, "970i lifting plant:own-edit writes the fetched own blob over the edit waiting to go up, on the restored profile and on the first computer, and the product file is never written: "
     + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
@@ -4247,7 +4224,7 @@ try {
     const x = await joinFirst(mod);
     return x.joinAtLead === null && x.useAtLead === null && x.uploads === 1 && x.uploaded;
   });
-  check(planted.turned && planted.back, "954b lifting plant:invite-join lets the other file spend the invitation's one upload, and the file is put back: "
+  check(planted.turned && planted.back, "954b lifting plant:invite-join lets the other file spend the invitation's one upload, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 954a): " + (e && e.stack ? e.stack : e));
@@ -4316,7 +4293,7 @@ try {
     const x = await tokenKept(mod);
     return x.afterFirst.used && x.afterFirst.posts === 1 && x.posts === 1 && x.joinAtLead === null && x.uploads === 0;
   });
-  check(planted.turned && planted.back, "955b lifting plant:token-kept marks the token used on the 500, so the next try never sends it, and the file is put back: "
+  check(planted.turned && planted.back, "955b lifting plant:token-kept marks the token used on the 500, so the next try never sends it, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 955a): " + (e && e.stack ? e.stack : e));
