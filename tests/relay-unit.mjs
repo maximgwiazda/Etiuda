@@ -9,14 +9,33 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
+/* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 198;
+const EXPECTED = 213;
+
+/* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
+function productShas() {
+  const out = {};
+  const walk = dir => {
+    for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = path.join(dir, e.name);
+      if (e.isDirectory()) walk(rel);
+      else out[rel.split(path.sep).join("/")] = crypto.createHash("sha256").update(fs.readFileSync(path.join(ROOT, rel))).digest("hex");
+    }
+  };
+  walk("relay");
+  walk(path.join("shell", "relay"));
+  return out;
+}
+const PRODUCT_AT_START = productShas();
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -965,72 +984,64 @@ async function main() {
     const hello = await boundHello(w, w.desk, id, token);
     return { w, hello, id };
   }
-  /* What a lifted copy of relay/core.cjs hands the first exports object, which the team's module and the Worker keep: the object's
+  /* ---- the plants (the test architect's condition H1, board 935): no plant writes a product file. A plant edits a COPY of the file in
+     a folder of its own under os.tmpdir() and loads the copy, so a run killed half way leaves the engine's tree as it found it. The
+     copy sits beside modules that forward to the live relay modules it requires (the core, the team module, the blob module), so the
+     legs run over the real ones with only the one file edited. A plant's `back` is that the product file's sha256 is the same after
+     the leg as before it: the file was never touched. ---- */
+  const PRODUCT = { core: path.join(ROOT, "relay", "core.cjs"), team: path.join(ROOT, "relay", "team.cjs"),
+    worker: path.join(ROOT, "relay", "worker.mjs"), blob: path.join(ROOT, "shell", "relay", "blob.cjs") };
+  const forwardTo = file => "module.exports = require(" + JSON.stringify(file) + ");\n";
+  let copies = 0;
+  /* A new folder under WORK holding the files given as { "relay/core.cjs": text, ... }: answers the folder. */
+  function copyOf(files) {
+    const dir = path.join(WORK, "p" + (++copies));
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), text);
+    }
+    return dir;
+  }
+  const lineLifted = tag => text => {
+    const lines = text.split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at < 0) return null;
+    lines.splice(at, 1);
+    return lines.join("\n");
+  };
+  const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
+  /* What a copy of relay/core.cjs hands the live exports object, which the team's module and the Worker keep: the object's
      factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
   const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "create2Bytes", "ROOT_PUB"];
   const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
-  /* As liftCore, with a text swapped in place of a whole line lifted: for a guard that is part of a line. */
-  async function swapCore(from, to, fn) {
-    const src = path.join(ROOT, "relay", "core.cjs");
-    const resolved = require.resolve(src);
-    if (!heldCore) heldCore = require(resolved);
-    const liveExports = heldCore;
-    const beforeBytes = fs.readFileSync(src);
-    const digest = sha(beforeBytes);
-    let turned = false, detail = "swap text absent";
+  /* The text of relay/core.cjs the live exports stand for: the product's, or while a plant is on, that plant's edit, so a plant run
+     inside another lifts a line of the edited text and both stay lifted. `edit` maps that text to the edited text, or to null where
+     what it means to change is absent. */
+  let coreNow = null;
+  async function plantCore(edit, fn, absent) {
+    const digest = sha(fs.readFileSync(PRODUCT.core)), outer = coreNow, kept = {};
+    for (const k of ADOPTED) kept[k] = C[k];
+    let turned = false, detail = absent;
     try {
-      const text = beforeBytes.toString("utf8");
-      if (text.split(from).length === 2) {
-        fs.writeFileSync(src, text.split(from).join(to));
-        delete require.cache[resolved];
-        adopt(liveExports, require(resolved));
+      const edited = edit(outer !== null ? outer : fs.readFileSync(PRODUCT.core, "utf8"));
+      if (edited !== null) {
+        const dir = copyOf({ "relay/core.cjs": edited, "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+        adopt(C, require(path.join(dir, "relay", "core.cjs")));
+        coreNow = edited;
         turned = await fn();
         detail = turned ? "the check lifted" : "the check still held";
       }
     } catch (e) {
       detail = e && e.stack ? e.stack : String(e);
     } finally {
-      fs.writeFileSync(src, beforeBytes);
-      try {
-        delete require.cache[resolved];
-        adopt(liveExports, require(resolved));
-      } catch { /* the next world loads the restored file */ }
+      adopt(C, kept);
+      coreNow = outer;
     }
-    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+    return { turned, back: sha(fs.readFileSync(PRODUCT.core)) === digest, detail };
   }
-  /* The team's module keeps the first exports object. A later require, after the cache is cleared, is a new
-     object, so every lift patches the first. */
-  let heldCore = null;
-  async function liftCore(tag, fn) {
-    const src = path.join(ROOT, "relay", "core.cjs");
-    const resolved = require.resolve(src);
-    if (!heldCore) heldCore = require(resolved);
-    const liveExports = heldCore;
-    const beforeBytes = fs.readFileSync(src);
-    const digest = sha(beforeBytes);
-    let turned = false, detail = "plant line absent";
-    try {
-      const lines = beforeBytes.toString("utf8").split(/\n/);
-      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
-      if (at >= 0) {
-        lines.splice(at, 1);
-        fs.writeFileSync(src, lines.join("\n"));
-        delete require.cache[resolved];
-        adopt(liveExports, require(resolved));
-        turned = await fn();
-        detail = turned ? "the check lifted" : "the check still held";
-      }
-    } catch (e) {
-      detail = e && e.stack ? e.stack : String(e);
-    } finally {
-      fs.writeFileSync(src, beforeBytes);
-      try {
-        delete require.cache[resolved];
-        adopt(liveExports, require(resolved));
-      } catch { /* the next world loads the restored file */ }
-    }
-    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
-  }
+  /* A text swapped in place of the one place `from` stands, for a guard that is part of a line; and the line carrying a plant tag lifted. */
+  const swapCore = (from, to, fn) => plantCore(swapped(from, to), fn, "swap text absent");
+  const liftCore = (tag, fn) => plantCore(lineLifted(tag), fn, "plant line absent");
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {
     const gets = { n: 0 };
@@ -1047,36 +1058,42 @@ async function main() {
     return { r, gets: c.gets.n };
   }
   const viaWorker = (worker, R, body) => countedCall(worker, R, "POST", "/relay/v1/teams", { json: body });
-  /* As liftCore for relay/worker.mjs, a module evaluated once per address: the edited file is imported under a query of its own and
-     `fn` is handed that module, so the Worker the legs hold is untouched. `edit` maps the file's text to the edited text, or to null
-     where what it means to change is absent; `lineLifted(tag)` is the edit that lifts the line carrying a plant tag. */
-  let editedWorkers = 0;
-  const lineLifted = tag => text => {
-    const lines = text.split(/\n/);
-    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
-    if (at < 0) return null;
-    lines.splice(at, 1);
-    return lines.join("\n");
-  };
+  /* As plantCore for relay/worker.mjs: the edited copy is imported from its own folder, beside modules that forward to the live team
+     and core modules, and `fn` is handed that module, so the Worker the legs hold is untouched. `edit` maps the file's text to the
+     edited text, or to null where what it means to change is absent; `lineLifted(tag)` is the edit that lifts the line carrying a
+     plant tag. */
   async function editWorker(edit, fn) {
-    const src = path.join(ROOT, "relay", "worker.mjs");
-    const beforeBytes = fs.readFileSync(src);
-    const digest = sha(beforeBytes);
+    const digest = sha(fs.readFileSync(PRODUCT.worker));
     let turned = false, detail = "plant line absent";
     try {
-      const edited = edit(beforeBytes.toString("utf8"));
+      const edited = edit(fs.readFileSync(PRODUCT.worker, "utf8"));
       if (edited !== null) {
-        fs.writeFileSync(src, edited);
-        const mod = await import(pathToFileURL(src).href + "?edited=" + (++editedWorkers));
+        const dir = copyOf({ "relay/worker.mjs": edited, "relay/team.cjs": forwardTo(PRODUCT.team), "relay/core.cjs": forwardTo(PRODUCT.core) });
+        const mod = await import(pathToFileURL(path.join(dir, "relay", "worker.mjs")).href);
         turned = await fn(mod);
         detail = turned ? "the check lifted" : "the check still held";
       }
     } catch (e) {
       detail = e && e.stack ? e.stack : String(e);
-    } finally {
-      fs.writeFileSync(src, beforeBytes);
     }
-    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+    return { turned, back: sha(fs.readFileSync(PRODUCT.worker)) === digest, detail };
+  }
+  /* A text of team.cjs swapped in a copy, the legs run over the copy, the product file never written. */
+  async function swapTeam(from, to, fn) {
+    const digest = sha(fs.readFileSync(PRODUCT.team));
+    let turned = false, detail = "swap text absent";
+    try {
+      const text = fs.readFileSync(PRODUCT.team, "utf8");
+      if (text.split(from).length === 2) {
+        const dir = copyOf({ "relay/team.cjs": text.split(from).join(to), "relay/core.cjs": forwardTo(PRODUCT.core),
+          "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+        turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+        detail = turned ? "the checks lifted" : "a check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    }
+    return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
   }
   {
     const x = await removedThen(true);
@@ -1119,15 +1136,15 @@ async function main() {
       });
       return inner.turned && inner.back;
     });
-    check(planted.turned && planted.back, "962c lifting plant:invite-removed with plant:withdraw-invite-sessions accepts that earlier invitation's upload, and the file is put back: "
-      + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+    check(planted.turned && planted.back, "962c lifting plant:invite-removed with plant:withdraw-invite-sessions accepts that earlier invitation's upload, and the product file is never written: "
+      + planted.detail + ", sha " + (planted.back ? "unchanged" : "CHANGED"));
     const quietPlant = await liftCore("plant:rejoin-quiet", async () => {
       const y = await removedThen(true);
       const listed = await since(y.w, y.hello.json && y.hello.json.session);
       return y.hello.status === 200 && listed.status === 200;
     });
-    check(quietPlant.turned && quietPlant.back, "962d lifting plant:rejoin-quiet lets that session list, and the file is put back: "
-      + quietPlant.detail + ", sha " + (quietPlant.back ? "restored" : "differs"));
+    check(quietPlant.turned && quietPlant.back, "962d lifting plant:rejoin-quiet lets that session list, and the product file is never written: "
+      + quietPlant.detail + ", sha " + (quietPlant.back ? "unchanged" : "CHANGED"));
 
     /* A key removed after an invitation was registered, the token not yet used: its bound token hello is answered
        removed and spends nothing (edit 2 of the read of ae3b1c5). */
@@ -1149,8 +1166,8 @@ async function main() {
       const y = await unusedFirst();
       return y.hello.status === 200 || y.spent;
     });
-    check(unusedPlant.turned && unusedPlant.back, "962f lifting plant:token-removed opens that hello or spends its token, and the file is put back: "
-      + unusedPlant.detail + ", sha " + (unusedPlant.back ? "restored" : "differs"));
+    check(unusedPlant.turned && unusedPlant.back, "962f lifting plant:token-removed opens that hello or spends its token, and the product file is never written: "
+      + unusedPlant.detail + ", sha " + (unusedPlant.back ? "unchanged" : "CHANGED"));
 
     /* A key removed while holding a bound, unuploaded invitation registered before the removal: its key hello is answered
        removed, never the invitation's session again (edit 3). */
@@ -1165,8 +1182,8 @@ async function main() {
       const r = await heldFirst();
       return r.status === 200 && !!r.json && r.json.invite === true;
     });
-    check(heldPlant.turned && heldPlant.back, "962h dropping registeredAfter from the removed key's resume reopens that invitation's session, and the file is put back: "
-      + heldPlant.detail + ", sha " + (heldPlant.back ? "restored" : "differs"));
+    check(heldPlant.turned && heldPlant.back, "962h dropping registeredAfter from the removed key's resume reopens that invitation's session, and the product file is never written: "
+      + heldPlant.detail + ", sha " + (heldPlant.back ? "unchanged" : "CHANGED"));
 
     /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
        registration and a removal changes neither answer. */
@@ -1201,14 +1218,14 @@ async function main() {
         const r = await stepBack(true);
         return r.hello.status === 200 || r.spent;
       });
-    check(clockPlant.turned && clockPlant.back, "962k ordering by the clock again opens that earlier invitation to the removed key, and the file is put back: "
-      + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
+    check(clockPlant.turned && clockPlant.back, "962k ordering by the clock again opens that earlier invitation to the removed key, and the product file is never written: "
+      + clockPlant.detail + ", sha " + (clockPlant.back ? "unchanged" : "CHANGED"));
     const gonePlant = await liftCore("plant:order-gone", async () => {
       const r = await stepBack(false);
       return refused(r.hello, "removed");
     });
-    check(gonePlant.turned && gonePlant.back, "962l lifting plant:order-gone leaves a later invitation unordered after the removal, so it is refused, and the file is put back: "
-      + gonePlant.detail + ", sha " + (gonePlant.back ? "restored" : "differs"));
+    check(gonePlant.turned && gonePlant.back, "962l lifting plant:order-gone leaves a later invitation unordered after the removal, so it is refused, and the product file is never written: "
+      + gonePlant.detail + ", sha " + (gonePlant.back ? "unchanged" : "CHANGED"));
 
     /* A desk enrolled as D binds an invitation's session, and the lead then withdraws D: that session reads nothing more,
        since, a blob and the socket each refused removed, as D's own hello is (Claude alpha's edit to 918, 2026-10-20). */
@@ -1233,8 +1250,8 @@ async function main() {
       const r = await boundThenGone();
       return r.list.status === 200;
     });
-    check(cutPlant.turned && cutPlant.back, "962n lifting plant:withdraw-invite-sessions lets that session list again, and the file is put back: "
-      + cutPlant.detail + ", sha " + (cutPlant.back ? "restored" : "differs"));
+    check(cutPlant.turned && cutPlant.back, "962n lifting plant:withdraw-invite-sessions lets that session list again, and the product file is never written: "
+      + cutPlant.detail + ", sha " + (cutPlant.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 963: the code that runs on Cloudflare: sqlStore over real SQLite, RelayTeam's constructor, hibernating sockets ----
@@ -1519,58 +1536,53 @@ async function main() {
       + " and invitation, a construction woken over the same ctx answers its ping, an upload is announced to it, and its close ends its listing;"
       + " the globals stood in for are put back: " + JSON.stringify(hib));
 
-    /* ---- plants: a guarded text of team.cjs swapped, the legs run over the swapped module, the file put back ---- */
+    /* ---- plants: a guarded text of team.cjs swapped in a copy, the legs run over the copy, the product file never written ---- */
     async function swapTeam(from, to, fn) {
-      const resolved = require.resolve(TEAM_SRC);
-      const beforeBytes = fs.readFileSync(TEAM_SRC);
-      const digest = sha(beforeBytes);
+      const digest = sha(fs.readFileSync(TEAM_SRC));
       let turned = false, detail = "swap text absent";
       try {
-        const text = beforeBytes.toString("utf8");
+        const text = fs.readFileSync(TEAM_SRC, "utf8");
         if (text.split(from).length === 2) {
-          fs.writeFileSync(TEAM_SRC, text.split(from).join(to));
-          delete require.cache[resolved];
-          turned = await fn(require(resolved));
+          const dir = copyOf({ "relay/team.cjs": text.split(from).join(to), "relay/core.cjs": forwardTo(CORE_SRC),
+            "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
           detail = turned ? "the checks lifted" : "a check still held";
         }
       } catch (e) {
         detail = e && e.stack ? e.stack : String(e);
-      } finally {
-        fs.writeFileSync(TEAM_SRC, beforeBytes);
-        delete require.cache[resolved];
       }
       return { turned, back: sha(fs.readFileSync(TEAM_SRC)) === digest, detail };
     }
     const safe = async f => { try { return await f(); } catch { return null; } };
     const back = p => p.turned && p.back;
-    const how = p => p.detail + ", sha " + (p.back ? "restored" : "differs");
+    const how = p => p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED");
 
     const pBound = await swapTeam("prefix + \"" + FFFF + "\"", "\"" + FFFF + "\"", async T => !okA(memList, sqlList(T)) && !same(await safe(() => pruneSql(T)), wantPrune)
       && !same(await safe(() => traceSql(T)), WANT_TRACE));
     check(back(pBound),
-      "963l lifting the prefix from list's upper bound turns 963a, 963g and 963h red, and the file is put back: " + how(pBound));
+      "963l lifting the prefix from list's upper bound turns 963a, 963g and 963h red, and the product file is never written: " + how(pBound));
     const pAfter = await swapTeam("opts && opts.after ? opts.after : prefix", "prefix", async T => {
       const l = sqlList(T);
       return !okB(memList, l) && !okD(memList, l) && !same(await safe(() => traceSql(T)), WANT_TRACE)
         && !same(await safe(() => sincePages(T)), WANT_PAGES);
     });
     check(back(pAfter),
-      "963m lifting list's after turns 963b, 963d, 963g and 963i red, and the file is put back: " + how(pAfter));
+      "963m lifting list's after turns 963b, 963d, 963g and 963i red, and the product file is never written: " + how(pAfter));
     const pLimit = await swapTeam("opts && opts.limit ? opts.limit : -1", "-1", async T => !okC(memList, sqlList(T)) && !same(await safe(() => sincePages(T)), WANT_PAGES));
     check(back(pLimit),
-      "963n lifting list's limit turns 963c and 963i red, and the file is put back: " + how(pLimit));
+      "963n lifting list's limit turns 963c and 963i red, and the product file is never written: " + how(pLimit));
     const pPut = await swapTeam("DO UPDATE SET v = excluded.v", "DO NOTHING", async T => !same(sqlKv(T), WANT_KV));
     check(back(pPut),
-      "963o lifting put's overwrite turns 963e red, and the file is put back: " + how(pPut));
+      "963o lifting put's overwrite turns 963e red, and the product file is never written: " + how(pPut));
     const pAtomic = await swapTeam("atomic(fn) { make(); return storage.transactionSync(fn); }", "atomic(fn) { return fn(); }", async T => !same(sqlAtomic(T), WANT_ATOMIC));
     check(back(pAtomic),
-      "963p lifting atomic's transaction turns 963f red, and the file is put back: " + how(pAtomic));
+      "963p lifting atomic's transaction turns 963f red, and the product file is never written: " + how(pAtomic));
     const pAttach = await swapTeam("pair[1].serializeAttachment(attachment);", "/* lifted */", async T => { const r = await safe(() => hibernated(T)); return !r || !sockOk(r); });
     check(back(pAttach),
-      "963q lifting the attachment a hibernating socket keeps turns 963k red, and the file is put back: " + how(pAttach));
+      "963q lifting the attachment a hibernating socket keeps turns 963k red, and the product file is never written: " + how(pAttach));
     const pAccept = await swapTeam("ctx.acceptWebSocket(pair[1]);", "/* lifted */", async T => { const r = await safe(() => hibernated(T)); return !r || !sockOk(r); });
     check(back(pAccept),
-      "963r lifting the accept onto the ctx turns 963k red, and the file is put back: " + how(pAccept));
+      "963r lifting the accept onto the ctx turns 963k red, and the product file is never written: " + how(pAccept));
 
     /* ---- 968: a team never made costs the relay nothing, and no body is awaited before the team is known (board 934, the test
        architect's conditions 2 and 3), over RelayTeam on real SQLite through the Worker ---- */
@@ -1578,7 +1590,6 @@ async function main() {
     const tablesOf = ctx => ctx.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
     const rowsOf = ctx => (tablesOf(ctx).indexOf("kv") > -1 ? ctx.db.prepare("SELECT k FROM kv").all().map(r => r.k) : []);
     const workerOver = mod => mod.routeWith(K.ROOTS, env => env.NOW());
-    const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
 
     /* Every route a stranger can name, each with GET and POST (and the blob route's PUT), for an id nobody made. */
     function strangerCalls(rt) {
@@ -1748,40 +1759,365 @@ async function main() {
       return !r || r.tables.length > 0 || !l || l.untouched.length > 0;
     });
     check(baseNever && same(lz, WANT_LAZY) && back(pCtor),
-      "968h making the table in the constructor again (the old line) turns 968a and 968c red, and the file is put back: " + how(pCtor));
+      "968h making the table in the constructor again (the old line) turns 968a and 968c red, and the product file is never written: " + how(pCtor));
     const pGet = await swapTeam("if (!has()) return undefined;", "", async T => !same(await safe(() => neverMade(T)), nm) && !same(await safe(() => lazyStore(T)), WANT_LAZY));
     check(baseNever && back(pGet),
-      "968i lifting the missing-table answer from get turns 968a and 968c red, and the file is put back: " + how(pGet));
+      "968i lifting the missing-table answer from get turns 968a and 968c red, and the product file is never written: " + how(pGet));
     const pList = await swapTeam("if (!has()) return [];", "", async T => !same(await safe(() => lazyStore(T)), WANT_LAZY));
     check(same(lz, WANT_LAZY) && back(pList),
-      "968j lifting the missing-table answer from list turns 968c red, and the file is put back: " + how(pList));
+      "968j lifting the missing-table answer from list turns 968c red, and the product file is never written: " + how(pList));
     const pDel = await swapTeam("if (!has()) return;", "", async T => !same(await safe(() => lazyStore(T)), WANT_LAZY));
     check(same(lz, WANT_LAZY) && back(pDel),
-      "968k lifting the missing-table answer from del turns 968c red, and the file is put back: " + how(pDel));
+      "968k lifting the missing-table answer from del turns 968c red, and the product file is never written: " + how(pDel));
     const pMake = await swapTeam("sql.exec(MAKE); made = true;", "made = true;", async T => !same(await safe(() => created(T)), WANT_CREATED) && !same(await safe(() => lazyStore(T)), WANT_LAZY));
     check(same(cr, WANT_CREATED) && same(lz, WANT_LAZY) && back(pMake),
-      "968l never making the table turns 968b and 968c red, and the file is put back: " + how(pMake));
+      "968l never making the table turns 968b and 968c red, and the product file is never written: " + how(pMake));
     const pRoute = await editWorker(swapped("if (!hit) return team.missing(); /* plant:worker-route */", ""), async mod => {
       const r = await safe(() => outside(T0, workerOver(mod)));
       return !r || r.wrong > 0 || r.fetched > 0;
     });
     check(baseOutside && pRoute.turned && pRoute.back,
-      "968m lifting the Worker's route check lets paths and methods outside the routes past it, and the file is put back: " + pRoute.detail + ", sha " + (pRoute.back ? "restored" : "differs"));
+      "968m lifting the Worker's route check lets paths and methods outside the routes past it, and the product file is never written: " + pRoute.detail + ", sha " + (pRoute.back ? "unchanged" : "CHANGED"));
     const pBody = await editWorker(swapped("if (request.method === \"POST\") { /* plant:worker-body */", "if (false) {"), async mod => {
       const r = await safe(() => bodyFirst(T0, workerOver(mod)));
       return !r || !bodyHolds(r);
     });
     check(baseBody && pBody.turned && pBody.back,
-      "968n leaving a POST body unread in the Worker wakes the object while the body is still arriving, and the file is put back: " + pBody.detail + ", sha " + (pBody.back ? "restored" : "differs"));
+      "968n leaving a POST body unread in the Worker wakes the object while the body is still arriving, and the product file is never written: " + pBody.detail + ", sha " + (pBody.back ? "unchanged" : "CHANGED"));
     const pFirst = await swapTeam("if (what !== \"teams\" && !c.hasTeam(rt)) return refusedFor(\"not-enrolled\"); /* plant:team-first */", "", async T => {
       const r = await safe(() => objectFirst(T, false));
       return !r || !["session", "devices", "invites"].every(k => same(r[k], [[403, "not-enrolled"], false]));
     });
     check(baseFirst && back(pFirst),
-      "968o lifting the object's team check before it reads turns 968f red, and the file is put back: " + how(pFirst));
+      "968o lifting the object's team check before it reads turns 968f red, and the product file is never written: " + how(pFirst));
     const pRoots = await swapTeam("clock: () => Date.now(), sockets: hibernating(ctx) }", "clock: () => Date.now(), sockets: hibernating(ctx), roots: [\"" + K.ROOT.pub + "\"] }", async T => !same(await safe(() => bareRefused(T)), { status: 403, error: "bad-grant", tables: [] }));
     check(baseBare && back(pRoots),
-      "968p handing RelayTeam's object the test root turns 968g red, and the file is put back: " + how(pRoots));
+      "968p handing RelayTeam's object the test root turns 968g red, and the product file is never written: " + how(pRoots));
+  }
+
+  /* ---- 970: the lines of slice 3 that no leg saw (the test architect's removal sweep, board 935): the wrap an invitation carries and
+     a re-seal sets, the shape of what the lead's call asks, the end of an invitation, the states, the read gate, an answer-only
+     session's tombstones, the answers it is served and a guard that stands behind another. Each leg says what the relay does; deleting the line a
+     leg guards, in a copy of relay/core.cjs, turns that leg red. ---- */
+  {
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const goodWrap = () => ({ epoch: 1, ct: hex(24) });
+    /* The lead's invitations call with `wraps` covered by its signature, as the program signs it; `wraps` left out when undefined. */
+    function invitesW(w, add, drop, wraps, o) {
+      const opts = o || {};
+      const t = opts.t != null ? opts.t : w.R.clock.now;
+      const json = { add, drop, t, sig: signHex(opts.signer || w.lead, C.invitesBytes(w.rt, t, add, drop, wraps)) };
+      if (wraps !== undefined) json.wraps = wraps;
+      return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json });
+    }
+    const statesOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", { token });
+    const wrapOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/wrap", { token });
+    const rowOf = (w, id) => w.R.stores.get(w.rt).get("inv:" + id);
+    const heldCount = w => w.R.stores.get(w.rt).list("inv:").length;
+    /* An invitation added with a wrap and opened by a desk's key that it binds: its session is the bound one. */
+    async function opened(w, wrap, extra) {
+      const id = hex(16), token = hex(32), who = keyPair(true);
+      const added = await invitesW(w, [Object.assign({ id, hash: sha(token), wrap }, extra || {})], []);
+      const hello = await boundHello(w, who, id, token);
+      return { id, token, who, session: hello.json && hello.json.session, ok: added.status === 200 && hello.status === 200 };
+    }
+    /* A session as a joiner's key leaves it once its one upload is made: its hello again opens the invitation's session for the lead's
+       answer alone. */
+    async function answerOnly(w) {
+      const o = await opened(w, goodWrap());
+      const place = "desk:k-" + hex(8);
+      const resumed = await helloAs(w, o.who);
+      const up = await put(w, resumed.json && resumed.json.session, sealJoin(w, o.who, 1, place), { extra: { pub: o.who.pub } });
+      const after = await helloAs(w, o.who);
+      return { id: o.id, who: o.who, token: after.json && after.json.session, ok: o.ok && resumed.status === 200 && up.status === 200 && after.status === 200 };
+    }
+
+    /* The wrap an invitation is added with is a plain object with a whole epoch of 1 or more and a text ct, or the add is refused as a
+       signature that does not hold and nothing is stored; of a good one the relay keeps the epoch and the ct and nothing else. */
+    {
+      const w = await world();
+      const addOf = wrap => [{ id: hex(16), hash: sha(hex(32)), wrap }];
+      const bad = [null, "text", 7, [], [goodWrap()], { epoch: 0, ct: "aa" }, { epoch: -1, ct: "aa" }, { epoch: 1.5, ct: "aa" }, { epoch: "1", ct: "aa" },
+        { epoch: 1 }, { epoch: 1, ct: 5 }, { epoch: 1, ct: "" }, { ct: "aa" }];
+      const answers = [];
+      for (const wrap of bad) answers.push(await invitesW(w, addOf(wrap), []));
+      const sent = { epoch: 1, ct: hex(24), key: hex(32), note: "extra" };
+      const row = addOf(sent), ok = await invitesW(w, row, []);
+      const kept = rowOf(w, row[0].id);
+      check(answers.every(r => refused(r, "bad-signature")) && answers.length === 13 && ok.status === 200 && heldCount(w) === 1
+        && eq(kept && kept.wrap, { epoch: sent.epoch, ct: sent.ct }),
+      "970a an invitation added with a wrap that is not an object with a whole epoch of 1 or more and a text ct (null, text, a number, a list, a zero or"
+        + " negative or fractional or text epoch, no ct, a number or empty ct) is refused as a signature that does not hold and keeps nothing, and of a good wrap only its"
+        + " epoch and ct are kept: " + answers.map(r => r.status).join(",") + ", kept " + JSON.stringify(kept && kept.wrap));
+    }
+
+    /* What a call's rows must be, signed or not: an add is an object with a 32-hex id, a 64-hex hash and an until that is left out
+       or a whole number. */
+    {
+      const w = await world();
+      const row = o => Object.assign({ id: hex(16), hash: sha(hex(32)) }, o);
+      const bad = [[null], [0], ["x"], [[]], [{}], [{ id: hex(16) }], [{ hash: sha("a") }], [row({ until: 1.5 })], [row({ until: "soon" })], [row({ until: null })],
+        [row({ until: 2 ** 53 })], [row({ until: true })]];
+      const answers = [];
+      for (const add of bad) answers.push(await invitesW(w, add, []));
+      const withUntil = row({ until: w.R.clock.now + 10 * MIN }), plain = row();
+      const ok = await invitesW(w, [withUntil, plain], []);
+      check(answers.every(r => refused(r, "bad-signature")) && answers.length === 12 && ok.status === 200 && heldCount(w) === 2
+        && rowOf(w, withUntil.id).until === withUntil.until && rowOf(w, plain.id).until === undefined,
+      "970b an add that is no object, has no id or no hash, or carries an until that is not a whole number (a fraction, text, null, past the safe integers,"
+        + " true) is refused as a signature that does not hold and keeps nothing, and an until that is a whole number or left out is kept as sent: " + answers.map(r => r.status).join(","));
+    }
+
+    /* The re-seals a call carries are a list of rows, each with a 32-hex id and a wrap that takeWrap takes. */
+    {
+      const w = await world();
+      const bad = [null, false, 0, "text", 7, {}, { id: hex(16) }];
+      const badRows = [[null], [0], [[]], ["x"], [{}], [{ id: "nothex", wrap: goodWrap() }], [{ id: hex(16) }], [{ id: hex(16), wrap: null }],
+        [{ id: hex(16), wrap: { epoch: 0, ct: "aa" } }]];
+      const answers = [];
+      for (const wraps of bad.concat(badRows)) answers.push(await invitesW(w, [], [], wraps));
+      const none = await invitesW(w, [], [], []), omitted = await invitesW(w, [], [], undefined, { t: w.R.clock.now + 1 });
+      check(answers.every(r => refused(r, "bad-signature")) && answers.length === 16 && none.status === 200 && omitted.status === 200,
+      "970c a re-seal list that is no list (null, false, zero, text, a number, an object) or has a row that is no object, has no 32-hex id, or whose wrap is not a wrap,"
+        + " each signed as sent, is refused as a signature that does not hold, and an empty list or none is taken: " + answers.map(r => r.status).join(","));
+    }
+
+    /* An id added and dropped in the one call is dropped and kept by nobody, and the invitation added beside it is kept. */
+    {
+      const w = await world();
+      const x = { id: hex(16), hash: sha(hex(32)) }, y = { id: hex(16), hash: sha(hex(32)) };
+      const both = await invitesW(w, [x, y], [x.id]);
+      check(both.status === 200 && rowOf(w, x.id) === undefined && !!rowOf(w, y.id) && heldCount(w) === 1 && eq(both.json.dropped, [x.id]),
+      "970d an invitation added and dropped in the same call is dropped and kept by nobody, and the invitation added beside it is kept: "
+        + both.status + ", kept " + heldCount(w));
+    }
+
+    /* The bytes the lead signs for an invitations call carry its re-seals (the protocol's bytes), and a signature made over the call
+       without them does not cover them: the call is refused and the stored wrap is unchanged. */
+    {
+      const w = await world();
+      const bytes = C.invitesBytes(w.rt, 9, [{ id: "x", hash: "y" }], ["z"], [{ id: "w1", wrap: { epoch: 1, ct: "c1" } }]).toString("utf8");
+      const first = goodWrap(), o = await opened(w, first);
+      const t = w.R.clock.now, swap = goodWrap(), rows = [{ id: o.id, wrap: swap }];
+      const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: { add: [], drop: [], wraps: rows, t,
+        sig: signHex(w.lead, C.invitesBytes(w.rt, t, [], [])) } });
+      const unchanged = eq(rowOf(w, o.id).wrap, first);
+      const covered = await invitesW(w, [], [], rows, { t: t + 1 });
+      check(bytes === "etiuda-relay-invites\n" + w.rt + "\n9\n" + "{\"add\":[{\"hash\":\"y\",\"id\":\"x\"}],\"drop\":[\"z\"],\"wraps\":[{\"id\":\"w1\",\"wrap\":{\"ct\":\"c1\",\"epoch\":1}}]}"
+        && o.ok && refused(bare, "bad-signature") && unchanged && covered.status === 200 && eq(rowOf(w, o.id).wrap, swap),
+      "970e the bytes of an invitations call carry its re-seals in canonical JSON after the add and the drop, and a re-seal call signed over the add and the drop alone is refused"
+        + " as a signature that does not hold and changes no wrap, where the same call signed over its re-seals is taken: " + bare.status + ", then " + covered.status);
+    }
+
+    /* A re-seal: the new wrap replaces the old of an invitation opened and not yet admitted, and an admitted one, one the relay keeps
+       only as spent, an id it does not hold and an id dropped in the same call are left as they were; a wrap the relay refuses changes nothing. */
+    {
+      const w = await world();
+      const c = await opened(w, goodWrap());
+      w.R.clock.now += C.KEEP_MS + 1;
+      await since(w, await sessionOf(w, w.lead));
+      const prunedAtFirst = JSON.stringify(rowOf(w, c.id));
+      const a = await opened(w, goodWrap()), b = await opened(w, goodWrap());
+      const joined = await put(w, b.session, sealJoin(w, b.who, 1, "desk:k-" + hex(8)), { extra: { pub: b.who.pub } });
+      const d = await opened(w, goodWrap());
+      const e = hex(16), eToken = hex(32);
+      await invitesW(w, [{ id: e, hash: sha(eToken), wrap: goodWrap() }], []);
+      const fresh = goodWrap(), later = goodWrap(), unknown = hex(16);
+      const re = await invitesW(w, [], [d.id, e], [{ id: a.id, wrap: fresh }, { id: b.id, wrap: fresh }, { id: c.id, wrap: fresh }, { id: unknown, wrap: fresh },
+        { id: d.id, wrap: later }, { id: e, wrap: later }]);
+      const rowA = rowOf(w, a.id), rowB = rowOf(w, b.id), served = await wrapOf(w, a.session);
+      check(prunedAtFirst === "{\"spent\":true}" && a.ok && b.ok && d.ok && joined.status === 200 && re.status === 200 && eq(rowA.wrap, fresh) && !("oldWrap" in rowA)
+        && rowB.uploaded === true && rowB.wrap === undefined && JSON.stringify(rowOf(w, c.id)) === "{\"spent\":true}" && rowOf(w, unknown) === undefined
+        && JSON.stringify(rowOf(w, d.id)) === "{\"spent\":true}" && rowOf(w, e) === undefined && served.status === 200 && eq(served.json.wrap, fresh),
+      "970f a re-seal replaces the wrap of an invitation opened and not yet admitted, and serves it to the key it bound, and leaves as it was an admitted invitation (no wrap),"
+        + " one kept only as spent, an id the relay does not hold, and ids dropped in the same call: " + re.status + ", opened " + JSON.stringify(rowA && rowA.wrap)
+        + ", admitted " + JSON.stringify(rowB && rowB.wrap) + ", spent " + JSON.stringify(rowOf(w, c.id)));
+      const big = { epoch: 1, ct: "ab".repeat(600) };
+      const refusedBig = await invitesW(w, [], [], [{ id: a.id, wrap: big }]);
+      const refusedShape = await invitesW(w, [], [], [{ id: a.id, wrap: { epoch: 0, ct: "aa" } }]);
+      const refusedLater = await invitesW(w, [], [], [{ id: a.id, wrap: later }, { id: a.id, wrap: null }]);
+      check(refused(refusedBig, "blob-size") && refused(refusedShape, "bad-signature") && refused(refusedLater, "bad-signature") && eq(rowOf(w, a.id).wrap, fresh),
+      "970g a re-seal with a wrap over 1024 bytes, one that is no wrap, or a good one beside one that is no wrap is refused whole and the stored wrap is unchanged: "
+        + refusedBig.status + "," + refusedShape.status + "," + refusedLater.status);
+    }
+
+    /* The end of an invitation: after its until a token hello is refused invite-ended, the token stays unspent, and the wrap is gone;
+       an invitation already used keeps the wrap its key was served. */
+    {
+      const w = await world();
+      const id = hex(16), token = hex(32), wrap = goodWrap(), until = w.R.clock.now + 10 * MIN;
+      const added = await invitesW(w, [{ id, hash: sha(token), until, wrap }], []);
+      const usedWrap = goodWrap();
+      const used = await opened(w, usedWrap, { until });
+      const held = rowOf(w, id);
+      w.R.clock.now = until + 1;
+      const late = await tokenHello(w, id, token), again = await tokenHello(w, id, token);
+      const gone = rowOf(w, id), kept = rowOf(w, used.id), served = await wrapOf(w, used.session);
+      check(added.status === 200 && used.ok && eq(held.wrap, wrap) && refused(late, "invite-ended") && refused(again, "invite-ended") && !!gone
+        && gone.wrap === undefined && gone.spent === false && gone.hash === sha(token) && gone.fails === 0
+        && eq(kept.wrap, usedWrap) && served.status === 200 && eq(served.json.wrap, usedWrap),
+      "970h a token hello after the invitation's until is refused invite-ended, twice, spends nothing and counts no try, and deletes the wrap, while an invitation used"
+        + " before its end keeps the wrap its key was served: " + (late.json && late.json.error) + ", wrap left " + JSON.stringify(gone && gone.wrap));
+    }
+
+    /* The states are the lead's alone and say what each invitation is: unused, used (with the time of the hello, null where the relay
+       keeps only that it was spent) or asked (the upload made, the time of the hello kept). */
+    {
+      const w = await world();
+      const never = hex(16);
+      const noTeam = await call(w.R, "GET", "/relay/v1/t/" + never + "/states", { token: hex(32) });
+      const p = await opened(w, goodWrap());
+      w.R.clock.now += C.KEEP_MS + 1;
+      const lead = await sessionOf(w, w.lead);
+      await since(w, lead);
+      const u = hex(16);
+      await invitesW(w, [{ id: u, hash: sha(hex(32)) }], []);
+      w.R.clock.now += 1000;
+      const o = await opened(w, goodWrap());
+      const openedAt = w.R.clock.now;
+      w.R.clock.now += 1000;
+      const q = await opened(w, goodWrap());
+      const q0 = w.R.clock.now;
+      w.R.clock.now += 1000;
+      const asked = await put(w, q.session, sealJoin(w, q.who, 1, "desk:k-" + hex(8)), { extra: { pub: q.who.pub } });
+      const states = await statesOf(w, lead);
+      const byId = id => (states.json && states.json.states || []).find(s => s.id === id);
+      const bare = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", {});
+      const outs = [bare, await statesOf(w, hex(32)), await statesOf(w, "short")];
+      const nonLead = [await statesOf(w, await sessionOf(w, w.desk)), await statesOf(w, o.session)];
+      check(refused(noTeam, "not-enrolled") && outs.every(r => refused(r, "no-hello")) && nonLead.every(r => refused(r, "not-enrolled"))
+        && states.status === 200 && Array.isArray(states.json.states) && states.json.states.length === 4 && asked.status === 200 && p.ok
+        && eq(byId(p.id), { id: p.id, state: "used", usedAt: null }) && eq(byId(u), { id: u, state: "unused", usedAt: null })
+        && eq(byId(o.id), { id: o.id, state: "used", usedAt: openedAt }) && eq(byId(q.id), { id: q.id, state: "asked", usedAt: q0 }),
+      "970i the states are told to the lead alone (a team never made, no session, a session never issued and a desk's or an invitation's are each refused) and give each"
+        + " invitation as unused, used with the time of its hello, used with no time where only that it was spent is kept, or asked with the time of the hello kept after the upload: "
+        + JSON.stringify(states.json && states.json.states));
+    }
+
+    /* The read gate, asked of the core itself: no session says no-hello, a desk's or the lead's gives nothing back (null), and an uploaded
+       invitation's session, while its key is not enrolled, is not enrolled. */
+    {
+      const w = await world();
+      const core = C.createCore({ store: w.R.stores.get(w.rt), clock: () => w.R.clock.now, roots: K.ROOTS });
+      const lead = await sessionOf(w, w.lead), desk = await sessionOf(w, w.desk), only = await answerOnly(w);
+      const said = r => (r && r.ok === false ? r.reason : r);
+      check(only.ok && said(core.readGate("nothex")) === "no-hello" && said(core.readGate(hex(32))) === "no-hello"
+        && core.readGate(lead) === null && core.readGate(desk) === null && said(core.readGate(only.token)) === "not-enrolled",
+      "970j the read gate says no-hello to a token that is no session, null to the lead's and a desk's, and not-enrolled to the session an uploaded invitation's key opens: "
+        + [core.readGate("nothex"), core.readGate(lead), core.readGate(only.token)].map(r => r === null ? "null" : r && r.reason).join(","));
+    }
+
+    /* An uploaded invitation's session, while its key is not enrolled, reads nothing of the team: a blob that stands is not enrolled, an id
+       the relay holds as a tombstone is told for what it is, and an id it knows nothing of is missing. */
+    {
+      const w = await world();
+      const only = await answerOnly(w);
+      const lead = await sessionOf(w, w.lead);
+      const b1 = sealAs(w, w.lead, "a.ec", 1), b2 = sealAs(w, w.lead, "b.ec", 2, { supersedes: b1.id });
+      await put(w, lead, b1);
+      await put(w, lead, b2);
+      const tomb = await getBlob(w, only.token, b1.id), standing = await getBlob(w, only.token, b2.id), unknown = await getBlob(w, only.token, hex(16));
+      check(only.ok && refused(tomb, "superseded") && refused(standing, "not-enrolled") && refused(unknown, "missing"),
+      "970k an uploaded invitation's session is told a superseded id is superseded, a blob that stands not-enrolled and an id the relay never held missing: "
+        + [tomb, standing, unknown].map(r => r.json && r.json.error).join(","));
+    }
+
+    /* The lead's answer is served to the session of the invitation it answers once that invitation's upload is made, and to no other session:
+       not to another uploaded invitation's, not to the same invitation's session before its upload, and a blob that only sits at an invitation
+       place under the same id is no answer, but is listed and fetched as any blob. */
+    {
+      const w = await world();
+      const one = await answerOnly(w), two = await answerOnly(w), before = await opened(w, goodWrap());
+      const lead = await sessionOf(w, w.lead);
+      const answerFor = (id, counter) => {
+        const a = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+          path: "join-answer.json", body: "joined", counter, place: null, kind: "file", id });
+        a.place = "answer:" + id;
+        return a;
+      };
+      const lid = hex(16);
+      const look = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+        path: "k.ec", body: "plain", counter: 3, place: null, kind: "file", id: lid });
+      look.place = "invite:" + lid;
+      const posts = [await put(w, lead, answerFor(one.id, 1)), await put(w, lead, answerFor(before.id, 2)), await put(w, lead, look)];
+      const own = await getBlob(w, one.token, one.id), other = await getBlob(w, two.token, one.id), early = await getBlob(w, before.session, before.id);
+      const listed = await since(w, lead), seen = await getBlob(w, lead, lid);
+      const ids = (listed.json || []).map(e => e.meta && e.meta.id);
+      check(one.ok && two.ok && before.ok && posts.every(p => p.status === 200) && own.status === 200 && !!own.meta && own.meta.place === "answer:" + one.id
+        && refused(other, "not-enrolled") && refused(early, "missing") && ids.indexOf(one.id) < 0 && ids.indexOf(before.id) < 0 && ids.indexOf(lid) > -1
+        && seen.status === 200 && seen.meta.place === "invite:" + lid,
+      "970l an answer is served to the session of the invitation it answers once that invitation's upload is made and to no other, not to another uploaded invitation's session"
+        + " nor to its own before the upload, an answer is on no list, and a blob at an invitation place under the same id is listed and fetched: own " + own.status
+        + ", another's " + (other.json && other.json.error) + ", before the upload " + (early.json && early.json.error) + ", the lookalike " + seen.status);
+    }
+
+    /* A guard that stands behind another, shown with the one in front lifted in a copy of the core: the session of a dropped invitation, were the
+       drop to leave it standing (plant:drop-sessions lifted), is told not-enrolled by the wrap route and not served what the invitation's record
+       no longer says. */
+    {
+      const droppedWrap = async () => {
+        const y = await world(), o = await opened(y, goodWrap());
+        const dropped = await invitesW(y, [], [o.id]);
+        const got = await wrapOf(y, o.session);
+        return { ok: o.ok && dropped.status === 200, got };
+      };
+      const front = await droppedWrap();
+      const lifted = await liftCore("plant:drop-sessions", async () => {
+        const r = await droppedWrap();
+        return r.ok && refused(r.got, "not-enrolled");
+      });
+      check(front.ok && refused(front.got, "no-hello") && lifted.turned && lifted.back,
+      "970m with the drop's end of the invitation's sessions lifted, the session of a dropped invitation is told not-enrolled by the wrap route, and the product file is never written: "
+        + lifted.detail + ", sha " + (lifted.back ? "unchanged" : "CHANGED"));
+    }
+
+    /* An invitation's socket is shut once that invitation's upload is made: announced to for no later upload. */
+    {
+      const teamRelay = T => {
+        const clock = { now: 0 };
+        const stores = new Map(), hubs = new Map(), live = new Map();
+        const bucket = S.memoryBucket();
+        function objectFor(name) {
+          if (live.has(name)) return live.get(name);
+          if (!stores.has(name)) stores.set(name, S.memoryStore());
+          const hub = S.socketHub();
+          hubs.set(name, hub);
+          const obj = (T || require(PRODUCT.team)).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, roots: K.ROOTS });
+          live.set(name, obj);
+          return obj;
+        }
+        const scoped = {
+          idFromName(name) { return { name: String(name) }; },
+          get(id) { return { fetch: request => objectFor(id.name).fetch(request) }; },
+        };
+        const env = {
+          TEAMS: { jurisdiction(j) { return j === "eu" ? scoped : null; } },
+          BLOBS: bucket,
+          NOW: () => clock.now,
+        };
+        return { env, clock, bucket, stores, hubs, object: objectFor };
+      };
+      const probe = async T => {
+        const R = teamRelay(T);
+        const w = await world({ R });
+        const o = await opened(w, goodWrap());
+        const sub = await socket(w, o.session);
+        const ws = wsOf(w, sub.socket);
+        const up = await put(w, o.session, sealJoin(w, o.who, 1, "desk:k-" + hex(8)), { extra: { pub: o.who.pub } });
+        const lead = await sessionOf(w, w.lead);
+        const up2 = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
+        const heard = ws.sent.map(m => JSON.parse(m));
+        return { ok: o.ok && sub.status === 200 && up.status === 200 && up2.status === 200, closed: ws.closed, heard };
+      };
+      const front = await probe();
+      const lifted = await swapTeam("    if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, \"not-enrolled\");", "", async T => {
+        const r = await probe(T);
+        return r.ok && r.closed === null && r.heard.length === 1 && r.heard[0].type === "new" && r.heard[0].seq === 2;
+      });
+      check(front.ok && !!front.closed && front.closed.reason === B.REASONS["not-enrolled"] && front.heard.length === 0 && lifted.turned && lifted.back,
+      "970n an invitation's socket is shut once its upload is made and hears no later new note; with the close lifted (in a copy) it stays open and hears it, and the product file is never written: "
+        + lifted.detail + ", sha " + (lifted.back ? "unchanged" : "CHANGED"));
+    }
   }
 
   /* ---- 17: a team is made only under a grant, judged in the Worker before any object wakes (board 935, slice G1) ---- */
@@ -1961,44 +2297,43 @@ async function main() {
         "965" + letter(i) + " " + ROWS[i].say + " is refused by the Worker with no object fetched and nothing stored, and by the object with nothing kept"
         + (ROWS[i].edge ? "; " + ROWS[i].edge + " is made, reaching the object once and keeping the grant's until and paid" : ""));
     }
-    /* ---- 966: the line each one guards, lifted in turn, lets the same probes through, and the file is put back ---- */
+    /* ---- 966: the line each one guards, lifted in turn, lets the same probes through, and the product file is never written ---- */
     for (let i = 0; i < ROWS.length; i++) {
       const p = await liftCore("plant:" + ROWS[i].tag, async () => !(await scene(ROWS[i], W)));
-      check(sceneOk[i] && p.turned && p.back, "966" + letter(i) + " lifting plant:" + ROWS[i].tag + " lets " + ROWS[i].say.split(",")[0] + " through, and the file is put back: "
-        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+      check(sceneOk[i] && p.turned && p.back, "966" + letter(i) + " lifting plant:" + ROWS[i].tag + " lets " + ROWS[i].say.split(",")[0] + " through, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
     }
 
     /* ---- 967: the remaining plants ---- */
-    const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
     const rootDecl = 'const ROOT_PUB = "' + ROOT_LITERAL + '";', testDecl = 'const ROOT_PUB = "' + K.ROOT.pub + '";';
     const rootPlant = await swapCore(rootDecl, testDecl, async () => !noRoots());
-    check(baseB && rootPlant.turned && rootPlant.back, "967a changing ROOT_PUB to the test root lets a team object built with no roots take its grant, and the file is put back: "
-      + rootPlant.detail + ", sha " + (rootPlant.back ? "restored" : "differs"));
+    check(baseB && rootPlant.turned && rootPlant.back, "967a changing ROOT_PUB to the test root lets a team object built with no roots take its grant, and the product file is never written: "
+      + rootPlant.detail + ", sha " + (rootPlant.back ? "unchanged" : "CHANGED"));
     const rootRead = await swapCore(rootDecl, testDecl, async () => !rootHolds());
-    check(baseA && rootRead.turned && rootRead.back, "967b changing ROOT_PUB makes 964a read another value, and the file is put back: "
-      + rootRead.detail + ", sha " + (rootRead.back ? "restored" : "differs"));
+    check(baseA && rootRead.turned && rootRead.back, "967b changing ROOT_PUB makes 964a read another value, and the product file is never written: "
+      + rootRead.detail + ", sha " + (rootRead.back ? "unchanged" : "CHANGED"));
     const workerRoot = await editWorker(swapped("export default routeWith([core.ROOT_PUB]);", 'export default routeWith(["' + K.ROOT.pub + '"]);'),
       async mod => !(await defaultRefuses(mod.default)));
-    check(baseC && workerRoot.turned && workerRoot.back, "967c giving the default Worker the test root takes the test root's create to the object, and the file is put back: "
-      + workerRoot.detail + ", sha " + (workerRoot.back ? "restored" : "differs"));
+    check(baseC && workerRoot.turned && workerRoot.back, "967c giving the default Worker the test root takes the test root's create to the object, and the product file is never written: "
+      + workerRoot.detail + ", sha " + (workerRoot.back ? "unchanged" : "CHANGED"));
     const labelPlant = await swapCore('return Buffer.from(GRANT_KIND + "\\n" + canon(unsigned(grant)), "utf8");',
       'return Buffer.from(canon(unsigned(grant)), "utf8");', async () => !vectorHolds());
-    check(baseD && labelPlant.turned && labelPlant.back, "967d dropping the grant's domain label from its signed bytes fails the vector, and the file is put back: "
-      + labelPlant.detail + ", sha " + (labelPlant.back ? "restored" : "differs"));
+    check(baseD && labelPlant.turned && labelPlant.back, "967d dropping the grant's domain label from its signed bytes fails the vector, and the product file is never written: "
+      + labelPlant.detail + ", sha " + (labelPlant.back ? "unchanged" : "CHANGED"));
     const delegLabel = await swapCore('return Buffer.from(DELEGATION_KIND + "\\n" + canon(unsigned(d)), "utf8");',
       'return Buffer.from(canon(unsigned(d)), "utf8");', async () => !vectorHolds());
-    check(baseD && delegLabel.turned && delegLabel.back, "967e dropping the delegation's domain label from its signed bytes fails the vector, and the file is put back: "
-      + delegLabel.detail + ", sha " + (delegLabel.back ? "restored" : "differs"));
+    check(baseD && delegLabel.turned && delegLabel.back, "967e dropping the delegation's domain label from its signed bytes fails the vector, and the product file is never written: "
+      + delegLabel.detail + ", sha " + (delegLabel.back ? "unchanged" : "CHANGED"));
     const createLabel = await swapCore('"etiuda-relay-create-2\\n" + rt', '"etiuda-relay-create\\n" + rt', async () => !vectorHolds());
-    check(baseD && createLabel.turned && createLabel.back, "967f the create-2 label turned back to today's fails the vector, and the file is put back: "
-      + createLabel.detail + ", sha " + (createLabel.back ? "restored" : "differs"));
+    check(baseD && createLabel.turned && createLabel.back, "967f the create-2 label turned back to today's fails the vector, and the product file is never written: "
+      + createLabel.detail + ", sha " + (createLabel.back ? "unchanged" : "CHANGED"));
     const untilPlant = await liftCore("plant:until-later", async () => !(await repeatHolds()));
-    check(baseG && untilPlant.turned && untilPlant.back, "967g lifting plant:until-later lets an earlier grant's repeat create lower the team's until, and the file is put back: "
-      + untilPlant.detail + ", sha " + (untilPlant.back ? "restored" : "differs"));
+    check(baseG && untilPlant.turned && untilPlant.back, "967g lifting plant:until-later lets an earlier grant's repeat create lower the team's until, and the product file is never written: "
+      + untilPlant.detail + ", sha " + (untilPlant.back ? "unchanged" : "CHANGED"));
     const keptPlant = await swapCore("epoch: team ? team.epoch : 0, until, paid }", "epoch: team ? team.epoch : 0 }",
       async () => !keptFor(await madeUnder(gf({ paid: true }))));
-    check(keptFor(byRoot) && keptPlant.turned && keptPlant.back, "967h leaving until and paid out of the team row fails the kept-grant leg, and the file is put back: "
-      + keptPlant.detail + ", sha " + (keptPlant.back ? "restored" : "differs"));
+    check(keptFor(byRoot) && keptPlant.turned && keptPlant.back, "967h leaving until and paid out of the team row fails the kept-grant leg, and the product file is never written: "
+      + keptPlant.detail + ", sha " + (keptPlant.back ? "unchanged" : "CHANGED"));
     /* With the Worker's own line lifted a refused create wakes the object, which refuses it itself: the Worker's line is what spares the object. */
     const endedVia = async worker => {
       const ctx = ctxOf(), R = fresh(), grant = K.grantFor(ctx.lead.pub, ctx.now, { fields: { until: ctx.now - 1 } });
@@ -2010,8 +2345,8 @@ async function main() {
       const w = await endedVia(mod.routeWith(K.ROOTS, env => env.NOW()));
       return w.gets === 1 && w.refusedBad && w.kept === undefined;
     });
-    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create wake its object once, which refuses it itself, and the file is put back: "
-      + workerPlant.detail + ", sha " + (workerPlant.back ? "restored" : "differs"));
+    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create wake its object once, which refuses it itself, and the product file is never written: "
+      + workerPlant.detail + ", sha " + (workerPlant.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
@@ -2039,10 +2374,22 @@ async function main() {
       + (extra.length ? ", extra " + extra.join(" ") : "")
       + (listedOk.length ? ", listed-but-ok " + listedOk.join(" ") : ""));
   }
+
+  /* ---- 969: no plant wrote a product file (the test architect's condition H1, board 935) ---- */
+  {
+    const now = productShas(), paths = Object.keys(PRODUCT_AT_START);
+    const changed = paths.filter(p => now[p] !== PRODUCT_AT_START[p]).concat(Object.keys(now).filter(p => !(p in PRODUCT_AT_START)));
+    const outside = path.relative(ROOT, WORK).split(path.sep)[0] === ".." && !path.isAbsolute(path.relative(ROOT, WORK));
+    check(paths.length > 10 && changed.length === 0 && copies > 0 && outside,
+      "969a no plant wrote a product file: all " + paths.length + " files under relay/ and shell/relay/ have the sha256 they had before the first leg,"
+      + " after " + copies + " copies made for the plants under " + (outside ? "a folder outside the repository" : "THE REPOSITORY") + (changed.length ? ", changed: " + changed.join(" ") : ""));
+  }
 }
 
 try { await main(); }
 catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
+/* The plants' copies were made under WORK alone, and the run takes them away. */
+try { fs.rmSync(WORK, { recursive: true, force: true }); } catch { /* a temp folder */ }
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted < EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
