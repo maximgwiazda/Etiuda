@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 224;
+const EXPECTED = 233;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2282,11 +2282,11 @@ async function main() {
       const g1 = g(20, true), g2 = g(40, false), g3 = g(10, true), g4 = g(40, true);
       const a = await make(g1), b = await make(g2), c = await make(g3), d = await make(g4);
       return !!a && !!b && !!c && !!d && a.until === g1.until && a.paid === true && b.until === g2.until && b.paid === false
-        && c.until === g2.until && c.paid === false && d.until === g2.until && d.paid === false;
+        && c.until === g2.until && c.paid === false && d.until === g2.until && d.paid === true;
     };
     const baseG = await repeatHolds();
     check(baseG,
-      "964g a repeat create by the same lead keeps the later until with the paid of the grant that gave it: an earlier grant changes neither, an equal one keeps the first's paid");
+      "964g a repeat create by the same lead keeps the later until with the paid of the grant that gave it: an earlier grant changes neither, an equal one makes paid true if either says so");
 
     /* ---- 965: each way a create fails its grant is refused in the Worker before any object, and again by the object ---- */
     const letter = i => String.fromCharCode(97 + i);
@@ -2475,6 +2475,80 @@ async function main() {
     const pStudio = await liftCore("plant:lead-studio-id", async () => !(await studioScene()));
     check(idS && pStudio.turned && pStudio.back, "972f lifting plant:lead-studio-id refuses the studio form of the lead's own pub, and the product file is never written: "
       + pStudio.detail + ", sha " + (pStudio.back ? "unchanged" : "CHANGED"));
+
+    /* ---- 973: a create's freshness is judged in the Worker too, so a replayed create wakes no object (the test architect's F1, board 935) ---- */
+    /* A create whose t is `t`, over a grant that is good at the relay's now: the stale or far-ahead t is all that is wrong. */
+    const bodyAt = (ctx, t) => K.createBody(ctx.rt, ctx.lead, t, bytes => signHex(ctx.lead, bytes), { now: T0 });
+    async function staleScene(worker, ts) {
+      for (const t of ts) {
+        const ctx = ctxOf(), body = bodyAt(ctx, t);
+        if (C.grantWhy(body.grant, ctx.lead.pub, T0, K.ROOTS) !== null) return false;
+        const R = fresh(), w = await viaWorker(worker, R, body);
+        if (!refused(w.r, "nonce-stale") || w.gets !== 0 || R.stores.has(ctx.rt)) return false;
+        const R2 = fresh(), o = await viaObject(R2, ctx.rt, body);
+        if (!refused(o, "nonce-stale") || teamOf(R2, ctx.rt) !== undefined) return false;
+      }
+      return true;
+    }
+    /* Each of those, through a Worker with its freshness line lifted, wakes the object once, which refuses it itself and keeps nothing. */
+    async function wakesObject(worker, ts) {
+      for (const t of ts) {
+        const ctx = ctxOf(), R = fresh(), w = await viaWorker(worker, R, bodyAt(ctx, t));
+        if (w.gets !== 1 || !refused(w.r, "nonce-stale") || teamOf(R, ctx.rt) !== undefined) return false;
+      }
+      return true;
+    }
+    const lateTs = [T0 - SKEW - 1, T0 - 10 * GD], aheadTs = [T0 + SKEW + 1, T0 + 10 * GD];
+    const staleA = await staleScene(W, lateTs);
+    check(staleA,
+      "973a a create whose t is more than the skew behind the relay's clock is refused nonce-stale by the Worker with no object fetched and nothing stored, and by the object with nothing kept, over a good grant");
+    const staleB = await staleScene(W, aheadTs);
+    check(staleB,
+      "973b a create whose t is more than the skew ahead of the relay's clock is refused nonce-stale by the Worker with no object fetched and nothing stored, and by the object with nothing kept, over a good grant");
+    const edgeScene = async () => {
+      for (const t of [T0 - SKEW, T0, T0 + SKEW]) {
+        const ctx = ctxOf(), R = fresh(), w = await viaWorker(W, R, bodyAt(ctx, t)), kept = teamOf(R, ctx.rt);
+        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== ctx.lead.keyId) return false;
+      }
+      return true;
+    };
+    const staleC = await edgeScene();
+    check(staleC,
+      "973c a create whose t is exactly the skew behind, at, or exactly the skew ahead of the relay's clock is made through the Worker with one object fetch");
+    const wFresh = await editWorker(lineLifted("plant:worker-fresh"), async mod => {
+      const w = mod.routeWith(K.ROOTS, env => env.NOW());
+      return (await wakesObject(w, lateTs)) && (await wakesObject(w, aheadTs));
+    });
+    check(staleA && staleB && staleC && wFresh.turned && wFresh.back, "973d lifting plant:worker-fresh makes a stale or far-ahead create wake its object once, which refuses it itself, and the product file is never written: "
+      + wFresh.detail + ", sha " + (wFresh.back ? "unchanged" : "CHANGED"));
+
+    /* ---- 974: a repeat create whose grant ends as the team's does keeps the paid of either (the test architect's F3, board 935) ---- */
+    /* The same lead makes a team under a grant that is `firstPaid` and then again under one of the same until that is `secondPaid`; what the team holds after each. */
+    async function sameUntil(firstPaid, secondPaid) {
+      const ctx = ctxOf(), R = fresh(), until = ctx.now + 20 * GD;
+      const g = paid => K.grantFor(ctx.lead.pub, ctx.now, { fields: { until, paid } });
+      const make = async grant => { const w = await viaWorker(W, R, bodyFor(ctx, { grant })); const t = w.r.status === 200 ? teamOf(R, ctx.rt) : null; return t && { paid: t.paid, until: t.until }; };
+      const a = await make(g(firstPaid)), b = await make(g(secondPaid));
+      return a && b ? { first: a, second: b, until } : null;
+    }
+    const trialThenPaid = async () => { const r = await sameUntil(false, true); return !!r && r.first.paid === false && r.second.paid === true && r.second.until === r.until; };
+    const paidThenTrial = async () => { const r = await sameUntil(true, false); return !!r && r.first.paid === true && r.second.paid === true && r.second.until === r.until; };
+    const equalSame = async () => {
+      const u = await sameUntil(false, false), p = await sameUntil(true, true);
+      return !!u && !!p && u.first.paid === false && u.second.paid === false && p.first.paid === true && p.second.paid === true;
+    };
+    const eqA = await trialThenPaid();
+    check(eqA, "974a a team made under a trial grant (paid false) and then by a repeat create of the same lead under a paid grant of the same until ends paid true, with that until");
+    const eqB = await paidThenTrial();
+    check(eqB, "974b a team made under a paid grant and then by a repeat create of the same lead under an unpaid grant of the same until stays paid true, with that until");
+    const eqC = await equalSame();
+    check(eqC, "974c two grants of one until that are both unpaid leave the team unpaid, and two that are both paid leave it paid");
+    const eqPlant = await liftCore("plant:until-equal-paid", async () => !(await trialThenPaid()));
+    check(eqA && eqB && eqC && eqPlant.turned && eqPlant.back, "974d lifting plant:until-equal-paid leaves a trial team unpaid under a paid grant of the same until, and the product file is never written: "
+      + eqPlant.detail + ", sha " + (eqPlant.back ? "unchanged" : "CHANGED"));
+    const eqKeep = await liftCore("plant:until-later", async () => !(await paidThenTrial()));
+    check(eqA && eqB && eqC && eqKeep.turned && eqKeep.back, "974e lifting plant:until-later lets an unpaid grant of the same until clear a paid team's paid, and the product file is never written: "
+      + eqKeep.detail + ", sha " + (eqKeep.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

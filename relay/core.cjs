@@ -154,6 +154,10 @@ function judgeCreate(rt, body, now, roots) {
   return { ok: true };
 }
 
+/* The freshness rule of a call's t against the relay's clock, the one the object applies to every signed call and the Worker
+   applies to a create before it wakes an object. */
+const isFresh = (t, now) => Math.abs(now - t) <= CALL_SKEW_MS;
+
 /* The Etiuda-Blob header, base64url of JSON, as the fields the relay judges; anything else in it is dropped. */
 function parseMeta(header) {
   if (typeof header !== "string" || header.length > META_MAX || !/^[A-Za-z0-9_-]+$/.test(header)) return null;
@@ -176,7 +180,7 @@ function createCore(deps) {
   /* For legs only: the roots a grant may trace to. Production code passes none, so the constant stands. */
   const roots = deps.roots === undefined ? [ROOT_PUB] : deps.roots;
   const random = n => crypto.randomBytes(n).toString("hex");
-  const fresh = t => Math.abs(clock() - t) <= CALL_SKEW_MS;
+  const fresh = t => isFresh(t, clock());
   const bodyOf = b => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
 
   function teamOf(rt) {
@@ -185,7 +189,8 @@ function createCore(deps) {
   }
 
   /* The grant is judged first, and the object judges it again after the Worker did. The team keeps the grant's until and paid and
-     nothing else of it: a repeat create by the same lead keeps the later until, and the paid of the grant that gave it. */
+     nothing else of it: a repeat create by the same lead keeps the later until, and the paid of the grant that gave it; on an
+     equal until, paid is true if either the team's or the grant's is. */
   function create(rt, body) {
     const judged = judgeCreate(rt, body, clock(), roots);
     if (!judged.ok) return judged;
@@ -195,6 +200,8 @@ function createCore(deps) {
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
     let until = b.grant.until, paid = b.grant.paid;
     if (team && Number.isSafeInteger(team.until) && team.until >= until) { until = team.until; paid = team.paid === true; } /* plant:until-later */
+    /* A grant that ends at the very instant the team's does is no worse than it: paid is true if either says so. */
+    if (team && team.until === b.grant.until && b.grant.paid === true) paid = true; /* plant:until-equal-paid */
     store.atomic(() => store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }));
     return { ok: true, rt };
   }
@@ -767,6 +774,6 @@ function createCore(deps) {
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
-  grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, keyMatches, leadKeyMatches, parseMeta,
+  grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };
