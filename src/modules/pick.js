@@ -17,6 +17,7 @@ import { activeTabName } from "./tabs.js";
 import { eNotice } from "./pack.js";
 import { tourHeardPick } from "./tour.js";
 import { hooks } from "./hooks.js";
+import { dockNow } from "./next-dock.js";
 // The picker's answers: the desk's replies as a short list for the window the shell draws over the
 // chat, found by the desk's own search and copied by the desk's own route.
 
@@ -63,10 +64,49 @@ function pickList(q){
   const rows=[];
   let total=0;
   const hits=rankedCards(terms,pickKeep(terms)).hits;
-  for(const m of terms.length ? hits : pickByUse(hits)){
+  if(terms.length){
+    for(const m of hits){
+      const l=cardLang(m), ps=parts(m,l);
+      total+=ps.length;
+      for(let vi=0;vi<ps.length && rows.length<PICK_ROWS;vi++) rows.push(pickRow(m,l,ps,vi));
+    }
+    return {rows:rows, total:total};
+  }
+  const now=dockNow();
+  const seen=new Set();
+  const lastLog=now.log&&now.log.length?now.log[now.log.length-1]:null;
+  const lastCard=lastLog?(now.live&&now.live.get(String(lastLog.id))||findCard(lastLog.id)):null;
+  if(lastCard && lastCard.seq){
+    const l=cardLang(lastCard), ps=parts(lastCard,l);
+    const nextB=(lastLog.b|0)+1;
+    if(nextB<ps.length){
+      if(rows.length<PICK_ROWS) rows.push(pickRow(lastCard,l,ps,nextB));
+      seen.add(String(lastCard.id)+":"+nextB);
+    }
+  }
+  for(const r of now.rows||[]){
+    if(!r || r.used) continue;
+    const c=now.live&&now.live.get(String(r.id));
+    if(!c || c._hidden) continue;
+    const cl=cardLang(c), cps=parts(c,cl);
+    for(let vi=0;vi<cps.length;vi++){
+      const key=String(c.id)+":"+vi;
+      if(!seen.has(key)){
+        seen.add(key);
+        if(rows.length<PICK_ROWS) rows.push(pickRow(c,cl,cps,vi));
+      }
+    }
+  }
+  for(const m of pickByUse(hits)){
     const l=cardLang(m), ps=parts(m,l);
     total+=ps.length;
-    for(let vi=0;vi<ps.length && rows.length<PICK_ROWS;vi++) rows.push(pickRow(m,l,ps,vi));
+    for(let vi=0;vi<ps.length;vi++){
+      const key=String(m.id)+":"+vi;
+      if(!seen.has(key)){
+        seen.add(key);
+        if(rows.length<PICK_ROWS) rows.push(pickRow(m,l,ps,vi));
+      }
+    }
   }
   return {rows:rows, total:total};
 }
