@@ -8909,7 +8909,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-20";
+  var E_BUILT = "2026-10-21";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -31618,6 +31618,14 @@ What you type stays in this browser only.`;
     const tag = (a.tagName || "").toLowerCase();
     return tag === "input" || tag === "textarea" || tag === "select";
   }
+  function fieldHoldsText() {
+    const a = document.activeElement;
+    if (!a) return false;
+    if (a.isContentEditable) return !!String(a.textContent || "").length;
+    const tag = (a.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea") return !!String(a.value || "").length;
+    return false;
+  }
   function wireCaptureKeydown() {
     addEventListener("keydown", (e) => {
       if (!scCaptureId || !modalOpen()) return;
@@ -31756,6 +31764,7 @@ What you type stays in this browser only.`;
         if (d.fixed) continue;
         if (!eventMatchesAction(e, d.id)) continue;
         if (inField && !d.inField) continue;
+        if (inField && fieldHoldsText() && !e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) continue;
         if (hooks.runShortcut(d.id) !== false) {
           e.preventDefault();
           return;
