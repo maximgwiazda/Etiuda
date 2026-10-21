@@ -50,7 +50,9 @@ function grantOf(signer, signerId, extra) {
 const byRoot = grantOf(root, "test-root-1");
 const byDelegate = grantOf(delegate, "test-delegate-1", { paid: false, via: delegation });
 
-const create = { rt: "00112233445566778899aabbccddeeff", keyId: "test-lead-1", t: now };
+/* The lead's key id comes from its key, as the relay requires: the branch id the shell makes of it, "k-" and 16 hex of the key's sha256. */
+const leadKeyId = "k-" + crypto.createHash("sha256").update(Buffer.from(lead.pub, "hex")).digest("hex").slice(0, 16);
+const create = { rt: "00112233445566778899aabbccddeeff", keyId: leadKeyId, t: now };
 const createBytes = Buffer.from("etiuda-relay-create-2\n" + create.rt + "\n" + create.keyId + "\n" + create.t + "\n"
   + crypto.createHash("sha256").update(Buffer.from(byRoot.bytes, "hex")).digest("hex"), "utf8");
 

@@ -140,6 +140,8 @@ const grantOk = (grant, leadPub, now, roots) => grantWhy(grant, leadPub, now, ro
 function judgeCreate(rt, body, now, roots) {
   const b = plain(body) ? body : {}, lead = plain(b.lead) ? b.lead : {};
   if (!is(HEX32, rt) || b.rt !== rt || !isId(lead.keyId) || !is(HEX64, lead.pub) || !Number.isSafeInteger(b.t)) return no("bad-signature");
+  /* The lead's key id comes from its key, as every other key id here does; a grant names the key alone, so nothing else binds the id. */
+  if (!keyMatches(lead.keyId, lead.pub)) return no("bad-signature"); /* plant:create-keyid */
   if (!grantOk(b.grant, lead.pub, now, roots)) return no("bad-grant"); /* plant:create-grant */
   if (!verified(lead.pub, create2Bytes(rt, lead.keyId, b.t, b.grant), b.sig)) return no("bad-signature"); /* plant:create-sig */
   return { ok: true };
@@ -203,6 +205,8 @@ function createCore(deps) {
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
     for (const k of b.keys) {
+      /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
+      if (k && k.pub === team.lead.pub) return no("bad-signature"); /* plant:devices-lead-pub */
       const shaped = !!k && typeof k === "object" && isId(k.id) && keyMatches(k.id, k.pub) && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
@@ -636,6 +640,7 @@ function createCore(deps) {
     if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
     const pub = m.pub !== null ? m.pub : m.writer;
     if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
+    if (pub === team.lead.pub) return no("no-hello"); /* plant:invite-lead-pub */
     const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
     let atDesk = true;
     atDesk = typeof m.place === "string" && m.place.indexOf("desk:") === 0; /* plant:S3-invite-place */
