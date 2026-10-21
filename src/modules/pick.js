@@ -63,7 +63,8 @@ function pickList(q){
   const terms=cardSearchTerms(String(q==null?"":q));
   const rows=[];
   let total=0;
-  const hits=rankedCards(terms,pickKeep(terms)).hits;
+  const keep=pickKeep(terms);
+  const hits=rankedCards(terms,keep).hits;
   if(terms.length){
     for(const m of hits){
       const l=cardLang(m), ps=parts(m,l);
@@ -76,7 +77,7 @@ function pickList(q){
   const seen=new Set();
   const lastLog=now.log&&now.log.length?now.log[now.log.length-1]:null;
   const lastCard=lastLog?(now.live&&now.live.get(String(lastLog.id))||findCard(lastLog.id)):null;
-  if(lastCard && lastCard.seq){
+  if(lastCard && lastCard.seq && keep(lastCard)){
     const l=cardLang(lastCard), ps=parts(lastCard,l);
     const nextB=(lastLog.b|0)+1;
     if(nextB<ps.length){
@@ -87,7 +88,7 @@ function pickList(q){
   for(const r of now.rows||[]){
     if(!r || r.used) continue;
     const c=now.live&&now.live.get(String(r.id));
-    if(!c || c._hidden) continue;
+    if(!c || !keep(c)) continue;
     const cl=cardLang(c), cps=parts(c,cl);
     for(let vi=0;vi<cps.length;vi++){
       const key=String(c.id)+":"+vi;

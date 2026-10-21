@@ -956,13 +956,22 @@ try {
   rest();
   pickAnswer("copy", { id: "c-seq", vi: 0 });
   const afterStep1 = ids(PICK.pickRows("").slice(0, 3));
+  SEQ._hidden = true;
+  const hideSeq = ids(PICK.pickRows("").slice(0, 2));
+  SEQ._hidden = false;
+  B.c = "care";
+  AS.setCats(["orders"]);
+  const catFollow = ids(PICK.pickRows("").slice(0, 2));
+  AS.setCats([]);
+  B.c = "orders";
   pickAnswer("copy", { id: "c-seq", vi: 1 });
   const afterStep2 = ids(PICK.pickRows("").slice(0, 3));
   pickAnswer("copy", { id: "c-seq", vi: 2 });
   const afterStep3 = ids(PICK.pickRows("").slice(0, 3));
-  check(afterStep1 === "c-seq/1 c-b/0 c-f0/0" && afterStep2 === "c-seq/2 c-b/0 c-f0/0" && afterStep3.startsWith("c-b/0"),
-    "6n at rest the picker surfaces the active conversation's next step and follow-up chain ahead of most-used replies: "
-    + afterStep1 + " | " + afterStep2 + " | " + afterStep3);
+  check(afterStep1 === "c-seq/1 c-b/0 c-f0/0" && hideSeq === "c-b/0 c-f0/0" && catFollow === "c-seq/1 c-f0/0"
+    && afterStep2 === "c-seq/2 c-b/0 c-f0/0" && afterStep3.startsWith("c-b/0"),
+    "6n at rest the picker surfaces the active conversation's next step and follow-up chain ahead of most-used replies, leaving hidden and out-of-category cards out: "
+    + afterStep1 + " | " + afterStep2 + " | " + afterStep3 + " | " + hideSeq + " | " + catFollow);
 
   /* ---- 7. the after-batch (board 901) ------------------------------------------------------- */
   console.log("\n[7/7] the list grouped and counted, the keys as they work, the conversation named, the hotkey made known");
