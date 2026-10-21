@@ -8909,7 +8909,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-20";
+  var E_BUILT = "2026-10-21";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -11896,6 +11896,7 @@ What you type stays in this browser only.`;
   function tabPathStep(id, how) {
     const tb = tabs.find((x) => x.id === activeTabId), at = String(id == null ? "" : id);
     if (!tb || !at) return null;
+    endPaxConversation(tb);
     const path = Array.isArray(tb.path) ? tb.path : [], prev = path.length ? path[path.length - 1] : null;
     const log = Array.isArray(tb.log) ? tb.log : [], e = { id: at, at: Date.now(), l: String(how && how.l || ""), b: Math.max(0, (how && how.b) | 0) };
     tb.log = (prev === at && log.length && log[log.length - 1].id === at ? log.slice(0, -1) : log).concat(e).slice(-TAB_LOG_MAX);
@@ -12046,16 +12047,36 @@ What you type stays in this browser only.`;
     if (!field) activeSaid = now;
     else if (activeSaid) activeSaid[field] = now[field];
   }
+  var paxBlurWired = null;
+  function endPaxConversation(tb) {
+    if (tb && tb.paxNamed && !String(tb.pax || "").trim() && Array.isArray(tb.path) && tb.path.length) {
+      tb.path = [];
+      tb.log = [];
+      tb.paxNamed = false;
+      hooks.syncNextDock();
+    }
+  }
+  function wirePaxBlur() {
+    if (!pax || paxBlurWired === pax || typeof pax.addEventListener !== "function") return;
+    paxBlurWired = pax;
+    pax.addEventListener("blur", () => {
+      const tb = tabs.find((x) => x.id === activeTabId);
+      if (tb) {
+        endPaxConversation(tb);
+        clearTimeout(tabSaveTimer);
+        tabSaveTimer = setTimeout(saveTabSession, 250);
+      }
+    });
+  }
   function scheduleTabSave() {
+    wirePaxBlur();
     const tb = tabs.find((x) => x.id === activeTabId);
     if (tb) {
-      const was = tabLabel(tb), named = !!String(tb.pax || "").trim();
+      const was = tabLabel(tb);
+      if (String(tb.pax || "").trim()) tb.paxNamed = true;
       tb.pax = pax ? pax.value : "";
-      if (named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length) {
-        tb.path = [];
-        tb.log = [];
-        hooks.syncNextDock();
-      }
+      const inPax = typeof document !== "undefined" && document.activeElement === pax;
+      if (!inPax) endPaxConversation(tb);
       if (tabLabel(tb) !== was) drawTabs();
       else syncTabAccent();
     }

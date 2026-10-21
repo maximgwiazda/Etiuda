@@ -57,6 +57,7 @@ function tabLogEntry(e){
 function tabPathStep(id, how){
   const tb=tabs.find(x=>x.id===activeTabId), at=String(id==null?"":id);
   if(!tb||!at) return null;
+  endPaxConversation(tb);
   const path=Array.isArray(tb.path) ? tb.path : [], prev=path.length ? path[path.length-1] : null;
   const log=Array.isArray(tb.log) ? tb.log : [], e={id:at, at:Date.now(), l:String(how&&how.l||""), b:Math.max(0,(how&&how.b)|0)};
   tb.log=(prev===at && log.length && log[log.length-1].id===at ? log.slice(0,-1) : log).concat(e).slice(-TAB_LOG_MAX);
@@ -220,13 +221,33 @@ function activeHeard(field){
 /* Called on every keystroke and every arrow, so it forces no layout: the strip draws only a
    tab's name and its filter's accent, and the rest of the snapshot, the scroll read included,
    waits for the save, which takes it anyway. */
+let paxBlurWired=null;
+function endPaxConversation(tb){
+  if(tb && tb.paxNamed && !String(tb.pax||"").trim() && Array.isArray(tb.path) && tb.path.length){
+    tb.path=[]; tb.log=[]; tb.paxNamed=false; hooks.syncNextDock();
+  }
+}
+function wirePaxBlur(){
+  if(!pax || paxBlurWired===pax || typeof pax.addEventListener!=="function") return;
+  paxBlurWired=pax;
+  pax.addEventListener("blur", ()=>{
+    const tb=tabs.find(x=>x.id===activeTabId);
+    if(tb){
+      endPaxConversation(tb);
+      clearTimeout(tabSaveTimer);
+      tabSaveTimer=setTimeout(saveTabSession, 250);
+    }
+  });
+}
 function scheduleTabSave(){
+  wirePaxBlur();
   const tb=tabs.find(x=>x.id===activeTabId);
   if(tb){
-    const was=tabLabel(tb), named=!!String(tb.pax||"").trim();
+    const was=tabLabel(tb);
+    if(String(tb.pax||"").trim()) tb.paxNamed=true;
     tb.pax=pax?pax.value:"";
-    // The customer's name cleared is the conversation over: the tab's next reply is the first of a new path.
-    if(named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length){ tb.path=[]; tb.log=[]; hooks.syncNextDock(); }
+    const inPax=typeof document!=="undefined" && document.activeElement===pax;
+    if(!inPax) endPaxConversation(tb);
     if(tabLabel(tb)!==was) drawTabs(); else syncTabAccent();
   }
   clearTimeout(tabSaveTimer);

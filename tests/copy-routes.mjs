@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 24;
+const EXPECTED = 25;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -85,6 +85,7 @@ class El {
   addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
   removeEventListener() {}
   focus() { DOC.activeElement = this; }
+  blur() { if (DOC.activeElement === this) DOC.activeElement = null; fire(this, "blur"); }
   get offsetWidth() { return 340; } get offsetHeight() { return 220; }
   getBoundingClientRect() { return { top: 100, left: 100, width: 300, height: 40 }; }
   getContext() { return {}; }
@@ -406,6 +407,22 @@ try {
       TB.scheduleTabSave();
       check(path() === "c-a9,c-b9",
         "3i control: a conversation that never named the customer keeps its path through a save with the box empty: " + JSON.stringify(path()));
+      // With a conversation under way, select the name, clear it and type a new one while typing:
+      ND.syncNextDock();
+      name.value = "guest one"; TB.scheduleTabSave();
+      name.focus();
+      name.value = ""; TB.scheduleTabSave();
+      const clearedWhileTyping = { path: path(), beads: ND.pathBeads(TB.tabPathNow().path), shown: !fabEl.hidden };
+      name.value = "guest two"; TB.scheduleTabSave();
+      const retyped = { path: path(), beads: ND.pathBeads(TB.tabPathNow().path), shown: !fabEl.hidden };
+      name.value = ""; TB.scheduleTabSave();
+      name.blur();
+      const blurred = { path: path(), beads: ND.pathBeads(TB.tabPathNow().path), shown: !fabEl.hidden };
+      check(clearedWhileTyping.path === "c-a9,c-b9" && clearedWhileTyping.shown &&
+        retyped.path === "c-a9,c-b9" && retyped.shown &&
+        blurred.path === "" && blurred.beads === null && !blurred.shown,
+        "3n clearing the customer's name while typing keeps the conversation, and leaving the field ends it: " +
+        JSON.stringify({ clearedWhileTyping, retyped, blurred }));
     } finally {
       ND.foldNextDock(); TB.watchTabPath(null);
       fabEl.remove(); HK.hooks.syncNextDock = hadSync;
