@@ -844,6 +844,21 @@ const CARD_B = {
       "card|cards"));
   check("ui-lang.js", "UI_LANGS lists at least English and Polish",
     () => eq(JSON.stringify(U.UI_LANGS).indexOf("pl") > -1, true));
+  check("ui-lang.js", "translateChrome sweeps active bubbles, notices, and the rail hit strip",
+    () => {
+      const asked = [];
+      const hadDoc = globalThis.document;
+      globalThis.document = {
+        querySelector: sel => { asked.push(sel); return null; }
+      };
+      try {
+        U.translateChrome();
+        const targets = ["#railHit", "#eNotices", "#eTeamJoin", "#eCatalogOffer"];
+        return eq(targets.every(t => asked.includes(t)), true);
+      } finally {
+        if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+      }
+    });
 }
 
 /* ------------------------------------------------------------------ env.js */
