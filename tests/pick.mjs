@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 104;
+const EXPECTED = 105;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -78,6 +78,10 @@ const SET = await import(MOD("settings.js"));
 const SP = await import(MOD("spell.js"));
 const DS = await import(MOD("desk-stats.js"));
 const RD = await import(MOD("render.js"));
+globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {};
+const TB = await import(MOD("tabs.js"));
+els["#intent"].classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
+["drawPillsCore", "drawIntentRail", "applyLangUI", "updateIntentPlaceholder", "scheduleRailGeometry", "syncNextDock"].forEach(k => { HK.hooks[k] = () => {}; });
 
 /* Invented cards. A greeting-and-name line opens two of them, as a real reply's first line would. */
 const CARDS = [
@@ -943,6 +947,31 @@ try {
   deskOf([A, B]); copies("c-b", 40); copies("c-a", 9);
   check(RD.rankedCards([], () => true).hits.map(m => m.id).join(" ") === resting && resting.split(" ").slice(-2).join(" ") === "c-a c-b",
     "6m the desk's resting list is the same order with copies counted as without: " + resting.split(" ").slice(-3).join(" "));
+
+  TB.tabs.splice(0, TB.tabs.length);
+  ST.ssSet(TB.TAB_KEY, "null");
+  TB.initTabs();
+  const SEQ = { id: "c-seq", c: "orders", t: "Sequence", alt: 1, seq: 1, en: "Step 1\n\nStep 2\n\nStep 3", next: [{ to: "c-b" }] };
+  deskOf([SEQ, A, B]);
+  rest();
+  pickAnswer("copy", { id: "c-seq", vi: 0 });
+  const afterStep1 = ids(PICK.pickRows("").slice(0, 3));
+  SEQ._hidden = true;
+  const hideSeq = ids(PICK.pickRows("").slice(0, 2));
+  SEQ._hidden = false;
+  B.c = "care";
+  AS.setCats(["orders"]);
+  const catFollow = ids(PICK.pickRows("").slice(0, 2));
+  AS.setCats([]);
+  B.c = "orders";
+  pickAnswer("copy", { id: "c-seq", vi: 1 });
+  const afterStep2 = ids(PICK.pickRows("").slice(0, 3));
+  pickAnswer("copy", { id: "c-seq", vi: 2 });
+  const afterStep3 = ids(PICK.pickRows("").slice(0, 3));
+  check(afterStep1 === "c-seq/1 c-b/0 c-f0/0" && hideSeq === "c-b/0 c-f0/0" && catFollow === "c-seq/1 c-f0/0"
+    && afterStep2 === "c-seq/2 c-b/0 c-f0/0" && afterStep3.startsWith("c-b/0"),
+    "6n at rest the picker surfaces the active conversation's next step and follow-up chain ahead of most-used replies, leaving hidden and out-of-category cards out: "
+    + afterStep1 + " | " + afterStep2 + " | " + afterStep3 + " | " + hideSeq + " | " + catFollow);
 
   /* ---- 7. the after-batch (board 901) ------------------------------------------------------- */
   console.log("\n[7/7] the list grouped and counted, the keys as they work, the conversation named, the hotkey made known");
