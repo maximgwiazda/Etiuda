@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 212;
+const EXPECTED = 213;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1078,6 +1078,23 @@ async function main() {
     }
     return { turned, back: sha(fs.readFileSync(PRODUCT.worker)) === digest, detail };
   }
+  /* A text of team.cjs swapped in a copy, the legs run over the copy, the product file never written. */
+  async function swapTeam(from, to, fn) {
+    const digest = sha(fs.readFileSync(PRODUCT.team));
+    let turned = false, detail = "swap text absent";
+    try {
+      const text = fs.readFileSync(PRODUCT.team, "utf8");
+      if (text.split(from).length === 2) {
+        const dir = copyOf({ "relay/team.cjs": text.split(from).join(to), "relay/core.cjs": forwardTo(PRODUCT.core),
+          "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+        turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+        detail = turned ? "the checks lifted" : "a check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    }
+    return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+  }
   {
     const x = await removedThen(true);
     const session = x.hello.json && x.hello.json.session;
@@ -2051,6 +2068,54 @@ async function main() {
       });
       check(front.ok && refused(front.got, "no-hello") && lifted.turned && lifted.back,
       "970m with the drop's end of the invitation's sessions lifted, the session of a dropped invitation is told not-enrolled by the wrap route, and the product file is never written: "
+        + lifted.detail + ", sha " + (lifted.back ? "unchanged" : "CHANGED"));
+    }
+
+    /* An invitation's socket is shut once that invitation's upload is made: announced to for no later upload. */
+    {
+      const teamRelay = T => {
+        const clock = { now: 0 };
+        const stores = new Map(), hubs = new Map(), live = new Map();
+        const bucket = S.memoryBucket();
+        function objectFor(name) {
+          if (live.has(name)) return live.get(name);
+          if (!stores.has(name)) stores.set(name, S.memoryStore());
+          const hub = S.socketHub();
+          hubs.set(name, hub);
+          const obj = (T || require(PRODUCT.team)).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, roots: K.ROOTS });
+          live.set(name, obj);
+          return obj;
+        }
+        const scoped = {
+          idFromName(name) { return { name: String(name) }; },
+          get(id) { return { fetch: request => objectFor(id.name).fetch(request) }; },
+        };
+        const env = {
+          TEAMS: { jurisdiction(j) { return j === "eu" ? scoped : null; } },
+          BLOBS: bucket,
+          NOW: () => clock.now,
+        };
+        return { env, clock, bucket, stores, hubs, object: objectFor };
+      };
+      const probe = async T => {
+        const R = teamRelay(T);
+        const w = await world({ R });
+        const o = await opened(w, goodWrap());
+        const sub = await socket(w, o.session);
+        const ws = wsOf(w, sub.socket);
+        const up = await put(w, o.session, sealJoin(w, o.who, 1, "desk:k-" + hex(8)), { extra: { pub: o.who.pub } });
+        const lead = await sessionOf(w, w.lead);
+        const up2 = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
+        const heard = ws.sent.map(m => JSON.parse(m));
+        return { ok: o.ok && sub.status === 200 && up.status === 200 && up2.status === 200, closed: ws.closed, heard };
+      };
+      const front = await probe();
+      const lifted = await swapTeam("    if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, \"not-enrolled\");", "", async T => {
+        const r = await probe(T);
+        return r.ok && r.closed === null && r.heard.length === 1 && r.heard[0].type === "new" && r.heard[0].seq === 2;
+      });
+      check(front.ok && !!front.closed && front.closed.reason === B.REASONS["not-enrolled"] && front.heard.length === 0 && lifted.turned && lifted.back,
+      "970n an invitation's socket is shut once its upload is made and hears no later new note; with the close lifted (in a copy) it stays open and hears it, and the product file is never written: "
         + lifted.detail + ", sha " + (lifted.back ? "unchanged" : "CHANGED"));
     }
   }
