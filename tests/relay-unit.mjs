@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 222;
+const EXPECTED = 224;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2455,6 +2455,26 @@ async function main() {
     const pInvite = await liftCore("plant:invite-lead-pub", async () => !(await leadInviteScene()));
     check(idE && pInvite.turned && pInvite.back, "972d lifting plant:invite-lead-pub lets the lead's public key upload through an invitation under its other id form, and the product file is never written: "
       + pInvite.detail + ", sha " + (pInvite.back ? "unchanged" : "CHANGED"));
+    /* Etiuda Studio names its lead's key "studio-" and the first 16 hex of the sha256 of the pub: the create takes that form too, of the lead's own pub alone. */
+    const studioOf = pub => "studio-" + sha(Buffer.from(pub, "hex")).slice(0, 16);
+    async function studioScene() {
+      const kp = keyPair(false), lead = { keyId: studioOf(kp.pub), pub: kp.pub, privateKey: kp.privateKey };
+      const ctx = { rt: hex(16), lead, now: T0 }, body = bodyFor(ctx, {});
+      const R = fresh(), w = await viaWorker(W, R, body), kept = teamOf(R, ctx.rt);
+      if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+      const R2 = fresh(), o = await viaObject(R2, ctx.rt, body), kept2 = teamOf(R2, ctx.rt);
+      if (o.status !== 200 || !kept2 || kept2.lead.keyId !== lead.keyId) return false;
+      const liar = { keyId: studioOf(keyPair(false).pub), pub: kp.pub, privateKey: kp.privateKey }, ctx2 = { rt: hex(16), lead: liar, now: T0 }, bad = bodyFor(ctx2, {});
+      const R3 = fresh(), w3 = await viaWorker(W, R3, bad);
+      if (!refused(w3.r, "bad-signature") || w3.gets !== 0 || R3.stores.has(ctx2.rt)) return false;
+      const R4 = fresh(), o4 = await viaObject(R4, ctx2.rt, bad);
+      return refused(o4, "bad-signature") && teamOf(R4, ctx2.rt) === undefined;
+    }
+    const idS = await studioScene();
+    check(idS, "972e a create whose lead key id is \"studio-\" and 16 hex of the sha256 of its pub is made through the Worker with one object fetch and by the object, keeping that id; one whose studio id is of another pub is refused bad-signature, with no object fetched and nothing kept");
+    const pStudio = await liftCore("plant:lead-studio-id", async () => !(await studioScene()));
+    check(idS && pStudio.turned && pStudio.back, "972f lifting plant:lead-studio-id refuses the studio form of the lead's own pub, and the product file is never written: "
+      + pStudio.detail + ", sha " + (pStudio.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
