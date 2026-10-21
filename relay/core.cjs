@@ -9,6 +9,9 @@ const B = require("../shell/relay/blob.cjs");
 const CHALLENGE_MS = 5 * 60 * 1000;
 const SESSION_MS = 30 * 60 * 1000;
 const CALL_SKEW_MS = 5 * 60 * 1000;
+/* The longest a delegation may run, from to until: one year, counted as 366 days so that a calendar year with a leap day passes
+   (Maxim, 2026-10-20: a delegation from the root key to the licence service's key runs one year). */
+const DELEGATION_MAX_MS = 366 * 86400000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 const INVITES_MAX = 200;
@@ -111,6 +114,7 @@ function delegationWhy(d, grant, roots) {
     || !Number.isSafeInteger(d.from) || !Number.isSafeInteger(d.until) || !sigShaped(d.sig)) return "via-shape";
   if (d.may.indexOf("relay-grant") < 0) return "via-may"; /* plant:grant-may */
   if (!(d.from <= grant.issued && grant.until <= d.until)) return "via-window"; /* plant:grant-window */
+  if (d.until - d.from > DELEGATION_MAX_MS) return "via-span"; /* plant:via-span */
   if (!roots.some(root => verified(root, delegationBytes(d), d.sig.value))) return "via-signature"; /* plant:via-sig */
   return null;
 }
@@ -772,7 +776,7 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
+  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

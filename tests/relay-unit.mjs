@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 233;
+const EXPECTED = 237;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2549,6 +2549,33 @@ async function main() {
     const eqKeep = await liftCore("plant:until-later", async () => !(await paidThenTrial()));
     check(eqA && eqB && eqC && eqKeep.turned && eqKeep.back, "974e lifting plant:until-later lets an unpaid grant of the same until clear a paid team's paid, and the product file is never written: "
       + eqKeep.detail + ", sha " + (eqKeep.back ? "unchanged" : "CHANGED"));
+
+    /* ---- 975: a delegation runs one year, 366 days, and no longer (the test architect's F2, board 935; Maxim's word of 2026-10-20 11:51) ---- */
+    /* The number is written out here again, so the leg does not lean on the constant it checks. */
+    const YEAR_MS = 366 * 86400000, FROM = T0 - HOUR;
+    const spanRow = (tag, say, until, good) => ({ tag, say, [good ? "good" : "bad"]: [good
+      ? via({ fields: { from: FROM, until } })
+      : grantProbe("via-span", via({ fields: { from: FROM, until } }))] });
+    const yearRow = spanRow("via-span", "a delegation of exactly 366 days", FROM + YEAR_MS, true);
+    const overRows = [spanRow("via-span", "a delegation of 366 days and a millisecond", FROM + YEAR_MS + 1, false),
+      spanRow("via-span", "a delegation of two years", FROM + 2 * YEAR_MS, false)];
+    const spanHolds = async () => (await scene(yearRow, W)) && (await scene(overRows[0], W)) && (await scene(overRows[1], W));
+    const yearGrant = ctx => via({ fields: { from: FROM, until: FROM + YEAR_MS } })(ctx);
+    const overGrant = ctx => via({ fields: { from: FROM, until: FROM + YEAR_MS + 1 } })(ctx);
+    const yearOk = () => { const ctx = ctxOf(); return C.grantOk(yearGrant(ctx), ctx.lead.pub, T0, K.ROOTS); };
+    const overNo = () => { const ctx = ctxOf(), g = overGrant(ctx); return !C.grantOk(g, ctx.lead.pub, T0, K.ROOTS) && C.grantWhy(g, ctx.lead.pub, T0, K.ROOTS) === "via-span"; };
+    const spanB = C.DELEGATION_MAX_MS === YEAR_MS && yearOk() && (await scene(yearRow, W));
+    check(spanB, "975a the delegation's longest span is DELEGATION_MAX_MS of 366 days in milliseconds, exported, and a grant via a delegation of exactly 366 days is taken by grantOk"
+      + " and made through the Worker with one object fetch, keeping the grant's until and paid");
+    const spanC = overNo() && (await scene(overRows[0], W)) && (await scene(overRows[1], W));
+    check(spanC, "975b a grant via a delegation of 366 days and a millisecond, or of two years, is refused by grantOk as via-span, by the Worker with no object fetched and nothing stored,"
+      + " and by the object with nothing kept");
+    const vectorSpan = V.delegation.doc.until - V.delegation.doc.from;
+    const spanD = vectorSpan > 0 && vectorSpan <= YEAR_MS && vectorHolds();
+    check(spanD, "975c the shared vector's delegation runs " + Math.round(vectorSpan / 86400000) + " days, no more than one year, and the vector still holds: grantOk takes both its grants");
+    const spanPlant = await liftCore("plant:via-span", async () => !(await spanHolds()));
+    check(spanB && spanC && spanPlant.turned && spanPlant.back, "975d lifting plant:via-span lets a delegation of 366 days and a millisecond carry a grant, and the product file is never written: "
+      + spanPlant.detail + ", sha " + (spanPlant.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
