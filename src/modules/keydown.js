@@ -43,6 +43,14 @@ function typingInField(){
   const tag=(a.tagName||"").toLowerCase();
   return tag==="input"||tag==="textarea"||tag==="select";
 }
+function fieldHoldsText(){
+  const a=document.activeElement;
+  if(!a) return false;
+  if(a.isContentEditable) return !!String(a.textContent||"").length;
+  const tag=(a.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea") return !!String(a.value||"").length;
+  return false;
+}
 
 // Capture rebinds while the shortcuts modal is open (capture phase)
 function wireCaptureKeydown(){
@@ -178,6 +186,7 @@ function wireGlobalKeydown(){
       if(d.fixed) continue;
       if(!eventMatchesAction(e,d.id)) continue;
       if(inField&&!d.inField) continue;
+      if(inField && fieldHoldsText() && !e.ctrlKey && !e.altKey && !e.metaKey && e.key.length===1) continue;
       // runShortcut may return false to decline (an editor arrow with no editor open)
       if(hooks.runShortcut(d.id)!==false){
         e.preventDefault();

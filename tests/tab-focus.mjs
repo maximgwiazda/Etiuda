@@ -323,6 +323,40 @@ check("keydown.js", "810tf4 a cover and a dialog still walk on Tab and Shift+Tab
       "ecYes,true,ecYes,true,coverCard,false, || modalX,true,save,true,modalCard,false,");
   });
 
+check("keydown.js", "810tf4b a single printable key bound with inField types itself in a field holding text, and acts in an empty field",
+  () => {
+    const box = byId["#intent"];
+    const pax = byId["#pax"];
+    covers = []; modal.hidden = true;
+    globalThis.document.activeElement = box;
+    box.value = "";
+    const emptySlash = press({ key: "/", code: "Slash" });
+    const emptyRan = ran.slice();
+    box.value = "24";
+    const textSlash = press({ key: "/", code: "Slash" });
+    const textRan = ran.slice();
+    box.value = "abc";
+    const tilde = press({ key: "`", code: "Backquote" });
+    const tildeRan = ran.slice();
+    const ctrlTab = press({ key: "Tab", code: "Tab", ctrlKey: true });
+    const ctrlTabRan = ran.slice();
+    box.value = "";
+    globalThis.document.activeElement = pax;
+    pax.value = "guest one";
+    const paxSlash = press({ key: "/", code: "Slash" });
+    const paxRan = ran.slice();
+    pax.value = "";
+    globalThis.document.activeElement = body;
+    return eq([
+      emptySlash.defaultPrevented, emptyRan.join("+"),
+      textSlash.defaultPrevented, textRan.join("+"),
+      tilde.defaultPrevented, tildeRan.join("+"),
+      ctrlTab.defaultPrevented, ctrlTabRan.join("+"),
+      paxSlash.defaultPrevented, paxRan.join("+")
+    ].join(" | "),
+    "true | langToggle | false |  | false |  | true | tabNext | false | ");
+  });
+
 check("shortcuts-list.js", "810tf5 the shortcuts list shows Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+T, in English and Polish",
   () => {
     const paint = () => { const b = { innerHTML: "", querySelectorAll: () => [] }; SL.wireShortcutsList(b, () => {}); return b.innerHTML; };
