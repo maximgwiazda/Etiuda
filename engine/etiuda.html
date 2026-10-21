@@ -8909,7 +8909,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-20";
+  var E_BUILT = "2026-10-21";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -11082,17 +11082,15 @@ What you type stays in this browser only.`;
     tabAddTitle: () => tabAddTitle
   });
   var SC_DEFS = [
-    /* One toggle, not an Alt+1/Alt+2 pair. inField:1 is the point - language switches
-       mid-sentence - so no header field can take a slash; the facts editor keeps its own (see
-       wireFactsEditor). Stored overrides for the retired pair drop via loadShortcuts' unknown-id
-       check. */
+    /* One toggle, not an Alt+1/Alt+2 pair. No inField: in a typing field, empty or not, the slash
+       types a slash, and anywhere else it switches the language (Maxim, 2026-10-21 12:24). Stored
+       overrides for the retired pair drop via loadShortcuts' unknown-id check. */
     {
       id: "langToggle",
       label: "Toggle language",
       hint: "Switch the cards between English and Polish",
       def: { code: "Slash", key: "/", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      def2: { code: "Backquote", key: "`", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 1
+      def2: { code: "Backquote", key: "`", ctrl: 0, alt: 0, shift: 0, meta: 0 }
     },
     /* Plain Tab and Shift+Tab walk focus. The chat tabs move on Ctrl+Tab and Ctrl+Shift+Tab,
        the pair a browser uses, and a new conversation opens on Ctrl+T, which is free in this
