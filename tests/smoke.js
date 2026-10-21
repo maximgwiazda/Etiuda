@@ -2163,7 +2163,7 @@ const t0 = Date.now();
   clean(e, "the internal note");
 
   /* Tabs: add one, then the chords. Ctrl+Tab steps the strip, the box's text travels with its
-     tab and focus stays put. Slash toggles the language with nothing typed. Ctrl+T opens a tab.
+     tab and focus stays put. Slash types itself in the box and toggles the language outside it. Ctrl+T opens a tab.
      Chrome never delivers Ctrl+Tab or Ctrl+T to a page, so these are events the page listens
      for, the same shape the shell forwards. Then back to where the strip started. */
   e = since();
@@ -2188,10 +2188,15 @@ const t0 = Date.now();
     "Ctrl+Tab steps round the strip (" + i0 + " > " + i1 + " > " + i2 + "), the query travels with its tab and focus stays in the box");
   const l0 = await p.evaluate(() => lang);
   await p.keyboard.press("Slash"); await sleep(500);
+  const typed = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
+  await p.keyboard.press("Backspace"); await sleep(200);
+  await p.evaluate(() => document.activeElement && document.activeElement.blur());
+  await p.keyboard.press("Slash"); await sleep(500);
   const l1 = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
   await p.keyboard.press("Slash"); await sleep(500);
   const l2 = await p.evaluate(() => lang);
-  check(l1.l !== l0 && l2 === l0 && l1.v === "probe", "slash toggles the language from inside the box (" + l0 + " > " + l1.l + " > " + l2 + ") and types nothing");
+  check(typed.l === l0 && typed.v === "probe/" && l1.l !== l0 && l2 === l0 && l1.v === "probe",
+    "slash types itself inside the box (" + JSON.stringify(typed.v) + ") and toggles the language outside it (" + l0 + " > " + l1.l + " > " + l2 + ")");
   await p.keyboard.press("Backquote"); await sleep(500);
   const l3 = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
   await p.keyboard.press("Backquote"); await sleep(500);

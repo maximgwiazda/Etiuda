@@ -7,13 +7,12 @@ import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[
-  /* One toggle, not an Alt+1/Alt+2 pair. inField:1 lets it act from an empty field; in a field
-     holding text a lone printable key types itself (fieldHoldsText in keydown.js), so "24/7"
-     keeps its slash. The facts editor keeps its own (see wireFactsEditor). Stored overrides for
-     the retired pair drop via loadShortcuts' unknown-id check. */
+  /* One toggle, not an Alt+1/Alt+2 pair. No inField: in a typing field, empty or not, the slash
+     types a slash, and anywhere else it switches the language (Maxim, 2026-10-21 12:24). Stored
+     overrides for the retired pair drop via loadShortcuts' unknown-id check. */
   {id:"langToggle",label:"Toggle language",hint:"Switch the cards between English and Polish",
     def:{code:"Slash",key:"/",ctrl:0,alt:0,shift:0,meta:0},
-    def2:{code:"Backquote",key:"`",ctrl:0,alt:0,shift:0,meta:0},inField:1},
+    def2:{code:"Backquote",key:"`",ctrl:0,alt:0,shift:0,meta:0}},
   /* Plain Tab and Shift+Tab walk focus. The chat tabs move on Ctrl+Tab and Ctrl+Shift+Tab,
      the pair a browser uses, and a new conversation opens on Ctrl+T, which is free in this
      table. Dialogs, covers and the tour return before the dispatch loop and keep an ordinary Tab. */

@@ -323,7 +323,7 @@ check("keydown.js", "810tf4 a cover and a dialog still walk on Tab and Shift+Tab
       "ecYes,true,ecYes,true,coverCard,false, || modalX,true,save,true,modalCard,false,");
   });
 
-check("keydown.js", "810tf4b a single printable key bound with inField types itself in a field holding text, and acts in an empty field",
+check("keydown.js", "810tf4b in a typing field, empty or not, the slash and the backquote type themselves; outside a field the slash switches the language; Ctrl+Tab is as before",
   () => {
     const box = byId["#intent"];
     const pax = byId["#pax"];
@@ -347,14 +347,17 @@ check("keydown.js", "810tf4b a single printable key bound with inField types its
     const paxRan = ran.slice();
     pax.value = "";
     globalThis.document.activeElement = body;
+    const bodySlash = press({ key: "/", code: "Slash" });
+    const bodyRan = ran.slice();
     return eq([
       emptySlash.defaultPrevented, emptyRan.join("+"),
       textSlash.defaultPrevented, textRan.join("+"),
       tilde.defaultPrevented, tildeRan.join("+"),
       ctrlTab.defaultPrevented, ctrlTabRan.join("+"),
-      paxSlash.defaultPrevented, paxRan.join("+")
+      paxSlash.defaultPrevented, paxRan.join("+"),
+      bodySlash.defaultPrevented, bodyRan.join("+")
     ].join(" | "),
-    "true | langToggle | false |  | false |  | true | tabNext | false | ");
+    "false |  | false |  | false |  | true | tabNext | false |  | true | langToggle");
   });
 
 check("shortcuts-list.js", "810tf5 the shortcuts list shows Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+T, in English and Polish",
