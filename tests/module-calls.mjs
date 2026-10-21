@@ -844,7 +844,7 @@ const CARD_B = {
       "card|cards"));
   check("ui-lang.js", "UI_LANGS lists at least English and Polish",
     () => eq(JSON.stringify(U.UI_LANGS).indexOf("pl") > -1, true));
-  check("ui-lang.js", "translateChrome sweeps active bubbles, notices, and the rail hit strip",
+  check("ui-lang.js", "translateChrome sweeps the rail hit strip and leaves bubbles and notices unswept",
     () => {
       const asked = [];
       const hadDoc = globalThis.document;
@@ -853,9 +853,118 @@ const CARD_B = {
       };
       try {
         U.translateChrome();
-        const targets = ["#railHit", "#eNotices", "#eTeamJoin", "#eCatalogOffer"];
-        return eq(targets.every(t => asked.includes(t)), true);
+        const targets = ["#railHit"];
+        const swept = targets.every(t => asked.includes(t));
+        const unswept = ["#eNotices", "#eTeamJoin", "#eCatalogOffer"].every(t => !asked.includes(t));
+        return eq(swept && unswept, true);
       } finally {
+        if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+      }
+    });
+
+  const RP = await import(MOD("repaint.js"));
+  const TJ = await import(MOD("team-join.js"));
+  const AS = await import(MOD("app-state.js"));
+  const H = await import(MOD("hooks.js"));
+
+  check("repaint.js", "an open team join bubble repaints in the new interface language with the catalog name intact",
+    () => {
+      const hadDoc = globalThis.document;
+      const hadHost = globalThis.window && globalThis.window.E_HOST;
+      const hadCards = AS.cards;
+      const hadLang = UILANG_STORE.lsGet("eUiLang");
+      const hadAdd = globalThis.addEventListener;
+      const hadRm = globalThis.removeEventListener;
+      const hadIw = globalThis.innerWidth;
+      const hadIh = globalThis.innerHeight;
+      const hadRaf = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+      globalThis.innerWidth = 1280;
+      globalThis.innerHeight = 800;
+      const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry", "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "syncSettingsMenu"];
+      const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+      STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => false; });
+
+      const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
+        toggle: (c, f) => { const w = f === undefined ? !o.has(c) : !!f; if (w) o.add(c); else o.delete(c); return w; } });
+      const mkEl = extra => Object.assign({
+        id: "", className: "", hidden: false, attrs: {}, innerHTML: "", textContent: "", value: "", style: {}, tagName: "DIV",
+        classList: on(new Set()),
+        setAttribute(k, v) { this.attrs[k] = String(v); },
+        getAttribute(k) { return this.attrs[k]; },
+        hasAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attrs, k); },
+        removeAttribute(k) { delete this.attrs[k]; },
+        querySelector: () => null, querySelectorAll: () => [],
+        remove() { this.gone = true; this.isConnected = false; },
+        contains: () => false,
+        appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.isConnected = true; return c; },
+        getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 100, height: 30 }),
+        addEventListener() {}, removeEventListener() {}
+      }, extra || {});
+
+      const made = [];
+      const catNowEl = mkEl({ id: "catNow" });
+      const body = mkEl({
+        tagName: "BODY",
+        appendChild: n => { made.push(n); n.isConnected = true; n.parentNode = body; return n; },
+        removeChild: n => { n.gone = true; n.isConnected = false; }
+      });
+      const docEl = mkEl({ tagName: "HTML", lang: "en" });
+
+      globalThis.document = {
+        body,
+        documentElement: docEl,
+        getElementById: id => (id === "catNow" ? catNowEl : (made.filter(n => n.id === id && !n.gone).pop() || null)),
+        querySelector: sel => (sel === "#catNow" ? catNowEl : (made.filter(n => ("#" + n.id) === sel && !n.gone).pop() || null)),
+        querySelectorAll: () => [],
+        createElement: tag => mkEl({ tagName: (tag || "DIV").toUpperCase(), isConnected: false }),
+        createRange: () => ({ selectNodeContents() {}, collapse() {} }),
+        addEventListener() {}, removeEventListener() {}
+      };
+      if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+      if (typeof globalThis.removeEventListener !== "function") globalThis.removeEventListener = () => {};
+
+      let deliver = null;
+      globalThis.window.E_HOST = {
+        teamJoin: () => {},
+        onTeamJoin: fn => { deliver = fn; }
+      };
+
+      try {
+        RP.setUiLang("en");
+        AS.setCards([{ id: "sample-card" }]);
+        TJ.wireTeamJoin();
+        if (typeof deliver === "function") {
+          deliver({ sealed: { file: "Settings", team: "Engineering" } });
+        } else {
+          TJ.paintJoin();
+        }
+
+        const enBubble = made.filter(n => n.id === "eTeamJoin" && !n.gone).pop();
+        const enHtml = enBubble ? enBubble.innerHTML : "";
+        const enHasName = enHtml.includes("Settings");
+        const enHasWords = enHtml.includes("sealed for its team") && enHtml.includes("Hide");
+
+        RP.setUiLang("pl");
+
+        const plBubble = made.filter(n => n.id === "eTeamJoin" && !n.gone).pop();
+        const plHtml = plBubble ? plBubble.innerHTML : "";
+        const plHasName = plHtml.includes("Settings");
+        const plHasWords = plHtml.includes("zaszyfrowany") && plHtml.includes("Ukryj");
+
+        return eq(enHasName && enHasWords && plHasName && plHasWords, true);
+      } finally {
+        try { if (typeof deliver === "function") deliver(null); } catch(e) {}
+        try { TJ.closeJoinBubble(); } catch(e) {}
+        try { AS.setCards(hadCards); } catch(e) {}
+        try { if (hadLang == null) UILANG_STORE.lsDel("eUiLang"); else UILANG_STORE.lsSet("eUiLang", hadLang); } catch(e) {}
+        if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
+        if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+        if (hadRm === undefined) delete globalThis.removeEventListener; else globalThis.removeEventListener = hadRm;
+        if (hadIw === undefined) delete globalThis.innerWidth; else globalThis.innerWidth = hadIw;
+        if (hadIh === undefined) delete globalThis.innerHeight; else globalThis.innerHeight = hadIh;
+        if (hadRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = hadRaf;
+        hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
         if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
       }
     });

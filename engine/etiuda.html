@@ -7917,10 +7917,7 @@ What you type stays in this browser only.`;
       "#tourRoot",
       "#intentRail",
       "#sampleMark",
-      "#railHit",
-      "#eNotices",
-      "#eTeamJoin",
-      "#eCatalogOffer"
+      "#railHit"
     ].forEach((sel) => {
       const el = document.querySelector(sel);
       if (el) translateTree(el);
@@ -22430,7 +22427,7 @@ What you type stays in this browser only.`;
     document.documentElement.lang = uiLang();
     syncSettingsMenu();
     syncShortcutTitles();
-    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, syncGenderGlyph, render].forEach((f) => {
+    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, syncGenderGlyph, render, paintJoin].forEach((f) => {
       try {
         f();
       } catch (e) {
