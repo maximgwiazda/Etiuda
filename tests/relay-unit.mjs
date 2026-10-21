@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 213;
+const EXPECTED = 224;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2347,6 +2347,134 @@ async function main() {
     });
     check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create wake its object once, which refuses it itself, and the product file is never written: "
       + workerPlant.detail + ", sha " + (workerPlant.back ? "unchanged" : "CHANGED"));
+
+    /* ---- 971: a team's lead is a key under an id that comes from it, and no desk is that key (the test architect's K1, board 935) ---- */
+    const branchOf = pub => "k-" + sha(Buffer.from(pub, "hex")).slice(0, 16);
+    /* The key pair `kp` under its public key as its id, or under its branch id. */
+    const asForm = (kp, form) => ({ keyId: form === "branch" ? branchOf(kp.pub) : kp.pub, pub: kp.pub, privateKey: kp.privateKey });
+    const otherForm = form => (form === "branch" ? "pub" : "branch");
+    /* A create whose lead carries another valid key id than its own, signed by the lead's key over a good grant, so that the id is all that is wrong. */
+    const wrongIds = () => [{ say: "another desk's branch id", id: "k-" + hex(8) }, { say: "another key's public key", id: keyPair(false).pub },
+      { say: "another key's branch id", id: keyPair(true).keyId }, { say: "a plain label", id: "test-lead-1" }];
+    async function wrongIdScene(worker) {
+      const kp = keyPair(false);
+      for (const probe of wrongIds()) {
+        const lead = { keyId: probe.id, pub: kp.pub, privateKey: kp.privateKey };
+        const ctx = { rt: hex(16), lead, now: T0 }, body = bodyFor(ctx, {});
+        const faultOnlyId = C.grantWhy(body.grant, lead.pub, T0, K.ROOTS) === null
+          && verifies(lead.pub, C.create2Bytes(ctx.rt, lead.keyId, ctx.now, body.grant).toString("hex"), body.sig) && !C.keyMatches(lead.keyId, lead.pub);
+        const R = fresh(), w = await viaWorker(worker, R, body);
+        if (!faultOnlyId || !refused(w.r, "bad-signature") || w.gets !== 0 || R.stores.has(ctx.rt)) return false;
+        const R2 = fresh(), o = await viaObject(R2, ctx.rt, body);
+        if (!refused(o, "bad-signature") || teamOf(R2, ctx.rt) !== undefined) return false;
+      }
+      return true;
+    }
+    const idA = await wrongIdScene(W);
+    check(idA,
+      "971a a create whose lead key id is neither the lead's public key nor its branch id, another valid id, is refused bad-signature by the Worker with no object fetched and"
+      + " nothing stored, and by the object with nothing kept, though the grant is good and the lead signed it");
+    const bothForms = async () => {
+      for (const form of ["pub", "branch"]) {
+        const lead = asForm(keyPair(false), form), ctx = { rt: hex(16), lead, now: T0 }, R = fresh();
+        const w = await viaWorker(W, R, bodyFor(ctx, {})), kept = teamOf(R, ctx.rt);
+        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+      }
+      return true;
+    };
+    const idB = await bothForms();
+    check(idB, "971b a create whose lead key id is the lead's public key, or its branch id, is made, reaching the object once and keeping that id");
+
+    /* The shared vector's create names its lead's key by an id that comes from it, and the relay judges that create whole. */
+    const vectorKeyId = vec => {
+      const c = vec.create, g = vec.grants[c.grant].grant;
+      return c.keyId === vec.lead.keyId && C.keyMatches(vec.lead.keyId, vec.lead.pub)
+        && C.judgeCreate(c.rt, { rt: c.rt, lead: { keyId: vec.lead.keyId, pub: vec.lead.pub }, t: c.t, grant: g, sig: c.sig }, vec.now, [vec.root.pub]).ok === true;
+    };
+    const idC = vectorKeyId(V);
+    check(idC, "971c the shared vector's lead key id comes from its public key, and the relay takes the vector's create whole: its grant, its id and its signature");
+
+    /* A desk key whose public key is the lead's, under the id form the lead did not take, is refused by the devices call. */
+    const leadWorld = async form => {
+      const R = relayEnv(), w = { R, rt: hex(16), lead: asForm(keyPair(false), form), rev: 0, devs: [] };
+      const made = await create(w, w.lead, R.clock.now);
+      if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+      return w;
+    };
+    async function leadDeskScene() {
+      for (const form of ["pub", "branch"]) {
+        const w = await leadWorld(form), as = asForm(w.lead, otherForm(form));
+        const probe = await devices(w, [{ id: as.keyId, pub: as.pub, desk: "k-" + hex(8) }]);
+        const own = await devices(w, [{ id: w.lead.keyId, pub: w.lead.pub, desk: "k-" + hex(8) }]);
+        const st = w.R.stores.get(w.rt);
+        if (as.keyId === w.lead.keyId || !refused(probe, "bad-signature") || !refused(own, "bad-signature") || w.rev !== 0
+          || st.get("dev:" + as.keyId) !== undefined || st.list("dev:").length !== 0) return false;
+        const desk = keyPair(true), ok = await devices(w, [{ id: desk.keyId, pub: desk.pub, desk: "k-" + hex(8) }]);
+        if (ok.status !== 200 || w.rev !== 1 || st.get("dev:" + desk.keyId) === undefined) return false;
+      }
+      return true;
+    }
+    const idD = await leadDeskScene();
+    check(idD, "971d a devices call enrolling the lead's public key under the id form the lead did not take, its branch id or its public key, is refused bad-signature, like the lead's own id, and nothing"
+      + " is kept; an ordinary desk key is still enrolled");
+
+    /* The same key through an invitation: its token hello binds it, and its one upload is refused. */
+    async function leadInviteScene() {
+      for (const form of ["pub", "branch"]) {
+        const w = await leadWorld(form), as = asForm(w.lead, otherForm(form));
+        const token = hex(32), id = hex(16), place = "desk:k-" + hex(8);
+        await invites(w, [{ id, hash: sha(token) }], []);
+        const hello = await tokenHello(w, id, token, null, as);
+        const sealFor = (who, p) => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+          writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + p.slice(5) + "/join.json", body: "ask", counter: 1, place: p, kind: "file" });
+        const up = hello.status === 200 ? await put(w, hello.json.session, sealFor(as, place), { extra: { pub: as.pub } }) : null;
+        if (hello.status !== 200 || !refused(up, "no-hello")) return false;
+        const t2 = hex(32), id2 = hex(16), who = keyPair(true), place2 = "desk:k-" + hex(8);
+        await invites(w, [{ id: id2, hash: sha(t2) }], []);
+        const h2 = await tokenHello(w, id2, t2, null, who);
+        const up2 = h2.status === 200 ? await put(w, h2.json.session, sealFor(who, place2), { extra: { pub: who.pub } }) : null;
+        if (!up2 || up2.status !== 200) return false;
+      }
+      return true;
+    }
+    const idE = await leadInviteScene();
+    check(idE, "971e an invitation's one upload by the lead's public key under the id form the lead did not take, its branch id or its public key, is refused no-hello, like the lead's own id;"
+      + " another key's invitation still uploads");
+
+    /* ---- 972: the line each one guards, lifted in a copy, and the old vector id put back ---- */
+    const pCreate = await liftCore("plant:create-keyid", async () => !(await wrongIdScene(W)));
+    check(idA && idB && pCreate.turned && pCreate.back, "972a lifting plant:create-keyid lets a create under a key id that is not the lead's through, and the product file is never written: "
+      + pCreate.detail + ", sha " + (pCreate.back ? "unchanged" : "CHANGED"));
+    const oldVec = JSON.parse(JSON.stringify(V));
+    oldVec.lead.keyId = "test-lead-1";
+    oldVec.create.keyId = "test-lead-1";
+    check(idC && !vectorKeyId(oldVec), "972b the vector read with its old label \"test-lead-1\" as the lead's id fails 971c, in a copy of its text; the file is never written");
+    const pDevices = await liftCore("plant:devices-lead-pub", async () => !(await leadDeskScene()));
+    check(idD && pDevices.turned && pDevices.back, "972c lifting plant:devices-lead-pub lets the lead's public key be enrolled as a desk under its other id form, and the product file is never written: "
+      + pDevices.detail + ", sha " + (pDevices.back ? "unchanged" : "CHANGED"));
+    const pInvite = await liftCore("plant:invite-lead-pub", async () => !(await leadInviteScene()));
+    check(idE && pInvite.turned && pInvite.back, "972d lifting plant:invite-lead-pub lets the lead's public key upload through an invitation under its other id form, and the product file is never written: "
+      + pInvite.detail + ", sha " + (pInvite.back ? "unchanged" : "CHANGED"));
+    /* Etiuda Studio names its lead's key "studio-" and the first 16 hex of the sha256 of the pub: the create takes that form too, of the lead's own pub alone. */
+    const studioOf = pub => "studio-" + sha(Buffer.from(pub, "hex")).slice(0, 16);
+    async function studioScene() {
+      const kp = keyPair(false), lead = { keyId: studioOf(kp.pub), pub: kp.pub, privateKey: kp.privateKey };
+      const ctx = { rt: hex(16), lead, now: T0 }, body = bodyFor(ctx, {});
+      const R = fresh(), w = await viaWorker(W, R, body), kept = teamOf(R, ctx.rt);
+      if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+      const R2 = fresh(), o = await viaObject(R2, ctx.rt, body), kept2 = teamOf(R2, ctx.rt);
+      if (o.status !== 200 || !kept2 || kept2.lead.keyId !== lead.keyId) return false;
+      const liar = { keyId: studioOf(keyPair(false).pub), pub: kp.pub, privateKey: kp.privateKey }, ctx2 = { rt: hex(16), lead: liar, now: T0 }, bad = bodyFor(ctx2, {});
+      const R3 = fresh(), w3 = await viaWorker(W, R3, bad);
+      if (!refused(w3.r, "bad-signature") || w3.gets !== 0 || R3.stores.has(ctx2.rt)) return false;
+      const R4 = fresh(), o4 = await viaObject(R4, ctx2.rt, bad);
+      return refused(o4, "bad-signature") && teamOf(R4, ctx2.rt) === undefined;
+    }
+    const idS = await studioScene();
+    check(idS, "972e a create whose lead key id is \"studio-\" and 16 hex of the sha256 of its pub is made through the Worker with one object fetch and by the object, keeping that id; one whose studio id is of another pub is refused bad-signature, with no object fetched and nothing kept");
+    const pStudio = await liftCore("plant:lead-studio-id", async () => !(await studioScene()));
+    check(idS && pStudio.turned && pStudio.back, "972f lifting plant:lead-studio-id refuses the studio form of the lead's own pub, and the product file is never written: "
+      + pStudio.detail + ", sha " + (pStudio.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

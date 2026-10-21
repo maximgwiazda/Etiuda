@@ -136,10 +136,11 @@ async function admin(method, p, json) {
 }
 
 /* ---- the team: its lead, its desks, its key and its files ------------------------------------------------------- */
-const LEAD = keyPair(false, "quay-lead");
+/* The lead's key id comes from its key (its branch id), as the relay now requires of a create. */
+const LEAD = keyPair(true);
 /* A create's body for LEAD: the grant of the test root the relay here is built with, and the create-2 signature. */
 const createBody = (rt, t) => K.createBody(rt, LEAD, t, bytes => signHex(LEAD, bytes));
-const DESK = keyPair(true), OTHER = keyPair(true), STRAY = keyPair(true), NEWD = keyPair(true), INTR = keyPair(false, "quay-lead");
+const DESK = keyPair(true), OTHER = keyPair(true), STRAY = keyPair(true), NEWD = keyPair(true), INTR = keyPair(false, LEAD.keyId);
 const TEAM = "t-" + hex(8), RT = hex(16), K1 = crypto.randomBytes(32);
 const RING = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "quay-board", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.pub }] };
 const PIN = { teamId: TEAM, rt: RT, lead: { keyId: LEAD.keyId, public: LEAD.pub } };

@@ -68,6 +68,13 @@ function verified(pubHex, bytes, sigHex) {
 /* A device's key id is its public key, or the branch id shell/main.js makes of it (branchIdOf). */
 const keyMatches = (id, pub) => is(HEX64, pub) && (id === pub || id === "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16));
 
+/* A lead's key id is one of those, or the id Etiuda Studio makes of the key ("studio-" and the first 16 hex of its sha256). Only a create
+   takes the Studio form; a desk's key id is judged by keyMatches alone. */
+function leadKeyMatches(id, pub) {
+  if (keyMatches(id, pub)) return true;
+  return is(HEX64, pub) && id === "studio-" + sha256(Buffer.from(pub, "hex")).slice(0, 16); /* plant:lead-studio-id */
+}
+
 /* The vendor's root key, public half: the one key a grant, or the delegation a grant names, must trace to. A constant of this
    file and read from no environment. Only a leg hands the relay other roots, through `roots`, and production code never does. */
 const ROOT_PUB = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
@@ -140,6 +147,8 @@ const grantOk = (grant, leadPub, now, roots) => grantWhy(grant, leadPub, now, ro
 function judgeCreate(rt, body, now, roots) {
   const b = plain(body) ? body : {}, lead = plain(b.lead) ? b.lead : {};
   if (!is(HEX32, rt) || b.rt !== rt || !isId(lead.keyId) || !is(HEX64, lead.pub) || !Number.isSafeInteger(b.t)) return no("bad-signature");
+  /* The lead's key id comes from its key, as every other key id here does; a grant names the key alone, so nothing else binds the id. */
+  if (!leadKeyMatches(lead.keyId, lead.pub)) return no("bad-signature"); /* plant:create-keyid */
   if (!grantOk(b.grant, lead.pub, now, roots)) return no("bad-grant"); /* plant:create-grant */
   if (!verified(lead.pub, create2Bytes(rt, lead.keyId, b.t, b.grant), b.sig)) return no("bad-signature"); /* plant:create-sig */
   return { ok: true };
@@ -203,6 +212,8 @@ function createCore(deps) {
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
     for (const k of b.keys) {
+      /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
+      if (k && k.pub === team.lead.pub) return no("bad-signature"); /* plant:devices-lead-pub */
       const shaped = !!k && typeof k === "object" && isId(k.id) && keyMatches(k.id, k.pub) && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
@@ -636,6 +647,7 @@ function createCore(deps) {
     if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
     const pub = m.pub !== null ? m.pub : m.writer;
     if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
+    if (pub === team.lead.pub) return no("no-hello"); /* plant:invite-lead-pub */
     const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
     let atDesk = true;
     atDesk = typeof m.place === "string" && m.place.indexOf("desk:") === 0; /* plant:S3-invite-place */
@@ -755,6 +767,6 @@ function createCore(deps) {
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
-  grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, keyMatches, parseMeta,
+  grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };
