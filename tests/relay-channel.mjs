@@ -46,7 +46,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 205;
+const EXPECTED = 206;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -60,6 +60,57 @@ const URLV1 = "https://relay.test/relay/v1";
 const hex = n => crypto.randomBytes(n).toString("hex");
 const sha = b => crypto.createHash("sha256").update(b).digest("hex");
 const SPKI = Buffer.from("302a300506032b6570032100", "hex");
+
+const productWrites = [];
+const isInside = (dir, target) => {
+  const rel = path.relative(dir, path.resolve(target));
+  return !rel.startsWith("..") && !path.isAbsolute(rel);
+};
+function noteWrite(target) {
+  if (typeof target !== "string") return;
+  const resolved = path.resolve(target);
+  const inRoot = isInside(ROOT, resolved);
+  const inLab = isInside(LAB, resolved);
+  const inTmp = !isInside(os.tmpdir(), ROOT) && isInside(os.tmpdir(), resolved);
+  if (inRoot && !inLab && !inTmp) {
+    productWrites.push(path.relative(ROOT, resolved).replace(/\\/g, "/"));
+  }
+}
+const origWriteFileSync = fs.writeFileSync.bind(fs);
+const origRenameSync = fs.renameSync.bind(fs);
+const origCopyFileSync = fs.copyFileSync.bind(fs);
+fs.writeFileSync = function (file, ...args) {
+  noteWrite(file);
+  return origWriteFileSync(file, ...args);
+};
+fs.renameSync = function (oldPath, newPath, ...args) {
+  noteWrite(newPath);
+  return origRenameSync(oldPath, newPath, ...args);
+};
+fs.copyFileSync = function (src, dest, ...args) {
+  noteWrite(dest);
+  return origCopyFileSync(src, dest, ...args);
+};
+
+function filesUnder(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...filesUnder(full));
+    else if (ent.isFile()) out.push(full);
+  }
+  return out;
+}
+const trackedProductFiles = [
+  ...filesUnder(path.join(ROOT, "shell", "relay")),
+  path.join(ROOT, "shell", "main.js"),
+  path.join(ROOT, "src", "modules", "settings.js"),
+];
+const initialDigests = new Map();
+for (const f of trackedProductFiles) {
+  initialDigests.set(path.relative(ROOT, f).replace(/\\/g, "/"), sha(fs.readFileSync(f)));
+}
 const wait = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, ms) {
   const end = Date.now() + (ms || 4000);
@@ -5327,6 +5378,17 @@ try {
     + ok + " ok, " + bad + " failed, exit " + r.status + (same && SLICE2_OPEN.length ? ", open " + SLICE2_OPEN.join(" ") : "")
     + (missing.length ? ", missing " + missing.join(" ") : "") + (extra.length ? ", extra " + extra.join(" ") : "")
     + (listedOk.length ? ", listed-but-ok " + listedOk.join(" ") : ""));
+}
+{
+  const changed = [];
+  for (const [rel, digest] of initialDigests.entries()) {
+    try {
+      if (sha(fs.readFileSync(path.join(ROOT, rel))) !== digest) changed.push(rel);
+    } catch {
+      changed.push(rel);
+    }
+  }
+  check(productWrites.length === 0 && changed.length === 0, "943b no leg wrote a product file: " + productWrites.length + " write(s) into the repository" + (productWrites.length ? " (" + [...new Set(productWrites)].join(" ") + ")" : "") + ", and every file under shell/relay/, shell/main.js and src/modules/settings.js ends with the sha256 it began with" + (changed.length ? "; changed: " + changed.join(" ") : ""));
 }
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted < EXPECTED) {
