@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 25;
+const EXPECTED = 27;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -372,6 +372,8 @@ try {
     globalThis.getComputedStyle = window.getComputedStyle = () => ({ getPropertyValue: () => "", borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0" });
     const fabEl = DOC.body.appendChild(new El("button", { id: "nextFab", class: "fab fab-next" }));
     fabEl.getBoundingClientRect = () => ({ top: 760, left: 1106, width: 44, height: 44 });
+    const toastEl = new El("div", { id: "toast" }); els["#toast"] = toastEl;
+    toastEl.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
     HK.hooks.syncNextDock = () => ND.syncNextDock();
     AS.setCards([
       { id: "c-a9", c: "orders", t: "A", en: "First.", next: [{ to: "c-b9" }] },
@@ -423,9 +425,60 @@ try {
         blurred.path === "" && blurred.beads === null && !blurred.shown,
         "3n clearing the customer's name while typing keeps the conversation, and leaving the field ends it: " +
         JSON.stringify({ clearedWhileTyping, retyped, blurred }));
+      // 3o taking a copy while the name field is still focused and empty ends the conversation before the copy step:
+      TB.tabs.splice(0, TB.tabs.length); ST.ssSet(TB.TAB_KEY, "null"); TB.initTabs();
+      Dom.grabDom();
+      // On the first keystroke, paxNamed must be set:
+      name.value = "g"; TB.scheduleTabSave();
+      const namedOnFirstStroke = TB.tabs[0].paxNamed === true;
+      LP.bumpUseCount("c-a9", "en"); LP.bumpUseCount("c-b9", "en");
+      name.focus();
+      name.value = ""; TB.scheduleTabSave();
+      const emptyWhileFocused = { path: path(), focused: DOC.activeElement === name };
+      LP.bumpUseCount("c-c9", "en");
+      const copiedEmpty = { path: path(), learnt: learntAfterB() };
+      name.blur();
+      check(namedOnFirstStroke && emptyWhileFocused.path === "c-a9,c-b9" && emptyWhileFocused.focused &&
+        copiedEmpty.path === "c-c9" && copiedEmpty.learnt === "",
+        "3o taking a copy while the name field is still focused and empty ends the conversation before the copy step: " +
+        JSON.stringify({ namedOnFirstStroke, emptyWhileFocused, copiedEmpty }));
+      // 3p switching tabs while the field is empty ends the outgoing tab and not the incoming one:
+      TB.tabs.splice(0, TB.tabs.length);
+      ST.ssSet(TB.TAB_KEY, JSON.stringify({
+        v: 1,
+        tabs: [{ id: "t1", pax: "guest one", path: ["c-a9", "c-b9"], log: [] }],
+        activeTabId: "t1"
+      }));
+      TB.initTabs();
+      Dom.grabDom();
+      const restoredNamed = TB.tabs[0].paxNamed === true;
+      const tab1Id = TB.tabs[0].id;
+      TB.addTab();
+      Dom.grabDom();
+      const tab2Id = TB.tabs[1].id;
+      name.value = "guest two"; TB.scheduleTabSave();
+      LP.bumpUseCount("c-c9", "en");
+      // Switch back to tab 1
+      TB.switchTab(tab1Id);
+      Dom.grabDom();
+      name.focus();
+      name.value = ""; TB.scheduleTabSave();
+      TB.switchTab(tab2Id);
+      Dom.grabDom();
+      name.blur();
+      const tab1 = TB.tabs.find(x => x.id === tab1Id);
+      const tab2 = TB.tabs.find(x => x.id === tab2Id);
+      const switched = {
+        restoredNamed,
+        tab1Path: (tab1 && tab1.path || []).join(","),
+        tab2Path: (tab2 && tab2.path || []).join(",")
+      };
+      check(switched.restoredNamed && switched.tab1Path === "" && switched.tab2Path === "c-c9",
+        "3p switching tabs while the field is empty ends the outgoing tab and not the incoming one: " +
+        JSON.stringify(switched));
     } finally {
       ND.foldNextDock(); TB.watchTabPath(null);
-      fabEl.remove(); HK.hooks.syncNextDock = hadSync;
+      fabEl.remove(); delete els["#toast"]; HK.hooks.syncNextDock = hadSync;
       TB.tabs.splice(0, TB.tabs.length);
       globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
     }

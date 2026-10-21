@@ -11047,6 +11047,7 @@ What you type stays in this browser only.`;
     scheduleTabSave: () => scheduleTabSave,
     setTabBeads: () => setTabBeads,
     stepTab: () => stepTab,
+    switchTab: () => switchTab,
     syncTabBeads: () => syncTabBeads,
     tabBeadsHtml: () => tabBeadsHtml,
     tabInsertAnimating: () => tabInsertAnimating,
@@ -11876,6 +11877,7 @@ What you type stays in this browser only.`;
          in, and a fresh launch resumes where you left off - neither snaps back to English. */
       lang,
       pax: "",
+      paxNamed: false,
       intentIdxs: [],
       intentText: "",
       intentBox: "",
@@ -12048,6 +12050,7 @@ What you type stays in this browser only.`;
     else if (activeSaid) activeSaid[field] = now[field];
   }
   var paxBlurWired = null;
+  var paxTabId = null;
   function endPaxConversation(tb) {
     if (tb && tb.paxNamed && !String(tb.pax || "").trim() && Array.isArray(tb.path) && tb.path.length) {
       tb.path = [];
@@ -12059,8 +12062,13 @@ What you type stays in this browser only.`;
   function wirePaxBlur() {
     if (!pax || paxBlurWired === pax || typeof pax.addEventListener !== "function") return;
     paxBlurWired = pax;
+    pax.addEventListener("focus", () => {
+      paxTabId = activeTabId;
+    });
     pax.addEventListener("blur", () => {
-      const tb = tabs.find((x) => x.id === activeTabId);
+      const targetId = paxTabId || activeTabId;
+      paxTabId = null;
+      const tb = tabs.find((x) => x.id === targetId);
       if (tb) {
         endPaxConversation(tb);
         clearTimeout(tabSaveTimer);
@@ -12070,11 +12078,12 @@ What you type stays in this browser only.`;
   }
   function scheduleTabSave() {
     wirePaxBlur();
+    paxTabId = activeTabId;
     const tb = tabs.find((x) => x.id === activeTabId);
     if (tb) {
       const was = tabLabel(tb);
-      if (String(tb.pax || "").trim()) tb.paxNamed = true;
       tb.pax = pax ? pax.value : "";
+      if (tb.pax.trim()) tb.paxNamed = true;
       const inPax = typeof document !== "undefined" && document.activeElement === pax;
       if (!inPax) endPaxConversation(tb);
       if (tabLabel(tb) !== was) drawTabs();
@@ -12097,7 +12106,8 @@ What you type stays in this browser only.`;
         intentIdxs: Array.isArray(t2.intentIdxs) ? t2.intentIdxs.filter(intentOk) : [],
         cats: Array.isArray(t2.cats) ? t2.cats.filter(catOk) : [],
         path: Array.isArray(t2.path) ? t2.path.filter((x) => typeof x === "string" && x).slice(-TAB_PATH_MAX) : [],
-        log: Array.isArray(t2.log) ? t2.log.filter(tabLogEntry).slice(-TAB_LOG_MAX) : []
+        log: Array.isArray(t2.log) ? t2.log.filter(tabLogEntry).slice(-TAB_LOG_MAX) : [],
+        paxNamed: Boolean(t2.paxNamed || String(t2.pax || "").trim())
       }));
       activeTabId = data.activeTabId;
       if (!tabs.some((t2) => t2.id === activeTabId)) activeTabId = tabs[0].id;
@@ -12148,6 +12158,7 @@ What you type stays in this browser only.`;
   function switchTab(id) {
     if (!id || id === activeTabId) return;
     snapshotActiveTab();
+    endPaxConversation(tabs.find((x) => x.id === activeTabId));
     const t2 = tabs.find((x) => x.id === id);
     if (!t2) return;
     applyTab(t2);
@@ -12901,6 +12912,7 @@ What you type stays in this browser only.`;
       tabs = [t2];
       activeTabId = t2.id;
     }
+    wirePaxBlur();
     const cur = tabs.find((x) => x.id === activeTabId) || tabs[0];
     applyTab(cur);
     saveTabSession();
