@@ -3,7 +3,8 @@
    and wakes no object. Every POST body is read here, to its cap, before an object is asked, so a body that trickles or never
    ends holds a Worker request and no object; a create's body is also read for the id it names and for its grant: a create that
    carries no valid grant under the vendor's root is refused here, before any object is asked, so a stranger's create costs one
-   Worker request and wakes nothing. The object judges it again. */
+   Worker request and wakes nothing. The object judges it again. A create whose t is stale or far ahead of the Worker's clock,
+   by the rule the object applies, is refused here the same way, so a replayed create wakes no object either. */
 import team from "./team.cjs";
 import core from "./core.cjs";
 
@@ -35,8 +36,9 @@ export function routeWith(roots, clockOf) {
       if (!bytes) return team.refusedFor("blob-size");
       const body = bodyOf(bytes), rt = rtOf(body);
       if (!rt) return team.refusedFor("bad-signature");
-      const judged = core.judgeCreate(rt, body, nowOf(env), roots);
+      const now = nowOf(env), judged = core.judgeCreate(rt, body, now, roots);
       if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-grant */
+      if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-fresh */
       return teams.get(teams.idFromName(rt)).fetch(new Request(request.url, { method: "POST", headers: request.headers, body: bytes }));
     }
     let forward = request;
