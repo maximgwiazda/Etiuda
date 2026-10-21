@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 27;
+const EXPECTED = 28;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -476,6 +476,20 @@ try {
       check(switched.restoredNamed && switched.tab1Path === "" && switched.tab2Path === "c-c9",
         "3p switching tabs while the field is empty ends the outgoing tab and not the incoming one: " +
         JSON.stringify(switched));
+      // 3q a window losing focus fires blur with the name field still active, and the conversation is kept; leaving the field ends it:
+      TB.tabs.splice(0, TB.tabs.length); ST.ssSet(TB.TAB_KEY, "null"); TB.initTabs();
+      Dom.grabDom();
+      name.value = "guest one"; TB.scheduleTabSave();
+      LP.bumpUseCount("c-a9", "en"); LP.bumpUseCount("c-b9", "en");
+      name.focus();
+      name.value = ""; TB.scheduleTabSave();
+      fire(name, "blur");
+      const kept = path();
+      name.blur();
+      const ended = path();
+      check(kept === "c-a9,c-b9" && ended === "",
+        "3q a window losing focus fires blur with the name field still active, and the conversation is kept; leaving the field ends it: " +
+        JSON.stringify({ kept, ended }));
     } finally {
       ND.foldNextDock(); TB.watchTabPath(null);
       fabEl.remove(); delete els["#toast"]; HK.hooks.syncNextDock = hadSync;

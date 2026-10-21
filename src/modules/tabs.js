@@ -233,6 +233,7 @@ function wirePaxBlur(){
   paxBlurWired=pax;
   pax.addEventListener("focus", ()=>{ paxTabId=activeTabId; });
   pax.addEventListener("blur", ()=>{
+    if(document.activeElement===pax || (typeof document.hasFocus==="function" && !document.hasFocus())) return;
     const targetId=paxTabId||activeTabId;
     paxTabId=null;
     const tb=tabs.find(x=>x.id===targetId);
