@@ -32,6 +32,7 @@ function blankTab(){
        in, and a fresh launch resumes where you left off - neither snaps back to English. */
     lang:lang,
     pax:"",
+    paxNamed:false,
     intentIdxs:[],
     intentText:"",
     intentBox:"",
@@ -57,6 +58,7 @@ function tabLogEntry(e){
 function tabPathStep(id, how){
   const tb=tabs.find(x=>x.id===activeTabId), at=String(id==null?"":id);
   if(!tb||!at) return null;
+  endPaxConversation(tb);
   const path=Array.isArray(tb.path) ? tb.path : [], prev=path.length ? path[path.length-1] : null;
   const log=Array.isArray(tb.log) ? tb.log : [], e={id:at, at:Date.now(), l:String(how&&how.l||""), b:Math.max(0,(how&&how.b)|0)};
   tb.log=(prev===at && log.length && log[log.length-1].id===at ? log.slice(0,-1) : log).concat(e).slice(-TAB_LOG_MAX);
@@ -220,13 +222,38 @@ function activeHeard(field){
 /* Called on every keystroke and every arrow, so it forces no layout: the strip draws only a
    tab's name and its filter's accent, and the rest of the snapshot, the scroll read included,
    waits for the save, which takes it anyway. */
+let paxBlurWired=null, paxTabId=null;
+function endPaxConversation(tb){
+  if(tb && tb.paxNamed && !String(tb.pax||"").trim() && Array.isArray(tb.path) && tb.path.length){
+    tb.path=[]; tb.log=[]; tb.paxNamed=false; hooks.syncNextDock();
+  }
+}
+function wirePaxBlur(){
+  if(!pax || paxBlurWired===pax || typeof pax.addEventListener!=="function") return;
+  paxBlurWired=pax;
+  pax.addEventListener("focus", ()=>{ paxTabId=activeTabId; });
+  pax.addEventListener("blur", ()=>{
+    if(document.activeElement===pax || (typeof document.hasFocus==="function" && !document.hasFocus())) return;
+    const targetId=paxTabId||activeTabId;
+    paxTabId=null;
+    const tb=tabs.find(x=>x.id===targetId);
+    if(tb){
+      endPaxConversation(tb);
+      clearTimeout(tabSaveTimer);
+      tabSaveTimer=setTimeout(saveTabSession, 250);
+    }
+  });
+}
 function scheduleTabSave(){
+  wirePaxBlur();
+  paxTabId=activeTabId;
   const tb=tabs.find(x=>x.id===activeTabId);
   if(tb){
-    const was=tabLabel(tb), named=!!String(tb.pax||"").trim();
+    const was=tabLabel(tb);
     tb.pax=pax?pax.value:"";
-    // The customer's name cleared is the conversation over: the tab's next reply is the first of a new path.
-    if(named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length){ tb.path=[]; tb.log=[]; hooks.syncNextDock(); }
+    if(tb.pax.trim()) tb.paxNamed=true;
+    const inPax=typeof document!=="undefined" && document.activeElement===pax;
+    if(!inPax) endPaxConversation(tb);
     if(tabLabel(tb)!==was) drawTabs(); else syncTabAccent();
   }
   clearTimeout(tabSaveTimer);
@@ -254,7 +281,8 @@ function loadTabSession(){
       intentIdxs:Array.isArray(t.intentIdxs)?t.intentIdxs.filter(intentOk):[],
       cats:Array.isArray(t.cats)?t.cats.filter(catOk):[],
       path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[],
-      log:Array.isArray(t.log)?t.log.filter(tabLogEntry).slice(-TAB_LOG_MAX):[]
+      log:Array.isArray(t.log)?t.log.filter(tabLogEntry).slice(-TAB_LOG_MAX):[],
+      paxNamed:Boolean(t.paxNamed||String(t.pax||"").trim())
     }));
     activeTabId=data.activeTabId;
     if(!tabs.some(t=>t.id===activeTabId)) activeTabId=tabs[0].id;
@@ -308,6 +336,7 @@ function applyTab(tb){
 function switchTab(id){
   if(!id||id===activeTabId) return;
   snapshotActiveTab();
+  endPaxConversation(tabs.find(x=>x.id===activeTabId));
   const t=tabs.find(x=>x.id===id);
   if(!t) return;
   applyTab(t);
@@ -1266,6 +1295,7 @@ function initTabs(){
     tabs=[t];
     activeTabId=t.id;
   }
+  wirePaxBlur();
   const cur=tabs.find(x=>x.id===activeTabId)||tabs[0];
   applyTab(cur);
   saveTabSession();
@@ -1283,6 +1313,7 @@ export {
   activeWords,
   sayLive,
   stepTab,
+  switchTab,
   addTab,
   closeActiveTab,
   escCloseAllTabsStep,
