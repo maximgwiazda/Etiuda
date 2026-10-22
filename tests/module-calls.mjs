@@ -4516,6 +4516,37 @@ const CARD_B = {
     check("search-box.js", "1012k4 four held Escapes in the search box neither ask nor close a conversation",
       () => eq(boxHeld, "dp-a:Anna,dp-b:Bartek/"));
 
+    /* Search box caret keys and category navigation */
+    const boxKeysD3 = (box.heard && box.heard.keydown) || [];
+    const shortcutsD3 = [];
+    const savedRunD3 = H.hooks.runShortcut;
+    H.hooks.runShortcut = id => { shortcutsD3.push(id); return true; };
+    const pressBox = o => {
+      shortcutsD3.length = 0;
+      const e = key(o);
+      boxKeysD3.forEach(fn => fn(e));
+      return (e.prevented ? "!" : "") + (e.stopped ? "s" : "") + ":" + shortcutsD3.join("+");
+    };
+    box.value = "abc"; box.selectionStart = 1; box.selectionEnd = 1;
+    const midLeft = pressBox({ key: "ArrowLeft", code: "ArrowLeft" });
+    const midRight = pressBox({ key: "ArrowRight", code: "ArrowRight" });
+    box.selectionStart = 0; box.selectionEnd = 0;
+    const edgeLeft = pressBox({ key: "ArrowLeft", code: "ArrowLeft" });
+    const edgeLeftFwd = pressBox({ key: "ArrowRight", code: "ArrowRight" });
+    box.selectionStart = 3; box.selectionEnd = 3;
+    const edgeRight = pressBox({ key: "ArrowRight", code: "ArrowRight" });
+    const edgeRightBack = pressBox({ key: "ArrowLeft", code: "ArrowLeft" });
+    box.value = ""; box.selectionStart = 0; box.selectionEnd = 0;
+    const emptyLeft = pressBox({ key: "ArrowLeft", code: "ArrowLeft" });
+    const emptyRight = pressBox({ key: "ArrowRight", code: "ArrowRight" });
+    box.value = "abc"; box.selectionStart = 1; box.selectionEnd = 1;
+    const home = pressBox({ key: "Home", code: "Home" });
+    const end = pressBox({ key: "End", code: "End" });
+    H.hooks.runShortcut = savedRunD3;
+    check("search-box.js", "1020d3 inside a query that holds text, ArrowLeft and ArrowRight move the caret and walk categories only at the edges or when the box is empty; Home and End are not prevented",
+      () => eq([midLeft, midRight, edgeLeft, edgeLeftFwd, edgeRight, edgeRightBack, emptyLeft, emptyRight, home, end].join(" | "),
+        ": | : | !s:navPillLeft | : | !s:navPillRight | : | !s:navPillLeft | !s:navPillRight | : | :"));
+
     /* 901u: CTRL+Z TAKES THE STANDING UNDO (board 901, desk-chrome-undo-key), through the page's own keydown and the
        real bubble; a field typed in since the bubble came keeps the key, as does a held key and a bubble a question hides. */
     {

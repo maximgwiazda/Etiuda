@@ -8910,7 +8910,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-21";
+  var E_BUILT = "2026-10-22";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -30606,16 +30606,6 @@ What you type stays in this browser only.`;
     railDecorate(false);
     railScheduleSort();
   }
-  function pinSearchCaret() {
-    if (!intentEl) return;
-    const n = intentEl.value.length;
-    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
-      try {
-        intentEl.setSelectionRange(n, n);
-      } catch (_) {
-      }
-    }
-  }
   function wireSearchBox() {
     intentEl.oninput = () => {
       intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
@@ -30636,8 +30626,6 @@ What you type stays in this browser only.`;
       if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
       setCatsDropArmed(true);
     });
-    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
     intentEl.addEventListener("keydown", (e) => {
       if (e.altKey || e.metaKey) return;
       if (e.key === "Escape") {
@@ -30649,20 +30637,19 @@ What you type stays in this browser only.`;
         return;
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (e.ctrlKey) return;
-        if (e.shiftKey) {
-          hooks.runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
+        const v = intentEl.value || "";
+        const atEdge = !v || (e.key === "ArrowLeft" ? intentEl.selectionStart === 0 && intentEl.selectionEnd === 0 : intentEl.selectionStart === v.length && intentEl.selectionEnd === v.length);
+        if (atEdge) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (e.ctrlKey) return;
+          if (e.shiftKey) {
+            hooks.runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
+            return;
+          }
+          hooks.runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
           return;
         }
-        hooks.runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
-        return;
-      }
-      if (e.key === "Home" || e.key === "End") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
       }
       const q = String(intentEl.value || "").trim();
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {

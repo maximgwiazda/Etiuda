@@ -43,16 +43,6 @@ function queueSearchSettle(){
   railDecorate(false);
   railScheduleSort();
 }
-/* The caret lives at the end, where letters land. A bare click into the middle snaps
-   back; a dragged SELECTION survives, because select-and-retype is a repair this box
-   keeps. Deferred a tick: the browser sets the caret after these events fire. */
-function pinSearchCaret(){
-  if(!intentEl) return;
-  const n=intentEl.value.length;
-  if(intentEl.selectionStart===intentEl.selectionEnd && intentEl.selectionEnd!==n){
-    try{ intentEl.setSelectionRange(n,n); }catch(_){}
-  }
-}
 function wireSearchBox(){
   intentEl.oninput=()=>{
     // The query never alters selected intents; picking is Enter's job.
@@ -76,8 +66,6 @@ function wireSearchBox(){
     if(q.trim() && !(intentEl.selectionStart===0 && intentEl.selectionEnd===q.length)) return;
     setCatsDropArmed(true);
   });
-  intentEl.addEventListener("mouseup",()=>setTimeout(pinSearchCaret,0));
-  intentEl.addEventListener("focus",()=>setTimeout(pinSearchCaret,0));
   /* The box's own keydown, and stopImmediatePropagation keeps these keys from the document's
      shortcut handlers behind it. Down/Up walk the MATCHES from the mark - an arrow also
      settles a pending resort first, since reaching for the arrows says "I stopped typing".
@@ -87,20 +75,21 @@ function wireSearchBox(){
     if(e.altKey || e.metaKey) return;
     // The box's door onto the escape ladder.
     if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); escapeHeld(e.repeat); escapeLadderStep(); escapeHeld(false); return; }
-    /* THE BOX HAS NO CARET KEYS - a query is a probe, not a document, so ←/→ steer the
-       categories from inside it exactly as they do from outside, and focus stops mattering
-       to the arrows at all. Repair is the clear button, Esc, or Ctrl+A and retyping. The
-       modified variants are RESERVED, not free: Shift may yet mean something here, and Ctrl
-       already means "several" on the pills themselves - so both fall dead, and Home/End die
-       with the caret they served. */
+    /* Caret keys move inside a query; category navigation happens only at the matching edge
+       or when the box is empty. Home and End move the caret natively. */
     if(e.key==="ArrowLeft"||e.key==="ArrowRight"){
-      e.preventDefault(); e.stopImmediatePropagation();
-      if(e.ctrlKey) return;                       // still reserved
-      if(e.shiftKey){ hooks.runShortcut(e.key==="ArrowRight"?"navPillLast":"navPillFirst"); return; }
-      hooks.runShortcut(e.key==="ArrowRight"?"navPillRight":"navPillLeft");
-      return;
+      const v=intentEl.value||"";
+      const atEdge=!v || (e.key==="ArrowLeft"
+        ? (intentEl.selectionStart===0 && intentEl.selectionEnd===0)
+        : (intentEl.selectionStart===v.length && intentEl.selectionEnd===v.length));
+      if(atEdge){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(e.ctrlKey) return;                       // still reserved
+        if(e.shiftKey){ hooks.runShortcut(e.key==="ArrowRight"?"navPillLast":"navPillFirst"); return; }
+        hooks.runShortcut(e.key==="ArrowRight"?"navPillRight":"navPillLeft");
+        return;
+      }
     }
-    if(e.key==="Home"||e.key==="End"){ e.preventDefault(); e.stopImmediatePropagation(); return; }
     const q=String(intentEl.value||"").trim();
     if(e.key==="ArrowDown"||e.key==="ArrowUp"){
       if(e.ctrlKey) { e.preventDefault(); e.stopImmediatePropagation(); return; }   // reserved
