@@ -8910,7 +8910,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-22";
+  var E_BUILT = "2026-10-25";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -32816,6 +32816,15 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
       return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName() }, pickFound(""));
+    }
+    if (op === "who") {
+      const name = String(a.name == null ? "" : a.name);
+      const p = document.getElementById("pax");
+      if (p) {
+        p.value = name;
+        if (typeof p.oninput === "function") p.oninput();
+      }
+      return Object.assign({ who: activeTabName() || name }, pickFound(a.q));
     }
     if (op === "find") return pickFound(a.q);
     if (op === "copy") {
