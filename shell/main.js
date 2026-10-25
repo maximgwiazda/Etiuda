@@ -3516,7 +3516,7 @@ async function takeInvite(text, name, check) {
     const picked = await dialog.showOpenDialog({
       properties: ["openDirectory"],
       defaultPath: previous || defaultCatalogFolder(),
-      title: "Choose the shared folder for this team",
+      title: shellWords().pickTeamFolder,
     });
     chosen = (!picked || picked.canceled || !picked.filePaths || !picked.filePaths[0]) ? "" : picked.filePaths[0];
     if (!chosen) {
@@ -5396,10 +5396,13 @@ function maximizedArea(r) {
 const SHELL_WORDS = {
   en: { lang: "en", undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
         addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
-        restart: "Restart", close: "Close Etiuda", wait: "Wait" },
+        restart: "Restart", close: "Close Etiuda", wait: "Wait",
+        pickTeamFolder: "Choose the shared folder for this team" },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
-        hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj" },
+        hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
+        /* The folder picker's title: a draft for the copywriter. */
+        pickTeamFolder: "Wybierz folder współdzielony tego zespołu" },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();
