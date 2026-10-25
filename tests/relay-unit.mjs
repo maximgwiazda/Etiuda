@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 237;
+const EXPECTED = 240;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2576,6 +2576,76 @@ async function main() {
     const spanPlant = await liftCore("plant:via-span", async () => !(await spanHolds()));
     check(spanB && spanC && spanPlant.turned && spanPlant.back, "975d lifting plant:via-span lets a delegation of 366 days and a millisecond carry a grant, and the product file is never written: "
       + spanPlant.detail + ", sha " + (spanPlant.back ? "unchanged" : "CHANGED"));
+  }
+
+  /* ---- 976: an upload is read only to the cap its session is granted (the test architect's K2) ---- */
+  {
+    /* A body that counts the bytes pulled from it: `n` is what the relay took of `bytes`, a chunk at a time. */
+    const CHUNK = 16 * 1024;
+    const counting = bytes => {
+      const c = { n: 0 };
+      c.stream = new ReadableStream({ pull(ctl) {
+        if (c.n >= bytes.length) { ctl.close(); return; }
+        const piece = new Uint8Array(bytes.subarray(c.n, c.n + CHUNK));
+        c.n += piece.length;
+        ctl.enqueue(piece);
+      } }, { highWaterMark: 0 });
+      return c;
+    };
+    /* The Worker's env with each team's object made by team.cjs, the product's or a plant's copy `T`. */
+    const teamRelay = T => {
+      const clock = { now: 0 };
+      const stores = new Map(), hubs = new Map(), live = new Map();
+      const bucket = S.memoryBucket();
+      function objectFor(name) {
+        if (live.has(name)) return live.get(name);
+        if (!stores.has(name)) stores.set(name, S.memoryStore());
+        const hub = S.socketHub();
+        hubs.set(name, hub);
+        const obj = (T || require(PRODUCT.team)).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, roots: K.ROOTS });
+        live.set(name, obj);
+        return obj;
+      }
+      const scoped = {
+        idFromName(name) { return { name: String(name) }; },
+        get(id) { return { fetch: request => objectFor(id.name).fetch(request) }; },
+      };
+      const env = { TEAMS: { jurisdiction(j) { return j === "eu" ? scoped : null; } }, BLOBS: bucket, NOW: () => clock.now };
+      return { env, clock, bucket, stores, hubs, object: objectFor };
+    };
+    const flood = Buffer.alloc(4 * 1024 * 1024, 7);
+    const scene = async T => {
+      const w = await world({ R: teamRelay(T) });
+      const token = hex(32), id = hex(16), joiner = keyPair(true), newDesk = "k-" + hex(8);
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const s = (await tokenHello(w, id, token, null, joiner)).json.session;
+      const sealJoin = (counter, extra) => B.seal(Object.assign({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+        writer: { keyId: joiner.keyId, privateKey: joiner.privateKey }, path: "desks/" + newDesk + "/join.json", body: "ask", counter,
+        place: "desk:" + newDesk, kind: "file" }, extra || {}));
+      const over = counting(flood);
+      const refusedOver = await put(w, s, sealJoin(1), { extra: { pub: joiner.pub }, body: over.stream });
+      const within = await put(w, s, sealJoin(1), { extra: { pub: joiner.pub } });
+      const lead = await sessionOf(w, w.lead);
+      const big = sealAs(w, w.lead, "guide.ec", 1, { body: "x".repeat(70 * 1024) });
+      const leadBody = counting(big.ciphertext);
+      const leadPut = await put(w, lead, big, { body: leadBody.stream });
+      return { refusedOver, pulled: over.n, within, leadPut, leadPulled: leadBody.n, leadSize: big.ciphertext.length };
+    };
+    const cap = C.INVITE_UPLOAD_MAX;
+    const live = await scene();
+    const kept = live.pulled <= cap + CHUNK;
+    check(refused(live.refusedOver, "blob-size") && kept,
+      "976a an invitation's PUT over INVITE_UPLOAD_MAX of " + cap + " is refused blob-size, read no further than the cap and one chunk of " + CHUNK + ": " + live.pulled + " of " + flood.length + " bytes pulled");
+    check(live.within.status === 200 && live.leadPut.status === 200 && live.leadSize > cap && live.leadSize < B.BLOB_MAX && live.leadPulled === live.leadSize,
+      "976b the same session's PUT within the cap is accepted, and a lead's PUT of " + live.leadSize + " bytes, between INVITE_UPLOAD_MAX and BLOB_MAX, is accepted and read whole: "
+      + live.within.status + ", " + live.leadPut.status + ", " + live.leadPulled + " bytes pulled");
+    const planted = await swapTeam("readCapped(request, a.max)", "readCapped(request, B.BLOB_MAX)", async T => {
+      const r = await scene(T);
+      return refused(r.refusedOver, "blob-size") && r.pulled > cap + CHUNK && r.within.status === 200 && r.leadPut.status === 200;
+    });
+    check(kept && planted.turned && planted.back,
+      "976c putting B.BLOB_MAX back as the read cap, in a copy, turns the count of 976a red: the invitation's PUT is still refused but the whole body is pulled, and the product file is never written: "
+      + planted.detail + ", sha " + (planted.back ? "unchanged" : "CHANGED"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

@@ -131,7 +131,7 @@ function teamObject(deps) {
     const m = c.parseMeta(request.headers.get("etiuda-blob"));
     const a = c.admit(rt, token, m, id);
     if (!a.ok) return refused(a);
-    const ct = await readCapped(request, B.BLOB_MAX);
+    const ct = await readCapped(request, a.max); /* plant:put-cap */
     if (!ct) return refusedFor("blob-size");
     const j = c.judge(rt, token, m, id, ct);
     if (!j.ok) return refused(j);
