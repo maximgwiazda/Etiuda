@@ -13,7 +13,7 @@ import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { lsGet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
+import { lsGet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
@@ -595,6 +595,33 @@ function takeCatalog(c,opts){
     pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
     cardOrderTouched();
     savePack();
+    const mapIntent = oldIdx => {
+      const id = intentIdAt(oldIdx);
+      if (!id) return -1;
+      if (id.startsWith("t:")) {
+        const tag = id.slice(2);
+        return (c && Array.isArray(c.intentIds)) ? c.intentIds.indexOf(tag) : -1;
+      }
+      const custom = pack.intentCustom || [];
+      const ix = custom.findIndex(x => x && (x.id === id || ("ui:" + oldIdx) === id));
+      if (ix >= 0) {
+        const baseN = (c && Array.isArray(c.intentIds)) ? c.intentIds.length
+          : ((c && c.intents && c.intents[intentFieldKey("clause", CONTENT_LANGS[0])]) || []).length;
+        return baseN + ix;
+      }
+      return -1;
+    };
+    let tabSession = null;
+    try { tabSession = JSON.parse(ssGet(TAB_KEY) || "null"); } catch (e) {}
+    if (tabSession && Array.isArray(tabSession.tabs)) {
+      tabSession.tabs.forEach(tb => {
+        if (Array.isArray(tb.path)) tb.path = tb.path.filter(id => alive.has(id));
+        if (Array.isArray(tb.log)) tb.log = tb.log.filter(e => e && alive.has(e.id));
+        if (tb.entrySel && !alive.has(tb.entrySel.id)) tb.entrySel = null;
+        if (Array.isArray(tb.intentIdxs)) tb.intentIdxs = tb.intentIdxs.map(mapIntent).filter(i => i >= 0);
+      });
+      ssSet(TAB_KEY, JSON.stringify(tabSession));
+    }
   } else if(loose) LAYER_KEYS.forEach(n=>lyDel(n));
   nsDel("CatalogNo");
   /* Set here, because EVERY route to a catalog passes
@@ -614,7 +641,7 @@ function takeCatalog(c,opts){
     nsSet("CatalogFile",String((opts&&opts.file)||""));
     nsSet("CatalogFileAt",String(+(opts&&opts.fileAt)||0));
     /* The file's own name wherever it lay, which the top bar shows; `file` above is only ever one
-       in the catalog folder. Blanked by a route that names none, for the same reason. */
+     in the catalog folder. Blanked by a route that names none, for the same reason. */
     nsSet("CatalogFrom",String((opts&&(opts.from||opts.file))||""));
     recordCatalogTrust(c);
   }catch(e){}
@@ -622,7 +649,7 @@ function takeCatalog(c,opts){
      points at whatever intent now sits there: all per-tab state goes, updates included.
      What the agent owns is not per-tab and is untouched. */
   clearTimeout(tabSaveTimer);
-  ssDel(TAB_KEY);
+  if (!same) ssDel(TAB_KEY);
   hooks.restartDesk();
   return true;
 }
