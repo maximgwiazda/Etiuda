@@ -8910,7 +8910,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-22";
+  var E_BUILT = "2026-10-25";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -31207,7 +31207,7 @@ What you type stays in this browser only.`;
   }
   function laneBody(m, k) {
     const l = cardLang(m), ps = parts(m, l);
-    return ps.length > k ? String(fill(ps[k], m, 0, l) || "") : "";
+    return ps.length > k ? String(fill(ps[k], m, true, l) || "") : "";
   }
   function laneRowHtml(st, r, i) {
     const m = st.live.get(r.id);
@@ -31220,7 +31220,7 @@ What you type stays in this browser only.`;
     const off = r.learnt || r.used;
     const grip = off ? "" : '<button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>';
     const act = off ? '<button type="button" class="ln-keep" title="' + esc(t("Add it to the list")) + '" aria-label="' + esc(t("Add it to the list")) + '">' + ICON_PLUS + "</button>" : '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button>";
-    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + esc(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then">' + esc(t("then: {LIST}").replace("{LIST}", then.join(LN_DOT))) + "</div>" : "") + "</div>";
+    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + escFilled(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then">' + esc(t("then: {LIST}").replace("{LIST}", then.join(LN_DOT))) + "</div>" : "") + "</div>";
   }
   function laneEditHtml(st) {
     const own = st.fold && st.fold.own ? '<div class="ln-src"><span class="nx-who own">' + esc(t("Your list")) + '</span><button type="button" class="btn ln-back">' + esc(t("Back to the catalog's")) + "</button></div>" : "";
@@ -31235,7 +31235,7 @@ What you type stays in this browser only.`;
     if (!m) return head + '<p class="ln-empty">' + esc(t("Each reply you send appears here, with what can follow it.")) + "</p>";
     const k = st.sent.length, slot = catSlot(m.c), l = cardLang(m), blocks = parts(m, l).length;
     let blk = "";
-    for (let i = 0; i < blocks; i++) blk += '<div class="txt ln-blk" role="button" data-b="' + i + '">' + esc(laneBody(m, i)) + "</div>";
+    for (let i = 0; i < blocks; i++) blk += '<div class="txt ln-blk" role="button" data-b="' + i + '">' + escFilled(laneBody(m, i)) + "</div>";
     const rows = st.rows.map((r, i) => laneRowHtml(st, r, i)).join("");
     const crumbs = st.sent.slice(-TRAIL_SHOWN), older = st.sent.length > crumbs.length;
     const trail = k ? '<div class="ln-trail" role="list" aria-label="' + esc(t("Sent")) + '">' + crumbs.map((e, i) => '<span class="ln-crumb' + (i === 0 && older ? " ln-older" : "") + '" role="listitem">' + laneTitleHtml(st.live.get(String(e.id))) + "</span>").join("") + "</div>" : "";
