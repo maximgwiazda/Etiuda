@@ -163,25 +163,54 @@ function judgeCreate(rt, body, now, roots) {
   return { ok: true };
 }
 
-/* Where a team stands by its grant at `now`: working, read-only (a paid team's reads alone), lapsed (a trial's: renewal alone) or
-   gone (to be swept), with the instants the computers are told: the grant's until, the start of read-only (null for a trial) and
-   the sweep. A team row without a safe until has nothing to count from: it reads as lapsed and is never swept by the clock. */
+/* The end of the latest paid grant a team holds, or null: its paidUntil where a later unpaid grant set until past it, else its
+   until where paid. */
+function paidEnd(team) {
+  if (!team || !Number.isSafeInteger(team.until)) return null;
+  if (Number.isSafeInteger(team.paidUntil)) return team.paidUntil;
+  return team.paid === true ? team.until : null;
+}
+const RANK = { working: 3, "read-only": 2, lapsed: 1, gone: 0 };
+
+/* Where a team stands by its grants at `now`: working, read-only (reads alone), lapsed (renewal alone) or gone (to be swept). Two
+   schedules, and the team stands where the better of them puts it: the latest grant's (working to its until, lapsed 30 days more)
+   and the latest paid grant's (working 30 days past its end, read-only to 90). Told with the instants the computers are told: the
+   latest until, the start of read-only (null where none lies ahead of the working time) and the sweep. A team row without a safe
+   until has nothing to count from: it reads as lapsed and is never swept by the clock. */
 function lapseOf(team, now) {
   if (!team || !Number.isSafeInteger(team.until)) return { state: "lapsed", until: null, readOnly: null, swept: null };
   const u = team.until;
-  if (team.paid !== true) return { state: now < u ? "working" : now < u + TRIAL_KEEP_MS ? "lapsed" : "gone", until: u, readOnly: null, swept: u + TRIAL_KEEP_MS }; /* plant:lapse-trial */
-  const readOnly = u + WORK_AFTER_MS, swept = u + READ_AFTER_MS;
-  return { state: now < readOnly ? "working" : now < swept ? "read-only" : "gone", until: u, readOnly, swept };
+  let p = u;
+  p = paidEnd(team); /* plant:lapse-trial */
+  const trial = now < u ? "working" : now < u + TRIAL_KEEP_MS ? "lapsed" : "gone";
+  const paid = p === null ? "gone" : now < p + WORK_AFTER_MS ? "working" : now < p + READ_AFTER_MS ? "read-only" : "gone";
+  const workEnd = p === null ? u : Math.max(u, p + WORK_AFTER_MS);
+  const readOnly = p !== null && p + READ_AFTER_MS > workEnd ? workEnd : null;
+  const swept = p === null ? u + TRIAL_KEEP_MS : Math.max(u + TRIAL_KEEP_MS, p + READ_AFTER_MS);
+  return { state: RANK[paid] >= RANK[trial] ? paid : trial, until: u, readOnly, swept };
+}
+/* The instant a team turns lapsed, or null where it goes from read-only or working straight to gone. */
+function lapsedFrom(team) {
+  const l = lapseOf(team, 0);
+  if (l.until === null) return null;
+  const p = paidEnd(team), from = p === null ? l.until : Math.max(l.until, p + READ_AFTER_MS);
+  return from < l.until + TRIAL_KEEP_MS ? from : null;
 }
 
-/* The until and paid a team keeps from a grant: the later until, with the paid of the grant that gave it; on an equal until, paid
-   is true if either the team's or the grant's is. One rule for a repeat create and a renewal. */
+/* What a team keeps from a grant: until, the latest end of any grant; paid, whether that end is a paid grant's; and paidUntil, the
+   latest paid end, kept apart only where a later unpaid grant has set until past it, so an unpaid grant extends a paid team's lapse
+   and never shortens it. One rule for a repeat create and a renewal. */
 function keptGrant(team, grant) {
-  let until = grant.until, paid = grant.paid;
-  if (team && Number.isSafeInteger(team.until) && team.until >= until) { until = team.until; paid = team.paid === true; } /* plant:until-later */
-  /* A grant that ends at the very instant the team's does is no worse than it: paid is true if either says so. */
-  if (team && team.until === grant.until && grant.paid === true) paid = true; /* plant:until-equal-paid */
-  return { until, paid };
+  const was = team && Number.isSafeInteger(team.until) ? team.until : null;
+  let until = grant.until;
+  if (was !== null && was >= until) until = was; /* plant:until-later */
+  let paidUntil = null;
+  paidUntil = paidEnd(team); /* plant:paid-kept */
+  /* A paid grant ending at or after the paid end the team holds becomes it. */
+  if (grant.paid === true && (paidUntil === null || grant.until >= paidUntil)) paidUntil = grant.until; /* plant:until-equal-paid */
+  const out = { until, paid: paidUntil === until };
+  if (paidUntil !== null && paidUntil < until) out.paidUntil = paidUntil;
+  return out;
 }
 
 /* The freshness rule of a call's t against the relay's clock, the one the object applies to every signed call and the Worker
@@ -227,8 +256,9 @@ function createCore(deps) {
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:create-fresh */
     const team = store.get("team");
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
-    const { until, paid } = keptGrant(team, b.grant);
-    store.atomic(() => store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }));
+    const kept = keptGrant(team, b.grant), { until, paid } = kept;
+    const paidApart = kept.paidUntil !== undefined ? { paidUntil: kept.paidUntil } : {};
+    store.atomic(() => store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }, paidApart)));
     return { ok: true, rt };
   }
 
@@ -240,7 +270,12 @@ function createCore(deps) {
     const b = bodyOf(body);
     if (!grantOk(b.grant, team.lead.pub, clock(), roots)) return no("bad-grant"); /* plant:renew-grant */
     const next = keptGrant(team, b.grant);
-    if (next.until !== team.until || next.paid !== team.paid) store.atomic(() => store.put("team", Object.assign({}, team, next)));
+    if (next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil) {
+      const row = Object.assign({}, team, { until: next.until, paid: next.paid });
+      delete row.paidUntil;
+      if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
+      store.atomic(() => store.put("team", row));
+    }
     return { ok: true, lapse: told() };
   }
 
@@ -270,8 +305,11 @@ function createCore(deps) {
     if (!Array.isArray(b.keys) || !Number.isSafeInteger(b.rev) || b.rev < 0 || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
+    /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved. */
     const lapsedDevices = lapseGate(true);
-    if (lapsedDevices) return lapsedDevices; /* plant:lapse-devices */
+    let removing = false;
+    removing = lapseState() === "read-only" && onlyRemoves(b.keys); /* plant:lapse-withdraw */
+    if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
     if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
@@ -305,6 +343,13 @@ function createCore(deps) {
       }
     });
     return { ok: true, rev: b.rev, withdrawn };
+  }
+
+  /* A set that takes at least one key off the enrolled set and keeps each other key as it is, at its own desk. */
+  function onlyRemoves(keys) {
+    const held = new Map(store.list("dev:").map(([k, v]) => [k.slice(4), v]));
+    if (keys.length >= held.size) return false;
+    return keys.every(k => !!k && typeof k === "object" && held.has(k.id) && held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk); /* plant:withdraw-same */
   }
 
 /* A wrap is {epoch, ct}. The relay keeps at most 1 KiB of its canonical JSON and cannot open it, so anything else on the
@@ -872,13 +917,14 @@ function createCore(deps) {
       for (const obj of left) store.put("orphan:" + obj, 1);
     });
   }
-  /* When the team's alarm should next ring: a trial's until while it works, and then the sweep; or null with no team to count from. */
+  /* When the team's alarm should next ring: the instant it turns lapsed while that lies ahead, and then the sweep; or null with no
+     team to count from. */
   function alarmAt() {
     const team = store.get("team");
     if (!team) return null;
-    const l = lapseOf(team, clock());
+    const l = lapseOf(team, clock()), from = lapsedFrom(team);
     if (l.swept === null) return null;
-    return l.readOnly === null && l.state === "working" ? l.until : l.swept;
+    return from !== null && from > clock() ? from : l.swept;
   }
   const lapseState = () => lapseOf(store.get("team"), clock()).state;
 
@@ -891,7 +937,7 @@ function createCore(deps) {
 
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
-  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };

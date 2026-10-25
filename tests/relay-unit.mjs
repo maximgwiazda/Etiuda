@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 285;
+const EXPECTED = 291;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2548,8 +2548,8 @@ async function main() {
     const eqPlant = await liftCore("plant:until-equal-paid", async () => !(await trialThenPaid()));
     check(eqA && eqB && eqC && eqPlant.turned && eqPlant.back, "974d lifting plant:until-equal-paid leaves a trial team unpaid under a paid grant of the same until, and the product file is never written: "
       + eqPlant.detail + ", sha " + (eqPlant.back ? "unchanged" : "CHANGED"));
-    const eqKeep = await liftCore("plant:until-later", async () => !(await paidThenTrial()));
-    check(eqA && eqB && eqC && eqKeep.turned && eqKeep.back, "974e lifting plant:until-later lets an unpaid grant of the same until clear a paid team's paid, and the product file is never written: "
+    const eqKeep = await liftCore("plant:paid-kept", async () => !(await paidThenTrial()));
+    check(eqA && eqB && eqC && eqKeep.turned && eqKeep.back, "974e lifting plant:paid-kept lets an unpaid grant of the same until clear a paid team's paid, and the product file is never written: "
       + eqKeep.detail + ", sha " + (eqKeep.back ? "unchanged" : "CHANGED"));
 
     /* ---- 975: a delegation runs one year, 366 days, and no longer (the test architect's F2, board 935; Maxim's word of 2026-10-20 11:51) ---- */
@@ -2926,6 +2926,53 @@ async function main() {
         && C.WORK_AFTER_MS === WORK && C.READ_AFTER_MS === READ && C.TRIAL_KEEP_MS === TRIAL;
     };
 
+    /* A paid team presented a trial's grant ending 5 days after its own: the trial's later until is kept and told, and the paid
+       schedule still stands, working to the paid end and 30 days, read-only to 90, swept then (E2 of the test architect's verdict). */
+    async function paidThenTrialScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, -29 * DAY);
+      const g = grantNow(w, { fields: { paid: false, until: w.until + 5 * DAY } });
+      const rn = await renewWith(w, { grant: g });
+      const row = w.R.stores.get(w.rt).get("team");
+      const want = state => ({ state, until: w.until + 5 * DAY, readOnly: w.until + WORK, swept: w.until + READ });
+      const out = { renewal: [rn.r.status, rn.r.json && rn.r.json.lapse], row: [row.until, row.paid, row.paidUntil], alarm: w.R.alarms.get(w.rt) };
+      const stand = async (offset, counter) => {
+        at(w, offset);
+        const s = await helloAs(w, w.desk), token = s.json && s.json.session;
+        const r = [tail(s), s.json && s.json.lapse && s.json.lapse.state];
+        if (counter) r.push(tail(await put(w, token, sealAs(w, w.desk, "desks/" + w.deskId + "/c" + counter + ".ec", counter))));
+        return r;
+      };
+      out.at29 = await stand(29 * DAY, 1);
+      out.at31 = await stand(31 * DAY, 2);
+      out.at89 = await stand(89 * DAY, 0);
+      at(w, 91 * DAY);
+      out.rang = await w.R.ring(w.rt);
+      out.gone = [inBucket(w).length, w.R.stores.get(w.rt).dump().length];
+      const ok = sameJ(out, { renewal: [200, want("working")], row: [w.until + 5 * DAY, false, w.until], alarm: w.until + READ, at29: [200, "working", 200],
+        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 0] });
+      return { ok, detail: JSON.stringify(out) };
+    }
+
+    /* A read-only team's lead takes a departed desk off: a set that only removes is taken and the key loses its session; one that
+       adds a key, moves a kept key to another desk, or replaces a key is refused team-lapsed (E1 of the test architect's verdict). */
+    async function withdrawScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, 31 * DAY);
+      const os = await sessionOf(w, w.other), fresh = keyPair(true);
+      const asked = [
+        await devices(w, w.devs.concat([{ id: fresh.keyId, pub: fresh.pub, desk: "k-" + hex(8) }])),
+        await devices(w, [Object.assign({}, w.devs[0], { desk: "k-" + hex(8) })]),
+        await devices(w, [{ id: fresh.keyId, pub: fresh.pub, desk: w.devs[1].desk }]),
+        await devices(w, [w.devs[0]]),
+      ].map(tail);
+      const st = w.R.stores.get(w.rt);
+      const kept = [st.get("dev:" + w.other.keyId) === undefined, !!st.get("dev:" + w.desk.keyId), st.get("dev:" + fresh.keyId) === undefined];
+      const after = [tail(await since(w, os)), tail(await helloAs(w, w.other)), tail(await since(w, await sessionOf(w, w.desk)))];
+      const ok = sameJ(asked, ["team-lapsed", "team-lapsed", "team-lapsed", 200]) && sameJ(kept, [true, true, true]) && sameJ(after, ["removed", "removed", 200]);
+      return { ok, detail: JSON.stringify({ asked, kept, after }) };
+    }
+
     const paid = await held(() => paidScene());
     check(paid.a === true, "977a a paid team at its grant's end and 29 days is working: hello answers its challenge alone, the lead's and a desk's sessions are each told"
       + " { state: working, until, readOnly: until + 30 d, swept: until + 90 d }, since carries the same in its etiuda-lapse header, and fetch, socket, states,"
@@ -2967,8 +3014,16 @@ async function main() {
     check(sameJ(sql, WANT_SQL), "977n RelayTeam over real SQLite: the create sets the object's alarm to the end and 90 days, and the alarm past it leaves no table, no"
       + " object and no alarm: " + JSON.stringify(sql));
     const edges = edgesHold();
+    const paidTrial = await held(() => paidThenTrialScene());
+    const withdraw = await held(() => withdrawScene());
     check(edges, "977o the edges: paid working to the end and 30 days less a millisecond, read-only from that instant to the end and 90 days, a trial working to"
       + " its until and swept 30 days on; a team row with no until reads lapsed and is never swept; the three spans exported");
+    check(paidTrial.ok === true, "977p a paid team with until T presented a trial's grant to T + 5 d keeps T as its paid end beside the new until: it is told"
+      + " { working, until: T + 5 d, readOnly: T + 30 d, swept: T + 90 d }, works and takes an upload at T + 29 d, reads and refuses an upload at T + 31 d, reads at"
+      + " T + 89 d, and at T + 91 d its alarm has swept it: " + (paidTrial.detail || paidTrial.failed));
+    check(withdraw.ok === true, "977q a read-only team's lead takes a desk off with a devices call that only removes it: the call is taken, the key is gone and its"
+      + " session refused removed, the other desk still reads; a call that adds a key, moves a kept key to another desk or replaces a key is refused team-lapsed: "
+      + (withdraw.detail || withdraw.failed));
 
     /* ---- 978: each line of the lapse lifted in a copy turns its leg red, and no product file is written ---- */
     const how2 = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
@@ -2989,7 +3044,7 @@ async function main() {
     /* Each plant counts only where the leg it turns red is green on the product. */
     const base = { "977a": paid.a === true, "977b": paid.b === true, "977c": paid.c === true, "977d": restored.ok === true, "977e": trial.e === true,
       "977h": renewal.zero === true && renewal.other === true && renewal.earlier === true, "977j": recorded.a === true, "977l": lazy.ok === true,
-      "977m": armed === true, "977n": sameJ(sql, WANT_SQL), "977o": edges === true };
+      "977m": armed === true, "977n": sameJ(sql, WANT_SQL), "977o": edges === true, "977p": paidTrial.ok === true, "977q": withdraw.ok === true };
     const CORE_LIFTS = [
       ["lapse-trial", "977e", "a trial's team keeps working past its until", async () => red(await held(() => trialScene()), "e")],
       ["lapse-working", "977a", "a working team refuses", async () => red(await held(() => paidScene()), "a")],
@@ -3013,7 +3068,7 @@ async function main() {
       const p = await liftCore("plant:" + tag, turns);
       check(base[leg] && p.turned && p.back, label() + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written: " + how2(p));
     }
-    const edgePlant = await swapCore('return { state: now < readOnly ? "working"', 'return { state: now <= readOnly ? "working"', async () => !edgesHold());
+    const edgePlant = await swapCore('now < p + WORK_AFTER_MS ? "working"', 'now <= p + WORK_AFTER_MS ? "working"', async () => !edgesHold());
     check(edges && edgePlant.turned && edgePlant.back, label() + " counting the end and 30 days itself as working turns 977o red, and the product file is never written: " + how2(edgePlant));
     const TEAM_LIFTS = [
       ["arm-create", "977c", "the create sets no alarm", async T => red(await held(() => paidScene(T)), "c")],
@@ -3053,6 +3108,20 @@ async function main() {
     });
     check(silent.ok === true && earlyGate.turned && earlyGate.back, label() + " asking the lapse before a devices call's signature tells a key that signed nothing"
       + " that the team has lapsed, which turns 977i red, and the product file is never written: " + how2(earlyGate));
+    const E_LIFTS = [
+      ["paid-kept", "977p", "a trial's grant takes the paid end with it", async () => red(await held(() => paidThenTrialScene()), "ok")],
+      ["lapse-withdraw", "977q", "a read-only team refuses a call that only removes a key", async () => red(await held(() => withdrawScene()), "ok")],
+    ];
+    for (const [tag, leg, say, turns] of E_LIFTS) {
+      const p = await liftCore("plant:" + tag, turns);
+      check(base[leg] && p.turned && p.back, label() + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written: " + how2(p));
+    }
+    const bestOf = await swapCore("state: RANK[paid] >= RANK[trial] ? paid : trial,", "state: trial,", async () => red(await held(() => paidThenTrialScene()), "ok"));
+    check(base["977p"] && bestOf.turned && bestOf.back, label() + " standing a team by the latest grant's schedule alone cuts the paid team off at T + 5 d, which turns 977p"
+      + " red, and the product file is never written: " + how2(bestOf));
+    const sameKey = await swapCore("held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk", "true", async () => red(await held(() => withdrawScene()), "ok"));
+    check(base["977q"] && sameKey.turned && sameKey.back, label() + " judging a removal by key ids alone lets a read-only team's call move a kept key to another desk,"
+      + " which turns 977q red, and the product file is never written: " + how2(sameKey));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
