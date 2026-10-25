@@ -839,7 +839,7 @@ try {
       E_CATALOG: JSON.parse(bootedAgain), E_HOST: {
       teamJoin: (op) => {
         if (op === "read") return Promise.resolve({ offer: { folder: "C:\\lab\\north", lead: "North lead", code: "12345", local: true } });
-        if (op === "state" || op === "leads") return Promise.resolve({
+        if (op === "state" || op === "leads" || op === "held") return Promise.resolve({
           sealed: showSealed ? { file: "north.ec", team: "t-0123456789abcdef" } : null, join: null, leads: [] });
         return Promise.resolve({});
       },
