@@ -46,7 +46,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 212;
+const EXPECTED = 214;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3951,6 +3951,74 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 952a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a desk's own copy lands its team file before the lead's other blobs of the batch open (C9, board 923). A desk
+   offline across an epoch move comes back to one page holding its copy of the new team file and the lead's files sealed
+   under the new key: the key its wrap gives opens them in the same pass, so each blob is fetched once. ---- */
+async function copyOnce(mod) {
+  const LBX = boxPair(), k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32);
+  const D = { k: keyPair(true), box: boxPair() };
+  const tm = await freshTeam([D.k]);
+  const tag = tm.rt.slice(0, 8);
+  const docAt = (epoch, rev, key) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["lane-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LBX.pub }, sealed: true, exportsSealed: false, epoch, rev,
+    channel: { kind: "relay", rt: tm.rt, url: URLV1 },
+    roster: [{ desk: { id: D.k.keyId, key: D.k.pub, box: D.box.pub }, wrap: wrapFor(key, D.box.pub, tm.id, epoch, D.k.keyId) }] }, LEAD), null, 1) + "\n";
+  const leadKeys = new Map([[1, k1]]);
+  const lead = opened(mod, "c9-lead-" + tag, tm, LEAD, "root", { keyFor: e => leadKeys.get(e) || null,
+    sealEpoch: () => Math.max(...leadKeys.keys()), agree: agreeWith(LBX) });
+  put(lead.mirror, C.TEAM_NAME, docAt(1, 1, k1));
+  put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition one\"}\n");
+  lead.ch.start();
+  await settle(lead);
+  const held = new Map([[1, k1]]), name = "c9-desk-" + tag;
+  const deskNow = () => opened(mod, name, tm, D.k, "desk:" + D.k.keyId, {
+    me: () => ({ keyId: D.k.keyId, public: D.k.pub, privateKey: D.k.privateKey, place: "desk:" + D.k.keyId, box: D.box.pub }),
+    keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(D.box),
+    onTeam: () => {
+      let doc = null;
+      try { doc = JSON.parse(read(path.join(LAB, name), C.TEAM_NAME)); } catch { return; }
+      const mine = doc && Array.isArray(doc.roster) ? doc.roster.find(r => r && r.desk && r.desk.id === D.k.keyId) : null;
+      const k = mine ? unwrapWith(D.box, mine.wrap, tm.id, doc.epoch, D.k.keyId) : null;
+      if (k) held.set(doc.epoch, k);
+    } });
+  const first = deskNow();
+  first.ch.start();
+  await settle(first);
+  const atOne = JSON.parse(read(first.mirror, C.TEAM_NAME) || "{}").epoch === 1;
+  await first.ch.stop();
+  leadKeys.set(2, k2);
+  put(lead.mirror, C.TEAM_NAME, docAt(2, 1, k2));
+  put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition two\"}\n");
+  put(lead.mirror, "after.ec", "{\"note\":\"written after the move\"}\n");
+  await settle(lead);
+  const back = deskNow();
+  back.ch.start();
+  await settle(back);
+  const gets = new Map();
+  for (const l of back.t.log) if (/^GET b\/[0-9a-f]{32}$/.test(l)) gets.set(l, (gets.get(l) || 0) + 1);
+  const out = { atOne, epoch: JSON.parse(read(back.mirror, C.TEAM_NAME) || "{}").epoch, key: !!held.get(2),
+    lane: read(back.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n", after: read(back.mirror, "after.ec") !== null,
+    fetched: gets.size, twice: [...gets.values()].filter(n => n > 1).length, pending: back.prog.state().pending.length };
+  await back.ch.stop();
+  await lead.ch.stop();
+  return out;
+}
+try {
+  const o = await copyOnce(C);
+  check(o.atOne && o.epoch === 2 && o.key && o.lane && o.after && o.pending === 0 && o.fetched > 0 && o.twice === 0,
+    "923g a desk back from an epoch move fetches its own copy of the new team file and the lead's files sealed under the new key once each, and opens them in that one pass: epoch "
+    + o.epoch + ", key " + (o.key ? "held" : "absent") + ", the new edition " + (o.lane ? "loaded" : "missing") + ", after.ec " + (o.after ? "loaded" : "missing")
+    + ", " + o.fetched + " blobs fetched, " + o.twice + " of them more than once, pending " + o.pending);
+  const copyPlant = await liftChannel("plant:copy-first", async mod => {
+    const x = await copyOnce(mod);
+    return x.epoch === 2 && x.lane && x.after && x.twice > 0;
+  });
+  check(copyPlant.turned && copyPlant.back, "923h lifting plant:copy-first opens the lead's new-epoch files before the copy's team file lands, so each is fetched again, and the product file is never written: "
+    + copyPlant.detail + ", sha " + (copyPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 923g): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- an edit of this program's own file, one cycle (S2). The catch-up skips what this desk, or the lead, just sent,

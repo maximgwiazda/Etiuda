@@ -944,17 +944,30 @@ function createProgram(opts) {
       if (it.meta.writer === pin.lead.keyId && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
       (it.meta.writer === pin.lead.keyId ? lead : rest).push(it);
     }
-    const opened = [];
-    for (const it of lead) { const x = openOne(it, floors0, ctx); if (x) opened.push(x); }
-    const teams = opened.filter(x => x.r.kind === "file" && x.r.path === TEAM_NAME);
-    if (teams.length) {
-      const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
+    const isTeam = x => x.r.kind === "file" && x.r.path === TEAM_NAME;
+    let topTeam = null;
+    const landTop = list => {
+      const teams = list.filter(isTeam);
       for (const x of teams) unpend(x.r.id);
+      if (!teams.length) return;
+      const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
+      if (topTeam && !later(top.r, topTeam.r)) return;
+      topTeam = top;
       const landed = landTeam(top.r, ctx); /* plant:team-first */
       if (!landed.ok) dropSaid(TEAM_NAME, landed);
-      else if (!landed.same && !landed.stale) { out.team = true; out.applied.push(TEAM_NAME); }
-    }
-    landNewest(opened.filter(x => !(x.r.kind === "file" && x.r.path === TEAM_NAME)), out, ctx);
+      else if (!landed.same && !landed.stale && !out.team) { out.team = true; out.applied.push(TEAM_NAME); }
+    };
+    /* An invitation's place and a desk's own copy first: the team file either brings is landed, and its key heeded, before
+       the lead's other blobs are opened, so those sealed under that key open in this pass rather than wait to be fetched again. */
+    const placed = [];
+    let first = () => false;
+    first = it => typeof it.meta.place === "string" && it.meta.place.startsWith("invite:"); /* plant:copy-first */
+    for (const it of lead) { if (first(it)) { const x = openOne(it, floors0, ctx); if (x) placed.push(x); } }
+    landTop(placed);
+    const opened = [];
+    for (const it of lead) { if (!first(it)) { const x = openOne(it, floors0, ctx); if (x) opened.push(x); } }
+    landTop(opened);
+    landNewest(opened.filter(x => !isTeam(x)), out, ctx);
     const desks = [];
     for (const it of rest) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
     landNewest(desks, out, ctx);
