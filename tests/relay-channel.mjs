@@ -3652,16 +3652,18 @@ try {
       const settings = lang => { ST.lsSet("eUiLang", lang); const h = shownText(SET.settingsBodyHtml()); ST.lsSet("eUiLang", "en"); return h; };
       const dismiss = async () => {
         const n = nodes.get("eTeamLapse");
-        const b = n ? (function find(e) { if (e.tag === "button" && e.textContent === "Dismiss") return e; for (const c of e.children || []) { const f = find(c); if (f) return f; } return null; })(n) : null;
+        /* Dismiss is the notice's last button, whatever language it was drawn in. */
+        const buttons = [];
+        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(n || { children: [] });
+        const b = buttons[buttons.length - 1] || null;
         if (b) b.onclick();
         await wait(30);
         return !!b;
       };
       const filesOf = dir => filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/") + "=" + sha(fs.readFileSync(f))).sort();
-      const STAY = "The team's catalogs and the catalog in use stay on this desk as they are.";
-      const RENEW = "The team's lead can renew it from Studio.";
-      const LEADS = ["The team's relay is due for renewal.", "The team's relay is read-only until it is renewed.",
-        "The team's relay has stopped until it is renewed.", "The relay has removed the team's copy."];
+      const STAY = "The catalogs on this desk stay as they are and work as before.";
+      const TITLES = ["The team's relay is due for renewal", "The team's relay is read-only until renewed",
+        "The team's relay has stopped", "The relay no longer holds the team's copy"];
 
       const paid = await lapseTeam("paid", { paid: true, until: BASE + 30 * DAYMS });
       const trial = await lapseTeam("trial", { paid: false, until: BASE + 14 * DAYMS });
@@ -3679,27 +3681,31 @@ try {
       await feed(trial);
       const insideNotice2 = notice(), insideSettings2 = settings("en");
       check(insideRows.every(r => r && !Object.prototype.hasOwnProperty.call(r, "lapse")) && insideTold.join() === "working,working"
-        && insideMade === 0 && !insideNotice && !insideNotice2 && LEADS.every(s => insideSettings.indexOf(s) < 0 && insideSettings2.indexOf(s) < 0),
+        && insideMade === 0 && !insideNotice && !insideNotice2 && TITLES.every(s => insideSettings.indexOf(s) < 0 && insideSettings2.indexOf(s) < 0),
         "978a a team working inside its grant shows nothing new: the relay told both teams " + insideTold.join(" and ") + ", rows "
         + insideRows.map(r => (r ? (r.lapse ? "lapse " + r.lapse.step : "no lapse") : "missing")).join(" / ") + ", notices " + insideMade
-        + ", Settings " + (LEADS.some(s => insideSettings.indexOf(s) >= 0 || insideSettings2.indexOf(s) >= 0) ? "names a lapse" : "names none"));
+        + ", Settings " + (TITLES.some(s => insideSettings.indexOf(s) >= 0 || insideSettings2.indexOf(s) >= 0) ? "names a lapse" : "names none"));
 
       /* The trial's team stops at its end; the paid team is still inside its grant. */
       at(BASE + 20 * DAYMS);
       await pumpL(trial); await pumpL(paid);
       const trialRow = await rowOf(trial), paidStill = await rowOf(paid);
       const madeB = lapseMade;
+      ST.lsSet("eUiLang", "pl");
       await feed(trial);
-      const trialEn = LEADS[2] + " " + STAY + " The relay keeps the team's copy until " + day(BASE + 44 * DAYMS) + ". " + RENEW;
-      const trialPl = "Przekaźnik zespołu jest wstrzymany do czasu odnowienia. Katalogi zespołu i katalog w użyciu zostają na tym stanowisku bez zmian."
-        + " Przekaźnik przechowuje kopię zespołu do " + day(BASE + 44 * DAYMS, "pl") + ". Lider zespołu może go odnowić w Studiu.";
+      ST.lsSet("eUiLang", "en");
+      const trialPl = "Przekaźnik zespołu jest wstrzymany Okres próbny, z którym działał, dobiegł końca. Katalogi na tym stanowisku zostają bez zmian"
+        + " i działają jak dotąd. Przekaźnik przechowuje kopię zespołu do dnia " + day(BASE + 44 * DAYMS, "pl")
+        + ", a lider zespołu może go przywrócić w Studiu po zakupie licencji.";
       const trialNotice = notice(), trialMade = lapseMade - madeB, trialSetEn = settings("en"), trialSetPl = settings("pl");
+      const trialRowEn = trialSetEn.indexOf(TITLES[2]) >= 0 && trialSetEn.indexOf("The trial it came with") < 0;
+      const trialRowPl = trialSetPl.indexOf("Przekaźnik zespołu jest wstrzymany") >= 0;
       check(!!trialRow && !!trialRow.lapse && trialRow.lapse.step === "lapsed" && trialRow.lapse.until === BASE + 14 * DAYMS
         && trialRow.lapse.swept === BASE + 44 * DAYMS && trialRow.lapse.seen === false && !!paidStill && !paidStill.lapse
-        && trialMade === 1 && trialNotice === trialEn && trialSetEn.indexOf(trialEn) >= 0 && trialSetPl.indexOf(trialPl) >= 0,
-        "978b a trial's team stopped at its end is shown once, renewal alone, with the day the relay's copy goes, in the notice and the"
-        + " team's row in both languages: row " + JSON.stringify(trialRow && trialRow.lapse) + ", the paid team " + (paidStill && !paidStill.lapse ? "shows nothing" : "shows a lapse")
-        + ", notices " + trialMade + ", text " + JSON.stringify(trialNotice) + ", Settings en " + (trialSetEn.indexOf(trialEn) >= 0) + ", pl " + (trialSetPl.indexOf(trialPl) >= 0));
+        && trialMade === 1 && trialNotice === trialPl && trialRowEn && trialRowPl,
+        "978b a trial's team stopped at its end is shown once with the day the relay's copy goes, here in Polish, and the team's row in"
+        + " Settings carries the title in both languages: row " + JSON.stringify(trialRow && trialRow.lapse) + ", the paid team " + (paidStill && !paidStill.lapse ? "shows nothing" : "shows a lapse")
+        + ", notices " + trialMade + ", text " + JSON.stringify(trialNotice) + ", Settings en " + trialRowEn + ", pl " + trialRowPl);
       await dismiss();
 
       /* The paid team past its grant's end: still working, until read-only. */
@@ -3708,12 +3714,14 @@ try {
       const graceRow = await rowOf(paid);
       const madeC = lapseMade;
       await feed(paid);
-      const graceEn = LEADS[0] + " It fell due on " + day(BASE + 30 * DAYMS) + ". Everything works as before until " + day(BASE + 60 * DAYMS)
-        + "; from then on the team's catalogs stay open here, and nothing more goes to the team. " + RENEW;
+      const graceEn = TITLES[0] + " It fell due on " + day(BASE + 30 * DAYMS) + ". Everything works as before until " + day(BASE + 60 * DAYMS)
+        + "; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is"
+        + " renewed. The team's lead renews it in Studio; nothing is needed here.";
+      const rowSays = (title, body) => { const h = settings("en"); return h.indexOf(title) >= 0 && h.indexOf(body) < 0; };
       const graceNotice = notice(), graceMade = lapseMade - madeC;
       check(!!graceRow && !!graceRow.lapse && graceRow.lapse.step === "grace" && graceRow.lapse.until === BASE + 30 * DAYMS
         && graceRow.lapse.readOnly === BASE + 60 * DAYMS && graceRow.lapse.swept === BASE + 120 * DAYMS && graceMade === 1 && graceNotice === graceEn
-        && settings("en").indexOf(graceEn) >= 0,
+        && rowSays(TITLES[0], "It fell due"),
         "978c a paid team past its grant's end and still working is shown once, with the day it fell due and the day it turns read-only: row "
         + JSON.stringify(graceRow && graceRow.lapse) + ", notices " + graceMade + ", text " + JSON.stringify(graceNotice));
 
@@ -3732,10 +3740,10 @@ try {
       await feed(paid);
       const seenRow = await rowOf(paid), kept = (paid.desk.envelope().teamLapseSeen || {})[paid.team];
       check(dismissed && kept === "grace:" + (BASE + 30 * DAYMS) && !!seenRow && !!seenRow.lapse && seenRow.lapse.seen === true
-        && !notice() && lapseMade - madeC === 1 && settings("en").indexOf(graceEn) >= 0,
+        && !notice() && lapseMade - madeC === 1 && rowSays(TITLES[0], "It fell due"),
         "978e a dismissed notice is kept by the shell, the next sync shows it no more, and the team's row in Settings still says it: kept "
         + JSON.stringify(kept) + ", row seen " + (seenRow && seenRow.lapse ? seenRow.lapse.seen : "no lapse") + ", notice "
-        + (notice() ? "on screen" : "gone") + ", Settings " + (settings("en").indexOf(graceEn) >= 0 ? "says it" : "silent"));
+        + (notice() ? "on screen" : "gone") + ", Settings " + (rowSays(TITLES[0], "It fell due") ? "says it" : "silent"));
 
       /* Read-only, told by since on a session opened while the team still worked. */
       at(BASE + 60 * DAYMS - 10 * MIN);
@@ -3746,11 +3754,11 @@ try {
       const madeF = lapseMade;
       await feed(paid);
       await feed(paid);
-      const roEn = LEADS[1] + " The team's catalogs and the catalog in use stay on this desk as they are, and nothing more goes to the team."
-        + " The relay keeps the team's copy until " + day(BASE + 120 * DAYMS) + ". " + RENEW;
+      const roEn = TITLES[1] + " The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team."
+        + " The relay keeps the team's copy until " + day(BASE + 120 * DAYMS) + ". The team's lead renews it in Studio.";
       const roNotice = notice(), roMade = lapseMade - madeF;
       check(!!roRow && !!roRow.lapse && roRow.lapse.step === "read-only" && roRow.lapse.swept === BASE + 120 * DAYMS && roRow.lapse.seen === false
-        && roMade === 1 && roNotice === roEn && settings("en").indexOf(roEn) >= 0,
+        && roMade === 1 && roNotice === roEn && rowSays(TITLES[1], "The relay keeps"),
         "978f read-only, told on since within a session the team opened while working, is shown once with the day the relay's copy goes: row "
         + JSON.stringify(roRow && roRow.lapse) + ", notices " + roMade + ", text " + JSON.stringify(roNotice));
       await dismiss();
@@ -3761,7 +3769,7 @@ try {
       const goneRow = await rowOf(paid);
       const madeG = lapseMade;
       await feed(paid);
-      const goneEn = LEADS[3] + " " + STAY + " The team's lead can say what comes next.";
+      const goneEn = TITLES[3] + " " + STAY + " The team's lead will say what comes next.";
       const goneNotice = notice();
       const sweptStore = RL.stores.get(paid.rt).dump().length;
       at(BASE + 121 * DAYMS);

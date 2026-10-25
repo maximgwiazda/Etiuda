@@ -157,26 +157,25 @@ function lapseKept(v){
   if(v.step==="grace" && (v.until===null || v.readOnly===null)) return null;
   return {step:v.step, until:v.until, readOnly:v.readOnly, swept:v.swept, seen:v.seen===true};
 }
-/* What each step says, as the notice's bold lead and its body: where the team stands, what comes next and when, that
-   nothing on this desk goes, and that the team's lead renews. A date the relay did not tell leaves its sentence out. */
+/* What each step says: its title, which the team's row in Settings shows, and the body the notice adds under it. A copy
+   kept to a day the relay did not tell leaves that sentence out. */
 function lapseWords(l){
   const day=ms=>leftDay(new Date(ms).toISOString());
-  const stay=t("The team's catalogs and the catalog in use stay on this desk as they are.");
-  const kept=l.swept===null?"":t("The relay keeps the team's copy until {DATE}.").split("{DATE}").join(day(l.swept));
-  const renew=t("The team's lead can renew it from Studio.");
-  if(l.step==="grace") return {lead:t("The team's relay is due for renewal."),
-    body:[t("It fell due on {DATE}. Everything works as before until {READONLY}; from then on the team's catalogs stay open here, and nothing more goes to the team.")
-      .split("{DATE}").join(day(l.until)).split("{READONLY}").join(day(l.readOnly)), renew].join(" ")};
-  if(l.step==="read-only") return {lead:t("The team's relay is read-only until it is renewed."),
-    body:[t("The team's catalogs and the catalog in use stay on this desk as they are, and nothing more goes to the team."), kept, renew].filter(Boolean).join(" ")};
-  if(l.step==="lapsed") return {lead:t("The team's relay has stopped until it is renewed."), body:[stay, kept, renew].filter(Boolean).join(" ")};
-  return {lead:t("The relay has removed the team's copy."), body:[stay, t("The team's lead can say what comes next.")].join(" ")};
+  const kept=s=>l.swept===null?"":t(s).split("{DATE}").join(day(l.swept));
+  const stay=t("The catalogs on this desk stay as they are and work as before.");
+  if(l.step==="grace") return {title:t("The team's relay is due for renewal"),
+    body:t("It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.")
+      .split("{DATE}").join(day(l.until)).split("{READONLY}").join(day(l.readOnly))};
+  if(l.step==="read-only") return {title:t("The team's relay is read-only until renewed"),
+    body:[t("The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team."),
+      kept("The relay keeps the team's copy until {DATE}."), t("The team's lead renews it in Studio.")].filter(Boolean).join(" ")};
+  if(l.step==="lapsed") return {title:t("The team's relay has stopped"),
+    body:[t("The trial it came with has ended."), stay,
+      kept("The relay keeps the team's copy until {DATE}, and the team's lead can bring it back from Studio with a licence.")].filter(Boolean).join(" ")};
+  return {title:t("The relay no longer holds the team's copy"), body:[stay, t("The team's lead will say what comes next.")].join(" ")};
 }
-/* The same, as one line for the team's row in Settings, where it stays after the notice is dismissed. */
-function lapseNote(l){
-  const w=lapseWords(l);
-  return w.lead+" "+w.body;
-}
+/* The team's row in Settings says the title, for as long as the step lasts. */
+function lapseNote(l){ return lapseWords(l).title; }
 const lapseKey=l=>l.team+"|"+l.lapse.step+"|"+l.lapse.until;
 /* One notice per step of each team's lapse, up until the agent dismisses it; a sync at the same step adds nothing. */
 function syncLapseNotice(){
@@ -188,7 +187,7 @@ function syncLapseNotice(){
   lapseUp=want;
   if(!l) return;
   const w=lapseWords(l.lapse), team=l.team, step=l.lapse.step;
-  eNotice("eTeamLapse", w.lead, w.body, ()=>{
+  eNotice("eTeamLapse", w.title, w.body, ()=>{
     lapseDismissed.add(want);
     if(lapseUp===want) lapseUp="";
     joinAsk("lapse-seen", team, step);
