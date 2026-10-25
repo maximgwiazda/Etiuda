@@ -17,7 +17,7 @@ import { lsGet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf,
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
-import { TAB_KEY, tabSaveTimer } from "./tabs.js";
+import { TAB_KEY, tabSaveTimer, saveTabSession, tabs } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
@@ -588,6 +588,10 @@ function takeCatalog(c,opts){
   if(!storeCatalog(kept)) return false;
   tellTaken(c);
   if(same){
+    if (tabSaveTimer || (tabs && tabs.length)) {
+      clearTimeout(tabSaveTimer);
+      saveTabSession();
+    }
     const alive=carryCardLayer(c);
     pack.baseCards=null;
     pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
