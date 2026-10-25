@@ -13,7 +13,7 @@ import { wantsAgentName, withAgentName } from "./agent.js";
 import { copy, noteCopy } from "./mark.js";
 import { counted, t, uiLang } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
-import { activeTabName, activeTabPax } from "./tabs.js";
+import { activeTabName } from "./tabs.js";
 import { eNotice } from "./pack.js";
 import { tourHeardPick } from "./tour.js";
 import { hooks } from "./hooks.js";
@@ -195,7 +195,7 @@ function pickDeskPax(val){
     if(val!==undefined){ p.value=val; if(typeof p.oninput==="function") p.oninput(); }
     return p.value;
   }
-  return activeTabPax(val);
+  return "";
 }
 function answerPick(op,argText){
   let a={};
@@ -203,11 +203,11 @@ function answerPick(op,argText){
   if(op==="open"){
     try{ tourHeardPick(); }catch(e){}
     const paxVal=pickDeskPax();
-    return Object.assign({look:pickLook(), words:pickWords(), last:pickLastRow(), who:activeTabName(), name:paxVal, pax:paxVal}, pickFound(""));
+    return Object.assign({look:pickLook(), words:pickWords(), last:pickLastRow(), who:activeTabName(), name:paxVal}, pickFound(""));
   }
   if(op==="who"){
     const paxVal=pickDeskPax(String(a.name==null?"":a.name));
-    return Object.assign({who:activeTabName(), name:paxVal, pax:paxVal}, pickFound(a.q));
+    return Object.assign({who:activeTabName(), name:paxVal}, pickFound(a.q));
   }
   if(op==="find") return pickFound(a.q);
   if(op==="copy"){

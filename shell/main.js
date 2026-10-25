@@ -5617,8 +5617,7 @@ function pickPage() {
     if (who) {
       who.hidden = !o.who;
       who.title = words.who || "";
-      const own = o.name != null ? o.name : (o.pax != null ? o.pax : o.who);
-      who.value = own || "";
+      who.value = o.name || "";
       sent = who.value;
       closing = false;
     }
@@ -5682,8 +5681,7 @@ function pickPage() {
         rows = Array.isArray(o.rows) ? o.rows : [];
         said = o.count || "";
         paint(false);
-        const own = o.name != null ? o.name : (o.pax != null ? o.pax : o.who);
-        if (own != null) { who.value = own; sent = who.value; }
+        if (o.name != null) { who.value = o.name; sent = who.value; }
       });
     };
     who.addEventListener("keydown", e => {

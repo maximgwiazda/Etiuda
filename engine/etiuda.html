@@ -11040,7 +11040,6 @@ What you type stays in this browser only.`;
     TAB_KEY: () => TAB_KEY,
     activeHeard: () => activeHeard,
     activeTabName: () => activeTabName,
-    activeTabPax: () => activeTabPax,
     activeWords: () => activeWords,
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
@@ -11985,11 +11984,6 @@ What you type stays in this browser only.`;
     const i = tabs.findIndex((x) => x.id === activeTabId);
     if (i < 0) return "";
     return tabLabel(Object.assign({}, tabs[i], { pax: pax ? pax.value : tabs[i].pax }), i);
-  }
-  function activeTabPax(val) {
-    const tb = tabs.find((x) => x.id === activeTabId);
-    if (val !== void 0 && tb) tb.pax = String(val || "");
-    return tb ? String(tb.pax || "") : "";
   }
   function snapshotActiveTab() {
     if (!activeTabId) return;
@@ -32887,7 +32881,7 @@ What you type stays in this browser only.`;
       }
       return p.value;
     }
-    return activeTabPax(val);
+    return "";
   }
   function answerPick(op, argText) {
     let a = {};
@@ -32902,11 +32896,11 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
       const paxVal = pickDeskPax();
-      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName(), name: paxVal, pax: paxVal }, pickFound(""));
+      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName(), name: paxVal }, pickFound(""));
     }
     if (op === "who") {
       const paxVal = pickDeskPax(String(a.name == null ? "" : a.name));
-      return Object.assign({ who: activeTabName(), name: paxVal, pax: paxVal }, pickFound(a.q));
+      return Object.assign({ who: activeTabName(), name: paxVal }, pickFound(a.q));
     }
     if (op === "find") return pickFound(a.q);
     if (op === "copy") {

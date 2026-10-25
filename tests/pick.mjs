@@ -1169,7 +1169,7 @@ try {
   const key7 = (k, code, mods) => { pg["q:keydown"](Object.assign({ key: k, code: code || k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false,
     preventDefault() {} }, mods || {})); return sent7[sent7.length - 1] || "nothing"; };
   const grp = [row("a", 0), row("g", 0, { tag: "1/3", commits: 1 }), row("g", 1, { tag: "2/3", commits: 1 }), row("g", 2, { tag: "3/3", commits: 1 }), row("c", 0)];
-  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const h7 = els7.rows.innerHTML, lis7 = h7.split("</li>").filter(x => x.indexOf("<li") > -1);
   const shape = lis7.map(li => (/class="grp"/.test(li) ? "head:" + ((/<span class="t">([^<]*)</.exec(li) || [])[1]) + (/class="st"/.test(li) ? "+st" : "")
     : ((/<kbd>([^<]*)<\/kbd>/.exec(li) || [])[1] || "-") + (/class="in/.test(li) ? " in " + ((/<span class="g">([^<]*)</.exec(li) || [])[1]) : "")
@@ -1179,7 +1179,7 @@ try {
     "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row shows its key as Ctrl"
     + " and its digit, the reply copied last Ctrl+0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
 
-  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const sEnterRest = key7("Enter", "Enter", { shiftKey: true });
   openWith(grp, { last: row("a", 0) });
   key7("ArrowDown", "ArrowDown");
@@ -1196,7 +1196,7 @@ try {
     "7e Shift with Enter, with Ctrl and a digit, or with a click takes the row in the other language; without Shift nothing changes: "
     + [sEnterRest, sEnter, sDigit, sClick, plain].join(" "));
 
-  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const foot = [els7.count.textContent, els7.keys.innerHTML, els7.who.hidden, els7.who.title, els7.who.value === "Marta"];
   found7 = { rows: [row("c", 0)], count: "1 reply" };
   els7.q.value = "c"; pg["q:input"]();

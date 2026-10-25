@@ -140,11 +140,6 @@ function activeTabName(){
   if(i<0) return "";
   return tabLabel(Object.assign({}, tabs[i], {pax:pax ? pax.value : tabs[i].pax}), i);
 }
-function activeTabPax(val){
-  const tb=tabs.find(x=>x.id===activeTabId);
-  if(val!==undefined && tb) tb.pax=String(val||"");
-  return tb ? String(tb.pax||"") : "";
-}
 function snapshotActiveTab(){
   if(!activeTabId) return;
   const t=tabs.find(x=>x.id===activeTabId);
@@ -1339,5 +1334,5 @@ export {
   tabs,
   tabSaveTimer,
   tabInsertAnimating,
-  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName, activeTabPax
+  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName
 };
