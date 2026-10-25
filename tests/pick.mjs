@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 105;
+const EXPECTED = 107;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -212,6 +212,14 @@ try {
     "1r a reply that commits the firm is offered marked, and the page is given the desk's words for the mark: " + JSON.stringify([oathRow.commits, oathRows.words.stamp]));
   check(Object.keys(lampRow).join(",") === "id,vi,t,x,tag",
     "1s control: the row of a reply that does not commit carries no mark and no key it did not: " + Object.keys(lampRow).join(","));
+  const whoRes = pickAnswer("who", { name: "Jan Kowalski" });
+  const lampAfterWho = pickAnswer("copy", { id: "c-lamp", vi: 0 });
+  const deskPax = document.getElementById("pax");
+  check(whoRes && whoRes.who === "" && deskPax && deskPax.value === "Jan Kowalski"
+    && lampAfterWho && /Jan Kowalski/.test(lampAfterWho.text) && !/Anna/.test(lampAfterWho.text),
+    "1t setting the customer name through the picker fills the desk's name and the replies, and with no conversation open the answer names none: "
+    + JSON.stringify([whoRes && whoRes.who, deskPax && deskPax.value, lampAfterWho && lampAfterWho.text]));
+  pickAnswer("who", { name: "Anna Nowak" });
 
   /* ---- 2. the shell --------------------------------------------------------------------- */
   console.log("\n[2/7] the shell: the hotkey, the relay and the clipboard");
@@ -951,6 +959,11 @@ try {
   TB.tabs.splice(0, TB.tabs.length);
   ST.ssSet(TB.TAB_KEY, "null");
   TB.initTabs();
+  const whoTab = pickAnswer("who", { name: "Jan Kowalski" });
+  const tabNow = TB.activeTabName();
+  check(whoTab && whoTab.who === tabNow && tabNow === "Jan" && !/Anna/.test(tabNow),
+    "1u with a conversation open, the picker's answer is that conversation's own label, which now carries the name (the first name, as a tab shows it): " + JSON.stringify([whoTab && whoTab.who, tabNow]));
+  pickAnswer("who", { name: "Anna Nowak" });
   const SEQ = { id: "c-seq", c: "orders", t: "Sequence", alt: 1, seq: 1, en: "Step 1\n\nStep 2\n\nStep 3", next: [{ to: "c-b" }] };
   deskOf([SEQ, A, B]);
   rest();

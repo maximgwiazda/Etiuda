@@ -196,6 +196,12 @@ function answerPick(op,argText){
     try{ tourHeardPick(); }catch(e){}
     return Object.assign({look:pickLook(), words:pickWords(), last:pickLastRow(), who:activeTabName()}, pickFound(""));
   }
+  if(op==="who"){
+    const name=String(a.name==null?"":a.name);
+    const p=document.getElementById("pax");
+    if(p){ p.value=name; if(typeof p.oninput==="function") p.oninput(); }
+    return Object.assign({who:activeTabName()}, pickFound(a.q));
+  }
   if(op==="find") return pickFound(a.q);
   if(op==="copy"){
     if(!a.last) return pickCopy(a.id,a.vi,a.other);
