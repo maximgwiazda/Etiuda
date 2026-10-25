@@ -3694,7 +3694,7 @@ function setRelayTeamAside(rt) {
   const file = path.join(relayMirrorOf(rt), TEAM_NAME);
   const aside = file + ".aside";
   try { fs.unlinkSync(aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
-  try { fs.renameSync(file, aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
+  try { renamePatiently(file, aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
 }
 function forgetLead(team, left) {
   team = String(team || "");
