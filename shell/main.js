@@ -3448,6 +3448,23 @@ function inviteFolderTeam(parsed) {
   return teamWhole(doc) && doc.id === parsed.team && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
     ? "" : "foreign";
 }
+/* True only where `folder` holds this team's own team file, whole under the invited lead, under a lead handed over to
+   from it, or vouched for by a ring in that folder. False for any other. */
+function inviteFolderBelongs(folder, parsed) {
+  if (!folder || !parsed || !parsed.team || !parsed.lead) return false;
+  const file = path.join(folder, TEAM_NAME);
+  let text = null;
+  try { if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8"); }
+  catch { return false; }
+  if (text === null) return false;
+  let doc = null;
+  try { doc = JSON.parse(text.replace(/^\ufeff/, "")); } catch { return false; }
+  if (!teamWhole(doc) || doc.id !== parsed.team) return false;
+  if (doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public) return true;
+  if (handedTo(doc, parsed.lead)) return true;
+  const ring = readRingFile(folder);
+  return Boolean(ring && memberRingVouches(doc, ring));
+}
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
 function readInvite(text) {
   const parsed = inviteParse(text);
@@ -3494,12 +3511,28 @@ async function takeInvite(text, name, check) {
   const was = earlier && typeof earlier.was === "string" && ownBefore === earlier.folder ? earlier.was : ownBefore;
   if (previous !== parsed.folder) deskSetOwn(CATALOG_FOLDER_KEY, parsed.folder);
   const answers = await askFolder(parsed.folder);
+  let chosen = "";
   if (!answers) {
-    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-    return Object.assign({}, joinView(), { refused: "silent" });
+    const picked = await dialog.showOpenDialog({
+      properties: ["openDirectory"],
+      defaultPath: previous || defaultCatalogFolder(),
+      title: "Choose the shared folder for this team",
+    });
+    chosen = (!picked || picked.canceled || !picked.filePaths || !picked.filePaths[0]) ? "" : picked.filePaths[0];
+    if (!chosen) {
+      if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
+      return Object.assign({}, joinView(), { refused: "silent" });
+    }
+    const chosenAnswers = await askFolder(chosen);
+    if (!chosenAnswers || !inviteFolderBelongs(chosen, parsed)) {
+      if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
+      return Object.assign({}, joinView(), { refused: "foreign" });
+    }
+    parsed.folder = chosen;
+    deskSetOwn(CATALOG_FOLDER_KEY, chosen);
   }
   settleFolder(parsed.folder, true);
-  const late = inviteFolderTeam(parsed) || inviteSettled(parsed.team, parsed.lead);
+  const late = (chosen ? "" : inviteFolderTeam(parsed)) || inviteSettled(parsed.team, parsed.lead);
   if (late) {
     if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
     return Object.assign({}, joinView(), { refused: late });
