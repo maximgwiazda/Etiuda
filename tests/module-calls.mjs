@@ -3379,6 +3379,23 @@ const CARD_B = {
         () => eq([(old.match(/<div class="ln-sent" style/g) || []).length, /ln-at|ln-since|ln-when/.test(old), /<span class="ln-title">This conversation<\/span>/.test(old),
           JSON.stringify(T.tabs[0].log)].join("|"), "2|false|true|[]"));
       LN.toggleLanes(false);
+      /* Unresolved placeholders in Now and Next cards render as fillmiss warning chips. */
+      AS.setCards([
+        { id: "c-warn-now", c: "orders", t: "Card Now", en: "Dear {PAX}, intent {INTENT}", next: [{ to: "c-warn-next" }] },
+        { id: "c-warn-next", c: "orders", t: "Card Next", en: "Followup {PAX}" },
+      ]);
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, "null");
+      T.initTabs();
+      LP.bumpUseCount("c-warn-now", "en", 0);
+      LN.toggleLanes(true);
+      const warnHtml = lanesBox.innerHTML;
+      LN.toggleLanes(false);
+      check("lanes.js", "1008w1 the lanes render unresolved tokens as fillmiss chips in the reply now and in the next replies",
+        () => eq([/<span class="fillmiss">PAX<\/span>/.test(warnHtml), /<span class="fillmiss">INTENT<\/span>/.test(warnHtml),
+          warnHtml.split('<div class="card ln-now"')[1].indexOf('<span class="fillmiss">PAX</span>') > -1,
+          warnHtml.split('<div class="ln-next"')[1].indexOf('<span class="fillmiss">PAX</span>') > -1].join(","),
+          "true,true,true,true"));
     } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);

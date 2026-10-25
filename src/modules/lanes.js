@@ -11,7 +11,7 @@ import { formatActionChord } from "./shortcuts.js";
 import { offerUndo, t, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
-import { fill } from "./intent-text.js";
+import { escFilled, fill } from "./intent-text.js";
 import { markCutText } from "./cut-text.js";
 import { NEXT_KEYS, nextFoldState, nextHitHtml, nextHits, nextIdsOf, nextListWrite, stampHtml } from "./card-chain.js";
 import { ICON_PLUS, ICON_X } from "./icons.js";
@@ -124,7 +124,7 @@ function laneTitleHtml(m){
 }
 function laneBody(m, k){
   const l=cardLang(m), ps=parts(m,l);
-  return ps.length>k ? String(fill(ps[k],m,0,l)||"") : "";
+  return ps.length>k ? String(fill(ps[k],m,true,l)||"") : "";
 }
 function laneRowHtml(st, r, i){
   const m=st.live.get(r.id);
@@ -143,7 +143,7 @@ function laneRowHtml(st, r, i){
       +esc(t("learnt"))+'</span>'
       : r.used ? '<span class="nd-learnt" title="'+esc(t("One of the cards this desk has used most lately"))+'">'+esc(t("often"))+'</span>' : "")
     +'<span class="ln-acts">'+act+'</span>'
-    +'</div><div class="txt ln-txt'+(i===laneMark?" sel":"")+'" role="button"><span class="ln-clamp">'+esc(laneBody(m,0).replace(/\s+/g," ").trim())+'</span></div>'
+    +'</div><div class="txt ln-txt'+(i===laneMark?" sel":"")+'" role="button"><span class="ln-clamp">'+escFilled(laneBody(m,0).replace(/\s+/g," ").trim())+'</span></div>'
     +(then.length ? '<div class="ln-then">'+esc(t("then: {LIST}").replace("{LIST}",then.join(LN_DOT)))+'</div>' : "")
     +'</div>';
 }
@@ -170,7 +170,7 @@ function lanesHtml(st){
   if(!m) return head+'<p class="ln-empty">'+esc(t("Each reply you send appears here, with what can follow it."))+'</p>';
   const k=st.sent.length, slot=catSlot(m.c), l=cardLang(m), blocks=parts(m,l).length;
   let blk="";
-  for(let i=0;i<blocks;i++) blk+='<div class="txt ln-blk" role="button" data-b="'+i+'">'+esc(laneBody(m,i))+'</div>';
+  for(let i=0;i<blocks;i++) blk+='<div class="txt ln-blk" role="button" data-b="'+i+'">'+escFilled(laneBody(m,i))+'</div>';
   const rows=st.rows.map((r,i)=>laneRowHtml(st,r,i)).join("");
   /* What was sent, again as a trail above Now, which the sheet shows in place of the Sent lane where three lanes would
      not fit: the last few, led in by a dotted line where there were more. */
