@@ -30724,6 +30724,24 @@ What you type stays in this browser only.`;
           copyEntrySel(e.shiftKey);
           return;
         }
+        if (!e.ctrlKey && e.shiftKey && q) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          setIntentIdxs([]);
+          setIntentText(q);
+          intentEl.value = "";
+          setRailSel(-1);
+          syncIntentInput();
+          hooks.render();
+          scheduleTabSave();
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          toast(t("Intent: {NAME}").replace("{NAME}", q));
+          return;
+        }
         if (!q && semiKind !== "intent") return;
         e.preventDefault();
         e.stopImmediatePropagation();

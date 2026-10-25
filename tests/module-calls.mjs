@@ -4533,6 +4533,16 @@ const CARD_B = {
     check("search-box.js", "1012k4 four held Escapes in the search box neither ask nor close a conversation",
       () => eq(boxHeld, "dp-a:Anna,dp-b:Bartek/"));
 
+    /* 1012k5: Shift+Enter in the search box with text sets a free-text intent, clears the box and blurs it */
+    copied.length = 0;
+    box.value = "lost luggage";
+    box.blurred = false;
+    toastEl.textContent = ""; toastEl.innerHTML = ""; toastEl.classList.remove("show");
+    const shiftRet = inBox({ key: "Enter", code: "Enter", shiftKey: true });
+    const freeIntent = [shiftRet, AS.intentText, box.value, box.blurred, String(toastEl.textContent || toastEl.innerHTML)].join("|");
+    check("search-box.js", "1012k5 Shift+Enter in the search box with text sets the free-text intent, clears the box and blurs it",
+      () => eq(freeIntent, "!s0|lost luggage||true|Intent: lost luggage"));
+
     /* Search box caret keys and category navigation */
     const boxKeysD3 = (box.heard && box.heard.keydown) || [];
     const shortcutsD3 = [];
