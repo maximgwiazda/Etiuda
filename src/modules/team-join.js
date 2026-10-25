@@ -170,8 +170,8 @@ function lapseWords(l){
     body:[t("The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team."),
       kept("The relay keeps the team's copy until {DATE}."), t("The team's lead renews it in Studio.")].filter(Boolean).join(" ")};
   if(l.step==="lapsed") return {title:t("The team's relay has stopped"),
-    body:[t("The trial it came with has ended."), stay,
-      kept("The relay keeps the team's copy until {DATE}, and the team's lead can bring it back from Studio with a licence.")].filter(Boolean).join(" ")};
+    body:[t("The licence or trial it came with has ended."), stay, kept("The relay keeps the team's copy until {DATE}."),
+      t("The team's lead can start it again from Studio with a licence.")].filter(Boolean).join(" ")};
   return {title:t("The relay no longer holds the team's copy"), body:[stay, t("The team's lead will say what comes next.")].join(" ")};
 }
 /* The team's row in Settings says the title, for as long as the step lasts. */

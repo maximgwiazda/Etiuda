@@ -3694,11 +3694,11 @@ try {
       ST.lsSet("eUiLang", "pl");
       await feed(trial);
       ST.lsSet("eUiLang", "en");
-      const trialPl = "Przekaźnik zespołu jest wstrzymany Okres próbny, z którym działał, dobiegł końca. Katalogi na tym stanowisku zostają bez zmian"
-        + " i działają jak dotąd. Przekaźnik przechowuje kopię zespołu do dnia " + day(BASE + 44 * DAYMS, "pl")
-        + ", a lider zespołu może go przywrócić w Studiu po zakupie licencji.";
+      const trialPl = "Przekaźnik zespołu jest wstrzymany Licencja albo okres próbny, z którym działał, dobiegły końca. Katalogi na tym"
+        + " stanowisku zostają bez zmian i działają jak dotąd. Przekaźnik przechowuje kopię zespołu do dnia " + day(BASE + 44 * DAYMS, "pl")
+        + ". Lider zespołu może go uruchomić ponownie w Studiu, z licencją.";
       const trialNotice = notice(), trialMade = lapseMade - madeB, trialSetEn = settings("en"), trialSetPl = settings("pl");
-      const trialRowEn = trialSetEn.indexOf(TITLES[2]) >= 0 && trialSetEn.indexOf("The trial it came with") < 0;
+      const trialRowEn = trialSetEn.indexOf(TITLES[2]) >= 0 && trialSetEn.indexOf("The licence or trial it came with") < 0;
       const trialRowPl = trialSetPl.indexOf("Przekaźnik zespołu jest wstrzymany") >= 0;
       check(!!trialRow && !!trialRow.lapse && trialRow.lapse.step === "lapsed" && trialRow.lapse.until === BASE + 14 * DAYMS
         && trialRow.lapse.swept === BASE + 44 * DAYMS && trialRow.lapse.seen === false && !!paidStill && !paidStill.lapse
