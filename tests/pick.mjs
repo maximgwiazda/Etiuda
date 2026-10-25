@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 109;
+const EXPECTED = 110;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -474,6 +474,50 @@ try {
     && tb2.log.length === logLenBefore && deskPax2.value === "Janina",
     "2J in the picker, the name is cleared and retyped (input events with an empty value in between), then Enter: the conversation's path and history stay, and the desk's name is the retyped one: "
     + JSON.stringify([tb2.path, tb2.log.length, deskPax2.value]));
+
+  /* The picker's name field shows and sends the desk's own name, #pax's value, whole; never the tab's label. */
+  TB.tabs.splice(0, TB.tabs.length);
+  ST.ssSet(TB.TAB_KEY, "null");
+  TB.initTabs();
+  const tb3 = TB.tabs[0];
+  deskPax2.value = "Jan Kowalski";
+  deskPax2.oninput = () => TB.scheduleTabSave();
+  TB.scheduleTabSave();
+
+  let onOpen3 = null;
+  const whoEvents3 = {};
+  const whoInputEl3 = {
+    value: "", hidden: false, title: "", focus() {},
+    addEventListener: (t, fn) => { whoEvents3[t] = fn; }
+  };
+  const qInputEl3 = {
+    value: "", placeholder: "", focus() {}, setAttribute() {},
+    addEventListener: () => {}
+  };
+  const rowsBoxEl3 = { innerHTML: "", scrollTop: 0, setAttribute() {}, querySelectorAll: () => [], addEventListener: () => {} };
+  const pickerDocStandin3 = {
+    getElementById: id => (id === "who" ? whoInputEl3 : id === "q" ? qInputEl3 : id === "rows" ? rowsBoxEl3 : null),
+    documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" }
+  };
+  new Function("window", "document", script2)({
+    E_PICK: {
+      who: (name, q) => Promise.resolve(JSON.stringify(PICK.answerPick("who", JSON.stringify({ name, q })))),
+      find: () => Promise.resolve(JSON.stringify({ rows: [] })),
+      close: () => {},
+      ready: () => {},
+      onOpen: fn => { onOpen3 = fn; }
+    }
+  }, pickerDocStandin3);
+
+  onOpen3(JSON.stringify(PICK.answerPick("open")));
+  const openedValue = whoInputEl3.value;
+  whoInputEl3.value = "Jan Kowalsky";
+  if (whoEvents3.keydown) whoEvents3.keydown({ key: "Enter", preventDefault() {} });
+  await tick(10);
+
+  check(openedValue === "Jan Kowalski" && deskPax2.value === "Jan Kowalsky" && whoInputEl3.value === "Jan Kowalsky",
+    "2K the picker's name field shows the desk's own name whole at open and keeping edits on Enter updates the desk: "
+    + JSON.stringify([openedValue, deskPax2.value, whoInputEl3.value]));
 
   deskPax2.value = "Anna Nowak";
   delete deskPax2.oninput;

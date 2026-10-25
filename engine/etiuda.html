@@ -11040,6 +11040,7 @@ What you type stays in this browser only.`;
     TAB_KEY: () => TAB_KEY,
     activeHeard: () => activeHeard,
     activeTabName: () => activeTabName,
+    activeTabPax: () => activeTabPax,
     activeWords: () => activeWords,
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
@@ -11984,6 +11985,11 @@ What you type stays in this browser only.`;
     const i = tabs.findIndex((x) => x.id === activeTabId);
     if (i < 0) return "";
     return tabLabel(Object.assign({}, tabs[i], { pax: pax ? pax.value : tabs[i].pax }), i);
+  }
+  function activeTabPax(val) {
+    const tb = tabs.find((x) => x.id === activeTabId);
+    if (val !== void 0 && tb) tb.pax = String(val || "");
+    return tb ? String(tb.pax || "") : "";
   }
   function snapshotActiveTab() {
     if (!activeTabId) return;
@@ -32872,6 +32878,17 @@ What you type stays in this browser only.`;
     }, null);
     return { asked: true };
   }
+  function pickDeskPax(val) {
+    const p = document.getElementById("pax");
+    if (p) {
+      if (val !== void 0) {
+        p.value = val;
+        if (typeof p.oninput === "function") p.oninput();
+      }
+      return p.value;
+    }
+    return activeTabPax(val);
+  }
   function answerPick(op, argText) {
     let a = {};
     try {
@@ -32884,16 +32901,12 @@ What you type stays in this browser only.`;
         tourHeardPick();
       } catch (e) {
       }
-      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName() }, pickFound(""));
+      const paxVal = pickDeskPax();
+      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName(), name: paxVal, pax: paxVal }, pickFound(""));
     }
     if (op === "who") {
-      const name = String(a.name == null ? "" : a.name);
-      const p = document.getElementById("pax");
-      if (p) {
-        p.value = name;
-        if (typeof p.oninput === "function") p.oninput();
-      }
-      return Object.assign({ who: activeTabName() }, pickFound(a.q));
+      const paxVal = pickDeskPax(String(a.name == null ? "" : a.name));
+      return Object.assign({ who: activeTabName(), name: paxVal, pax: paxVal }, pickFound(a.q));
     }
     if (op === "find") return pickFound(a.q);
     if (op === "copy") {
