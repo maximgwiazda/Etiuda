@@ -660,11 +660,12 @@ try {
   const lastCall = () => pcalls[pcalls.length - 1] || "nothing";
   const reopen = () => { pcalls.length = 0; qEl.value = ""; pOpen(JSON.stringify({ rows: pRows, last: R("b"), words: { again: "again" } })); };
   reopen();
-  check(/^<li[^>]*id="r0"[^>]*class="on"[^>]*title="again"/.test(boxHtml), "4b at rest the reply copied last is the first row, and marked");
+  check(/^<li[^>]*id="r0"[^>]*title="again"/.test(boxHtml) && /<li[^>]*id="r1"[^>]*class="on"/.test(boxHtml),
+    "4b at rest the reply copied last is the first row, and the row after it is marked");
   press("Enter", "Enter");
-  check(lastCall() === 'copy {"last":true}', "4c Enter at rest copies the reply copied last again: " + lastCall());
+  check(lastCall() === 'copy {"id":"a","vi":0}', "4c Enter at rest copies the row marked, the row after the reply copied last: " + lastCall());
   reopen(); press("ArrowDown", "ArrowDown"); press("Enter", "Enter");
-  check(lastCall() === 'copy {"id":"a","vi":0}', "4d a step down and Enter copies the row marked: " + lastCall());
+  check(lastCall() === 'copy {"id":"c","vi":0}', "4d a step down and Enter copies the row marked: " + lastCall());
   reopen(); press("1", "Digit1", true);
   check(lastCall() === 'copy {"id":"a","vi":0}', "4e Ctrl+1 copies the row numbered 1: " + lastCall());
   reopen(); press("2", "Numpad2", true);
@@ -678,15 +679,15 @@ try {
   reopen(); press("1", "Digit1", false);
   check(pcalls.length === 0, "4j a digit without Control is typed, and copies nothing");
   reopen(); press("ArrowUp", "ArrowUp"); press("Enter", "Enter");
-  check(lastCall() === 'copy {"id":"c","vi":0}', "4k a step up from the first row wraps to the last: " + lastCall());
+  check(lastCall() === 'copy {"last":true}', "4k a step up from the marked row moves to the reply copied last: " + lastCall());
   /* The other end of the same ring (board 818): as many steps down as there are rows comes back to the first, the reply
      copied last. A list that stopped at its last row would copy that row instead. */
   reopen();
   const shownRows = (boxHtml.match(/<li\b/g) || []).length;
   for (let i = 0; i < shownRows; i++) press("ArrowDown", "ArrowDown");
   press("Enter", "Enter");
-  check(shownRows === 3 && lastCall() === 'copy {"last":true}',
-    "4n a step down from the last row wraps to the first: " + shownRows + " row(s), " + shownRows + " step(s) down, then " + lastCall());
+  check(shownRows === 3 && lastCall() === 'copy {"id":"a","vi":0}',
+    "4n a full turn down wraps back to the marked row: " + shownRows + " row(s), " + shownRows + " step(s) down, then " + lastCall());
   reopen();
   pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
   check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
@@ -1079,8 +1080,8 @@ try {
   const sClick = sent7[sent7.length - 1];
   openWith(grp, { last: row("a", 0) });
   const plain = key7("Enter", "Enter");
-  check(sEnterRest === '{"last":true,"other":1}' && sEnter === '{"id":"g","vi":0,"other":1}' && sDigit === '{"id":"g","vi":2,"other":1}'
-    && sClick === '{"id":"c","vi":0,"other":1}' && plain === '{"last":true}',
+  check(sEnterRest === '{"id":"g","vi":0,"other":1}' && sEnter === '{"id":"g","vi":1,"other":1}' && sDigit === '{"id":"g","vi":2,"other":1}'
+    && sClick === '{"id":"c","vi":0,"other":1}' && plain === '{"id":"g","vi":0}',
     "7e Shift with Enter, with Ctrl and a digit, or with a click takes the row in the other language; without Shift nothing changes: "
     + [sEnterRest, sEnter, sDigit, sClick, plain].join(" "));
 

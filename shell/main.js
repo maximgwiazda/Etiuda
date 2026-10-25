@@ -5625,7 +5625,7 @@ function pickPage() {
     rows = Array.isArray(o.rows) ? o.rows : [];
     said = o.count || "";
     last = o.last || null;
-    q.value = ""; at = 0; asked++;
+    q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
     box.scrollTop = 0;
     paint(false);
     q.focus();
