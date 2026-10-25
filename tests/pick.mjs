@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 117;
+const EXPECTED = 118;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1190,6 +1190,7 @@ try {
   let open7 = null, found7 = { rows: [], count: "" };
   new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve(JSON.stringify(found7)),
     tab: id => Promise.resolve(JSON.stringify(pickAnswer("tab", { id }))),
+    who: (name, q) => Promise.resolve(JSON.stringify(pickAnswer("who", { name, q }))),
     lang: () => Promise.resolve(JSON.stringify(pickAnswer("lang", {}))),
     copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } } },
     { getElementById: id => els7[id] || null, documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
@@ -1396,6 +1397,16 @@ try {
   check(TB.tabs.length === 3 && deskPaxAfterNew === "" && whoAfterNew === "" && focusedEl === els7.who,
     "7p Ctrl+T opens a new conversation on the desk, the field is empty and focused: "
     + JSON.stringify([TB.tabs.length, deskPaxAfterNew, whoAfterNew, focusedEl === els7.who]));
+
+  /* A name typed in the picker and not yet sent reaches the conversation it was typed for before a tab key switches. */
+  open7(JSON.stringify(pickAnswer("open")));
+  const left7 = TB.tabs[TB.tabs.length - 1], leftName7 = TB.activeTabName();
+  els7.who.value = "Marek Lis";
+  if (pg["who:keydown"]) pg["who:keydown"]({ key: "Tab", code: "Tab", ctrlKey: true, shiftKey: false, altKey: false, metaKey: false, preventDefault() {} });
+  await tick(10);
+  check(left7.pax === "Marek Lis" && TB.activeTabName() !== leftName7 && els7.who.value === "Anna Nowak",
+    "7v a name typed in the picker and not yet sent stays with the conversation it was typed for when Ctrl+Tab switches: "
+    + JSON.stringify([left7.pax, leftName7, TB.activeTabName(), els7.who.value]));
 
   const tabsCount7 = TB.tabs.length;
   const tabActive7 = TB.activeTabName();

@@ -5664,8 +5664,12 @@ function pickPage() {
   const onTabKey = (e, tabId) => {
     e.preventDefault();
     if (typeof P.tab === "function") {
+      /* A name typed and not yet sent belongs to the conversation in front: it reaches the desk before the switch. */
+      const pending = !!who && !who.hidden && !closing && who.value !== sent && typeof P.who === "function";
+      if (pending) sent = who.value;
+      const before = pending ? P.who(who.value, q.value) : Promise.resolve();
       const mine = ++asked;
-      P.tab(tabId).then(text => {
+      before.then(() => P.tab(tabId)).then(text => {
         if (mine !== asked) return;
         let o = {};
         try { o = JSON.parse(text) || {}; } catch (_) { o = {}; }
