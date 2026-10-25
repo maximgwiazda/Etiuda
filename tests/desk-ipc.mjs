@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 86;
+const EXPECTED = 88;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -358,13 +358,19 @@ try {
      signed bytes, so the shell's canonical form is held to the engine's. --------------------- */
   const FOLDER = path.join(UD, "Etiuda");
   fs.mkdirSync(FOLDER, { recursive: true });
-  const fake = () => new Proxy(function () {}, {
-    get: (t, k) => k === Symbol.toPrimitive ? () => "" : (k === "length" ? 0
-      : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake())),
-    apply: () => fake(), set: () => true, has: () => true });
+  const fake = () => {
+    const store = Object.create(null);
+    return new Proxy(function () {}, {
+      get: (t, k) => k in store ? store[k] : (k === Symbol.toPrimitive ? () => "" : (k === "length" ? 0
+        : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake()))),
+      set: (t, k, v) => { store[k] = v; return true; },
+      apply: () => fake(), has: () => true });
+  };
   Object.assign(window, { innerWidth: 1280, innerHeight: 800 });
   globalThis.innerHeight = 800;
   globalThis.getComputedStyle = () => fake();
+  globalThis.addEventListener = (...a) => window.addEventListener(...a);
+  globalThis.removeEventListener = (...a) => window.removeEventListener(...a);
   globalThis.requestAnimationFrame = fn => setTimeout(fn, 0);
   globalThis.document = new Proxy({}, { set: () => true, get: (t, k) => (k === "readyState" ? "complete"
     : k === "visibilityState" ? "visible" : (k === "addEventListener" || k === "removeEventListener") ? noop : fake()) });
@@ -941,6 +947,93 @@ try {
     + JSON.stringify(fUk && labelOf(fUk, kCat).label) + ")");
   delete PK.pack["catLabels:uk"];
   await settle();
+
+  /* Four open tabs survive an edition load. */
+  {
+    const fourDocs = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-tabs", rev: 1,
+      langs: [{ code: "en", label: "EN" }],
+      tags: [
+        { id: "t-op", kind: "shelf", label: { en: "Openers" } },
+        { id: "t-r1", kind: "request", clause: { en: "a refund" }, action: { en: "refund" }, topic: { en: "refund" } },
+        { id: "t-r2", kind: "request", clause: { en: "a status" }, action: { en: "status" }, topic: { en: "status" } },
+        { id: "t-r3", kind: "request", clause: { en: "a delivery" }, action: { en: "delivery" }, topic: { en: "delivery" } },
+        { id: "t-r4", kind: "request", clause: { en: "an invoice" }, action: { en: "invoice" }, topic: { en: "invoice" } }
+      ],
+      cards: ["a", "b", "c", "d"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain",
+        title: { en: "Card " + x }, body: { en: "Body " + x + "." } }))
+    };
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(fourDocs)), { file: "tabs.ec" });
+    CB.applyBootCatalog(); IID.snapshotBaseIntents(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    const tabsPlanted = {
+      v: 1, activeTabId: "tab-1",
+      tabs: [
+        { id: "tab-1", pax: "Anna", path: ["c-a", "c-b"], log: [{ id: "c-a", at: 1, l: "en", b: 0 }], intentIdxs: [0] },
+        { id: "tab-2", pax: "Bob", path: ["c-b", "c-c"], log: [{ id: "c-b", at: 2, l: "en", b: 0 }], intentIdxs: [1] },
+        { id: "tab-3", pax: "Celia", path: ["c-c", "c-d"], log: [{ id: "c-d", at: 3, l: "en", b: 0 }], intentIdxs: [2] },
+        { id: "tab-4", pax: "David", path: ["c-d", "c-a"], log: [{ id: "c-d", at: 4, l: "en", b: 0 }], intentIdxs: [3] }
+      ]
+    };
+    ST.ssSet("eSessionTabs", JSON.stringify(tabsPlanted));
+
+    const threeDocs = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-tabs", rev: 2,
+      langs: [{ code: "en", label: "EN" }],
+      tags: [
+        { id: "t-op", kind: "shelf", label: { en: "Openers" } },
+        { id: "t-r1", kind: "request", clause: { en: "a refund" }, action: { en: "refund" }, topic: { en: "refund" } },
+        { id: "t-r2", kind: "request", clause: { en: "a status" }, action: { en: "status" }, topic: { en: "status" } },
+        { id: "t-r4", kind: "request", clause: { en: "an invoice" }, action: { en: "invoice" }, topic: { en: "invoice" } }
+      ],
+      cards: ["a", "b", "c"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain",
+        title: { en: "Card " + x }, body: { en: "Body " + x + "." } }))
+    };
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(threeDocs)), { file: "tabs.ec" });
+    CB.applyBootCatalog(); IID.snapshotBaseIntents(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+
+    const tabsAfter = JSON.parse(ST.ssGet("eSessionTabs") || "null");
+    const tabsOk = !!(tabsAfter && Array.isArray(tabsAfter.tabs) && tabsAfter.tabs.length === 4
+      && tabsAfter.tabs[0].pax === "Anna" && tabsAfter.tabs[0].path.join() === "c-a,c-b" && tabsAfter.tabs[0].log.map(e => e.id).join() === "c-a" && tabsAfter.tabs[0].intentIdxs.join() === "0"
+      && tabsAfter.tabs[1].pax === "Bob" && tabsAfter.tabs[1].path.join() === "c-b,c-c" && tabsAfter.tabs[1].log.map(e => e.id).join() === "c-b" && tabsAfter.tabs[1].intentIdxs.join() === "1"
+      && tabsAfter.tabs[2].pax === "Celia" && tabsAfter.tabs[2].path.join() === "c-c" && tabsAfter.tabs[2].log.length === 0 && tabsAfter.tabs[2].intentIdxs.length === 0
+      && tabsAfter.tabs[3].pax === "David" && tabsAfter.tabs[3].path.join() === "c-a" && tabsAfter.tabs[3].log.length === 0 && tabsAfter.tabs[3].intentIdxs.join() === "2");
+
+    check(tabsOk,
+      "78m four open tabs, each with a name, history and an intent, survive a load of an edition that keeps some of their cards and intents and drops one of each");
+  }
+
+  /* A tab change within the 250 ms debounce survives an edition load. */
+  {
+    const TB = await import(PLAIN("tabs.js"));
+    TB.initTabs();
+    DM.pax.value = "Eleanor";
+    TB.scheduleTabSave();
+    TB.tabPathStep("c-c", { l: "en", b: 0 });
+
+    const nextDocs = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-tabs", rev: 3,
+      langs: [{ code: "en", label: "EN" }],
+      tags: [
+        { id: "t-op", kind: "shelf", label: { en: "Openers" } },
+        { id: "t-r1", kind: "request", clause: { en: "a refund" }, action: { en: "refund" }, topic: { en: "refund" } },
+        { id: "t-r2", kind: "request", clause: { en: "a status" }, action: { en: "status" }, topic: { en: "status" } },
+        { id: "t-r4", kind: "request", clause: { en: "an invoice" }, action: { en: "invoice" }, topic: { en: "invoice" } }
+      ],
+      cards: ["a", "b", "c"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain",
+        title: { en: "Card " + x }, body: { en: "Body " + x + "." } }))
+    };
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(nextDocs)), { file: "tabs.ec" });
+    CB.applyBootCatalog(); IID.snapshotBaseIntents(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+
+    const tabsAfterDebounce = JSON.parse(ST.ssGet("eSessionTabs") || "null");
+    const debouncedOk = !!(tabsAfterDebounce && Array.isArray(tabsAfterDebounce.tabs)
+      && tabsAfterDebounce.tabs[0].pax === "Eleanor"
+      && tabsAfterDebounce.tabs[0].path.join() === "c-a,c-b,c-c"
+      && tabsAfterDebounce.tabs[0].log.some(e => e.id === "c-c"));
+
+    check(debouncedOk,
+      "78n a tab change within the quarter-second debounce survives a load of a new edition");
+  }
 
   /* A catalog taken while the identity is asked: the write that began over the one before, its file already made. */
   await catRev("lamp-swap-one", 1);
