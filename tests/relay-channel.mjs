@@ -46,7 +46,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 206;
+const EXPECTED = 208;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -4173,6 +4173,72 @@ try {
     + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a page whose fetch fails part way is applied only where it can be judged whole (C3, board 923). The lead names a
+   second desk at rev 2, that desk sends a file, and the lead writes rev 3, which buries rev 2: the first desk, offline
+   meanwhile, is listed the second desk's file and then rev 3, whose fetch the relay answers 503 once. The desk file is
+   not judged against rev 1, which does not name its writer, and lands at the next cycle. ---- */
+async function pageWhole(mod) {
+  const key = crypto.randomBytes(32), D1 = keyPair(true), D2 = keyPair(true);
+  const tm = await freshTeam([D1, D2]);
+  const tag = tm.rt.slice(0, 8), keyFor = e => (e === 1 ? key : null);
+  const lead = opened(mod, "c3-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1 });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+  lead.ch.start();
+  await settle(lead);
+  let failId = null, failed = 0;
+  const t1 = transport("c3-d1-" + tag);
+  const request = async (m, u, h, b) => {
+    if (m === "GET" && failId && failed === 0 && String(u).endsWith("/b/" + failId)) {
+      failed++;
+      return { status: 503, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "fault" })) };
+    }
+    return t1.request(m, u, h, b);
+  };
+  const deskOne = () => opened(mod, "c3-d1-" + tag, tm, D1, "desk:" + D1.keyId, { keyFor, sealEpoch: () => 1, request, connect: t1.connect });
+  const first = deskOne();
+  first.ch.start();
+  await settle(first);
+  const atRev1 = JSON.parse(read(first.mirror, C.TEAM_NAME) || "{}").rev === 1;
+  await first.ch.stop();
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 2, [member(D1), member(D2)]));
+  await settle(lead);
+  const REL = "desks/" + D2.keyId + "/stats.estat", BODY = "{\"counted\":2}\n";
+  const d2 = opened(mod, "c3-d2-" + tag, tm, D2, "desk:" + D2.keyId, { keyFor, sealEpoch: () => 1 });
+  put(d2.mirror, REL, BODY);
+  d2.ch.start();
+  await settle(d2);
+  await d2.ch.stop();
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 3, [member(D1), member(D2)]));
+  await settle(lead);
+  const live = blobsOn(tm.rt, LEAD.keyId).filter(v => !v.del && !v.gone).sort((a, b) => b.seq - a.seq);
+  const deskBlob = blobsOn(tm.rt, D2.keyId).filter(v => !v.del).sort((a, b) => b.seq - a.seq)[0];
+  failId = live.length ? live[0].id : null;
+  const listedBefore = !!deskBlob && !!live.length && deskBlob.seq < live[0].seq;
+  const back = deskOne();
+  back.ch.start();
+  await settle(back);
+  const out = { atRev1, listedBefore, failed, rev: JSON.parse(read(back.mirror, C.TEAM_NAME) || "{}").rev, landed: read(back.mirror, REL) === BODY,
+    fetchedDesk: deskBlob ? t1.log.filter(l => l === "GET b/" + deskBlob.id).length : 0 };
+  await back.ch.stop();
+  await lead.ch.stop();
+  return out;
+}
+try {
+  const w = await pageWhole(C);
+  check(w.atRev1 && w.listedBefore && w.failed === 1 && w.rev === 3 && w.landed,
+    "923a a desk file listed before the lead's newer team file, whose fetch the relay answers 503 once, is not judged against the older roster that does not name its writer, and lands at the next cycle: "
+    + (w.listedBefore ? "listed before rev 3" : "not listed before rev 3") + ", 503 answered " + w.failed + ", the mirror's rev " + w.rev
+    + ", the desk file " + (w.landed ? "landed" : "missing") + " after " + w.fetchedDesk + " fetch(es)");
+  const wholePlant = await liftChannel("plant:page-whole", async mod => {
+    const x = await pageWhole(mod);
+    return x.listedBefore && x.failed === 1 && x.rev === 3 && !x.landed;
+  });
+  check(wholePlant.turned && wholePlant.back, "923b lifting plant:page-whole judges the desk file against the older roster and loses it, and the product file is never written: "
+    + wholePlant.detail + ", sha " + (wholePlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 923a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a joining desk that also owes another file. Only join.json may be sealed under the invitation, so the other
