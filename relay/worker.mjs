@@ -4,7 +4,8 @@
    ends holds a Worker request and no object; a create's body is also read for the id it names and for its grant: a create that
    carries no valid grant under the vendor's root is refused here, before any object is asked, so a stranger's create costs one
    Worker request and wakes nothing. The object judges it again. A create whose t is stale or far ahead of the Worker's clock,
-   by the rule the object applies, is refused here the same way, so a replayed create wakes no object either. */
+   by the rule the object applies, is refused here the same way, so a replayed create wakes no object either. A renewal whose
+   grant does not hold for the lead it names is refused here too. */
 import team from "./team.cjs";
 import core from "./core.cjs";
 
@@ -23,6 +24,11 @@ function rtOf(body) {
    root and the Worker's own clock. `clockOf` takes the env and answers the time in ms. */
 export function routeWith(roots, clockOf) {
   const nowOf = typeof clockOf === "function" ? clockOf : () => Date.now();
+  /* A renewal's grant holds for the lead it names; the object then holds it to the team's own lead. */
+  const renewable = (body, now) => {
+    const grant = body && typeof body === "object" ? body.grant : undefined;
+    return core.grantOk(grant, grant && typeof grant === "object" ? grant.lead : undefined, now, roots);
+  };
 
   async function route(request, env) {
     const url = new URL(request.url);
@@ -45,6 +51,7 @@ export function routeWith(roots, clockOf) {
     if (request.method === "POST") { /* plant:worker-body */
       const bytes = await team.readCapped(request, team.JSON_MAX);
       if (!bytes) return team.refusedFor("blob-size");
+      if (hit.what === "grant" && !renewable(bodyOf(bytes), nowOf(env))) return team.refusedFor("bad-grant"); /* plant:worker-renew */
       forward = new Request(request.url, { method: "POST", headers: request.headers, body: bytes });
     }
     return teams.get(teams.idFromName(hit.rt)).fetch(forward);

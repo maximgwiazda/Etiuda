@@ -24,10 +24,14 @@ function cursor(rows) {
 }
 
 /* ctx.storage over a database: exec binds its arguments in order; transactionSync runs its function between BEGIN and
-   COMMIT, rolls back and rethrows on a throw, and nests as a savepoint inside another. */
+   COMMIT, rolls back and rethrows on a throw, and nests as a savepoint inside another; and the alarm. */
 function storage(db) {
-  let depth = 0;
+  let depth = 0, alarm = null;
   return {
+    /* The object's one alarm, as the runtime keeps it: a time in ms or null, each call answering a promise. */
+    async setAlarm(at) { alarm = Number(at); },
+    async getAlarm() { return alarm; },
+    async deleteAlarm() { alarm = null; },
     sql: {
       exec(query, ...bindings) { return cursor(db.prepare(query).all(...bindings)); },
     },

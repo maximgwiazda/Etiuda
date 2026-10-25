@@ -11,14 +11,14 @@ const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
   "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
-  "replay-rev": 409, "bad-grant": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
+  "replay-rev": 409, "bad-grant": 403, "team-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
-const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|socket|wrap|states|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
+const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|grant|socket|wrap|states|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 /* The methods each route answers, in one table the Worker and the object both ask, so that a path or a method no route answers
    is missing before any object is woken to say so. `since` and `b` are the two routes whose names carry an argument. */
-const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], hello: ["POST"], session: ["POST"], socket: ["GET"],
+const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], socket: ["GET"],
   wrap: ["GET"], states: ["GET"], since: ["GET"], b: ["GET", "PUT"] };
 /* The route a method and a path name, as { rt, what }, or null where none answers them. */
 function routeOf(method, pathname) {
@@ -66,9 +66,12 @@ function shut(ws, reason) {
   try { ws.close(CLOSE[reason] || 4400, B.REASONS[reason] || ""); } catch { /* already closed */ }
 }
 
+/* A sweep whose delete of some object failed rings again after this long, for those objects alone. */
+const SWEEP_RETRY_MS = 60 * 60 * 1000;
+
 function teamObject(deps) {
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots });
-  const r2 = deps.r2, sockets = deps.sockets;
+  const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
 
   async function fetch(request) {
@@ -79,6 +82,8 @@ function teamObject(deps) {
     const url = new URL(request.url);
     const m = ROUTE.exec(url.pathname);
     if (!m || !routeOf(request.method, url.pathname) || url.protocol !== "https:" || url.search !== "") return missing();
+    /* A team gone by the clock is swept before anything is answered, should its alarm not have rung yet. */
+    await sweepIfDue(); /* plant:sweep-lazy */
     const rt = m[1], what = m[2] || "teams", method = request.method;
     if (what === "socket") return method === "GET" ? openSocket(request, bearer(request)) : missing();
     if (m[3] !== undefined) return method === "GET" ? listSince(bearer(request), Number(m[3])) : missing();
@@ -96,8 +101,21 @@ function teamObject(deps) {
     if (!bytes) return refusedFor("blob-size");
     let body = null;
     try { body = JSON.parse(bytes.toString("utf8")); } catch { body = null; }
-    if (what === "teams") return answer(c.create(body && typeof body.rt === "string" ? body.rt : "", body), r => ({ rt: r.rt }));
-    if (what === "session") return answer(c.session(rt, body), r => (r.invite ? { session: r.session, until: r.until, invite: true } : { session: r.session, until: r.until }));
+    if (what === "teams") {
+      const made = c.create(body && typeof body.rt === "string" ? body.rt : "", body);
+      if (made.ok) await arm(); /* plant:arm-create */
+      return answer(made, r => ({ rt: r.rt }));
+    }
+    if (what === "grant") {
+      const renewed = c.renew(rt, body);
+      if (renewed.ok) await arm(); /* plant:arm-renew */
+      return answer(renewed, r => ({ ok: true, lapse: r.lapse }));
+    }
+    if (what === "session") {
+      const s = c.session(rt, body);
+      if (s.ok && alarm && (await alarm.get()) == null) await arm(); /* plant:arm-session */
+      return answer(s, r => (r.invite ? { session: r.session, until: r.until, invite: true, lapse: r.lapse } : { session: r.session, until: r.until, lapse: r.lapse }));
+    }
     if (what === "devices") {
       const r = c.devices(rt, body);
       if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
@@ -113,7 +131,10 @@ function teamObject(deps) {
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
     await dropObjects(c.prune());
-    return answer(c.since(token, after), r => r.items);
+    const r = c.since(token, after);
+    if (!r.ok) return refused(r);
+    const lapse = Buffer.from(JSON.stringify(r.lapse), "utf8").toString("base64url");
+    return new Response(JSON.stringify(r.items), { status: 200, headers: Object.assign({ "etiuda-lapse": lapse }, HEADERS) }); /* plant:since-lapse */
   }
 
   async function getBlob(token, id) {
@@ -136,6 +157,7 @@ function teamObject(deps) {
     const j = c.judge(rt, token, m, id, ct);
     if (!j.ok) return refused(j);
     const obj = rt + "/" + id + "/" + crypto.randomBytes(8).toString("hex");
+    c.record(obj); /* plant:r2-record */
     await r2.put(obj, ct);
     const done = c.commit(rt, token, m, id, ct, obj);
     if (!done.ok) { await dropObjects([obj]); return refused(done); }
@@ -146,9 +168,45 @@ function teamObject(deps) {
   }
 
   async function dropObjects(objs) {
-    for (const obj of objs) {
-      try { await r2.delete(obj); } catch { c.orphan(obj); }
+    for (const obj of new Set(objs)) {
+      try { await r2.delete(obj); } catch { c.orphan(obj); continue; }
+      c.forget(obj);
     }
+  }
+
+  /* The alarm set to the team's next instant: a trial's until while it works, else its sweep. */
+  async function arm() {
+    if (!alarm) return;
+    const at = c.alarmAt();
+    if (at !== null) await alarm.set(at);
+  }
+
+  /* Every object the team's rows name deleted, the sockets closed and the storage emptied; an object whose delete fails keeps its
+     row and the alarm rings again for it. True where a sweep was due. Requests arriving while R2 answers wait on the same sweep, so
+     none of them writes a row that its wipe would then take. */
+  let sweeping = null;
+  function sweepIfDue() {
+    if (sweeping) return sweeping;
+    if (!c.sweepDue()) return Promise.resolve(false);
+    sweeping = sweep().finally(() => { sweeping = null; });
+    return sweeping;
+  }
+  async function sweep() {
+    const left = [];
+    for (const obj of c.heldObjects()) {
+      try { await r2.delete(obj); } catch { left.push(obj); } /* plant:sweep-delete */
+    }
+    closeWhere(() => true, "team-lapsed");
+    c.wipe(left); /* plant:sweep-wipe */
+    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : alarm.clear());
+    return true;
+  }
+
+  /* The alarm: the sweep where it is due; otherwise a trial's sockets closed at its until, and the alarm set to the next instant. */
+  async function onAlarm() {
+    if (await sweepIfDue()) return;
+    if (c.lapseState() === "lapsed") closeWhere(() => true, "team-lapsed"); /* plant:lapse-close */
+    await arm();
   }
 
   function openSocket(request, token) {
@@ -179,6 +237,8 @@ function teamObject(deps) {
   function webSocketMessage(ws, message) {
     const s = c.sessionByHash(attachmentOf(ws).ses);
     if (!s.ok) return shut(ws, s.reason);
+    const lapsed = c.lapseGate(false);
+    if (lapsed) return shut(ws, lapsed.reason); /* plant:lapse-ping */
     let msg = null;
     try { msg = JSON.parse(String(message)); } catch { msg = null; }
     if (msg && msg.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
@@ -188,7 +248,7 @@ function teamObject(deps) {
     try { ws.close(1000, ""); } catch { /* already closed */ }
   }
 
-  return { fetch, webSocketMessage, webSocketClose };
+  return { fetch, webSocketMessage, webSocketClose, alarm: onAlarm };
 }
 
 /* The object's storage as the core's store, over its SQLite: one table of keys and JSON values. The table is made by the first
@@ -218,6 +278,11 @@ function sqlStore(storage) {
         .toArray().map(row => [row.k, JSON.parse(row.v)]);
     },
     atomic(fn) { make(); return storage.transactionSync(fn); },
+    /* The team swept: the table dropped, so the object's storage is as empty as a team never made leaves it. */
+    clear() {
+      if (has()) sql.exec("DROP TABLE kv");
+      made = false;
+    },
   };
 }
 
@@ -234,11 +299,17 @@ function hibernating(ctx) {
   };
 }
 
+/* The object's one alarm, as the runtime keeps it. */
+function alarmOf(storage) {
+  return { set: at => storage.setAlarm(at), get: () => storage.getAlarm(), clear: () => storage.deleteAlarm() };
+}
+
 class RelayTeam {
   constructor(ctx, env) {
-    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, clock: () => Date.now(), sockets: hibernating(ctx) });
+    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), clock: () => Date.now(), sockets: hibernating(ctx) });
   }
   fetch(request) { return this.object.fetch(request); }
+  alarm() { return this.object.alarm(); }
   webSocketMessage(ws, message) { return this.object.webSocketMessage(ws, message); }
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }

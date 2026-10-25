@@ -47,6 +47,7 @@ const REASONS = Object.freeze({
   "tmp": "A temporary file stays on this desk.",
   "echo": "A file just received stays as it is.",
   "bad-grant": "That team needs a valid grant, so the relay did not make it.",
+  "team-lapsed": "This team's relay is waiting for its renewal, so that was not done.",
 });
 
 function refusal(reason) {

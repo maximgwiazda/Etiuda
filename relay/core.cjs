@@ -22,6 +22,11 @@ const KEYS_MAX = 1000;
 const SINCE_MAX = 1000;
 const TOKEN_MAX = 256;
 const META_MAX = 4096;
+/* After a paid grant's until: working for WORK_AFTER_MS, read-only to READ_AFTER_MS, then swept. A trial's grant (paid false)
+   stops the team at its until, and its copy is swept TRIAL_KEEP_MS later. */
+const WORK_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+const READ_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
+const TRIAL_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 
 const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
 /* A key id takes blob.cjs's id shape, so no newline or separator rides in it. A desk id is isDeskId: that shape, and not a
@@ -158,6 +163,27 @@ function judgeCreate(rt, body, now, roots) {
   return { ok: true };
 }
 
+/* Where a team stands by its grant at `now`: working, read-only (a paid team's reads alone), lapsed (a trial's: renewal alone) or
+   gone (to be swept), with the instants the computers are told: the grant's until, the start of read-only (null for a trial) and
+   the sweep. A team row without a safe until has nothing to count from: it reads as lapsed and is never swept by the clock. */
+function lapseOf(team, now) {
+  if (!team || !Number.isSafeInteger(team.until)) return { state: "lapsed", until: null, readOnly: null, swept: null };
+  const u = team.until;
+  if (team.paid !== true) return { state: now < u ? "working" : now < u + TRIAL_KEEP_MS ? "lapsed" : "gone", until: u, readOnly: null, swept: u + TRIAL_KEEP_MS }; /* plant:lapse-trial */
+  const readOnly = u + WORK_AFTER_MS, swept = u + READ_AFTER_MS;
+  return { state: now < readOnly ? "working" : now < swept ? "read-only" : "gone", until: u, readOnly, swept };
+}
+
+/* The until and paid a team keeps from a grant: the later until, with the paid of the grant that gave it; on an equal until, paid
+   is true if either the team's or the grant's is. One rule for a repeat create and a renewal. */
+function keptGrant(team, grant) {
+  let until = grant.until, paid = grant.paid;
+  if (team && Number.isSafeInteger(team.until) && team.until >= until) { until = team.until; paid = team.paid === true; } /* plant:until-later */
+  /* A grant that ends at the very instant the team's does is no worse than it: paid is true if either says so. */
+  if (team && team.until === grant.until && grant.paid === true) paid = true; /* plant:until-equal-paid */
+  return { until, paid };
+}
+
 /* The freshness rule of a call's t against the relay's clock, the one the object applies to every signed call and the Worker
    applies to a create before it wakes an object. */
 const isFresh = (t, now) => Math.abs(now - t) <= CALL_SKEW_MS;
@@ -193,8 +219,7 @@ function createCore(deps) {
   }
 
   /* The grant is judged first, and the object judges it again after the Worker did. The team keeps the grant's until and paid and
-     nothing else of it: a repeat create by the same lead keeps the later until, and the paid of the grant that gave it; on an
-     equal until, paid is true if either the team's or the grant's is. */
+     nothing else of it, by keptGrant. */
   function create(rt, body) {
     const judged = judgeCreate(rt, body, clock(), roots);
     if (!judged.ok) return judged;
@@ -202,12 +227,38 @@ function createCore(deps) {
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:create-fresh */
     const team = store.get("team");
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
-    let until = b.grant.until, paid = b.grant.paid;
-    if (team && Number.isSafeInteger(team.until) && team.until >= until) { until = team.until; paid = team.paid === true; } /* plant:until-later */
-    /* A grant that ends at the very instant the team's does is no worse than it: paid is true if either says so. */
-    if (team && team.until === b.grant.until && b.grant.paid === true) paid = true; /* plant:until-equal-paid */
+    const { until, paid } = keptGrant(team, b.grant);
     store.atomic(() => store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }));
     return { ok: true, rt };
+  }
+
+  /* A renewal: a grant for the team's own lead, unsigned beyond itself, kept by the create's rule, so an earlier grant changes
+     nothing and a later one gives the team its working state again. Answered with where the team then stands. */
+  function renew(rt, body) {
+    const team = teamOf(rt);
+    if (!team) return no("not-enrolled");
+    const b = bodyOf(body);
+    if (!grantOk(b.grant, team.lead.pub, clock(), roots)) return no("bad-grant"); /* plant:renew-grant */
+    const next = keptGrant(team, b.grant);
+    if (next.until !== team.until || next.paid !== team.paid) store.atomic(() => store.put("team", Object.assign({}, team, next)));
+    return { ok: true, lapse: told() };
+  }
+
+  /* Where the team stands, as a session's reply and since's header carry it. */
+  function told() {
+    const l = lapseOf(store.get("team"), clock());
+    return { state: l.state, until: l.until, readOnly: l.readOnly, swept: l.swept };
+  }
+
+  /* null where the team may do this now, or the refusal. A read is answered while working and read-only, a write while working.
+     Each route asks after its caller has shown who it is, so the lapse is told to no one who holds only the team's id. */
+  function lapseGate(write) {
+    const team = store.get("team");
+    if (!team) return null;
+    const state = lapseOf(team, clock()).state;
+    if (state === "working") return null; /* plant:lapse-working */
+    if (state === "read-only" && !write) return null; /* plant:lapse-read */
+    return no("team-lapsed");
   }
 
   /* The lead's enrolled set replaces the last; a key it leaves out is withdrawn, and every session it holds with it.
@@ -219,6 +270,8 @@ function createCore(deps) {
     if (!Array.isArray(b.keys) || !Number.isSafeInteger(b.rev) || b.rev < 0 || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
+    const lapsedDevices = lapseGate(true);
+    if (lapsedDevices) return lapsedDevices; /* plant:lapse-devices */
     if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
@@ -284,6 +337,8 @@ function createCore(deps) {
     const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
     if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
+    const lapsedInvites = lapseGate(true);
+    if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
     const seen = "seen:" + sha256(bytes);
     if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
     const wrapRows = b.wraps || [];
@@ -410,6 +465,9 @@ function createCore(deps) {
       const gone = store.get("gone:" + b.key);
       if (gone && !registeredAfter(inv, gone)) return no("removed"); /* plant:token-removed */
     }
+    /* A token is spent only while the team works: a lapsed team could not enrol the key it would bind. */
+    const lapsedToken = lapseGate(true);
+    if (lapsedToken) return lapsedToken; /* plant:lapse-token */
     const who = { key: null, inv: b.inv };
     if (binds) who.bound = b.key;
     return issue(b.challenge, who, () => {
@@ -472,6 +530,8 @@ function createCore(deps) {
 
   /* The session is kept by its sha256, so the store holds nothing a reader could present. */
   function issue(nonce, who, also) {
+    const lapsedSession = lapseGate(false);
+    if (lapsedSession) return lapsedSession; /* plant:lapse-session */
     const token = random(32), now = clock(), until = now + SESSION_MS;
     store.atomic(() => {
       also && also();
@@ -480,7 +540,7 @@ function createCore(deps) {
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
     });
-    return who.inv ? { ok: true, session: token, until, invite: true } : { ok: true, session: token, until };
+    return who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
   }
 
   /* An invitation registered strictly after the key was withdrawn, by the order the relay itself keeps: "ord", raised in
@@ -506,6 +566,8 @@ function createCore(deps) {
   function wrapFor(token) {
     const s = sessionOf(token);
     if (!s.ok) return s;
+    const lapsedWrap = lapseGate(false);
+    if (lapsedWrap) return lapsedWrap; /* plant:lapse-wrap */
     let onlyBound = false;
     onlyBound = true; /* plant:S3-wrap-session */
     if (!onlyBound) {
@@ -526,6 +588,8 @@ function createCore(deps) {
     const s = sessionOf(token);
     if (!s.ok) return s;
     if (s.inv || s.key !== team.lead.keyId) return no("not-enrolled");
+    const lapsedStates = lapseGate(false);
+    if (lapsedStates) return lapsedStates; /* plant:lapse-states */
     const states = [];
     for (const [k, v] of store.list("inv:")) {
       const id = k.slice(4);
@@ -578,6 +642,8 @@ function createCore(deps) {
     const s = sessionOf(token);
     if (!s.ok) return s;
     if (answerOnly(s)) return no("not-enrolled");
+    const lapsedSocket = lapseGate(false);
+    if (lapsedSocket) return lapsedSocket; /* plant:lapse-socket */
     return null;
   }
 
@@ -590,17 +656,21 @@ function createCore(deps) {
     if (!s.ok) return s;
     if (s.quiet) return no("removed");
     if (answerOnly(s)) return no("not-enrolled");
+    const lapsedSince = lapseGate(false);
+    if (lapsedSince) return lapsedSince; /* plant:lapse-since */
     const now = clock(), items = [];
     for (const [, id] of store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX })) {
       const m = store.get("blob:" + id);
       if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
     }
-    return { ok: true, items };
+    return { ok: true, items, lapse: told() };
   }
 
   function blobFor(token, id) {
     const s = sessionOf(token);
     if (!s.ok) return s;
+    const lapsedBlob = lapseGate(false);
+    if (lapsedBlob) return lapsedBlob; /* plant:lapse-blob */
     const now = clock();
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
     if (m && expired(m, now)) return no("expired");
@@ -628,6 +698,8 @@ function createCore(deps) {
     if (!team) return no("not-enrolled");
     const s = sessionOf(token);
     if (!s.ok) return s; /* plant:put-session */
+    const lapsedPut = lapseGate(true);
+    if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
     if (!m || m.id !== pathId) return no("bad-signature");
     if (s.inv) return admitInvite(team, s, m);
     if (s.key !== m.writer) return no("no-hello"); /* plant:put-writer */
@@ -723,14 +795,15 @@ function createCore(deps) {
       if (j.a.invite) rec.pub = j.a.pub;
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
+      store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
     });
     return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop, uploadedInv: j.a.invite || null };
   }
 
-  /* A blob no longer served: its bytes given back, its object for the caller to delete, and its id kept 30 days as a
-     tombstone, so a fetch says why and a later upload cannot reuse it. */
+  /* A blob no longer served: its bytes given back, its object for the caller to delete (its orphan row standing until the delete
+     is made), and its id kept 30 days as a tombstone, so a fetch says why and a later upload cannot reuse it. */
   function bury(m, why, now, drop) {
     store.del("blob:" + m.id);
     store.del("seq:" + pad(m.seq));
@@ -738,11 +811,12 @@ function createCore(deps) {
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("tomb:" + m.id, { writer: m.writer, why, until: now + KEEP_MS });
     store.put(expiryKey(now + KEEP_MS, m.id), "tomb");
+    store.put("orphan:" + m.obj, 1);
     drop.push(m.obj);
   }
 
   /* Deletion records past their keep, tombstones past theirs, a spent invitation's hash and times past its keep (its id and
-     that it was spent stay), and objects a delete missed. */
+     that it was spent stay), and every object whose delete is still to be made. */
   function prune() {
     const now = clock(), drop = [];
     store.atomic(() => {
@@ -759,25 +833,65 @@ function createCore(deps) {
         store.del(k);
         store.put(k, SPENT); /* plant:spent-kept */
       }
-      for (const [k] of store.list("orphan:")) { drop.push(k.slice(7)); store.del(k); }
+      for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
     });
     return drop;
   }
 
   function orphan(obj) {
-    store.atomic(() => store.put("orphan:" + obj, 1));
+    store.atomic(() => { store.put("orphan:" + obj, 1); store.del("put:" + obj); });
   }
+
+  /* Every object in the bucket has a row here from before its put: "put:" until the commit's blob row holds it, and "orphan:" from
+     the moment it is to be deleted until a delete is made. A deleted object's rows go. */
+  function record(obj) {
+    store.atomic(() => store.put("put:" + obj, clock()));
+  }
+  function forget(obj) {
+    store.atomic(() => { store.del("put:" + obj); store.del("orphan:" + obj); });
+  }
+
+  /* The sweep is due once the team is gone by the clock, or, with no team left, while a missed object waits. */
+  function sweepDue() {
+    const team = store.get("team");
+    return team ? lapseOf(team, clock()).state === "gone" : store.list("orphan:").length > 0;
+  }
+  /* Every object the rows name: the blobs', those put and not yet committed, and those a delete missed. */
+  function heldObjects() {
+    const objs = new Set();
+    for (const [, m] of store.list("blob:")) if (m && typeof m.obj === "string") objs.add(m.obj);
+    for (const [k] of store.list("put:")) objs.add(k.slice(4));
+    for (const [k] of store.list("orphan:")) objs.add(k.slice(7));
+    return [...objs];
+  }
+  /* The team's storage emptied, but for an orphan row per object in `left`, the ones whose delete failed. */
+  function wipe(left) {
+    if (!left.length && typeof store.clear === "function") return store.clear();
+    store.atomic(() => {
+      for (const [k] of store.list("")) store.del(k);
+      for (const obj of left) store.put("orphan:" + obj, 1);
+    });
+  }
+  /* When the team's alarm should next ring: a trial's until while it works, and then the sweep; or null with no team to count from. */
+  function alarmAt() {
+    const team = store.get("team");
+    if (!team) return null;
+    const l = lapseOf(team, clock());
+    if (l.swept === null) return null;
+    return l.readOnly === null && l.state === "working" ? l.until : l.swept;
+  }
+  const lapseState = () => lapseOf(store.get("team"), clock()).state;
 
   /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
   const hasTeam = rt => teamOf(rt) !== null;
 
-  return { create, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, parseMeta, wrapFor, statesFor, readGate, hasTeam };
+  return { create, renew, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
+    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
-  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };

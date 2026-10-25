@@ -22,15 +22,17 @@ function memoryStore() {
       try { return fn(); } catch (e) { data = before; throw e; }
     },
     dump() { return [...data.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)); },
+    clear() { data = new Map(); },
   };
   return store;
 }
 
 /* put, get and delete as an R2 binding answers them. `hold()` parks the next put: `parked` settles once it waits,
-   and `release()` lets it go on. */
+   and `release()` lets it go on. `losePuts(n)` keeps the next n objects and then throws, as a request that dies after the
+   bucket wrote; `failDeletes(n)` refuses the next n deletes. */
 function memoryBucket() {
   const objects = new Map();
-  let held = null, failing = 0;
+  let held = null, failing = 0, losing = 0, refusing = 0;
   return {
     objects,
     hold() {
@@ -41,10 +43,13 @@ function memoryBucket() {
       return { release, parked };
     },
     failPuts(n) { failing = n; },
+    losePuts(n) { losing = n; },
+    failDeletes(n) { refusing = n; },
     async put(key, value) {
       if (held) { const h = held; held = null; h.parkedNow(); await h.gate; }
       if (failing > 0) { failing--; throw new Error("stand-in bucket refused the write"); }
       objects.set(key, Buffer.from(value));
+      if (losing > 0) { losing--; throw new Error("stand-in request died after the write"); }
       return { key };
     },
     async get(key) {
@@ -52,7 +57,10 @@ function memoryBucket() {
       const bytes = objects.get(key);
       return { size: bytes.length, body: new Blob([bytes]).stream() };
     },
-    async delete(key) { objects.delete(key); },
+    async delete(key) {
+      if (refusing > 0) { refusing--; throw new Error("stand-in bucket refused the delete"); }
+      objects.delete(key);
+    },
   };
 }
 
@@ -85,20 +93,28 @@ function socketHub() {
 }
 
 /* The Worker's env: TEAMS a namespace whose objects run relay/team.cjs over the stores here, BLOBS the bucket.
-   `restart()` drops every live object and its sockets; storage and the bucket stay. `opts.roots` are the roots its team objects
-   accept a grant under, and NOW is the clock a leg gives the Worker. */
+   `restart()` drops every live object and its sockets; storage, the bucket and the alarms stay. `opts.roots` are the roots its team
+   objects accept a grant under, `opts.team` a copy of relay/team.cjs to run in its place, and NOW is the clock a leg gives the
+   Worker. `alarms` holds each object's one alarm by name, and `ring(name)` runs that object's alarm where it is set and due, as
+   the runtime would, answering whether it rang. */
 function relayEnv(opts) {
   const o = opts || {};
   const clock = { now: 0 };
-  const stores = new Map(), hubs = new Map(), live = new Map();
+  const stores = new Map(), hubs = new Map(), live = new Map(), alarms = new Map();
   const bucket = memoryBucket();
   const asked = [];
+  const alarmFor = name => ({
+    async set(at) { alarms.set(name, at); },
+    async get() { return alarms.has(name) ? alarms.get(name) : null; },
+    async clear() { alarms.delete(name); },
+  });
   function objectFor(name) {
     if (live.has(name)) return live.get(name);
     if (!stores.has(name)) stores.set(name, memoryStore());
     const hub = socketHub();
     hubs.set(name, hub);
-    const obj = team.teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots });
+    const obj = (o.team || team).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots,
+      alarm: alarmFor(name) });
     live.set(name, obj);
     return obj;
   }
@@ -112,8 +128,14 @@ function relayEnv(opts) {
     NOW: () => clock.now,
   };
   return {
-    env, clock, bucket, asked, stores, hubs,
+    env, clock, bucket, asked, stores, hubs, alarms,
     object: objectFor,
+    async ring(name) {
+      if (!alarms.has(name) || clock.now < alarms.get(name)) return false;
+      alarms.delete(name);
+      await objectFor(name).alarm();
+      return true;
+    },
     restart() {
       for (const hub of hubs.values()) for (const ws of hub.all()) ws.close(1012, "restart");
       live.clear();
