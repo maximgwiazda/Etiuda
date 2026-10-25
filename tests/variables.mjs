@@ -71,7 +71,7 @@ if (process.argv[2] === "--grid") {
 }
 
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
-const EXPECTED = 80;
+const EXPECTED = 85;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -205,8 +205,8 @@ try {
 
   /* ---- 5. a gender read from a first name ---------------------------------------------------- */
   const want = { "Anna": "f", "Kuba": "m", "Kim": "n", "": "n", "Józef": "m", "Mary-Jane": "f", "Jerzy": "m",
-    "Noemi": "f", "Nikola": "n", "Tomasz": "m", "Grzesiek": "m", "ola": "f", "Jean-Pierre": "m", "Zoe": "f" };
-  const got = {}; Object.keys(want).forEach(n => { got[n] = V.nameGender(n); });
+    "Noemi": "f", "Nikola": "f", "Tomasz": "m", "Grzesiek": "m", "ola": "f", "Jean-Pierre": "m", "Zoe": "f" };
+  const got = {}; Object.keys(want).forEach(n => { got[n] = V.nameGender(n, "pl"); });
   check(JSON.stringify(got) === JSON.stringify(want), "5 the reading: -a female, a consonant male, the listed exceptions and nonbinary where the name leaves it open: " + JSON.stringify(got));
 
   /* ---- 6. the glyph: three states, read and by hand, and a new name read afresh ---------------- */
@@ -270,7 +270,7 @@ try {
   world({ name: "Kuba" }); G.setHandGender("m");
   const kubaPl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
   G.putHandGender(null);
-  check(annaPl === "Dzień dobry, Pani Anno." && annaEn === "Hello, Ms Kowalska." && kimPl === "Dzień dobry, Państwo."
+  check(annaPl === "Dzień dobry, Pani Anno." && annaEn === "Hello, Ms Kowalska." && kimPl === "Dzień dobry, Kim."
     && kimEn === "Hello, Mx Lee." && kubaPl === "Dzień dobry, Panie Kubo.",
     "8a the team's address follows the gender: " + JSON.stringify([annaPl, annaEn, kimPl, kimEn, kubaPl]));
   world({ name: "Anna Kowalska" });
@@ -288,6 +288,50 @@ try {
   check(I.fill("Dzień dobry, {PAX}.", off, false, "pl") === "Dzień dobry, Anno.", "8f the override off on a catalog with no address: Etiuda's own, the first name in the vocative");
   check(F.paxOwnShown(card("Hello.")) === false && F.paxOwnShown(card("Hi {PAX}")) === true && F.paxOwnShown(both) === false,
     "8g the editor's switch shows a derived override only on a card that uses {PAX}");
+  world({ name: "John" });
+  const johnEn = I.fill("Hello, {PAX}.", both, false, "en");
+  V.setCatalogVariables({ list: [{ name: "PAX", rules: V.varAddressRules("titleSurname", "titleSurname") }] });
+  world({ name: "Jan" });
+  const janPl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  world({ name: "Kim" });
+  const kimSinglePl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  A.putLang("pl");
+  world({ name: "Nikola Nowak" });
+  const nikolaPl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  check(johnEn === "Hello, John." && janPl === "Dzień dobry, Panie Janie." && kimSinglePl === "Dzień dobry, Kim." && nikolaPl === "Dzień dobry, Pani Nowak.",
+    "8h title address fallback: English with no surname greets by first name, Polish with no surname keeps Pan in vocative, Polish ungendered greets by first name, Nikola female: "
+    + JSON.stringify([johnEn, janPl, kimSinglePl, nikolaPl]));
+
+  A.putLang("en");
+  world({ name: "Nikola Nowak" });
+  G.syncGenderGlyph();
+  const nikolaEn = I.fill("Hello, {PAX}.", both, false, "en");
+  check(drum.dataset.g === "n" && nikolaEn === "Hello, Mx Nowak.",
+    "8i an English chat with Nikola reads neutral on the glyph and in the reply: " + JSON.stringify([drum.dataset.g, nikolaEn]));
+
+  G.setHandGender("f");
+  G.syncGenderGlyph();
+  const nikolaEnHand = I.fill("Hello, {PAX}.", both, false, "en");
+  G.putHandGender(null);
+  check(drum.dataset.g === "f" && nikolaEnHand === "Hello, Ms Nowak.",
+    "8j the agent turns the glyph to female and the reply says Ms: " + JSON.stringify([drum.dataset.g, nikolaEnHand]));
+
+  A.putLang("pl");
+  world({ name: "Nikola Nowak" });
+  G.syncGenderGlyph();
+  const nikolaPlChat = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  check(drum.dataset.g === "f" && nikolaPlChat === "Dzień dobry, Pani Nowak.",
+    "8k a Polish chat with Nikola reads female on both: " + JSON.stringify([drum.dataset.g, nikolaPlChat]));
+
+  G.setHandGender("m");
+  G.syncGenderGlyph();
+  const nikolaPlHand = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  G.putHandGender(null);
+  check(drum.dataset.g === "m" && nikolaPlHand === "Dzień dobry, Panie Nowak.",
+    "8l the agent's hand choice in a Polish chat (turned to male) stands: " + JSON.stringify([drum.dataset.g, nikolaPlHand]));
+
+  V.setCatalogVariables(null);
+  A.putLang("en");
 
   /* ---- 10. a team's own variable in a card, nested, and one that names itself ------------------ */
   V.setCatalogVariables({ list: [def,
@@ -353,7 +397,7 @@ try {
   ["m", "n"].forEach(g => { G.setHandGender(g); byGlyph.push(say(titled, "pl"), say(titled, "en")); });
   G.putHandGender(null);
   check(JSON.stringify(byGlyph) === JSON.stringify(["Dzień dobry, Pani Anno.", "Hello, Ms Kowalska.",
-    "Dzień dobry, Panie Anno.", "Hello, Mr Kowalska.", "Dzień dobry, Państwo.", "Hello, Mx Kowalska."]),
+    "Dzień dobry, Panie Anno.", "Hello, Mr Kowalska.", "Dzień dobry, Anno.", "Hello, Mx Kowalska."]),
     "13a a card set to Pani or Pan with the first name, and to title and surname in English, follows the glyph: " + JSON.stringify(byGlyph));
   const boxed = formed("", "", { paxVoc: 0 });
   const boxF = say(boxed, "pl"); G.setHandGender("m"); const boxM = say(boxed, "pl"); G.putHandGender(null);

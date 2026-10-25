@@ -1,6 +1,7 @@
 import { nameGender, VAR_GENDERS } from "./variables.js";
 import { t } from "./ui-lang.js";
 import { pax, $ } from "./dom.js";
+import { lang } from "./app-state.js";
 
 /* CONTRACT: nothing here imports a module inside the load cycle, as role-drum.js; the gestures that
    render and save live in gender-turn.js. */
@@ -9,11 +10,11 @@ import { pax, $ } from "./dom.js";
    agent turned the glyph, which holds for the tab until another first name is typed. */
 let handGender=null;
 function firstKeyOf(raw){ return String(raw==null?"":raw).trim().split(/\s+/)[0].toLowerCase(); }
-function custGender(){
+function custGender(lg){
   const first=firstKeyOf(pax?pax.value:"");
   if(handGender && handGender.first!==first) handGender=null;
   if(handGender) return {v:handGender.v, hand:true, empty:!first};
-  return {v:nameGender(first), hand:false, empty:!first};
+  return {v:nameGender(first, lg||lang), hand:false, empty:!first};
 }
 function setHandGender(v){
   if(VAR_GENDERS.indexOf(v)<0) return;

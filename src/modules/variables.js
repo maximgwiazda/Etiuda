@@ -8,12 +8,12 @@ const VAR_NAME_RE=/^[A-Z][A-Z0-9]*$/;
 const VAR_FACTS={
   time:"time", weekday:"weekday", date:"date", daypart:"daypart",
   lang:"lang",
-  name:"text", first:"text", gender:"gender",
+  name:"text", first:"text", surname:"text", gender:"gender",
   intent:"intent", intents:"count", topic:"text",
   agent:"text", role:"text"
 };
 const VAR_FACT_GROUPS=[["clock",["time","weekday","date","daypart"]],["card",["lang"]],
-  ["customer",["name","first","gender"]],["chat",["intent","intents","topic"]],["desk",["agent","role"]]];
+  ["customer",["name","first","surname","gender"]],["chat",["intent","intents","topic"]],["desk",["agent","role"]]];
 const VAR_OPS={
   time:["before","after"],
   weekday:["is","isnot","oneof"],
@@ -89,7 +89,7 @@ const VAR_NAMES_F="noemi naomi heidi beatrycze abigail ingrid carmen miriam ruth
   +"michelle jane anne alice sophie chloe zoe catherine caroline charlotte claire marie julie "
   +"josephine christine simone yvonne irene louise elise rose grace kate jade natalie stephanie "
   +"valerie denise diane elaine doris iris gladys";
-const VAR_NAMES_N="kim alex aleks sasha sasza andrea nikola nicola jean robin sam chris charlie "
+const VAR_NAMES_N="kim alex aleks sasha sasza andrea nicola jean robin sam chris charlie "
   +"jordan taylor morgan ariel dominique claude camille maxime luca nikita dana eden noa kai yuki "
   +"michele leslie";
 const VAR_NAME_TABLE={};
@@ -102,9 +102,10 @@ function varFirstKey(first){
   const parts=w.split("-").filter(Boolean);
   return varFold((parts[parts.length-1]||"").replace(/^[^\p{L}]+|[^\p{L}]+$/gu,""));
 }
-function nameGender(first){
+function nameGender(first, lang){
   const k=varFirstKey(first);
   if(!k) return "n";
+  if(k==="nikola" && lang!=="pl") return "n";
   if(Object.prototype.hasOwnProperty.call(VAR_NAME_TABLE,k)) return VAR_NAME_TABLE[k];
   const end=k.charAt(k.length-1);
   if(k.length<2) return "n";
@@ -180,6 +181,7 @@ function varWordsOf(rule,L,primary){
 }
 function varFillWords(s,F){
   return varText(s).replace(VAR_WORD_RE,(raw,k)=>{
+    if(k==="first-voc" && nameGender(F&&F.first, F&&F.lang)==="n") return varText(F&&F.first);
     const f=Object.prototype.hasOwnProperty.call(VAR_WORD_FACT,k) ? VAR_WORD_FACT[k] : null;
     return f ? varText(F[f]) : raw;
   });
@@ -243,24 +245,37 @@ function varBuiltin(name,greet){
    Ungendered on both sides is one rule; otherwise male, female, and Otherwise for nonbinary. */
 const VAR_ADDRESS_PL=["first","titleFirst","titleSurname","none"];
 const VAR_ADDRESS_EN=["first","titleSurname"];
-function varAddressWords(choice,lang,g){
+function varAddressWords(choice,lang,g,hasSur){
   if(lang==="pl"){
     if(choice==="none") return "";
     if(choice==="first") return "{@first-voc}";
     const who=g==="m"?"Panie ":g==="f"?"Pani ":"";
-    if(!who) return "Państwo";
-    return who+(choice==="titleSurname"?"{@surname}":"{@first-voc}");
+    if(!who) return "{@first-voc}";
+    return who+((choice==="titleSurname"&&hasSur)?"{@surname}":"{@first-voc}");
   }
-  if(choice==="titleSurname") return (g==="m"?"Mr ":g==="f"?"Ms ":"Mx ")+"{@surname}";
+  if(choice==="titleSurname"&&hasSur) return (g==="m"?"Mr ":g==="f"?"Ms ":"Mx ")+"{@surname}";
   return "{@first}";
 }
 function varAddressRules(pl,en){
   const gendered=(pl!=="first"&&pl!=="none") || en==="titleSurname";
-  const write=g=>({en:varAddressWords(en,"en",g), pl:varAddressWords(pl,"pl",g)});
-  if(!gendered) return [{when:[], write:write("n")}];
-  return [{key:"male", when:[varIs("gender","is","m")], write:write("m")},
-          {key:"female", when:[varIs("gender","is","f")], write:write("f")},
-          {key:"nonbinary", when:[], write:write("n")}];
+  const needsSur=pl==="titleSurname" || en==="titleSurname";
+  const write=(g,hasSur)=>({en:varAddressWords(en,"en",g,hasSur), pl:varAddressWords(pl,"pl",g,hasSur)});
+  if(!gendered && !needsSur) return [{when:[], write:write("n",false)}];
+  if(needsSur){
+    return [
+      {key:"male", when:[varIs("surname","set"), varIs("gender","is","m")], write:write("m",true)},
+      {key:"female", when:[varIs("surname","set"), varIs("gender","is","f")], write:write("f",true)},
+      {key:"nonbinary", when:[varIs("surname","set")], write:write("n",true)},
+      {key:"male-first", when:[varIs("gender","is","m")], write:write("m",false)},
+      {key:"female-first", when:[varIs("gender","is","f")], write:write("f",false)},
+      {key:"nonbinary-first", when:[], write:write("n",false)}
+    ];
+  }
+  return [
+    {key:"male", when:[varIs("gender","is","m")], write:write("m",false)},
+    {key:"female", when:[varIs("gender","is","f")], write:write("f",false)},
+    {key:"nonbinary", when:[], write:write("n",false)}
+  ];
 }
 /* Which of the choices a {PAX} definition is, or null where its rules were written by hand. */
 function varAddressOf(def){
