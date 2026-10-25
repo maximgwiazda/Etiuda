@@ -5134,6 +5134,7 @@ What you type stays in this browser only.`;
     lang: "lang",
     name: "text",
     first: "text",
+    surname: "text",
     gender: "gender",
     intent: "intent",
     intents: "count",
@@ -5144,7 +5145,7 @@ What you type stays in this browser only.`;
   var VAR_FACT_GROUPS = [
     ["clock", ["time", "weekday", "date", "daypart"]],
     ["card", ["lang"]],
-    ["customer", ["name", "first", "gender"]],
+    ["customer", ["name", "first", "surname", "gender"]],
     ["chat", ["intent", "intents", "topic"]],
     ["desk", ["agent", "role"]]
   ];
@@ -5225,7 +5226,7 @@ What you type stays in this browser only.`;
   }
   var VAR_NAMES_M = "kuba barnaba bonawentura kosma jarema zawisza juda ilja ilia misza wania kostia mike joe george steve pierre jose josé jorge andre andré rene rené giuseppe dante felipe bruce wayne kyle dave jake luke philippe";
   var VAR_NAMES_F = "noemi naomi heidi beatrycze abigail ingrid carmen miriam ruth rut rachel agnes karin kirsten elizabeth judith edith megan karen ellen helen lily emily mary kelly ashley sally molly holly nancy lucy betty judy wendy amy cathy kathy daisy ivy dolores mercedes nicole michelle jane anne alice sophie chloe zoe catherine caroline charlotte claire marie julie josephine christine simone yvonne irene louise elise rose grace kate jade natalie stephanie valerie denise diane elaine doris iris gladys";
-  var VAR_NAMES_N = "kim alex aleks sasha sasza andrea nikola nicola jean robin sam chris charlie jordan taylor morgan ariel dominique claude camille maxime luca nikita dana eden noa kai yuki michele leslie";
+  var VAR_NAMES_N = "kim alex aleks sasha sasza andrea nicola jean robin sam chris charlie jordan taylor morgan ariel dominique claude camille maxime luca nikita dana eden noa kai yuki michele leslie";
   var VAR_NAME_TABLE = {};
   [["m", VAR_NAMES_M], ["f", VAR_NAMES_F], ["n", VAR_NAMES_N]].forEach((p) => {
     p[1].split(/\s+/).forEach((w) => {
@@ -5237,9 +5238,10 @@ What you type stays in this browser only.`;
     const parts2 = w.split("-").filter(Boolean);
     return varFold((parts2[parts2.length - 1] || "").replace(/^[^\p{L}]+|[^\p{L}]+$/gu, ""));
   }
-  function nameGender(first) {
+  function nameGender(first, lang2 = "pl") {
     const k = varFirstKey(first);
     if (!k) return "n";
+    if (k === "nikola" && lang2 !== "pl") return "n";
     if (Object.prototype.hasOwnProperty.call(VAR_NAME_TABLE, k)) return VAR_NAME_TABLE[k];
     const end = k.charAt(k.length - 1);
     if (k.length < 2) return "n";
@@ -5281,7 +5283,9 @@ What you type stays in this browser only.`;
         return op === "isnot" ? !hit : hit;
       }
       default: {
-        const have = varFold(kind === "weekday" ? F.weekday : F[c.fact]);
+        let raw = kind === "weekday" ? F.weekday : F[c.fact];
+        if (kind === "gender" && F && F.first && raw !== "m" && F.gender === nameGender(F.first, "pl")) raw = nameGender(F.first, F.lang);
+        const have = varFold(raw);
         if (op === "set") return have !== "";
         if (op === "unset") return have === "";
         if (op === "isnot") return !among(have, [val]);
@@ -5309,6 +5313,7 @@ What you type stays in this browser only.`;
   }
   function varFillWords(s, F) {
     return varText(s).replace(VAR_WORD_RE, (raw, k) => {
+      if (k === "first-voc" && nameGender(F && F.first, F && F.lang) === "n") return varText(F && F.first);
       const f = Object.prototype.hasOwnProperty.call(VAR_WORD_FACT, k) ? VAR_WORD_FACT[k] : null;
       return f ? varText(F[f]) : raw;
     });
@@ -5385,25 +5390,36 @@ What you type stays in this browser only.`;
   }
   var VAR_ADDRESS_PL = ["first", "titleFirst", "titleSurname", "none"];
   var VAR_ADDRESS_EN = ["first", "titleSurname"];
-  function varAddressWords(choice, lang2, g) {
+  function varAddressWords(choice, lang2, g, hasSur) {
     if (lang2 === "pl") {
       if (choice === "none") return "";
       if (choice === "first") return "{@first-voc}";
       const who = g === "m" ? "Panie " : g === "f" ? "Pani " : "";
-      if (!who) return "Państwo";
-      return who + (choice === "titleSurname" ? "{@surname}" : "{@first-voc}");
+      if (!who) return "{@first-voc}";
+      return who + (choice === "titleSurname" && hasSur ? "{@surname}" : "{@first-voc}");
     }
-    if (choice === "titleSurname") return (g === "m" ? "Mr " : g === "f" ? "Ms " : "Mx ") + "{@surname}";
+    if (choice === "titleSurname" && hasSur) return (g === "m" ? "Mr " : g === "f" ? "Ms " : "Mx ") + "{@surname}";
     return "{@first}";
   }
   function varAddressRules(pl, en) {
     const gendered = pl !== "first" && pl !== "none" || en === "titleSurname";
-    const write = (g) => ({ en: varAddressWords(en, "en", g), pl: varAddressWords(pl, "pl", g) });
-    if (!gendered) return [{ when: [], write: write("n") }];
+    const needsSur = pl === "titleSurname" || en === "titleSurname";
+    const write = (g, hasSur) => ({ en: varAddressWords(en, "en", g, hasSur), pl: varAddressWords(pl, "pl", g, hasSur) });
+    if (!gendered && !needsSur) return [{ when: [], write: write("n", false) }];
+    if (needsSur) {
+      return [
+        { key: "male", when: [varIs("surname", "set"), varIs("gender", "is", "m")], write: write("m", true) },
+        { key: "female", when: [varIs("surname", "set"), varIs("gender", "is", "f")], write: write("f", true) },
+        { key: "nonbinary", when: [varIs("surname", "set")], write: write("n", true) },
+        { key: "male-first", when: [varIs("gender", "is", "m")], write: write("m", false) },
+        { key: "female-first", when: [varIs("gender", "is", "f")], write: write("f", false) },
+        { key: "nonbinary-first", when: [], write: write("n", false) }
+      ];
+    }
     return [
-      { key: "male", when: [varIs("gender", "is", "m")], write: write("m") },
-      { key: "female", when: [varIs("gender", "is", "f")], write: write("f") },
-      { key: "nonbinary", when: [], write: write("n") }
+      { key: "male", when: [varIs("gender", "is", "m")], write: write("m", false) },
+      { key: "female", when: [varIs("gender", "is", "f")], write: write("f", false) },
+      { key: "nonbinary", when: [], write: write("n", false) }
     ];
   }
   function varAddressOf(def) {

@@ -71,7 +71,7 @@ if (process.argv[2] === "--grid") {
 }
 
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
-const EXPECTED = 81;
+const EXPECTED = 83;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -297,10 +297,13 @@ try {
   const kimSinglePl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
   world({ name: "Nikola Nowak" });
   const nikolaPl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  const nikolaEn = I.fill("Hello, {PAX}.", both, false, "en");
   V.setCatalogVariables(null);
   check(johnEn === "Hello, John." && janPl === "Dzień dobry, Panie Janie." && kimSinglePl === "Dzień dobry, Kim." && nikolaPl === "Dzień dobry, Pani Nowak.",
     "8h title address fallback: English with no surname greets by first name, Polish with no surname keeps Pan in vocative, Polish ungendered greets by first name, Nikola female: "
     + JSON.stringify([johnEn, janPl, kimSinglePl, nikolaPl]));
+  check(nikolaPl === "Dzień dobry, Pani Nowak.", "8i Nikola in a Polish chat reads female: " + nikolaPl);
+  check(nikolaEn === "Hello, Mx Nowak.", "8j Nikola in an English chat reads neutral, no Ms and no Mr: " + nikolaEn);
 
   /* ---- 10. a team's own variable in a card, nested, and one that names itself ------------------ */
   V.setCatalogVariables({ list: [def,

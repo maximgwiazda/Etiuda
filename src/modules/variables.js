@@ -102,9 +102,10 @@ function varFirstKey(first){
   const parts=w.split("-").filter(Boolean);
   return varFold((parts[parts.length-1]||"").replace(/^[^\p{L}]+|[^\p{L}]+$/gu,""));
 }
-function nameGender(first){
+function nameGender(first, lang = "pl"){
   const k=varFirstKey(first);
   if(!k) return "n";
+  if(k==="nikola" && lang!=="pl") return "n";
   if(Object.prototype.hasOwnProperty.call(VAR_NAME_TABLE,k)) return VAR_NAME_TABLE[k];
   const end=k.charAt(k.length-1);
   if(k.length<2) return "n";
@@ -149,7 +150,9 @@ function condHolds(c,F){
       return op==="isnot" ? !hit : hit;
     }
     default:{
-      const have=varFold(kind==="weekday" ? F.weekday : F[c.fact]);
+      let raw=kind==="weekday" ? F.weekday : F[c.fact];
+      if(kind==="gender" && F && F.first && raw!=="m" && F.gender===nameGender(F.first,"pl")) raw=nameGender(F.first,F.lang);
+      const have=varFold(raw);
       if(op==="set") return have!=="";
       if(op==="unset") return have==="";
       if(op==="isnot") return !among(have,[val]);
@@ -180,7 +183,7 @@ function varWordsOf(rule,L,primary){
 }
 function varFillWords(s,F){
   return varText(s).replace(VAR_WORD_RE,(raw,k)=>{
-    if(k==="first-voc" && nameGender(F&&F.first)==="n") return varText(F&&F.first);
+    if(k==="first-voc" && nameGender(F&&F.first, F&&F.lang)==="n") return varText(F&&F.first);
     const f=Object.prototype.hasOwnProperty.call(VAR_WORD_FACT,k) ? VAR_WORD_FACT[k] : null;
     return f ? varText(F[f]) : raw;
   });
