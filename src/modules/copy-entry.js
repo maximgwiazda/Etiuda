@@ -49,6 +49,5 @@ function copyCardPart(id, vi, anchor, other){
 
 export {
   copyCardPart,
-  copyEntrySel,
-  manualToastMsg
+  copyEntrySel
 };
