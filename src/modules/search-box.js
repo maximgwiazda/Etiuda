@@ -11,8 +11,8 @@ import { render } from "./render.js";
 import { kbdNav, markSurface, railStep } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
 import { copyEntrySel } from "./copy-entry.js";
-import { t } from "./ui-lang.js";
-import { setRailSel, railSortT, setRailSortT, setRailSettled, putEntrySel, setRailMarkUsed, setSemiKind, cats, setCatsDropArmed, semiKind, railOrder, entrySel, railSel, railMarkIdx, railMarkUsed, pickRun, intentIdxs, setPickRun } from "./app-state.js";
+import { t, toast } from "./ui-lang.js";
+import { setRailSel, railSortT, setRailSortT, setRailSettled, putEntrySel, setRailMarkUsed, setSemiKind, cats, setCatsDropArmed, semiKind, railOrder, entrySel, railSel, railMarkIdx, railMarkUsed, pickRun, intentIdxs, setPickRun, setIntentIdxs, setIntentText } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 function updateIntentPlaceholder(){
@@ -144,6 +144,20 @@ function wireSearchBox(){
         kbdNav(true);
         try{ intentEl.blur(); }catch(_){}
         copyEntrySel(e.shiftKey);
+        return;
+      }
+      if(!e.ctrlKey && e.shiftKey && q){
+        e.preventDefault(); e.stopImmediatePropagation();
+        kbdNav(true);
+        setIntentIdxs([]);
+        setIntentText(q);
+        intentEl.value="";
+        setRailSel(-1);
+        syncIntentInput();
+        hooks.render();
+        scheduleTabSave();
+        try{ intentEl.blur(); }catch(_){}
+        toast(t("Intent: {NAME}").replace("{NAME}", q));
         return;
       }
       if(!q && semiKind!=="intent") return;
