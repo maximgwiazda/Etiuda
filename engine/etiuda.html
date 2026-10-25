@@ -15066,7 +15066,7 @@ What you type stays in this browser only.`;
     };
     if (s.joined && s.joined.file) {
       closeJoinBubble();
-      if (wholeThingEmpty()) hooks.loadCatalogFromFolder(String(s.joined.file), 0);
+      if (wholeThingEmpty() || nsGet("Sample") === "1") hooks.loadCatalogFromFolder(String(s.joined.file), 0);
     }
     syncJoinDoor();
     const refusal = s.linkRefusal;
@@ -15333,7 +15333,7 @@ What you type stays in this browser only.`;
   function openJoinBubble() {
     closeJoinBubble();
     const offer = document.getElementById("eCatalogOffer");
-    if (offer && !offer.classList.contains("e-gone")) return;
+    if (offer) dismissNode(offer);
     const p = joinParts();
     const wrap = document.createElement("div");
     wrap.className = "bub bub-ask e-offer e-join-bub";

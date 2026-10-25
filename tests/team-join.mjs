@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 92;
+const EXPECTED = 94;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1332,6 +1332,21 @@ try {
   check(!!tookFn && keptCatalog && loadedEmpty,
     "15bl joining leaves a catalog the desk already has loaded, and an empty desk still loads the one the invitation named: kept "
     + keptCatalog + ", empty loaded " + JSON.stringify(loads));
+  loads.length = 0;
+  HK.hooks.loadCatalogFromFolder = name => { loads.push(String(name)); };
+  AS.setCards([{ id: "c-sample" }]);
+  ST.nsSet("Sample", "1");
+  if (tookFn) tookFn({ joined: { team: TEAM, file: "lamps.ec" }, join: null, leads: [] });
+  const loadedSample = loads.length === 1 && loads[0] === "lamps.ec";
+  ST.nsDel("Sample");
+  loads.length = 0;
+  if (tookFn) tookFn({ joined: { team: TEAM, file: "lamps.ec" }, join: null, leads: [] });
+  const keptReal = loads.length === 0;
+  HK.hooks.loadCatalogFromFolder = wasLoad;
+  AS.setCards([]);
+  check(!!tookFn && loadedSample && keptReal,
+    "15bn a team catalog arriving opens automatically on a desk showing the sample catalog, and never over a real catalog the agent chose: sample "
+    + loadedSample + ", real kept " + keptReal);
 
   /* Join a team in Settings, the Library and the Menu, on a desk that already has a catalog and has seen its lead. */
   const doorWas = { createElement: document.createElement, body: document.body, getElementById: document.getElementById,
@@ -1518,6 +1533,10 @@ try {
     MG.openManage();
     click(doc.getElementById("mgJoinTeam"));
     libraryOpened = leftPaste && TJ.inviteHeld().mode === "paste";
+    const offerEl = new DoorEl("div", { id: "eCatalogOffer", class: "bub bub-ask e-offer" });
+    doc.body.appendChild(offerEl);
+    TJ.openJoinPaste();
+    var joinShownOverOffer = !!doc.getElementById("eTeamJoin") && !doc.getElementById("eCatalogOffer");
   } catch (e) {
     doorErr = e && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : String(e);
   } finally {
@@ -1533,6 +1552,7 @@ try {
   check(menuItem && settingsOpened && libraryOpened,
     "15bm the Menu item Join a team is in the template, and the Settings and Library buttons' clicks open the paste: "
     + [menuItem, settingsOpened, libraryOpened].join("/") + (doorErr ? " " + doorErr : ""));
+  check(joinShownOverOffer, "15bo with a catalog loaded, the team-join bubble is reachable while the catalog offer shows: " + joinShownOverOffer);
 
   /* ---- leaving, and being left off the roster ---------------------------------------------------------------------- */
   /* A desk let in by an invitation, then left off the team's roster at a newer epoch with the newest edition sealed again
