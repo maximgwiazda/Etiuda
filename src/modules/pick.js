@@ -18,7 +18,7 @@ import { eNotice } from "./pack.js";
 import { tourHeardPick } from "./tour.js";
 import { hooks } from "./hooks.js";
 import { dockNow } from "./next-dock.js";
-import { scChord, scChord2, SC_DEFS } from "./shortcuts.js";
+import { scChord, scChord2 } from "./shortcuts.js";
 import { runShortcut } from "./run-shortcut.js";
 // The picker's answers: the desk's replies as a short list for the window the shell draws over the
 // chat, found by the desk's own search and copied by the desk's own route.
@@ -199,19 +199,10 @@ function pickDeskPax(val){
   }
   return "";
 }
+/* The desk's own bindings for its tab keys, as the agent has set them, a cleared one included, for the picker to match. */
 function pickChords(){
-  const chordOf=(id,slot)=>{
-    const fn=slot===2?scChord2:scChord;
-    const c=fn(id);
-    if(c&&(c.code||c.key)) return Object.assign({}, c);
-    const def=(SC_DEFS.find(d=>d.id===id)||{})[slot===2?"def2":"def"];
-    return Object.assign({}, def||c);
-  };
-  return {
-    tabNext: [chordOf("tabNext",1), chordOf("tabNext",2)],
-    tabPrev: [chordOf("tabPrev",1), chordOf("tabPrev",2)],
-    tabNew: [chordOf("tabNew",1), chordOf("tabNew",2)]
-  };
+  const both=id=>[Object.assign({}, scChord(id)), Object.assign({}, scChord2(id))];
+  return { tabNext:both("tabNext"), tabPrev:both("tabPrev"), tabNew:both("tabNew") };
 }
 function answerPick(op,argText){
   let a={};
@@ -223,8 +214,7 @@ function answerPick(op,argText){
   }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;
-    const doShortcut = (typeof hooks.runShortcut === "function" ? hooks.runShortcut : runShortcut);
-    doShortcut(a.id);
+    runShortcut(a.id);
     const paxVal=pickDeskPax();
     const out=Object.assign({who:activeTabName(), name:paxVal, last:pickLastRow()}, pickFound(""));
     if(a.id==="tabNew") out.fresh=true;

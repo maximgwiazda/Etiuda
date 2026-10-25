@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 113;
+const EXPECTED = 114;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -85,6 +85,10 @@ globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {
 const TB = await import(MOD("tabs.js"));
 els["#intent"].classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
 ["drawPillsCore", "drawIntentRail", "applyLangUI", "updateIntentPlaceholder", "scheduleRailGeometry", "syncNextDock"].forEach(k => { HK.hooks[k] = () => {}; });
+/* The desk loads its shortcut bindings at boot; the picker is handed them as the agent set them. */
+const SCM = await import(MOD("shortcuts.js"));
+if (typeof HK.hooks.segFolded !== "function") HK.hooks.segFolded = () => false;
+SCM.loadShortcuts();
 
 /* Invented cards. A greeting-and-name line opens two of them, as a real reply's first line would. */
 const CARDS = [
@@ -1381,6 +1385,18 @@ try {
   check(outside7 === null && bogus7 === null && empty7 === null && TB.tabs.length === tabsCount7 && TB.activeTabName() === tabActive7,
     "7q op \"tab\" with an id outside the three runs nothing and answers null: "
     + JSON.stringify([outside7, bogus7, empty7, TB.tabs.length === tabsCount7, TB.activeTabName() === tabActive7]));
+
+  /* The agent's own bindings reach the picker: a rebound new-tab key and a cleared next-tab key, never the defaults. */
+  ST.lsSet("eShortcuts", JSON.stringify({ tabNew: { code: "KeyN", key: "n", ctrl: 1, alt: 0, shift: 1, meta: 0 },
+    tabNext: { code: "", key: "", ctrl: 0, alt: 0, shift: 0, meta: 0 } }));
+  SCM.loadShortcuts();
+  const bound7 = (pickAnswer("open") || {}).chords || {};
+  ST.lsDel("eShortcuts");
+  SCM.loadShortcuts();
+  const newAt7 = (bound7.tabNew || [])[0] || {}, nextAt7 = (bound7.tabNext || [])[0] || {};
+  check(newAt7.code === "KeyN" && newAt7.shift === 1 && !nextAt7.code && !nextAt7.key,
+    "7r the picker is handed the agent's own tab keys, a rebound one as rebound and a cleared one as cleared: "
+    + JSON.stringify([newAt7, nextAt7]));
   }
 } catch (e) {
   failed++;
