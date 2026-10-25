@@ -12,6 +12,7 @@ import { placeBubble } from "./bubble.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { hooks } from "./hooks.js";
 import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
+import { nsGet } from "./storage.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
@@ -161,7 +162,7 @@ function joinTook(v,changed){
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
   if(s.joined && s.joined.file){
     closeJoinBubble();
-    if(wholeThingEmpty()) hooks.loadCatalogFromFolder(String(s.joined.file),0);
+    if(wholeThingEmpty() || nsGet("Sample")==="1") hooks.loadCatalogFromFolder(String(s.joined.file),0);
   }
   syncJoinDoor();
   const refusal=s.linkRefusal;
@@ -412,7 +413,7 @@ function closeJoinBubble(){ if(joinBubbleClose) joinBubbleClose(); }
 function openJoinBubble(){
   closeJoinBubble();
   const offer=document.getElementById("eCatalogOffer");
-  if(offer && !offer.classList.contains("e-gone")) return;
+  if(offer) dismissNode(offer);
   const p=joinParts();
   const wrap=document.createElement("div");
   wrap.className="bub bub-ask e-offer e-join-bub";
