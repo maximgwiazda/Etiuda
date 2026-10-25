@@ -20,6 +20,8 @@ import { hooks } from "./hooks.js";
 import { withAgentName } from "./agent.js";
 import { activeHeard, tabPathStep } from "./tabs.js";
 import { useEditionMark } from "./edition-marks.js";
+import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
+import { nsGet, nsSet } from "./storage.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -442,7 +444,7 @@ function wireListPointer(){
     txtEl.classList.add("just-picked");
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
     withAgentName(ps[vi],()=>{
-      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
+      copy(fill(ps[vi],m), manualToastMsg(m, cl, vi, ps.length), cardCommits(m));
       bumpUseCount(mid, cl, vi);
     },txtEl);
   });
@@ -457,6 +459,16 @@ function copiedToastMsg(m, lang, vi, total){
   const where=m&&m.seq ? code+" "+t("step")+" "+(vi+1)+"/"+total
                        : code+(total>1 ? " "+(vi+1)+"/"+total : "");
   return (cardCommits(m) ? t("A commitment, ready to paste: {TITLE}, {WHAT}") : t("Ready to paste: {TITLE}, {WHAT}")).replace("{WHAT}",where).replace("{TITLE}",cardTitle(m));
+}
+function manualToastMsg(m, l, vi, total){
+  if(nsGet("PickerHint") !== "1"){
+    const h = eHost(), hk = eHotkey();
+    if(h && typeof h.openPicker === "function" && hk && hk.held){
+      nsSet("PickerHint", "1");
+      return t("Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.").replace("{KEYS}", eHotkeyLabel(hk.accel));
+    }
+  }
+  return copiedToastMsg(m, l, vi, total);
 }
 /* Local copy counter: one integer per card id, stored in the pack. It leaves the desk
    only as a file on the organisation's own share, on request. Answers two questions
@@ -478,6 +490,7 @@ export {
   bumpUseCount,
   cardDrag,
   copiedToastMsg,
+  manualToastMsg,
   wireListPointer,
   animateFoldAll
 };

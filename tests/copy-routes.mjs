@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 28;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -237,6 +237,33 @@ try {
       check(ok7(r.d, false), "2d control: the keyboard copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.d));
       check(ok7(r.e, false), "2e control: the click copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.e));
       check(ok7(r.f, false), "2f control: the picker's ask copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.f));
+      const HINT = "Next time, Ctrl+Shift+Space opens the replies over any window and pastes the one chosen.";
+      globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true }), openPicker: () => {} };
+      ST.nsDel("PickerHint");
+      const hadToastHtml = Object.getOwnPropertyDescriptor(toastEl, "innerHTML");
+      Object.defineProperty(toastEl, "innerHTML", { get() { return this._html || this._text; }, set(h) { this._html = h; }, configurable: true });
+      route("ask", "c-loose");
+      const askSaw = toastEl.innerHTML.includes(HINT);
+      route("key", "c-loose");
+      const firstSaw = toastEl.innerHTML.includes(HINT);
+      route("key", "c-loose");
+      const secondSaw = toastEl.innerHTML.includes(HINT);
+      check(!askSaw && firstSaw && !secondSaw, "2g first manual copy shows the global picker hint, the second does not, a copy through the picker does not: " + JSON.stringify({ askSaw, firstSaw, secondSaw }));
+      ST.nsDel("PickerHint");
+      route("click", "c-loose");
+      const clickSaw = toastEl.innerHTML.includes(HINT);
+      route("key", "c-loose");
+      const manualAfterSaw = toastEl.innerHTML.includes(HINT);
+      check(clickSaw && !manualAfterSaw, "2h a click copy first shows the hint (and a manual copy after it does not): " + JSON.stringify({ clickSaw, manualAfterSaw }));
+      ST.nsDel("PickerHint");
+      globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Alt+Space", held: true }), openPicker: () => {} };
+      route("key", "c-loose");
+      const altHint = "Next time, Ctrl+Alt+Space opens the replies over any window and pastes the one chosen.";
+      const altSaw = toastEl.innerHTML.includes(altHint);
+      check(altSaw, "2i the hint names a non-default hotkey when the host holds one: " + JSON.stringify({ altSaw, toast: toastEl.innerHTML }));
+      delete globalThis.window.E_HOST;
+      ST.nsDel("PickerHint");
+      if (hadToastHtml) Object.defineProperty(toastEl, "innerHTML", hadToastHtml); else delete toastEl.innerHTML;
     } finally {
       navigator.clipboard = null;
       delete els["#list"]; delete els["#toast"]; Dom.grabDom();

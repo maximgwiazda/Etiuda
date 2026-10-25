@@ -223,6 +223,7 @@ UI_STRINGS.pl={
   "step":"krok",
   "Ready to paste: {TITLE}, {WHAT}":"Gotowe do wklejenia: {TITLE}, {WHAT}",
   "A commitment, ready to paste: {TITLE}, {WHAT}":"Gotowe do wklejenia zobowiązanie: {TITLE}, {WHAT}",
+  "Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.":"Skopiowano. Następnym razem {KEYS} otworzy odpowiedzi nad dowolnym oknem i wklei wybraną.",
   "All":"Wszystkie",
   "cards":"karty",
   "categories":"kategorie",

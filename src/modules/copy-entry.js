@@ -1,7 +1,7 @@
 import { nextContentLang } from "./content-model.js";
 import { cardCommits, cardLang, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
-import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
+import { bumpUseCount, manualToastMsg } from "./list-pointer.js";
 import { eCopyFeedback } from "./pops.js";
 import { eNoteRecent } from "./recency.js";
 import { t, toast } from "./ui-lang.js";
@@ -23,7 +23,7 @@ function copyEntrySel(otherLang){
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
   const id=entrySel.id;
   withAgentName(ps[vi],()=>{
-    copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
+    copy(fill(ps[vi],m,0,l), manualToastMsg(m, l, vi, ps.length), cardCommits(m));
     bumpUseCount(id, l, vi);
     eCopyFeedback(id,vi);   // wash the selected block + recency trace, same as a click
   },document.querySelector("#list .txt.sel"));
@@ -40,7 +40,7 @@ function copyCardPart(id, vi, anchor, other){
   const k=Math.max(0, Math.min(ps.length-1, vi|0));
   withAgentName(ps[k],()=>{
     // The copy is made before the step, which the lanes and the action button answer with motion.
-    copy(fill(ps[k],m,0,l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
+    copy(fill(ps[k],m,0,l), manualToastMsg(m, l, k, ps.length), cardCommits(m));
     bumpUseCount(m.id, l, k);
     eNoteRecent(m.id,k);
   },anchor);
