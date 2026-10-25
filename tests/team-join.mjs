@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 94;
+const EXPECTED = 95;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -47,7 +47,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha"];
+  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -558,6 +558,24 @@ try {
       && touchedV.length > 0 && touchedV.every(n => n.indexOf("promises.") === 0),
     "15av at yes, a folder that does not answer is asked and nothing more: no call that could wait on it with the window behind it, the"
     + " desk's folder put back, nothing pinned or written: " + (tookV && tookV.refused) + ", touched " + JSON.stringify(touchedV));
+
+  const ringYard = folder("files-ring");
+  put(ringYard, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
+  put(ringYard, "etiuda-ring.json", { format: 1, kind: "etiuda-ring",
+    keys: [{ catalog: "lamp-shop", keyId: FORGED.keyId, alg: "Ed25519", public: FORGED.public }] });
+  const invented = { team: TEAM, lead: lampLead };
+  const belongChecks = [
+    P.inviteFolderBelongs ? P.inviteFolderBelongs(genuineFolder, invented) : false,
+    P.inviteFolderBelongs ? P.inviteFolderBelongs(ringYard, invented) : false,
+    P.inviteFolderBelongs ? P.inviteFolderBelongs(silentFolder, invented) : false,
+    P.inviteFolderBelongs ? P.inviteFolderBelongs(otherTeam, invented) : false,
+    P.inviteFolderBelongs ? P.inviteFolderBelongs(underForger, invented) : false,
+    P.inviteFolderBelongs ? P.inviteFolderBelongs(broken, invented) : false,
+  ];
+  check(belongChecks[0] === true && belongChecks[1] === true
+      && belongChecks[2] === false && belongChecks[3] === false
+      && belongChecks[4] === false && belongChecks[5] === false,
+    "15aw a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead or vouched for by a ring, and refused otherwise: " + JSON.stringify(belongChecks));
 
   const Dk = await deskWith("kept", folder("kept-own"));
   const secretK = newSecret();
