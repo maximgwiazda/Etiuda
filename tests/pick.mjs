@@ -412,6 +412,18 @@ try {
   const found2 = JSON.parse(await pickerPage.E_PICK.find("brass"));
   check(ids(found2.rows) === "c-sign/0", "2i a query from the picker is answered by the desk's own search: " + ids(found2.rows));
 
+  const whoRes2 = JSON.parse(await pickerPage.E_PICK.who("Jan Kowalski", ""));
+  const lampAfterWho2 = deskCopy("c-lamp", 0);
+  const deskPax2 = document.getElementById("pax");
+  const doc2 = decodeURIComponent(String(pw.url || ""));
+  const whoInputInDoc = /<input\s+id="who"[^>]*hidden/.test(doc2);
+  const whoKeydown = /key\s*===\s*"Tab"[\s\S]*?who\.focus\(\)/.test(doc2) && /who\.addEventListener\("input"/.test(doc2);
+  check(typeof pickerPage.E_PICK.who === "function" && whoRes2 && whoRes2.who === "" && deskPax2 && deskPax2.value === "Jan Kowalski"
+    && lampAfterWho2 && /Jan Kowalski/.test(lampAfterWho2) && !/Anna/.test(lampAfterWho2) && whoInputInDoc && whoKeydown,
+    "2I setting the customer name through the picker's bridge fills the desk's name and replies, and #who in the picker is an input: "
+    + JSON.stringify([whoRes2 && whoRes2.who, deskPax2 && deskPax2.value, lampAfterWho2 && lampAfterWho2.slice(0, 30)]));
+  await pickerPage.E_PICK.who("Anna Nowak", "");
+
   const expect = deskCopy("c-lamp", 0);
   const copied = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
   const lastClip = clip[clip.length - 1];
