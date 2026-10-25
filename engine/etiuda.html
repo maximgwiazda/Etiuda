@@ -6786,6 +6786,7 @@ What you type stays in this browser only.`;
     "step": "krok",
     "Ready to paste: {TITLE}, {WHAT}": "Gotowe do wklejenia: {TITLE}, {WHAT}",
     "A commitment, ready to paste: {TITLE}, {WHAT}": "Gotowe do wklejenia zobowiązanie: {TITLE}, {WHAT}",
+    "Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.": "Skopiowano. Następnym razem {KEYS} otworzy odpowiedzi nad dowolnym oknem i wklei wybraną.",
     "All": "Wszystkie",
     "cards": "karty",
     "categories": "kategorie",
@@ -16867,6 +16868,7 @@ What you type stays in this browser only.`;
     bumpUseCount: () => bumpUseCount,
     cardDrag: () => cardDrag,
     copiedToastMsg: () => copiedToastMsg,
+    manualToastMsg: () => manualToastMsg,
     wireListPointer: () => wireListPointer
   });
 
@@ -20586,7 +20588,7 @@ What you type stays in this browser only.`;
       txtEl.classList.add("just-picked");
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
       withAgentName(ps[vi], () => {
-        copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
+        copy(fill(ps[vi], m), manualToastMsg(m, cl, vi, ps.length), cardCommits(m));
         bumpUseCount(mid, cl, vi);
       }, txtEl);
     });
@@ -20595,6 +20597,16 @@ What you type stays in this browser only.`;
     const code = String(lang2 || "").toUpperCase();
     const where = m && m.seq ? code + " " + t("step") + " " + (vi + 1) + "/" + total : code + (total > 1 ? " " + (vi + 1) + "/" + total : "");
     return (cardCommits(m) ? t("A commitment, ready to paste: {TITLE}, {WHAT}") : t("Ready to paste: {TITLE}, {WHAT}")).replace("{WHAT}", where).replace("{TITLE}", cardTitle(m));
+  }
+  function manualToastMsg(m, l, vi, total) {
+    if (nsGet("PickerHint") !== "1") {
+      const h = eHost(), hk = eHotkey();
+      if (h && typeof h.openPicker === "function" && hk && hk.held) {
+        nsSet("PickerHint", "1");
+        return t("Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.").replace("{KEYS}", eHotkeyLabel(hk.accel));
+      }
+    }
+    return copiedToastMsg(m, l, vi, total);
   }
   function bumpUseCount(id, lang2, vi) {
     if (!id) return;
@@ -30498,7 +30510,8 @@ What you type stays in this browser only.`;
   var copy_entry_exports = {};
   __export(copy_entry_exports, {
     copyCardPart: () => copyCardPart,
-    copyEntrySel: () => copyEntrySel
+    copyEntrySel: () => copyEntrySel,
+    manualToastMsg: () => manualToastMsg
   });
 
   // src/modules/pops.js
@@ -30606,7 +30619,7 @@ What you type stays in this browser only.`;
     const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
     const id = entrySel.id;
     withAgentName(ps[vi], () => {
-      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
+      copy(fill(ps[vi], m, 0, l), manualToastMsg(m, l, vi, ps.length), cardCommits(m));
       bumpUseCount(id, l, vi);
       eCopyFeedback(id, vi);
     }, document.querySelector("#list .txt.sel"));
@@ -30622,7 +30635,7 @@ What you type stays in this browser only.`;
     }
     const k = Math.max(0, Math.min(ps.length - 1, vi | 0));
     withAgentName(ps[k], () => {
-      copy(fill(ps[k], m, 0, l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
+      copy(fill(ps[k], m, 0, l), manualToastMsg(m, l, k, ps.length), cardCommits(m));
       bumpUseCount(m.id, l, k);
       eNoteRecent(m.id, k);
     }, anchor);

@@ -1,28 +1,13 @@
 import { nextContentLang } from "./content-model.js";
 import { cardCommits, cardLang, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
-import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
+import { bumpUseCount, manualToastMsg } from "./list-pointer.js";
 import { eCopyFeedback } from "./pops.js";
 import { eNoteRecent } from "./recency.js";
-import { t, toast, uiLang } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { copy } from "./mark.js";
 import { entrySel, shown } from "./app-state.js";
 import { withAgentName } from "./agent.js";
-import { eHost, eHotkey } from "./host.js";
-import { nsGet, nsSet } from "./storage.js";
-
-function manualToastMsg(m, l, vi, total){
-  if(nsGet("PickerHint") !== "1"){
-    const h = eHost(), hk = eHotkey();
-    if(h && typeof h.openPicker === "function" && hk && hk.held){
-      nsSet("PickerHint", "1");
-      return uiLang() === "pl"
-        ? "Skopiowano. Następnym razem Ctrl+Shift+Spacja otworzy odpowiedzi nad dowolnym oknem i wklei wybraną."
-        : "Copied. Next time, Ctrl+Shift+Space opens the replies over any window and pastes the one chosen.";
-    }
-  }
-  return copiedToastMsg(m, l, vi, total);
-}
 
 /** Copy the focused block (or other language at the same part index). */
 function copyEntrySel(otherLang){
@@ -64,5 +49,6 @@ function copyCardPart(id, vi, anchor, other){
 
 export {
   copyCardPart,
-  copyEntrySel
+  copyEntrySel,
+  manualToastMsg
 };
