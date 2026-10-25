@@ -5587,6 +5587,7 @@ What you type stays in this browser only.`;
     BASE_CATS: () => BASE_CATS,
     BASE_M: () => BASE_M,
     catalogCardId: () => catalogCardId,
+    dropNotice: () => dropNotice,
     eNotice: () => eNotice,
     ePackEpoch: () => ePackEpoch,
     flushStats: () => flushStats,
@@ -7653,6 +7654,18 @@ What you type stays in this browser only.`;
     "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
+    "The team's relay is due for renewal": "Przekaźnik zespołu czeka na odnowienie",
+    "It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.": "Termin odnowienia minął dnia {DATE}. Do dnia {READONLY} wszystko działa jak dotąd; potem katalogi na tym stanowisku zostaną bez zmian, ale do czasu odnowienia nic nowego nie przejdzie już między stanowiskiem a zespołem. Przekaźnik odnawia lider zespołu w Studiu; tutaj nic nie trzeba robić.",
+    "The team's relay is read-only until renewed": "Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",
+    "The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; nic nowego nie przechodzi już między stanowiskiem a zespołem.",
+    "The relay keeps the team's copy until {DATE}.": "Przekaźnik przechowuje kopię zespołu do dnia {DATE}.",
+    "The team's lead renews it in Studio.": "Odnowić go może lider zespołu w Studiu.",
+    "The team's relay has stopped": "Przekaźnik zespołu jest wstrzymany",
+    "The licence or trial it came with has ended.": "Licencja albo okres próbny, z którym działał, dobiegły końca.",
+    "The catalogs on this desk stay as they are and work as before.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd.",
+    "The team's lead can start it again from Studio with a licence.": "Lider zespołu może go uruchomić ponownie w Studiu, z licencją.",
+    "The relay no longer holds the team's copy": "Przekaźnik nie przechowuje już kopii zespołu",
+    "The team's lead will say what comes next.": "Lider zespołu powie, co dalej.",
     "Studio's signing key": "Klucz podpisu Studia",
     "A desk's key": "Klucz stanowiska",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
@@ -14896,6 +14909,7 @@ What you type stays in this browser only.`;
     joinDoorButton: () => joinDoorButton,
     keySignHtml: () => keySignHtml,
     keyTipHtml: () => keyTipHtml,
+    lapseNote: () => lapseNote,
     leadKeyText: () => leadKeyText,
     leadsNow: () => leadsNow,
     noteCatalogCopy: () => noteCatalogCopy,
@@ -14918,6 +14932,8 @@ What you type stays in this browser only.`;
   var joinWhy = "";
   var joinLinkSaid = null;
   var joinReads = 0;
+  var lapseUp = "";
+  var lapseDismissed = /* @__PURE__ */ new Set();
   function eHasJoin() {
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
@@ -15058,6 +15074,59 @@ What you type stays in this browser only.`;
     if (/[\u0000-\u001f\u007f]/.test(edition + published)) return null;
     return { edition, published, t: h.t };
   }
+  var LAPSE_STEPS = ["grace", "read-only", "lapsed", "gone"];
+  var instantOk = (v) => v === null || Number.isSafeInteger(v);
+  function lapseKept(v) {
+    if (!v || typeof v !== "object" || LAPSE_STEPS.indexOf(v.step) < 0 || !instantOk(v.until) || !instantOk(v.readOnly) || !instantOk(v.swept)) return null;
+    if (v.step === "grace" && (v.until === null || v.readOnly === null)) return null;
+    return { step: v.step, until: v.until, readOnly: v.readOnly, swept: v.swept, seen: v.seen === true };
+  }
+  function lapseWords(l) {
+    const day = (ms) => leftDay(new Date(ms).toISOString());
+    const kept = (s) => l.swept === null ? "" : t(s).split("{DATE}").join(day(l.swept));
+    const stay = t("The catalogs on this desk stay as they are and work as before.");
+    if (l.step === "grace") return {
+      title: t("The team's relay is due for renewal"),
+      body: t("It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.").split("{DATE}").join(day(l.until)).split("{READONLY}").join(day(l.readOnly))
+    };
+    if (l.step === "read-only") return {
+      title: t("The team's relay is read-only until renewed"),
+      body: [
+        t("The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team."),
+        kept("The relay keeps the team's copy until {DATE}."),
+        t("The team's lead renews it in Studio.")
+      ].filter(Boolean).join(" ")
+    };
+    if (l.step === "lapsed") return {
+      title: t("The team's relay has stopped"),
+      body: [
+        t("The licence or trial it came with has ended."),
+        stay,
+        kept("The relay keeps the team's copy until {DATE}."),
+        t("The team's lead can start it again from Studio with a licence.")
+      ].filter(Boolean).join(" ")
+    };
+    return { title: t("The relay no longer holds the team's copy"), body: [stay, t("The team's lead will say what comes next.")].join(" ") };
+  }
+  function lapseNote(l) {
+    return lapseWords(l).title;
+  }
+  var lapseKey = (l) => l.team + "|" + l.lapse.step + "|" + l.lapse.until;
+  function syncLapseNotice() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.lapse && !x.lapse.seen && !lapseDismissed.has(lapseKey(x)))[0] || null;
+    const want = l ? lapseKey(l) : "", up = document.getElementById("eTeamLapse");
+    if (want === lapseUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    lapseUp = want;
+    if (!l) return;
+    const w = lapseWords(l.lapse), team = l.team, step = l.lapse.step;
+    eNotice("eTeamLapse", w.title, w.body, () => {
+      lapseDismissed.add(want);
+      if (lapseUp === want) lapseUp = "";
+      joinAsk("lapse-seen", team, step);
+    });
+  }
   function joinTook(v, changed) {
     const s = v && typeof v === "object" ? v : {};
     const was = JSON.stringify(joinNow);
@@ -15077,6 +15146,8 @@ What you type stays in this browser only.`;
         };
         const head = headKept(l.head);
         if (head) row.head = head;
+        const lapse = lapseKept(l.lapse);
+        if (lapse) row.lapse = lapse;
         return row;
       }) : []
     };
@@ -15085,6 +15156,7 @@ What you type stays in this browser only.`;
       if (wholeThingEmpty() || nsGet("Sample") === "1") hooks.loadCatalogFromFolder(String(s.joined.file), 0);
     }
     syncJoinDoor();
+    syncLapseNotice();
     const refusal = s.linkRefusal;
     if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
       dropInvite();
@@ -30097,6 +30169,7 @@ What you type stays in this browser only.`;
       l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ];
     if (l.head) notes.push(teamHeadNote(l.head));
+    if (l.lapse) notes.push(lapseNote(l.lapse));
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
   var leaveHold = "";

@@ -22,7 +22,10 @@
  * own only where its own record shows it sent that id: a lead restored to a fresh profile catches up its team file and the
  * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched (970c), and
  * an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e) and, older than the last sent,
- * changes nothing (970f). Throwaway keys and invented words only;
+ * changes nothing (970f). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
+ * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
+ * copy removed; a team inside its grant shows nothing, and no step removes anything from the desk (978). Throwaway keys and
+ * invented words only;
  * nothing contacts a host.
  *
  *     node tests/relay-channel.mjs     exit code is the number of failed checks, capped at 63; 78 where it did not complete
@@ -46,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 214;
+const EXPECTED = 222;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3557,6 +3560,251 @@ try {
     const back = sha(fs.readFileSync(src)) === digest;
     check(turned && back, "961g lifting plant:leave-aside leaves the old team file in the mirror, and the product file is never written: "
       + detail + ", sha " + (back ? "restored" : "differs"));
+  }
+  /* ---- 978: the lapse at the desk (the test architect's C1 on G2). A relay of its own whose clock the legs move, a paid
+     team and a trial's team on it, each followed by a desk loaded from its record (pinned by an invitation, its key
+     enrolled), and the page's team-join and Settings over that desk's shell. Each step is shown once with its dates, a
+     second sync at the same step shows nothing new, a dismissal is kept by the shell and the team's row still says it, a
+     team inside its grant shows nothing, and nothing on the desk is removed by any step. ---- */
+  {
+    const RL = S.relayEnv({ roots: K.ROOTS });
+    const DAYMS = K.DAY, MIN = 60 * 1000, BASE = Date.UTC(2026, 2, 2, 12);
+    RL.clock.now = BASE;
+    /* The desks' clock moves with the relay's, as two real clocks do; each desk's channel takes Date.now when it is made. */
+    const realNow = Date.now;
+    let jump = 0;
+    const at = ms => { jump += ms - RL.clock.now; RL.clock.now = ms; };
+    const lfetch = (url, init) => {
+      const i = Object.assign({}, init);
+      if (i.body && i.method !== "GET") i.duplex = "half"; else delete i.body;
+      return W.fetch(new Request(url, i), RL.env);
+    };
+    const ladmin = async (method, p, json) => {
+      const res = await lfetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" },
+        body: Buffer.from(JSON.stringify(json), "utf8") });
+      return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+    };
+    const day = (ms, lang) => new Intl.DateTimeFormat(lang === "pl" ? "pl" : "en-GB", { day: "numeric", month: "long", year: "numeric" }).format(new Date(ms));
+    /* The page's DOM, as much of it as a lasting notice and Settings touch; each notice of the lapse is counted as it lands. */
+    const nodes = new Map();
+    let lapseMade = 0;
+    const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
+      classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      appendChild(c) { c.parent = this; this.children.push(c); if (c.id) nodes.set(c.id, c); if (c.id === "eTeamLapse") lapseMade++; return c; },
+      remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); if (this.id && nodes.get(this.id) === this) nodes.delete(this.id); this.parent = null; },
+      get firstChild() { return this.children[0] || null; } });
+    const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
+    const was = { WebSocket: globalThis.WebSocket, document: globalThis.document, window: globalThis.window,
+      add: globalThis.addEventListener, remove: globalThis.removeEventListener, style: globalThis.getComputedStyle };
+    const desks = [];
+    try {
+      Date.now = () => realNow() + jump;
+      /* The desk's socket stays open and silent, so every cycle below is one a leg asked for. */
+      globalThis.WebSocket = class { constructor() { this.readyState = 1; } send() {} close() {} };
+      globalThis.window = globalThis.window || {};
+      globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
+        createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
+        querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
+      globalThis.addEventListener = () => {};
+      globalThis.removeEventListener = () => {};
+      globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+      let pageDesk = null, took = null;
+      window.E_HOST = { teamJoin: (...a) => (pageDesk ? pageDesk.desk.ask("etiuda:team-join", ...a) : Promise.resolve(null)), onTeamJoin: fn => { took = fn; } };
+      const mod = n => import(pathToFileURL(path.join(ROOT, "src", "modules", n)).href);
+      const HK = await mod("hooks.js");
+      HK.hooks.render = () => {};
+      const ST = await mod("storage.js"), TJ = await mod("team-join.js"), SET = await mod("settings.js");
+      TJ.wireTeamJoin();
+      await wait(20);
+
+      /* A team on this relay with its grant's `fields`, and a desk following it with two files in its mirror: one of its own
+         place and one at the root. */
+      async function lapseTeam(name, fields) {
+        const rt = hex(16), team = "t-" + hex(8);
+        const made = await ladmin("POST", "/relay/v1/teams", K.createBody(rt, LEAD, RL.clock.now, bytes => signHex(LEAD, bytes), { grantOpts: { fields } }));
+        if (made.status !== 200) throw new Error(name + " was not made: " + JSON.stringify(made.json));
+        const ud = path.join(LAB, "978-" + name);
+        fs.mkdirSync(ud, { recursive: true });
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
+          teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
+          teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
+        const desk = loadDesk(ud, { fetch: lfetch });
+        const me = await desk.ask("etiuda:branch-identity", true);
+        const t = RL.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
+        const en = await ladmin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
+        if (en.status !== 200) throw new Error(name + "'s desk was not enrolled: " + JSON.stringify(en.json));
+        const mirror = path.join(ud, "relay", rt);
+        put(mirror, "desks/" + me.id + "/note.ec", "A note of this desk's own, kept through every step.\n");
+        put(mirror, "guide.ec", "A file at the root, kept through every step.\n");
+        const d = { name, rt, team, desk, me, mirror, ud };
+        desks.push(d);
+        return d;
+      }
+      const pumpL = async d => { const ch = d.desk.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } return ch; };
+      const rowOf = async d => {
+        const v = await d.desk.ask("etiuda:team-join", "leads");
+        return ((v && v.leads) || []).filter(l => l && l.team === d.team)[0] || null;
+      };
+      /* The shell's view handed to the page, as the push after a step hands it. */
+      const feed = async d => { pageDesk = d; const v = await d.desk.ask("etiuda:team-join", "state"); took(v); await wait(10); return v; };
+      const notice = () => { const n = nodes.get("eTeamLapse"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
+      const settings = lang => { ST.lsSet("eUiLang", lang); const h = shownText(SET.settingsBodyHtml()); ST.lsSet("eUiLang", "en"); return h; };
+      const dismiss = async () => {
+        const n = nodes.get("eTeamLapse");
+        /* Dismiss is the notice's last button, whatever language it was drawn in. */
+        const buttons = [];
+        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(n || { children: [] });
+        const b = buttons[buttons.length - 1] || null;
+        if (b) b.onclick();
+        await wait(30);
+        return !!b;
+      };
+      const filesOf = dir => filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/") + "=" + sha(fs.readFileSync(f))).sort();
+      const STAY = "The catalogs on this desk stay as they are and work as before.";
+      const TITLES = ["The team's relay is due for renewal", "The team's relay is read-only until renewed",
+        "The team's relay has stopped", "The relay no longer holds the team's copy"];
+
+      const paid = await lapseTeam("paid", { paid: true, until: BASE + 30 * DAYMS });
+      const trial = await lapseTeam("trial", { paid: false, until: BASE + 14 * DAYMS });
+
+      /* Inside both grants. */
+      at(BASE + DAYMS);
+      await pumpL(paid); await pumpL(trial);
+      const before = { paid: filesOf(paid.mirror), trial: filesOf(trial.mirror) };
+      const pinsOf = d => { const e = d.desk.envelope(); return JSON.stringify([e.teamPins, e.teamChannel, e.teamPinFrom]); };
+      const pinsBefore = { paid: pinsOf(paid), trial: pinsOf(trial) };
+      const insideRows = [await rowOf(paid), await rowOf(trial)];
+      const insideTold = [paid, trial].map(d => { const p = d.desk.api.relayRun().program; return p.lapse() ? p.lapse().state : "none"; });
+      await feed(paid);
+      const insideNotice = notice(), insideMade = lapseMade, insideSettings = settings("en");
+      await feed(trial);
+      const insideNotice2 = notice(), insideSettings2 = settings("en");
+      check(insideRows.every(r => r && !Object.prototype.hasOwnProperty.call(r, "lapse")) && insideTold.join() === "working,working"
+        && insideMade === 0 && !insideNotice && !insideNotice2 && TITLES.every(s => insideSettings.indexOf(s) < 0 && insideSettings2.indexOf(s) < 0),
+        "978a a team working inside its grant shows nothing new: the relay told both teams " + insideTold.join(" and ") + ", rows "
+        + insideRows.map(r => (r ? (r.lapse ? "lapse " + r.lapse.step : "no lapse") : "missing")).join(" / ") + ", notices " + insideMade
+        + ", Settings " + (TITLES.some(s => insideSettings.indexOf(s) >= 0 || insideSettings2.indexOf(s) >= 0) ? "names a lapse" : "names none"));
+
+      /* The trial's team stops at its end; the paid team is still inside its grant. */
+      at(BASE + 20 * DAYMS);
+      await pumpL(trial); await pumpL(paid);
+      const trialRow = await rowOf(trial), paidStill = await rowOf(paid);
+      const madeB = lapseMade;
+      ST.lsSet("eUiLang", "pl");
+      await feed(trial);
+      ST.lsSet("eUiLang", "en");
+      const trialPl = "Przekaźnik zespołu jest wstrzymany Licencja albo okres próbny, z którym działał, dobiegły końca. Katalogi na tym"
+        + " stanowisku zostają bez zmian i działają jak dotąd. Przekaźnik przechowuje kopię zespołu do dnia " + day(BASE + 44 * DAYMS, "pl")
+        + ". Lider zespołu może go uruchomić ponownie w Studiu, z licencją.";
+      const trialNotice = notice(), trialMade = lapseMade - madeB, trialSetEn = settings("en"), trialSetPl = settings("pl");
+      const trialRowEn = trialSetEn.indexOf(TITLES[2]) >= 0 && trialSetEn.indexOf("The licence or trial it came with") < 0;
+      const trialRowPl = trialSetPl.indexOf("Przekaźnik zespołu jest wstrzymany") >= 0;
+      check(!!trialRow && !!trialRow.lapse && trialRow.lapse.step === "lapsed" && trialRow.lapse.until === BASE + 14 * DAYMS
+        && trialRow.lapse.swept === BASE + 44 * DAYMS && trialRow.lapse.seen === false && !!paidStill && !paidStill.lapse
+        && trialMade === 1 && trialNotice === trialPl && trialRowEn && trialRowPl,
+        "978b a trial's team stopped at its end is shown once with the day the relay's copy goes, here in Polish, and the team's row in"
+        + " Settings carries the title in both languages: row " + JSON.stringify(trialRow && trialRow.lapse) + ", the paid team " + (paidStill && !paidStill.lapse ? "shows nothing" : "shows a lapse")
+        + ", notices " + trialMade + ", text " + JSON.stringify(trialNotice) + ", Settings en " + trialRowEn + ", pl " + trialRowPl);
+      await dismiss();
+
+      /* The paid team past its grant's end: still working, until read-only. */
+      at(BASE + 35 * DAYMS);
+      await pumpL(paid);
+      const graceRow = await rowOf(paid);
+      const madeC = lapseMade;
+      await feed(paid);
+      const graceEn = TITLES[0] + " It fell due on " + day(BASE + 30 * DAYMS) + ". Everything works as before until " + day(BASE + 60 * DAYMS)
+        + "; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is"
+        + " renewed. The team's lead renews it in Studio; nothing is needed here.";
+      const rowSays = (title, body) => { const h = settings("en"); return h.indexOf(title) >= 0 && h.indexOf(body) < 0; };
+      const graceNotice = notice(), graceMade = lapseMade - madeC;
+      check(!!graceRow && !!graceRow.lapse && graceRow.lapse.step === "grace" && graceRow.lapse.until === BASE + 30 * DAYMS
+        && graceRow.lapse.readOnly === BASE + 60 * DAYMS && graceRow.lapse.swept === BASE + 120 * DAYMS && graceMade === 1 && graceNotice === graceEn
+        && rowSays(TITLES[0], "It fell due"),
+        "978c a paid team past its grant's end and still working is shown once, with the day it fell due and the day it turns read-only: row "
+        + JSON.stringify(graceRow && graceRow.lapse) + ", notices " + graceMade + ", text " + JSON.stringify(graceNotice));
+
+      /* The same step at the next sync. */
+      await pumpL(paid);
+      const againRow = await rowOf(paid);
+      await feed(paid);
+      await feed(paid);
+      check(lapseMade - madeC === 1 && notice() === graceEn && JSON.stringify(againRow) === JSON.stringify(graceRow),
+        "978d a second sync at the same step shows nothing new: notices at this step " + (lapseMade - madeC) + ", the one on screen "
+        + (notice() === graceEn ? "unchanged" : JSON.stringify(notice())) + ", row " + (JSON.stringify(againRow) === JSON.stringify(graceRow) ? "unchanged" : JSON.stringify(againRow)));
+
+      /* Dismissed: the shell keeps it, the next sync shows nothing, and the team's row still says where the team stands. */
+      const dismissed = await dismiss();
+      await pumpL(paid);
+      await feed(paid);
+      const seenRow = await rowOf(paid), kept = (paid.desk.envelope().teamLapseSeen || {})[paid.team];
+      check(dismissed && kept === "grace:" + (BASE + 30 * DAYMS) && !!seenRow && !!seenRow.lapse && seenRow.lapse.seen === true
+        && !notice() && lapseMade - madeC === 1 && rowSays(TITLES[0], "It fell due"),
+        "978e a dismissed notice is kept by the shell, the next sync shows it no more, and the team's row in Settings still says it: kept "
+        + JSON.stringify(kept) + ", row seen " + (seenRow && seenRow.lapse ? seenRow.lapse.seen : "no lapse") + ", notice "
+        + (notice() ? "on screen" : "gone") + ", Settings " + (rowSays(TITLES[0], "It fell due") ? "says it" : "silent"));
+
+      /* Read-only, told by since on a session opened while the team still worked. */
+      at(BASE + 60 * DAYMS - 10 * MIN);
+      await pumpL(paid);
+      at(BASE + 60 * DAYMS + 10 * MIN);
+      await pumpL(paid);
+      const roRow = await rowOf(paid);
+      const madeF = lapseMade;
+      await feed(paid);
+      await feed(paid);
+      const roEn = TITLES[1] + " The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team."
+        + " The relay keeps the team's copy until " + day(BASE + 120 * DAYMS) + ". The team's lead renews it in Studio.";
+      const roNotice = notice(), roMade = lapseMade - madeF;
+      check(!!roRow && !!roRow.lapse && roRow.lapse.step === "read-only" && roRow.lapse.swept === BASE + 120 * DAYMS && roRow.lapse.seen === false
+        && roMade === 1 && roNotice === roEn && rowSays(TITLES[1], "The relay keeps"),
+        "978f read-only, told on since within a session the team opened while working, is shown once with the day the relay's copy goes: row "
+        + JSON.stringify(roRow && roRow.lapse) + ", notices " + roMade + ", text " + JSON.stringify(roNotice));
+      await dismiss();
+
+      /* Past the sweep's day: the relay sweeps the team at the first call and knows it no more. */
+      at(BASE + 120 * DAYMS + 10 * MIN);
+      await pumpL(paid);
+      const goneRow = await rowOf(paid);
+      const madeG = lapseMade;
+      await feed(paid);
+      const goneEn = TITLES[3] + " " + STAY + " The team's lead will say what comes next.";
+      const goneNotice = notice();
+      const sweptStore = RL.stores.get(paid.rt).dump().length;
+      at(BASE + 121 * DAYMS);
+      await pumpL(paid);
+      await feed(paid);
+      const laterRow = await rowOf(paid);
+      check(!!goneRow && !!goneRow.lapse && goneRow.lapse.step === "gone" && sweptStore === 0 && !!laterRow && !!laterRow.lapse
+        && laterRow.lapse.step === "gone" && lapseMade - madeG === 1 && goneNotice === goneEn && notice() === goneEn,
+        "978g past its sweep's day the team is shown once as removed from the relay, and stays so at the next sync: "
+        + (goneRow && goneRow.lapse ? goneRow.lapse.step : "no lapse") + ", the relay's rows " + sweptStore + ", a day later "
+        + (laterRow && laterRow.lapse ? laterRow.lapse.step : "no lapse") + ", notices " + (lapseMade - madeG) + ", text " + JSON.stringify(goneNotice));
+
+      /* Nothing on either desk was removed by any step: every file of the mirror, and the record's pins. A copy short of one
+         file is read as changed, so the comparison reads. */
+      const after = { paid: filesOf(paid.mirror), trial: filesOf(trial.mirror) };
+      const same = (a, b) => a.every(x => b.indexOf(x) >= 0);
+      const control = same(before.paid, before.paid.slice(1)) === false;
+      check(before.paid.length >= 2 && before.trial.length >= 2 && same(before.paid, after.paid) && same(before.trial, after.trial)
+        && pinsOf(paid) === pinsBefore.paid && pinsOf(trial) === pinsBefore.trial && control,
+        "978h no step removes anything from the desk: the mirror's files " + before.paid.length + " and " + before.trial.length
+        + (same(before.paid, after.paid) && same(before.trial, after.trial) ? ", all still there with the same bytes" : ", not all still there")
+        + ", the pins " + (pinsOf(paid) === pinsBefore.paid && pinsOf(trial) === pinsBefore.trial ? "kept" : "changed")
+        + ", the comparison " + (control ? "reads a missing file" : "blind"));
+    } catch (e) {
+      check(false, "978 the lapse at the desk: " + (e && e.stack ? e.stack : e));
+    } finally {
+      for (const d of desks) { try { const ch = d.desk.api.relayRun(); if (ch) await ch.stop(); } catch { /* stopped */ } }
+      Date.now = realNow;
+      globalThis.WebSocket = was.WebSocket;
+      globalThis.document = was.document;
+      globalThis.window = was.window;
+      globalThis.addEventListener = was.add;
+      globalThis.removeEventListener = was.remove;
+      globalThis.getComputedStyle = was.style;
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

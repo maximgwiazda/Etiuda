@@ -1190,6 +1190,7 @@ function deskEnvelopeBody(keysText) {
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
     + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
+    + (Object.keys(teamLapseSeen).length ? ',"teamLapseSeen":' + JSON.stringify(teamLapseSeen) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
     + (ejectOwed ? ',"ejectOwed":' + JSON.stringify(ejectOwed) : "")
@@ -2540,6 +2541,8 @@ const teamOpened = new Set();                  // catalog ids this desk has open
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
+let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
+const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
 const editionTeams = new Map();                // pin -> every team whose envelope held it; this run only
 /* A later envelope of the same pin joins editionTeams and leaves the first team in place. */
@@ -3662,6 +3665,24 @@ function headShown(team) {
     || !Number.isFinite(n.time) || /[\u0000-\u001f\u007f]/.test(edition + published)) return null;
   return { edition: edition, published: published, t: n.time };
 }
+/* Where the relay team this desk follows stands past its grant, for the team row, as the channel judges it by the relay's
+   clock; `seen` once the agent has dismissed this step's notice. Nothing for a team inside its grant or a folder team. */
+function lapseShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || typeof relayChannel.lapse !== "function") return null;
+  let v = null;
+  try { v = relayChannel.lapse(); } catch (e) { return null; }
+  if (!v) return null;
+  return { step: v.step, until: v.until, readOnly: v.readOnly, swept: v.swept, seen: teamLapseSeen[team] === v.step + ":" + v.until };
+}
+/* The agent dismissed the notice of `step`: kept only while the team is still at that step, so a notice dismissed as the
+   step moved on does not hide the next one. */
+function lapseSeen(team, step) {
+  team = String(team || "");
+  const v = lapseShown(team);
+  if (v && v.step === step && !v.seen) { teamLapseSeen[team] = v.step + ":" + v.until; persistDeskEnvelope(); } /* plant:lapse-seen */
+  return joinView();
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t));
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
@@ -3672,6 +3693,8 @@ function leadsView() {
       policy: !!named && named === teamPins[t].public };
     const head = headShown(t);
     if (head) row.head = head;
+    const lapse = lapseShown(t);
+    if (lapse) row.lapse = lapse;
     return row;
   });
 }
@@ -3709,6 +3732,7 @@ function forgetLead(team, left) {
   delete teamPinFrom[team];
   teamRingAt = null;
   teamSeen.delete(team);
+  delete teamLapseSeen[team];
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
@@ -3843,6 +3867,8 @@ function relayRun() {
       return out;
     },
     onTeam: () => { teamStamp = ""; heedTeam(); },
+    /* The team's lapse moved a step, so the page is told now. */
+    onLapse: () => sendJoin(theWindow),
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
     onInviteEnd: kind => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
@@ -4409,6 +4435,10 @@ function readDesk() {
     if (doc && table(doc.teamLeft)) Object.keys(doc.teamLeft).forEach(t => {
       const at = doc.teamLeft[t];
       if (SEALED_TEAM_RE.test(t) && typeof at === "string" && /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/.test(at)) teamLeft[t] = at;
+    });
+    if (doc && table(doc.teamLapseSeen)) Object.keys(doc.teamLapseSeen).forEach(t => {
+      const v = doc.teamLapseSeen[t];
+      if (SEALED_TEAM_RE.test(t) && typeof v === "string" && LAPSE_SEEN_RE.test(v)) teamLapseSeen[t] = v;
     });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
@@ -5096,12 +5126,13 @@ ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyP
 ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
-// "seen", "forget" and "leave" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
+// "seen", "forget", "leave" and "lapse-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
+  : op === "lapse-seen" ? lapseSeen(file, name)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
