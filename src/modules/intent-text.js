@@ -201,7 +201,7 @@ const PAX_ETIUDA={firstOnly:1, paxVoc:1};
    desk reads it before the glyph is turned. */
 function paxOwnExample(m,L,name){
   const n=formatPaxName(name);
-  return n ? paxOwnWords(n,m,L,()=>Object.assign(paxNameFacts(n,L),{gender:nameGender(n)})) : "";
+  return n ? paxOwnWords(n,m,L,()=>Object.assign(paxNameFacts(n,L),{gender:nameGender(n,L)})) : "";
 }
 function varMark(name){
   switch(name){

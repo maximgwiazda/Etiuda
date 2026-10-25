@@ -71,7 +71,7 @@ if (process.argv[2] === "--grid") {
 }
 
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
-const EXPECTED = 83;
+const EXPECTED = 85;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -206,7 +206,7 @@ try {
   /* ---- 5. a gender read from a first name ---------------------------------------------------- */
   const want = { "Anna": "f", "Kuba": "m", "Kim": "n", "": "n", "Józef": "m", "Mary-Jane": "f", "Jerzy": "m",
     "Noemi": "f", "Nikola": "f", "Tomasz": "m", "Grzesiek": "m", "ola": "f", "Jean-Pierre": "m", "Zoe": "f" };
-  const got = {}; Object.keys(want).forEach(n => { got[n] = V.nameGender(n); });
+  const got = {}; Object.keys(want).forEach(n => { got[n] = V.nameGender(n, "pl"); });
   check(JSON.stringify(got) === JSON.stringify(want), "5 the reading: -a female, a consonant male, the listed exceptions and nonbinary where the name leaves it open: " + JSON.stringify(got));
 
   /* ---- 6. the glyph: three states, read and by hand, and a new name read afresh ---------------- */
@@ -295,15 +295,43 @@ try {
   const janPl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
   world({ name: "Kim" });
   const kimSinglePl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  A.putLang("pl");
   world({ name: "Nikola Nowak" });
   const nikolaPl = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
-  const nikolaEn = I.fill("Hello, {PAX}.", both, false, "en");
-  V.setCatalogVariables(null);
   check(johnEn === "Hello, John." && janPl === "Dzień dobry, Panie Janie." && kimSinglePl === "Dzień dobry, Kim." && nikolaPl === "Dzień dobry, Pani Nowak.",
     "8h title address fallback: English with no surname greets by first name, Polish with no surname keeps Pan in vocative, Polish ungendered greets by first name, Nikola female: "
     + JSON.stringify([johnEn, janPl, kimSinglePl, nikolaPl]));
-  check(nikolaPl === "Dzień dobry, Pani Nowak.", "8i Nikola in a Polish chat reads female: " + nikolaPl);
-  check(nikolaEn === "Hello, Mx Nowak.", "8j Nikola in an English chat reads neutral, no Ms and no Mr: " + nikolaEn);
+
+  A.putLang("en");
+  world({ name: "Nikola Nowak" });
+  G.syncGenderGlyph();
+  const nikolaEn = I.fill("Hello, {PAX}.", both, false, "en");
+  check(drum.dataset.g === "n" && nikolaEn === "Hello, Mx Nowak.",
+    "8i an English chat with Nikola reads neutral on the glyph and in the reply: " + JSON.stringify([drum.dataset.g, nikolaEn]));
+
+  G.setHandGender("f");
+  G.syncGenderGlyph();
+  const nikolaEnHand = I.fill("Hello, {PAX}.", both, false, "en");
+  G.putHandGender(null);
+  check(drum.dataset.g === "f" && nikolaEnHand === "Hello, Ms Nowak.",
+    "8j the agent turns the glyph to female and the reply says Ms: " + JSON.stringify([drum.dataset.g, nikolaEnHand]));
+
+  A.putLang("pl");
+  world({ name: "Nikola Nowak" });
+  G.syncGenderGlyph();
+  const nikolaPlChat = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  check(drum.dataset.g === "f" && nikolaPlChat === "Dzień dobry, Pani Nowak.",
+    "8k a Polish chat with Nikola reads female on both: " + JSON.stringify([drum.dataset.g, nikolaPlChat]));
+
+  G.setHandGender("m");
+  G.syncGenderGlyph();
+  const nikolaPlHand = I.fill("Dzień dobry, {PAX}.", both, false, "pl");
+  G.putHandGender(null);
+  check(drum.dataset.g === "m" && nikolaPlHand === "Dzień dobry, Panie Nowak.",
+    "8l the agent's hand choice in a Polish chat (turned to male) stands: " + JSON.stringify([drum.dataset.g, nikolaPlHand]));
+
+  V.setCatalogVariables(null);
+  A.putLang("en");
 
   /* ---- 10. a team's own variable in a card, nested, and one that names itself ------------------ */
   V.setCatalogVariables({ list: [def,

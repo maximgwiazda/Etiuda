@@ -5238,7 +5238,7 @@ What you type stays in this browser only.`;
     const parts2 = w.split("-").filter(Boolean);
     return varFold((parts2[parts2.length - 1] || "").replace(/^[^\p{L}]+|[^\p{L}]+$/gu, ""));
   }
-  function nameGender(first, lang2 = "pl") {
+  function nameGender(first, lang2) {
     const k = varFirstKey(first);
     if (!k) return "n";
     if (k === "nikola" && lang2 !== "pl") return "n";
@@ -5283,9 +5283,7 @@ What you type stays in this browser only.`;
         return op === "isnot" ? !hit : hit;
       }
       default: {
-        let raw = kind === "weekday" ? F.weekday : F[c.fact];
-        if (kind === "gender" && F && F.first && raw !== "m" && F.gender === nameGender(F.first, "pl")) raw = nameGender(F.first, F.lang);
-        const have = varFold(raw);
+        const have = varFold(kind === "weekday" ? F.weekday : F[c.fact]);
         if (op === "set") return have !== "";
         if (op === "unset") return have === "";
         if (op === "isnot") return !among(have, [val]);
@@ -10983,11 +10981,11 @@ What you type stays in this browser only.`;
   function firstKeyOf(raw) {
     return String(raw == null ? "" : raw).trim().split(/\s+/)[0].toLowerCase();
   }
-  function custGender() {
+  function custGender(lg) {
     const first = firstKeyOf(pax ? pax.value : "");
     if (handGender && handGender.first !== first) handGender = null;
     if (handGender) return { v: handGender.v, hand: true, empty: !first };
-    return { v: nameGender(first), hand: false, empty: !first };
+    return { v: nameGender(first, lg || lang), hand: false, empty: !first };
   }
   function setHandGender(v) {
     if (VAR_GENDERS.indexOf(v) < 0) return;
@@ -13224,7 +13222,7 @@ What you type stays in this browser only.`;
   var PAX_ETIUDA = { firstOnly: 1, paxVoc: 1 };
   function paxOwnExample(m, L, name) {
     const n = formatPaxName(name);
-    return n ? paxOwnWords(n, m, L, () => Object.assign(paxNameFacts(n, L), { gender: nameGender(n) })) : "";
+    return n ? paxOwnWords(n, m, L, () => Object.assign(paxNameFacts(n, L), { gender: nameGender(n, L) })) : "";
   }
   function varMark(name) {
     switch (name) {

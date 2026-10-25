@@ -102,7 +102,7 @@ function varFirstKey(first){
   const parts=w.split("-").filter(Boolean);
   return varFold((parts[parts.length-1]||"").replace(/^[^\p{L}]+|[^\p{L}]+$/gu,""));
 }
-function nameGender(first, lang = "pl"){
+function nameGender(first, lang){
   const k=varFirstKey(first);
   if(!k) return "n";
   if(k==="nikola" && lang!=="pl") return "n";
@@ -150,9 +150,7 @@ function condHolds(c,F){
       return op==="isnot" ? !hit : hit;
     }
     default:{
-      let raw=kind==="weekday" ? F.weekday : F[c.fact];
-      if(kind==="gender" && F && F.first && raw!=="m" && F.gender===nameGender(F.first,"pl")) raw=nameGender(F.first,F.lang);
-      const have=varFold(raw);
+      const have=varFold(kind==="weekday" ? F.weekday : F[c.fact]);
       if(op==="set") return have!=="";
       if(op==="unset") return have==="";
       if(op==="isnot") return !among(have,[val]);
