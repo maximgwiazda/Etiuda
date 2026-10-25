@@ -32824,7 +32824,7 @@ What you type stays in this browser only.`;
         p.value = name;
         if (typeof p.oninput === "function") p.oninput();
       }
-      return Object.assign({ who: activeTabName() || name }, pickFound(a.q));
+      return Object.assign({ who: activeTabName() }, pickFound(a.q));
     }
     if (op === "find") return pickFound(a.q);
     if (op === "copy") {

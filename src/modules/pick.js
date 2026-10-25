@@ -200,7 +200,7 @@ function answerPick(op,argText){
     const name=String(a.name==null?"":a.name);
     const p=document.getElementById("pax");
     if(p){ p.value=name; if(typeof p.oninput==="function") p.oninput(); }
-    return Object.assign({who:activeTabName()||name}, pickFound(a.q));
+    return Object.assign({who:activeTabName()}, pickFound(a.q));
   }
   if(op==="find") return pickFound(a.q);
   if(op==="copy"){
