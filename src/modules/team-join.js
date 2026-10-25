@@ -13,6 +13,7 @@ import { cutLeaves, dismissNode } from "./motion.js";
 import { hooks } from "./hooks.js";
 import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 import { nsGet } from "./storage.js";
+import { eNotice, dropNotice } from "./pack.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
@@ -24,6 +25,8 @@ let joinTyped="";                 // the check code the agent typed on the confi
 let joinWhy="";                   // the refusal's word, as the shell said it
 let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell's two sentences, the secret never among them
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
+let lapseUp="";                   // "team|step|until" of the lapse notice on screen
+const lapseDismissed=new Set();   // the same keys, dismissed here while the shell's answer is on its way
 function eHasJoin(){
   const h=eHost();
   return !!h && typeof h.teamJoin==="function";
@@ -146,6 +149,51 @@ function headKept(h){
   if(/[\u0000-\u001f\u007f]/.test(edition+published)) return null;
   return {edition:edition, published:published, t:h.t};
 }
+/* The lapse the shell judged for a relay team past its grant, or nothing: a team inside its grant sends none. */
+const LAPSE_STEPS=["grace","read-only","lapsed","gone"];
+const instantOk=v=>v===null || Number.isSafeInteger(v);
+function lapseKept(v){
+  if(!v || typeof v!=="object" || LAPSE_STEPS.indexOf(v.step)<0 || !instantOk(v.until) || !instantOk(v.readOnly) || !instantOk(v.swept)) return null;
+  if(v.step==="grace" && (v.until===null || v.readOnly===null)) return null;
+  return {step:v.step, until:v.until, readOnly:v.readOnly, swept:v.swept, seen:v.seen===true};
+}
+/* What each step says, as the notice's bold lead and its body: where the team stands, what comes next and when, that
+   nothing on this desk goes, and that the team's lead renews. A date the relay did not tell leaves its sentence out. */
+function lapseWords(l){
+  const day=ms=>leftDay(new Date(ms).toISOString());
+  const stay=t("The team's catalogs and the catalog in use stay on this desk as they are.");
+  const kept=l.swept===null?"":t("The relay keeps the team's copy until {DATE}.").split("{DATE}").join(day(l.swept));
+  const renew=t("The team's lead can renew it from Studio.");
+  if(l.step==="grace") return {lead:t("The team's relay is due for renewal."),
+    body:[t("It fell due on {DATE}. Everything works as before until {READONLY}; from then on the team's catalogs stay open here, and nothing more goes to the team.")
+      .split("{DATE}").join(day(l.until)).split("{READONLY}").join(day(l.readOnly)), renew].join(" ")};
+  if(l.step==="read-only") return {lead:t("The team's relay is read-only until it is renewed."),
+    body:[t("The team's catalogs and the catalog in use stay on this desk as they are, and nothing more goes to the team."), kept, renew].filter(Boolean).join(" ")};
+  if(l.step==="lapsed") return {lead:t("The team's relay has stopped until it is renewed."), body:[stay, kept, renew].filter(Boolean).join(" ")};
+  return {lead:t("The relay has removed the team's copy."), body:[stay, t("The team's lead can say what comes next.")].join(" ")};
+}
+/* The same, as one line for the team's row in Settings, where it stays after the notice is dismissed. */
+function lapseNote(l){
+  const w=lapseWords(l);
+  return w.lead+" "+w.body;
+}
+const lapseKey=l=>l.team+"|"+l.lapse.step+"|"+l.lapse.until;
+/* One notice per step of each team's lapse, up until the agent dismisses it; a sync at the same step adds nothing. */
+function syncLapseNotice(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.lapse && !x.lapse.seen && !lapseDismissed.has(lapseKey(x)))[0]||null;
+  const want=l?lapseKey(l):"", up=document.getElementById("eTeamLapse");
+  if(want===lapseUp && (!want || up)) return; /* plant:lapse-once */
+  if(up) dropNotice(up);
+  lapseUp=want;
+  if(!l) return;
+  const w=lapseWords(l.lapse), team=l.team, step=l.lapse.step;
+  eNotice("eTeamLapse", w.lead, w.body, ()=>{
+    lapseDismissed.add(want);
+    if(lapseUp===want) lapseUp="";
+    joinAsk("lapse-seen", team, step);
+  });
+}
 function joinTook(v,changed){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
@@ -157,6 +205,8 @@ function joinTook(v,changed){
                removed:l.removed===true,policy:l.policy===true};
              const head=headKept(l.head);
              if(head) row.head=head;
+             const lapse=lapseKept(l.lapse);
+             if(lapse) row.lapse=lapse;
              return row;
            }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
@@ -165,6 +215,7 @@ function joinTook(v,changed){
     if(wholeThingEmpty() || nsGet("Sample")==="1") hooks.loadCatalogFromFolder(String(s.joined.file),0);
   }
   syncJoinDoor();
+  syncLapseNotice();
   const refusal=s.linkRefusal;
   if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
     dropInvite();
@@ -454,4 +505,4 @@ function forgetTeamLead(team,then){
   return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

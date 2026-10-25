@@ -591,5 +591,5 @@ export {
   packSnapshot,
   packUndoFor,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, retiredCards, pack, loadPack, resetPack,
-  showPackMigrationWarning, syncSaveNotice, showDeskNotices, eNotice, whoOptions, isFavourite, isIntentFavourite,
+  showPackMigrationWarning, syncSaveNotice, showDeskNotices, eNotice, dropNotice, whoOptions, isFavourite, isIntentFavourite,
 };

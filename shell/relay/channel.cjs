@@ -140,6 +140,29 @@ const branchIdOf = pub => "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16);
 const toBytes = v => (Buffer.isBuffer(v) ? v : v instanceof Uint8Array ? Buffer.from(v.buffer, v.byteOffset, v.byteLength)
   : typeof v === "string" ? Buffer.from(v, "utf8") : null);
 const later = (a, b) => a.epoch > b.epoch || (a.epoch === b.epoch && a.counter > b.counter);
+
+/* THE LAPSE. A session's reply and since's etiuda-lapse header tell where the team stands by its grants: {state, until,
+   readOnly, swept}, state one of LAPSE_STATES (relay/core.cjs lapseOf). A hello's until less RELAY_CHALLENGE_MS is the
+   relay's own time when it answered, so the step is judged by the relay's clock and not this computer's. */
+const LAPSE_STATES = ["working", "read-only", "lapsed", "gone"];
+const RELAY_CHALLENGE_MS = 5 * 60 * 1000;
+const instantOrNull = v => v === null || Number.isSafeInteger(v);
+/* The lapse as told, or null where it is not that shape. */
+function lapseKept(v) {
+  if (!table(v) || LAPSE_STATES.indexOf(v.state) < 0 || !instantOrNull(v.until) || !instantOrNull(v.readOnly) || !instantOrNull(v.swept)) return null;
+  return { state: v.state, until: v.until, readOnly: v.readOnly, swept: v.swept };
+}
+/* The step a lapse is at by the relay's time `now`: "grace" (working past the grant's end, read-only from readOnly),
+   "read-only", "lapsed" (renewal alone) or "gone"; null while the team works inside its grant, or where nothing was told. */
+function lapseStep(lapse, now) {
+  const l = lapseKept(lapse);
+  if (!l) return null;
+  if (l.state !== "working") return l.state;
+  if (l.until === null || l.readOnly === null || !Number.isFinite(now)) return null;
+  let inside = false;
+  inside = now < l.until; /* plant:lapse-inside */
+  return inside ? null : "grace";
+}
 /* The key every path map uses. The same fold as checkPath, so a path that differs only in case is one file.
    A path checkPath refuses keeps the text it was given, and is not folded into another file. */
 function pathKey(rel) {
@@ -323,7 +346,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, headT: null };
+    tokenUsedIds: {}, invitedIds: {}, headT: null, lapse: null, skew: 0 };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -336,6 +359,8 @@ function stateOf(x) {
   if (count(x.bytes)) s.bytes = x.bytes;
   if (count(x.leadEpoch)) s.leadEpoch = x.leadEpoch;
   if (Number.isFinite(x.headT)) s.headT = x.headT;
+  s.lapse = lapseKept(x.lapse);
+  if (Number.isSafeInteger(x.skew)) s.skew = x.skew;
   s.tokenUsed = x.tokenUsed === true;
   s.invited = x.invited === true;
   const idSet = m => {
@@ -1209,6 +1234,22 @@ function createProgram(opts) {
     tokenSpent(id) { return HEX32.test(String(id || "")) && st.tokenUsedIds[String(id)] === true; },
     inviteSent(id) { return HEX32.test(String(id || "")) && st.invitedIds[String(id)] === true; },
     heldTeam,
+    /* The lapse last told, and the relay's clock less this computer's at the last hello. */
+    lapse: () => (st.lapse ? Object.assign({}, st.lapse) : null),
+    skew: () => st.skew,
+    tellLapse(l) {
+      const k = lapseKept(l);
+      if (!k || JSON.stringify(k) === JSON.stringify(st.lapse)) return;
+      st.lapse = k;
+      persist();
+    },
+    /* Kept on disk only once it moves by more than a minute, so a session's few milliseconds write nothing. */
+    setSkew(n) {
+      if (!Number.isSafeInteger(n)) return;
+      const far = Math.abs(n - st.skew) > 60 * 1000;
+      st.skew = n;
+      if (far) persist();
+    },
     pending: () => st.pending.slice(),
     unpend(id) { unpend(id); persist(); },
   };
@@ -1278,6 +1319,41 @@ function createChannel(opts) {
     return reason ? R(reason) : { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
   }
 
+  /* THE LAPSE, kept with the program's record so a restart still knows it, and handed on through onLapse(view) whenever
+     the view changes. */
+  let viewSaid = null;
+  const relayNow = () => clock() + prog.skew();
+  function lapseView() {
+    const l = prog.lapse(), step = lapseStep(l, relayNow());
+    return step ? { step, until: l.until, readOnly: l.readOnly, swept: l.swept } : null;
+  }
+  function noteStep() {
+    const v = lapseView(), text = JSON.stringify(v);
+    if (text === viewSaid) return;
+    viewSaid = text;
+    if (typeof o.onLapse === "function") o.onLapse(v);
+  }
+  function told(l) {
+    prog.tellLapse(l);
+    noteStep();
+  }
+  /* Every session starts here, a refused one included, so the relay's time is read even once the team has stopped. */
+  async function hello() {
+    const ch = await call("POST", "hello", { json: {} });
+    if (ch.status === 200 && ch.json && Number.isSafeInteger(ch.json.until)) prog.setSkew(ch.json.until - RELAY_CHALLENGE_MS - clock()); /* plant:lapse-clock */
+    return ch;
+  }
+  /* The relay refuses a session, since or a blob as team-lapsed once the team stops: lapsed to its sweep and gone after,
+     with the dates last told. Once swept, at the first call past that day, it knows no team and says not-enrolled. */
+  function refusedLapse(why) {
+    const last = prog.lapse();
+    const past = !!last && last.swept !== null && relayNow() >= last.swept;
+    let stopped = false;
+    stopped = why.reason === "team-lapsed"; /* plant:lapse-refused */
+    if (stopped) told(Object.assign({ until: null, readOnly: null, swept: null }, last, { state: past ? "gone" : "lapsed" }));
+    else if (why.reason === "not-enrolled" && past) told(Object.assign({}, last, { state: "gone" })); /* plant:lapse-swept */
+  }
+
   async function call(method, rel, c) {
     const x = c || {};
     const headers = {};
@@ -1292,14 +1368,17 @@ function createChannel(opts) {
     try { json = JSON.parse(bytes.toString("utf8")); } catch { json = null; }
     const h = res && typeof res.header === "function" ? res.header("etiuda-blob") : null;
     if (typeof h === "string" && h) { try { meta = JSON.parse(Buffer.from(h, "base64url").toString("utf8")); } catch { meta = null; } }
-    return { status: res.status, json, bytes, meta };
+    let lapse = null;
+    const lh = res && typeof res.header === "function" ? res.header("etiuda-lapse") : null;
+    if (typeof lh === "string" && lh) { try { lapse = JSON.parse(Buffer.from(lh, "base64url").toString("utf8")); } catch { lapse = null; } }
+    return { status: res.status, json, bytes, meta, lapse };
   }
 
   /* A session by this program's own key, or, where the relay does not know that key yet, by the invitation's token, which
      the relay spends at its first use. */
   async function openSession() {
     session = null;
-    let ch = await call("POST", "hello", { json: {} });
+    let ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
     const who = me();
     let why = R("not-enrolled");
@@ -1319,13 +1398,14 @@ function createChannel(opts) {
         /* The invitation's session again, where this key was bound by the token's one session and the request is not yet in
            (N4): a request lost on the way, or a quit before it went, is sent again without the token. */
         session = { token: r.json.session, at: clock(), by: r.json.invite === true ? "invite" : "key" }; /* plant:n4-resume */
+        told(r.json.lapse);
         if (session.by === "invite" && inv && HEX32.test(String(inv.inv))) session.inv = String(inv.inv);
         return { ok: true };
       }
       if (!olderInvite) why = refusalOf(r);
       /* The relay spent that challenge on the session it opened, so the fresh token's hello asks for another. */
       if (olderInvite) {
-        ch = await call("POST", "hello", { json: {} });
+        ch = await hello();
         if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
       }
     }
@@ -1343,6 +1423,7 @@ function createChannel(opts) {
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite", inv: String(inv.inv) };
+      told(r.json.lapse);
       return { ok: true };
     }
     const t = refusalOf(r);
@@ -1367,7 +1448,7 @@ function createChannel(opts) {
   async function keySession() {
     const who = me();
     if (!who || !who.privateKey) return R("not-enrolled");
-    const ch = await call("POST", "hello", { json: {} });
+    const ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
     const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
     const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
@@ -1376,6 +1457,7 @@ function createChannel(opts) {
     device = r.json.invite !== true; /* plant:S3-device */
     if (device) dropSocket();
     session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
+    told(r.json.lapse);
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
     return { ok: true };
   }
@@ -1432,6 +1514,7 @@ function createChannel(opts) {
         if (session && session.by === "invite" && why.reason === "removed") return { ok: true };
         return why;
       }
+      told(r.lapse); /* plant:lapse-since-told */
       const items = [];
       let top = st.seq;
       for (const e of r.json) {
@@ -1701,12 +1784,12 @@ function createChannel(opts) {
 
   async function cycle() {
     const s = await ensureSession();
-    if (!s.ok) return s;
+    if (!s.ok) { refusedLapse(s); return s; }
     if (session && session.by === "invite" && invitedNow()) return pullAnswer();
     const w = await pullWrap();
     if (!w.ok) return w;
     const c = await catchUp(); /* plant:catch-up-first */
-    if (!c.ok) return c;
+    if (!c.ok) { refusedLapse(c); return c; }
     await openHeldWrap();
     await retryPending();
     const f = await flush();
@@ -1783,7 +1866,7 @@ function createChannel(opts) {
     fs.mkdirSync(mirror, { recursive: true });
     running = true;
     watchMirror();
-    pollTimer = setInterval(() => { if (!sock) kick(); }, pollMs);
+    pollTimer = setInterval(() => { noteStep(); if (!sock) kick(); }, pollMs);
     if (pollTimer.unref) pollTimer.unref();
     kick();
   }
@@ -1805,12 +1888,14 @@ function createChannel(opts) {
     online: () => !!session,
     socketOpen: () => !!sock,
     writeAnswer,
+    lapse: lapseView,
   };
 }
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
-  SESSION_KEEP_MS, WAITING_SAID,
+  SESSION_KEEP_MS, WAITING_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
+  lapseKept, lapseStep,
   canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   createProgram, createChannel,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */
