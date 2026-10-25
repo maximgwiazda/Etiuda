@@ -2,7 +2,8 @@
  * runtime: each endpoint's success and each of its refusals, word for word as relay/test/target-contract.md writes
  * them; sessions expiring; a withdrawn key losing its session at once; a superseded blob dropped; a deletion record
  * kept 30 days and then refused; every limit; a commit judged again after the R2 write; a chain that keeps one blob;
- * nothing kept that names a path, a body or a team; and the harness, relay/test/attacks.mjs, through relay-product.
+ * nothing kept that names a path, a body or a team; a team's grant lapsing, renewed and swept; and the harness, relay/test/attacks.mjs,
+ * through relay-product.
  *
  *     node tests/relay-unit.mjs        exit code is the number of failed checks, capped at 63; 78 where it did not complete
  */
@@ -19,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 240;
+const EXPECTED = 291;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -80,10 +81,11 @@ async function call(R, method, p, o) {
   const bytes = Buffer.from(await res.arrayBuffer());
   let json = null;
   try { json = JSON.parse(bytes.toString("utf8")); } catch { json = null; }
-  const mh = res.headers.get("etiuda-blob");
-  let meta = null;
+  const mh = res.headers.get("etiuda-blob"), lh = res.headers.get("etiuda-lapse");
+  let meta = null, lapse = null;
   try { meta = mh ? JSON.parse(Buffer.from(mh, "base64url").toString("utf8")) : null; } catch { meta = null; }
-  return { status: res.status, json, bytes, meta, socket: res.headers.get("x-stand-in-socket") };
+  try { lapse = lh ? JSON.parse(Buffer.from(lh, "base64url").toString("utf8")) : null; } catch { lapse = null; }
+  return { status: res.status, json, bytes, meta, lapse, socket: res.headers.get("x-stand-in-socket") };
 }
 
 const refused = (r, reason) => !!r && r.status >= 400 && r.status < 500 && !!r.json && r.json.error === reason
@@ -1012,7 +1014,7 @@ async function main() {
   const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
   /* What a copy of relay/core.cjs hands the live exports object, which the team's module and the Worker keep: the object's
      factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
-  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "create2Bytes", "ROOT_PUB"];
+  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "create2Bytes", "ROOT_PUB", "lapseOf"];
   const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
   /* The text of relay/core.cjs the live exports stand for: the product's, or while a plant is on, that plant's edit, so a plant run
      inside another lifts a line of the edited text and both stay lifted. `edit` maps that text to the edited text, or to null where
@@ -1596,7 +1598,7 @@ async function main() {
       const id = hex(16), tok = hex(32), p = "/relay/v1/t/" + rt;
       const meta = { v: 1, id, supersedes: null, epoch: 1, writer: "k-" + hex(8), counter: 1, del: false, sig: hex(64), nonce: hex(12), place: "root" };
       const out = [];
-      for (const route of ["hello", "session", "devices", "invites", "socket", "wrap", "states", "since/0", "b/" + id]) {
+      for (const route of ["hello", "session", "grant", "devices", "invites", "socket", "wrap", "states", "since/0", "b/" + id]) {
         out.push(["GET", p + "/" + route, { token: tok }], ["POST", p + "/" + route, { token: tok, json: {} }]);
       }
       out.push(["PUT", p + "/b/" + id, { token: tok, meta, body: Buffer.alloc(8) }], ["GET", p + "/since/0", {}]);
@@ -1610,7 +1612,7 @@ async function main() {
         rows: [].concat(...woken.map(t => rowsOf(t.ctx))) };
     };
     const nm = await neverMade(T0);
-    const baseNever = nm.calls === 20 && nm.bad === 0 && nm.woke === 1 && nm.tables.length === 0 && nm.rows.length === 0;
+    const baseNever = nm.calls === 22 && nm.bad === 0 && nm.woke === 1 && nm.tables.length === 0 && nm.rows.length === 0;
     check(baseNever,
       "968a every route a stranger can name, by GET and by POST, for a team id never made is answered 4xx and leaves the object with no kv table and no row: "
       + JSON.stringify(nm));
@@ -2546,8 +2548,8 @@ async function main() {
     const eqPlant = await liftCore("plant:until-equal-paid", async () => !(await trialThenPaid()));
     check(eqA && eqB && eqC && eqPlant.turned && eqPlant.back, "974d lifting plant:until-equal-paid leaves a trial team unpaid under a paid grant of the same until, and the product file is never written: "
       + eqPlant.detail + ", sha " + (eqPlant.back ? "unchanged" : "CHANGED"));
-    const eqKeep = await liftCore("plant:until-later", async () => !(await paidThenTrial()));
-    check(eqA && eqB && eqC && eqKeep.turned && eqKeep.back, "974e lifting plant:until-later lets an unpaid grant of the same until clear a paid team's paid, and the product file is never written: "
+    const eqKeep = await liftCore("plant:paid-kept", async () => !(await paidThenTrial()));
+    check(eqA && eqB && eqC && eqKeep.turned && eqKeep.back, "974e lifting plant:paid-kept lets an unpaid grant of the same until clear a paid team's paid, and the product file is never written: "
       + eqKeep.detail + ", sha " + (eqKeep.back ? "unchanged" : "CHANGED"));
 
     /* ---- 975: a delegation runs one year, 366 days, and no longer (the test architect's F2, board 935; Maxim's word of 2026-10-20 11:51) ---- */
@@ -2646,6 +2648,480 @@ async function main() {
     check(kept && planted.turned && planted.back,
       "976c putting B.BLOB_MAX back as the read cap, in a copy, turns the count of 976a red: the invitation's PUT is still refused but the whole body is pulled, and the product file is never written: "
       + planted.detail + ", sha " + (planted.back ? "unchanged" : "CHANGED"));
+  }
+
+  /* ---- 977: a team's grant lapses (board 935, slice G2, with the test architect's read of the plan): a paid team works to 30 days
+     past its grant's until, reads to 90 and is then swept by its alarm; a trial's team stops at its until and is swept 30 days on; a
+     renewal gives a team its working state again; the lapse is told on a session's reply and on since, never on hello; and every
+     object in the bucket has a row from before its put, so the sweep misses none ---- */
+  {
+    const X = require(path.join(ROOT, "relay", "test", "do-ctx.cjs"));
+    const T0L = 1800000000000, END = 30 * DAY, HOUR = K.HOUR;
+    /* The numbers written out again, so the legs do not lean on the constants they check. */
+    const WORK = 30 * DAY, READ = 90 * DAY, TRIAL = 30 * DAY;
+    const sameJ = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const tail = r => (r && r.status === 200 ? 200 : r && r.json && r.json.error ? r.json.error : r ? r.status : null);
+    const told = (until, paid, state) => ({ state, until, readOnly: paid ? until + WORK : null, swept: until + (paid ? READ : TRIAL) });
+    const at = (w, offset) => { w.R.clock.now = w.until + offset; };
+    const inBucket = w => [...w.R.bucket.objects.keys()].filter(k => k.startsWith(w.rt + "/"));
+    const helloKeys = async w => { const h = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} }); return h.status === 200 ? Object.keys(h.json).sort().join() : tail(h); };
+    const renewWith = (w, body, worker) => countedCall(worker || W, w.R, "POST", "/relay/v1/t/" + w.rt + "/grant", { json: body });
+    const grantNow = (w, o) => K.grantFor(w.lead.pub, w.R.clock.now, o);
+    const statesOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", { token });
+    const wrapOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/wrap", { token });
+    const closedBy = ws => (ws && ws.closed ? [ws.closed.code, ws.closed.reason === B.REASONS["team-lapsed"]] : null);
+    /* A scene that throws has not held. */
+    const held = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.message) }; } };
+
+    /* A team made at T0L under a grant ending END later, paid or a trial, through the Worker, with its two desks, a blob of the
+       lead's and two unused invitations (the first carrying a wrap); the alarm as the create left it is kept. `o.T` is a copy of
+       relay/team.cjs to run in place of the product's, `o.R` a relay a leg brings. */
+    async function lapseWorld(paid, o) {
+      const opts = o || {};
+      const R = opts.R || relayEnv(opts.T ? { team: opts.T } : {});
+      R.clock.now = T0L;
+      const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(false), rev: 0, devs: [], until: T0L + END };
+      w.deskId = "k-" + hex(8);
+      w.otherId = "k-" + hex(8);
+      const body = K.createBody(w.rt, w.lead, T0L, bytes => signHex(w.lead, bytes), { grantOpts: { fields: { paid, until: w.until } } });
+      const made = await call(R, "POST", "/relay/v1/teams", { json: body });
+      if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+      w.armedAtCreate = R.alarms ? R.alarms.get(w.rt) : undefined;
+      w.devs = [{ id: w.desk.keyId, pub: w.desk.pub, desk: w.deskId }, { id: w.other.keyId, pub: w.other.pub, desk: w.otherId }];
+      if ((await devices(w, w.devs)).status !== 200) throw new Error("the desks were not enrolled");
+      w.blob = sealAs(w, w.lead, "guide.ec", 1);
+      if ((await put(w, await sessionOf(w, w.lead), w.blob)).status !== 200) throw new Error("the lead's blob was not taken");
+      w.inv = { id: hex(16), token: hex(32) };
+      w.inv2 = { id: hex(16), token: hex(32) };
+      const added = await invites(w, [{ id: w.inv.id, hash: sha(w.inv.token), wrap: { epoch: 1, ct: "sealed" } }, { id: w.inv2.id, hash: sha(w.inv2.token) }], []);
+      if (added.status !== 200) throw new Error("the invitations were not added");
+      return w;
+    }
+
+    /* What each route answers at the relay's now: hello, fresh sessions of the lead and a desk and what they are told, since and
+       its header, a fetch, a socket, the states, and the four writes, the token hello of the invitation `inv` among them. */
+    async function routesNow(w, inv) {
+      const out = { hello: await helloKeys(w) };
+      const ls = await helloAs(w, w.lead), ds = await helloAs(w, w.desk);
+      out.sessions = [tail(ls), tail(ds)];
+      out.told = [ls.json && ls.json.lapse, ds.json && ds.json.lapse];
+      const lead = ls.json && ls.json.session, desk = ds.json && ds.json.session;
+      const list = await since(w, desk);
+      out.since = tail(list);
+      out.header = list.lapse;
+      out.fetch = tail(await getBlob(w, desk, w.blob.id));
+      out.socket = tail(await socket(w, desk));
+      out.states = tail(await statesOf(w, lead));
+      w.counter = (w.counter || 0) + 1;
+      out.upload = tail(await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/n" + w.counter + ".ec", w.counter)));
+      out.devices = tail(await devices(w, w.devs));
+      out.invites = tail(await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], []));
+      out.token = tail(await tokenHello(w, inv.id, inv.token, null, keyPair(true)));
+      out.spent = !!(w.R.stores.get(w.rt).get("inv:" + inv.id) || {}).spent;
+      return out;
+    }
+    const wantRoutes = (t, working) => ({ hello: "challenge,until", sessions: [200, 200], told: [t, t], since: 200, header: t, fetch: 200, socket: 200,
+      states: 200, upload: working ? 200 : "team-lapsed", devices: working ? 200 : "team-lapsed", invites: working ? 200 : "team-lapsed",
+      token: working ? 200 : "team-lapsed", spent: working });
+
+    /* A paid team: working at end+29 d, read-only at end+31 d, still read-only at end+89 d, and swept by its alarm at end+91 d. */
+    async function paidScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, 29 * DAY);
+      const working = await routesNow(w, w.inv);
+      at(w, 31 * DAY);
+      const reading = await routesNow(w, w.inv2);
+      at(w, 89 * DAY);
+      const ro = told(w.until, true, "read-only");
+      const late = [await helloKeys(w), ((await helloAs(w, w.desk)).json || {}).lapse, await w.R.ring(w.rt)];
+      const sock = wsOf(w, (await socket(w, await sessionOf(w, w.desk))).socket);
+      at(w, 91 * DAY);
+      const rang = await w.R.ring(w.rt);
+      const gone = { rang, bucket: inBucket(w).length, store: w.R.stores.get(w.rt).dump().length, alarm: w.R.alarms.has(w.rt), hello: await helloKeys(w),
+        socket: closedBy(sock) };
+      return {
+        a: sameJ(working, wantRoutes(told(w.until, true, "working"), true)),
+        b: sameJ(reading, wantRoutes(ro, false)),
+        c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, false])
+          && sameJ(gone, { rang: true, bucket: 0, store: 0, alarm: false, hello: "not-enrolled", socket: [4400, true] }),
+        detail: JSON.stringify({ working, reading, late, gone, armed: w.armedAtCreate === w.until + READ }),
+      };
+    }
+
+    /* A paid team read-only at end+31 d, renewed by a later grant: working again, every write taken, the alarm moved. */
+    async function restoreScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, 31 * DAY);
+      const g = grantNow(w);
+      const rn = await renewWith(w, { grant: g });
+      const ds = await helloAs(w, w.desk), desk = ds.json && ds.json.session;
+      const after = [tail(await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/again.ec", 1))), tail(await devices(w, w.devs)),
+        tail(await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], [])), tail(await tokenHello(w, w.inv.id, w.inv.token, null, keyPair(true)))];
+      const kept = w.R.stores.get(w.rt).get("team");
+      const ok = rn.r.status === 200 && rn.gets === 1 && sameJ(rn.r.json, { ok: true, lapse: told(g.until, true, "working") })
+        && sameJ(ds.json && ds.json.lapse, told(g.until, true, "working")) && sameJ(after, [200, 200, 200, 200])
+        && w.R.alarms.get(w.rt) === g.until + READ && kept.until === g.until && kept.paid === true;
+      return { ok, detail: JSON.stringify({ renewal: [rn.r.status, rn.gets], after, alarm: w.R.alarms.get(w.rt) === g.until + READ }) };
+    }
+
+    /* A trial's team: at its until every route but hello and renewal refuses, sessions held from before included, its sockets are
+       closed, and its alarm moves to the sweep; a paid grant then restores it; another trial's team is swept 30 days on. */
+    async function trialScene(T) {
+      const w = await lapseWorld(false, { T });
+      at(w, -2 * MIN);
+      const L = await sessionOf(w, w.lead), D = await sessionOf(w, w.desk);
+      const J = (await tokenHello(w, w.inv.id, w.inv.token, null, keyPair(true))).json.session;
+      const ws1 = wsOf(w, (await socket(w, D)).socket), ws2 = wsOf(w, (await socket(w, D)).socket);
+      const out = { before: [tail(await since(w, D)), tail(await wrapOf(w, J)), tail(await statesOf(w, L))] };
+      at(w, 0);
+      out.hello = await helloKeys(w);
+      out.sessions = [tail(await helloAs(w, w.lead)), tail(await helloAs(w, w.desk))];
+      out.reads = [tail(await since(w, D)), tail(await getBlob(w, D, w.blob.id)), tail(await socket(w, D)), tail(await statesOf(w, L)), tail(await wrapOf(w, J))];
+      out.writes = [tail(await put(w, D, sealAs(w, w.desk, "desks/" + w.deskId + "/late.ec", 1))), tail(await devices(w, w.devs)),
+        tail(await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], [])), tail(await tokenHello(w, w.inv2.id, w.inv2.token, null, keyPair(true)))];
+      await w.R.object(w.rt).webSocketMessage(ws1, JSON.stringify({ type: "ping" }));
+      out.ping = closedBy(ws1);
+      out.open = !!ws2 && !ws2.closed;
+      out.rang = await w.R.ring(w.rt);
+      out.rung = closedBy(ws2);
+      out.next = w.R.alarms.get(w.rt) === w.until + TRIAL;
+      const lapsed = Array(5).fill("team-lapsed");
+      const e = w.armedAtCreate === w.until && sameJ(out, { before: [200, 200, 200], hello: "challenge,until", sessions: ["team-lapsed", "team-lapsed"],
+        reads: lapsed, writes: lapsed.slice(1), ping: [4400, true], open: true, rang: true, rung: [4400, true], next: true });
+
+      at(w, 10 * DAY);
+      const g = grantNow(w, { fields: { paid: true } });
+      const rn = await renewWith(w, { grant: g });
+      const ds = await helloAs(w, w.desk);
+      const up = tail(await put(w, ds.json && ds.json.session, sealAs(w, w.desk, "desks/" + w.deskId + "/back.ec", 2)));
+      const f = rn.r.status === 200 && sameJ(rn.r.json, { ok: true, lapse: told(g.until, true, "working") }) && ds.status === 200
+        && sameJ(ds.json.lapse, told(g.until, true, "working")) && up === 200 && w.R.alarms.get(w.rt) === g.until + READ;
+
+      const v = await lapseWorld(false, { T });
+      at(v, 0);
+      const r0 = await v.R.ring(v.rt);
+      at(v, TRIAL - 1);
+      const early = [await v.R.ring(v.rt), await helloKeys(v), inBucket(v).length > 0];
+      at(v, TRIAL);
+      const late = [await v.R.ring(v.rt), inBucket(v).length, v.R.stores.get(v.rt).dump().length, v.R.alarms.has(v.rt), await helloKeys(v)];
+      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 0, false, "not-enrolled"]);
+      return { e, f, g: g2, detail: JSON.stringify({ out, renewal: [rn.r.status, ds.status, up], early, late }) };
+    }
+
+    /* Renewals that must not move a team: a grant that does not hold refused by the Worker with no object fetched; a good grant of
+       another lead's refused by the object; an earlier grant answered and changing nothing; a team never made not enrolled. */
+    async function renewScene(worker, T) {
+      const w = await lapseWorld(true, { T });
+      at(w, -29 * DAY);
+      const now = w.R.clock.now, st = () => w.R.stores.get(w.rt).get("team");
+      const strayKey = keyPair(false), stray = { id: "stray-1", pub: strayKey.pub, privateKey: strayKey.privateKey };
+      const bad = [{}, { grant: "grant" }, { grant: grantNow(w, { fields: { issued: now - 10 * DAY, until: now - 1 } }) },
+        { grant: grantNow(w, { signer: stray }) }, { grant: grantNow(w, { fields: { kind: "etiuda-licence" } }) }];
+      const seen = [];
+      for (const body of bad) { const x = await renewWith(w, body, worker); seen.push({ refused: refused(x.r, "bad-grant"), gets: x.gets, until: st().until }); }
+      const o = await renewWith(w, { grant: K.grantFor(keyPair(false).pub, now) }, worker);
+      const e = await renewWith(w, { grant: grantNow(w, { fields: { until: now + DAY, paid: false } }) }, worker);
+      const nrt = hex(16);
+      const n = await countedCall(worker, w.R, "POST", "/relay/v1/t/" + nrt + "/grant", { json: { grant: K.grantFor(keyPair(false).pub, now) } });
+      return {
+        zero: seen.every(s => s.refused && s.gets === 0 && s.until === w.until),
+        objectSays: seen.every(s => s.refused && s.until === w.until),
+        other: refused(o.r, "bad-grant") && o.gets === 1 && st().until === w.until && st().paid === true,
+        earlier: e.r.status === 200 && st().until === w.until && st().paid === true && sameJ(e.r.json, { ok: true, lapse: told(w.until, true, "working") }),
+        never: refused(n.r, "not-enrolled") && n.gets === 1 && w.R.stores.get(nrt).dump().length === 0,
+        detail: JSON.stringify({ seen, other: [o.r.status, o.gets], earlier: [e.r.status, st().until === w.until], never: [n.r.status, n.gets] }),
+      };
+    }
+
+    /* Hello says nothing of the lapse, and a call that has not shown who it is hears its own refusal, not the lapse. */
+    async function silentScene() {
+      const w = await lapseWorld(true);
+      at(w, 31 * DAY);
+      const a = [await helloKeys(w), tail(await devices(w, w.devs, { signer: keyPair(false), rev: 99 })), tail(await tokenHello(w, w.inv.id, hex(32)))];
+      const v = await lapseWorld(false);
+      at(v, 0);
+      const b = [await helloKeys(v), tail(await helloAs(v, v.lead, { sig: "00".repeat(64) }))];
+      return { ok: sameJ(a, ["challenge,until", "bad-signature", "not-enrolled"]) && sameJ(b, ["challenge,until", "bad-signature"]), detail: JSON.stringify({ a, b }) };
+    }
+
+    /* An object written by a request that died before its commit has its row from before the put, and the sweep deletes it; a
+       sweep whose delete fails keeps that object's row alone and rings again an hour on. */
+    async function recordScene(T) {
+      const w = await lapseWorld(true, { T });
+      const st = w.R.stores.get(w.rt), lead = await sessionOf(w, w.lead);
+      const b = sealAs(w, w.lead, "notes.ec", 2);
+      w.R.bucket.losePuts(1);
+      const lost = await put(w, lead, b);
+      const lostObjs = inBucket(w).filter(k => k.indexOf("/" + b.id + "/") > -1);
+      const rowed = lostObjs.length === 1 && st.get("put:" + lostObjs[0]) !== undefined;
+      const again = await put(w, lead, b);
+      const named = new Set(st.list("blob:").map(([, m]) => m.obj).concat(st.list("put:").map(([k]) => k.slice(4)), st.list("orphan:").map(([k]) => k.slice(7))));
+      const every = inBucket(w).length === 3 && inBucket(w).every(k => named.has(k));
+      at(w, 91 * DAY);
+      const rang = await w.R.ring(w.rt);
+      const a = lost.status === 500 && rowed && again.status === 200 && every && rang && inBucket(w).length === 0;
+
+      const v = await lapseWorld(true, { T });
+      at(v, 91 * DAY);
+      v.R.bucket.failDeletes(1);
+      const r1 = await v.R.ring(v.rt);
+      const left = inBucket(v), keys = v.R.stores.get(v.rt).dump().map(([k]) => k);
+      const retry = v.R.alarms.get(v.rt) === v.R.clock.now + HOUR;
+      v.R.clock.now += HOUR;
+      const r2 = await v.R.ring(v.rt);
+      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0]]) && retry && r2 && inBucket(v).length === 0
+        && v.R.stores.get(v.rt).dump().length === 0 && !v.R.alarms.has(v.rt);
+      return { a, b: missed, detail: JSON.stringify({ lost: lost.status, rowed, again: again.status, every, rang, left: inBucket(w).length, r1, kept: keys.length, retry, r2 }) };
+    }
+
+    /* A team gone by the clock whose alarm has not rung is swept by the next request, and the same lead may make it afresh. */
+    async function lazyScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, 91 * DAY);
+      const hello = await helloKeys(w), st = w.R.stores.get(w.rt);
+      const emptied = [st.dump().length, inBucket(w).length];
+      const body = K.createBody(w.rt, w.lead, w.R.clock.now, bytes => signHex(w.lead, bytes));
+      const made = await call(w.R, "POST", "/relay/v1/teams", { json: body });
+      const team = st.get("team");
+      return { ok: hello === "not-enrolled" && sameJ(emptied, [0, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
+        && st.list("dev:").length === 0 && st.list("blob:").length === 0, detail: JSON.stringify({ hello, emptied, made: made.status }) };
+    }
+
+    /* A team with no alarm, as one made before the alarm existed, gets one at its next session. */
+    async function armScene(T) {
+      const w = await lapseWorld(true, { T });
+      w.R.alarms.delete(w.rt);
+      const s = await helloAs(w, w.desk);
+      return s.status === 200 && w.R.alarms.get(w.rt) === w.until + READ;
+    }
+
+    /* RelayTeam over real SQLite: the create sets the object's alarm, and the alarm at the sweep leaves no table and no object. The
+       core is handed the test root and a set clock as it is made. */
+    async function sqlScene(T) {
+      const Tm = T || require(PRODUCT.team), ctx = X.doCtx(), clk = { now: T0L };
+      const env = { BLOBS: S.memoryBucket(), NOW: () => clk.now };
+      const real = C.createCore;
+      let team;
+      C.createCore = deps => real(Object.assign({}, deps, { roots: K.ROOTS, clock: () => clk.now }));
+      try { team = new Tm.RelayTeam(ctx, env); } finally { C.createCore = real; }
+      const scoped = { idFromName: n => ({ name: String(n) }), get: () => ({ fetch: r => team.fetch(r) }) };
+      env.TEAMS = { jurisdiction: j => (j === "eu" ? scoped : null) };
+      const w = await lapseWorld(true, { R: { env, clock: clk, bucket: env.BLOBS } });
+      const tables = () => ctx.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
+      const out = { armed: (await ctx.storage.getAlarm()) === w.until + READ, before: tables(), objects: [...env.BLOBS.objects.keys()].length > 0 };
+      clk.now = w.until + 91 * DAY;
+      await team.alarm();
+      Object.assign(out, { after: tables(), left: [...env.BLOBS.objects.keys()].length, alarm: await ctx.storage.getAlarm() });
+      return out;
+    }
+    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: [], left: 0, alarm: null };
+
+    /* Each state's edges, in milliseconds. A core that has no lapseOf does not hold them. */
+    const edgesHold = () => {
+      if (typeof C.lapseOf !== "function") return false;
+      const u = T0L, L = (paid, t) => C.lapseOf({ until: u, paid }, t).state;
+      return L(true, u + WORK - 1) === "working" && L(true, u + WORK) === "read-only" && L(true, u + READ - 1) === "read-only" && L(true, u + READ) === "gone"
+        && L(false, u - 1) === "working" && L(false, u) === "lapsed" && L(false, u + TRIAL - 1) === "lapsed" && L(false, u + TRIAL) === "gone"
+        && sameJ(C.lapseOf({ paid: true }, u), { state: "lapsed", until: null, readOnly: null, swept: null })
+        && C.WORK_AFTER_MS === WORK && C.READ_AFTER_MS === READ && C.TRIAL_KEEP_MS === TRIAL;
+    };
+
+    /* A paid team presented a trial's grant ending 5 days after its own: the trial's later until is kept and told, and the paid
+       schedule still stands, working to the paid end and 30 days, read-only to 90, swept then (E2 of the test architect's verdict). */
+    async function paidThenTrialScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, -29 * DAY);
+      const g = grantNow(w, { fields: { paid: false, until: w.until + 5 * DAY } });
+      const rn = await renewWith(w, { grant: g });
+      const row = w.R.stores.get(w.rt).get("team");
+      const want = state => ({ state, until: w.until + 5 * DAY, readOnly: w.until + WORK, swept: w.until + READ });
+      const out = { renewal: [rn.r.status, rn.r.json && rn.r.json.lapse], row: [row.until, row.paid, row.paidUntil], alarm: w.R.alarms.get(w.rt) };
+      const stand = async (offset, counter) => {
+        at(w, offset);
+        const s = await helloAs(w, w.desk), token = s.json && s.json.session;
+        const r = [tail(s), s.json && s.json.lapse && s.json.lapse.state];
+        if (counter) r.push(tail(await put(w, token, sealAs(w, w.desk, "desks/" + w.deskId + "/c" + counter + ".ec", counter))));
+        return r;
+      };
+      out.at29 = await stand(29 * DAY, 1);
+      out.at31 = await stand(31 * DAY, 2);
+      out.at89 = await stand(89 * DAY, 0);
+      at(w, 91 * DAY);
+      out.rang = await w.R.ring(w.rt);
+      out.gone = [inBucket(w).length, w.R.stores.get(w.rt).dump().length];
+      const ok = sameJ(out, { renewal: [200, want("working")], row: [w.until + 5 * DAY, false, w.until], alarm: w.until + READ, at29: [200, "working", 200],
+        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 0] });
+      return { ok, detail: JSON.stringify(out) };
+    }
+
+    /* A read-only team's lead takes a departed desk off: a set that only removes is taken and the key loses its session; one that
+       adds a key, moves a kept key to another desk, or replaces a key is refused team-lapsed (E1 of the test architect's verdict). */
+    async function withdrawScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, 31 * DAY);
+      const os = await sessionOf(w, w.other), fresh = keyPair(true);
+      const asked = [
+        await devices(w, w.devs.concat([{ id: fresh.keyId, pub: fresh.pub, desk: "k-" + hex(8) }])),
+        await devices(w, [Object.assign({}, w.devs[0], { desk: "k-" + hex(8) })]),
+        await devices(w, [{ id: fresh.keyId, pub: fresh.pub, desk: w.devs[1].desk }]),
+        await devices(w, [w.devs[0]]),
+      ].map(tail);
+      const st = w.R.stores.get(w.rt);
+      const kept = [st.get("dev:" + w.other.keyId) === undefined, !!st.get("dev:" + w.desk.keyId), st.get("dev:" + fresh.keyId) === undefined];
+      const after = [tail(await since(w, os)), tail(await helloAs(w, w.other)), tail(await since(w, await sessionOf(w, w.desk)))];
+      const ok = sameJ(asked, ["team-lapsed", "team-lapsed", "team-lapsed", 200]) && sameJ(kept, [true, true, true]) && sameJ(after, ["removed", "removed", 200]);
+      return { ok, detail: JSON.stringify({ asked, kept, after }) };
+    }
+
+    const paid = await held(() => paidScene());
+    check(paid.a === true, "977a a paid team at its grant's end and 29 days is working: hello answers its challenge alone, the lead's and a desk's sessions are each told"
+      + " { state: working, until, readOnly: until + 30 d, swept: until + 90 d }, since carries the same in its etiuda-lapse header, and fetch, socket, states,"
+      + " upload, devices, invites and an invitation's token hello are answered: " + (paid.detail || paid.failed));
+    check(paid.b === true, "977b at the end and 31 days it is read-only: hello, sessions told read-only, since, fetch, socket and states are answered, and an upload,"
+      + " devices, invites and a token hello are refused team-lapsed, the token left unspent");
+    check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only and the alarm has not rung; at 91 days it rings,"
+      + " deletes every object of the team, empties its storage, clears the alarm and closes its sockets, and hello is answered not-enrolled");
+    const restored = await held(() => restoreScene());
+    check(restored.ok === true, "977d a renewal while read-only, a later grant for the team's lead, is answered with the team working under the new until, and an upload,"
+      + " devices, invites and a token hello are then taken, the alarm moved to the new end and 90 days: " + (restored.detail || restored.failed));
+    const trial = await held(() => trialScene());
+    check(trial.e === true, "977e a trial's team at its until answers hello alone: new sessions, and since, fetch, socket, states and wrap under sessions held from before,"
+      + " and every write are refused team-lapsed; a ping closes its socket, the alarm set at the create to the until rings and closes the rest, and is set to"
+      + " the until and 30 days: " + (trial.detail || trial.failed));
+    check(trial.f === true, "977f a paid grant presented to that trial's team 10 days after its until restores it: the renewal and the next session say working under"
+      + " the new until, and an upload is taken");
+    check(trial.g === true, "977g another trial's team, its alarm rung at the until, still answers hello a millisecond before the until and 30 days and is swept at that"
+      + " instant: no object, no storage, no alarm, hello not-enrolled");
+    const renewal = await held(() => renewScene(W));
+    check(renewal.zero === true && renewal.other === true && renewal.earlier === true && renewal.never === true,
+      "977h a renewal with no grant, a grant that is not one, one that has ended, one a stray key signed or a licence is refused bad-grant by the Worker with no"
+      + " object fetched; a good grant of another lead reaches the object once and is refused bad-grant there; an earlier grant is answered and moves nothing;"
+      + " a renewal of a team never made is not-enrolled and leaves its storage empty: " + (renewal.detail || renewal.failed));
+    const silent = await held(() => silentScene());
+    check(silent.ok === true, "977i hello is answered with its challenge alone at a read-only team and at a lapsed trial's, and a devices call another key signed, a"
+      + " wrong token and a forged hello hear their own refusals, not the lapse: " + (silent.detail || silent.failed));
+    const recorded = await held(() => recordScene());
+    check(recorded.a === true, "977j an object the bucket wrote for a request that died before its commit has a put row from before its put, every object of the team"
+      + " is named by a row, and the sweep deletes the lost one with the rest: " + (recorded.detail || recorded.failed));
+    check(recorded.b === true, "977k a sweep whose delete of one object fails keeps that object's orphan row alone, rings again an hour on, and then leaves no object,"
+      + " no row and no alarm");
+    const lazy = await held(() => lazyScene());
+    check(lazy.ok === true, "977l a team gone by the clock whose alarm has not rung is swept by the next request, which hello answers not-enrolled, and its lead then"
+      + " makes it afresh with no desk and no blob: " + (lazy.detail || lazy.failed));
+    const armed = await held(() => armScene());
+    check(armed === true, "977m a team with no alarm, as one made before the alarm, has it set to its end and 90 days at its next session");
+    const sql = await held(() => sqlScene());
+    check(sameJ(sql, WANT_SQL), "977n RelayTeam over real SQLite: the create sets the object's alarm to the end and 90 days, and the alarm past it leaves no table, no"
+      + " object and no alarm: " + JSON.stringify(sql));
+    const edges = edgesHold();
+    const paidTrial = await held(() => paidThenTrialScene());
+    const withdraw = await held(() => withdrawScene());
+    check(edges, "977o the edges: paid working to the end and 30 days less a millisecond, read-only from that instant to the end and 90 days, a trial working to"
+      + " its until and swept 30 days on; a team row with no until reads lapsed and is never swept; the three spans exported");
+    check(paidTrial.ok === true, "977p a paid team with until T presented a trial's grant to T + 5 d keeps T as its paid end beside the new until: it is told"
+      + " { working, until: T + 5 d, readOnly: T + 30 d, swept: T + 90 d }, works and takes an upload at T + 29 d, reads and refuses an upload at T + 31 d, reads at"
+      + " T + 89 d, and at T + 91 d its alarm has swept it: " + (paidTrial.detail || paidTrial.failed));
+    check(withdraw.ok === true, "977q a read-only team's lead takes a desk off with a devices call that only removes it: the call is taken, the key is gone and its"
+      + " session refused removed, the other desk still reads; a call that adds a key, moves a kept key to another desk or replaces a key is refused team-lapsed: "
+      + (withdraw.detail || withdraw.failed));
+
+    /* ---- 978: each line of the lapse lifted in a copy turns its leg red, and no product file is written ---- */
+    const how2 = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    async function editTeam(edit, fn) {
+      const digest = sha(fs.readFileSync(PRODUCT.team));
+      let turned = false, detail = "plant line absent";
+      try {
+        const edited = edit(fs.readFileSync(PRODUCT.team, "utf8"));
+        if (edited !== null) {
+          const dir = copyOf({ "relay/team.cjs": edited, "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+    }
+    const red = (s, k) => !s || s[k] !== true;
+    /* Each plant counts only where the leg it turns red is green on the product. */
+    const base = { "977a": paid.a === true, "977b": paid.b === true, "977c": paid.c === true, "977d": restored.ok === true, "977e": trial.e === true,
+      "977h": renewal.zero === true && renewal.other === true && renewal.earlier === true, "977j": recorded.a === true, "977l": lazy.ok === true,
+      "977m": armed === true, "977n": sameJ(sql, WANT_SQL), "977o": edges === true, "977p": paidTrial.ok === true, "977q": withdraw.ok === true };
+    const CORE_LIFTS = [
+      ["lapse-trial", "977e", "a trial's team keeps working past its until", async () => red(await held(() => trialScene()), "e")],
+      ["lapse-working", "977a", "a working team refuses", async () => red(await held(() => paidScene()), "a")],
+      ["lapse-read", "977b", "a read-only team refuses its reads", async () => red(await held(() => paidScene()), "b")],
+      ["lapse-upload", "977b", "a read-only team takes an upload", async () => red(await held(() => paidScene()), "b")],
+      ["lapse-devices", "977b", "a read-only team takes a devices call", async () => red(await held(() => paidScene()), "b")],
+      ["lapse-invites", "977b", "a read-only team takes an invites call", async () => red(await held(() => paidScene()), "b")],
+      ["lapse-token", "977b", "a read-only team spends a token", async () => red(await held(() => paidScene()), "b")],
+      ["lapse-session", "977e", "a lapsed trial issues a session", async () => red(await held(() => trialScene()), "e")],
+      ["lapse-since", "977e", "a lapsed trial lists", async () => red(await held(() => trialScene()), "e")],
+      ["lapse-blob", "977e", "a lapsed trial serves a blob", async () => red(await held(() => trialScene()), "e")],
+      ["lapse-socket", "977e", "a lapsed trial opens a socket", async () => red(await held(() => trialScene()), "e")],
+      ["lapse-wrap", "977e", "a lapsed trial serves a wrap", async () => red(await held(() => trialScene()), "e")],
+      ["lapse-states", "977e", "a lapsed trial tells the states", async () => red(await held(() => trialScene()), "e")],
+      ["renew-grant", "977h", "another lead's grant renews the team", async () => red(await held(() => renewScene(W)), "other")],
+      ["until-later", "977h", "an earlier grant's renewal lowers the team's until", async () => red(await held(() => renewScene(W)), "earlier")],
+    ];
+    let n = 0;
+    const label = () => { const k = n++; return (978 + Math.floor(k / 26)) + String.fromCharCode(97 + k % 26); };
+    for (const [tag, leg, say, turns] of CORE_LIFTS) {
+      const p = await liftCore("plant:" + tag, turns);
+      check(base[leg] && p.turned && p.back, label() + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written: " + how2(p));
+    }
+    const edgePlant = await swapCore('now < p + WORK_AFTER_MS ? "working"', 'now <= p + WORK_AFTER_MS ? "working"', async () => !edgesHold());
+    check(edges && edgePlant.turned && edgePlant.back, label() + " counting the end and 30 days itself as working turns 977o red, and the product file is never written: " + how2(edgePlant));
+    const TEAM_LIFTS = [
+      ["arm-create", "977c", "the create sets no alarm", async T => red(await held(() => paidScene(T)), "c")],
+      ["arm-renew", "977d", "a renewal leaves the alarm where it was", async T => red(await held(() => restoreScene(T)), "ok")],
+      ["arm-session", "977m", "a team with no alarm stays without one", async T => (await held(() => armScene(T))) !== true],
+      ["sweep-lazy", "977l", "a team gone by the clock still answers until its alarm rings", async T => red(await held(() => lazyScene(T)), "ok")],
+      ["sweep-delete", "977c", "the sweep leaves the team's objects in the bucket", async T => red(await held(() => paidScene(T)), "c")],
+      ["sweep-wipe", "977c", "the sweep leaves the team's storage", async T => red(await held(() => paidScene(T)), "c")],
+      ["r2-record", "977j", "an object lost before its commit has no row and outlives the sweep", async T => red(await held(() => recordScene(T)), "a")],
+      ["lapse-close", "977e", "the alarm at a trial's until leaves its sockets open", async T => red(await held(() => trialScene(T)), "e")],
+      ["lapse-ping", "977e", "a ping on a lapsed trial's socket is answered", async T => red(await held(() => trialScene(T)), "e")],
+    ];
+    for (const [tag, leg, say, turns] of TEAM_LIFTS) {
+      const p = await editTeam(lineLifted("plant:" + tag), turns);
+      check(base[leg] && p.turned && p.back, label() + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written: " + how2(p));
+    }
+    const TEAM_SWAPS = [
+      ['Object.assign({ "etiuda-lapse": lapse }, HEADERS)', "HEADERS", "977a", "since carries no lapse", async T => red(await held(() => paidScene(T)), "a")],
+      ["{ session: r.session, until: r.until, lapse: r.lapse }", "{ session: r.session, until: r.until }", "977a", "a key session is not told the lapse",
+        async T => red(await held(() => paidScene(T)), "a")],
+      ['sql.exec("DROP TABLE kv");', "", "977n", "the sweep leaves the kv table", async T => !sameJ(await held(() => sqlScene(T)), WANT_SQL)],
+    ];
+    for (const [from, to, leg, say, turns] of TEAM_SWAPS) {
+      const p = await editTeam(swapped(from, to), turns);
+      check(base[leg] && p.turned && p.back, label() + " in a copy of relay/team.cjs, " + say + ", which turns " + leg + " red, and the product file is never written: " + how2(p));
+    }
+    const workerRenew = await editWorker(lineLifted("plant:worker-renew"), async mod => {
+      const r = await held(() => renewScene(mod.routeWith(K.ROOTS, env => env.NOW())));
+      return r.zero === false && r.objectSays === true;
+    });
+    check(renewal.zero === true && workerRenew.turned && workerRenew.back, label() + " lifting plant:worker-renew makes a renewal whose grant does not hold wake"
+      + " its object once, which refuses it itself, and the product file is never written: " + how2(workerRenew));
+    const devicesSig = 'if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */';
+    const earlyGate = await swapCore(devicesSig, "if (lapseGate(true)) return lapseGate(true); " + devicesSig, async () => {
+      const r = await held(() => silentScene());
+      return r.ok === false && typeof r.detail === "string" && r.detail.indexOf("team-lapsed") > -1;
+    });
+    check(silent.ok === true && earlyGate.turned && earlyGate.back, label() + " asking the lapse before a devices call's signature tells a key that signed nothing"
+      + " that the team has lapsed, which turns 977i red, and the product file is never written: " + how2(earlyGate));
+    const E_LIFTS = [
+      ["paid-kept", "977p", "a trial's grant takes the paid end with it", async () => red(await held(() => paidThenTrialScene()), "ok")],
+      ["lapse-withdraw", "977q", "a read-only team refuses a call that only removes a key", async () => red(await held(() => withdrawScene()), "ok")],
+    ];
+    for (const [tag, leg, say, turns] of E_LIFTS) {
+      const p = await liftCore("plant:" + tag, turns);
+      check(base[leg] && p.turned && p.back, label() + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written: " + how2(p));
+    }
+    const bestOf = await swapCore("state: RANK[paid] >= RANK[trial] ? paid : trial,", "state: trial,", async () => red(await held(() => paidThenTrialScene()), "ok"));
+    check(base["977p"] && bestOf.turned && bestOf.back, label() + " standing a team by the latest grant's schedule alone cuts the paid team off at T + 5 d, which turns 977p"
+      + " red, and the product file is never written: " + how2(bestOf));
+    const sameKey = await swapCore("held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk", "true", async () => red(await held(() => withdrawScene()), "ok"));
+    check(base["977q"] && sameKey.turned && sameKey.back, label() + " judging a removal by key ids alone lets a read-only team's call move a kept key to another desk,"
+      + " which turns 977q red, and the product file is never written: " + how2(sameKey));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
