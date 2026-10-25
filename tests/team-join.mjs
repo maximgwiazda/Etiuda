@@ -575,7 +575,7 @@ try {
   check(belongChecks[0] === true && belongChecks[1] === true
       && belongChecks[2] === false && belongChecks[3] === false
       && belongChecks[4] === false && belongChecks[5] === false,
-    "15aw a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead or vouched for by a ring, and refused otherwise: " + JSON.stringify(belongChecks));
+    "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead or vouched for by a ring, and refused otherwise: " + JSON.stringify(belongChecks));
 
   const Dk = await deskWith("kept", folder("kept-own"));
   const secretK = newSecret();
@@ -1363,7 +1363,7 @@ try {
   HK.hooks.loadCatalogFromFolder = wasLoad;
   AS.setCards([]);
   check(!!tookFn && loadedSample && keptReal,
-    "15bn a team catalog arriving opens automatically on a desk showing the sample catalog, and never over a real catalog the agent chose: sample "
+    "15cm a team catalog arriving opens automatically on a desk showing the sample catalog, and never over a real catalog the agent chose: sample "
     + loadedSample + ", real kept " + keptReal);
 
   /* Join a team in Settings, the Library and the Menu, on a desk that already has a catalog and has seen its lead. */
@@ -1570,7 +1570,7 @@ try {
   check(menuItem && settingsOpened && libraryOpened,
     "15bm the Menu item Join a team is in the template, and the Settings and Library buttons' clicks open the paste: "
     + [menuItem, settingsOpened, libraryOpened].join("/") + (doorErr ? " " + doorErr : ""));
-  check(joinShownOverOffer, "15bo with a catalog loaded, the team-join bubble is reachable while the catalog offer shows: " + joinShownOverOffer);
+  check(joinShownOverOffer, "15cn with a catalog loaded, the team-join bubble is reachable while the catalog offer shows: " + joinShownOverOffer);
 
   /* ---- leaving, and being left off the roster ---------------------------------------------------------------------- */
   /* A desk let in by an invitation, then left off the team's roster at a newer epoch with the newest edition sealed again
