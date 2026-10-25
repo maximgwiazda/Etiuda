@@ -6,6 +6,8 @@ compatibility_date = "2026-09-01"
 # shell/relay/blob.cjs and the relay's own signatures use node:crypto.
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
+# The relay answers at the one address Studio and the desk call, and the site on etiuda.dev keeps every other path.
+routes = [{ pattern = "etiuda.dev/relay/v1/*", zone_name = "etiuda.dev" }]
 
 # The relay logs nothing per request.
 [observability]
