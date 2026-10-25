@@ -5551,15 +5551,13 @@ function pickPage() {
   const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
   if (!P || !q || !box) return;
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys");
-  let rows = [], last = null, words = {}, at = 0, asked = 0, said = "";
+  let rows = [], last = null, words = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
   const ICON_STAMP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor"'
     + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/>'
     + '<path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
-  const ICON_WHO = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
-    + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>';
   const stamp = () => '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>';
   const list = () => (!q.value.trim() && last)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
@@ -5628,7 +5626,9 @@ function pickPage() {
     if (who) {
       who.hidden = !o.who;
       who.title = words.who || "";
-      who.innerHTML = ICON_WHO + '<span>' + esc(o.who) + '</span>';
+      who.value = o.name || "";
+      sent = who.value;
+      closing = false;
     }
     legend();
     rows = Array.isArray(o.rows) ? o.rows : [];
@@ -5656,7 +5656,11 @@ function pickPage() {
   q.addEventListener("keydown", e => {
     const all = list();
     if (e.key === "Escape") { e.preventDefault(); P.close(); return; }
-    if (e.key === "Tab") { e.preventDefault(); return; }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      if (who && !who.hidden) who.focus();
+      return;
+    }
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
     if (step) {
       e.preventDefault();
@@ -5674,6 +5678,32 @@ function pickPage() {
       take(all.filter(r => !r.again)[+d[2] - 1], e.shiftKey);
     }
   });
+  if (who) {
+    const send = () => {
+      if (closing || who.value === sent) return;
+      sent = who.value;
+      const mine = ++asked;
+      P.who(who.value, q.value).then(text => {
+        if (mine !== asked) return;
+        let o = {};
+        try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+        rows = Array.isArray(o.rows) ? o.rows : [];
+        said = o.count || "";
+        paint(false);
+        if (o.name != null) { who.value = o.name; sent = who.value; }
+      });
+    };
+    who.addEventListener("keydown", e => {
+      if (e.key === "Escape") { closing = true; e.preventDefault(); P.close(); return; }
+      if (e.key === "Tab" || e.key === "Enter") {
+        send();
+        e.preventDefault();
+        q.focus();
+        return;
+      }
+    });
+    who.addEventListener("blur", send);
+  }
   box.addEventListener("mousemove", e => {
     const li = e.target.closest && e.target.closest("li[data-i]");
     if (li && +li.dataset.i !== at) { at = +li.dataset.i; paint(false); }
@@ -5707,9 +5737,10 @@ function pickerDoc() {
     + 'border-bottom-color:var(--field-edge);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);'
     + 'font:var(--intent-type) var(--sans);outline:none}\n'
     + '#q:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
-    + '#who{flex:0 1 auto;max-width:34%;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line);'
-    + 'border-radius:var(--radius-sm);color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden}\n'
-    + '#who[hidden]{display:none}\n#who svg{flex:0 0 auto}\n#who span{overflow:hidden;text-overflow:clip}\n'
+    + '#who{box-sizing:border-box;flex:0 1 auto;max-width:34%;min-width:0;padding:0 10px;border:1px solid var(--line);'
+    + 'border-radius:var(--radius-sm);background:var(--field);color:var(--ink);font-size:13px;outline:none}\n'
+    + '#who:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
+    + '#who[hidden]{display:none}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -5738,7 +5769,7 @@ function pickerDoc() {
     + '#q:focus{outline:2px solid Highlight}}\n'
     + '</style>\n'
     + '<div id="top"><input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
-    + ' autocomplete="off" spellcheck="false"><span id="who" hidden></span></div>\n'
+    + ' autocomplete="off" spellcheck="false"><input id="who" type="text" autocomplete="off" spellcheck="false" hidden></div>\n'
     + '<ul id="rows" role="listbox"></ul>\n'
     + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';
@@ -5936,6 +5967,10 @@ ipcMain.on("etiuda:pick-show", (e) => {
 ipcMain.handle("etiuda:pick-find", (e, q) => {
   if (!fromPicker(e)) return "null";
   return askDesk("find", { q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
+});
+ipcMain.handle("etiuda:pick-who", (e, name, q) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("who", { name: String(name || "").slice(0, 100), q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and

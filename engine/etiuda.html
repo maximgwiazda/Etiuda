@@ -32884,6 +32884,17 @@ What you type stays in this browser only.`;
     }, null);
     return { asked: true };
   }
+  function pickDeskPax(val) {
+    const p = document.getElementById("pax");
+    if (p) {
+      if (val !== void 0) {
+        p.value = val;
+        if (typeof p.oninput === "function") p.oninput();
+      }
+      return p.value;
+    }
+    return "";
+  }
   function answerPick(op, argText) {
     let a = {};
     try {
@@ -32896,16 +32907,12 @@ What you type stays in this browser only.`;
         tourHeardPick();
       } catch (e) {
       }
-      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName() }, pickFound(""));
+      const paxVal = pickDeskPax();
+      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName(), name: paxVal }, pickFound(""));
     }
     if (op === "who") {
-      const name = String(a.name == null ? "" : a.name);
-      const p = document.getElementById("pax");
-      if (p) {
-        p.value = name;
-        if (typeof p.oninput === "function") p.oninput();
-      }
-      return Object.assign({ who: activeTabName() }, pickFound(a.q));
+      const paxVal = pickDeskPax(String(a.name == null ? "" : a.name));
+      return Object.assign({ who: activeTabName(), name: paxVal }, pickFound(a.q));
     }
     if (op === "find") return pickFound(a.q);
     if (op === "copy") {

@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 107;
+const EXPECTED = 110;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -411,6 +411,117 @@ try {
 
   const found2 = JSON.parse(await pickerPage.E_PICK.find("brass"));
   check(ids(found2.rows) === "c-sign/0", "2i a query from the picker is answered by the desk's own search: " + ids(found2.rows));
+
+  const whoRes2 = JSON.parse(await pickerPage.E_PICK.who("Jan Kowalski", ""));
+  const lampAfterWho2 = deskCopy("c-lamp", 0);
+  const deskPax2 = document.getElementById("pax");
+  const doc2 = decodeURIComponent(String(pw.url || ""));
+  const whoInputInDoc = /<input\s+id="who"[^>]*hidden/.test(doc2);
+  const whoKeydown = /key\s*===\s*"Tab"[\s\S]*?who\.focus\(\)/.test(doc2) && /who\.addEventListener\("blur"/.test(doc2);
+  check(typeof pickerPage.E_PICK.who === "function" && whoRes2 && whoRes2.who === "" && deskPax2 && deskPax2.value === "Jan Kowalski"
+    && lampAfterWho2 && /Jan Kowalski/.test(lampAfterWho2) && !/Anna/.test(lampAfterWho2) && whoInputInDoc && whoKeydown,
+    "2I setting the customer name through the picker's bridge fills the desk's name and replies, and #who in the picker is an input: "
+    + JSON.stringify([whoRes2 && whoRes2.who, deskPax2 && deskPax2.value, lampAfterWho2 && lampAfterWho2.slice(0, 30)]));
+  await pickerPage.E_PICK.who("Anna Nowak", "");
+
+  /* In the picker, clearing and retyping the customer name never wipes the open conversation's
+     path and history; only the finished name on Enter reaches the desk. */
+  TB.tabs.splice(0, TB.tabs.length);
+  ST.ssSet(TB.TAB_KEY, "null");
+  TB.initTabs();
+  const tb2 = TB.tabs[0];
+  deskPax2.value = "Jan Kowalski";
+  deskPax2.oninput = () => TB.scheduleTabSave();
+  TB.scheduleTabSave();
+  TB.tabPathStep("c-lamp", { l: "en", b: 0 });
+  const pathBefore = tb2.path.slice(), logLenBefore = tb2.log.length;
+
+  const script2 = (/<script>([\s\S]*?)<\/script>/.exec(doc2) || [])[1] || "";
+  const whoEvents = {};
+  const whoInputEl = {
+    value: "Jan Kowalski", hidden: false, title: "", focus() {},
+    addEventListener: (t, fn) => { whoEvents[t] = fn; }
+  };
+  const qInputEl = {
+    value: "", placeholder: "", focus() {}, setAttribute() {},
+    addEventListener: () => {}
+  };
+  const rowsBoxEl = { innerHTML: "", scrollTop: 0, setAttribute() {}, querySelectorAll: () => [], addEventListener: () => {} };
+  const pickerDocStandin = {
+    getElementById: id => (id === "who" ? whoInputEl : id === "q" ? qInputEl : id === "rows" ? rowsBoxEl : null),
+    documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" }
+  };
+  new Function("window", "document", script2)({
+    E_PICK: {
+      who: (name, q) => Promise.resolve(JSON.stringify(PICK.answerPick("who", JSON.stringify({ name, q })))),
+      find: () => Promise.resolve(JSON.stringify({ rows: [] })),
+      close: () => {},
+      ready: () => {},
+      onOpen: () => {}
+    }
+  }, pickerDocStandin);
+
+  whoInputEl.value = "";
+  if (whoEvents.input) whoEvents.input();
+  await tick(10);
+  whoInputEl.value = "Janina";
+  if (whoEvents.input) whoEvents.input();
+  await tick(10);
+  if (whoEvents.keydown) whoEvents.keydown({ key: "Enter", preventDefault() {} });
+  await tick(10);
+
+  check(tb2.path.length === pathBefore.length && tb2.path[0] === "c-lamp"
+    && tb2.log.length === logLenBefore && deskPax2.value === "Janina",
+    "2J in the picker, the name is cleared and retyped (input events with an empty value in between), then Enter: the conversation's path and history stay, and the desk's name is the retyped one: "
+    + JSON.stringify([tb2.path, tb2.log.length, deskPax2.value]));
+
+  /* The picker's name field shows and sends the desk's own name, #pax's value, whole; never the tab's label. */
+  TB.tabs.splice(0, TB.tabs.length);
+  ST.ssSet(TB.TAB_KEY, "null");
+  TB.initTabs();
+  const tb3 = TB.tabs[0];
+  deskPax2.value = "Jan Kowalski";
+  deskPax2.oninput = () => TB.scheduleTabSave();
+  TB.scheduleTabSave();
+
+  let onOpen3 = null;
+  const whoEvents3 = {};
+  const whoInputEl3 = {
+    value: "", hidden: false, title: "", focus() {},
+    addEventListener: (t, fn) => { whoEvents3[t] = fn; }
+  };
+  const qInputEl3 = {
+    value: "", placeholder: "", focus() {}, setAttribute() {},
+    addEventListener: () => {}
+  };
+  const rowsBoxEl3 = { innerHTML: "", scrollTop: 0, setAttribute() {}, querySelectorAll: () => [], addEventListener: () => {} };
+  const pickerDocStandin3 = {
+    getElementById: id => (id === "who" ? whoInputEl3 : id === "q" ? qInputEl3 : id === "rows" ? rowsBoxEl3 : null),
+    documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" }
+  };
+  new Function("window", "document", script2)({
+    E_PICK: {
+      who: (name, q) => Promise.resolve(JSON.stringify(PICK.answerPick("who", JSON.stringify({ name, q })))),
+      find: () => Promise.resolve(JSON.stringify({ rows: [] })),
+      close: () => {},
+      ready: () => {},
+      onOpen: fn => { onOpen3 = fn; }
+    }
+  }, pickerDocStandin3);
+
+  onOpen3(JSON.stringify(PICK.answerPick("open")));
+  const openedValue = whoInputEl3.value;
+  whoInputEl3.value = "Jan Kowalsky";
+  if (whoEvents3.keydown) whoEvents3.keydown({ key: "Enter", preventDefault() {} });
+  await tick(10);
+
+  check(openedValue === "Jan Kowalski" && deskPax2.value === "Jan Kowalsky" && whoInputEl3.value === "Jan Kowalsky",
+    "2K the picker's name field shows the desk's own name whole at open and keeping edits on Enter updates the desk: "
+    + JSON.stringify([openedValue, deskPax2.value, whoInputEl3.value]));
+
+  deskPax2.value = "Anna Nowak";
+  delete deskPax2.oninput;
+  TB.tabs.splice(0, TB.tabs.length);
 
   const expect = deskCopy("c-lamp", 0);
   const copied = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
@@ -1058,7 +1169,7 @@ try {
   const key7 = (k, code, mods) => { pg["q:keydown"](Object.assign({ key: k, code: code || k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false,
     preventDefault() {} }, mods || {})); return sent7[sent7.length - 1] || "nothing"; };
   const grp = [row("a", 0), row("g", 0, { tag: "1/3", commits: 1 }), row("g", 1, { tag: "2/3", commits: 1 }), row("g", 2, { tag: "3/3", commits: 1 }), row("c", 0)];
-  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const h7 = els7.rows.innerHTML, lis7 = h7.split("</li>").filter(x => x.indexOf("<li") > -1);
   const shape = lis7.map(li => (/class="grp"/.test(li) ? "head:" + ((/<span class="t">([^<]*)</.exec(li) || [])[1]) + (/class="st"/.test(li) ? "+st" : "")
     : ((/<kbd>([^<]*)<\/kbd>/.exec(li) || [])[1] || "-") + (/class="in/.test(li) ? " in " + ((/<span class="g">([^<]*)</.exec(li) || [])[1]) : "")
@@ -1068,7 +1179,7 @@ try {
     "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row shows its key as Ctrl"
     + " and its digit, the reply copied last Ctrl+0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
 
-  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const sEnterRest = key7("Enter", "Enter", { shiftKey: true });
   openWith(grp, { last: row("a", 0) });
   key7("ArrowDown", "ArrowDown");
@@ -1085,8 +1196,8 @@ try {
     "7e Shift with Enter, with Ctrl and a digit, or with a click takes the row in the other language; without Shift nothing changes: "
     + [sEnterRest, sEnter, sDigit, sClick, plain].join(" "));
 
-  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
-  const foot = [els7.count.textContent, els7.keys.innerHTML, els7.who.hidden, els7.who.title, /<span>Marta<\/span>/.test(els7.who.innerHTML)];
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
+  const foot = [els7.count.textContent, els7.keys.innerHTML, els7.who.hidden, els7.who.title, els7.who.value === "Marta"];
   found7 = { rows: [row("c", 0)], count: "1 reply" };
   els7.q.value = "c"; pg["q:input"]();
   await tick(5);

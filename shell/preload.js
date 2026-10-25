@@ -8,6 +8,7 @@ const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && 
 if (PICKER) {
   contextBridge.exposeInMainWorld("E_PICK", {
     find: (q) => ipcRenderer.invoke("etiuda:pick-find", String(q || "")).then(v => String(v || "null")),
+    who: (name, q) => ipcRenderer.invoke("etiuda:pick-who", String(name || ""), String(q || "")).then(v => String(v || "null")),
     copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
     close: () => ipcRenderer.send("etiuda:pick-close"),
     ready: () => ipcRenderer.send("etiuda:pick-ready"),
