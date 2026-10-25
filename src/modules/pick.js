@@ -149,6 +149,7 @@ function pickWords(){
           none:t("A different word may do better."), stamp:t("Commits the firm"),
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
+          langTitle:t("Click to switch replies to the next language"),
           keyCopy:t("{KEY} copies"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V")};
 }
@@ -210,19 +211,24 @@ function answerPick(op,argText){
   if(op==="open"){
     try{ tourHeardPick(); }catch(e){}
     const paxVal=pickDeskPax();
-    return Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal}, pickFound(""));
+    return Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
   }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;
     runShortcut(a.id);
     const paxVal=pickDeskPax();
-    const out=Object.assign({who:activeTabName(), name:paxVal, last:pickLastRow()}, pickFound(""));
+    const out=Object.assign({who:activeTabName(), name:paxVal, last:pickLastRow(), lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
     if(a.id==="tabNew") out.fresh=true;
     return out;
   }
   if(op==="who"){
     const paxVal=pickDeskPax(String(a.name==null?"":a.name));
-    return Object.assign({who:activeTabName(), name:paxVal}, pickFound(a.q));
+    return Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(a.q));
+  }
+  if(op==="lang"){
+    runShortcut("langToggle");
+    const paxVal=pickDeskPax();
+    return Object.assign({words:pickWords(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
   }
   if(op==="find") return pickFound(a.q);
   if(op==="copy"){

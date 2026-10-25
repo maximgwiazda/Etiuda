@@ -5550,7 +5550,7 @@ function pickClipText(text, platform) {
 function pickPage() {
   const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
   if (!P || !q || !box) return;
-  const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys");
+  const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
@@ -5634,7 +5634,18 @@ function pickPage() {
     }
     return null;
   };
+  const paintLang = o => {
+    if (!langBtn || !o || !o.lang) return;
+    langBtn.hidden = (o.langs | 0) < 2;
+    langBtn.textContent = String(o.lang).toUpperCase();
+  };
   const paintOpen = (o, fresh) => {
+    if (o.words) {
+      words = o.words;
+      if (langBtn && words.langTitle) langBtn.title = words.langTitle;
+      legend();
+    }
+    paintLang(o);
     if (who) {
       who.hidden = !o.who;
       who.value = o.name || "";
@@ -5676,6 +5687,7 @@ function pickPage() {
     q.placeholder = words.search || "";
     box.setAttribute("aria-label", words.list || "");
     if (who) who.title = words.who || "";
+    if (langBtn) langBtn.title = words.langTitle || "";
     legend();
     paintOpen(o, false);
     P.ready();
@@ -5731,6 +5743,7 @@ function pickPage() {
         try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
         rows = Array.isArray(o.rows) ? o.rows : [];
         said = o.count || "";
+        paintLang(o);
         paint(false);
         if (o.name != null) { who.value = o.name; sent = who.value; }
       });
@@ -5747,6 +5760,20 @@ function pickPage() {
       }
     });
     who.addEventListener("blur", send);
+  }
+  if (langBtn) {
+    langBtn.addEventListener("click", () => {
+      if (typeof P.lang === "function") {
+        const mine = ++asked;
+        P.lang().then(text => {
+          if (mine !== asked) return;
+          let o = {};
+          try { o = JSON.parse(text) || {}; } catch (_) { o = {}; }
+          paintOpen(o, false);
+          if (q) q.focus();
+        });
+      }
+    });
   }
   box.addEventListener("mousemove", e => {
     const li = e.target.closest && e.target.closest("li[data-i]");
@@ -5785,6 +5812,11 @@ function pickerDoc() {
     + 'border-radius:var(--radius-sm);background:var(--field);color:var(--ink);font-size:13px;outline:none}\n'
     + '#who:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
     + '#who[hidden]{display:none}\n'
+    + '#lang{box-sizing:border-box;flex:0 0 auto;padding:0 8px;border:1px solid var(--line);'
+    + 'border-radius:var(--radius-sm);background:var(--field);color:var(--dim);font:600 11px var(--mono);cursor:pointer;outline:none}\n'
+    + '#lang:hover{color:var(--ink);border-color:var(--line-strong)}\n'
+    + '#lang:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
+    + '#lang[hidden]{display:none}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -5813,7 +5845,8 @@ function pickerDoc() {
     + '#q:focus{outline:2px solid Highlight}}\n'
     + '</style>\n'
     + '<div id="top"><input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
-    + ' autocomplete="off" spellcheck="false"><input id="who" type="text" autocomplete="off" spellcheck="false" hidden></div>\n'
+    + ' autocomplete="off" spellcheck="false"><input id="who" type="text" autocomplete="off" spellcheck="false" hidden>'
+    + '<button id="lang" type="button" hidden></button></div>\n'
     + '<ul id="rows" role="listbox"></ul>\n'
     + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';
@@ -6019,6 +6052,10 @@ ipcMain.handle("etiuda:pick-who", (e, name, q) => {
 ipcMain.handle("etiuda:pick-tab", (e, id) => {
   if (!fromPicker(e)) return "null";
   return askDesk("tab", { id: String(id || "").slice(0, 20) }).then(v => JSON.stringify(v));
+});
+ipcMain.handle("etiuda:pick-lang", (e) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("lang", {}).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and

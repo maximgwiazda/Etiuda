@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 114;
+const EXPECTED = 117;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -51,13 +51,15 @@ const until = async (fn, ms) => { const t0 = Date.now(); while (!fn() && Date.no
 const SYSTEM = ["en-US"];
 Object.defineProperty(globalThis, "navigator", { configurable: true,
   value: { get language() { return SYSTEM[0]; }, get languages() { return SYSTEM; }, clipboard: null } });
-const els = { "#pax": { value: "Anna Nowak" }, "#roleSel": { value: "" }, "#intent": { value: "" },
+const els = { "#pax": { value: "Anna Nowak" }, "#roleSel": { value: "" }, "#intent": { value: "" }, "#seg": { querySelectorAll: () => [], querySelector: () => null },
+  "#list": { classList: { add() {}, remove() {}, toggle() {}, contains: () => false }, style: { removeProperty() {}, setProperty() {} }, querySelector: () => null, querySelectorAll: () => [], replaceChildren() {} },
   "#toast": { classList: { add() {}, remove() {}, toggle() {}, contains: () => false }, style: {}, textContent: "", innerHTML: "", getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) } };
 const bodyClasses = new Set();
 globalThis.window = { innerWidth: 1280, innerHeight: 800, isSecureContext: true, addEventListener() {}, removeEventListener() {} };
 globalThis.document = {
   querySelector: s => els[s] || null, getElementById: id => els["#" + id] || null, querySelectorAll: () => [],
-  createElement: () => ({ getContext: () => ({}), style: {}, classList: { add() {}, remove() {}, toggle() {} } }),
+  createElement: () => ({ getContext: () => ({}), style: {}, classList: { add() {}, remove() {}, toggle() {} }, content: { firstChild: null } }),
+  createDocumentFragment: () => ({ appendChild() {} }),
   createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) }),
   documentElement: { dataset: {}, classList: { contains: () => false } },
   body: { classList: { contains: c => bodyClasses.has(c), add: c => bodyClasses.add(c), remove: c => bodyClasses.delete(c), toggle() {} } },
@@ -69,7 +71,19 @@ globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
 
 /* The hooks boot() fills: the few a copy reaches, as nothing, since no list is drawn here. */
 const HK = await import(MOD("hooks.js"));
-["railDecorate", "syncSampleMark", "markEntrySel", "render"].forEach(k => { HK.hooks[k] = () => {}; });
+[
+  "runShortcut", "syncSampleMark", "syncSaveNotice", "importCatalogHere", "loadCatalogFromFolder",
+  "offerPickedCatalog", "openManage", "mgCardsIn", "openCategoryEditor", "openIntentEditor",
+  "segFolded", "applyLangUI", "clearSearchQuery", "updateIntentPlaceholder", "clearIntents",
+  "pickIntent", "intentPickedLine", "onRailMQChange", "rebuildCards", "render",
+  "closeSettingsMenu", "syncSettingsMenu", "endTour", "startTour", "tourActive",
+  "openSettings", "cardOrderTouched", "railDecorate", "drawIntentRail", "syncRailGeometry",
+  "scheduleRailGeometry", "setIntentHidden", "syncIntentOrder", "toggleIntentFavourite",
+  "syncFavouritesMeta", "ensureCustomCat", "syncAddFab", "syncNextDock", "openCardEditor",
+  "flushPillState", "markEntrySel", "listEntryEls", "hideCard", "captureRail", "railRelKeys",
+  "railEchoRedraw", "capturePills", "drawPillsCore", "shedSnap", "shedStage", "shedAnimate",
+  "shedHold", "shedHolding", "shedWordmarkW", "cardFillKey", "keepPoolAcross", "restartDesk"
+].forEach(k => { HK.hooks[k] = () => {}; });
 const Dom = await import(MOD("dom.js"));
 Dom.grabDom();
 const AS = await import(MOD("app-state.js"));
@@ -81,6 +95,7 @@ const SET = await import(MOD("settings.js"));
 const SP = await import(MOD("spell.js"));
 const DS = await import(MOD("desk-stats.js"));
 const RD = await import(MOD("render.js"));
+const LS = await import(MOD("lang-seg.js"));
 globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {};
 const TB = await import(MOD("tabs.js"));
 els["#intent"].classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
@@ -655,8 +670,10 @@ try {
     const noteDoc = w => decodeURIComponent(String(w.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
     const said = pickAnswer("open").words;
     const noteSays = w => (/<\/svg>([^<]*)<\/body>/.exec(noteDoc(w)) || [])[1] || "";
-    /* 2v called every handler with nothing, which turned the hotkey off; it is held again. */
+    /* 2v called every handler with nothing, which turned the hotkey off and toggled the language; both are restored. */
     await deskPage.E_HOST.setHotkey("Control+Shift+Space");
+    AS.putLang("en");
+    LS.cancelLangTail();
     caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false;
     await pressHotkey();
     const placed = Object.assign({}, pw.bounds);
@@ -1163,18 +1180,21 @@ try {
   let focusedEl = null;
   const mk = () => ({ value: "", placeholder: "", hidden: false, title: "", textContent: "", innerHTML: "", attrs: {}, focus() { focusedEl = this; },
     setAttribute(k, v) { this.attrs[k] = String(v); }, querySelectorAll: () => [], addEventListener: (t, fn) => { pg[t] = fn; } });
-  const els7 = { q: mk(), rows: mk(), who: mk(), count: mk(), keys: mk() };
+  const els7 = { q: mk(), rows: mk(), who: mk(), lang: mk(), count: mk(), keys: mk() };
+  els7.lang.hidden = true;
   els7.q.addEventListener = (t, fn) => { pg["q:" + t] = fn; };
   els7.rows.addEventListener = (t, fn) => { pg["box:" + t] = fn; };
   els7.who.addEventListener = (t, fn) => { pg["who:" + t] = fn; };
+  els7.lang.addEventListener = (t, fn) => { pg["lang:" + t] = fn; };
   const sent7 = [];
   let open7 = null, found7 = { rows: [], count: "" };
   new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve(JSON.stringify(found7)),
     tab: id => Promise.resolve(JSON.stringify(pickAnswer("tab", { id }))),
+    lang: () => Promise.resolve(JSON.stringify(pickAnswer("lang", {}))),
     copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } } },
     { getElementById: id => els7[id] || null, documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
   const row = (id, vi, extra) => Object.assign({ id: id, vi: vi, t: "T " + id, x: "x " + id + vi, tag: "" }, extra || {});
-  const W7 = { again: "again", stamp: "Commits the firm", who: "Filled for", keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes" };
+  const W7 = { again: "again", stamp: "Commits the firm", who: "Filled for", langTitle: "Click to switch replies to the next language", keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes" };
   const openWith = (rows, extra) => { sent7.length = 0; els7.q.value = ""; open7(JSON.stringify(Object.assign({ rows: rows, words: W7 }, extra || {}))); };
   const key7 = (k, code, mods) => { pg["q:keydown"](Object.assign({ key: k, code: code || k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false,
     preventDefault() {} }, mods || {})); return sent7[sent7.length - 1] || "nothing"; };
@@ -1397,6 +1417,49 @@ try {
   check(newAt7.code === "KeyN" && newAt7.shift === 1 && !nextAt7.code && !nextAt7.key,
     "7r the picker is handed the agent's own tab keys, a rebound one as rebound and a cleared one as cleared: "
     + JSON.stringify([newAt7, nextAt7]));
+
+  /* The global picker shows the conversation's language and switches it with a click. */
+  const TWO_LANG = [
+    { id: "c-tl", c: "orders", t: "Delivery note", en: "Your package leaves today.", pl: "Twoja paczka wyrusza dzisiaj." }
+  ];
+  deskOf(TWO_LANG);
+  AS.putLang("en");
+  const openAns7 = pickAnswer("open");
+  open7(JSON.stringify(openAns7));
+  const openLangOk = openAns7 && openAns7.lang === "en" && openAns7.langs === 2;
+  const badgeBefore = [els7.lang.hidden, els7.lang.textContent];
+  const rowsBeforeEn = els7.rows.innerHTML.indexOf("Your package leaves today.") > -1;
+  if (typeof pg["lang:click"] === "function") pg["lang:click"]();
+  await tick(10);
+  const deskLangAfter = AS.lang;
+  const badgeAfter = [els7.lang.hidden, els7.lang.textContent];
+  const rowsAfterPl = els7.rows.innerHTML.indexOf("Twoja paczka wyrusza dzisiaj.") > -1;
+  check(openLangOk && badgeBefore[0] === false && badgeBefore[1] === "EN" && rowsBeforeEn
+    && deskLangAfter === "pl" && badgeAfter[0] === false && badgeAfter[1] === "PL" && rowsAfterPl && focusedEl === els7.q,
+    "7s with a two-language catalog the open answer's lang is the desk's and the badge shows its code; a click switches the desk's lang to the other, and the rows and the badge then show the other language: "
+    + JSON.stringify([openAns7 && openAns7.lang, badgeBefore, deskLangAfter, badgeAfter, focusedEl === els7.q]));
+
+  LS.cancelLangTail();
+  const langsOrig = CM.CONTENT_LANGS.slice();
+  CM.setContentLangs(["en"]);
+  AS.putLang("en");
+  const openOne7 = pickAnswer("open");
+  open7(JSON.stringify(openOne7));
+  const badgeHiddenOne = els7.lang.hidden;
+  const langBeforeOne = AS.lang;
+  const langAnsOne = pickAnswer("lang", {});
+  const langAfterOne = AS.lang;
+  CM.setContentLangs(langsOrig);
+  check(openOne7 && openOne7.langs === 1 && badgeHiddenOne === true && langAnsOne && langAnsOne.langs === 1 && langBeforeOne === "en" && langAfterOne === "en",
+    "7t with a one-language catalog the badge is hidden and op \"lang\" changes nothing: "
+    + JSON.stringify([badgeHiddenOne, langBeforeOne, langAfterOne]));
+
+  els7.q.value = "/";
+  key7("/", "Slash");
+  await tick(10);
+  check(els7.q.value === "/" && AS.lang === "en",
+    "7u the slash typed into #q stays in #q and switches nothing: "
+    + JSON.stringify([els7.q.value, AS.lang]));
   }
 } catch (e) {
   failed++;

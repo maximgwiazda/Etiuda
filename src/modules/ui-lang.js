@@ -905,6 +905,7 @@ UI_STRINGS.pl={
   "many␟{N} replies":"{N} odpowiedzi",
   "{SHOWN} of {COUNT}":"{SHOWN} z {COUNT}",
   "Etiuda fills the reply in for this conversation":"Etiuda dopasuje odpowiedź do tej rozmowy",
+  "Click to switch replies to the next language":"Kliknięcie przełącza odpowiedzi na kolejny język",
   "{KEY} copies":"{KEY} kopiuje",
   "{KEY} in {LANG}":"{KEY} w języku {LANG}",
   "{KEY} closes":"{KEY} zamyka",
