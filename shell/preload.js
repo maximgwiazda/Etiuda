@@ -2,13 +2,14 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
-/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own five verbs and
+/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own six verbs and
    nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
 const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
 if (PICKER) {
   contextBridge.exposeInMainWorld("E_PICK", {
     find: (q) => ipcRenderer.invoke("etiuda:pick-find", String(q || "")).then(v => String(v || "null")),
     who: (name, q) => ipcRenderer.invoke("etiuda:pick-who", String(name || ""), String(q || "")).then(v => String(v || "null")),
+    tab: (id) => ipcRenderer.invoke("etiuda:pick-tab", String(id || "")).then(v => String(v || "null")),
     copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
     close: () => ipcRenderer.send("etiuda:pick-close"),
     ready: () => ipcRenderer.send("etiuda:pick-ready"),

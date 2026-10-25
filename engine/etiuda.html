@@ -32895,6 +32895,20 @@ What you type stays in this browser only.`;
     }
     return "";
   }
+  function pickChords() {
+    const chordOf = (id, slot) => {
+      const fn = slot === 2 ? scChord2 : scChord;
+      const c = fn(id);
+      if (c && (c.code || c.key)) return Object.assign({}, c);
+      const def = (SC_DEFS.find((d) => d.id === id) || {})[slot === 2 ? "def2" : "def"];
+      return Object.assign({}, def || c);
+    };
+    return {
+      tabNext: [chordOf("tabNext", 1), chordOf("tabNext", 2)],
+      tabPrev: [chordOf("tabPrev", 1), chordOf("tabPrev", 2)],
+      tabNew: [chordOf("tabNew", 1), chordOf("tabNew", 2)]
+    };
+  }
   function answerPick(op, argText) {
     let a = {};
     try {
@@ -32908,7 +32922,16 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
       const paxVal = pickDeskPax();
-      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName(), name: paxVal }, pickFound(""));
+      return Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal }, pickFound(""));
+    }
+    if (op === "tab") {
+      if (a.id !== "tabNext" && a.id !== "tabPrev" && a.id !== "tabNew") return null;
+      const doShortcut = typeof hooks.runShortcut === "function" ? hooks.runShortcut : runShortcut;
+      doShortcut(a.id);
+      const paxVal = pickDeskPax();
+      const out = Object.assign({ who: activeTabName(), name: paxVal, last: pickLastRow() }, pickFound(""));
+      if (a.id === "tabNew") out.fresh = true;
+      return out;
     }
     if (op === "who") {
       const paxVal = pickDeskPax(String(a.name == null ? "" : a.name));

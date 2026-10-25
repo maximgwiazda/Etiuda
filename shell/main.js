@@ -5551,7 +5551,7 @@ function pickPage() {
   const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
   if (!P || !q || !box) return;
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys");
-  let rows = [], last = null, words = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
+  let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
@@ -5611,6 +5611,57 @@ function pickPage() {
     keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Esc", words.keyClose]]
       .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
   };
+  const matchChord = (e, c) => {
+    if (!c || (!c.code && !c.key)) return false;
+    if (!!e.ctrlKey !== !!c.ctrl) return false;
+    if (!!e.altKey !== !!c.alt) return false;
+    if (!!e.shiftKey !== !!c.shift) return false;
+    if (!!e.metaKey !== !!c.meta) return false;
+    if (c.code && e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code === c.code;
+    const k = String(e.key || "");
+    const ek = k.length === 1 ? k.toLowerCase() : k;
+    return ek === c.key || k === c.key;
+  };
+  const matchTab = e => {
+    const ids = ["tabNext", "tabPrev", "tabNew"];
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i], list = chords[id];
+      if (Array.isArray(list)) {
+        for (let j = 0; j < list.length; j++) {
+          if (matchChord(e, list[j])) return id;
+        }
+      }
+    }
+    return null;
+  };
+  const paintOpen = (o, fresh) => {
+    if (who) {
+      who.hidden = !o.who;
+      who.value = o.name || "";
+      sent = who.value;
+      closing = false;
+    }
+    rows = Array.isArray(o.rows) ? o.rows : [];
+    said = o.count || "";
+    last = o.last || null;
+    q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
+    box.scrollTop = 0;
+    paint(false);
+    if (fresh && who && !who.hidden) who.focus();
+    else q.focus();
+  };
+  const onTabKey = (e, tabId) => {
+    e.preventDefault();
+    if (typeof P.tab === "function") {
+      const mine = ++asked;
+      P.tab(tabId).then(text => {
+        if (mine !== asked) return;
+        let o = {};
+        try { o = JSON.parse(text) || {}; } catch (_) { o = {}; }
+        paintOpen(o, !!o.fresh);
+      });
+    }
+  };
   P.onOpen(text => {
     let o = {};
     try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
@@ -5620,24 +5671,13 @@ function pickPage() {
     root.classList.toggle("glass", !!look.glass);
     root.classList.toggle("still", !!look.still);
     words = o.words || {};
+    chords = o.chords || {};
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
     box.setAttribute("aria-label", words.list || "");
-    if (who) {
-      who.hidden = !o.who;
-      who.title = words.who || "";
-      who.value = o.name || "";
-      sent = who.value;
-      closing = false;
-    }
+    if (who) who.title = words.who || "";
     legend();
-    rows = Array.isArray(o.rows) ? o.rows : [];
-    said = o.count || "";
-    last = o.last || null;
-    q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
-    box.scrollTop = 0;
-    paint(false);
-    q.focus();
+    paintOpen(o, false);
     P.ready();
   });
   q.addEventListener("input", () => {
@@ -5654,6 +5694,8 @@ function pickPage() {
     });
   });
   q.addEventListener("keydown", e => {
+    const tabId = matchTab(e);
+    if (tabId) { onTabKey(e, tabId); return; }
     const all = list();
     if (e.key === "Escape") { e.preventDefault(); P.close(); return; }
     if (e.key === "Tab") {
@@ -5694,6 +5736,8 @@ function pickPage() {
       });
     };
     who.addEventListener("keydown", e => {
+      const tabId = matchTab(e);
+      if (tabId) { onTabKey(e, tabId); return; }
       if (e.key === "Escape") { closing = true; e.preventDefault(); P.close(); return; }
       if (e.key === "Tab" || e.key === "Enter") {
         send();
@@ -5971,6 +6015,10 @@ ipcMain.handle("etiuda:pick-find", (e, q) => {
 ipcMain.handle("etiuda:pick-who", (e, name, q) => {
   if (!fromPicker(e)) return "null";
   return askDesk("who", { name: String(name || "").slice(0, 100), q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
+});
+ipcMain.handle("etiuda:pick-tab", (e, id) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("tab", { id: String(id || "").slice(0, 20) }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and

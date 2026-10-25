@@ -18,6 +18,8 @@ import { eNotice } from "./pack.js";
 import { tourHeardPick } from "./tour.js";
 import { hooks } from "./hooks.js";
 import { dockNow } from "./next-dock.js";
+import { scChord, scChord2, SC_DEFS } from "./shortcuts.js";
+import { runShortcut } from "./run-shortcut.js";
 // The picker's answers: the desk's replies as a short list for the window the shell draws over the
 // chat, found by the desk's own search and copied by the desk's own route.
 
@@ -197,13 +199,36 @@ function pickDeskPax(val){
   }
   return "";
 }
+function pickChords(){
+  const chordOf=(id,slot)=>{
+    const fn=slot===2?scChord2:scChord;
+    const c=fn(id);
+    if(c&&(c.code||c.key)) return Object.assign({}, c);
+    const def=(SC_DEFS.find(d=>d.id===id)||{})[slot===2?"def2":"def"];
+    return Object.assign({}, def||c);
+  };
+  return {
+    tabNext: [chordOf("tabNext",1), chordOf("tabNext",2)],
+    tabPrev: [chordOf("tabPrev",1), chordOf("tabPrev",2)],
+    tabNew: [chordOf("tabNew",1), chordOf("tabNew",2)]
+  };
+}
 function answerPick(op,argText){
   let a={};
   try{ a=JSON.parse(String(argText||"{}"))||{}; }catch(e){ a={}; }
   if(op==="open"){
     try{ tourHeardPick(); }catch(e){}
     const paxVal=pickDeskPax();
-    return Object.assign({look:pickLook(), words:pickWords(), last:pickLastRow(), who:activeTabName(), name:paxVal}, pickFound(""));
+    return Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal}, pickFound(""));
+  }
+  if(op==="tab"){
+    if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;
+    const doShortcut = (typeof hooks.runShortcut === "function" ? hooks.runShortcut : runShortcut);
+    doShortcut(a.id);
+    const paxVal=pickDeskPax();
+    const out=Object.assign({who:activeTabName(), name:paxVal, last:pickLastRow()}, pickFound(""));
+    if(a.id==="tabNew") out.fresh=true;
+    return out;
   }
   if(op==="who"){
     const paxVal=pickDeskPax(String(a.name==null?"":a.name));
