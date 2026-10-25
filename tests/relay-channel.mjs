@@ -46,7 +46,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 208;
+const EXPECTED = 212;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3373,6 +3373,57 @@ try {
     const gaveLift = await planted(dropLine("plant:e4-chain"), ["wrapretake"]);
     check(red(gaveLift, ["wrapretake"]) && gaveLift.back,
       "921ae lifting plant:e4-chain, the epochs the first invitation's wrap gave kept by the second, reddens 921y, and the product file is never written: " + redTold(gaveLift, ["wrapretake"]) + ", sha " + (gaveLift.back ? "restored" : "differs"));
+
+    /* C6, board 923: a desk that already keeps the key of the team's epoch takes an invitation, and the lead admits it at that
+       epoch with the next rev. Admission does not rotate the key, so the join finishes on the roster that names this desk with
+       a wrap it opened. `named` is a yard whose rev 1, heeded before the invitation, already names this desk: a roster read
+       before the request is never its answer, and the join waits for the lead's rev 2. */
+    async function heldJoin(src, tag, named) {
+      const team = "t-" + hex(8), secret = hex(16), key = crypto.randomBytes(32);
+      const own = path.join(LAB, "c6-own-" + tag), yard = path.join(LAB, "c6-yard-" + tag);
+      fs.mkdirSync(yard, { recursive: true });
+      const doc = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev, roster }, LEAD), null, 1) + "\n";
+      const D = deskFrom("c6-desk-" + tag, own, src, Object.assign({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } },
+        named ? { teamRevSeen: { [team]: { [LEAD.pub]: { epoch: 1, rev: 1 } } } } : {}));
+      const pre = await D.ask("etiuda:branch-identity", true);
+      const entryOf = () => ({ desk: { id: pre.id, key: pre.key, box: pre.box }, wrap: D.api.wrapTeamKey(key, pre.box, team, 1, pre.id) });
+      put(yard, C.TEAM_NAME, doc(1, named ? [entryOf()] : []));
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, folder: yard,
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+      const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      const joinAt = path.join(yard, "desks", pre.id, "join.json");
+      const asked = !taken.refused && fs.existsSync(joinAt) && !!D.envelope().teamJoin && D.envelope().teamJoin.held === 1;
+      D.api.heedTeam();
+      await D.ask("etiuda:team-join", "view");
+      const waited = fs.existsSync(joinAt) && !!D.envelope().teamJoin;
+      put(yard, C.TEAM_NAME, doc(2, [entryOf()]));
+      D.api.heedTeam();
+      const view = await D.ask("etiuda:team-join", "view");
+      return { asked, waited, refused: taken.refused, gone: !fs.existsSync(joinAt), join: D.envelope().teamJoin, joined: !!(view && view.joined && view.joined.team === team) };
+    }
+    const heldTold = g => (g.asked ? "asked" : "not asked" + (g.refused ? " (refused " + g.refused + ")" : "")) + ", before rev 2 the request "
+      + (g.waited ? "waited" : "was let go") + ", after it join.json " + (g.gone ? "deleted" : "still there") + ", the join " + (g.join ? "standing" : "gone")
+      + ", said " + (g.joined ? "joined" : "nothing");
+    const heldOk = g => g.asked && g.gone && !g.join && g.joined;
+    try {
+      const mainNow = fs.readFileSync(mainFile, "utf8");
+      const h = await heldJoin(mainNow, "held", false);
+      check(heldOk(h), "923c a desk holding the key of the team's epoch takes an invitation, and the lead's next rev at that epoch names it with a wrap it opens: the join finishes: " + heldTold(h));
+      const n = await heldJoin(mainNow, "named", true);
+      check(heldOk(n) && n.waited, "923d a roster heeded before the invitation that already names this desk does not finish the join, and the lead's rev 2 does: " + heldTold(n));
+      const nameBytes = sha(fs.readFileSync(mainFile));
+      const liftedNamed = dropLine("plant:c6-named")(mainNow);
+      const ln = liftedNamed === null ? null : await heldJoin(liftedNamed, "plant-held", false);
+      check(!!ln && ln.asked && !heldOk(ln) && sha(fs.readFileSync(mainFile)) === nameBytes,
+        "923e lifting plant:c6-named reddens 923c, and the product file is never written: " + (ln ? heldTold(ln) : "plant line absent"));
+      const liftedFresh = swapText("plant:c6-fresh", "raised && ", "")(mainNow);
+      const lf = liftedFresh === null ? null : await heldJoin(liftedFresh, "plant-named", true);
+      check(!!lf && !lf.refused && !lf.waited && sha(fs.readFileSync(mainFile)) === nameBytes,
+        "923f lifting plant:c6-fresh finishes the join on the roster heeded before the invitation, reddening 923d, and the product file is never written: " + (lf ? heldTold(lf) : "plant line absent"));
+    } catch (e) {
+      check(false, "harness (the legs 923c): " + (e && e.stack ? e.stack : e));
+    }
   } catch (e) {
     check(false, "harness (the legs 921a to 921ae): " + (e && e.stack ? e.stack : e));
   }

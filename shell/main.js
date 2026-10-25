@@ -3007,6 +3007,7 @@ function heedTeam() {
   // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
   // that epoch at rev 0, since deleting it would let the older epoch back (board 931); with no floor kept, a floor of 0
   // refuses nothing and is not kept.
+  let raised = false;
   if (!floor || r.epoch > floor.epoch || (r.epoch === floor.epoch && rev > floor.rev)) {
     const kept = Object.assign({}, floors);
     if (rev > 0) kept[doc.lead.public] = { epoch: r.epoch, rev: rev };
@@ -3015,6 +3016,7 @@ function heedTeam() {
     if (JSON.stringify(kept) !== JSON.stringify(floors)) {
       if (Object.keys(kept).length) teamRevSeen[r.team] = kept; else delete teamRevSeen[r.team];
       changed = true;
+      raised = true;
     }
   }
   if (r.keep) {
@@ -3028,7 +3030,9 @@ function heedTeam() {
     } catch (e) { teamStamp = ""; teamSay("the team key for " + r.team + " could not be kept - " + e.message); }
   }
   if (changed) persistDeskEnvelope();
-  finishJoin(); /* plant:n1-heed */
+  /* A file above every one heeded before, naming this desk with a wrap it opened: never a roster read before the request. */
+  const admitted = raised && r.key ? r.team : ""; /* plant:c6-fresh */
+  finishJoin(admitted); /* plant:n1-heed */
 }
 /* The catalog's text inside a sealed envelope, where this desk holds its team's key for its epoch, else null. */
 function teamOpen(data) {
@@ -3053,13 +3057,18 @@ let joinTold = false;                           // the lead's answer already que
 /* Admitted once this desk keeps a newer key for the team than when it asked, whether or not the Team cover is read: the
    request goes, which the relay carries to the lead as its signed deletion, and the invitation's address is no longer
    followed. The next joinView says so once, as it did when it was the one to find it. */
-function finishJoin() {
+function finishJoin(admitted) {
   const j = teamJoin;
-  if (!j || !deskBranch || !(newestEpoch(j.team) > j.held)) return false;
+  if (!j || !deskBranch) return false;
+  const roster = teamRoster[j.team], mine = !!roster && roster.desks.indexOf(branchIdOf(deskBranch.sign.pub)) >= 0;
+  /* Admission does not rotate the key, so a desk that already held the key of its epoch is admitted by a heeded file of
+     that epoch, newer than any before (`admitted`, heedTeam's), whose roster names it. */
+  let named = false;
+  named = admitted === j.team && mine && roster.epoch === newestEpoch(j.team); /* plant:c6-named */
+  if (!named && !(newestEpoch(j.team) > j.held)) return false;
   /* A key opened from the invitation's wrap lets this desk read before it is admitted. The request stays until the
      roster of the epoch accepted names this desk, which is still what lets the request go. */
-  const roster = teamRoster[j.team];
-  if (j.invite && j.invite.relay && !(roster && roster.desks.indexOf(branchIdOf(deskBranch.sign.pub)) >= 0)) return false;
+  if (j.invite && j.invite.relay && !mine) return false;
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
   if (!joinTold) joinDone = { team: j.team, file: j.file };
