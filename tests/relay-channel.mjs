@@ -46,7 +46,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 206;
+const EXPECTED = 214;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3373,6 +3373,57 @@ try {
     const gaveLift = await planted(dropLine("plant:e4-chain"), ["wrapretake"]);
     check(red(gaveLift, ["wrapretake"]) && gaveLift.back,
       "921ae lifting plant:e4-chain, the epochs the first invitation's wrap gave kept by the second, reddens 921y, and the product file is never written: " + redTold(gaveLift, ["wrapretake"]) + ", sha " + (gaveLift.back ? "restored" : "differs"));
+
+    /* C6, board 923: a desk that already keeps the key of the team's epoch takes an invitation, and the lead admits it at that
+       epoch with the next rev. Admission does not rotate the key, so the join finishes on the roster that names this desk with
+       a wrap it opened. `named` is a yard whose rev 1, heeded before the invitation, already names this desk: a roster read
+       before the request is never its answer, and the join waits for the lead's rev 2. */
+    async function heldJoin(src, tag, named) {
+      const team = "t-" + hex(8), secret = hex(16), key = crypto.randomBytes(32);
+      const own = path.join(LAB, "c6-own-" + tag), yard = path.join(LAB, "c6-yard-" + tag);
+      fs.mkdirSync(yard, { recursive: true });
+      const doc = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev, roster }, LEAD), null, 1) + "\n";
+      const D = deskFrom("c6-desk-" + tag, own, src, Object.assign({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } },
+        named ? { teamRevSeen: { [team]: { [LEAD.pub]: { epoch: 1, rev: 1 } } } } : {}));
+      const pre = await D.ask("etiuda:branch-identity", true);
+      const entryOf = () => ({ desk: { id: pre.id, key: pre.key, box: pre.box }, wrap: D.api.wrapTeamKey(key, pre.box, team, 1, pre.id) });
+      put(yard, C.TEAM_NAME, doc(1, named ? [entryOf()] : []));
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, folder: yard,
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+      const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      const joinAt = path.join(yard, "desks", pre.id, "join.json");
+      const asked = !taken.refused && fs.existsSync(joinAt) && !!D.envelope().teamJoin && D.envelope().teamJoin.held === 1;
+      D.api.heedTeam();
+      await D.ask("etiuda:team-join", "view");
+      const waited = fs.existsSync(joinAt) && !!D.envelope().teamJoin;
+      put(yard, C.TEAM_NAME, doc(2, [entryOf()]));
+      D.api.heedTeam();
+      const view = await D.ask("etiuda:team-join", "view");
+      return { asked, waited, refused: taken.refused, gone: !fs.existsSync(joinAt), join: D.envelope().teamJoin, joined: !!(view && view.joined && view.joined.team === team) };
+    }
+    const heldTold = g => (g.asked ? "asked" : "not asked" + (g.refused ? " (refused " + g.refused + ")" : "")) + ", before rev 2 the request "
+      + (g.waited ? "waited" : "was let go") + ", after it join.json " + (g.gone ? "deleted" : "still there") + ", the join " + (g.join ? "standing" : "gone")
+      + ", said " + (g.joined ? "joined" : "nothing");
+    const heldOk = g => g.asked && g.gone && !g.join && g.joined;
+    try {
+      const mainNow = fs.readFileSync(mainFile, "utf8");
+      const h = await heldJoin(mainNow, "held", false);
+      check(heldOk(h), "923c a desk holding the key of the team's epoch takes an invitation, and the lead's next rev at that epoch names it with a wrap it opens: the join finishes: " + heldTold(h));
+      const n = await heldJoin(mainNow, "named", true);
+      check(heldOk(n) && n.waited, "923d a roster heeded before the invitation that already names this desk does not finish the join, and the lead's rev 2 does: " + heldTold(n));
+      const nameBytes = sha(fs.readFileSync(mainFile));
+      const liftedNamed = dropLine("plant:c6-named")(mainNow);
+      const ln = liftedNamed === null ? null : await heldJoin(liftedNamed, "plant-held", false);
+      check(!!ln && ln.asked && !heldOk(ln) && sha(fs.readFileSync(mainFile)) === nameBytes,
+        "923e lifting plant:c6-named reddens 923c, and the product file is never written: " + (ln ? heldTold(ln) : "plant line absent"));
+      const liftedFresh = swapText("plant:c6-fresh", "raised && ", "")(mainNow);
+      const lf = liftedFresh === null ? null : await heldJoin(liftedFresh, "plant-named", true);
+      check(!!lf && !lf.refused && !lf.waited && sha(fs.readFileSync(mainFile)) === nameBytes,
+        "923f lifting plant:c6-fresh finishes the join on the roster heeded before the invitation, reddening 923d, and the product file is never written: " + (lf ? heldTold(lf) : "plant line absent"));
+    } catch (e) {
+      check(false, "harness (the legs 923c): " + (e && e.stack ? e.stack : e));
+    }
   } catch (e) {
     check(false, "harness (the legs 921a to 921ae): " + (e && e.stack ? e.stack : e));
   }
@@ -3902,6 +3953,74 @@ try {
   check(false, "harness (the leg 952a): " + (e && e.stack ? e.stack : e));
 }
 
+/* ---- a desk's own copy lands its team file before the lead's other blobs of the batch open (C9, board 923). A desk
+   offline across an epoch move comes back to one page holding its copy of the new team file and the lead's files sealed
+   under the new key: the key its wrap gives opens them in the same pass, so each blob is fetched once. ---- */
+async function copyOnce(mod) {
+  const LBX = boxPair(), k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32);
+  const D = { k: keyPair(true), box: boxPair() };
+  const tm = await freshTeam([D.k]);
+  const tag = tm.rt.slice(0, 8);
+  const docAt = (epoch, rev, key) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["lane-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LBX.pub }, sealed: true, exportsSealed: false, epoch, rev,
+    channel: { kind: "relay", rt: tm.rt, url: URLV1 },
+    roster: [{ desk: { id: D.k.keyId, key: D.k.pub, box: D.box.pub }, wrap: wrapFor(key, D.box.pub, tm.id, epoch, D.k.keyId) }] }, LEAD), null, 1) + "\n";
+  const leadKeys = new Map([[1, k1]]);
+  const lead = opened(mod, "c9-lead-" + tag, tm, LEAD, "root", { keyFor: e => leadKeys.get(e) || null,
+    sealEpoch: () => Math.max(...leadKeys.keys()), agree: agreeWith(LBX) });
+  put(lead.mirror, C.TEAM_NAME, docAt(1, 1, k1));
+  put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition one\"}\n");
+  lead.ch.start();
+  await settle(lead);
+  const held = new Map([[1, k1]]), name = "c9-desk-" + tag;
+  const deskNow = () => opened(mod, name, tm, D.k, "desk:" + D.k.keyId, {
+    me: () => ({ keyId: D.k.keyId, public: D.k.pub, privateKey: D.k.privateKey, place: "desk:" + D.k.keyId, box: D.box.pub }),
+    keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(D.box),
+    onTeam: () => {
+      let doc = null;
+      try { doc = JSON.parse(read(path.join(LAB, name), C.TEAM_NAME)); } catch { return; }
+      const mine = doc && Array.isArray(doc.roster) ? doc.roster.find(r => r && r.desk && r.desk.id === D.k.keyId) : null;
+      const k = mine ? unwrapWith(D.box, mine.wrap, tm.id, doc.epoch, D.k.keyId) : null;
+      if (k) held.set(doc.epoch, k);
+    } });
+  const first = deskNow();
+  first.ch.start();
+  await settle(first);
+  const atOne = JSON.parse(read(first.mirror, C.TEAM_NAME) || "{}").epoch === 1;
+  await first.ch.stop();
+  leadKeys.set(2, k2);
+  put(lead.mirror, C.TEAM_NAME, docAt(2, 1, k2));
+  put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition two\"}\n");
+  put(lead.mirror, "after.ec", "{\"note\":\"written after the move\"}\n");
+  await settle(lead);
+  const back = deskNow();
+  back.ch.start();
+  await settle(back);
+  const gets = new Map();
+  for (const l of back.t.log) if (/^GET b\/[0-9a-f]{32}$/.test(l)) gets.set(l, (gets.get(l) || 0) + 1);
+  const out = { atOne, epoch: JSON.parse(read(back.mirror, C.TEAM_NAME) || "{}").epoch, key: !!held.get(2),
+    lane: read(back.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n", after: read(back.mirror, "after.ec") !== null,
+    fetched: gets.size, twice: [...gets.values()].filter(n => n > 1).length, pending: back.prog.state().pending.length };
+  await back.ch.stop();
+  await lead.ch.stop();
+  return out;
+}
+try {
+  const o = await copyOnce(C);
+  check(o.atOne && o.epoch === 2 && o.key && o.lane && o.after && o.pending === 0 && o.fetched > 0 && o.twice === 0,
+    "923g a desk back from an epoch move fetches its own copy of the new team file and the lead's files sealed under the new key once each, and opens them in that one pass: epoch "
+    + o.epoch + ", key " + (o.key ? "held" : "absent") + ", the new edition " + (o.lane ? "loaded" : "missing") + ", after.ec " + (o.after ? "loaded" : "missing")
+    + ", " + o.fetched + " blobs fetched, " + o.twice + " of them more than once, pending " + o.pending);
+  const copyPlant = await liftChannel("plant:copy-first", async mod => {
+    const x = await copyOnce(mod);
+    return x.epoch === 2 && x.lane && x.after && x.twice > 0;
+  });
+  check(copyPlant.turned && copyPlant.back, "923h lifting plant:copy-first opens the lead's new-epoch files before the copy's team file lands, so each is fetched again, and the product file is never written: "
+    + copyPlant.detail + ", sha " + (copyPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 923g): " + (e && e.stack ? e.stack : e));
+}
+
 /* ---- an edit of this program's own file, one cycle (S2). The catch-up skips what this desk, or the lead, just sent,
    so the cycle that the edit starts does not write the older bytes back over it. Three cycles would hide the loss:
    the second would consume the program's own blob before the edit. The edit has three guards now: the record that shows
@@ -4173,6 +4292,72 @@ try {
     + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a page whose fetch fails part way is applied only where it can be judged whole (C3, board 923). The lead names a
+   second desk at rev 2, that desk sends a file, and the lead writes rev 3, which buries rev 2: the first desk, offline
+   meanwhile, is listed the second desk's file and then rev 3, whose fetch the relay answers 503 once. The desk file is
+   not judged against rev 1, which does not name its writer, and lands at the next cycle. ---- */
+async function pageWhole(mod) {
+  const key = crypto.randomBytes(32), D1 = keyPair(true), D2 = keyPair(true);
+  const tm = await freshTeam([D1, D2]);
+  const tag = tm.rt.slice(0, 8), keyFor = e => (e === 1 ? key : null);
+  const lead = opened(mod, "c3-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1 });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+  lead.ch.start();
+  await settle(lead);
+  let failId = null, failed = 0;
+  const t1 = transport("c3-d1-" + tag);
+  const request = async (m, u, h, b) => {
+    if (m === "GET" && failId && failed === 0 && String(u).endsWith("/b/" + failId)) {
+      failed++;
+      return { status: 503, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "fault" })) };
+    }
+    return t1.request(m, u, h, b);
+  };
+  const deskOne = () => opened(mod, "c3-d1-" + tag, tm, D1, "desk:" + D1.keyId, { keyFor, sealEpoch: () => 1, request, connect: t1.connect });
+  const first = deskOne();
+  first.ch.start();
+  await settle(first);
+  const atRev1 = JSON.parse(read(first.mirror, C.TEAM_NAME) || "{}").rev === 1;
+  await first.ch.stop();
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 2, [member(D1), member(D2)]));
+  await settle(lead);
+  const REL = "desks/" + D2.keyId + "/stats.estat", BODY = "{\"counted\":2}\n";
+  const d2 = opened(mod, "c3-d2-" + tag, tm, D2, "desk:" + D2.keyId, { keyFor, sealEpoch: () => 1 });
+  put(d2.mirror, REL, BODY);
+  d2.ch.start();
+  await settle(d2);
+  await d2.ch.stop();
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 3, [member(D1), member(D2)]));
+  await settle(lead);
+  const live = blobsOn(tm.rt, LEAD.keyId).filter(v => !v.del && !v.gone).sort((a, b) => b.seq - a.seq);
+  const deskBlob = blobsOn(tm.rt, D2.keyId).filter(v => !v.del).sort((a, b) => b.seq - a.seq)[0];
+  failId = live.length ? live[0].id : null;
+  const listedBefore = !!deskBlob && !!live.length && deskBlob.seq < live[0].seq;
+  const back = deskOne();
+  back.ch.start();
+  await settle(back);
+  const out = { atRev1, listedBefore, failed, rev: JSON.parse(read(back.mirror, C.TEAM_NAME) || "{}").rev, landed: read(back.mirror, REL) === BODY,
+    fetchedDesk: deskBlob ? t1.log.filter(l => l === "GET b/" + deskBlob.id).length : 0 };
+  await back.ch.stop();
+  await lead.ch.stop();
+  return out;
+}
+try {
+  const w = await pageWhole(C);
+  check(w.atRev1 && w.listedBefore && w.failed === 1 && w.rev === 3 && w.landed,
+    "923a a desk file listed before the lead's newer team file, whose fetch the relay answers 503 once, is not judged against the older roster that does not name its writer, and lands at the next cycle: "
+    + (w.listedBefore ? "listed before rev 3" : "not listed before rev 3") + ", 503 answered " + w.failed + ", the mirror's rev " + w.rev
+    + ", the desk file " + (w.landed ? "landed" : "missing") + " after " + w.fetchedDesk + " fetch(es)");
+  const wholePlant = await liftChannel("plant:page-whole", async mod => {
+    const x = await pageWhole(mod);
+    return x.listedBefore && x.failed === 1 && x.rev === 3 && !x.landed;
+  });
+  check(wholePlant.turned && wholePlant.back, "923b lifting plant:page-whole judges the desk file against the older roster and loses it, and the product file is never written: "
+    + wholePlant.detail + ", sha " + (wholePlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the legs 923a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a joining desk that also owes another file. Only join.json may be sealed under the invitation, so the other

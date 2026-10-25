@@ -944,17 +944,30 @@ function createProgram(opts) {
       if (it.meta.writer === pin.lead.keyId && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
       (it.meta.writer === pin.lead.keyId ? lead : rest).push(it);
     }
-    const opened = [];
-    for (const it of lead) { const x = openOne(it, floors0, ctx); if (x) opened.push(x); }
-    const teams = opened.filter(x => x.r.kind === "file" && x.r.path === TEAM_NAME);
-    if (teams.length) {
-      const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
+    const isTeam = x => x.r.kind === "file" && x.r.path === TEAM_NAME;
+    let topTeam = null;
+    const landTop = list => {
+      const teams = list.filter(isTeam);
       for (const x of teams) unpend(x.r.id);
+      if (!teams.length) return;
+      const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
+      if (topTeam && !later(top.r, topTeam.r)) return;
+      topTeam = top;
       const landed = landTeam(top.r, ctx); /* plant:team-first */
       if (!landed.ok) dropSaid(TEAM_NAME, landed);
-      else if (!landed.same && !landed.stale) { out.team = true; out.applied.push(TEAM_NAME); }
-    }
-    landNewest(opened.filter(x => !(x.r.kind === "file" && x.r.path === TEAM_NAME)), out, ctx);
+      else if (!landed.same && !landed.stale && !out.team) { out.team = true; out.applied.push(TEAM_NAME); }
+    };
+    /* An invitation's place and a desk's own copy first: the team file either brings is landed, and its key heeded, before
+       the lead's other blobs are opened, so those sealed under that key open in this pass rather than wait to be fetched again. */
+    const placed = [];
+    let first = () => false;
+    first = it => typeof it.meta.place === "string" && it.meta.place.startsWith("invite:"); /* plant:copy-first */
+    for (const it of lead) { if (first(it)) { const x = openOne(it, floors0, ctx); if (x) placed.push(x); } }
+    landTop(placed);
+    const opened = [];
+    for (const it of lead) { if (!first(it)) { const x = openOne(it, floors0, ctx); if (x) opened.push(x); } }
+    landTop(opened);
+    landNewest(opened.filter(x => !isTeam(x)), out, ctx);
     const desks = [];
     for (const it of rest) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
     landNewest(desks, out, ctx);
@@ -1432,8 +1445,18 @@ function createChannel(opts) {
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
         const got = await authed("GET", "b/" + m.id);
-        /* Not served for a reason that can pass (see gone): what came before it is applied and the next cycle asks from it. */
-        if (got.status !== 200 && !gone(got)) { prog.applyBatch(items, ctx()); prog.setSeq(before); return got.refused || refusalOf(got); } /* plant:fetch-kept */
+        /* Not served for a reason that can pass (see gone): what came before it is applied and the next cycle asks from it.
+           Where the lead has a blob listed from here on, which may be the team file a desk's file is judged under, the
+           page applies only up to its first desk file and the next cycle asks from that file. */
+        if (got.status !== 200 && !gone(got)) {
+          const leadId = prog.pinned() ? prog.pinned().lead.keyId : "";
+          let cut = -1;
+          if (r.json.some(x => table(x) && table(x.meta) && Number.isSafeInteger(x.seq) && x.seq >= e.seq && x.meta.writer === leadId))
+            cut = items.findIndex(x => x.meta.writer !== leadId); /* plant:page-whole */
+          prog.applyBatch(cut < 0 ? items : items.slice(0, cut), ctx());
+          prog.setSeq(cut < 0 ? before : items[cut].seq - 1);
+          return got.refused || refusalOf(got); /* plant:fetch-kept */
+        }
         if (got.status !== 200) continue;
         items.push({ seq: e.seq, meta: table(got.meta) && got.meta.id === m.id ? got.meta : m, ct: got.bytes });
       }
