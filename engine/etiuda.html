@@ -31430,7 +31430,11 @@ What you type stays in this browser only.`;
       return true;
     }
     if (id === "copy" || id === "copyOther") {
-      laneCopy(Math.max(0, laneMark), id === "copyOther");
+      if (laneMark < 0) {
+        laneMarkTo(0);
+        return true;
+      }
+      laneCopy(laneMark, id === "copyOther");
       return true;
     }
     if (/^nextCopy[1-4]$/.test(id)) return laneCopy(+id.slice(8) - 1);

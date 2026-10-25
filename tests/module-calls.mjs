@@ -3396,6 +3396,32 @@ const CARD_B = {
           warnHtml.split('<div class="card ln-now"')[1].indexOf('<span class="fillmiss">PAX</span>') > -1,
           warnHtml.split('<div class="ln-next"')[1].indexOf('<span class="fillmiss">PAX</span>') > -1].join(","),
           "true,true,true,true"));
+
+      /* 1008w2: with nothing marked, Enter in the lanes copies nothing and marks row 0 */
+      H.hooks.railDecorate = () => {};
+      const hadSec = globalThis.window.isSecureContext, hadClip = navigator.clipboard;
+      globalThis.window.isSecureContext = true;
+      navigator.clipboard = { writeText: () => new Promise(() => {}) };
+      const hadAll = lanesBox.querySelectorAll;
+      const rowClasses = new Set();
+      const mockRow = {
+        classList: { toggle: (c, val) => (val ? rowClasses.add(c) : rowClasses.delete(c)), contains: c => rowClasses.has(c) },
+        querySelector: () => null, scrollIntoView() {},
+      };
+      lanesBox.querySelectorAll = sel => (sel === ".ln-row" ? [mockRow] : []);
+      LN.toggleLanes(true);
+      const pathBefore = T.tabs[0].path.slice();
+      LN.lanesShortcut("copy");
+      const pathFirst = T.tabs[0].path.slice(), markedFirst = rowClasses.has("on");
+      LN.lanesShortcut("copy");
+      const pathSecond = T.tabs[0].path.slice();
+      lanesBox.querySelectorAll = hadAll;
+      globalThis.window.isSecureContext = hadSec;
+      if (hadClip) navigator.clipboard = hadClip; else delete navigator.clipboard;
+      LN.toggleLanes(false);
+      check("lanes.js", "1008w2 with nothing marked, Enter in the lanes copies nothing and marks row 0; a second Enter copies row 0",
+        () => eq([pathBefore.join(","), pathFirst.join(","), markedFirst, pathSecond.join(",")].join("|"),
+          "c-warn-now|c-warn-now|true|c-warn-now,c-warn-next"));
     } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);

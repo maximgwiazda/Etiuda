@@ -320,7 +320,11 @@ function laneCopy(k, other){
 function lanesShortcut(id){
   if(id==="navUp"||id==="navDown"){ laneMarkTo(laneMark<0 ? (id==="navDown" ? 0 : 1e9) : laneMark+(id==="navDown"?1:-1)); return true; }
   if(id==="markTop"||id==="markBottom"){ laneMarkTo(id==="markTop" ? 0 : 1e9); return true; }
-  if(id==="copy"||id==="copyOther"){ laneCopy(Math.max(0,laneMark), id==="copyOther"); return true; }
+  if(id==="copy"||id==="copyOther"){
+    if(laneMark<0){ laneMarkTo(0); return true; }
+    laneCopy(laneMark, id==="copyOther");
+    return true;
+  }
   if(/^nextCopy[1-4]$/.test(id)) return laneCopy(+id.slice(8)-1);
   if(/^navPill/.test(id)) return true;
   return undefined;
