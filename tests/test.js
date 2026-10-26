@@ -1726,9 +1726,13 @@ function deskMarkTests() {
     [both.err, both.lineHidden, both.line, both.hidden, both.text, both.cls, both.key, both.sample],
     ["", false, EN_EVAL, true, "Sample catalog", "", "evaluation", "1"]);
 
-  /* WHERE THE LINE SITS. No layout here, so the document is the question: the line is inside
-     the header and the card list is not. Its own rule sets position:relative, so the family's
-     fixed bubble does not lift it over the cards, and it names print-color-adjust. */
+  /* WHERE THE LINE SITS. shoot.mjs counts #list text nodes whose rectangles meet a visible
+     mark. This process has no layout, so the same question is the document's: the line is
+     inside the header and the card list is not, the header is position:relative and the
+     scroller that holds the list starts under it, and the line's own rule sets no position,
+     no inset and no negative margin. A fixed stamp still covers the page, and the legs
+     below keep that stamp hidden while a published mark is shown. The ground prints because
+     the line names print-color-adjust, and it is not taken off the page in print. */
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const h0 = tpl.indexOf("<header>");
   const h1 = tpl.indexOf("</header>");
@@ -1743,21 +1747,18 @@ function deskMarkTests() {
      listAt > h1],
     [true, true, true]);
   eq("desk mark the line is a note a screen reader meets once, and it is not hidden from one",
-    [header.indexOf('<div id="deskMark" class="bub" data-side="none" role="note" hidden>') > -1,
+    [header.indexOf('<div id="deskMark" role="note" hidden>') > -1,
      /<div id="deskMark"[^>]*aria-hidden/.test(header)],
     [true, false]);
-  /* .bub is position:fixed. The line's own rule has to put it back in flow, or the family's
-     bubble lifts it out of the header and over the cards. */
-  const rule = /#deskMark\.bub\{([^}]*)\}/.exec(tpl);
+  const rule = /#deskMark\{([^}]*)\}/.exec(tpl);
   const body = rule ? rule[1] : "";
-  const positioned = /position\s*:\s*(fixed|absolute|sticky)/.test(body)
-    || !/position\s*:\s*relative/.test(body);
+  const positioned = /position\s*:\s*(fixed|absolute|sticky)/.test(body);
   const neg = /margin(?:-[a-z]+)?\s*:[^;]*-\d/.test(body);
   const taken = /\b(?:inset|z-index|top|left|right|bottom)\s*:/.test(body);
   eq("desk mark the line takes its own room in the header and is not placed over the cards, and its ground prints",
     [!!rule, positioned, neg, taken,
      /header\{position:relative/.test(tpl),
-     /-webkit-print-color-adjust:exact/.test(body) && /(?:^|;)\s*print-color-adjust:exact/.test(body),
+     tpl.indexOf("#deskMark{-webkit-print-color-adjust:exact;print-color-adjust:exact}") > -1,
      /#sampleMark\{[^}]*position:fixed/.test(tpl),
      /body\.e-lanes #pillsSlot\{display:none\}/.test(tpl)
        && !/body\.e-lanes[^{]*#deskMark\{[^}]*display\s*:\s*none/.test(tpl)],
@@ -1798,20 +1799,6 @@ function deskMarkTests() {
   eq("desk mark the line is hidden when the loaded catalog carries no mark",
     [clearLine.err, desk.hidden, ns.DeskMark || ""],
     ["", true, ""]);
-
-  /* THE LOOK. The line is the family's bubble: class bub so the fill is --bub and the radius
-     is 14, ink and shadow the bubble's own tokens, and no warning ground on any of its rules. */
-  const open = (header.match(/<div id="deskMark"[^>]*>/) || [""])[0];
-  const familyOk = (tpl.match(/[^{}]*\.bub[^{]*\{[^}]*\}/g) || [])
-    .some(b => /background:var\(--bub\)/.test(b) && /border-radius:14px/.test(b));
-  const deskCss = (tpl.match(/#deskMark[^{]*\{[^}]*\}/g) || []).join("\n");
-  eq("desk mark the line uses the bubble's own fill and ink, not the warning ground",
-    [open.indexOf('class="bub"') > -1 && open.indexOf('data-side="none"') > -1,
-     familyOk,
-     /color:var\(--bub-ink\)/.test(body) && /var\(--bub-shadow\)/.test(body) && !/background:/.test(body),
-     /#deskMark \.ic\{[^}]*color:var\(--bub-ink\)/.test(tpl),
-     deskCss.length > 0 && !/--warn-bg/.test(deskCss) && !/--warn\b/.test(deskCss)],
-    [true, true, true, true, true]);
 }
 
 /* Spec 2.6 lines 399-401: where a label is present the copy control shows it in place of
@@ -4642,7 +4629,7 @@ function pillsWidthWatchTests() {
      outside the slot, at the slot's width and no height, so the width watch still observes
      a box the clip does not resize. */
   eq("the probe sits outside the slot at the slot's width and no height",
-    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div id="deskMark"[^>]*>[\s\S]*?<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
+    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div id="deskMark" role="note" hidden>[\s\S]*?<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
       !!rule && !!slotRule && rule[1].indexOf("max-width:" + slotRule[1]) > -1 && /height:0/.test(rule[1])],
     [true, true]);
   const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
