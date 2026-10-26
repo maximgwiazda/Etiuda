@@ -1,5 +1,5 @@
 "use strict";
-/* The team's Durable Object over HTTP: the routes under /relay/v1, the blobs in R2 and the sockets' announcements,
+/* The team's Durable Object over HTTP: the routes under the Worker's prefix, the blobs in R2 and the sockets' announcements,
    around relay/core.cjs. Storage, R2, the clock and the sockets are passed in, so node legs run it over
    relay/test/stand-ins.cjs; RelayTeam passes the runtime's own. */
 const { Buffer } = require("node:buffer");
@@ -14,15 +14,31 @@ const STATUS = {
   "replay-rev": 409, "bad-grant": 403, "team-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
-const ROUTE = /^\/relay\/v1\/(?:teams|t\/([0-9a-f]{32})\/(devices|invites|hello|session|grant|socket|wrap|states|since\/(\d{1,16})|b\/([0-9a-f]{32})))$/;
+const DEFAULT_PREFIX = "/relay/v1/";
+/* One leading slash, one segment, then /v1/ and a trailing slash. A ".." cannot occur in that shape. */
+const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
+const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|hello|session|grant|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 /* The methods each route answers, in one table the Worker and the object both ask, so that a path or a method no route answers
    is missing before any object is woken to say so. `since` and `b` are the two routes whose names carry an argument. */
 const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], socket: ["GET"],
   wrap: ["GET"], states: ["GET"], since: ["GET"], b: ["GET", "PUT"] };
-/* The route a method and a path name, as { rt, what }, or null where none answers them. */
-function routeOf(method, pathname) {
-  const m = ROUTE.exec(pathname);
+/* The one path this Worker answers under. API_PREFIX names it where set; with none, the path is /relay/v1/. A value of any
+   other shape is not a prefix, and the Worker answers unavailable rather than /relay/v1/. */
+function apiPrefixOf(env) {
+  const p = env ? env.API_PREFIX : undefined;
+  if (p === undefined || p === null || p === "") return DEFAULT_PREFIX; /* plant:prefix-default */
+  if (typeof p !== "string" || !PREFIX_RE.test(p)) return null; /* plant:prefix-shape */
+  return p; /* plant:prefix-set */
+}
+function routeRe(prefix) {
+  return new RegExp("^" + prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ROUTE_TAIL);
+}
+/* The route a method and a path name, as { rt, what }, or null where none answers them. `prefix` omitted is /relay/v1/. */
+function routeOf(method, pathname, prefix) {
+  const use = prefix === undefined ? DEFAULT_PREFIX : prefix;
+  if (typeof use !== "string" || !PREFIX_RE.test(use)) return null;
+  const m = routeRe(use).exec(pathname);
   if (!m) return null;
   const what = m[3] !== undefined ? "since" : m[4] !== undefined ? "b" : (m[2] || "teams");
   return METHODS[what].indexOf(method) > -1 ? { rt: m[1] || null, what } : null;
@@ -33,6 +49,7 @@ const refused = r => reply(STATUS[r.reason] || 400, { error: r.reason, said: r.s
 const refusedFor = reason => refused(B.refusal(reason));
 const missing = () => refusedFor("missing");
 const fault = () => reply(500, { error: "fault", said: "The relay could not answer that." });
+const unavailable = () => reply(503, { error: "unavailable", said: "The relay could not answer that." });
 
 /* The body, or null once it would pass `max`: a declared length is believed only to refuse, and a stream is read no
    further than the cap. */
@@ -72,6 +89,7 @@ const SWEEP_RETRY_MS = 60 * 60 * 1000;
 function teamObject(deps) {
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
+  const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
 
   async function fetch(request) {
@@ -80,8 +98,9 @@ function teamObject(deps) {
 
   async function route(request) {
     const url = new URL(request.url);
-    const m = ROUTE.exec(url.pathname);
-    if (!m || !routeOf(request.method, url.pathname) || url.protocol !== "https:" || url.search !== "") return missing();
+    if (prefix === null) return unavailable();
+    const m = routeRe(prefix).exec(url.pathname);
+    if (!m || !routeOf(request.method, url.pathname, prefix) || url.protocol !== "https:" || url.search !== "") return missing();
     /* A team gone by the clock is swept before anything is answered, should its alarm not have rung yet. */
     await sweepIfDue(); /* plant:sweep-lazy */
     const rt = m[1], what = m[2] || "teams", method = request.method;
@@ -306,7 +325,7 @@ function alarmOf(storage) {
 
 class RelayTeam {
   constructor(ctx, env) {
-    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), clock: () => Date.now(), sockets: hibernating(ctx) });
+    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined, clock: () => Date.now(), sockets: hibernating(ctx) });
   }
   fetch(request) { return this.object.fetch(request); }
   alarm() { return this.object.alarm(); }
@@ -314,4 +333,4 @@ class RelayTeam {
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }
 
-module.exports = { JSON_MAX, teamObject, RelayTeam, routeOf, readCapped, refusedFor, missing, fault };
+module.exports = { JSON_MAX, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable };

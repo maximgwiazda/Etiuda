@@ -114,7 +114,7 @@ function relayEnv(opts) {
     const hub = socketHub();
     hubs.set(name, hub);
     const obj = (o.team || team).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots,
-      alarm: alarmFor(name) });
+      alarm: alarmFor(name), prefix: env.API_PREFIX });
     live.set(name, obj);
     return obj;
   }

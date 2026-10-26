@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 291;
+const EXPECTED = 295;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -180,6 +180,53 @@ async function main() {
     WORKER = await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href);
     W = WORKER.routeWith(K.ROOTS, env => env.NOW());
   } catch (e) { check(false, "0a the relay's modules load - " + e.message); return; }
+
+  /* ---- 979: the Worker answers under the one prefix its configuration names, and under nothing else ---- */
+  {
+    const rt = hex(16), lead = keyPair(false), body = createBody(rt, lead, 0);
+    const made = r => r.status === 200 && !!r.json && r.json.rt === rt;
+    const gone = r => r.status === 404 && refused(r, "missing");
+    const down = r => r.status === 503 && !!r.json && r.json.error === "unavailable" && r.json.said === "The relay could not answer that."
+      && Object.keys(r.json).sort().join() === "error,said";
+    async function both(envPrefix) {
+      const R = relayEnv();
+      if (envPrefix !== undefined) R.env.API_PREFIX = envPrefix;
+      const prod = await call(R, "POST", "/relay/v1/teams", { json: body });
+      const asked = R.asked.length;
+      const staging = await call(R, "POST", "/relay-staging/v1/teams", { json: body });
+      return { prod, staging, asked, after: R.asked.length };
+    }
+    const staged = await both("/relay-staging/v1/");
+    check(gone(staged.prod) && staged.asked === 0 && made(staged.staging),
+      "979i with API_PREFIX /relay-staging/v1/ a teams POST on that path is made, and one on /relay/v1/ is missing and wakes no object: "
+      + staged.prod.status + " " + staged.staging.status + " asked " + staged.asked);
+    const plain = await both(undefined);
+    check(made(plain.prod) && gone(plain.staging) && plain.after === plain.asked,
+      "979j with no API_PREFIX a teams POST on /relay/v1/ is made, and one on /relay-staging/v1/ is missing: "
+      + plain.prod.status + " " + plain.staging.status);
+    const badValues = ["relay-staging/v1/", "/relay-staging/v1", "/relay/../v1/"];
+    const badDetail = [];
+    let badOk = true;
+    for (const bad of badValues) {
+      const row = await both(bad);
+      const ok = down(row.prod) && down(row.staging) && row.after === 0;
+      if (!ok) badOk = false;
+      badDetail.push(bad + " " + row.prod.status + "/" + row.staging.status + " asked " + row.after);
+    }
+    check(badOk, "979k a prefix with no leading slash, no trailing slash, or a .. is unavailable on both paths and wakes no object: " + badDetail.join("; "));
+    const toml = fs.readFileSync(path.join(ROOT, "relay", "wrangler.toml"), "utf8");
+    const halves = toml.split("\n[env.production]\n");
+    const top = halves[0], prod = halves[1] || "";
+    const has = (text, re) => re.test(text);
+    check(halves.length === 2 && has(top, /^name = "etiuda-relay-staging"$/m) && has(top, /pattern = "etiuda\.dev\/relay-staging\/v1\/\*"/)
+      && has(top, /^API_PREFIX = "\/relay-staging\/v1\/"$/m) && has(top, /^bucket_name = "etiuda-relay-staging"$/m)
+      && has(prod, /^name = "etiuda-relay"$/m) && has(prod, /pattern = "etiuda\.dev\/relay\/v1\/\*"/)
+      && has(prod, /^API_PREFIX = "\/relay\/v1\/"$/m) && has(prod, /^bucket_name = "etiuda-relay"$/m) && has(prod, /jurisdiction = "eu"/)
+      && has(prod, /\[\[env\.production\.durable_objects\.bindings\]\]/) && has(prod, /class_name = "RelayTeam"/)
+      && has(prod, /\[\[env\.production\.migrations\]\]/) && has(prod, /new_sqlite_classes = \["RelayTeam"\]/)
+      && has(prod, /Nothing deploys/) && has(prod, /Maxim/) && !/relay-staging/.test(prod),
+      "979l the top of relay/wrangler.toml is the staging Worker, its route, prefix and bucket, and [env.production] names its Worker, route, prefix, eu bucket and Durable Object, and says nothing deploys it until Maxim's word");
+  }
 
   /* ---- 1: the bytes and the routes ---- */
   {
