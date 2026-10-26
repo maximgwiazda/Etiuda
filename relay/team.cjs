@@ -88,8 +88,9 @@ const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
 function teamObject(deps) {
   /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
-     A call with no header reads deps.revoked, which is the kept list where the caller has one. */
-  let headerSet = false, headerKeys = null;
+     Those keys stay for a later call with no header, while this wake lasts. With none, the call reads deps.revoked,
+     and a result that is not a list is no list. */
+  let headerSet = false, headerKeys = null, carried = null;
   function useKept(request) {
     const raw = request && request.headers ? request.headers.get("etiuda-kept") : null;
     if (typeof raw !== "string") { headerSet = false; headerKeys = null; return; }
@@ -98,9 +99,19 @@ function teamObject(deps) {
     if (!Array.isArray(parsed) || parsed.some(k => typeof k !== "string")) { headerSet = false; headerKeys = null; return; }
     headerSet = true;
     headerKeys = parsed.slice();
+    carried = headerKeys.slice();
+  }
+  function revokedNow() {
+    if (headerSet) return headerKeys.slice();
+    const read = typeof deps.revoked === "function" ? deps.revoked() : [];
+    const envKeys = Array.isArray(read) ? read : [];
+    if (!carried) return envKeys.slice();
+    const out = carried.slice();
+    for (const k of envKeys) if (out.indexOf(k) < 0) out.push(k);
+    return out;
   }
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
-    revoked: () => headerSet ? headerKeys.slice() : (typeof deps.revoked === "function" ? deps.revoked() : []) });
+    revoked: revokedNow });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
@@ -350,20 +361,13 @@ class RelayTeam {
     const self = this;
     this.object = teamObject({ store, r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined,
       revoked: () => {
-        /* Headerless calls, a socket message among them. The object named for the list answers from its own storage.
-           Re-entering that object reads the row and does not ask itself again. */
+        /* The object named for the list answers from its own row. A headerless call cannot ask another object:
+           its method returns a promise. The parent's read of REVOKED is synchronous. */
         if (self.listing) {
           const row = store.get("revoked");
           return row && Array.isArray(row.keys) ? row.keys.slice() : [];
         }
-        const bound = env && env.TEAMS;
-        const ns = bound && typeof bound.jurisdiction === "function" ? bound.jurisdiction("eu") : null;
-        const stub = ns && typeof ns.get === "function" && typeof ns.idFromName === "function" ? ns.get(ns.idFromName("revoked")) : null;
-        if (stub && typeof stub.acceptRevocations === "function") {
-          const decided = stub.acceptRevocations(env && env.REVOKED);
-          return decided && Array.isArray(decided.keys) ? decided.keys : [];
-        }
-        return core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]);
+        return core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]); /* plant:revoked-wake */
       },
       clock: () => Date.now(), sockets: hibernating(ctx) });
   }

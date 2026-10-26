@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 329;
+const EXPECTED = 331;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -3539,6 +3539,78 @@ async function main() {
     const inv = await sceneInvites();
     check(inv.ok, inv.line);
 
+    /* A socket message wakes the object with no request, so it has no carried header. The stub's acceptRevocations answers a
+       promise. The parent's read is what still refuses the key. The suite's list is signed by the test root, and that read names
+       the vendor's, so this leg lends the export the test root for the call, the same seam a create uses. */
+    async function sceneWake(T) {
+      const X = require(path.join(ROOT, "relay", "test", "do-ctx.cjs"));
+      const teamMod = T || require(PRODUCT.team);
+      const CORE_SRC = path.join(ROOT, "relay", "core.cjs");
+      const realKeys = C.revokedKeysOf;
+      C.revokedKeysOf = text => realKeys(text, K.ROOTS);
+      const say = "982o a hibernated socket's message on a team whose grant's service key is revoked is refused, and the stub answers a promise: ";
+      try {
+        return await X.withWorkersGlobals(async () => {
+          const env = { BLOBS: S.memoryBucket(), NOW: () => Date.now() }, teams = new Map();
+          const revokedStore = S.memoryStore();
+          function raise(ctx) {
+            const cores = [...new Set([C, require(CORE_SRC)])], reals = cores.map(c => c.createCore);
+            cores.forEach((c, i) => { c.createCore = deps => reals[i](Object.assign({}, deps, { roots: K.ROOTS })); });
+            try { return new teamMod.RelayTeam(ctx, env); }
+            finally { cores.forEach((c, i) => { c.createCore = reals[i]; }); }
+          }
+          function hold(name) {
+            if (!teams.has(name)) teams.set(name, { ctx: X.doCtx(), team: null });
+            return teams.get(name);
+          }
+          const scoped = {
+            idFromName(name) { return { name: String(name) }; },
+            get(id) {
+              return {
+                fetch(request) {
+                  const held = hold(id.name);
+                  if (!held.team) held.team = raise(held.ctx);
+                  return Promise.resolve(held.team.fetch(request));
+                },
+                alarm() { const held = hold(id.name); return Promise.resolve(held.team ? held.team.alarm() : undefined); },
+                webSocketMessage(ws, message) { const held = hold(id.name); return Promise.resolve(held.team ? held.team.webSocketMessage(ws, message) : undefined); },
+                webSocketClose(ws) { const held = hold(id.name); return Promise.resolve(held.team ? held.team.webSocketClose(ws) : undefined); },
+                acceptRevocations(text) { return Promise.resolve().then(() => C.acceptRevocations(text, K.ROOTS, revokedStore)); },
+              };
+            },
+            acceptRevocations(text) { return C.acceptRevocations(text, K.ROOTS, revokedStore); },
+          };
+          env.TEAMS = { jurisdiction(j) { return j === "eu" ? scoped : null; } };
+          const R = { env, clock: { now: Date.now() } };
+          const rt = hex(16), lead = keyPair(false), now = R.clock.now;
+          const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now, { grant: K.delegatedGrantFor(lead.pub, now) }) });
+          const w = { R, rt, lead };
+          const ses = made.status === 200 ? await helloAs(w, lead) : { status: 0, json: null };
+          const token = ses.json && ses.json.session;
+          const held = teams.get(rt);
+          const opened = token && held ? await held.team.fetch(new Request("https://relay.test/relay/v1/t/" + rt + "/socket",
+            { headers: { authorization: "Bearer " + token, upgrade: "websocket" } })) : null;
+          const server = held && held.ctx.accepted[0];
+          env.REVOKED = revText([K.DELEGATE.pub]);
+          const probe = scoped.get({ name: "list" }).acceptRevocations(undefined);
+          const asyncStub = !!probe && typeof probe.then === "function" && !Array.isArray(probe.keys);
+          const woken = held ? raise(held.ctx) : null;
+          if (server && woken) woken.webSocketMessage(server, JSON.stringify({ type: "ping" }));
+          const closed = server && server.closed;
+          const ok = made.status === 200 && !!token && opened && opened.status === 101 && asyncStub && !!closed
+            && closed.code === 4400 && closed.reason === REVOKED_SAID && server.sent.length === 0;
+          const line = say + "made " + made.status + ", session " + (token ? "yes" : ses.status) + ", open " + (opened && opened.status)
+            + ", stub " + (asyncStub ? "promise" : "sync") + ", closed " + (closed ? closed.code + " " + closed.reason : "open")
+            + ", sent " + (server ? server.sent.length : "none");
+          return { ok, line };
+        });
+      } catch (e) {
+        return { ok: false, line: say + (e && e.stack ? e.stack : e) };
+      } finally { C.revokedKeysOf = realKeys; }
+    }
+    const wake = await sceneWake();
+    check(wake.ok, wake.line);
+
     await broken(a.ok, run => swapCore("swept !== lead.pub", "true", () => run(sceneA)),
       "980i", "swapping the swept lead's key for true refuses that lead too, which turns 980a red");
     await broken(b.ok, run => liftCore("plant:swept-other", () => run(sceneB)),
@@ -3577,6 +3649,11 @@ async function main() {
       "982m", "lifting plant:revoked-devices accepts a devices call under a revoked key, which turns 982f red");
     await broken(inv.ok, run => liftCore("plant:revoked-invites", () => run(sceneInvites)),
       "982n", "lifting plant:revoked-invites accepts an invites call under a revoked key, which turns 982g red");
+    await broken(wake.ok, run => swapTeam(
+      "return core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]); /* plant:revoked-wake */",
+      "return undefined; /* plant:revoked-wake */",
+      T => run(() => sceneWake(T))),
+      "982p", "lifting plant:revoked-wake leaves a hibernated socket open on a revoked key, which turns 982o red");
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

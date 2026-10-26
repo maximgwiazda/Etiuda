@@ -125,9 +125,19 @@ function relayEnv(opts) {
     live.set(name, obj);
     return obj;
   }
+  /* A stub's methods answer promises, as a Durable Object stub's do. A call that does not await one has no list and no response. */
   const scoped = {
     idFromName(name) { return { name: String(name) }; },
-    get(id) { return { fetch: request => objectFor(id.name).fetch(request) }; },
+    get(id) {
+      const obj = () => objectFor(id.name);
+      return {
+        fetch(request) { return Promise.resolve(obj().fetch(request)); },
+        alarm() { return Promise.resolve(obj().alarm()); },
+        webSocketMessage(ws, message) { return Promise.resolve(obj().webSocketMessage(ws, message)); },
+        webSocketClose(ws) { return Promise.resolve(obj().webSocketClose(ws)); },
+        acceptRevocations(text) { return Promise.resolve().then(() => acceptRevocations(text)); },
+      };
+    },
     acceptRevocations,
   };
   const env = {
