@@ -1103,7 +1103,7 @@ UI_STRINGS.pl={
   "The catalogs on this desk stay as they are and work as before.":"Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd.",
   "The team's lead can start it again from Studio with a licence.":"Lider zespołu może go uruchomić ponownie w Studiu, z licencją.",
   "The relay no longer holds the team's copy":"Przekaźnik nie przechowuje już kopii zespołu",
-  "The team's lead will say what comes next.":"Lider zespołu powie, co dalej.",
+  "If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.":"Jeśli lider zespołu odnowi licencję, to stanowisko dołączy samo, o ile nadal należy do zespołu; tutaj nic nie trzeba robić.",
   "Studio's signing key":"Klucz podpisu Studia",
   "A desk's key":"Klucz stanowiska",
   "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",

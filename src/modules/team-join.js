@@ -172,7 +172,7 @@ function lapseWords(l){
   if(l.step==="lapsed") return {title:t("The team's relay has stopped"),
     body:[t("The licence or trial it came with has ended."), stay, kept("The relay keeps the team's copy until {DATE}."),
       t("The team's lead can start it again from Studio with a licence.")].filter(Boolean).join(" ")};
-  return {title:t("The relay no longer holds the team's copy"), body:[stay, t("The team's lead will say what comes next.")].join(" ")};
+  return {title:t("The relay no longer holds the team's copy"), body:[stay, t("If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.")].join(" ")};
 }
 /* The team's row in Settings says the title, for as long as the step lasts. */
 function lapseNote(l){ return lapseWords(l).title; }

@@ -38,7 +38,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 43;
+const EXPECTED = 46;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -792,6 +792,124 @@ function main() {
         + "; the string compare put back says " + JSON.stringify(plantLine && plantLine.gitTree));
     }
   }
+
+  /* ---- 12. A MARKED FILE RUNS AFTER THE OTHERS, AND THE MARKER IS SPELT ---------------------- */
+  /* The marker is one line, ALONE below, in the first 15 lines of a test file. gate-run reads
+     it and moves that file after every file without it, then names the file in the log. A near
+     miss is not a marker: the runner leaves the file where it is, and this gate refuses the
+     near miss. With no marker the commands stay in chain order and the log gains nothing. */
+  const ALONE = "/* run: alone (timing) */";
+  const ALONE_SHAPED = /^\/\*[ \t]*run:[ \t]*alone\b.*\*\/$/;
+  const ALONE_SLASH = /^\/\/[ \t]*run:[ \t]*alone\b/;
+  function markerFaults(text) {
+    const faults = [];
+    const lines = String(text).split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (t === ALONE) {
+        if (i >= 15) faults.push("line " + (i + 1) + " sits past the first 15 lines");
+        continue;
+      }
+      if (ALONE_SHAPED.test(t) || ALONE_SLASH.test(t)) faults.push("line " + (i + 1) + " is misspelt");
+    }
+    return faults;
+  }
+  function commandLines(out) {
+    return String(out).split(/\r?\n/).filter(l => l.startsWith("> ")).map(l => l.slice(2));
+  }
+  const say = (n) => 'console.log("ran ' + n + '");\nprocess.exit(0);\n';
+  function chainLab(kind, names, bodies) {
+    const stubs = {};
+    for (const n of names) stubs[n] = bodies[n];
+    const l = makeLab(kind, stubs);
+    const pkg = JSON.parse(fs.readFileSync(path.join(l.lab, "package.json"), "utf8"));
+    pkg.scripts = { chain: names.map(n => "node tests/" + n + ".mjs").join(" && ") };
+    fs.writeFileSync(path.join(l.lab, "package.json"), JSON.stringify(pkg) + "\n");
+    return l;
+  }
+
+  const marked = chainLab("alone", ["early", "timed", "late"], {
+    early: say("early"),
+    timed: ALONE + "\n" + say("timed"),
+    late: say("late"),
+  });
+  const markedRun = run(marked, ["chain"]);
+  const markedOrder = commandLines(markedRun.out);
+  const aloneLine = markedRun.out.split(/\r?\n/).filter(l => l.indexOf("run after the rest") >= 0);
+  check(markedOrder.join(" | ") === "node tests/early.mjs | node tests/late.mjs | node tests/timed.mjs"
+    && aloneLine.length === 1 && aloneLine[0] === "gate-run: tests/timed.mjs run after the rest of its list (not alone on the machine)"
+    && markedRun.out.indexOf("ran timed") >= 0 && markedRun.exit === 0,
+    "12a a marked file runs last and the log names it run after the rest: " + markedOrder.join(" | ")
+    + "; alone line " + JSON.stringify(aloneLine) + "; exit " + markedRun.exit);
+
+  const plain = chainLab("alone-plain", ["early", "mid", "late"], {
+    early: say("early"),
+    mid: "// the word alone in prose is not a marker\n" + say("mid"),
+    late: say("late"),
+  });
+  const plainRun = run(plain, ["chain"]);
+  const plainOrder = commandLines(plainRun.out);
+  const plainWant = "node tests/early.mjs | node tests/mid.mjs | node tests/late.mjs";
+  const toolSrc = fs.readFileSync(path.join(plain.lab, "tools", "gate-run.mjs"), "utf8");
+  const unchanged = "if (!any) return list; /* alone: unchanged */";
+  const plantedSrc = toolSrc.indexOf(unchanged) >= 0
+    ? toolSrc.replace(unchanged, "if (!any) return list.slice().reverse(); /* alone: unchanged */")
+    : "";
+  let plantOrder = "";
+  if (plantedSrc) {
+    fs.writeFileSync(path.join(plain.lab, "tools", "gate-run.mjs"), plantedSrc);
+    plantOrder = commandLines(run(plain, ["chain"]).out).join(" | ");
+  }
+  check(plainOrder.join(" | ") === plainWant
+    && plainRun.out.indexOf("run after the rest") < 0
+    && plantOrder === "node tests/late.mjs | node tests/mid.mjs | node tests/early.mjs",
+    "12b with no marker the order is the chain's and the log is unchanged (" + plainOrder.join(" | ")
+    + "); reversing the unchanged path runs " + (plantOrder || "nothing, the path was not there"));
+
+  const missText = "/* run: alone */\n";
+  const lateText = Array.from({ length: 15 }, (_, i) => "// pad " + (i + 1)).join("\n") + "\n" + ALONE + "\n";
+  const missFaults = markerFaults(missText);
+  const lateFaults = markerFaults(lateText);
+  const exactFaults = markerFaults(ALONE + "\n");
+  const treeFaults = [];
+  const walkTests = (dir) => {
+    for (const name of fs.readdirSync(dir)) {
+      const abs = path.join(dir, name);
+      if (fs.statSync(abs).isDirectory()) {
+        if (name !== "node_modules") walkTests(abs);
+        continue;
+      }
+      if (!/\.(mjs|js|cjs)$/.test(name)) continue;
+      const rel = path.relative(ROOT, abs).split(path.sep).join("/");
+      for (const f of markerFaults(fs.readFileSync(abs, "utf8"))) treeFaults.push(rel + " " + f);
+    }
+  };
+  walkTests(path.join(ROOT, "tests"));
+  const desk = fs.readFileSync(path.join(ROOT, "tests", "desk-growth.mjs"), "utf8");
+  const deskHas = desk.split(/\r?\n/).slice(0, 15).some(l => l.trim() === ALONE);
+  const missLab = chainLab("alone-miss", ["early", "bad", "late"], {
+    early: say("early"), bad: missText + say("bad"), late: say("late"),
+  });
+  const missRun = run(missLab, ["chain"]);
+  const missOrder = commandLines(missRun.out).join(" | ");
+  const lateLab = chainLab("alone-late", ["early", "latefile", "zed"], {
+    early: say("early"), latefile: lateText + say("latefile"), zed: say("zed"),
+  });
+  const lateRun = run(lateLab, ["chain"]);
+  const lateOrder = commandLines(lateRun.out).join(" | ");
+  check(exactFaults.length === 0
+    && missFaults.length === 1 && missFaults[0] === "line 1 is misspelt"
+    && lateFaults.length === 1 && lateFaults[0] === "line 16 sits past the first 15 lines"
+    && treeFaults.length === 0 && deskHas
+    && missOrder === "node tests/early.mjs | node tests/bad.mjs | node tests/late.mjs"
+    && missRun.out.indexOf("run after the rest") < 0
+    && lateOrder === "node tests/early.mjs | node tests/latefile.mjs | node tests/zed.mjs"
+    && lateRun.out.indexOf("run after the rest") < 0,
+    "12c a misspelt marker is refused (" + missFaults.join("; ")
+    + "), one past line 15 is refused (" + lateFaults.join("; ")
+    + "), desk-growth carries it (" + deskHas + "), the tree's faults are "
+    + (treeFaults.length ? treeFaults.join("; ") : "none")
+    + "; a misspelling stays in place (" + missOrder + ") and so does a late line (" + lateOrder + ")");
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }

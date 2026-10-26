@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 226;
+const EXPECTED = 234;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -279,7 +279,7 @@ function program(name, who, place, o) {
   const x = o || {};
   const t = transport(name), said = [], written = [];
   const mirror = path.join(LAB, name);
-  const ch = C.createChannel(Object.assign({
+  const ch = (x.mod || C).createChannel(Object.assign({
     rt: RT, url: URLV1, mirror, stateFile: path.join(LAB, name + ".json"),
     pin: () => PIN,
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
@@ -3769,7 +3769,7 @@ try {
       const goneRow = await rowOf(paid);
       const madeG = lapseMade;
       await feed(paid);
-      const goneEn = TITLES[3] + " " + STAY + " The team's lead will say what comes next.";
+      const goneEn = TITLES[3] + " " + STAY + " If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.";
       const goneNotice = notice();
       const sweptDump = RL.stores.get(paid.rt).dump();
       const sweptStore = sweptDump.length;
@@ -5800,6 +5800,260 @@ try {
   } catch (e) {
     check(false, "981 harness: " + (e && e.stack ? e.stack : e));
   }
+}
+
+/* ---- 990 and 991: the team after the sweep (Claude alpha's ruling of 2026-10-25, option (b)). Each scene runs on a relay of
+   its own whose clock the legs move, with the channel module it is handed, so a plant below runs the same scene over a planted
+   copy. 990: a paid team with two desks; past the sweep the relay holds nothing of it, and the lead takes one desk off while it
+   is gone, with a new key; nothing is made again until the renewal. Renewed, the lead makes the space again under the same id and
+   enrols the roster as it stands: the kept desk starts over with the relay by itself and reads the team again, the one taken off
+   reaches nothing, and no file of any mirror goes at any step. 991: the lead on two computers with one key, the second off while
+   the first publishes a newer edition: back after the old sweep day of a team renewed and never swept, it does not start over
+   (991a); back after a sweep and a renewal the first one made, it starts over and still takes the newer edition rather than
+   sending its older one (991b). ---- */
+let scenes9 = 0;
+function relay9() {
+  const RS = S.relayEnv({ roots: K.ROOTS });
+  const DAYMS = K.DAY, BASE = Date.UTC(2026, 4, 4, 12);
+  RS.clock.now = BASE;
+  const realNow = Date.now;
+  let jump = 0;
+  const sfetch = (url, init) => {
+    const i = Object.assign({}, init);
+    if (i.body && i.method !== "GET") i.duplex = "half"; else delete i.body;
+    return W.fetch(new Request(url, i), RS.env);
+  };
+  const admin9 = async (method, p, json) => {
+    const res = await sfetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(json), "utf8") });
+    return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  };
+  /* A program's way to this relay, each call kept in `log` as "<method> <route>". */
+  const way = log => async (method, url, headers, body) => {
+    log.push(method + " " + String(url).replace(/^https:\/\/[^/]+\/relay\/v1\/t\/[0-9a-f]{32}\//, ""));
+    const res = await sfetch(url, { method, headers, body });
+    return { status: res.status, header: n => res.headers.get(n), bytes: Buffer.from(await res.arrayBuffer()) };
+  };
+  const tm = { rt: hex(16), id: "t-" + hex(8) }, LB9 = boxPair(), K9 = new Map([[1, crypto.randomBytes(32)]]);
+  const pin9 = () => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  const doc9 = (epoch, ds) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["lane-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LB9.pub }, sealed: true, exportsSealed: false, epoch, rev: 1,
+    channel: { kind: "relay", rt: tm.rt, url: URLV1 }, roster: ds.map(d => ({ desk: { id: d.k.keyId, key: d.k.pub, box: d.box.pub },
+      wrap: wrapFor(K9.get(epoch), d.box.pub, tm.id, epoch, d.k.keyId) })) }, LEAD), null, 1) + "\n";
+  const enrol9 = async (rev, ...ds) => {
+    const list = ds.map(d => ({ id: d.k.keyId, pub: d.k.pub, desk: d.k.keyId })), t = RS.clock.now;
+    return admin9("POST", "/relay/v1/t/" + tm.rt + "/devices", { keys: list, rev, t, sig: signHex(LEAD, core.devicesBytes(tm.rt, rev, t, list)) });
+  };
+  const store9 = () => RS.stores.get(tm.rt);
+  /* What the relay holds of the lead's, by path: each live blob of its key opened under the team key of its epoch. */
+  const leadFiles = () => {
+    const s = store9(), out = {};
+    if (!s) return out;
+    for (const [k, v] of s.dump()) {
+      if (!k.startsWith("blob:")) continue;
+      const m = JSON.parse(v);
+      if (m.writer !== LEAD.keyId || m.del) continue;
+      const ct = RS.bucket.objects.get(m.obj);
+      const r = ct ? B.openBlob({ blob: { id: m.id, epoch: m.epoch, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter, nonce: m.nonce,
+        signature: m.sig, ciphertext: ct }, relayTeamId: tm.rt, epoch: m.epoch, teamKey: K9.get(m.epoch) || Buffer.alloc(32),
+        trust: { lead: { keyId: LEAD.keyId, public: LEAD.pub }, desks: [] }, counters: {} }) : null;
+      if (r && r.ok && r.kind === "file") out[r.path] = r.body;
+    }
+    return out;
+  };
+  const liveBy = keyId => { const s = store9(); return s ? s.dump().filter(([k, v]) => k.startsWith("blob:") && JSON.parse(v).writer === keyId && !JSON.parse(v).del).length : 0; };
+  const progs = [];
+  const lead9 = (mod, name) => {
+    const log = [];
+    const p = program(name, LEAD, "root", { mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
+      keyFor: e => K9.get(e) || null, sealEpoch: () => Math.max(...K9.keys()), agree: agreeWith(LB9) });
+    progs.push(p);
+    return Object.assign(p, { log });
+  };
+  const desk9 = (mod, name, d) => {
+    const held = new Map([[1, K9.get(1)]]), mirror = path.join(LAB, name), log = [];
+    const p = program(name, d.k, "desk:" + d.k.keyId, { mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
+      me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
+      keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
+      onTeam: () => {
+        let doc = null;
+        try { doc = JSON.parse(read(mirror, C.TEAM_NAME)); } catch { return; }
+        const mine = (doc && Array.isArray(doc.roster) ? doc.roster : []).find(r => r && r.desk && r.desk.id === d.k.keyId);
+        const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, doc.epoch, d.k.keyId) : null;
+        if (key) held.set(doc.epoch, key);
+      } });
+    progs.push(p);
+    return Object.assign(p, { held, log });
+  };
+  return { RS, DAYMS, BASE, tm, K9, doc9, enrol9, admin9, store9, leadFiles, liveBy, lead9, desk9, progs, tag: "s" + (++scenes9),
+    at: ms => { jump += ms - RS.clock.now; RS.clock.now = ms; },
+    clockOn: () => { Date.now = () => realNow() + jump; },
+    done: async () => { for (const p of progs) { try { await p.ch.stop(); } catch { /* stopped */ } } Date.now = realNow; } };
+}
+const names9 = dir => filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/")).sort();
+const epoch9 = dir => { try { return JSON.parse(read(dir, C.TEAM_NAME)).epoch; } catch { return null; } };
+const ED9 = ["{\"note\":\"Lane Board edition one\"}\n", "{\"note\":\"Lane Board edition two\"}\n"];
+
+async function scene990(mod) {
+  const X = relay9(), { tm, BASE, DAYMS } = X;
+  const DK = { k: keyPair(true), box: boxPair() }, DE = { k: keyPair(true), box: boxPair() };
+  const NOTE = "A note of the kept desk's own.\n", AFTER = "Written by the kept desk after the renewal.\n";
+  const devOf = d => { const s = X.store9(); return !!s && s.get("dev:" + d.k.keyId) !== undefined; };
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    const enrolled = await X.enrol9(1, DK, DE);
+    if (made.status !== 200 || enrolled.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json]));
+    const lead = X.lead9(mod, "990-lead-" + X.tag), dk = X.desk9(mod, "990-kept-" + X.tag, DK), de = X.desk9(mod, "990-off-" + X.tag, DE);
+    put(lead.mirror, C.TEAM_NAME, X.doc9(1, [DK, DE]));
+    put(lead.mirror, "lane.ec", ED9[0]);
+    lead.ch.start(); dk.ch.start(); de.ch.start();
+    await settle(lead, dk, de);
+    put(dk.mirror, "desks/" + DK.k.keyId + "/note.ec", NOTE);
+    await settle(dk, lead);
+    const working = read(dk.mirror, "lane.ec") === ED9[0] && read(de.mirror, "lane.ec") === ED9[0]
+      && read(lead.mirror, "desks/" + DK.k.keyId + "/note.ec") === NOTE;
+    const before = { lead: names9(lead.mirror), dk: names9(dk.mirror), de: names9(de.mirror) };
+
+    /* Past the sweep (the grant ended at day 30, read-only to day 120): the first call sweeps the team. */
+    X.at(BASE + 121 * DAYMS);
+    await settle(lead, dk, de);
+    const swept = X.store9().dump().length === 0;
+    const goneAt = [dk, de, lead].map(p => (p.ch.lapse() ? p.ch.lapse().step : "none"));
+    /* While it is gone the lead takes the second desk off, with a new key; nothing is made again before the renewal. */
+    X.K9.set(2, crypto.randomBytes(32));
+    put(lead.mirror, C.TEAM_NAME, X.doc9(2, [DK]));
+    X.at(BASE + 123 * DAYMS);
+    await settle(lead, dk, de);
+    const stillSwept = X.store9().dump().length === 0;
+
+    /* Renewed: the space made again under the same id by the lead's signed create, the roster as it stands enrolled, and a
+       new edition published. Nothing is done for either desk. */
+    X.at(BASE + 125 * DAYMS);
+    const again = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    const enrolledAgain = await X.enrol9(1, DK);
+    put(lead.mirror, "lane.ec", ED9[1]);
+    await settle(lead, dk, de);
+    await settle(lead, dk, de);
+    put(dk.mirror, "desks/" + DK.k.keyId + "/after.ec", AFTER);
+    await settle(dk, lead);
+    const files = X.leadFiles(), paths = Object.keys(files).sort();
+    const back = again.status === 200 && enrolledAgain.status === 200 && paths.indexOf(C.TEAM_NAME) >= 0 && files["lane.ec"] === ED9[1];
+    const keptReads = read(dk.mirror, "lane.ec") === ED9[1] && epoch9(dk.mirror) === 2 && dk.held.has(2) && dk.ch.online() && dk.ch.lapse() === null;
+    const keptSends = read(lead.mirror, "desks/" + DK.k.keyId + "/after.ec") === AFTER && X.liveBy(DK.k.keyId) >= 2;
+    const a = { ok: working && swept && goneAt.join() === "gone,gone,gone" && stillSwept && back && keptReads && keptSends,
+      line: "before " + working + ", swept " + swept + " (told " + goneAt.join(" ") + "), still swept before the renewal " + stillSwept
+        + "; made again under the same id " + again.status + " and enrolled " + enrolledAgain.status + ", the lead's files back at the relay "
+        + JSON.stringify(paths) + "; the kept desk reads the new edition and the new key's team file " + keptReads + " (seq " + dk.prog.state().seq
+        + ") and its files reach the lead, the one from before the sweep sent again, " + keptSends + " (" + X.liveBy(DK.k.keyId) + " live)" };
+
+    const offOut = !devOf(DE) && !de.ch.online() && read(de.mirror, "lane.ec") === ED9[0] && epoch9(de.mirror) === 1 && !!de.ch.lapse() && de.ch.lapse().step === "gone";
+    const after = { lead: names9(lead.mirror), dk: names9(dk.mirror), de: names9(de.mirror) };
+    const kept = ["lead", "dk", "de"].every(n => before[n].length >= 2 && before[n].every(f => after[n].indexOf(f) >= 0));
+    const short = new Set(before.dk.slice(1)), control = before.dk.some(f => !short.has(f));
+    const b = { ok: offOut && kept && control,
+      line: "enrolled " + devOf(DE) + ", online " + de.ch.online() + ", its edition " + (read(de.mirror, "lane.ec") === ED9[0] ? "the old one" : "changed")
+        + ", its team file's epoch " + epoch9(de.mirror) + ", told " + (de.ch.lapse() ? de.ch.lapse().step : "nothing") + "; the files "
+        + JSON.stringify([before.lead.length, before.dk.length, before.de.length]) + (kept ? " all still there" : " not all still there")
+        + ", the comparison " + (control ? "reads a missing file" : "blind") };
+    return { a, b };
+  } finally {
+    await X.done();
+  }
+}
+
+/* The lead on two computers, one key: the first (the one that stays) publishes edition one, the second takes it and goes off.
+   `swept`: past the sweep, the first makes the space again and publishes edition two; else the team is renewed before its sweep
+   and the first publishes edition two. The second comes back after the old sweep day. */
+async function scene991(mod, swept) {
+  const X = relay9(), { tm, BASE, DAYMS } = X;
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+    const first = X.lead9(mod, "991-first-" + X.tag), second = X.lead9(mod, "991-second-" + X.tag);
+    put(first.mirror, C.TEAM_NAME, X.doc9(1, []));
+    put(first.mirror, "lane.ec", ED9[0]);
+    first.ch.start();
+    await settle(first);
+    second.ch.start();
+    await settle(second);
+    const both = read(second.mirror, "lane.ec") === ED9[0];
+    await second.ch.stop();
+    if (swept) {
+      X.at(BASE + 121 * DAYMS);
+      await settle(first);
+      X.at(BASE + 122 * DAYMS);
+      await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    } else {
+      X.at(BASE + 100 * DAYMS);
+      await X.admin9("POST", "/relay/v1/t/" + tm.rt + "/grant", { grant: K.grantFor(LEAD.pub, X.RS.clock.now) });
+    }
+    put(first.mirror, "lane.ec", ED9[1]);
+    await settle(first);
+    const published = X.leadFiles()["lane.ec"] === ED9[1];
+    /* The second computer back, past the old sweep day (day 120). */
+    X.at(BASE + 126 * DAYMS);
+    const from = second.log.length;
+    second.ch.start();
+    await settle(second, first);
+    await settle(second, first);
+    const calls = second.log.slice(from);
+    const since0 = calls.filter(c => c === "GET since/0").length, puts = calls.filter(c => c.indexOf("PUT ") === 0).length;
+    const kept = X.leadFiles()["lane.ec"] === ED9[1] && read(first.mirror, "lane.ec") === ED9[1] && read(second.mirror, "lane.ec") === ED9[1];
+    return { both, published, kept, since0, puts, swept: !!swept };
+  } finally {
+    await X.done();
+  }
+}
+/* A copy of the channel with one marked line replaced by `text`, handed to `fn`; the product file is only read. */
+async function swapChannel(tag, text, fn) {
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const beforeBytes = fs.readFileSync(src), digest = sha(beforeBytes);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines[at] = text;
+      turned = await fn(loadPlantedChannel(lines.join("\n")));
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+}
+try {
+  const s990 = await scene990(C);
+  check(s990.a.ok, "990a a team renewed after its sweep comes back by itself: " + s990.a.line);
+  check(s990.b.ok, "990b the desk taken off while the team was gone is not admitted after the renewal, and nothing on any mirror was removed at any step: " + s990.b.line);
+  const seen = await liftChannel("plant:remade-seen", async mod => !(await scene990(mod)).a.ok);
+  check(seen.turned && seen.back, "990c lifting plant:remade-seen, the desk never starts over with the relay's new copy, and 990a goes red: " + seen.detail
+    + ", sha " + (seen.back ? "restored" : "differs"));
+  const gone = await swapChannel("plant:remade-seq", "      st.seq = 0; for (const f of io.list()) io.remove(f);", async mod => !(await scene990(mod)).b.ok);
+  check(gone.turned && gone.back, "990d a start over planted to remove the mirror's files at plant:remade-seq turns 990b red: " + gone.detail
+    + ", sha " + (gone.back ? "restored" : "differs"));
+
+  const r1 = await scene991(C, false);
+  check(r1.both && r1.published && r1.kept && r1.since0 === 1 && r1.puts === 0,
+    "991a the lead's second computer, back after the old sweep day of a team renewed and never swept, asks the relay, does not start over and"
+    + " takes the newer edition: both had edition one " + r1.both + ", the first published edition two " + r1.published + ", edition two on the relay"
+    + " and on both computers " + r1.kept + ", lists from the start " + r1.since0 + ", uploads " + r1.puts);
+  const r2 = await scene991(C, true);
+  check(r2.both && r2.published && r2.kept && r2.since0 === 2 && r2.puts === 0,
+    "991b the lead's second computer, back after a sweep and the first's renewal, starts over with the new copy and still takes the newer edition,"
+    + " sending nothing older: both had edition one " + r2.both + ", the first published edition two " + r2.published + ", edition two on the relay"
+    + " and on both computers " + r2.kept + ", lists from the start " + r2.since0 + ", uploads " + r2.puts);
+  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false); return x.since0 !== 1; });
+  check(known.turned && known.back, "991c lifting plant:remade-known, the second computer starts over with a copy the relay kept, and 991a goes red: "
+    + known.detail + ", sha " + (known.back ? "restored" : "differs"));
+  const owe = await swapChannel("plant:remade-owe",
+    "      const owedAgain = m => { for (const k of Object.keys(m)) if (!m[k].del) m[k] = Object.assign({}, m[k], { sha: null }); };",
+    async mod => { const x = await scene991(mod, true); return !x.kept || x.puts > 0; });
+  check(owe.turned && owe.back, "991d a start over that forgets the bytes last sent at plant:remade-owe sends the older edition over the newer and turns 991b red: "
+    + owe.detail + ", sha " + (owe.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "990 and 991 the team after the sweep: " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

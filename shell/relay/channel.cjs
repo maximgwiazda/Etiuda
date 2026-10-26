@@ -402,6 +402,7 @@ function stateOf(x) {
       if (table(v) && HEX32.test(String(v.id)) && isCount(v.epoch) && isCount(v.counter) && count(v.size)) {
         const key = pathKey(k);
         const rec = { id: v.id, epoch: v.epoch, counter: v.counter, sha: typeof v.sha === "string" ? v.sha : null, size: v.size, del: v.del === true };
+        if (v.owe === true) rec.owe = true;
         if (!o[key] || later(rec, o[key])) o[key] = rec;
       }
     }
@@ -718,6 +719,9 @@ function createProgram(opts) {
     const prev = has(st.applied, TEAM_NAME) ? st.applied[TEAM_NAME] : null;
     if (prev && !prev.del && prev.sha === sha) {
       st.counters = B.raiseCounter(st.counters, r.writerKeyId, r.epoch, r.counter);
+      /* After a start over, this key's own team file of the same bytes, newer than the one recorded, is the one the relay holds. */
+      const mine = has(st.sent, TEAM_NAME) ? st.sent[TEAM_NAME] : null;
+      if (ownOf(ctx, r) && mine && mine.owe === true && later(r, mine)) sentFrom(r, TEAM_NAME);
       persist();
       return { ok: true, path: TEAM_NAME, same: true };
     }
@@ -1033,7 +1037,7 @@ function createProgram(opts) {
       if (bytes == null) continue;
       const sha = sha256(bytes);
       const was = has(st.sent, relKey) ? st.sent[relKey] : null;
-      if (was && !was.del && was.sha === sha) continue;
+      if (was && !was.del && was.sha === sha && was.owe !== true) continue;
       const stopped = has(st.refused, relKey) ? st.refused[relKey] : null;
       if (stopped && stopped.sha === sha) continue; /* plant:refused-skip */
       if (!considerOutgoing(p.path, bytes).send) continue;
@@ -1057,7 +1061,7 @@ function createProgram(opts) {
         const was = has(st.sentInv, k.id) ? st.sentInv[k.id][TEAM_NAME] : null;
         if (!bytes) continue;
         const sha = sha256(bytes);
-        if (!was || was.del || was.sha !== sha)
+        if (!was || was.del || was.sha !== sha || was.owe === true)
           ops.push({ rel: TEAM_NAME, kind: "file", body: bytes.toString("utf8"), sha, invite: k, place: "invite:" + k.id });
       }
       /* An invitation no longer live, its desk enrolled or the invitation dropped, or a desk the roster no longer names: its
@@ -1252,6 +1256,32 @@ function createProgram(opts) {
     },
     pending: () => st.pending.slice(),
     unpend(id) { unpend(id); persist(); },
+    /* The relay's copy of the team made again under the same id, after a sweep: its sequence starts over and it holds none of
+       this program's uploads. The place in the sequence goes back to the start, and every file this program last sent is owed
+       again with the bytes it sent kept, so a newer blob of the same key the catch-up finds is taken as newer and never as an
+       edit waiting here; one the relay still lists, or a newer one taken, is owed no more. The mirror, the floors and the
+       trust are kept; the lapse is told again by the next session. */
+    forgetRelay() {
+      st.seq = 0; /* plant:remade-seq */
+      const owedAgain = m => { for (const k of Object.keys(m)) if (!m[k].del) m[k] = Object.assign({}, m[k], { owe: true }); }; /* plant:remade-owe */
+      owedAgain(st.sent);
+      for (const h of Object.keys(st.sentInv)) owedAgain(st.sentInv[h]);
+      st.pending = [];
+      st.lapse = null;
+      persist();
+    },
+    /* A blob of this program's own record the relay lists: it holds that upload, so the file is not owed again. */
+    stillHeld(id) {
+      const clear = m => { for (const k of Object.keys(m)) if (m[k].id === id && m[k].owe === true) { m[k] = Object.assign({}, m[k]); delete m[k].owe; return true; } return false; };
+      let hit = clear(st.sent);
+      for (const h of Object.keys(st.sentInv)) hit = clear(st.sentInv[h]) || hit;
+      if (hit) persist();
+    },
+    /* Whether this program has met the blob `id`: applied it, taken it, or sent it. */
+    knows(id) {
+      if (has(st.taken, id) || wroteIds().has(id)) return true;
+      return Object.keys(st.applied).some(k => st.applied[k].id === id);
+    },
   };
 }
 
@@ -1353,6 +1383,23 @@ function createChannel(opts) {
     if (stopped) told(Object.assign({ until: null, readOnly: null, swept: null }, last, { state: past ? "gone" : "lapsed" }));
     else if (why.reason === "not-enrolled" && past) told(Object.assign({}, last, { state: "gone" })); /* plant:lapse-swept */
   }
+  /* A session opened for a team the relay last said was swept, or whose sweep day has passed by the relay's clock, may meet
+     a copy the relay made anew. That is only a question: the cycle asks the relay before anything is fetched (copyIsNew). */
+  let suspect = false;
+  function sessionOpened() {
+    const l = prog.lapse();
+    if (!!l && (l.state === "gone" || (l.swept !== null && relayNow() >= l.swept))) suspect = true; /* plant:remade-seen */
+  }
+  /* The relay's own evidence: its list from the start names no blob this program has met. A team renewed before its sweep
+     still lists them (the team file at least), and keeps its place in the sequence; a copy made anew lists none, and this
+     program starts over with it (forgetRelay). A list it does not give leaves the question for the next cycle. */
+  async function copyIsNew() {
+    const r = await authed("GET", "since/0");
+    if (r.status !== 200 || !Array.isArray(r.json)) return null;
+    let known = false;
+    known = r.json.some(e => table(e) && table(e.meta) && prog.knows(String(e.meta.id))); /* plant:remade-known */
+    return !known;
+  }
 
   async function call(method, rel, c) {
     const x = c || {};
@@ -1398,6 +1445,7 @@ function createChannel(opts) {
         /* The invitation's session again, where this key was bound by the token's one session and the request is not yet in
            (N4): a request lost on the way, or a quit before it went, is sent again without the token. */
         session = { token: r.json.session, at: clock(), by: r.json.invite === true ? "invite" : "key" }; /* plant:n4-resume */
+        sessionOpened();
         told(r.json.lapse);
         if (session.by === "invite" && inv && HEX32.test(String(inv.inv))) session.inv = String(inv.inv);
         return { ok: true };
@@ -1423,6 +1471,7 @@ function createChannel(opts) {
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite", inv: String(inv.inv) };
+      sessionOpened();
       told(r.json.lapse);
       return { ok: true };
     }
@@ -1457,6 +1506,7 @@ function createChannel(opts) {
     device = r.json.invite !== true; /* plant:S3-device */
     if (device) dropSocket();
     session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
+    sessionOpened();
     told(r.json.lapse);
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
     return { ok: true };
@@ -1524,6 +1574,7 @@ function createChannel(opts) {
         const m = e.meta;
         let own = !!who && m.writer === who.keyId;
         own = wrote.has(m.id); /* plant:own-record */
+        if (own) prog.stillHeld(m.id);
         if (own) continue; /* plant:own-skip */
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
@@ -1788,6 +1839,11 @@ function createChannel(opts) {
     if (session && session.by === "invite" && invitedNow()) return pullAnswer();
     const w = await pullWrap();
     if (!w.ok) return w;
+    if (suspect) {
+      const fresh = await copyIsNew();
+      if (fresh !== null) suspect = false;
+      if (fresh === true) prog.forgetRelay();
+    }
     const c = await catchUp(); /* plant:catch-up-first */
     if (!c.ok) { refusedLapse(c); return c; }
     await openHeldWrap();
