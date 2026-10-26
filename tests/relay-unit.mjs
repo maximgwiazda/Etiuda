@@ -227,13 +227,13 @@ async function main() {
       && has(top, /^bucket_name = "etiuda-relay-staging"$/m) && has(top, /^jurisdiction = "eu"$/m)
       && has(top, /\[\[durable_objects\.bindings\]\]/) && has(top, /^class_name = "RelayTeam"$/m)
       && has(top, /\[\[migrations\]\]/) && has(top, /new_sqlite_classes = \["RelayTeam"\]/)
-      && has(staging, /^name = "etiuda-relay-g2"$/m) && has(staging, stagingRoute) && !has(staging, liveRoute)
+      && has(staging, /^name = "etiuda-relay-next"$/m) && has(staging, stagingRoute) && !has(staging, liveRoute)
       && has(staging, /^API_PREFIX = "\/relay-staging\/v1\/"$/m)
-      && has(staging, /^bucket_name = "etiuda-relay-g2"$/m) && has(staging, /^jurisdiction = "eu"$/m)
+      && has(staging, /^bucket_name = "etiuda-relay-next"$/m) && has(staging, /^jurisdiction = "eu"$/m)
       && has(staging, /\[\[env\.staging\.durable_objects\.bindings\]\]/) && has(staging, /^class_name = "RelayTeam"$/m)
       && has(staging, /\[\[env\.staging\.migrations\]\]/) && has(staging, /new_sqlite_classes = \["RelayTeam"\]/)
       && has(staging, /wrangler deploy --env staging/) && has(staging, /chief of staff/),
-      "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-g2, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-g2 and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff");
+      "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-next, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-next and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff");
   }
 
   /* ---- 1: the bytes and the routes ---- */

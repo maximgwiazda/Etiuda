@@ -1,5 +1,5 @@
 # The top block is the live Worker etiuda-relay-staging, on etiuda.dev/relay/v1/*, with its objects and its bucket.
-# A deploy with no environment targets this block. [env.staging] is the separate Worker etiuda-relay-g2,
+# A deploy with no environment targets this block. [env.staging] is the separate Worker etiuda-relay-next,
 # on etiuda.dev/relay-staging/v1/*. It holds no secret, only bindings.
 name = "etiuda-relay-staging"
 main = "worker.mjs"
@@ -31,7 +31,7 @@ jurisdiction = "eu"
 
 [env.staging]
 # Deployed only by `wrangler deploy --env staging`, by a chief of staff.
-name = "etiuda-relay-g2"
+name = "etiuda-relay-next"
 routes = [{ pattern = "etiuda.dev/relay-staging/v1/*", zone_name = "etiuda.dev" }]
 
 [env.staging.vars]
@@ -47,5 +47,5 @@ new_sqlite_classes = ["RelayTeam"]
 
 [[env.staging.r2_buckets]]
 binding = "BLOBS"
-bucket_name = "etiuda-relay-g2"
+bucket_name = "etiuda-relay-next"
 jurisdiction = "eu"
