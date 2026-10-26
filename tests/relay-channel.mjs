@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 222;
+const EXPECTED = 224;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3769,7 +3769,7 @@ try {
       const goneRow = await rowOf(paid);
       const madeG = lapseMade;
       await feed(paid);
-      const goneEn = TITLES[3] + " " + STAY + " The team's lead will say what comes next.";
+      const goneEn = TITLES[3] + " " + STAY + " If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.";
       const goneNotice = notice();
       const sweptStore = RL.stores.get(paid.rt).dump().length;
       at(BASE + 121 * DAYMS);
@@ -5723,6 +5723,150 @@ try {
     + endedPlant.detail + ", sha " + (endedPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- 990: the team after the sweep (Claude alpha's ruling of 2026-10-25, option (b)). A relay of its own whose clock the legs
+   move, a paid team on it with two desks. Past the sweep the relay holds nothing of the team, and the lead takes one desk off
+   while it is gone, with a new key; nothing is made again until the renewal. Renewed, the lead makes the space again under the
+   same id and enrols the roster as it stands: the kept desk starts over with the relay by itself and reads the team again, the
+   one taken off reaches nothing, and no file of any mirror goes at any step. ---- */
+{
+  const RS = S.relayEnv({ roots: K.ROOTS });
+  const DAYMS = K.DAY, BASE = Date.UTC(2026, 4, 4, 12);
+  RS.clock.now = BASE;
+  const realNow = Date.now;
+  let jump = 0;
+  const at = ms => { jump += ms - RS.clock.now; RS.clock.now = ms; };
+  const sfetch = (url, init) => {
+    const i = Object.assign({}, init);
+    if (i.body && i.method !== "GET") i.duplex = "half"; else delete i.body;
+    return W.fetch(new Request(url, i), RS.env);
+  };
+  const sadmin = async (method, p, json) => {
+    const res = await sfetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(json), "utf8") });
+    return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  };
+  const sreq = async (method, url, headers, body) => {
+    const res = await sfetch(url, { method, headers, body });
+    return { status: res.status, header: n => res.headers.get(n), bytes: Buffer.from(await res.arrayBuffer()) };
+  };
+  const tm = { rt: hex(16), id: "t-" + hex(8) }, LB9 = boxPair(), K9 = new Map([[1, crypto.randomBytes(32)]]);
+  const DK = { k: keyPair(true), box: boxPair() }, DE = { k: keyPair(true), box: boxPair() };
+  const pin9 = () => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  const doc9 = (epoch, ds) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["lane-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LB9.pub }, sealed: true, exportsSealed: false, epoch, rev: 1,
+    channel: { kind: "relay", rt: tm.rt, url: URLV1 }, roster: ds.map(d => ({ desk: { id: d.k.keyId, key: d.k.pub, box: d.box.pub },
+      wrap: wrapFor(K9.get(epoch), d.box.pub, tm.id, epoch, d.k.keyId) })) }, LEAD), null, 1) + "\n";
+  const enrol9 = async (rev, ...ds) => {
+    const list = ds.map(d => ({ id: d.k.keyId, pub: d.k.pub, desk: d.k.keyId })), t = RS.clock.now;
+    return sadmin("POST", "/relay/v1/t/" + tm.rt + "/devices", { keys: list, rev, t, sig: signHex(LEAD, core.devicesBytes(tm.rt, rev, t, list)) });
+  };
+  const via = { rt: tm.rt, pin: pin9, request: sreq, connect: () => null, watch: false };
+  const desk9 = (name, d) => {
+    const held = new Map([[1, K9.get(1)]]), mirror = path.join(LAB, name);
+    const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({}, via, {
+      me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
+      keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
+      onTeam: () => {
+        let doc = null;
+        try { doc = JSON.parse(read(mirror, C.TEAM_NAME)); } catch { return; }
+        const mine = (doc && Array.isArray(doc.roster) ? doc.roster : []).find(r => r && r.desk && r.desk.id === d.k.keyId);
+        const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, doc.epoch, d.k.keyId) : null;
+        if (key) held.set(doc.epoch, key);
+      } }));
+    return Object.assign(p, { held });
+  };
+  const names = dir => filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/")).sort();
+  const epochOf = dir => { try { return JSON.parse(read(dir, C.TEAM_NAME)).epoch; } catch { return null; } };
+  /* What the relay holds of the lead's, by path: each live blob of its key opened under the team key of its epoch. */
+  const leadPaths = () => {
+    const s = RS.stores.get(tm.rt), out = [];
+    if (!s) return out;
+    for (const [k, v] of s.dump()) {
+      if (!k.startsWith("blob:")) continue;
+      const m = JSON.parse(v);
+      if (m.writer !== LEAD.keyId || m.del) continue;
+      const ct = RS.bucket.objects.get(m.obj);
+      const r = ct ? B.openBlob({ blob: { id: m.id, epoch: m.epoch, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter, nonce: m.nonce,
+        signature: m.sig, ciphertext: ct }, relayTeamId: tm.rt, epoch: m.epoch, teamKey: K9.get(m.epoch) || Buffer.alloc(32),
+        trust: { lead: { keyId: LEAD.keyId, public: LEAD.pub }, desks: [] }, counters: {} }) : null;
+      if (r && r.ok) out.push(r.path);
+    }
+    return out.sort();
+  };
+  const devOf = d => { const s = RS.stores.get(tm.rt); return !!s && s.get("dev:" + d.k.keyId) !== undefined; };
+  const liveBy9 = keyId => { const s = RS.stores.get(tm.rt); return s ? s.dump().filter(([k, v]) => k.startsWith("blob:") && JSON.parse(v).writer === keyId && !JSON.parse(v).del).length : 0; };
+  const ED1 = "{\"note\":\"Lane Board edition one\"}\n", ED2 = "{\"note\":\"Lane Board edition two, after the renewal\"}\n";
+  const NOTE = "A note of the kept desk's own.\n", AFTER = "Written by the kept desk after the renewal.\n";
+  const progs = [];
+  try {
+    Date.now = () => realNow() + jump;
+    const made = await sadmin("POST", "/relay/v1/teams", createBody(tm.rt, RS.clock.now));
+    const enrolled = await enrol9(1, DK, DE);
+    if (made.status !== 200 || enrolled.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json]));
+    const lead = program("990-lead", LEAD, "root", Object.assign({}, via, { keyFor: e => K9.get(e) || null,
+      sealEpoch: () => Math.max(...K9.keys()), agree: agreeWith(LB9) }));
+    const dk = desk9("990-kept", DK), de = desk9("990-off", DE);
+    progs.push(lead, dk, de);
+    put(lead.mirror, C.TEAM_NAME, doc9(1, [DK, DE]));
+    put(lead.mirror, "lane.ec", ED1);
+    lead.ch.start(); dk.ch.start(); de.ch.start();
+    await settle(lead, dk, de);
+    put(dk.mirror, "desks/" + DK.k.keyId + "/note.ec", NOTE);
+    await settle(dk, lead);
+    const working = read(dk.mirror, "lane.ec") === ED1 && read(de.mirror, "lane.ec") === ED1
+      && read(lead.mirror, "desks/" + DK.k.keyId + "/note.ec") === NOTE;
+    const before = { lead: names(lead.mirror), dk: names(dk.mirror), de: names(de.mirror) };
+
+    /* Past the sweep (the grant ended at day 30, read-only to day 120): the first call sweeps the team. */
+    at(BASE + 121 * DAYMS);
+    await settle(lead, dk, de);
+    const swept = RS.stores.get(tm.rt).dump().length === 0;
+    const goneAt = [dk, de, lead].map(p => (p.ch.lapse() ? p.ch.lapse().step : "none"));
+    /* While it is gone the lead takes the second desk off, with a new key; nothing is made again before the renewal. */
+    K9.set(2, crypto.randomBytes(32));
+    put(lead.mirror, C.TEAM_NAME, doc9(2, [DK]));
+    at(BASE + 123 * DAYMS);
+    await settle(lead, dk, de);
+    const stillSwept = RS.stores.get(tm.rt).dump().length === 0;
+
+    /* Renewed: the space made again under the same id by the lead's signed create, the roster as it stands enrolled, and a
+       new edition published. Nothing is done for either desk. */
+    at(BASE + 125 * DAYMS);
+    const again = await sadmin("POST", "/relay/v1/teams", createBody(tm.rt, RS.clock.now));
+    const enrolledAgain = await enrol9(1, DK);
+    put(lead.mirror, "lane.ec", ED2);
+    await settle(lead, dk, de);
+    await settle(lead, dk, de);
+    put(dk.mirror, "desks/" + DK.k.keyId + "/after.ec", AFTER);
+    await settle(dk, lead);
+    const paths = leadPaths();
+    const back = again.status === 200 && enrolledAgain.status === 200 && paths.indexOf(C.TEAM_NAME) >= 0 && paths.indexOf("lane.ec") >= 0;
+    const keptReads = read(dk.mirror, "lane.ec") === ED2 && epochOf(dk.mirror) === 2 && dk.held.has(2) && dk.ch.online() && dk.ch.lapse() === null;
+    const keptSends = read(lead.mirror, "desks/" + DK.k.keyId + "/after.ec") === AFTER && liveBy9(DK.k.keyId) >= 2;
+    check(working && swept && goneAt.join() === "gone,gone,gone" && stillSwept && back && keptReads && keptSends,
+      "990a a team renewed after its sweep comes back by itself: before " + working + ", swept " + swept + " (told " + goneAt.join(" ")
+      + "), still swept before the renewal " + stillSwept + "; made again under the same id " + again.status + " and enrolled " + enrolledAgain.status
+      + ", the lead's files back at the relay " + JSON.stringify(paths) + "; the kept desk reads the new edition and the new key's team file "
+      + keptReads + " (seq " + dk.prog.state().seq + ") and its files reach the lead, the one from before the sweep sent again, " + keptSends
+      + " (" + liveBy9(DK.k.keyId) + " live)");
+
+    const offOut = !devOf(DE) && !de.ch.online() && read(de.mirror, "lane.ec") === ED1 && epochOf(de.mirror) === 1 && !!de.ch.lapse() && de.ch.lapse().step === "gone";
+    const after = { lead: names(lead.mirror), dk: names(dk.mirror), de: names(de.mirror) };
+    const kept = ["lead", "dk", "de"].every(n => before[n].length >= 2 && before[n].every(f => after[n].indexOf(f) >= 0));
+    const control = before.dk.every(f => before.dk.slice(1).indexOf(f) >= 0) === false;
+    check(offOut && kept && control,
+      "990b the desk taken off while the team was gone is not admitted after the renewal, and nothing on any mirror was removed at any step: "
+      + "enrolled " + devOf(DE) + ", online " + de.ch.online() + ", its edition " + (read(de.mirror, "lane.ec") === ED1 ? "the old one" : "changed")
+      + ", its team file's epoch " + epochOf(de.mirror) + ", told " + (de.ch.lapse() ? de.ch.lapse().step : "nothing") + "; the files "
+      + JSON.stringify([before.lead.length, before.dk.length, before.de.length]) + (kept ? " all still there" : " not all still there")
+      + ", the comparison " + (control ? "reads a missing file" : "blind"));
+  } catch (e) {
+    check(false, "990 the team after the sweep: " + (e && e.stack ? e.stack : e));
+  } finally {
+    for (const p of progs) { try { await p.ch.stop(); } catch { /* stopped */ } }
+    Date.now = realNow;
+  }
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

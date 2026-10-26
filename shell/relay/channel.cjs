@@ -1252,6 +1252,19 @@ function createProgram(opts) {
     },
     pending: () => st.pending.slice(),
     unpend(id) { unpend(id); persist(); },
+    /* The relay's copy of the team made again under the same id, after a sweep: its sequence starts over and it holds none of
+       this program's uploads. So the place in the sequence goes back to the start and every file this program last sent is
+       owed again, each still naming the blob it replaces, so that where the relay kept the team after all the chain stays
+       one. The mirror, the floors and the trust are kept; the lapse is told again by the next session. */
+    forgetRelay() {
+      st.seq = 0; /* plant:remade-seq */
+      const owedAgain = m => { for (const k of Object.keys(m)) if (!m[k].del) m[k] = Object.assign({}, m[k], { sha: null }); };
+      owedAgain(st.sent);
+      for (const h of Object.keys(st.sentInv)) owedAgain(st.sentInv[h]);
+      st.pending = [];
+      st.lapse = null;
+      persist();
+    },
   };
 }
 
@@ -1353,6 +1366,15 @@ function createChannel(opts) {
     if (stopped) told(Object.assign({ until: null, readOnly: null, swept: null }, last, { state: past ? "gone" : "lapsed" }));
     else if (why.reason === "not-enrolled" && past) told(Object.assign({}, last, { state: "gone" })); /* plant:lapse-swept */
   }
+  /* A session opened for a team the relay last said was swept, or whose sweep day has passed by the relay's clock: the relay
+     holds the team anew, so this program starts over with it (forgetRelay) before the session's lapse is told. One renewed
+     before its sweep after all is only fetched and sent again. */
+  function sessionOpened() {
+    const l = prog.lapse();
+    let remade = false;
+    remade = !!l && (l.state === "gone" || (l.swept !== null && relayNow() >= l.swept)); /* plant:remade-seen */
+    if (remade) prog.forgetRelay();
+  }
 
   async function call(method, rel, c) {
     const x = c || {};
@@ -1398,6 +1420,7 @@ function createChannel(opts) {
         /* The invitation's session again, where this key was bound by the token's one session and the request is not yet in
            (N4): a request lost on the way, or a quit before it went, is sent again without the token. */
         session = { token: r.json.session, at: clock(), by: r.json.invite === true ? "invite" : "key" }; /* plant:n4-resume */
+        sessionOpened();
         told(r.json.lapse);
         if (session.by === "invite" && inv && HEX32.test(String(inv.inv))) session.inv = String(inv.inv);
         return { ok: true };
@@ -1423,6 +1446,7 @@ function createChannel(opts) {
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite", inv: String(inv.inv) };
+      sessionOpened();
       told(r.json.lapse);
       return { ok: true };
     }
@@ -1457,6 +1481,7 @@ function createChannel(opts) {
     device = r.json.invite !== true; /* plant:S3-device */
     if (device) dropSocket();
     session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
+    sessionOpened();
     told(r.json.lapse);
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
     return { ok: true };
