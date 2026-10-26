@@ -4175,9 +4175,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
 <div id="eSay" aria-live="polite"></div>
-<!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
-     reader would otherwise meet it on every focus move; Manage's status line carries the same
-     fact as text. -->
+<!-- The sample stamp only. aria-hidden: a screen reader would otherwise meet it on every focus move. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <div id="fabStack" class="fab-stack">
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>

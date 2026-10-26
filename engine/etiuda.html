@@ -4175,9 +4175,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
 <div id="eSay" aria-live="polite"></div>
-<!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
-     reader would otherwise meet it on every focus move; Manage's status line carries the same
-     fact as text. -->
+<!-- The sample stamp only. aria-hidden: a screen reader would otherwise meet it on every focus move. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <div id="fabStack" class="fab-stack">
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
@@ -6851,6 +6849,8 @@ What you type stays in this browser only.`;
     "Advanced": "Zaawansowane",
     "Favourites": "Ulubione",
     "Sample catalog": "Przykładowy katalog",
+    "Evaluation copy, published without a licence. Everything works as usual; the team's lead can replace it with an edition published under a licence.": "Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji.",
+    "Published by a version of Studio newer than its licence covers. Everything works as usual; the team's lead can replace it with an edition the licence covers.": "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją.",
     "the version on this computer": "wersja na tym komputerze",
     "Built on {DATE}": "z {DATE}",
     "New in this version": "Co nowego w tej wersji",
@@ -9050,6 +9050,7 @@ What you type stays in this browser only.`;
     "greet",
     "stop",
     "sample",
+    "evaluation",
     "modified",
     "hash",
     "sig",
@@ -9712,6 +9713,7 @@ What you type stays in this browser only.`;
     if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
     if (typeof data.facts === "string") out.facts = data.facts;
     if (data.sample) out.sample = 1;
+    if (data.evaluation === "evaluation" || data.evaluation === "newer") out.evaluation = data.evaluation;
     if (data.notes) out.notes = v2Copy(data.notes);
     if (data.grew) out.grew = v2Copy(data.grew);
     if (data.desk) out.desk = v2Copy(data.desk);
@@ -9829,6 +9831,7 @@ What you type stays in this browser only.`;
     if (c.greet && typeof c.greet === "object") out.greet = c.greet;
     if (c.stop && typeof c.stop === "object") out.stop = c.stop;
     if (c.sample) out.sample = true;
+    if (c.evaluation === "evaluation" || c.evaluation === "newer") out.evaluation = c.evaluation;
     if (c.notes && typeof c.notes === "object") out.notes = v2Copy(c.notes);
     if (c.grew && typeof c.grew === "object") out.grew = v2Copy(c.grew);
     if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
@@ -14192,6 +14195,7 @@ What you type stays in this browser only.`;
     if (data && Array.isArray(data.intentIds) && data.intentIds.length) cat.intentIds = data.intentIds.map(String);
     if (data && data.commentLang) cat.commentLang = String(data.commentLang);
     if (data && data.sample) cat.sample = 1;
+    if (data && (data.evaluation === "evaluation" || data.evaluation === "newer")) cat.evaluation = data.evaluation;
     if (data && data.categories && typeof data.categories === "object") {
       Object.keys(data.categories).forEach((k) => {
         if (k !== "fav") cat.categories[k] = String(data.categories[k] || k);
@@ -24160,7 +24164,7 @@ What you type stays in this browser only.`;
     if (Array.isArray(v)) return "[" + v.map(sharedCanon).join(",") + "]";
     return "{" + Object.keys(v).filter((k) => v[k] !== void 0).sort().map((k) => JSON.stringify(k) + ":" + sharedCanon(v[k])).join(",") + "}";
   }
-  var SHARED_OWN_KEYS = ["format", "kind", "id", "rev", "date", "hash", "sig", "modified", "grew", "desk", "sample", "cards", "tags"];
+  var SHARED_OWN_KEYS = ["format", "kind", "id", "rev", "date", "hash", "sig", "modified", "grew", "desk", "sample", "evaluation", "cards", "tags"];
   var SHARED_SEP = "";
   function sharedById(list2) {
     const m = /* @__PURE__ */ new Map();
@@ -24929,6 +24933,8 @@ What you type stays in this browser only.`;
     if (origin && origin.variables && typeof origin.variables === "object") out.variables = origin.variables;
     if (origin && origin.notes && typeof origin.notes === "object") out.notes = origin.notes;
     if (origin && origin.ext && typeof origin.ext === "object") out.ext = origin.ext;
+    const publishedMark = deskMarkOf(origin);
+    if (publishedMark) out.evaluation = publishedMark;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
     if (keptIds.some((x) => x)) out.intentIds = keptIds;
@@ -25420,6 +25426,10 @@ What you type stays in this browser only.`;
     }
     flushStats();
   }
+  function deskMarkOf(c) {
+    const v = c && c.evaluation;
+    return v === "evaluation" || v === "newer" ? v : "";
+  }
   function activateCatalog(c, opts) {
     if (looseUnexported()) {
       askLoose(() => takeCatalog(c, opts));
@@ -25480,6 +25490,8 @@ What you type stays in this browser only.`;
     try {
       if (c && c.sample) nsSet("Sample", "1");
       else nsDel("Sample");
+      if (deskMarkOf(c)) nsSet("DeskMark", deskMarkOf(c));
+      else nsDel("DeskMark");
     } catch (e) {
     }
     try {
@@ -25492,6 +25504,12 @@ What you type stays in this browser only.`;
     clearTimeout(tabSaveTimer);
     if (!same) ssDel(TAB_KEY);
     hooks.restartDesk();
+    try {
+      const sentence = deskMarkSentence(deskMarkOf(c));
+      if (sentence) showDeskMark(sentence);
+      else dropDeskMark();
+    } catch (e) {
+    }
     return true;
   }
   function sampleUntouched() {
@@ -25546,6 +25564,106 @@ What you type stays in this browser only.`;
     let on = false;
     on = nsGet("Sample") === "1";
     el.hidden = !(on && (cards || []).length > 0 && sampleUntouched());
+  }
+  function deskMarkVisible(e) {
+    if (!e || !e.getClientRects().length) return null;
+    const r = e.getBoundingClientRect();
+    return r.width && r.height && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth ? e : null;
+  }
+  function deskMarkInView(e) {
+    if (!e) return null;
+    const a = e.getBoundingClientRect();
+    for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (/(auto|scroll|hidden)/.test(cs.overflowY)) {
+        const b = p.getBoundingClientRect();
+        if (a.top < b.top || a.bottom > b.bottom) return null;
+      }
+    }
+    return deskMarkVisible(e);
+  }
+  function deskMarkTarget() {
+    const open = !document.getElementById("modal").hidden;
+    if (open && document.querySelector("#modalCard details.manage-sec")) {
+      const d = document.querySelector('#modalCard details[data-mg="data"]');
+      if (!d) return null;
+      if (!d.open) return { el: deskMarkInView(d.querySelector("summary")), prefer: "right" };
+      return { el: deskMarkInView(d.querySelector(".ec-row.is-loaded")), prefer: "right" };
+    }
+    if (open) return null;
+    const m = document.getElementById("settingsMenu");
+    if (m && !m.hidden) return { el: deskMarkVisible(m.querySelector('[data-act="manage"]')), prefer: "left" };
+    return { el: deskMarkVisible(document.getElementById("settingsBtn")), prefer: "left" };
+  }
+  function placeDeskMark(el) {
+    let target = deskMarkTarget();
+    if (!target || !target.el) target = { el: document.getElementById("catNow"), prefer: "below" };
+    const r = target.el.getBoundingClientRect();
+    placeBubble(el, { top: r.top, left: r.left, width: r.width, height: r.height }, { prefer: target.prefer });
+  }
+  function deskMarkSentence(kind) {
+    if (kind === "evaluation") return t("Evaluation copy, published without a licence. Everything works as usual; the team's lead can replace it with an edition published under a licence.");
+    if (kind === "newer") return t("Published by a version of Studio newer than its licence covers. Everything works as usual; the team's lead can replace it with an edition the licence covers.");
+    return "";
+  }
+  function showDeskMark(sentence) {
+    dropDeskMark();
+    const i = sentence.indexOf(". ");
+    const d = document.createElement("div");
+    d.id = "eDeskMark";
+    d.className = "bub bub-ask";
+    d.setAttribute("role", "status");
+    const p = document.createElement("p"), b = document.createElement("b");
+    b.textContent = i < 0 ? sentence : sentence.slice(0, i + 1);
+    p.appendChild(b);
+    if (i >= 0) p.appendChild(document.createTextNode(" " + sentence.slice(i + 2)));
+    d.appendChild(p);
+    const row = document.createElement("div");
+    row.className = "tour-actions";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "btn";
+    x.textContent = t("Dismiss");
+    row.appendChild(x);
+    d.appendChild(row);
+    document.body.appendChild(d);
+    let raf = 0;
+    const again = () => {
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        placeDeskMark(d);
+      });
+    };
+    const mo = new MutationObserver((rs) => {
+      if (!rs.every((r) => d.contains(r.target))) again();
+    });
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open", "class"] });
+    addEventListener("resize", again, { passive: true });
+    addEventListener("scroll", again, { passive: true, capture: true });
+    d._drop = () => {
+      mo.disconnect();
+      removeEventListener("resize", again);
+      removeEventListener("scroll", again, { capture: true });
+      cancelAnimationFrame(raf);
+      d.remove();
+    };
+    x.onclick = () => d._drop();
+    placeDeskMark(d);
+    return d;
+  }
+  function dropDeskMark() {
+    let old = null;
+    try {
+      old = document.getElementById("eDeskMark");
+    } catch (e) {
+      return;
+    }
+    if (!old) return;
+    try {
+      if (typeof old._drop === "function") old._drop();
+      else if (typeof old.remove === "function") old.remove();
+    } catch (e) {
+    }
   }
   function catalogFromFileText(text, fileName) {
     try {
@@ -25654,7 +25772,7 @@ What you type stays in this browser only.`;
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("DeskMark"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
   var SHARE_KEEP = ["eAgent", "eLayers"];

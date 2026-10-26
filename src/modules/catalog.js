@@ -212,6 +212,8 @@ function normaliseCatalog(data){
   if(data&&Array.isArray(data.intentIds)&&data.intentIds.length) cat.intentIds=data.intentIds.map(String);
   if(data&&data.commentLang) cat.commentLang=String(data.commentLang);
   if(data&&data.sample) cat.sample=1;
+  /* The same two words the file is allowed to carry. Anything else is dropped, not stored. */
+  if(data&&(data.evaluation==="evaluation"||data.evaluation==="newer")) cat.evaluation=data.evaluation;
   if(data&&data.categories&&typeof data.categories==="object"){
     Object.keys(data.categories).forEach(k=>{
       /* "fav" stays refused on the way IN. The virtual category it collided with is gone,

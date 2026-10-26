@@ -19,6 +19,7 @@ import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
 import { TAB_KEY, tabSaveTimer, saveTabSession, tabs } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
+import { placeBubble } from "./bubble.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { catPackKey, catCatalogLabel } from "./cat-set.js";
@@ -169,6 +170,10 @@ function currentCatalog(opts){
      the origin was, and an export is a new catalog. */
   if(origin&&origin.notes&&typeof origin.notes==="object") out.notes=origin.notes;
   if(origin&&origin.ext&&typeof origin.ext==="object") out.ext=origin.ext;
+  /* The published mark travels with an export. The sample flag does not, so an edit still
+     clears that one. A licensed file has none, and none is written. */
+  const publishedMark=deskMarkOf(origin);
+  if(publishedMark) out.evaluation=publishedMark;
   /* The file's request ids, re-indexed onto what survived the removals. The array is aligned
      with the ORIGINAL order, so an intent added at this desk is past its end and has none. */
   const wasIds=(origin&&Array.isArray(origin.intentIds))?origin.intentIds:[];
@@ -572,6 +577,12 @@ function flushLayer(){
   try{ hooks.flushPillState(); }catch(e){}
   flushStats();
 }
+/* A published catalog's mark, as the file names it. A sample is the other flag, and an edit
+   clears only that one. Anything else is no mark. */
+function deskMarkOf(c){
+  const v=c&&c.evaluation;
+  return (v==="evaluation"||v==="newer")?v:"";
+}
 /** Make a catalog the active one, and the desk starts again with it in place. The personal layer
  *  in view goes with the catalog it orbits; a new edition of the same catalog carries it forward. */
 function activateCatalog(c,opts){
@@ -635,6 +646,9 @@ function takeCatalog(c,opts){
   try{
     if(c && c.sample) nsSet("Sample","1");
     else nsDel("Sample");
+    /* Its own key. The sample flag clears on an edit, and one edit must not wipe this mark. */
+    if(deskMarkOf(c)) nsSet("DeskMark",deskMarkOf(c));
+    else nsDel("DeskMark");
   }catch(e){}
   /* WHICH FILE IN THE CATALOG FOLDER THIS CAME OUT OF, and when that file was last written.
      Nothing else on the desk records it, and the Library's list marks the row that is loaded.
@@ -655,6 +669,12 @@ function takeCatalog(c,opts){
   clearTimeout(tabSaveTimer);
   if (!same) ssDel(TAB_KEY);
   hooks.restartDesk();
+  /* A marked file just opened shows the bubble. Boot reads the stored copy and never comes through here. */
+  try{
+    const sentence=deskMarkSentence(deskMarkOf(c));
+    if(sentence) showDeskMark(sentence);
+    else dropDeskMark();
+  }catch(e){}
   return true;
 }
 /** True while the sample is still, word for word, the one that shipped. The test is
@@ -722,6 +742,99 @@ function syncSampleMark(){
   let on=false;
   on=nsGet("Sample")==="1";
   el.hidden=!(on && (cards||[]).length>0 && sampleUntouched());
+}
+/* THE PUBLISHED MARK FOLLOWS THE WAY TO THE CATALOG, as the tour's bubbles follow theirs: the Menu
+   button, then Library in the open Menu, then Catalog & data in the Library while it is shut, then
+   the loaded catalog's row. Anything else, or a step not on screen, points at the file name in the
+   band. Re-placed on every change the tour re-places on: the DOM, a resize, a scroll. */
+function deskMarkVisible(e){
+  if(!e || !e.getClientRects().length) return null;
+  const r=e.getBoundingClientRect();
+  return r.width && r.height && r.bottom>0 && r.top<innerHeight && r.right>0 && r.left<innerWidth ? e : null;
+}
+/* A row scrolled out of the Library's own scroller is not on screen, whatever its box says. */
+function deskMarkInView(e){
+  if(!e) return null;
+  const a=e.getBoundingClientRect();
+  for(let p=e.parentElement; p && p!==document.body; p=p.parentElement){
+    const cs=getComputedStyle(p);
+    if(/(auto|scroll|hidden)/.test(cs.overflowY)){
+      const b=p.getBoundingClientRect();
+      if(a.top<b.top || a.bottom>b.bottom) return null;
+    }
+  }
+  return deskMarkVisible(e);
+}
+function deskMarkTarget(){
+  const open=!document.getElementById("modal").hidden;
+  if(open && document.querySelector("#modalCard details.manage-sec")){
+    const d=document.querySelector('#modalCard details[data-mg="data"]');
+    if(!d) return null;
+    if(!d.open) return {el:deskMarkInView(d.querySelector("summary")), prefer:"right"};
+    return {el:deskMarkInView(d.querySelector(".ec-row.is-loaded")), prefer:"right"};
+  }
+  if(open) return null;
+  const m=document.getElementById("settingsMenu");
+  if(m && !m.hidden) return {el:deskMarkVisible(m.querySelector('[data-act="manage"]')), prefer:"left"};
+  return {el:deskMarkVisible(document.getElementById("settingsBtn")), prefer:"left"};
+}
+function placeDeskMark(el){
+  let target=deskMarkTarget();
+  if(!target || !target.el) target={el:document.getElementById("catNow"), prefer:"below"};
+  const r=target.el.getBoundingClientRect();
+  placeBubble(el, {top:r.top, left:r.left, width:r.width, height:r.height}, {prefer:target.prefer});
+}
+/* The two cases, each one sentence the string table holds. The first sentence is the bold lead. */
+function deskMarkSentence(kind){
+  if(kind==="evaluation") return t("Evaluation copy, published without a licence. Everything works as usual; the team's lead can replace it with an edition published under a licence.");
+  if(kind==="newer") return t("Published by a version of Studio newer than its licence covers. Everything works as usual; the team's lead can replace it with an edition the licence covers.");
+  return "";
+}
+function showDeskMark(sentence){
+  dropDeskMark();
+  const i=sentence.indexOf(". ");
+  const d=document.createElement("div");
+  d.id="eDeskMark";
+  d.className="bub bub-ask";
+  d.setAttribute("role","status");
+  const p=document.createElement("p"), b=document.createElement("b");
+  b.textContent=i<0 ? sentence : sentence.slice(0,i+1);
+  p.appendChild(b);
+  if(i>=0) p.appendChild(document.createTextNode(" "+sentence.slice(i+2)));
+  d.appendChild(p);
+  const row=document.createElement("div");
+  row.className="tour-actions";
+  const x=document.createElement("button");
+  x.type="button"; x.className="btn"; x.textContent=t("Dismiss");
+  row.appendChild(x);
+  d.appendChild(row);
+  document.body.appendChild(d);
+  let raf=0;
+  const again=()=>{ if(!raf) raf=requestAnimationFrame(()=>{ raf=0; placeDeskMark(d); }); };
+  const mo=new MutationObserver(rs=>{ if(!rs.every(r=>d.contains(r.target))) again(); });
+  mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["hidden","open","class"]});
+  addEventListener("resize", again, {passive:true});
+  addEventListener("scroll", again, {passive:true, capture:true});
+  d._drop=()=>{
+    mo.disconnect();
+    removeEventListener("resize", again);
+    removeEventListener("scroll", again, {capture:true});
+    cancelAnimationFrame(raf);
+    d.remove();
+  };
+  x.onclick=()=>d._drop();
+  placeDeskMark(d);
+  return d;
+}
+/* Gone, listeners and all. A document that is not the page's must not throw: the catalog is already stored. */
+function dropDeskMark(){
+  let old=null;
+  try{ old=document.getElementById("eDeskMark"); }catch(e){ return; }
+  if(!old) return;
+  try{
+    if(typeof old._drop==="function") old._drop();
+    else if(typeof old.remove==="function") old.remove();
+  }catch(e){}
 }
 /* Reads a picked file's text into a catalog, or names the file and hands back null. */
 function catalogFromFileText(text,fileName){

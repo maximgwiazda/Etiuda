@@ -9,7 +9,7 @@ function sharedCanon(v){
   return "{"+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+":"+sharedCanon(v[k])).join(",")+"}";
 }
 // Keys a write moves or a signature owns, and the two lists merged item by item: never merged as header keys.
-const SHARED_OWN_KEYS=["format","kind","id","rev","date","hash","sig","modified","grew","desk","sample","cards","tags"];
+const SHARED_OWN_KEYS=["format","kind","id","rev","date","hash","sig","modified","grew","desk","sample","evaluation","cards","tags"];
 const SHARED_SEP="\u0001";
 function sharedById(list){
   const m=new Map();
