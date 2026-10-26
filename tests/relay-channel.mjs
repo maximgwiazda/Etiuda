@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 230;
+const EXPECTED = 236;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5792,9 +5792,16 @@ function relay9() {
     progs.push(p);
     return Object.assign(p, { log });
   };
-  const desk9 = (mod, name, d) => {
-    const held = new Map([[1, K9.get(1)]]), mirror = path.join(LAB, name), log = [];
-    const p = program(name, d.k, "desk:" + d.k.keyId, { mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
+  /* `cut`, where given: once armed, the first call after a session opens throws, as a computer shut down there would leave it. */
+  const desk9 = (mod, name, d, cut) => {
+    const held = new Map([[1, K9.get(1)]]), mirror = path.join(LAB, name), log = [], base9 = way(log);
+    const request = async (...a) => {
+      if (cut && cut.armed && cut.seen) { cut.done = true; throw new Error("this computer was shut down"); }
+      const res = await base9(...a);
+      if (cut && cut.armed && a[0] === "POST" && /\/session$/.test(String(a[1])) && res.status === 200) cut.seen = true;
+      return res;
+    };
+    const p = program(name, d.k, "desk:" + d.k.keyId, { mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
       onTeam: () => {
@@ -5807,7 +5814,9 @@ function relay9() {
     progs.push(p);
     return Object.assign(p, { held, log });
   };
-  return { RS, DAYMS, BASE, tm, K9, doc9, enrol9, admin9, store9, leadFiles, liveBy, lead9, desk9, progs, tag: "s" + (++scenes9),
+  /* The team row as a relay from before the copy's stamp keeps it. */
+  const unstamp = () => { const s = store9(), row = s ? s.get("team") : null; if (row && row.made) { delete row.made; s.put("team", row); } };
+  return { RS, DAYMS, BASE, tm, K9, doc9, enrol9, admin9, store9, leadFiles, liveBy, lead9, desk9, unstamp, progs, tag: "s" + (++scenes9),
     at: ms => { jump += ms - RS.clock.now; RS.clock.now = ms; },
     clockOn: () => { Date.now = () => realNow() + jump; },
     done: async () => { for (const p of progs) { try { await p.ch.stop(); } catch { /* stopped */ } } Date.now = realNow; } };
@@ -5887,12 +5896,13 @@ async function scene990(mod) {
 /* The lead on two computers, one key: the first (the one that stays) publishes edition one, the second takes it and goes off.
    `swept`: past the sweep, the first makes the space again and publishes edition two; else the team is renewed before its sweep
    and the first publishes edition two. The second comes back after the old sweep day. */
-async function scene991(mod, swept) {
+async function scene991(mod, swept, noStamp) {
   const X = relay9(), { tm, BASE, DAYMS } = X;
   try {
     X.clockOn();
     const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
     if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+    if (noStamp) X.unstamp();
     const first = X.lead9(mod, "991-first-" + X.tag), second = X.lead9(mod, "991-second-" + X.tag);
     put(first.mirror, C.TEAM_NAME, X.doc9(1, []));
     put(first.mirror, "lane.ec", ED9[0]);
@@ -5907,6 +5917,7 @@ async function scene991(mod, swept) {
       await settle(first);
       X.at(BASE + 122 * DAYMS);
       await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+      if (noStamp) X.unstamp();
     } else {
       X.at(BASE + 100 * DAYMS);
       await X.admin9("POST", "/relay/v1/t/" + tm.rt + "/grant", { grant: K.grantFor(LEAD.pub, X.RS.clock.now) });
@@ -5946,6 +5957,63 @@ async function swapChannel(tag, text, fn) {
   }
   return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
 }
+/* A desk of a team swept and made again, with the relay's stamp of its copy or (`o.noStamp`) a relay from before it. `o.quit`: the
+   desk shuts down at its first call after the session the renewal lets it open, and starts again. `o.noLapse`: it kept no lapse
+   (closed through the whole lapse); `o.noMade`: nor any stamp, as a record from before the stamp. Each reads the edition published
+   after the renewal. */
+async function scene992(mod, o) {
+  const x = o || {}, X = relay9(), { tm, BASE, DAYMS } = X;
+  const D = { k: keyPair(true), box: boxPair() }, name = "992-desk-" + X.tag, stateAt = path.join(LAB, name + ".json");
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    await X.enrol9(1, D);
+    if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+    if (x.noStamp) X.unstamp();
+    const stamp1 = (X.store9().get("team") || {}).made || null;
+    const lead = X.lead9(mod, "992-lead-" + X.tag), desk = X.desk9(mod, name, D);
+    put(lead.mirror, C.TEAM_NAME, X.doc9(1, [D]));
+    put(lead.mirror, "lane.ec", ED9[0]);
+    lead.ch.start(); desk.ch.start();
+    await settle(lead, desk);
+    const working = read(desk.mirror, "lane.ec") === ED9[0];
+    X.at(BASE + 121 * DAYMS);
+    await settle(lead, desk);
+    const swept = X.store9().dump().length === 0;
+    await desk.ch.stop();
+    const kept = JSON.parse(fs.readFileSync(stateAt, "utf8"));
+    if (x.noLapse) delete kept.lapse;
+    if (x.noMade) delete kept.made;
+    fs.writeFileSync(stateAt, JSON.stringify(kept));
+    X.at(BASE + 125 * DAYMS);
+    await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    if (x.noStamp) X.unstamp();
+    const stamp2 = (X.store9().get("team") || {}).made || null;
+    await X.enrol9(1, D);
+    put(lead.mirror, "lane.ec", ED9[1]);
+    await settle(lead);
+    let quitAt = "no quit";
+    if (x.quit) {
+      const cut = { armed: true, seen: false, done: false };
+      const once = X.desk9(mod, name, D, cut);
+      once.ch.start();
+      await settle(once);
+      await once.ch.stop();
+      quitAt = cut.done ? "shut down after the session" : "never cut";
+    }
+    const again = X.desk9(mod, name, D);
+    again.ch.start();
+    await settle(again, lead);
+    await settle(again, lead);
+    const reads = read(again.mirror, "lane.ec") === ED9[1];
+    const stamps = x.noStamp ? stamp1 === null && stamp2 === null : !!stamp1 && !!stamp2 && stamp1 !== stamp2;
+    return { ok: working && swept && reads && stamps && (!x.quit || quitAt === "shut down after the session"),
+      line: "before " + working + ", swept " + swept + ", the copy's stamp " + (x.noStamp ? "untold" : stamp1 && stamp2 && stamp1 !== stamp2 ? "new" : "the same")
+        + ", " + quitAt + ", the desk reads the edition published after the renewal " + reads + " (seq " + again.prog.state().seq + ")" };
+  } finally {
+    await X.done();
+  }
+}
 try {
   const s990 = await scene990(C);
   check(s990.a.ok, "990a a team renewed after its sweep comes back by itself: " + s990.a.line);
@@ -5958,23 +6026,39 @@ try {
     + ", sha " + (gone.back ? "restored" : "differs"));
 
   const r1 = await scene991(C, false);
-  check(r1.both && r1.published && r1.kept && r1.since0 === 1 && r1.puts === 0,
-    "991a the lead's second computer, back after the old sweep day of a team renewed and never swept, asks the relay, does not start over and"
+  check(r1.both && r1.published && r1.kept && r1.since0 === 0 && r1.puts === 0,
+    "991a the lead's second computer, back after the old sweep day of a team renewed and never swept, hears the copy's stamp unchanged, does not start over and"
     + " takes the newer edition: both had edition one " + r1.both + ", the first published edition two " + r1.published + ", edition two on the relay"
     + " and on both computers " + r1.kept + ", lists from the start " + r1.since0 + ", uploads " + r1.puts);
   const r2 = await scene991(C, true);
-  check(r2.both && r2.published && r2.kept && r2.since0 === 2 && r2.puts === 0,
+  check(r2.both && r2.published && r2.kept && r2.since0 === 1 && r2.puts === 0,
     "991b the lead's second computer, back after a sweep and the first's renewal, starts over with the new copy and still takes the newer edition,"
     + " sending nothing older: both had edition one " + r2.both + ", the first published edition two " + r2.published + ", edition two on the relay"
     + " and on both computers " + r2.kept + ", lists from the start " + r2.since0 + ", uploads " + r2.puts);
-  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false); return x.since0 !== 1; });
-  check(known.turned && known.back, "991c lifting plant:remade-known, the second computer starts over with a copy the relay kept, and 991a goes red: "
-    + known.detail + ", sha " + (known.back ? "restored" : "differs"));
+  const r3 = await scene991(C, false, true);
+  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false, true); return x.since0 !== 1; });
+  check(r3.kept && r3.since0 === 1 && r3.puts === 0 && known.turned && known.back, "991c with a relay from before the copy's stamp, the second computer"
+    + " asks the relay's list once and keeps its place (edition two everywhere " + r3.kept + ", lists from the start " + r3.since0 + ", uploads " + r3.puts
+    + "); lifting plant:remade-known, it starts over with a copy the relay kept: " + known.detail + ", sha " + (known.back ? "restored" : "differs"));
   const owe = await swapChannel("plant:remade-owe",
     "      const owedAgain = m => { for (const k of Object.keys(m)) if (!m[k].del) m[k] = Object.assign({}, m[k], { sha: null }); };",
     async mod => { const x = await scene991(mod, true); return !x.kept || x.puts > 0; });
   check(owe.turned && owe.back, "991d a start over that forgets the bytes last sent at plant:remade-owe sends the older edition over the newer and turns 991b red: "
     + owe.detail + ", sha " + (owe.back ? "restored" : "differs"));
+  const q1 = await scene992(C, { quit: true });
+  check(q1.ok, "992a a desk shut down between the session that told the renewal and its first catch-up still starts over with the copy made anew: " + q1.line);
+  const q2 = await scene992(C, { quit: true, noStamp: true });
+  check(q2.ok, "992b the same with a relay that tells no stamp: the question the lapse raised is kept on disk and asked after the restart: " + q2.line);
+  const q3 = await scene992(C, { noLapse: true });
+  check(q3.ok, "992c a desk that kept no lapse, closed through the whole lapse, starts over by the copy's new stamp: " + q3.line);
+  const q4 = await scene992(C, { noLapse: true, noMade: true });
+  check(q4.ok, "992d a desk that kept neither a lapse nor a stamp asks the relay's list once and starts over: " + q4.line);
+  const made9 = await liftChannel("plant:remade-made", async mod => !(await scene992(mod, { noLapse: true })).ok);
+  check(made9.turned && made9.back, "992e lifting plant:remade-made, a desk with no lapse stays on its old place in the sequence, and 992c goes red: "
+    + made9.detail + ", sha " + (made9.back ? "restored" : "differs"));
+  const asked9 = await liftChannel("plant:remade-ask-kept", async mod => !(await scene992(mod, { quit: true, noStamp: true })).ok);
+  check(asked9.turned && asked9.back, "992f lifting plant:remade-ask-kept, the question is lost with the shut down, and 992b goes red: "
+    + asked9.detail + ", sha " + (asked9.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "990 and 991 the team after the sweep: " + (e && e.stack ? e.stack : e));
 }

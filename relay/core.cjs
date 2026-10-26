@@ -258,7 +258,9 @@ function createCore(deps) {
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
     const kept = keptGrant(team, b.grant), { until, paid } = kept;
     const paidApart = kept.paidUntil !== undefined ? { paidUntil: kept.paidUntil } : {};
-    store.atomic(() => store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }, paidApart)));
+    /* `made` stamps this copy of the team: kept by a repeat create, new once a sweep has emptied the store, and told at each session. */
+    const made = team && typeof team.made === "string" ? team.made : random(8);
+    store.atomic(() => store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made }, paidApart)));
     return { ok: true, rt };
   }
 
@@ -585,7 +587,10 @@ function createCore(deps) {
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
     });
-    return who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
+    const out = who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
+    const made = (store.get("team") || {}).made;
+    if (typeof made === "string") out.made = made;
+    return out;
   }
 
   /* An invitation registered strictly after the key was withdrawn, by the order the relay itself keeps: "ord", raised in
