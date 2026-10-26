@@ -835,11 +835,11 @@ function main() {
   });
   const markedRun = run(marked, ["chain"]);
   const markedOrder = commandLines(markedRun.out);
-  const aloneLine = markedRun.out.split(/\r?\n/).filter(l => l.indexOf("run alone") >= 0);
+  const aloneLine = markedRun.out.split(/\r?\n/).filter(l => l.indexOf("run after the rest") >= 0);
   check(markedOrder.join(" | ") === "node tests/early.mjs | node tests/late.mjs | node tests/timed.mjs"
-    && aloneLine.length === 1 && aloneLine[0] === "gate-run: tests/timed.mjs run alone"
+    && aloneLine.length === 1 && aloneLine[0] === "gate-run: tests/timed.mjs run after the rest of its list (not alone on the machine)"
     && markedRun.out.indexOf("ran timed") >= 0 && markedRun.exit === 0,
-    "12a a marked file runs last and the log names it run alone: " + markedOrder.join(" | ")
+    "12a a marked file runs last and the log names it run after the rest: " + markedOrder.join(" | ")
     + "; alone line " + JSON.stringify(aloneLine) + "; exit " + markedRun.exit);
 
   const plain = chainLab("alone-plain", ["early", "mid", "late"], {
@@ -861,7 +861,7 @@ function main() {
     plantOrder = commandLines(run(plain, ["chain"]).out).join(" | ");
   }
   check(plainOrder.join(" | ") === plainWant
-    && plainRun.out.indexOf("run alone") < 0
+    && plainRun.out.indexOf("run after the rest") < 0
     && plantOrder === "node tests/late.mjs | node tests/mid.mjs | node tests/early.mjs",
     "12b with no marker the order is the chain's and the log is unchanged (" + plainOrder.join(" | ")
     + "); reversing the unchanged path runs " + (plantOrder || "nothing, the path was not there"));
@@ -902,9 +902,9 @@ function main() {
     && lateFaults.length === 1 && lateFaults[0] === "line 16 sits past the first 15 lines"
     && treeFaults.length === 0 && deskHas
     && missOrder === "node tests/early.mjs | node tests/bad.mjs | node tests/late.mjs"
-    && missRun.out.indexOf("run alone") < 0
+    && missRun.out.indexOf("run after the rest") < 0
     && lateOrder === "node tests/early.mjs | node tests/latefile.mjs | node tests/zed.mjs"
-    && lateRun.out.indexOf("run alone") < 0,
+    && lateRun.out.indexOf("run after the rest") < 0,
     "12c a misspelt marker is refused (" + missFaults.join("; ")
     + "), one past line 15 is refused (" + lateFaults.join("; ")
     + "), desk-growth carries it (" + deskHas + "), the tree's faults are "

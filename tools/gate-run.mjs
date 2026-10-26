@@ -413,7 +413,7 @@ console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), "
             + " byte(s), by " + before.how + "; git tree " + tree);
 for (const step of ordered) {
   const now = new Date();
-  if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run alone");
+  if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run after the rest of its list (not alone on the machine)");
   console.log("\n> " + step.cmd);
   const res = await runStep(step);
   const after = fingerprint();
