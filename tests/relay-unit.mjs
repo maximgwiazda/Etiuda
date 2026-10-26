@@ -215,17 +215,25 @@ async function main() {
     }
     check(badOk, "979k a prefix with no leading slash, no trailing slash, or a .. is unavailable on both paths and wakes no object: " + badDetail.join("; "));
     const toml = fs.readFileSync(path.join(ROOT, "relay", "wrangler.toml"), "utf8");
-    const halves = toml.split("\n[env.production]\n");
-    const top = halves[0], prod = halves[1] || "";
+    const marker = "\n[env.staging]\n";
+    const at = toml.indexOf(marker);
+    const top = at < 0 ? toml : toml.slice(0, at);
+    const staging = at < 0 ? "" : toml.slice(at + marker.length);
     const has = (text, re) => re.test(text);
-    check(halves.length === 2 && has(top, /^name = "etiuda-relay-staging"$/m) && has(top, /pattern = "etiuda\.dev\/relay-staging\/v1\/\*"/)
-      && has(top, /^API_PREFIX = "\/relay-staging\/v1\/"$/m) && has(top, /^bucket_name = "etiuda-relay-staging"$/m)
-      && has(prod, /^name = "etiuda-relay"$/m) && has(prod, /pattern = "etiuda\.dev\/relay\/v1\/\*"/)
-      && has(prod, /^API_PREFIX = "\/relay\/v1\/"$/m) && has(prod, /^bucket_name = "etiuda-relay"$/m) && has(prod, /jurisdiction = "eu"/)
-      && has(prod, /\[\[env\.production\.durable_objects\.bindings\]\]/) && has(prod, /class_name = "RelayTeam"/)
-      && has(prod, /\[\[env\.production\.migrations\]\]/) && has(prod, /new_sqlite_classes = \["RelayTeam"\]/)
-      && has(prod, /Nothing deploys/) && has(prod, /Maxim/) && !/relay-staging/.test(prod),
-      "979l the top of relay/wrangler.toml is the staging Worker, its route, prefix and bucket, and [env.production] names its Worker, route, prefix, eu bucket and Durable Object, and says nothing deploys it until Maxim's word");
+    const liveRoute = /pattern = "etiuda\.dev\/relay\/v1\/\*"/;
+    const stagingRoute = /pattern = "etiuda\.dev\/relay-staging\/v1\/\*"/;
+    check(at >= 0 && toml.indexOf(marker, at + marker.length) < 0 && !/\[env\.production/.test(toml)
+      && has(top, /^name = "etiuda-relay-staging"$/m) && has(top, liveRoute) && !has(top, stagingRoute) && !/^API_PREFIX = /m.test(top)
+      && has(top, /^bucket_name = "etiuda-relay-staging"$/m) && has(top, /^jurisdiction = "eu"$/m)
+      && has(top, /\[\[durable_objects\.bindings\]\]/) && has(top, /^class_name = "RelayTeam"$/m)
+      && has(top, /\[\[migrations\]\]/) && has(top, /new_sqlite_classes = \["RelayTeam"\]/)
+      && has(staging, /^name = "etiuda-relay-g2"$/m) && has(staging, stagingRoute) && !has(staging, liveRoute)
+      && has(staging, /^API_PREFIX = "\/relay-staging\/v1\/"$/m)
+      && has(staging, /^bucket_name = "etiuda-relay-g2"$/m) && has(staging, /^jurisdiction = "eu"$/m)
+      && has(staging, /\[\[env\.staging\.durable_objects\.bindings\]\]/) && has(staging, /^class_name = "RelayTeam"$/m)
+      && has(staging, /\[\[env\.staging\.migrations\]\]/) && has(staging, /new_sqlite_classes = \["RelayTeam"\]/)
+      && has(staging, /wrangler deploy --env staging/) && has(staging, /chief of staff/),
+      "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-g2, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-g2 and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff");
   }
 
   /* ---- 1: the bytes and the routes ---- */

@@ -1,17 +1,14 @@
-# The relay on a staging name. Nothing deploys this file: a deploy, and every Cloudflare resource named here, waits for
-# Maxim's word. It holds no secret, only bindings.
+# The top block is the live Worker etiuda-relay-staging, on etiuda.dev/relay/v1/*, with its objects and its bucket.
+# A deploy with no environment targets this block. [env.staging] is the separate Worker etiuda-relay-g2,
+# on etiuda.dev/relay-staging/v1/*. It holds no secret, only bindings.
 name = "etiuda-relay-staging"
 main = "worker.mjs"
 compatibility_date = "2026-09-01"
 # shell/relay/blob.cjs and the relay's own signatures use node:crypto.
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
-# Staging answers at its own path, and the site on etiuda.dev keeps every other path.
-routes = [{ pattern = "etiuda.dev/relay-staging/v1/*", zone_name = "etiuda.dev" }]
-
-# The path the Worker answers under: this route's own.
-[vars]
-API_PREFIX = "/relay-staging/v1/"
+# The relay answers at the one address Studio and the desk call, and the site on etiuda.dev keeps every other path.
+routes = [{ pattern = "etiuda.dev/relay/v1/*", zone_name = "etiuda.dev" }]
 
 # The relay logs nothing per request.
 [observability]
@@ -32,31 +29,23 @@ binding = "BLOBS"
 bucket_name = "etiuda-relay-staging"
 jurisdiction = "eu"
 
-[env.production]
-# Nothing deploys this environment until Maxim's word. Durable Object bindings, migrations and R2 buckets
-# are not inherited by an environment, so they are named here again, with the script and its compat flags.
-name = "etiuda-relay"
-main = "worker.mjs"
-compatibility_date = "2026-09-01"
-compatibility_flags = ["nodejs_compat"]
-workers_dev = false
-routes = [{ pattern = "etiuda.dev/relay/v1/*", zone_name = "etiuda.dev" }]
+[env.staging]
+# Deployed only by `wrangler deploy --env staging`, by a chief of staff.
+name = "etiuda-relay-g2"
+routes = [{ pattern = "etiuda.dev/relay-staging/v1/*", zone_name = "etiuda.dev" }]
 
-[env.production.vars]
-API_PREFIX = "/relay/v1/"
+[env.staging.vars]
+API_PREFIX = "/relay-staging/v1/"
 
-[env.production.observability]
-enabled = false
-
-[[env.production.durable_objects.bindings]]
+[[env.staging.durable_objects.bindings]]
 name = "TEAMS"
 class_name = "RelayTeam"
 
-[[env.production.migrations]]
+[[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["RelayTeam"]
 
-[[env.production.r2_buckets]]
+[[env.staging.r2_buckets]]
 binding = "BLOBS"
-bucket_name = "etiuda-relay"
+bucket_name = "etiuda-relay-g2"
 jurisdiction = "eu"
