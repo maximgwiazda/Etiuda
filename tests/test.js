@@ -1632,6 +1632,8 @@ function deskMarkTests() {
   const ns = {};
   const band = { className: "", attrs: {}, textContent: "Sample catalog", setAttribute(k, v) { this.attrs[k] = v; } };
   const mark = { hidden: true, querySelector: () => band };
+  const deskText = { attrs: {}, textContent: "", setAttribute(k, v) { this.attrs[k] = v; } };
+  const desk = { hidden: false, querySelector: (s) => (s === ".dm-text" ? deskText : null) };
   const PL = { "Sample catalog": "Przykładowy katalog" };
   PL[EN_EVAL] = PL_EVAL;
   PL[EN_NEWER] = PL_NEWER;
@@ -1640,7 +1642,7 @@ function deskMarkTests() {
     nsSet: (k, v) => { ns[k] = String(v); },
     nsDel: (k) => { delete ns[k]; },
     nsGet: (k) => (k in ns ? ns[k] : null),
-    document: { getElementById: (id) => (id === "sampleMark" ? mark : null) },
+    document: { getElementById: (id) => (id === "sampleMark" ? mark : id === "deskMark" ? desk : null) },
     cards: [{ id: "c-hello" }],
     pack: {},
     cardOrderIsBase: () => true,
@@ -1680,33 +1682,34 @@ function deskMarkTests() {
     try { api.takeCatalog(c, {}); api.syncSampleMark(); }
     catch (e) { err = e.message; }
     return { err: err, hidden: mark.hidden, text: band.textContent, cls: band.className,
-      key: ns.DeskMark || "", sample: ns.Sample || "", en: band.attrs["data-i18n-text"] || "" };
+      key: ns.DeskMark || "", sample: ns.Sample || "", en: band.attrs["data-i18n-text"] || "",
+      lineHidden: desk.hidden, line: deskText.textContent, lineEn: deskText.attrs["data-i18n-text"] || "" };
   };
   lang = "en";
   const ev = show({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
   lang = "pl";
   api.syncSampleMark();
-  const evPl = band.textContent;
+  const evPl = deskText.textContent;
   eq("desk mark an evaluation catalog shows its sentence, in English and in Polish, and does not set the sample flag",
-    [ev.err, ev.hidden, ev.text, ev.en, ev.cls, ev.key, ev.sample, evPl],
-    ["", false, EN_EVAL, EN_EVAL, "mark-sentence", "evaluation", "", PL_EVAL]);
+    [ev.err, ev.lineHidden, ev.line, ev.lineEn, ev.hidden, ev.text, ev.cls, ev.key, ev.sample, evPl],
+    ["", false, EN_EVAL, EN_EVAL, true, "Sample catalog", "", "evaluation", "", PL_EVAL]);
   lang = "en";
   const nw = show({ evaluation: "newer", cards: [{ id: "c-hello" }] });
   lang = "pl";
   api.syncSampleMark();
   eq("desk mark a newer catalog shows its sentence, in English and in Polish",
-    [nw.err, nw.hidden, nw.text, nw.key, band.textContent],
-    ["", false, EN_NEWER, "newer", PL_NEWER]);
+    [nw.err, nw.lineHidden, nw.line, nw.key, deskText.textContent, nw.hidden, nw.text],
+    ["", false, EN_NEWER, "newer", PL_NEWER, true, "Sample catalog"]);
   lang = "en";
   own.pack.overrides = { "c-hello": { en: "A changed reply" } };
   api.syncSampleMark();
-  eq("desk mark a card's text edited leaves the newer sentence on the band",
-    [mark.hidden, band.textContent, ns.DeskMark || ""],
-    [false, EN_NEWER, "newer"]);
+  eq("desk mark a card's text edited leaves the newer sentence on the line",
+    [desk.hidden, deskText.textContent, mark.hidden, ns.DeskMark || ""],
+    [false, EN_NEWER, true, "newer"]);
   const cleared = show({ cards: [{ id: "c-hello" }] });
-  eq("desk mark loading a catalog without the field clears it and hides the band",
-    [cleared.err, cleared.hidden, cleared.key, cleared.sample],
-    ["", true, "", ""]);
+  eq("desk mark loading a catalog without the field clears it and hides the line",
+    [cleared.err, cleared.lineHidden, cleared.hidden, cleared.key, cleared.sample],
+    ["", true, true, "", ""]);
   lang = "en";
   const sample = show({ sample: 1, cards: [{ id: "c-hello" }] });
   lang = "pl";
@@ -1716,12 +1719,86 @@ function deskMarkTests() {
   own.pack.overrides = { "c-hello": { en: "A changed reply" } };
   api.syncSampleMark();
   eq("desk mark the sample still shows until a card's text changes, and that edit hides it without a published mark",
-    [sample.err, sample.hidden, sample.text, sample.cls, sample.sample, sample.key, samplePl, mark.hidden, ns.Sample || "", ns.DeskMark || ""],
-    ["", false, "Sample catalog", "", "1", "", "Przykładowy katalog", true, "1", ""]);
+    [sample.err, sample.hidden, sample.text, sample.cls, sample.sample, sample.key, sample.lineHidden, samplePl, mark.hidden, ns.Sample || "", ns.DeskMark || ""],
+    ["", false, "Sample catalog", "", "1", "", true, "Przykładowy katalog", true, "1", ""]);
   const both = show({ sample: 1, evaluation: "evaluation", cards: [{ id: "c-hello" }] });
   eq("desk mark a file that carries both shows the published sentence, not the sample stamp",
-    [both.err, both.hidden, both.text, both.key, both.sample],
-    ["", false, EN_EVAL, "evaluation", "1"]);
+    [both.err, both.lineHidden, both.line, both.hidden, both.text, both.cls, both.key, both.sample],
+    ["", false, EN_EVAL, true, "Sample catalog", "", "evaluation", "1"]);
+
+  /* WHERE THE LINE SITS. shoot.mjs counts #list text nodes whose rectangles meet a visible
+     mark. This process has no layout, so the same question is the document's: the line is
+     inside the header and the card list is not, the header is position:relative and the
+     scroller that holds the list starts under it, and the line's own rule sets no position,
+     no inset and no negative margin. A fixed stamp still covers the page, and the legs
+     below keep that stamp hidden while a published mark is shown. The ground prints because
+     the line names print-color-adjust, and it is not taken off the page in print. */
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const h0 = tpl.indexOf("<header>");
+  const h1 = tpl.indexOf("</header>");
+  const header = h0 >= 0 && h1 > h0 ? tpl.slice(h0, h1) : "";
+  const pillsAt = header.indexOf('id="pillsSlot"');
+  const lineAt = header.indexOf('id="deskMark"');
+  const probeAt = header.indexOf('id="pillsProbe"');
+  const listAt = tpl.indexOf('id="list"');
+  eq("desk mark the line sits in the header under the categories and the card list sits outside that header",
+    [pillsAt >= 0 && lineAt > pillsAt && probeAt > lineAt,
+     lineAt >= 0 && header.indexOf('class="dm-text"') > lineAt,
+     listAt > h1],
+    [true, true, true]);
+  eq("desk mark the line is a note a screen reader meets once, and it is not hidden from one",
+    [header.indexOf('<div id="deskMark" role="note" hidden>') > -1,
+     /<div id="deskMark"[^>]*aria-hidden/.test(header)],
+    [true, false]);
+  const rule = /#deskMark\{([^}]*)\}/.exec(tpl);
+  const body = rule ? rule[1] : "";
+  const positioned = /position\s*:\s*(fixed|absolute|sticky)/.test(body);
+  const neg = /margin(?:-[a-z]+)?\s*:[^;]*-\d/.test(body);
+  const taken = /\b(?:inset|z-index|top|left|right|bottom)\s*:/.test(body);
+  eq("desk mark the line takes its own room in the header and is not placed over the cards, and its ground prints",
+    [!!rule, positioned, neg, taken,
+     /header\{position:relative/.test(tpl),
+     tpl.indexOf("#deskMark{-webkit-print-color-adjust:exact;print-color-adjust:exact}") > -1,
+     /#sampleMark\{[^}]*position:fixed/.test(tpl),
+     /body\.e-lanes #pillsSlot\{display:none\}/.test(tpl)
+       && !/body\.e-lanes[^{]*#deskMark\{[^}]*display\s*:\s*none/.test(tpl)],
+    [true, false, false, false, true, true, true, true]);
+  const stamp = [
+    "#sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;",
+    "  display:flex;align-items:center;justify-content:center}",
+    "#sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;",
+    "  /* 650 and .18em tracking, not 800 and .08em: a stamp, not a shout. The wide tracking is",
+    "     what keeps it legible at low alpha - the letterforms stop competing with the card text",
+    "     for the same spatial frequency and read as a layer instead. */",
+    "  font:650 clamp(20px,3.8vw,56px)/1 var(--sans);letter-spacing:.18em;",
+    "  /* Neutral, not red: red is the danger colour here (Delete, hide, nothing else), and a",
+    "     red watermark read as a warning about the content. Green, blue and gold are spoken",
+    "     for too; grey belongs to no vocabulary, which is right for a note about the document. */",
+    "  color:var(--dim);opacity:.13}",
+    "/* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */",
+    ":root[data-theme=light] #sampleMark b{opacity:.11}"
+  ].join("\n");
+  eq("desk mark the sample stamp is the faint rotated one, and the sentence class is gone from it",
+    [tpl.indexOf(stamp) > -1, tpl.indexOf("mark-sentence"),
+     tpl.indexOf('<div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>') > -1],
+    [true, -1, true]);
+
+  own.cards = [];
+  lang = "en";
+  desk.hidden = true;
+  deskText.textContent = "";
+  delete deskText.attrs["data-i18n-text"];
+  const bare = show({ evaluation: "evaluation", cards: [] });
+  eq("desk mark a catalog carrying a mark still shows the line when no card is on screen",
+    [bare.err, desk.hidden, deskText.textContent, deskText.attrs["data-i18n-text"] || "", mark.hidden],
+    ["", false, EN_EVAL, EN_EVAL, true]);
+  own.cards = [{ id: "c-hello" }];
+  lang = "en";
+  desk.hidden = false;
+  const clearLine = show({ cards: [{ id: "c-hello" }] });
+  eq("desk mark the line is hidden when the loaded catalog carries no mark",
+    [clearLine.err, desk.hidden, ns.DeskMark || ""],
+    ["", true, ""]);
 }
 
 /* Spec 2.6 lines 399-401: where a label is present the copy control shows it in place of
@@ -4548,8 +4625,11 @@ function pillsWidthWatchTests() {
   eq("the width watch leaves a slot narrowing at the same window width to the resize pass", got, [0, 0]);
   eq("the width watch observes the probe, a box the clip it sets cannot resize", observed === probe, true);
   const rule = /\.pills-probe\{([^}]*)\}/.exec(tpl), slotRule = /\.pills-slot\{max-width:([^;]*);/.exec(tpl);
+  /* The published line is the one element between the slot and the probe. The probe stays
+     outside the slot, at the slot's width and no height, so the width watch still observes
+     a box the clip does not resize. */
   eq("the probe sits outside the slot at the slot's width and no height",
-    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
+    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div id="deskMark" role="note" hidden>[\s\S]*?<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
       !!rule && !!slotRule && rule[1].indexOf("max-width:" + slotRule[1]) > -1 && /height:0/.test(rule[1])],
     [true, true]);
   const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");

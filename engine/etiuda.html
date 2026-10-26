@@ -3882,11 +3882,16 @@ body.e-lanes #pillsSlot{display:none}
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* The two published marks are a sentence, so they do not wear the sample's stamp. */
-#sampleMark b.mark-sentence{transform:none;white-space:normal;text-transform:none;
-  font:600 clamp(15px,2.1vw,22px)/1.35 var(--sans);letter-spacing:0;
-  max-width:36em;text-align:center;opacity:.72}
-:root[data-theme=light] #sampleMark b.mark-sentence{opacity:.78}
+/* A PUBLISHED MARK is a line of the header's own, under the tools and the categories: it takes its
+   own room, so it stands over no card on screen or on paper, and it never scrolls away. The sample
+   keeps its faint stamp; this is a sentence, so it is set as one. */
+#deskMark{max-width:var(--app-max);margin:8px auto 0;display:flex;align-items:flex-start;gap:9px;
+  padding:6px 12px;border-radius:7px;background:var(--warn-bg);
+  border:1px solid color-mix(in srgb,var(--warn) 32%,transparent);
+  color:var(--ink);font:13px/1.45 var(--sans)}
+#deskMark[hidden]{display:none}
+#deskMark .ic{flex:none;margin-top:2px;color:var(--warn)}
+#deskMark{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
@@ -4140,6 +4145,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
   </div>
+  <div id="deskMark" role="note" hidden><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="4.8" r="2.3"/><path d="M8.7 7v3.3h2.6V7"/><rect x="3.8" y="10.3" width="12.4" height="3.4" rx="1"/><path d="M4.5 16.6h11"/></svg><span class="dm-text"></span></div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
@@ -4180,8 +4186,9 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
 <div id="eSay" aria-live="polite"></div>
-<!-- The sample stamp, or a published mark. aria-hidden: a screen reader would otherwise meet
-     it on every focus move. The sample's fact is also on Manage's status line. -->
+<!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
+     reader would otherwise meet it on every focus move; Manage's status line carries the same
+     fact as text. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <div id="fabStack" class="fab-stack">
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
@@ -25560,8 +25567,8 @@ What you type stays in this browser only.`;
   function syncSampleMark() {
     scheduleDeskBranch();
     const el = document.getElementById("sampleMark");
-    if (!el) return;
-    const b = el.querySelector ? el.querySelector("b") : null;
+    const desk = document.getElementById("deskMark");
+    const line = desk && desk.querySelector ? desk.querySelector(".dm-text") : null;
     const mark = nsGet("DeskMark");
     let en = "", shown2 = "";
     if (mark === "evaluation") {
@@ -25571,17 +25578,19 @@ What you type stays in this browser only.`;
       en = "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
       shown2 = t("Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.");
     }
-    if (en && (cards || []).length > 0) {
-      if (b) {
-        b.className = "mark-sentence";
-        b.setAttribute("data-i18n-text", en);
-        b.textContent = shown2;
+    if (en) {
+      if (line) {
+        line.setAttribute("data-i18n-text", en);
+        line.textContent = shown2;
       }
-      el.hidden = false;
+      if (desk) desk.hidden = false;
+      if (el) el.hidden = true;
       return;
     }
+    if (desk) desk.hidden = true;
+    if (!el) return;
+    const b = el.querySelector ? el.querySelector("b") : null;
     if (b) {
-      b.className = "";
       b.setAttribute("data-i18n-text", "Sample catalog");
       b.textContent = t("Sample catalog");
     }
