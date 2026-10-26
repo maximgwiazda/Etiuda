@@ -5,7 +5,7 @@
    carries no valid grant under the vendor's root is refused here, before any object is asked, so a stranger's create costs one
    Worker request and wakes nothing. The object judges it again. A create whose t is stale or far ahead of the Worker's clock,
    by the rule the object applies, is refused here the same way, so a replayed create wakes no object either. A renewal whose
-   grant does not hold for the lead it names is refused here too. */
+   grant does not hold for the lead it names is refused here too, and so is a grant a revoked service key signed. */
 import team from "./team.cjs";
 import core from "./core.cjs";
 
@@ -24,11 +24,8 @@ function rtOf(body) {
    root and the Worker's own clock. `clockOf` takes the env and answers the time in ms. */
 export function routeWith(roots, clockOf) {
   const nowOf = typeof clockOf === "function" ? clockOf : () => Date.now();
-  /* A renewal's grant holds for the lead it names; the object then holds it to the team's own lead. */
-  const renewable = (body, now) => {
-    const grant = body && typeof body === "object" ? body.grant : undefined;
-    return core.grantOk(grant, grant && typeof grant === "object" ? grant.lead : undefined, now, roots);
-  };
+  /* The revoked list, read on each request. A list that does not verify is none, and nothing is said of it. */
+  const revokedOf = env => core.revokedKeysOf(env && env.REVOKED, roots);
 
   async function route(request, env) {
     const prefix = team.apiPrefixOf(env);
@@ -44,7 +41,7 @@ export function routeWith(roots, clockOf) {
       if (!bytes) return team.refusedFor("blob-size");
       const body = bodyOf(bytes), rt = rtOf(body);
       if (!rt) return team.refusedFor("bad-signature");
-      const now = nowOf(env), judged = core.judgeCreate(rt, body, now, roots);
+      const now = nowOf(env), judged = core.judgeCreate(rt, body, now, roots, revokedOf(env));
       if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-grant */
       if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-fresh */
       return teams.get(teams.idFromName(rt)).fetch(new Request(request.url, { method: "POST", headers: request.headers, body: bytes }));
@@ -53,7 +50,13 @@ export function routeWith(roots, clockOf) {
     if (request.method === "POST") { /* plant:worker-body */
       const bytes = await team.readCapped(request, team.JSON_MAX);
       if (!bytes) return team.refusedFor("blob-size");
-      if (hit.what === "grant" && !renewable(bodyOf(bytes), nowOf(env))) return team.refusedFor("bad-grant"); /* plant:worker-renew */
+      if (hit.what === "grant") {
+        const grantBody = bodyOf(bytes);
+        const grant = grantBody && typeof grantBody === "object" ? grantBody.grant : undefined;
+        const why = core.grantWhy(grant, grant && typeof grant === "object" ? grant.lead : undefined, nowOf(env), roots, revokedOf(env));
+        if (why === "revoked") return team.refusedFor("revoked"); /* plant:worker-revoked */
+        if (why) return team.refusedFor("bad-grant"); /* plant:worker-renew */
+      }
       forward = new Request(request.url, { method: "POST", headers: request.headers, body: bytes });
     }
     return teams.get(teams.idFromName(hit.rt)).fetch(forward);

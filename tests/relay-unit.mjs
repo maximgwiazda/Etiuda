@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 295;
+const EXPECTED = 315;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -232,8 +232,10 @@ async function main() {
       && has(staging, /^bucket_name = "etiuda-relay-next"$/m) && has(staging, /^jurisdiction = "eu"$/m)
       && has(staging, /\[\[env\.staging\.durable_objects\.bindings\]\]/) && has(staging, /^class_name = "RelayTeam"$/m)
       && has(staging, /\[\[env\.staging\.migrations\]\]/) && has(staging, /new_sqlite_classes = \["RelayTeam"\]/)
-      && has(staging, /wrangler deploy --env staging/) && has(staging, /chief of staff/),
-      "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-next, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-next and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff");
+      && has(staging, /wrangler deploy --env staging/) && has(staging, /chief of staff/)
+      && !/REVOKED/.test(top) && has(staging, /^# REVOKED, the root-signed list of revoked service keys: the chief of staff sets it at deploy\.$/m)
+      && !/^REVOKED\s*=/m.test(toml),
+      "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-next, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-next and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff, and REVOKED is named only as a comment the chief of staff sets at deploy, with no value");
   }
 
   /* ---- 1: the bytes and the routes ---- */
@@ -1069,7 +1071,7 @@ async function main() {
   const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
   /* What a copy of relay/core.cjs hands the live exports object, which the team's module and the Worker keep: the object's
      factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
-  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "create2Bytes", "ROOT_PUB", "lapseOf"];
+  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "create2Bytes", "ROOT_PUB", "lapseOf"];
   const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
   /* The text of relay/core.cjs the live exports stand for: the product's, or while a plant is on, that plant's edit, so a plant run
      inside another lifts a line of the edited text and both stay lifted. `edit` maps that text to the edited text, or to null where
@@ -2792,13 +2794,14 @@ async function main() {
       const sock = wsOf(w, (await socket(w, await sessionOf(w, w.desk))).socket);
       at(w, 91 * DAY);
       const rang = await w.R.ring(w.rt);
-      const gone = { rang, bucket: inBucket(w).length, store: w.R.stores.get(w.rt).dump().length, alarm: w.R.alarms.has(w.rt), hello: await helloKeys(w),
+      const goneStore = w.R.stores.get(w.rt);
+      const gone = { rang, bucket: inBucket(w).length, store: goneStore.dump().length, mark: goneStore.get("swept") === w.lead.pub, alarm: w.R.alarms.has(w.rt), hello: await helloKeys(w),
         socket: closedBy(sock) };
       return {
         a: sameJ(working, wantRoutes(told(w.until, true, "working"), true)),
         b: sameJ(reading, wantRoutes(ro, false)),
         c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, false])
-          && sameJ(gone, { rang: true, bucket: 0, store: 0, alarm: false, hello: "not-enrolled", socket: [4400, true] }),
+          && sameJ(gone, { rang: true, bucket: 0, store: 1, mark: true, alarm: false, hello: "not-enrolled", socket: [4400, true] }),
         detail: JSON.stringify({ working, reading, late, gone, armed: w.armedAtCreate === w.until + READ }),
       };
     }
@@ -2859,7 +2862,7 @@ async function main() {
       const early = [await v.R.ring(v.rt), await helloKeys(v), inBucket(v).length > 0];
       at(v, TRIAL);
       const late = [await v.R.ring(v.rt), inBucket(v).length, v.R.stores.get(v.rt).dump().length, v.R.alarms.has(v.rt), await helloKeys(v)];
-      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 0, false, "not-enrolled"]);
+      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 1, false, "not-enrolled"]);
       return { e, f, g: g2, detail: JSON.stringify({ out, renewal: [rn.r.status, ds.status, up], early, late }) };
     }
 
@@ -2924,8 +2927,10 @@ async function main() {
       const retry = v.R.alarms.get(v.rt) === v.R.clock.now + HOUR;
       v.R.clock.now += HOUR;
       const r2 = await v.R.ring(v.rt);
-      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0]]) && retry && r2 && inBucket(v).length === 0
-        && v.R.stores.get(v.rt).dump().length === 0 && !v.R.alarms.has(v.rt);
+      const marked = v.R.stores.get(v.rt).get("swept") === v.lead.pub;
+      const afterSweep = v.R.stores.get(v.rt);
+      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0], "swept"]) && marked && retry && r2 && inBucket(v).length === 0
+        && afterSweep.dump().length === 1 && afterSweep.get("swept") === v.lead.pub && !v.R.alarms.has(v.rt);
       return { a, b: missed, detail: JSON.stringify({ lost: lost.status, rowed, again: again.status, every, rang, left: inBucket(w).length, r1, kept: keys.length, retry, r2 }) };
     }
 
@@ -2938,7 +2943,7 @@ async function main() {
       const body = K.createBody(w.rt, w.lead, w.R.clock.now, bytes => signHex(w.lead, bytes));
       const made = await call(w.R, "POST", "/relay/v1/teams", { json: body });
       const team = st.get("team");
-      return { ok: hello === "not-enrolled" && sameJ(emptied, [0, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
+      return { ok: hello === "not-enrolled" && sameJ(emptied, [1, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
         && st.list("dev:").length === 0 && st.list("blob:").length === 0, detail: JSON.stringify({ hello, emptied, made: made.status }) };
     }
 
@@ -2963,13 +2968,14 @@ async function main() {
       env.TEAMS = { jurisdiction: j => (j === "eu" ? scoped : null) };
       const w = await lapseWorld(true, { R: { env, clock: clk, bucket: env.BLOBS } });
       const tables = () => ctx.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
+      const keys = () => { try { return ctx.db.prepare("SELECT k FROM kv ORDER BY k").all().map(r => r.k); } catch (e) { return [String(e && e.message)]; } };
       const out = { armed: (await ctx.storage.getAlarm()) === w.until + READ, before: tables(), objects: [...env.BLOBS.objects.keys()].length > 0 };
       clk.now = w.until + 91 * DAY;
       await team.alarm();
-      Object.assign(out, { after: tables(), left: [...env.BLOBS.objects.keys()].length, alarm: await ctx.storage.getAlarm() });
+      Object.assign(out, { after: tables(), keys: keys(), left: [...env.BLOBS.objects.keys()].length, alarm: await ctx.storage.getAlarm() });
       return out;
     }
-    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: [], left: 0, alarm: null };
+    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: ["kv"], keys: ["swept"], left: 0, alarm: null };
 
     /* Each state's edges, in milliseconds. A core that has no lapseOf does not hold them. */
     const edgesHold = () => {
@@ -3005,7 +3011,7 @@ async function main() {
       out.rang = await w.R.ring(w.rt);
       out.gone = [inBucket(w).length, w.R.stores.get(w.rt).dump().length];
       const ok = sameJ(out, { renewal: [200, want("working")], row: [w.until + 5 * DAY, false, w.until], alarm: w.until + READ, at29: [200, "working", 200],
-        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 0] });
+        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 1] });
       return { ok, detail: JSON.stringify(out) };
     }
 
@@ -3035,7 +3041,7 @@ async function main() {
     check(paid.b === true, "977b at the end and 31 days it is read-only: hello, sessions told read-only, since, fetch, socket and states are answered, and an upload,"
       + " devices, invites and a token hello are refused team-lapsed, the token left unspent");
     check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only and the alarm has not rung; at 91 days it rings,"
-      + " deletes every object of the team, empties its storage, clears the alarm and closes its sockets, and hello is answered not-enrolled");
+      + " deletes every object of the team, keeps the lead's public key and nothing else, clears the alarm and closes its sockets, and hello is answered not-enrolled");
     const restored = await held(() => restoreScene());
     check(restored.ok === true, "977d a renewal while read-only, a later grant for the team's lead, is answered with the team working under the new until, and an upload,"
       + " devices, invites and a token hello are then taken, the alarm moved to the new end and 90 days: " + (restored.detail || restored.failed));
@@ -3046,7 +3052,7 @@ async function main() {
     check(trial.f === true, "977f a paid grant presented to that trial's team 10 days after its until restores it: the renewal and the next session say working under"
       + " the new until, and an upload is taken");
     check(trial.g === true, "977g another trial's team, its alarm rung at the until, still answers hello a millisecond before the until and 30 days and is swept at that"
-      + " instant: no object, no storage, no alarm, hello not-enrolled");
+      + " instant: no object, the lead's public key alone, no alarm, hello not-enrolled");
     const renewal = await held(() => renewScene(W));
     check(renewal.zero === true && renewal.other === true && renewal.earlier === true && renewal.never === true,
       "977h a renewal with no grant, a grant that is not one, one that has ended, one a stray key signed or a licence is refused bad-grant by the Worker with no"
@@ -3058,15 +3064,15 @@ async function main() {
     const recorded = await held(() => recordScene());
     check(recorded.a === true, "977j an object the bucket wrote for a request that died before its commit has a put row from before its put, every object of the team"
       + " is named by a row, and the sweep deletes the lost one with the rest: " + (recorded.detail || recorded.failed));
-    check(recorded.b === true, "977k a sweep whose delete of one object fails keeps that object's orphan row alone, rings again an hour on, and then leaves no object,"
-      + " no row and no alarm");
+    check(recorded.b === true, "977k a sweep whose delete of one object fails keeps that object's orphan row and the lead's public key, rings again an hour on, and then leaves no object,"
+      + " the lead's public key alone and no alarm");
     const lazy = await held(() => lazyScene());
     check(lazy.ok === true, "977l a team gone by the clock whose alarm has not rung is swept by the next request, which hello answers not-enrolled, and its lead then"
       + " makes it afresh with no desk and no blob: " + (lazy.detail || lazy.failed));
     const armed = await held(() => armScene());
     check(armed === true, "977m a team with no alarm, as one made before the alarm, has it set to its end and 90 days at its next session");
     const sql = await held(() => sqlScene());
-    check(sameJ(sql, WANT_SQL), "977n RelayTeam over real SQLite: the create sets the object's alarm to the end and 90 days, and the alarm past it leaves no table, no"
+    check(sameJ(sql, WANT_SQL), "977n RelayTeam over real SQLite: the create sets the object's alarm to the end and 90 days, and the alarm past it leaves the kv table holding the lead's public key alone, no"
       + " object and no alarm: " + JSON.stringify(sql));
     const edges = edgesHold();
     const paidTrial = await held(() => paidThenTrialScene());
@@ -3177,6 +3183,226 @@ async function main() {
     const sameKey = await swapCore("held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk", "true", async () => red(await held(() => withdrawScene()), "ok"));
     check(base["977q"] && sameKey.turned && sameKey.back, label() + " judging a removal by key ids alone lets a read-only team's call move a kept key to another desk,"
       + " which turns 977q red, and the product file is never written: " + how2(sameKey));
+  }
+
+  /* ---- 980: a swept id is kept for its own lead, and a revoked service key's grant is refused ---- */
+  {
+    const T0S = 1700000000000;
+    const REVOKED_SAID = "That grant was signed by a revoked key, so the relay did not take it.";
+    const SWEPT_SAID = "This team id is kept for its own lead, so a create under another key is not taken.";
+    function revDoc(keys, signer) {
+      const who = signer || K.ROOT;
+      const doc = { kind: "etiuda-revocations", format: 1, serial: 1, keys: keys.slice().sort(),
+        sig: { alg: "ed25519", keyId: who.id, value: "" } };
+      doc.sig.value = crypto.sign(null, Buffer.from("etiuda-revocations\n" + doc.serial + "\n" + doc.keys.join(","), "utf8"), who.privateKey).toString("hex");
+      return doc;
+    }
+    const revText = (keys, signer) => JSON.stringify(revDoc(keys, signer));
+    const markOnly = (st, pub) => {
+      if (!st) return false;
+      const dump = st.dump();
+      return dump.length === 1 && dump[0][0] === "swept" && dump[0][1] === JSON.stringify(pub) && st.get("swept") === pub && st.get("team") === undefined;
+    };
+    async function sweptOf() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false), until = T0S + DAY;
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S, { grantOpts: { fields: { paid: false, until } } }) });
+      R.clock.now = until + 30 * DAY;
+      const rang = await R.ring(rt);
+      return { R, rt, lead, made, rang, st: R.stores.get(rt) };
+    }
+    async function objectGrant(R, rt, grant) {
+      const res = await R.object(rt).fetch(new Request("https://relay.test/relay/v1/t/" + rt + "/grant", {
+        method: "POST", body: JSON.stringify({ grant }), duplex: "half" }));
+      let json = null;
+      try { json = await res.json(); } catch { json = null; }
+      return { status: res.status, json, meta: null, socket: null };
+    }
+
+    const eLead = keyPair(false), eGrant = K.delegatedGrantFor(eLead.pub, T0S);
+    async function sceneA() {
+      const row = await sweptOf();
+      const mark = row.st && row.st.get("swept");
+      const heldMark = markOnly(row.st, row.lead.pub);
+      const again = await call(row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, row.lead, row.R.clock.now) });
+      const teamA = row.st && row.st.get("team");
+      const ok = row.made.status === 200 && row.rang === true && heldMark && again.status === 200 && !!teamA && teamA.epoch === 0
+        && teamA.lead.pub === row.lead.pub && row.st.get("swept") === undefined && B.REASONS["swept-other-lead"] === SWEPT_SAID;
+      const line = "980a a swept team re-created by its own lead key is accepted, and the mark is that key until the create takes it: made " + row.made.status
+        + ", rang " + row.rang + ", mark " + JSON.stringify(mark) + ", again " + again.status
+        + ", epoch " + (teamA && teamA.epoch) + ", swept after " + JSON.stringify(row.st && row.st.get("swept"));
+      return { ok, line };
+    }
+    async function sceneB() {
+      const row = await sweptOf();
+      const other = keyPair(false);
+      const hit = await countedCall(W, row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, other, row.R.clock.now) });
+      const bad = await countedCall(W, row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, other, row.R.clock.now, { grant: null }) });
+      const ok = refused(hit.r, "swept-other-lead") && hit.r.json.said === SWEPT_SAID && hit.gets === 1 && markOnly(row.st, row.lead.pub)
+        && refused(bad.r, "bad-grant") && bad.gets === 0;
+      const line = "980b a swept team re-created by another key with a valid grant is refused swept-other-lead, and a grant that does not hold is still bad-grant: "
+        + hit.r.status + " " + (hit.r.json && hit.r.json.error) + " gets " + hit.gets + ", mark " + (markOnly(row.st, row.lead.pub) ? "kept" : "lost")
+        + ", bad " + bad.r.status + " " + (bad.r.json && bad.r.json.error) + " gets " + bad.gets;
+      return { ok, line };
+    }
+    async function sceneC() {
+      const cR = relayEnv();
+      cR.clock.now = T0S;
+      const cRt = hex(16), cLead = keyPair(false);
+      const cMade = await countedCall(W, cR, "POST", "/relay/v1/teams", { json: createBody(cRt, cLead, T0S) });
+      const cSt = cR.stores.get(cRt), cTeam = cSt && cSt.get("team");
+      const cBadRt = hex(16);
+      const cBad = await countedCall(W, cR, "POST", "/relay/v1/teams", { json: createBody(cBadRt, keyPair(false), T0S, { grant: null }) });
+      const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 1 && !!cTeam && cTeam.epoch === 0
+        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,paid,rt,until"
+        && refused(cBad.r, "bad-grant") && cBad.gets === 0 && (cR.stores.get(cBadRt) ? cR.stores.get(cBadRt).dump().length : 0) === 0;
+      const line = "980c an id never made is judged as today: a valid grant is taken and keeps no mark, and a create with no grant is bad-grant with no object woken: "
+        + cMade.r.status + " gets " + cMade.gets + ", swept " + JSON.stringify(cSt && cSt.get("swept"))
+        + ", bad " + cBad.r.status + " " + (cBad.r.json && cBad.r.json.error) + " gets " + cBad.gets;
+      return { ok, line };
+    }
+    async function sceneD() {
+      const row = await sweptOf();
+      const dDump = row.st ? row.st.dump() : [];
+      const ok = row.made.status === 200 && row.rang === true && markOnly(row.st, row.lead.pub) && row.R.bucket.objects.size === 0
+        && dDump.length === 1 && typeof row.st.get("swept") === "string";
+      const line = "980d after a sweep the mark is the lead's public key and nothing else: rang " + row.rang + ", dump "
+        + JSON.stringify(dDump.map(([k, v]) => [k, v])) + ", bucket " + row.R.bucket.objects.size;
+      return { ok, line };
+    }
+    async function sceneE(worker) {
+      const use = worker || W;
+      const eR = relayEnv();
+      eR.clock.now = T0S;
+      eR.env.REVOKED = revText([K.DELEGATE.pub]);
+      const eRt = hex(16);
+      const eCreated = await countedCall(use, eR, "POST", "/relay/v1/teams", { json: createBody(eRt, eLead, T0S, { grant: eGrant }) });
+      const e2 = relayEnv();
+      e2.clock.now = T0S;
+      const eLead2 = keyPair(false), eRt2 = hex(16), eW = { R: e2, rt: eRt2, lead: eLead2 };
+      const eMade = await call(e2, "POST", "/relay/v1/teams", { json: createBody(eRt2, eLead2, T0S, { grant: K.delegatedGrantFor(eLead2.pub, T0S) }) });
+      const eCh = eMade.status === 200 ? await call(e2, "POST", "/relay/v1/t/" + eRt2 + "/hello", { json: {} }) : { status: 0, json: null };
+      const eSess = eCh.json && eCh.json.challenge ? await helloAs(eW, eLead2, { nonce: eCh.json.challenge }) : { status: 0, json: null };
+      const eTok = eSess.json && eSess.json.session;
+      const eSince = eTok ? await since(eW, eTok) : { status: 0, json: null };
+      const eCh2 = eMade.status === 200 ? await call(e2, "POST", "/relay/v1/t/" + eRt2 + "/hello", { json: {} }) : { status: 0, json: null };
+      e2.env.REVOKED = revText([K.DELEGATE.pub]);
+      const eHello = await call(e2, "POST", "/relay/v1/t/" + eRt2 + "/hello", { json: {} });
+      const eSess2 = eCh2.json && eCh2.json.challenge ? await helloAs(eW, eLead2, { nonce: eCh2.json.challenge }) : { status: 0, json: null };
+      const eSince2 = eTok ? await since(eW, eTok) : { status: 0, json: null };
+      const eRenew = await countedCall(use, e2, "POST", "/relay/v1/t/" + eRt2 + "/grant", { json: { grant: K.delegatedGrantFor(eLead2.pub, T0S, { fields: { until: T0S + 10 * DAY } }) } });
+      const eObj = eMade.status === 200 ? await objectGrant(e2, eRt2, K.delegatedGrantFor(eLead2.pub, T0S, { fields: { until: T0S + 12 * DAY } })) : { status: 0, json: null };
+      const ok = refused(eCreated.r, "revoked") && eCreated.r.json.said === REVOKED_SAID && eCreated.gets === 0
+        && (eR.stores.get(eRt) ? eR.stores.get(eRt).dump().length : 0) === 0
+        && eMade.status === 200 && eSess.status === 200 && eSince.status === 200
+        && refused(eHello, "revoked") && refused(eSess2, "revoked") && refused(eSince2, "revoked")
+        && refused(eRenew.r, "revoked") && eRenew.gets === 0 && refused(eObj, "revoked")
+        && B.REASONS.revoked === REVOKED_SAID;
+      const line = "980e a grant from a revoked service key is refused at create, at renewal and at hello and session: "
+        + JSON.stringify({ create: [eCreated.r.status, eCreated.r.json && eCreated.r.json.error, eCreated.gets], made: eMade.status,
+          session: eSess.status, since: eSince.status, hello: [eHello.status, eHello.json && eHello.json.error],
+          sessionAfter: [eSess2.status, eSess2.json && eSess2.json.error], sinceAfter: [eSince2.status, eSince2.json && eSince2.json.error],
+          renew: [eRenew.r.status, eRenew.r.json && eRenew.r.json.error, eRenew.gets], object: [eObj.status, eObj.json && eObj.json.error] });
+      return { ok, line };
+    }
+    async function sceneF() {
+      const accepted = relayEnv();
+      accepted.clock.now = T0S;
+      const same = hex(16);
+      const created = await countedCall(W, accepted, "POST", "/relay/v1/teams", { json: createBody(same, eLead, T0S, { grant: eGrant }) });
+      const hello = created.r.status === 200 ? await call(accepted, "POST", "/relay/v1/t/" + same + "/hello", { json: {} }) : { status: 0, json: null };
+      const renewal = await countedCall(W, accepted, "POST", "/relay/v1/t/" + same + "/grant", { json: { grant: K.delegatedGrantFor(eLead.pub, T0S, { fields: { until: T0S + 20 * DAY } }) } });
+      const ok = accepted.env.REVOKED === undefined && created.r.status === 200 && created.gets === 1 && hello.status === 200 && !!hello.json && !!hello.json.challenge
+        && renewal.r.status === 200 && renewal.gets === 1;
+      const line = "980f the same delegated grant with no list set is accepted at create, hello and renewal: create " + created.r.status + " gets " + created.gets
+        + ", hello " + hello.status + ", renew " + renewal.r.status + " " + (renewal.r.json && renewal.r.json.error) + " gets " + renewal.gets;
+      return { ok, line };
+    }
+    async function sceneG() {
+      const gDoc = revDoc([K.DELEGATE.pub]);
+      gDoc.sig.value = (gDoc.sig.value[0] === "a" ? "b" : "a") + gDoc.sig.value.slice(1);
+      const gR = relayEnv();
+      gR.clock.now = T0S;
+      gR.env.REVOKED = JSON.stringify(gDoc);
+      const gLead = keyPair(false), gRt = hex(16);
+      const gMade = await call(gR, "POST", "/relay/v1/teams", { json: createBody(gRt, gLead, T0S, { grant: K.delegatedGrantFor(gLead.pub, T0S) }) });
+      const gHello = gMade.status === 200 ? await call(gR, "POST", "/relay/v1/t/" + gRt + "/hello", { json: {} }) : { status: 0, json: null };
+      const gText = JSON.stringify(gMade.json) + JSON.stringify(gHello.json);
+      const ok = gMade.status === 200 && gHello.status === 200 && !!gHello.json && !!gHello.json.challenge
+        && gText.indexOf(gDoc.sig.value) < 0 && gText.indexOf("revoked") < 0 && gText.indexOf(REVOKED_SAID) < 0;
+      const line = "980g a list with a bad signature is ignored, and the relay says nothing of it: create " + gMade.status + " " + (gMade.json && gMade.json.error)
+        + ", hello " + gHello.status + " " + (gHello.json && gHello.json.error);
+      return { ok, line };
+    }
+    async function sceneH() {
+      const hR = relayEnv();
+      hR.clock.now = T0S;
+      hR.env.REVOKED = revText([K.ROOT.pub, K.DELEGATE.pub]);
+      const hLead = keyPair(false), hRt = hex(16);
+      const hMade = await countedCall(W, hR, "POST", "/relay/v1/teams", { json: createBody(hRt, hLead, T0S) });
+      const hSt = hR.stores.get(hRt);
+      const hHello = hMade.r.status === 200 ? await call(hR, "POST", "/relay/v1/t/" + hRt + "/hello", { json: {} }) : { status: 0, json: null };
+      const hOther = hex(16), hLead2 = keyPair(false);
+      const hDel = await countedCall(W, hR, "POST", "/relay/v1/teams", { json: createBody(hOther, hLead2, T0S, { grant: K.delegatedGrantFor(hLead2.pub, T0S) }) });
+      const ok = hMade.r.status === 200 && hMade.gets === 1 && hSt && hSt.get("grantKey") === undefined && hHello.status === 200
+        && refused(hDel.r, "revoked") && hDel.gets === 0;
+      const line = "980h a root-signed grant is accepted while the list is set, and a delegated grant beside it is refused: create " + hMade.r.status
+        + " gets " + hMade.gets + ", grantKey " + JSON.stringify(hSt && hSt.get("grantKey")) + ", hello " + hHello.status
+        + ", delegated " + hDel.r.status + " " + (hDel.r.json && hDel.r.json.error) + " gets " + hDel.gets;
+      return { ok, line };
+    }
+    async function broken(base, plant, id, say) {
+      let line = "";
+      const p = await plant(async scene => {
+        const r = await scene();
+        line = r.line;
+        return r.ok === false;
+      });
+      check(base && p.turned && p.back, id + " " + say + ", and the product file is never written: " + line + "; " + p.detail);
+    }
+
+    const a = await sceneA();
+    check(a.ok, a.line);
+    const b = await sceneB();
+    check(b.ok, b.line);
+    const c = await sceneC();
+    check(c.ok, c.line);
+    const d = await sceneD();
+    check(d.ok, d.line);
+    const e = await sceneE();
+    check(e.ok, e.line);
+    const f = await sceneF();
+    check(f.ok, f.line);
+    const g = await sceneG();
+    check(g.ok, g.line);
+    const h = await sceneH();
+    check(h.ok, h.line);
+
+    await broken(a.ok, run => swapCore("swept !== lead.pub", "true", () => run(sceneA)),
+      "980i", "swapping the swept lead's key for true refuses that lead too, which turns 980a red");
+    await broken(b.ok, run => liftCore("plant:swept-other", () => run(sceneB)),
+      "980j", "lifting plant:swept-other lets another key take the swept id, which turns 980b red");
+    await broken(c.ok, run => swapCore("marked &&", "!team &&", () => run(sceneC)),
+      "980k", "refusing every id that has no team as swept-other-lead turns 980c red");
+    await broken(d.ok, run => liftCore("plant:swept-mark", () => run(sceneD)),
+      "980l", "lifting plant:swept-mark leaves a sweep with no mark, which turns 980d red");
+    await broken(e.ok, run => liftCore("plant:revoked-grant", () => run(sceneE)),
+      "980m", "lifting plant:revoked-grant accepts a revoked service key's grant, which turns 980e red");
+    await broken(e.ok, run => liftCore("plant:revoked-hold", () => run(sceneE)),
+      "980n", "lifting plant:revoked-hold lets hello and session stand on a revoked key, which turns 980e red");
+    await broken(e.ok, run => editWorker(lineLifted("plant:worker-revoked"), async mod => run(() => sceneE(mod.routeWith(K.ROOTS, env => env.NOW())))),
+      "980o", "lifting plant:worker-revoked answers a revoked renewal as bad-grant, which turns 980e red");
+    await broken(e.ok, run => liftCore("plant:create-revoked", () => run(sceneE)),
+      "980p", "lifting plant:create-revoked answers a revoked create as bad-grant, which turns 980e red");
+    await broken(e.ok, run => liftCore("plant:renew-revoked", () => run(sceneE)),
+      "980q", "lifting plant:renew-revoked answers the object's revoked renewal as bad-grant, which turns 980e red");
+    await broken(f.ok, run => liftCore("plant:revoked-unset", () => run(sceneF)),
+      "980r", "lifting plant:revoked-unset throws where no list is set, which turns 980f red");
+    await broken(g.ok, run => liftCore("plant:revoked-list", () => run(sceneG)),
+      "980s", "lifting plant:revoked-list honours a list whose signature does not hold, which turns 980g red");
+    await broken(h.ok, run => liftCore("plant:revoked-root", () => run(sceneH)),
+      "980t", "lifting plant:revoked-root refuses a grant the root itself signed, which turns 980h red");
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

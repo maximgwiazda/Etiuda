@@ -126,7 +126,7 @@ function delegationWhy(d, grant, roots) {
 
 /* Why a grant does not hold for this lead at this instant, or null where it does. Every check of kind, shape, window and bound
    comes before the signature, and a document of another kind is refused by its kind alone. */
-function grantWhy(grant, leadPub, now, roots) {
+function grantWhy(grant, leadPub, now, roots, revoked) {
   const rs = roots === undefined ? [ROOT_PUB] : roots;
   if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, leadPub)) return "setup";
   if (!plain(grant)) return "shape";
@@ -147,18 +147,24 @@ function grantWhy(grant, leadPub, now, roots) {
     signers = [grant.via.key.pub];
   }
   if (!signers.some(pub => verified(pub, grantBytes(grant), grant.sig.value))) return "signature"; /* plant:grant-sig */
+  /* A grant the root itself signed is never refused by the revoked list. A delegated grant is, once its signature holds,
+     where the service key that signed it is on the list. */
+  if (grant.via === undefined) return null; /* plant:revoked-root */
+  if (Array.isArray(revoked) && revoked.indexOf(grant.via.key.pub) > -1) return "revoked"; /* plant:revoked-grant */
   return null;
 }
-const grantOk = (grant, leadPub, now, roots) => grantWhy(grant, leadPub, now, roots) === null;
+const grantOk = (grant, leadPub, now, roots, revoked) => grantWhy(grant, leadPub, now, roots, revoked) === null;
 
 /* A create's judgement that waits on no team and no store, so the Worker runs it before any object wakes and the object runs
    it again: its shape, its grant for its lead, and the lead's signature over the create and that grant's hash. */
-function judgeCreate(rt, body, now, roots) {
+function judgeCreate(rt, body, now, roots, revoked) {
   const b = plain(body) ? body : {}, lead = plain(b.lead) ? b.lead : {};
   if (!is(HEX32, rt) || b.rt !== rt || !isId(lead.keyId) || !is(HEX64, lead.pub) || !Number.isSafeInteger(b.t)) return no("bad-signature");
   /* The lead's key id comes from its key, as every other key id here does; a grant names the key alone, so nothing else binds the id. */
   if (!leadKeyMatches(lead.keyId, lead.pub)) return no("bad-signature"); /* plant:create-keyid */
-  if (!grantOk(b.grant, lead.pub, now, roots)) return no("bad-grant"); /* plant:create-grant */
+  const why = grantWhy(b.grant, lead.pub, now, roots, revoked);
+  if (why === "revoked") return no("revoked"); /* plant:create-revoked */
+  if (why !== null) return no("bad-grant"); /* plant:create-grant */
   if (!verified(lead.pub, create2Bytes(rt, lead.keyId, b.t, b.grant), b.sig)) return no("bad-signature"); /* plant:create-sig */
   return { ok: true };
 }
@@ -217,6 +223,36 @@ function keptGrant(team, grant) {
    applies to a create before it wakes an object. */
 const isFresh = (t, now) => Math.abs(now - t) <= CALL_SKEW_MS;
 
+/* The revoked service keys' list, the same document the licence side reads: kind, format, serial, keys and sig, signed by a
+   root the relay already trusts, over the kind's line, the serial and the keys joined. A list that does not verify is no list,
+   and the relay says nothing of it. The relay judges the list it is given and keeps no older one. */
+const REVOKED_TEXT_MAX = 65536;
+const REVOKED_MAX = 256;
+const REVOCATIONS_KIND = "etiuda-revocations";
+const REVOCATION_FIELDS = ["kind", "format", "serial", "keys", "sig"];
+function revocationBytes(r) {
+  return Buffer.from(REVOCATIONS_KIND + "\n" + r.serial + "\n" + r.keys.join(","), "utf8");
+}
+function revocationsShaped(r) {
+  if (!plain(r) || r.kind !== REVOCATIONS_KIND || r.format !== 1 || !exactly(r, REVOCATION_FIELDS)) return false;
+  if (!Number.isSafeInteger(r.serial) || r.serial < 1 || !Array.isArray(r.keys) || r.keys.length > REVOKED_MAX) return false;
+  if (!r.keys.every((k, i) => /^[0-9a-f]{64}$/.test(String(k)) && (i === 0 || r.keys[i - 1] < k))) return false;
+  return plain(r.sig) && exactly(r.sig, ["alg", "keyId", "value"]) && r.sig.alg === "ed25519"
+    && typeof r.sig.keyId === "string" && /^[0-9a-f]{128}$/.test(String(r.sig.value));
+}
+function revocationsHold(doc, roots) {
+  if (!revocationsShaped(doc) || !Array.isArray(roots)) return false;
+  return roots.some(root => verified(root, revocationBytes(doc), doc.sig.value));
+}
+function revokedKeysOf(text, roots) {
+  if (typeof text !== "string") return []; /* plant:revoked-unset */
+  if (text.length === 0 || text.length > REVOKED_TEXT_MAX) return [];
+  let doc = null;
+  try { doc = JSON.parse(text); } catch { return []; }
+  if (!revocationsHold(doc, roots)) return []; /* plant:revoked-list */
+  return doc.keys.slice();
+}
+
 /* The Etiuda-Blob header, base64url of JSON, as the fields the relay judges; anything else in it is dropped. */
 function parseMeta(header) {
   if (typeof header !== "string" || header.length > META_MAX || !/^[A-Za-z0-9_-]+$/.test(header)) return null;
@@ -238,6 +274,7 @@ function createCore(deps) {
   const teamMax = deps.limits && Number.isSafeInteger(deps.limits.teamMax) ? deps.limits.teamMax : B.TEAM_MAX;
   /* For legs only: the roots a grant may trace to. Production code passes none, so the constant stands. */
   const roots = deps.roots === undefined ? [ROOT_PUB] : deps.roots;
+  const revokedNow = typeof deps.revoked === "function" ? deps.revoked : () => [];
   const random = n => crypto.randomBytes(n).toString("hex");
   const fresh = t => isFresh(t, clock());
   const bodyOf = b => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
@@ -247,18 +284,40 @@ function createCore(deps) {
     return team && team.rt === rt ? team : null;
   }
 
+  /* The service key of the grant in force, kept off the team row. A root-signed grant clears it. Absent is a team the root signed. */
+  function remember(grant) {
+    const via = grant && plain(grant.via) && plain(grant.via.key) ? grant.via.key.pub : null;
+    if (is(HEX64, via)) store.put("grantKey", via);
+    else store.del("grantKey");
+  }
+  /* A hello, a session or a later call under one, where the grant in force was signed by a key now on the list. */
+  function grantRefused() {
+    const key = store.get("grantKey");
+    if (!is(HEX64, key)) return null;
+    const list = revokedNow();
+    if (!Array.isArray(list) || list.indexOf(key) < 0) return null;
+    return no("revoked"); /* plant:revoked-hold */
+  }
+
   /* The grant is judged first, and the object judges it again after the Worker did. The team keeps the grant's until and paid and
-     nothing else of it, by keptGrant. */
+     nothing else of it, by keptGrant. A swept id keeps only the lead's public key, and a create under another key is refused. */
   function create(rt, body) {
-    const judged = judgeCreate(rt, body, clock(), roots);
+    const judged = judgeCreate(rt, body, clock(), roots, revokedNow());
     if (!judged.ok) return judged;
     const b = bodyOf(body), lead = bodyOf(b.lead);
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:create-fresh */
     const team = store.get("team");
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
+    const swept = team ? undefined : store.get("swept");
+    const marked = is(HEX64, swept); /* plant:swept-new */
+    if (marked && swept !== lead.pub) return no("swept-other-lead"); /* plant:swept-other */
     const kept = keptGrant(team, b.grant), { until, paid } = kept;
     const paidApart = kept.paidUntil !== undefined ? { paidUntil: kept.paidUntil } : {};
-    store.atomic(() => store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }, paidApart)));
+    store.atomic(() => {
+      store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid }, paidApart));
+      store.del("swept");
+      remember(b.grant);
+    });
     return { ok: true, rt };
   }
 
@@ -268,14 +327,19 @@ function createCore(deps) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
     const b = bodyOf(body);
-    if (!grantOk(b.grant, team.lead.pub, clock(), roots)) return no("bad-grant"); /* plant:renew-grant */
+    const why = grantWhy(b.grant, team.lead.pub, clock(), roots, revokedNow());
+    if (why === "revoked") return no("revoked"); /* plant:renew-revoked */
+    if (why !== null) return no("bad-grant"); /* plant:renew-grant */
     const next = keptGrant(team, b.grant);
-    if (next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil) {
-      const row = Object.assign({}, team, { until: next.until, paid: next.paid });
-      delete row.paidUntil;
-      if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
-      store.atomic(() => store.put("team", row));
-    }
+    store.atomic(() => {
+      if (next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil) {
+        const row = Object.assign({}, team, { until: next.until, paid: next.paid });
+        delete row.paidUntil;
+        if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
+        store.put("team", row);
+      }
+      remember(b.grant);
+    });
     return { ok: true, lapse: told() };
   }
 
@@ -454,6 +518,8 @@ function createCore(deps) {
 
   function challenge(rt) {
     if (!teamOf(rt)) return no("not-enrolled"); /* plant:challenge-team */
+    const blocked = grantRefused();
+    if (blocked) return blocked;
     const now = clock(), nonce = random(16), n = (store.get("chn") || 0) + 1;
     store.atomic(() => {
       const held = store.list("ch:").sort((a, b) => a[1].n - b[1].n);
@@ -470,6 +536,8 @@ function createCore(deps) {
   function session(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
+    const blocked = grantRefused();
+    if (blocked) return blocked;
     const b = bodyOf(body);
     const ch = is(HEX32, b.challenge) ? store.get("ch:" + b.challenge) : undefined;
     if (ch === undefined) return no("hello-replay"); /* plant:challenge-once */
@@ -654,6 +722,8 @@ function createCore(deps) {
     if (!s) return no("no-hello"); /* plant:session-known */
     if (clock() > s.until) return no("no-hello"); /* plant:session-life */
     if (s.removed) return no("removed"); /* plant:session-removed */
+    const blocked = grantRefused();
+    if (blocked) return blocked;
     const out = { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
     if (quietSession(out)) out.quiet = true; /* plant:rejoin-quiet */
     return out;
@@ -909,12 +979,22 @@ function createCore(deps) {
     for (const [k] of store.list("orphan:")) objs.add(k.slice(7));
     return [...objs];
   }
-  /* The team's storage emptied, but for an orphan row per object in `left`, the ones whose delete failed. */
+  /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key. A sweep that
+     finds no team keeps a mark already written, so a missed delete's retry does not drop it. Nothing else of the team is kept.
+     The mark is written after clear(), which drops the table on its own. */
   function wipe(left) {
-    if (!left.length && typeof store.clear === "function") return store.clear();
+    const team = store.get("team");
+    const prior = store.get("swept");
+    const leadPub = team && plain(team.lead) ? team.lead.pub : null;
+    const mark = is(HEX64, leadPub) ? leadPub : (is(HEX64, prior) ? prior : null);
+    const finish = () => {
+      if (mark) store.put("swept", mark); /* plant:swept-mark */
+    };
+    if (!left.length && typeof store.clear === "function") { store.clear(); finish(); return; }
     store.atomic(() => {
       for (const [k] of store.list("")) store.del(k);
       for (const obj of left) store.put("orphan:" + obj, 1);
+      finish();
     });
   }
   /* When the team's alarm should next ring: the instant it turns lapsed while that lies ahead, and then the sweep; or null with no
@@ -938,6 +1018,6 @@ function createCore(deps) {
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
-  grantBytes, delegationBytes, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
+  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };

@@ -36,6 +36,7 @@ routes = [{ pattern = "etiuda.dev/relay-staging/v1/*", zone_name = "etiuda.dev" 
 
 [env.staging.vars]
 API_PREFIX = "/relay-staging/v1/"
+# REVOKED, the root-signed list of revoked service keys: the chief of staff sets it at deploy.
 
 [[env.staging.durable_objects.bindings]]
 name = "TEAMS"

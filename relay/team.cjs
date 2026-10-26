@@ -11,7 +11,7 @@ const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
   "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
-  "replay-rev": 409, "bad-grant": 403, "team-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
+  "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
 const DEFAULT_PREFIX = "/relay/v1/";
@@ -87,7 +87,8 @@ function shut(ws, reason) {
 const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
 function teamObject(deps) {
-  const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots });
+  const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
+    revoked: typeof deps.revoked === "function" ? deps.revoked : () => [] });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
@@ -200,9 +201,9 @@ function teamObject(deps) {
     if (at !== null) await alarm.set(at);
   }
 
-  /* Every object the team's rows name deleted, the sockets closed and the storage emptied; an object whose delete fails keeps its
-     row and the alarm rings again for it. True where a sweep was due. Requests arriving while R2 answers wait on the same sweep, so
-     none of them writes a row that its wipe would then take. */
+  /* Every object the team's rows name deleted, the sockets closed and the storage emptied but for the lead's mark; an object whose
+     delete fails keeps its row and the alarm rings again for it. True where a sweep was due. Requests arriving while R2 answers wait
+     on the same sweep, so none of them writes a row that its wipe would then take. */
   let sweeping = null;
   function sweepIfDue() {
     if (sweeping) return sweeping;
@@ -325,7 +326,8 @@ function alarmOf(storage) {
 
 class RelayTeam {
   constructor(ctx, env) {
-    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined, clock: () => Date.now(), sockets: hibernating(ctx) });
+    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined,
+      revoked: () => core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]), clock: () => Date.now(), sockets: hibernating(ctx) });
   }
   fetch(request) { return this.object.fetch(request); }
   alarm() { return this.object.alarm(); }

@@ -3,6 +3,7 @@
    the R2 bucket, the clock and the hibernating sockets. tests/relay-unit.mjs and the harness's relay-product adapter
    run relay/worker.mjs over them, with no Workers runtime and no network. */
 const team = require("../team.cjs");
+const core = require("../core.cjs");
 
 /* get, put, del, list and atomic as relay/core.cjs uses them; values are kept as JSON text, as SQLite keeps them. */
 function memoryStore() {
@@ -114,7 +115,7 @@ function relayEnv(opts) {
     const hub = socketHub();
     hubs.set(name, hub);
     const obj = (o.team || team).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots,
-      alarm: alarmFor(name), prefix: env.API_PREFIX });
+      revoked: () => core.revokedKeysOf(env.REVOKED, o.roots), alarm: alarmFor(name), prefix: env.API_PREFIX });
     live.set(name, obj);
     return obj;
   }
