@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 236;
+const EXPECTED = 240;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3771,14 +3771,16 @@ try {
       await feed(paid);
       const goneEn = TITLES[3] + " " + STAY + " If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.";
       const goneNotice = notice();
-      const sweptStore = RL.stores.get(paid.rt).dump().length;
+      const sweptDump = RL.stores.get(paid.rt).dump();
+      const sweptStore = sweptDump.length;
+      const sweptOnly = sweptStore === 1 && sweptDump[0][0] === "swept";
       at(BASE + 121 * DAYMS);
       await pumpL(paid);
       await feed(paid);
       const laterRow = await rowOf(paid);
-      check(!!goneRow && !!goneRow.lapse && goneRow.lapse.step === "gone" && sweptStore === 0 && !!laterRow && !!laterRow.lapse
+      check(!!goneRow && !!goneRow.lapse && goneRow.lapse.step === "gone" && sweptOnly && !!laterRow && !!laterRow.lapse
         && laterRow.lapse.step === "gone" && lapseMade - madeG === 1 && goneNotice === goneEn && notice() === goneEn,
-        "978g past its sweep's day the team is shown once as removed from the relay, and stays so at the next sync: "
+        "978g past its sweep's day the team is shown once as removed from the relay, the relay keeps the lead's public key alone, and it stays so at the next sync: "
         + (goneRow && goneRow.lapse ? goneRow.lapse.step : "no lapse") + ", the relay's rows " + sweptStore + ", a day later "
         + (laterRow && laterRow.lapse ? laterRow.lapse.step : "no lapse") + ", notices " + (lapseMade - madeG) + ", text " + JSON.stringify(goneNotice));
 
@@ -5725,6 +5727,81 @@ try {
   check(false, "harness (the legs 963a): " + (e && e.stack ? e.stack : e));
 }
 
+/* ---- 981: the desk hears a revoked service key, and a list that does not verify changes nothing ---- */
+{
+  const REVOKED_SAID = "That grant was signed by a revoked key, so the relay did not take it.";
+  const T0R = 1700000000000;
+  function revText(keys) {
+    const doc = { kind: "etiuda-revocations", format: 1, serial: 1, keys: keys.slice().sort(),
+      sig: { alg: "ed25519", keyId: K.ROOT.id, value: "" } };
+    doc.sig.value = crypto.sign(null, Buffer.from("etiuda-revocations\n" + doc.serial + "\n" + doc.keys.join(","), "utf8"), K.ROOT.privateKey).toString("hex");
+    return JSON.stringify(doc);
+  }
+  function corrupt(text) {
+    const doc = JSON.parse(text);
+    doc.sig.value = (doc.sig.value[0] === "a" ? "b" : "a") + doc.sig.value.slice(1);
+    return JSON.stringify(doc);
+  }
+  async function ask(RL, method, p, json) {
+    const init = { method, headers: { "content-type": "application/json" }, body: JSON.stringify(json), duplex: "half" };
+    const res = await W.fetch(new Request("https://relay.test" + p, init), RL.env);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    let parsed = null;
+    try { parsed = JSON.parse(bytes.toString("utf8")); } catch { parsed = null; }
+    return { status: res.status, json: parsed };
+  }
+  async function heard(o) {
+    const RL = S.relayEnv({ roots: K.ROOTS });
+    RL.clock.now = T0R;
+    const rt = hex(16);
+    const opts = o || {};
+    if (opts.list !== undefined) RL.env.REVOKED = opts.list;
+    const spec = {};
+    if (opts.root !== true) spec.grant = K.delegatedGrantFor(LEAD.pub, T0R);
+    const made = await ask(RL, "POST", "/relay/v1/teams", K.createBody(rt, LEAD, T0R, bytes => signHex(LEAD, bytes), spec));
+    if (opts.thenList !== undefined) RL.env.REVOKED = opts.thenList;
+    const who = keyPair(true);
+    const request = async (method, url, headers, body) => {
+      const init = { method, headers: headers || {} };
+      if (body && method !== "GET") { init.body = body; init.duplex = "half"; }
+      const res = await W.fetch(new Request(String(url), init), RL.env);
+      const bytes = Buffer.from(await res.arrayBuffer());
+      return { status: res.status, header: n => res.headers.get(n), bytes, socket: res.headers.get("x-stand-in-socket") };
+    };
+    const desk = opened(C, "981-" + rt.slice(0, 8), { rt, id: "t-" + hex(8) }, who, "desk:" + who.keyId, {
+      request, connect: () => ({ send() {}, close() {} }),
+    });
+    let said = [];
+    try { desk.ch.start(); await desk.ch.idle(); said = desk.said.slice(); }
+    finally { await desk.ch.stop(); }
+    const hello = await ask(RL, "POST", "/relay/v1/t/" + rt + "/hello", {});
+    return { made: made.status, madeError: made.json && made.json.error, said, hello: hello.status, helloError: hello.json && hello.json.error };
+  }
+  try {
+    const a = await heard({ thenList: revText([K.DELEGATE.pub]) });
+    const aSaid = a.said.some(l => l === "the relay: " + REVOKED_SAID);
+    check(a.made === 200 && a.hello === 403 && a.helloError === "revoked" && aSaid && B.REASONS.revoked === REVOKED_SAID,
+      "981a a desk whose team's grant was signed by a revoked service key is told that, at hello: made " + a.made
+      + ", hello " + a.hello + " " + a.helloError + ", said " + JSON.stringify(a.said));
+    const b = await heard({});
+    check(b.made === 200 && b.hello === 200 && b.said.every(l => l.indexOf(REVOKED_SAID) < 0),
+      "981b the same delegated grant with no list set is taken, and the desk is not told of a revoked key: made " + b.made
+      + ", hello " + b.hello + " " + b.helloError + ", said " + JSON.stringify(b.said));
+    const bad = corrupt(revText([K.DELEGATE.pub]));
+    const g = await heard({ list: bad });
+    const gText = JSON.stringify(g);
+    check(g.made === 200 && g.hello === 200 && g.said.every(l => l.indexOf(REVOKED_SAID) < 0) && gText.indexOf(JSON.parse(bad).sig.value) < 0,
+      "981c a list with a bad signature is ignored: the desk still opens and nothing of the list is said: made " + g.made
+      + ", hello " + g.hello + " " + g.helloError + ", said " + JSON.stringify(g.said));
+    const h = await heard({ root: true, list: revText([K.ROOT.pub, K.DELEGATE.pub]) });
+    check(h.made === 200 && h.hello === 200 && h.said.every(l => l.indexOf(REVOKED_SAID) < 0),
+      "981d a root-signed grant is taken while the list is set, and the desk is not told of a revoked key: made " + h.made
+      + ", hello " + h.hello + " " + h.helloError + ", said " + JSON.stringify(h.said));
+  } catch (e) {
+    check(false, "981 harness: " + (e && e.stack ? e.stack : e));
+  }
+}
+
 /* ---- 990 and 991: the team after the sweep (Claude alpha's ruling of 2026-10-25, option (b)). Each scene runs on a relay of
    its own whose clock the legs move, with the channel module it is handed, so a plant below runs the same scene over a planted
    copy. 990: a paid team with two desks; past the sweep the relay holds nothing of it, and the lead takes one desk off while it
@@ -5846,17 +5923,28 @@ async function scene990(mod) {
       && read(lead.mirror, "desks/" + DK.k.keyId + "/note.ec") === NOTE;
     const before = { lead: names9(lead.mirror), dk: names9(dk.mirror), de: names9(de.mirror) };
 
-    /* Past the sweep (the grant ended at day 30, read-only to day 120): the first call sweeps the team. */
+    /* Past the sweep (the grant ended at day 30, read-only to day 120): the first call sweeps the team. The store keeps
+       the lead's public key alone, the mark a later create under another key is refused by. */
     X.at(BASE + 121 * DAYMS);
     await settle(lead, dk, de);
-    const swept = X.store9().dump().length === 0;
+    const markOnly = () => {
+      const s = X.store9();
+      if (!s) return { ok: false, rows: "none" };
+      const d = s.dump();
+      let pub = null;
+      try { pub = d.length === 1 ? JSON.parse(d[0][1]) : null; } catch { pub = null; }
+      return { ok: d.length === 1 && d[0][0] === "swept" && pub === LEAD.pub, rows: d.map(e => e[0]).join(",") || "empty" };
+    };
+    const sweptNow = markOnly();
+    const swept = sweptNow.ok;
     const goneAt = [dk, de, lead].map(p => (p.ch.lapse() ? p.ch.lapse().step : "none"));
     /* While it is gone the lead takes the second desk off, with a new key; nothing is made again before the renewal. */
     X.K9.set(2, crypto.randomBytes(32));
     put(lead.mirror, C.TEAM_NAME, X.doc9(2, [DK]));
     X.at(BASE + 123 * DAYMS);
     await settle(lead, dk, de);
-    const stillSwept = X.store9().dump().length === 0;
+    const stillNow = markOnly();
+    const stillSwept = stillNow.ok;
 
     /* Renewed: the space made again under the same id by the lead's signed create, the roster as it stands enrolled, and a
        new edition published. Nothing is done for either desk. */
@@ -5873,7 +5961,7 @@ async function scene990(mod) {
     const keptReads = read(dk.mirror, "lane.ec") === ED9[1] && epoch9(dk.mirror) === 2 && dk.held.has(2) && dk.ch.online() && dk.ch.lapse() === null;
     const keptSends = read(lead.mirror, "desks/" + DK.k.keyId + "/after.ec") === AFTER && X.liveBy(DK.k.keyId) >= 2;
     const a = { ok: working && swept && goneAt.join() === "gone,gone,gone" && stillSwept && back && keptReads && keptSends,
-      line: "before " + working + ", swept " + swept + " (told " + goneAt.join(" ") + "), still swept before the renewal " + stillSwept
+      line: "before " + working + ", swept " + swept + " (rows " + sweptNow.rows + ", told " + goneAt.join(" ") + "), still swept before the renewal " + stillSwept + " (rows " + stillNow.rows + ")"
         + "; made again under the same id " + again.status + " and enrolled " + enrolledAgain.status + ", the lead's files back at the relay "
         + JSON.stringify(paths) + "; the kept desk reads the new edition and the new key's team file " + keptReads + " (seq " + dk.prog.state().seq
         + ") and its files reach the lead, the one from before the sweep sent again, " + keptSends + " (" + X.liveBy(DK.k.keyId) + " live)" };

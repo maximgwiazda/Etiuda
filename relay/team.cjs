@@ -11,7 +11,7 @@ const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
   "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
-  "replay-rev": 409, "bad-grant": 403, "team-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
+  "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
 const DEFAULT_PREFIX = "/relay/v1/";
@@ -87,7 +87,31 @@ function shut(ws, reason) {
 const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
 function teamObject(deps) {
-  const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots });
+  /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
+     Those keys stay for a later call with no header, while this wake lasts. With none, the call reads deps.revoked,
+     and a result that is not a list is no list. */
+  let headerSet = false, headerKeys = null, carried = null;
+  function useKept(request) {
+    const raw = request && request.headers ? request.headers.get("etiuda-kept") : null;
+    if (typeof raw !== "string") { headerSet = false; headerKeys = null; return; }
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (!Array.isArray(parsed) || parsed.some(k => typeof k !== "string")) { headerSet = false; headerKeys = null; return; }
+    headerSet = true;
+    headerKeys = parsed.slice();
+    carried = headerKeys.slice();
+  }
+  function revokedNow() {
+    if (headerSet) return headerKeys.slice();
+    const read = typeof deps.revoked === "function" ? deps.revoked() : [];
+    const envKeys = Array.isArray(read) ? read : [];
+    if (!carried) return envKeys.slice();
+    const out = carried.slice();
+    for (const k of envKeys) if (out.indexOf(k) < 0) out.push(k);
+    return out;
+  }
+  const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
+    revoked: revokedNow });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
@@ -103,9 +127,10 @@ function teamObject(deps) {
     if (!m || !routeOf(request.method, url.pathname, prefix) || url.protocol !== "https:" || url.search !== "") return missing();
     /* A team gone by the clock is swept before anything is answered, should its alarm not have rung yet. */
     await sweepIfDue(); /* plant:sweep-lazy */
+    useKept(request);
     const rt = m[1], what = m[2] || "teams", method = request.method;
     if (what === "socket") return method === "GET" ? openSocket(request, bearer(request)) : missing();
-    if (m[3] !== undefined) return method === "GET" ? listSince(bearer(request), Number(m[3])) : missing();
+    if (m[3] !== undefined) return method === "GET" ? listSince(request, bearer(request), Number(m[3])) : missing();
     if (m[4] !== undefined) {
       if (method === "GET") return getBlob(bearer(request), m[4]);
       return method === "PUT" ? putBlob(request, rt, bearer(request), m[4]) : missing();
@@ -118,6 +143,7 @@ function teamObject(deps) {
     if (what !== "teams" && !c.hasTeam(rt)) return refusedFor("not-enrolled"); /* plant:team-first */
     const bytes = await readCapped(request, JSON_MAX);
     if (!bytes) return refusedFor("blob-size");
+    useKept(request);
     let body = null;
     try { body = JSON.parse(bytes.toString("utf8")); } catch { body = null; }
     if (what === "teams") {
@@ -147,10 +173,12 @@ function teamObject(deps) {
     return answer(r, x => ({ ok: true, dropped: x.dropped, used: x.used }));
   }
 
-  async function listSince(token, after) {
+  async function listSince(request, token, after) {
+    useKept(request);
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
     await dropObjects(c.prune());
+    useKept(request);
     const r = c.since(token, after);
     if (!r.ok) return refused(r);
     const lapse = Buffer.from(JSON.stringify(r.lapse), "utf8").toString("base64url");
@@ -174,11 +202,13 @@ function teamObject(deps) {
     if (!a.ok) return refused(a);
     const ct = await readCapped(request, a.max); /* plant:put-cap */
     if (!ct) return refusedFor("blob-size");
+    useKept(request);
     const j = c.judge(rt, token, m, id, ct);
     if (!j.ok) return refused(j);
     const obj = rt + "/" + id + "/" + crypto.randomBytes(8).toString("hex");
     c.record(obj); /* plant:r2-record */
     await r2.put(obj, ct);
+    useKept(request);
     const done = c.commit(rt, token, m, id, ct, obj);
     if (!done.ok) { await dropObjects([obj]); return refused(done); }
     if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, "not-enrolled");
@@ -201,9 +231,9 @@ function teamObject(deps) {
     if (at !== null) await alarm.set(at);
   }
 
-  /* Every object the team's rows name deleted, the sockets closed and the storage emptied; an object whose delete fails keeps its
-     row and the alarm rings again for it. True where a sweep was due. Requests arriving while R2 answers wait on the same sweep, so
-     none of them writes a row that its wipe would then take. */
+  /* Every object the team's rows name deleted, the sockets closed and the storage emptied but for the lead's mark; an object whose
+     delete fails keeps its row and the alarm rings again for it. True where a sweep was due. Requests arriving while R2 answers wait
+     on the same sweep, so none of them writes a row that its wipe would then take. */
   let sweeping = null;
   function sweepIfDue() {
     if (sweeping) return sweeping;
@@ -255,6 +285,7 @@ function teamObject(deps) {
   }
 
   function webSocketMessage(ws, message) {
+    headerSet = false;
     const s = c.sessionByHash(attachmentOf(ws).ses);
     if (!s.ok) return shut(ws, s.reason);
     const lapsed = c.lapseGate(false);
@@ -326,7 +357,25 @@ function alarmOf(storage) {
 
 class RelayTeam {
   constructor(ctx, env) {
-    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined, clock: () => Date.now(), sockets: hibernating(ctx) });
+    const store = sqlStore(ctx.storage);
+    this.listStore = store;
+    const self = this;
+    this.object = teamObject({ store, r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined,
+      revoked: () => {
+        /* The object named for the list answers from its own row. A headerless call cannot ask another object:
+           its method returns a promise. The parent's read of REVOKED is synchronous. */
+        if (self.listing) {
+          const row = store.get("revoked");
+          return row && Array.isArray(row.keys) ? row.keys.slice() : [];
+        }
+        return core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]); /* plant:revoked-wake */
+      },
+      clock: () => Date.now(), sockets: hibernating(ctx) });
+  }
+  acceptRevocations(text) {
+    this.listing = true;
+    try { return core.acceptRevocations(text, [core.ROOT_PUB], this.listStore); }
+    finally { this.listing = false; }
   }
   fetch(request) { return this.object.fetch(request); }
   alarm() { return this.object.alarm(); }

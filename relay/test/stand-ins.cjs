@@ -3,6 +3,7 @@
    the R2 bucket, the clock and the hibernating sockets. tests/relay-unit.mjs and the harness's relay-product adapter
    run relay/worker.mjs over them, with no Workers runtime and no network. */
 const team = require("../team.cjs");
+const core = require("../core.cjs");
 
 /* get, put, del, list and atomic as relay/core.cjs uses them; values are kept as JSON text, as SQLite keeps them. */
 function memoryStore() {
@@ -103,6 +104,9 @@ function relayEnv(opts) {
   const stores = new Map(), hubs = new Map(), live = new Map(), alarms = new Map();
   const bucket = memoryBucket();
   const asked = [];
+  /* One list for every team. It is not a team's store, so a create that wakes nothing leaves that team's store empty. */
+  const revokedStore = memoryStore();
+  function acceptRevocations(text) { return core.acceptRevocations(text, o.roots, revokedStore); }
   const alarmFor = name => ({
     async set(at) { alarms.set(name, at); },
     async get() { return alarms.has(name) ? alarms.get(name) : null; },
@@ -114,13 +118,27 @@ function relayEnv(opts) {
     const hub = socketHub();
     hubs.set(name, hub);
     const obj = (o.team || team).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots,
-      alarm: alarmFor(name), prefix: env.API_PREFIX });
+      revoked: () => {
+        const decided = acceptRevocations(env.REVOKED);
+        return decided && Array.isArray(decided.keys) ? decided.keys : [];
+      }, alarm: alarmFor(name), prefix: env.API_PREFIX });
     live.set(name, obj);
     return obj;
   }
+  /* A stub's methods answer promises, as a Durable Object stub's do. A call that does not await one has no list and no response. */
   const scoped = {
     idFromName(name) { return { name: String(name) }; },
-    get(id) { return { fetch: request => objectFor(id.name).fetch(request) }; },
+    get(id) {
+      const obj = () => objectFor(id.name);
+      return {
+        fetch(request) { return Promise.resolve(obj().fetch(request)); },
+        alarm() { return Promise.resolve(obj().alarm()); },
+        webSocketMessage(ws, message) { return Promise.resolve(obj().webSocketMessage(ws, message)); },
+        webSocketClose(ws) { return Promise.resolve(obj().webSocketClose(ws)); },
+        acceptRevocations(text) { return Promise.resolve().then(() => acceptRevocations(text)); },
+      };
+    },
+    acceptRevocations,
   };
   const env = {
     TEAMS: { jurisdiction(j) { asked.push(j); return j === "eu" ? scoped : null; } },
@@ -128,7 +146,7 @@ function relayEnv(opts) {
     NOW: () => clock.now,
   };
   return {
-    env, clock, bucket, asked, stores, hubs, alarms,
+    env, clock, bucket, asked, stores, hubs, alarms, revoked: revokedStore,
     object: objectFor,
     async ring(name) {
       if (!alarms.has(name) || clock.now < alarms.get(name)) return false;

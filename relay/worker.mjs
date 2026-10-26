@@ -5,7 +5,7 @@
    carries no valid grant under the vendor's root is refused here, before any object is asked, so a stranger's create costs one
    Worker request and wakes nothing. The object judges it again. A create whose t is stale or far ahead of the Worker's clock,
    by the rule the object applies, is refused here the same way, so a replayed create wakes no object either. A renewal whose
-   grant does not hold for the lead it names is refused here too. */
+   grant does not hold for the lead it names is refused here too, and so is a grant a revoked service key signed. */
 import team from "./team.cjs";
 import core from "./core.cjs";
 
@@ -24,11 +24,40 @@ function rtOf(body) {
    root and the Worker's own clock. `clockOf` takes the env and answers the time in ms. */
 export function routeWith(roots, clockOf) {
   const nowOf = typeof clockOf === "function" ? clockOf : () => Date.now();
-  /* A renewal's grant holds for the lead it names; the object then holds it to the team's own lead. */
-  const renewable = (body, now) => {
-    const grant = body && typeof body === "object" ? body.grant : undefined;
-    return core.grantOk(grant, grant && typeof grant === "object" ? grant.lead : undefined, now, roots);
-  };
+  /* The last accepted list is kept. A later text replaces it only when it verifies, its serial is higher and it names every
+     kept key. A chief's own root-signed create or renewal is told when a text was ignored. The Worker's own logs are off. */
+  async function revokedDecision(teams, env) {
+    const text = env ? env.REVOKED : undefined;
+    if (teams && typeof teams.acceptRevocations === "function") return teams.acceptRevocations(text);
+    if (teams && typeof teams.get === "function" && typeof teams.idFromName === "function") {
+      const stub = teams.get(teams.idFromName("revoked"));
+      if (stub && typeof stub.acceptRevocations === "function") return await stub.acceptRevocations(text);
+    }
+    return { keys: core.revokedKeysOf(text, roots), serial: null, ignored: null };
+  }
+  /* The keys this request enforces. Copied over any header the client sent, including an empty list. */
+  function carry(request, keys, body) {
+    const headers = new Headers(request.headers);
+    headers.set("etiuda-kept", JSON.stringify(Array.isArray(keys) ? keys : []));
+    const init = { method: request.method, headers };
+    if (body !== undefined) { init.body = body; init.duplex = "half"; }
+    return new Request(request.url, init);
+  }
+  /* A root-signed create or renewal, and only when a text was ignored. A refusal stays its error and its said sentence. */
+  async function noted(res, decided, grant) {
+    const why = decided && typeof decided.ignored === "string" ? decided.ignored : null;
+    const root = !!(grant && typeof grant === "object" && !Array.isArray(grant) && grant.via === undefined);
+    if (!why || !root) return res;
+    const raw = await res.arrayBuffer();
+    let body = null;
+    try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { body = null; }
+    if (res.status !== 200 || !body || typeof body !== "object" || Array.isArray(body)) {
+      return new Response(raw, { status: res.status, headers: new Headers(res.headers) });
+    }
+    const out = Object.assign({}, body, { listIgnored: why });
+    if (Number.isSafeInteger(decided.serial)) out.keptSerial = decided.serial;
+    return new Response(JSON.stringify(out), { status: 200, headers: new Headers(res.headers) });
+  }
 
   async function route(request, env) {
     const prefix = team.apiPrefixOf(env);
@@ -39,24 +68,34 @@ export function routeWith(roots, clockOf) {
     if (!hit) return team.missing(); /* plant:worker-route */
     let teams = env.TEAMS;
     teams = env.TEAMS.jurisdiction("eu"); /* plant:eu */
+    const decided = await revokedDecision(teams, env);
+    const keys = decided && Array.isArray(decided.keys) ? decided.keys : [];
     if (hit.what === "teams") {
       const bytes = await team.readCapped(request, team.JSON_MAX);
       if (!bytes) return team.refusedFor("blob-size");
       const body = bodyOf(bytes), rt = rtOf(body);
       if (!rt) return team.refusedFor("bad-signature");
-      const now = nowOf(env), judged = core.judgeCreate(rt, body, now, roots);
+      const now = nowOf(env), judged = core.judgeCreate(rt, body, now, roots, keys);
       if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-grant */
       if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-fresh */
-      return teams.get(teams.idFromName(rt)).fetch(new Request(request.url, { method: "POST", headers: request.headers, body: bytes }));
+      const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
+      return noted(res, decided, body.grant);
     }
-    let forward = request;
+    let grant = null, forward = null;
     if (request.method === "POST") { /* plant:worker-body */
       const bytes = await team.readCapped(request, team.JSON_MAX);
       if (!bytes) return team.refusedFor("blob-size");
-      if (hit.what === "grant" && !renewable(bodyOf(bytes), nowOf(env))) return team.refusedFor("bad-grant"); /* plant:worker-renew */
-      forward = new Request(request.url, { method: "POST", headers: request.headers, body: bytes });
-    }
-    return teams.get(teams.idFromName(hit.rt)).fetch(forward);
+      if (hit.what === "grant") {
+        const grantBody = bodyOf(bytes);
+        grant = grantBody && typeof grantBody === "object" ? grantBody.grant : undefined;
+        const why = core.grantWhy(grant, grant && typeof grant === "object" ? grant.lead : undefined, nowOf(env), roots, keys);
+        if (why === "revoked") return team.refusedFor("revoked"); /* plant:worker-revoked */
+        if (why) return team.refusedFor("bad-grant"); /* plant:worker-renew */
+      }
+      forward = carry(request, keys, bytes);
+    } else forward = carry(request, keys, request.body === null || request.body === undefined ? undefined : request.body);
+    const res = await teams.get(teams.idFromName(hit.rt)).fetch(forward);
+    return hit.what === "grant" ? noted(res, decided, grant) : res;
   }
 
   return {

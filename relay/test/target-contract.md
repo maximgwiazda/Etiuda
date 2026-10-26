@@ -167,6 +167,8 @@ The relay and the program each apply the blob, team and rate limits. An incoming
 | `echo` | A file just received stays as it is. |
 | `bad-grant` | That team needs a valid grant, so the relay did not make it. |
 | `team-lapsed` | This team's relay is waiting for its renewal, so that was not done. |
+| `swept-other-lead` | This team id is kept for its own lead, so a create under another key is not taken. |
+| `revoked` | That grant was signed by a revoked key, so the relay did not take it. |
 
 A swap of id, team, epoch, counter or `supersedes` fails closed as `bad-signature`. A path written onto the blob is not where the file lands. A blob sealed for an epoch the team file does not carry is `epoch`.
 
