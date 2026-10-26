@@ -1506,6 +1506,81 @@ function formatPassTests() {
      [true, true, false, false]);
 }
 
+/* One export, through the modules the desk uses, of a small catalog invented here. The text
+   the save would have written is parsed and handed to catalogFromV2, which is the reader. */
+function deskMarkExported() {
+  const cp = require("child_process");
+  const script = [
+    'process.removeAllListeners("warning");',
+    'process.on("warning", () => {});',
+    'import { pathToFileURL } from "node:url";',
+    'import { join } from "node:path";',
+    'const root = process.env.DESK_MARK_ROOT;',
+    'const mod = (n) => pathToFileURL(join(root, "src", "modules", n)).href;',
+    'const fake = () => new Proxy(function () {}, {',
+    '  get: (t, k) => k === Symbol.toPrimitive ? () => "" : (k === "length" ? 0',
+    '    : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake())),',
+    '  apply: () => fake(), set: () => true, has: () => true });',
+    'let written = null;',
+    'globalThis.window = { innerWidth: 1280, innerHeight: 800,',
+    '  showSaveFilePicker: async () => ({ name: "out.ec", createWritable: async () => ({',
+    '    write: async (t) => { written = t; }, close: async () => {} }) }) };',
+    'globalThis.innerHeight = 800;',
+    'globalThis.getComputedStyle = () => fake();',
+    'globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 0);',
+    'globalThis.document = new Proxy({}, { get: (t, k) => (k === "readyState" ? "complete" : fake()), set: () => true });',
+    'const HK = await import(mod("hooks.js"));',
+    '["rebuildCards", "render", "syncIntentOrder", "drawIntentRail", "syncFavouritesMeta", "syncSampleMark",',
+    ' "drawPillsCore", "drawTabsCore"].forEach((k) => { HK.hooks[k] = () => {}; });',
+    'const CT = await import(mod("catalog.js"));',
+    'const ST = await import(mod("storage.js"));',
+    'const PK = await import(mod("pack.js"));',
+    'const AP = await import(mod("app-state.js"));',
+    'const DM = await import(mod("dom.js"));',
+    'DM.grabDom();',
+    'const CF = await import(mod("catalog-file.js"));',
+    'const V2 = await import(mod("catalog-v2.js"));',
+    'function base() {',
+    '  return {',
+    '    format: 2, kind: "etiuda-catalog", id: "toy-shop", rev: 1,',
+    '    langs: [{ code: "en", label: "EN" }],',
+    '    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } }],',
+    '    cards: [{ id: "c-hello", shelf: "t-open", bodyShape: "plain",',
+    '      title: { en: "Hello" }, body: { en: "Hello there." } }]',
+    '  };',
+    '}',
+    'async function wordOf(extra) {',
+    '  const doc = Object.assign(base(), extra);',
+    '  const cat = CT.parseCatalogFile(JSON.stringify(doc));',
+    '  ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(cat), true);',
+    '  CT.eApplyCatalog(cat);',
+    '  PK.resetPack();',
+    '  PK.pack.baseCards = JSON.parse(JSON.stringify(cat.cards));',
+    '  AP.setCards(cat.cards.slice());',
+    '  written = null;',
+    '  await CF.exportCatalog();',
+    '  if (written == null) return "unwritten";',
+    '  const file = JSON.parse(written);',
+    '  const back = V2.catalogFromV2(file);',
+    '  return back && back.evaluation ? back.evaluation : null;',
+    '}',
+    'const out = {',
+    '  evaluation: await wordOf({ evaluation: "evaluation" }),',
+    '  newer: await wordOf({ evaluation: "newer" }),',
+    '  sample: await wordOf({ sample: true })',
+    '};',
+    'process.stdout.write(JSON.stringify(out));'
+  ].join("\n");
+  const r = cp.spawnSync(process.execPath, ["--input-type=module", "-"], {
+    input: script, encoding: "utf8", cwd: E.ROOT, timeout: 60000, windowsHide: true,
+    env: Object.assign({}, process.env, { DESK_MARK_ROOT: E.ROOT })
+  });
+  if (r.status !== 0) return "export threw: " + String((r.stderr || "") + (r.error || "")).trim().slice(0, 500);
+  const line = String(r.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop();
+  try { return JSON.parse(line); }
+  catch (e) { return "export said: " + String(r.stdout || "").slice(0, 200); }
+}
+
 /* The published mark: a field on the catalog, a band that names which case it is, and a sample
    that still shows and clears exactly as it did. */
 function deskMarkTests() {
@@ -1546,10 +1621,13 @@ function deskMarkTests() {
   eq("desk mark the content hash and the signed bytes both cover the field",
     [V.v2ContentHash(kept) !== V.v2ContentHash(stripped), bytes(kept) !== bytes(stripped)],
     [true, true]);
-  const exporter = extractDecl(fileSrc, "function currentCatalog(");
-  eq("desk mark an export copies the published mark off the origin and does not copy the sample flag",
-    [exporter.indexOf("out.evaluation=") > -1, exporter.indexOf("out.sample") > -1],
-    [true, false]);
+  /* The file an export writes, read back by the engine's own reader. A source line that
+     still names out.evaluation and writes the wrong word stays red: the word on the file is
+     what is compared, for each of the two, and a sample exports with no mark. */
+  const exported = deskMarkExported();
+  eq("desk mark an export of a catalog carrying each word reads back as that word, and an export of the sample carries no evaluation mark",
+    exported && typeof exported === "object" ? [exported.evaluation, exported.newer, exported.sample] : exported,
+    ["evaluation", "newer", null]);
 
   const ns = {};
   const band = { className: "", attrs: {}, textContent: "Sample catalog", setAttribute(k, v) { this.attrs[k] = v; } };
