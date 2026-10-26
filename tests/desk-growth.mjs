@@ -1,3 +1,4 @@
+/* run: alone (timing) */
 /* A long shift, in bare node: a desk that has kept three hundred days of counts, through the real
  * src/modules (storage, pack, desk-stats, pills-box, favourites) over the real shell/preload.js and
  * the real handlers of shell/main.js, electron stubbed, desk.json in a temp folder. What it holds: a

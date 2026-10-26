@@ -4,6 +4,9 @@
  *   node tools/gate-run.mjs shell-smoke             one gate, one line
  *   ETIUDA_RUNS=<folder> node tools/gate-run.mjs …  somewhere else to write them
  *
+ * A step whose file carries the alone marker in its first 15 lines runs after every step that
+ * does not, and the log names it. The marker and the rule sit beside deferAlone.
+ *
  * WHY. The chief of staff's tick and the QA engineer read a run's result out of prose today, and
  * prose is where a count is quietly wrong: 103 verifications in the week to 2026-09-16 refuted no
  * build and corrected 47 counts. A number a tool wrote is cheaper to check than a number an agent
@@ -370,6 +373,37 @@ function runStep(step) {
   });
 }
 
+/* A file whose first 15 lines hold ALONE_MARKER, spaces trimmed, runs after every file that
+   does not, and the log names it. Any other spelling stays where it is. With none, this
+   returns the same list and the log is unchanged. */
+const ALONE_MARKER = "/* run: alone (timing) */";
+const ALONE_HEAD = 15;
+
+function runsAlone(file) {
+  let text;
+  try { text = fs.readFileSync(path.resolve(ROOT, file), "utf8"); }
+  catch (e) { return false; }
+  const lines = text.split(/\r?\n/);
+  const n = Math.min(lines.length, ALONE_HEAD);
+  for (let i = 0; i < n; i++) if (lines[i].trim() === ALONE_MARKER) return true;
+  return false;
+}
+
+function deferAlone(list) {
+  let any = false;
+  for (const step of list) {
+    step.alone = runsAlone(step.file);
+    if (step.alone) any = true;
+  }
+  if (!any) return list; /* alone: unchanged */
+  const now = [];
+  const later = [];
+  for (const step of list) (step.alone ? later : now).push(step);
+  return now.concat(later);
+}
+
+const ordered = deferAlone(steps);
+
 let worst = 0, written = 0, treeMoved = false, refusedAt = null;
 /* The tree as it stood before the first gate. Every step is judged against the step before it,
    so the record says WHICH gate the tree moved under and not merely that it moved. */
@@ -377,8 +411,9 @@ let before = fingerprint();
 let tree = gitTree();
 console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
             + " byte(s), by " + before.how + "; git tree " + tree);
-for (const step of steps) {
+for (const step of ordered) {
   const now = new Date();
+  if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run alone");
   console.log("\n> " + step.cmd);
   const res = await runStep(step);
   const after = fingerprint();
