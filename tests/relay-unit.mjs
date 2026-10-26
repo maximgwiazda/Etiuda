@@ -267,8 +267,8 @@ async function main() {
     const text = dumpText(w);
     const team = w.R.stores.get(w.rt).get("team");
     check(!!team && team.rt === w.rt && team.lead.keyId === w.lead.keyId && team.lead.pub === w.lead.pub
-      && Object.keys(team).sort().join() === "epoch,lead,paid,rt,until",
-      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor and the grant's until and paid only");
+      && Object.keys(team).sort().join() === "epoch,lead,made,paid,rt,until" && /^[0-9a-f]{16}$/.test(team.made),
+      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor, the grant's until and paid and the copy's stamp only");
     const v = { R: relayEnv(), rt: hex(16), lead: keyPair(false) };
     const marker = "TeamName" + hex(4);
     const named = await create(v, v.lead, 0, { name: marker, teamId: marker });
@@ -2324,7 +2324,7 @@ async function main() {
       const leaks = [grant.sig.value, grant.kind].concat(grant.via ? [grant.via.sig.value] : []).filter(s => dump.indexOf(s) > -1).length;
       return { w, kept, grant, ctx, leaks };
     };
-    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,paid,rt,until"
+    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,until"
       && x.kept.until === x.grant.until && x.kept.paid === x.grant.paid && x.kept.lead.keyId === x.ctx.lead.keyId && x.leaks === 0;
     const byRoot = await madeUnder(gf({ paid: true })), byDelegate = await madeUnder(ctx => K.delegatedGrantFor(ctx.lead.pub, ctx.now, { fields: { paid: false } }));
     check(keptFor(byRoot) && byRoot.kept.paid === true,
@@ -2387,7 +2387,7 @@ async function main() {
     const untilPlant = await liftCore("plant:until-later", async () => !(await repeatHolds()));
     check(baseG && untilPlant.turned && untilPlant.back, "967g lifting plant:until-later lets an earlier grant's repeat create lower the team's until, and the product file is never written: "
       + untilPlant.detail + ", sha " + (untilPlant.back ? "unchanged" : "CHANGED"));
-    const keptPlant = await swapCore("epoch: team ? team.epoch : 0, until, paid }", "epoch: team ? team.epoch : 0 }",
+    const keptPlant = await swapCore("epoch: team ? team.epoch : 0, until, paid, made }", "epoch: team ? team.epoch : 0, made }",
       async () => !keptFor(await madeUnder(gf({ paid: true }))));
     check(keptFor(byRoot) && keptPlant.turned && keptPlant.back, "967h leaving until and paid out of the team row fails the kept-grant leg, and the product file is never written: "
       + keptPlant.detail + ", sha " + (keptPlant.back ? "unchanged" : "CHANGED"));

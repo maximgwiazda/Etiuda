@@ -117,6 +117,8 @@ const PING_MS = 30 * 1000;
 const RETRY_MIN_MS = 2000, RETRY_MAX_MS = 60 * 1000;
 const TMP_RE = /\.tmp$/i;
 const HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/;
+/* The relay's stamp of one copy of a team, told at each session (relay/core.cjs create). */
+const MADE_RE = /^[0-9a-f]{16}$/;
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /* Reasons a judgement this program makes before an upload may record as a stop by content hash, and which a record
@@ -346,7 +348,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, headT: null, lapse: null, skew: 0 };
+    tokenUsedIds: {}, invitedIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -361,6 +363,8 @@ function stateOf(x) {
   if (Number.isFinite(x.headT)) s.headT = x.headT;
   s.lapse = lapseKept(x.lapse);
   if (Number.isSafeInteger(x.skew)) s.skew = x.skew;
+  if (typeof x.made === "string" && MADE_RE.test(x.made)) s.made = x.made;
+  s.suspect = x.suspect === true; /* plant:remade-ask-kept */
   s.tokenUsed = x.tokenUsed === true;
   s.invited = x.invited === true;
   const idSet = m => {
@@ -1225,7 +1229,7 @@ function createProgram(opts) {
     return b == null ? null : toBytes(b).toString("utf8");
   }
 
-  return {
+  const api = {
     setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
     sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
@@ -1282,7 +1286,23 @@ function createProgram(opts) {
       if (has(st.taken, id) || wroteIds().has(id)) return true;
       return Object.keys(st.applied).some(k => st.applied[k].id === id);
     },
+    /* What a session tells of the copy: its stamp `made`, and `passed`, whether the lapse last told says the team was swept or its
+       sweep day has gone by. A stamp other than the one kept is a copy made anew: the program starts over at once. A stamp kept
+       for the first time by a program that has been here before, or no stamp where the lapse says swept, is a question for the
+       relay's list (copyIsNew). Each is kept on disk before the session's lapse is told, so it outlives a quit. */
+    copyMade(made, passed) {
+      const m = typeof made === "string" && MADE_RE.test(made) ? made : null;
+      let changed = false;
+      changed = !!m && !!st.made && m !== st.made; /* plant:remade-made */
+      if (changed) { api.forgetRelay(); st.made = m; persist(); return; }
+      const been = st.seq > 0 || Object.keys(st.sent).length > 0;
+      if (m && !st.made) { st.made = m; if (been) st.suspect = true; persist(); return; }
+      if (!m && passed) { st.suspect = true; persist(); }
+    },
+    suspect: () => st.suspect === true,
+    settled() { if (st.suspect) { st.suspect = false; persist(); } },
   };
+  return api;
 }
 
 /* ---- the channel: the relay and the mirror's watch ------------------------------------------------------------- */
@@ -1385,10 +1405,10 @@ function createChannel(opts) {
   }
   /* A session opened for a team the relay last said was swept, or whose sweep day has passed by the relay's clock, may meet
      a copy the relay made anew. That is only a question: the cycle asks the relay before anything is fetched (copyIsNew). */
-  let suspect = false;
-  function sessionOpened() {
+  function sessionOpened(json) {
     const l = prog.lapse();
-    if (!!l && (l.state === "gone" || (l.swept !== null && relayNow() >= l.swept))) suspect = true; /* plant:remade-seen */
+    const passed = !!l && (l.state === "gone" || (l.swept !== null && relayNow() >= l.swept)); /* plant:remade-seen */
+    prog.copyMade(json && json.made, passed);
   }
   /* The relay's own evidence: its list from the start names no blob this program has met. A team renewed before its sweep
      still lists them (the team file at least), and keeps its place in the sequence; a copy made anew lists none, and this
@@ -1445,7 +1465,7 @@ function createChannel(opts) {
         /* The invitation's session again, where this key was bound by the token's one session and the request is not yet in
            (N4): a request lost on the way, or a quit before it went, is sent again without the token. */
         session = { token: r.json.session, at: clock(), by: r.json.invite === true ? "invite" : "key" }; /* plant:n4-resume */
-        sessionOpened();
+        sessionOpened(r.json);
         told(r.json.lapse);
         if (session.by === "invite" && inv && HEX32.test(String(inv.inv))) session.inv = String(inv.inv);
         return { ok: true };
@@ -1471,7 +1491,7 @@ function createChannel(opts) {
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite", inv: String(inv.inv) };
-      sessionOpened();
+      sessionOpened(r.json);
       told(r.json.lapse);
       return { ok: true };
     }
@@ -1506,7 +1526,7 @@ function createChannel(opts) {
     device = r.json.invite !== true; /* plant:S3-device */
     if (device) dropSocket();
     session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
-    sessionOpened();
+    sessionOpened(r.json);
     told(r.json.lapse);
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
     return { ok: true };
@@ -1839,10 +1859,10 @@ function createChannel(opts) {
     if (session && session.by === "invite" && invitedNow()) return pullAnswer();
     const w = await pullWrap();
     if (!w.ok) return w;
-    if (suspect) {
+    if (prog.suspect()) {
       const fresh = await copyIsNew();
-      if (fresh !== null) suspect = false;
       if (fresh === true) prog.forgetRelay();
+      if (fresh !== null) prog.settled();
     }
     const c = await catchUp(); /* plant:catch-up-first */
     if (!c.ok) { refusedLapse(c); return c; }

@@ -133,7 +133,8 @@ function teamObject(deps) {
     if (what === "session") {
       const s = c.session(rt, body);
       if (s.ok && alarm && (await alarm.get()) == null) await arm(); /* plant:arm-session */
-      return answer(s, r => (r.invite ? { session: r.session, until: r.until, invite: true, lapse: r.lapse } : { session: r.session, until: r.until, lapse: r.lapse }));
+      return answer(s, r => Object.assign(r.invite ? { session: r.session, until: r.until, invite: true, lapse: r.lapse } : { session: r.session, until: r.until, lapse: r.lapse },
+        r.made ? { made: r.made } : {}));
     }
     if (what === "devices") {
       const r = c.devices(rt, body);
