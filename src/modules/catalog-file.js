@@ -731,11 +731,10 @@ function syncSampleMark(){
   // Every pack save, a restart and the boot pass here, which makes it the one place the desk file is told.
   scheduleDeskBranch();
   const el=document.getElementById("sampleMark");
-  const desk=document.getElementById("deskMark");
-  const line=desk&&desk.querySelector?desk.querySelector(".dm-text"):null;
+  if(!el) return;
+  const b=el.querySelector ? el.querySelector("b") : null;
   const mark=nsGet("DeskMark");
-  /* A published mark is a line of the header, and it stays through the desk's own edits.
-     The sample is the stamp, and it still clears on the first edit. */
+  /* A published mark stays through the desk's own edits. The sample still clears on the first. */
   let en="", shown="";
   if(mark==="evaluation"){
     en="Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.";
@@ -744,21 +743,17 @@ function syncSampleMark(){
     en="Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
     shown=t("Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.");
   }
-  if(en){
-    /* Shown however many cards are on screen: filtering every card out leaves the catalog marked. */
-    if(line){
-      line.setAttribute("data-i18n-text", en);
-      line.textContent=shown;
+  if(en && (cards||[]).length>0){
+    if(b){
+      b.className="mark-sentence";
+      b.setAttribute("data-i18n-text", en);
+      b.textContent=shown;
     }
-    if(desk) desk.hidden=false;
-    if(el) el.hidden=true;
+    el.hidden=false;
     return;
   }
-  if(desk) desk.hidden=true;
-  if(!el) return;
-  const b=el.querySelector ? el.querySelector("b") : null;
-  /* The stamp's own words. No class is swapped onto it: the sentence does not borrow the stamp. */
   if(b){
+    b.className="";
     b.setAttribute("data-i18n-text", "Sample catalog");
     b.textContent=t("Sample catalog");
   }
