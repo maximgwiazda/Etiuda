@@ -3882,16 +3882,17 @@ body.e-lanes #pillsSlot{display:none}
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* A PUBLISHED MARK is a line of the header's own, under the tools and the categories: it takes its
-   own room, so it stands over no card on screen or on paper, and it never scrolls away. The sample
-   keeps its faint stamp; this is a sentence, so it is set as one. */
-#deskMark{max-width:var(--app-max);margin:8px auto 0;display:flex;align-items:flex-start;gap:9px;
-  padding:6px 12px;border-radius:7px;background:var(--warn-bg);
-  border:1px solid color-mix(in srgb,var(--warn) 32%,transparent);
-  color:var(--ink);font:13px/1.45 var(--sans)}
+/* THE PUBLISHED MARK (evaluation or newer): the family's bubble, kin to the notices that outlast a
+   moment (.e-notice, the Undo): no pointer, centred. In the header's own room and in flow, so it
+   covers no card on screen or on paper, and the header never scrolls it away. */
+#deskMark.bub{position:relative;width:fit-content;max-width:100%;box-sizing:border-box;
+  margin:12px auto 2px;display:flex;align-items:flex-start;gap:8px;padding:8px 16px 8px 12px;
+  font:13.5px/1.45 var(--sans);color:var(--bub-ink);
+  filter:drop-shadow(0 6px 14px var(--bub-shadow));
+  -webkit-print-color-adjust:exact;print-color-adjust:exact}
 #deskMark[hidden]{display:none}
-#deskMark .ic{flex:none;margin-top:2px;color:var(--warn)}
-#deskMark{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#deskMark .ic{flex:none;margin-top:2px;color:var(--bub-ink)}
+#deskMark .dm-text{text-wrap:balance}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
@@ -4145,7 +4146,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
   </div>
-  <div id="deskMark" role="note" hidden><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="4.8" r="2.3"/><path d="M8.7 7v3.3h2.6V7"/><rect x="3.8" y="10.3" width="12.4" height="3.4" rx="1"/><path d="M4.5 16.6h11"/></svg><span class="dm-text"></span></div>
+  <div id="deskMark" class="bub" data-side="none" role="note" hidden><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="4.8" r="2.3"/><path d="M8.7 7v3.3h2.6V7"/><rect x="3.8" y="10.3" width="12.4" height="3.4" rx="1"/><path d="M4.5 16.6h11"/></svg><span class="dm-text"></span></div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
