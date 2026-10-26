@@ -1581,19 +1581,35 @@ function deskMarkExported() {
   catch (e) { return "export said: " + String(r.stdout || "").slice(0, 200); }
 }
 
-/* The published mark: a field on the catalog, a band that names which case it is, and a sample
-   that still shows and clears exactly as it did. */
+/* The published mark: a field on the catalog, a bubble that names which case it is and points
+   the way to that catalog, and a sample stamp that still shows and clears exactly as it did. */
 function deskMarkTests() {
-  const EN_EVAL = "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.";
-  const PL_EVAL = "Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.";
-  const EN_NEWER = "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
-  const PL_NEWER = "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.";
+  const EN_EVAL_LEAD = "Evaluation copy, published without a licence.";
+  const EN_EVAL_BODY = "Everything works as usual; the team's lead can replace it with an edition published under a licence.";
+  const PL_EVAL_LEAD = "Wersja do oceny, opublikowana bez licencji.";
+  const PL_EVAL_BODY = "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji.";
+  const EN_NEWER_LEAD = "Published by a version of Studio newer than its licence covers.";
+  const EN_NEWER_BODY = "Everything works as usual; the team's lead can replace it with an edition the licence covers.";
+  const PL_NEWER_LEAD = "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja.";
+  const PL_NEWER_BODY = "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją.";
+  const EN_EVAL = EN_EVAL_LEAD + " " + EN_EVAL_BODY;
+  const PL_EVAL = PL_EVAL_LEAD + " " + PL_EVAL_BODY;
+  const EN_NEWER = EN_NEWER_LEAD + " " + EN_NEWER_BODY;
+  const PL_NEWER = PL_NEWER_LEAD + " " + PL_NEWER_BODY;
   const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
   const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
-  eq("desk mark the two sentences are in the string table, English and Polish",
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  eq("desk mark the two sentences are in the string table, English and Polish, and the old wording is gone",
     [langSrc.indexOf('"' + EN_EVAL + '":"' + PL_EVAL + '"') > -1,
-     langSrc.indexOf('"' + EN_NEWER + '":"' + PL_NEWER + '"') > -1],
-    [true, true]);
+     langSrc.indexOf('"' + EN_NEWER + '":"' + PL_NEWER + '"') > -1,
+     langSrc.indexOf("if the mark stays") < 0,
+     fileSrc.indexOf("if the mark stays") < 0],
+    [true, true, true, true]);
+  eq("desk mark the published mark is not a band over the cards and not a line in the header",
+    [tpl.indexOf("mark-sentence") < 0, tpl.indexOf('id="deskMark"') < 0,
+     tpl.indexOf("Manage's status line") < 0, tpl.indexOf("#eDeskMark") < 0,
+     /import \{ placeBubble \} from "\.\/bubble\.js"/.test(fileSrc)],
+    [true, true, true, true, true]);
 
   const V = v2Fns();
   const base = () => ({
@@ -1632,15 +1648,82 @@ function deskMarkTests() {
   const ns = {};
   const band = { className: "", attrs: {}, textContent: "Sample catalog", setAttribute(k, v) { this.attrs[k] = v; } };
   const mark = { hidden: true, querySelector: () => band };
-  const PL = { "Sample catalog": "Przykładowy katalog" };
+  const PL = { "Sample catalog": "Przykładowy katalog", "Dismiss": "Zamknij" };
   PL[EN_EVAL] = PL_EVAL;
   PL[EN_NEWER] = PL_NEWER;
   let lang = "en";
+  const box = (top, left, width, height) => ({ top: top, left: left, width: width, height: height, right: left + width, bottom: top + height });
+  const world = { library: false, rowMissing: false };
+  const observers = [], listeners = [], rafQ = [], placed = [];
+  const makeEl = (tag) => {
+    const el = {
+      tag: tag, id: "", className: "", hidden: false, open: false, overflowY: "visible",
+      textContent: "", attrs: {}, style: {}, children: [], parentElement: null, rect: box(0, 0, 10, 10),
+      setAttribute(k, v) { this.attrs[k] = v; },
+      getAttribute(k) { return this.attrs[k]; },
+      appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
+      remove() {
+        const p = this.parentElement;
+        if (p && p.children) { const i = p.children.indexOf(this); if (i >= 0) p.children.splice(i, 1); }
+        this.parentElement = null;
+      },
+      contains(n) { return n === this || this.children.some(c => c === n || (c.contains && c.contains(n))); },
+      getClientRects() { return this.rect.width && this.rect.height ? [{}] : []; },
+      getBoundingClientRect() { return this.rect; },
+      querySelector(sel) {
+        if (sel === "summary") return summary;
+        if (sel === ".ec-row.is-loaded") return world.rowMissing ? null : loadedRow;
+        if (sel === '[data-act="manage"]') return libraryBtn;
+        return null;
+      }
+    };
+    return el;
+  };
+  const body = makeEl("body");
+  const settingsBtn = makeEl("button"); settingsBtn.id = "settingsBtn"; settingsBtn.rect = box(12, 1100, 36, 36);
+  const libraryBtn = makeEl("button"); libraryBtn.rect = box(48, 1100, 160, 28);
+  const settingsMenu = makeEl("div"); settingsMenu.id = "settingsMenu"; settingsMenu.hidden = true;
+  settingsMenu.appendChild(libraryBtn);
+  const summary = makeEl("summary"); summary.rect = box(96, 40, 180, 28);
+  const loadedRow = makeEl("div"); loadedRow.className = "ec-row is-loaded"; loadedRow.rect = box(140, 40, 240, 32);
+  const scroller = makeEl("div"); scroller.overflowY = "auto"; scroller.rect = box(80, 20, 320, 500);
+  scroller.appendChild(loadedRow);
+  const dataDetails = makeEl("details"); dataDetails.className = "manage-sec"; dataDetails.open = false; dataDetails.attrs["data-mg"] = "data";
+  dataDetails.appendChild(summary); dataDetails.appendChild(scroller);
+  const modalCard = makeEl("div"); modalCard.id = "modalCard"; modalCard.appendChild(dataDetails);
+  const modal = makeEl("div"); modal.id = "modal"; modal.hidden = true;
+  const catNow = makeEl("div"); catNow.id = "catNow"; catNow.rect = box(4, 16, 180, 22);
+  const byId = { sampleMark: mark, settingsBtn: settingsBtn, settingsMenu: settingsMenu, modal: modal, modalCard: modalCard, catNow: catNow };
+  const doc = {
+    body: body,
+    getElementById(id) {
+      if (id === "eDeskMark") return body.children.filter(c => c.id === "eDeskMark")[0] || null;
+      return byId[id] || null;
+    },
+    querySelector(sel) {
+      if (!world.library) return null;
+      if (sel === "#modalCard details.manage-sec" || sel === '#modalCard details[data-mg="data"]') return dataDetails;
+      return null;
+    },
+    createElement: (tag) => makeEl(tag),
+    createTextNode: (text) => ({ nodeType: 3, textContent: text, children: [] })
+  };
+  function fireMutations() {
+    observers.forEach(o => { if (!o.dead) o.cb([{ target: body }]); });
+    const q = rafQ.splice(0, rafQ.length);
+    q.forEach(fn => { if (fn) fn(); });
+  }
+  function whereOf(p) {
+    if (!p) return "none";
+    const who = p.top === 12 ? "menu" : p.top === 48 ? "library" : p.top === 96 ? "catalog-data"
+      : p.top === 140 ? "row" : p.top === 4 ? "filename" : "top" + p.top;
+    return who + " " + p.prefer;
+  }
   const own = {
     nsSet: (k, v) => { ns[k] = String(v); },
     nsDel: (k) => { delete ns[k]; },
     nsGet: (k) => (k in ns ? ns[k] : null),
-    document: { getElementById: (id) => (id === "sampleMark" ? mark : null) },
+    document: doc,
     cards: [{ id: "c-hello" }],
     pack: {},
     cardOrderIsBase: () => true,
@@ -1655,16 +1738,34 @@ function deskMarkTests() {
     ssDel: () => {},
     clearTimeout: () => {},
     tabSaveTimer: 0,
+    innerWidth: 1440,
+    innerHeight: 900,
+    getComputedStyle: (p) => ({ overflowY: (p && p.overflowY) || "visible" }),
+    placeBubble: (el, rect, opts) => { placed.push({ prefer: opts && opts.prefer, top: rect.top, left: rect.left, width: rect.width, height: rect.height }); },
+    requestAnimationFrame: (fn) => { rafQ.push(fn); return rafQ.length; },
+    cancelAnimationFrame: () => {},
+    addEventListener: (type, fn, opts) => { listeners.push({ type: type, fn: fn, opts: opts }); },
+    removeEventListener: (type, fn) => {
+      const i = listeners.findIndex(l => l.type === type && l.fn === fn);
+      if (i >= 0) listeners.splice(i, 1);
+    },
     t: (en) => (lang === "pl" ? (PL[en] == null ? en : PL[en]) : en)
   };
+  own.MutationObserver = function (cb) { this.cb = cb; this.dead = false; observers.push(this); };
+  own.MutationObserver.prototype.observe = function () {};
+  own.MutationObserver.prototype.disconnect = function () { this.dead = true; };
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
     get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
     set: (o, k, v) => { own[k] = v; return true; }
   });
+  const sliceFn = (m) => { try { return extractDecl(fileSrc, m); } catch (e) { return ""; } };
   let api = null;
   try {
     api = new Function("scope", "with(scope){\n"
+      + ["function deskMarkVisible(", "function deskMarkInView(", "function deskMarkTarget(",
+         "function placeDeskMark(", "function showDeskMark(", "function dropDeskMark(", "function deskMarkSentence("]
+        .map(sliceFn).filter(Boolean).join("\n") + "\n"
       + extractDecl(fileSrc, "function deskMarkOf(") + "\n"
       + extractDecl(fileSrc, "function sampleUntouched(") + "\n"
       + extractDecl(fileSrc, "function takeCatalog(") + "\n"
@@ -1674,54 +1775,148 @@ function deskMarkTests() {
     eq("catalog-file.js carries the desk mark", e.message, "sliced");
     return;
   }
-  const show = (c) => {
+  const bubbles = () => body.children.filter(c => c.id === "eDeskMark");
+  const flat = (el, out) => { (el.children || []).forEach(c => { out.push(c); if (c.children) flat(c, out); }); return out; };
+  const bubbleView = () => {
+    const list = bubbles();
+    const d = list[0] || null;
+    if (!d) return { n: 0, lead: "", body: "", dismiss: "", cls: "", role: "" };
+    const all = flat(d, []);
+    const b = all.find(c => c.tag === "b");
+    const tx = all.filter(c => c.nodeType === 3).map(c => c.textContent).join("");
+    const btn = all.find(c => c.tag === "button");
+    return { n: list.length, lead: b ? b.textContent : "", body: tx.replace(/^ /, ""),
+      dismiss: btn ? btn.textContent : "", cls: d.className, role: (d.attrs && d.attrs.role) || "", button: btn };
+  };
+  const resetStamp = () => { band.className = ""; band.textContent = "Sample catalog"; band.attrs = {}; mark.hidden = true; };
+  const resetDesk = () => {
+    bubbles().forEach(c => { if (c._drop) c._drop(); });
+    observers.splice(0, observers.length).forEach(o => { o.dead = true; });
+    listeners.splice(0, listeners.length);
+    rafQ.splice(0, rafQ.length);
+    placed.splice(0, placed.length);
+    modal.hidden = true; settingsMenu.hidden = true; dataDetails.open = false;
+    world.library = false; world.rowMissing = false;
+    settingsBtn.rect = box(12, 1100, 36, 36);
+    libraryBtn.rect = box(48, 1100, 160, 28);
+    summary.rect = box(96, 40, 180, 28);
+    loadedRow.rect = box(140, 40, 240, 32);
+    resetStamp();
     own.pack = {};
+    own.cards = [{ id: "c-hello" }];
+  };
+  const clearNs = () => { delete ns.DeskMark; delete ns.Sample; };
+  const take = (c) => {
     let err = "";
     try { api.takeCatalog(c, {}); api.syncSampleMark(); }
     catch (e) { err = e.message; }
-    return { err: err, hidden: mark.hidden, text: band.textContent, cls: band.className,
-      key: ns.DeskMark || "", sample: ns.Sample || "", en: band.attrs["data-i18n-text"] || "" };
+    return err;
   };
-  lang = "en";
-  const ev = show({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
-  lang = "pl";
+  const open = (c) => { resetDesk(); clearNs(); lang = "en"; return take(c); };
+  const view = () => {
+    const b = bubbleView();
+    return [b.n, b.lead, b.body, b.dismiss, b.cls, b.role, mark.hidden, band.className, band.textContent, ns.DeskMark || "", ns.Sample || ""];
+  };
+
+  resetDesk(); clearNs();
+  ns.DeskMark = "evaluation";
   api.syncSampleMark();
-  const evPl = band.textContent;
-  eq("desk mark an evaluation catalog shows its sentence, in English and in Polish, and does not set the sample flag",
-    [ev.err, ev.hidden, ev.text, ev.en, ev.cls, ev.key, ev.sample, evPl],
-    ["", false, EN_EVAL, EN_EVAL, "mark-sentence", "evaluation", "", PL_EVAL]);
-  lang = "en";
-  const nw = show({ evaluation: "newer", cards: [{ id: "c-hello" }] });
+  eq("desk mark boot from the stored marked copy shows no bubble and leaves the sample stamp hidden",
+    [bubbles().length, mark.hidden, band.className, band.textContent.indexOf("Evaluation copy") < 0, ns.DeskMark || ""],
+    [0, true, "", true, "evaluation"]);
+
+  const evErr = open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+  const ev = view();
+  eq("desk mark an evaluation file opened shows the bubble once, in English, and does not set the sample flag",
+    [evErr].concat(ev),
+    ["", 1, EN_EVAL_LEAD, EN_EVAL_BODY, "Dismiss", "bub bub-ask", "status", true, "", "Sample catalog", "evaluation", ""]);
   lang = "pl";
-  api.syncSampleMark();
-  eq("desk mark a newer catalog shows its sentence, in English and in Polish",
-    [nw.err, nw.hidden, nw.text, nw.key, band.textContent],
-    ["", false, EN_NEWER, "newer", PL_NEWER]);
+  const evPlErr = take({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+  const evPl = view();
+  eq("desk mark a second open replaces that bubble, and the evaluation words are Polish",
+    [evPlErr, evPl[0], evPl[1], evPl[2], evPl[3]],
+    ["", 1, PL_EVAL_LEAD, PL_EVAL_BODY, "Zamknij"]);
+
   lang = "en";
+  const nwErr = open({ evaluation: "newer", cards: [{ id: "c-hello" }] });
+  const nw = view();
+  eq("desk mark a newer file opened shows the bubble once, in English",
+    [nwErr, nw[0], nw[1], nw[2], nw[3], nw[9]],
+    ["", 1, EN_NEWER_LEAD, EN_NEWER_BODY, "Dismiss", "newer"]);
   own.pack.overrides = { "c-hello": { en: "A changed reply" } };
   api.syncSampleMark();
-  eq("desk mark a card's text edited leaves the newer sentence on the band",
-    [mark.hidden, band.textContent, ns.DeskMark || ""],
-    [false, EN_NEWER, "newer"]);
-  const cleared = show({ cards: [{ id: "c-hello" }] });
-  eq("desk mark loading a catalog without the field clears it and hides the band",
-    [cleared.err, cleared.hidden, cleared.key, cleared.sample],
-    ["", true, "", ""]);
+  const edited = view();
+  eq("desk mark a card's text edited leaves the newer bubble as it was and does not put the sentence on the stamp",
+    [edited[0], edited[1], edited[2], edited[6], edited[7], edited[8], edited[9]],
+    [1, EN_NEWER_LEAD, EN_NEWER_BODY, true, "", "Sample catalog", "newer"]);
+  lang = "pl";
+  const nwPlErr = take({ evaluation: "newer", cards: [{ id: "c-hello" }] });
+  const nwPl = view();
+  eq("desk mark the newer words are Polish, and still one bubble",
+    [nwPlErr, nwPl[0], nwPl[1], nwPl[2], nwPl[3]],
+    ["", 1, PL_NEWER_LEAD, PL_NEWER_BODY, "Zamknij"]);
+
   lang = "en";
-  const sample = show({ sample: 1, cards: [{ id: "c-hello" }] });
+  const clearedErr = open({ cards: [{ id: "c-hello" }] });
+  const cleared = view();
+  eq("desk mark loading a catalog without the field drops the bubble and hides the stamp",
+    [clearedErr, cleared[0], cleared[6], cleared[7], cleared[9], cleared[10]],
+    ["", 0, true, "", "", ""]);
+
+  const sampleErr = open({ sample: 1, cards: [{ id: "c-hello" }] });
+  const sampleShown = [mark.hidden, band.textContent, band.className, bubbles().length, ns.Sample || "", ns.DeskMark || ""];
   lang = "pl";
   api.syncSampleMark();
-  const samplePl = band.textContent;
+  const samplePl = [mark.hidden, band.textContent, band.className];
   lang = "en";
   own.pack.overrides = { "c-hello": { en: "A changed reply" } };
   api.syncSampleMark();
   eq("desk mark the sample still shows until a card's text changes, and that edit hides it without a published mark",
-    [sample.err, sample.hidden, sample.text, sample.cls, sample.sample, sample.key, samplePl, mark.hidden, ns.Sample || "", ns.DeskMark || ""],
-    ["", false, "Sample catalog", "", "1", "", "Przykładowy katalog", true, "1", ""]);
-  const both = show({ sample: 1, evaluation: "evaluation", cards: [{ id: "c-hello" }] });
-  eq("desk mark a file that carries both shows the published sentence, not the sample stamp",
-    [both.err, both.hidden, both.text, both.key, both.sample],
-    ["", false, EN_EVAL, "evaluation", "1"]);
+    [sampleErr, sampleShown, samplePl, mark.hidden, bubbles().length, ns.Sample || "", ns.DeskMark || ""],
+    ["", [false, "Sample catalog", "", 0, "1", ""], [false, "Sample catalog", ""], true, 0, "1", ""]);
+
+  const bothErr = open({ sample: 1, evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+  const both = view();
+  eq("desk mark a file that carries both shows the bubble and still shows the sample stamp",
+    [bothErr, both[0], both[1], both[2], both[6], both[7], both[8], both[9], both[10]],
+    ["", 1, EN_EVAL_LEAD, EN_EVAL_BODY, false, "", "Sample catalog", "evaluation", "1"]);
+
+  if (fileSrc.indexOf("function placeDeskMark(") < 0) {
+    eq("desk mark the bubble points at the Menu button, then Library, then Catalog and data, then the loaded row",
+      "no placeDeskMark", "menu left, library left, catalog-data right, row right, menu left");
+    eq("desk mark a step that cannot be done points at the file name in the band",
+      "no placeDeskMark", "filename below");
+  } else {
+    open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+    const pathSeen = [whereOf(placed[placed.length - 1])];
+    settingsMenu.hidden = false; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
+    modal.hidden = false; world.library = true; dataDetails.open = false; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
+    dataDetails.open = true; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
+    modal.hidden = true; world.library = false; settingsMenu.hidden = true; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
+    eq("desk mark the bubble points at the Menu button, then Library, then Catalog and data, then the loaded row",
+      pathSeen.join(", "), "menu left, library left, catalog-data right, row right, menu left");
+    const fell = [];
+    modal.hidden = false; world.library = false; fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    modal.hidden = true; settingsBtn.rect = box(12, 1100, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    settingsBtn.rect = box(12, 1100, 36, 36); settingsMenu.hidden = false; libraryBtn.rect = box(48, 1100, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    settingsMenu.hidden = true; libraryBtn.rect = box(48, 1100, 160, 28);
+    modal.hidden = false; world.library = true; dataDetails.open = false; summary.rect = box(96, 40, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    summary.rect = box(96, 40, 180, 28); dataDetails.open = true; loadedRow.rect = box(700, 40, 240, 32); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    loadedRow.rect = box(140, 40, 240, 32); world.rowMissing = true; fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    eq("desk mark a step that cannot be done points at the file name in the band",
+      fell.join(", "), "filename below, filename below, filename below, filename below, filename below, filename below");
+  }
+
+  open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+  const beforeClose = bubbles().length;
+  const btn = bubbleView().button;
+  let closeErr = "";
+  try { if (btn && btn.onclick) btn.onclick(); else closeErr = "no Dismiss"; }
+  catch (e) { closeErr = e.message; }
+  api.syncSampleMark();
+  eq("desk mark Dismiss closes the bubble and a later sample sync does not bring it back",
+    [closeErr, beforeClose, bubbles().length, listeners.length, observers.filter(o => !o.dead).length, ns.DeskMark || ""],
+    ["", 1, 0, 0, 0, "evaluation"]);
 }
 
 /* Spec 2.6 lines 399-401: where a label is present the copy control shows it in place of
@@ -5326,7 +5521,7 @@ function checkCatalogRoundTrip() {
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 1164;
-const UI_STRINGS_SHA256 = "7e2e1ae0513083abacb778487add0e1317848ca3d2297c38ab5d081e80af8a00";
+const UI_STRINGS_SHA256 = "cd0e820796eeeae25e7f1bf048180f2cf9a81a603a9c935f5ab3885e8f58d16b";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

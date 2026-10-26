@@ -146,7 +146,9 @@ const ALLOWED_IN = [
     within: "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi." },
   /* 2026-10-26. The copywriter's two desk marks both say "jak zwykle", the other word, not "zwykłe". */
   { fold: "zwykle", since: "2026-10-26",
-    within: "Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu." },
+    within: "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji." },
+  { fold: "zwykle", since: "2026-10-26",
+    within: "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją." },
 ];
 function allowedAt(line, k, at) {
   return ALLOWED_IN.some(a => {

@@ -3882,11 +3882,6 @@ body.e-lanes #pillsSlot{display:none}
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* The two published marks are a sentence, so they do not wear the sample's stamp. */
-#sampleMark b.mark-sentence{transform:none;white-space:normal;text-transform:none;
-  font:600 clamp(15px,2.1vw,22px)/1.35 var(--sans);letter-spacing:0;
-  max-width:36em;text-align:center;opacity:.72}
-:root[data-theme=light] #sampleMark b.mark-sentence{opacity:.78}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
@@ -4180,8 +4175,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
 <div id="eSay" aria-live="polite"></div>
-<!-- The sample stamp, or a published mark. aria-hidden: a screen reader would otherwise meet
-     it on every focus move. The sample's fact is also on Manage's status line. -->
+<!-- The sample stamp only. aria-hidden: a screen reader would otherwise meet it on every focus move. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <div id="fabStack" class="fab-stack">
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
@@ -6855,8 +6849,8 @@ What you type stays in this browser only.`;
     "Advanced": "Zaawansowane",
     "Favourites": "Ulubione",
     "Sample catalog": "Przykładowy katalog",
-    "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.": "Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.",
-    "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.": "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.",
+    "Evaluation copy, published without a licence. Everything works as usual; the team's lead can replace it with an edition published under a licence.": "Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji.",
+    "Published by a version of Studio newer than its licence covers. Everything works as usual; the team's lead can replace it with an edition the licence covers.": "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją.",
     "the version on this computer": "wersja na tym komputerze",
     "Built on {DATE}": "z {DATE}",
     "New in this version": "Co nowego w tej wersji",
@@ -25510,6 +25504,12 @@ What you type stays in this browser only.`;
     clearTimeout(tabSaveTimer);
     if (!same) ssDel(TAB_KEY);
     hooks.restartDesk();
+    try {
+      const sentence = deskMarkSentence(deskMarkOf(c));
+      if (sentence) showDeskMark(sentence);
+      else dropDeskMark();
+    } catch (e) {
+    }
     return true;
   }
   function sampleUntouched() {
@@ -25561,33 +25561,109 @@ What you type stays in this browser only.`;
     scheduleDeskBranch();
     const el = document.getElementById("sampleMark");
     if (!el) return;
-    const b = el.querySelector ? el.querySelector("b") : null;
-    const mark = nsGet("DeskMark");
-    let en = "", shown2 = "";
-    if (mark === "evaluation") {
-      en = "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.";
-      shown2 = t("Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.");
-    } else if (mark === "newer") {
-      en = "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
-      shown2 = t("Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.");
-    }
-    if (en && (cards || []).length > 0) {
-      if (b) {
-        b.className = "mark-sentence";
-        b.setAttribute("data-i18n-text", en);
-        b.textContent = shown2;
-      }
-      el.hidden = false;
-      return;
-    }
-    if (b) {
-      b.className = "";
-      b.setAttribute("data-i18n-text", "Sample catalog");
-      b.textContent = t("Sample catalog");
-    }
     let on = false;
     on = nsGet("Sample") === "1";
     el.hidden = !(on && (cards || []).length > 0 && sampleUntouched());
+  }
+  function deskMarkVisible(e) {
+    if (!e || !e.getClientRects().length) return null;
+    const r = e.getBoundingClientRect();
+    return r.width && r.height && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth ? e : null;
+  }
+  function deskMarkInView(e) {
+    if (!e) return null;
+    const a = e.getBoundingClientRect();
+    for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (/(auto|scroll|hidden)/.test(cs.overflowY)) {
+        const b = p.getBoundingClientRect();
+        if (a.top < b.top || a.bottom > b.bottom) return null;
+      }
+    }
+    return deskMarkVisible(e);
+  }
+  function deskMarkTarget() {
+    const open = !document.getElementById("modal").hidden;
+    if (open && document.querySelector("#modalCard details.manage-sec")) {
+      const d = document.querySelector('#modalCard details[data-mg="data"]');
+      if (!d) return null;
+      if (!d.open) return { el: deskMarkInView(d.querySelector("summary")), prefer: "right" };
+      return { el: deskMarkInView(d.querySelector(".ec-row.is-loaded")), prefer: "right" };
+    }
+    if (open) return null;
+    const m = document.getElementById("settingsMenu");
+    if (m && !m.hidden) return { el: deskMarkVisible(m.querySelector('[data-act="manage"]')), prefer: "left" };
+    return { el: deskMarkVisible(document.getElementById("settingsBtn")), prefer: "left" };
+  }
+  function placeDeskMark(el) {
+    let target = deskMarkTarget();
+    if (!target || !target.el) target = { el: document.getElementById("catNow"), prefer: "below" };
+    const r = target.el.getBoundingClientRect();
+    placeBubble(el, { top: r.top, left: r.left, width: r.width, height: r.height }, { prefer: target.prefer });
+  }
+  function deskMarkSentence(kind) {
+    if (kind === "evaluation") return t("Evaluation copy, published without a licence. Everything works as usual; the team's lead can replace it with an edition published under a licence.");
+    if (kind === "newer") return t("Published by a version of Studio newer than its licence covers. Everything works as usual; the team's lead can replace it with an edition the licence covers.");
+    return "";
+  }
+  function showDeskMark(sentence) {
+    dropDeskMark();
+    const i = sentence.indexOf(". ");
+    const d = document.createElement("div");
+    d.id = "eDeskMark";
+    d.className = "bub bub-ask";
+    d.setAttribute("role", "status");
+    const p = document.createElement("p"), b = document.createElement("b");
+    b.textContent = i < 0 ? sentence : sentence.slice(0, i + 1);
+    p.appendChild(b);
+    if (i >= 0) p.appendChild(document.createTextNode(" " + sentence.slice(i + 2)));
+    d.appendChild(p);
+    const row = document.createElement("div");
+    row.className = "tour-actions";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "btn";
+    x.textContent = t("Dismiss");
+    row.appendChild(x);
+    d.appendChild(row);
+    document.body.appendChild(d);
+    let raf = 0;
+    const again = () => {
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        placeDeskMark(d);
+      });
+    };
+    const mo = new MutationObserver((rs) => {
+      if (!rs.every((r) => d.contains(r.target))) again();
+    });
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open", "class"] });
+    addEventListener("resize", again, { passive: true });
+    addEventListener("scroll", again, { passive: true, capture: true });
+    d._drop = () => {
+      mo.disconnect();
+      removeEventListener("resize", again);
+      removeEventListener("scroll", again, { capture: true });
+      cancelAnimationFrame(raf);
+      d.remove();
+    };
+    x.onclick = () => d._drop();
+    placeDeskMark(d);
+    return d;
+  }
+  function dropDeskMark() {
+    let old = null;
+    try {
+      old = document.getElementById("eDeskMark");
+    } catch (e) {
+      return;
+    }
+    if (!old) return;
+    try {
+      if (typeof old._drop === "function") old._drop();
+      else if (typeof old.remove === "function") old.remove();
+    } catch (e) {
+    }
   }
   function catalogFromFileText(text, fileName) {
     try {
