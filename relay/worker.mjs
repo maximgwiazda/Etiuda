@@ -1,4 +1,4 @@
-/* The relay's Worker: each route under /relay/v1 goes to its team's Durable Object, named by the relay team id and
+/* The relay's Worker: each route under its prefix goes to its team's Durable Object, named by the relay team id and
    made in the EU jurisdiction. What no route answers (a path or a method outside the table in relay/team.cjs) is missing here
    and wakes no object. Every POST body is read here, to its cap, before an object is asked, so a body that trickles or never
    ends holds a Worker request and no object; a create's body is also read for the id it names and for its grant: a create that
@@ -31,9 +31,11 @@ export function routeWith(roots, clockOf) {
   };
 
   async function route(request, env) {
+    const prefix = team.apiPrefixOf(env);
+    if (prefix === null) return team.unavailable(); /* plant:prefix */
     const url = new URL(request.url);
     if (url.protocol !== "https:" || url.search !== "") return team.missing();
-    const hit = team.routeOf(request.method, url.pathname);
+    const hit = team.routeOf(request.method, url.pathname, prefix);
     if (!hit) return team.missing(); /* plant:worker-route */
     let teams = env.TEAMS;
     teams = env.TEAMS.jurisdiction("eu"); /* plant:eu */
