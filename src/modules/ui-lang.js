@@ -287,6 +287,8 @@ UI_STRINGS.pl={
   "Advanced":"Zaawansowane",
   "Favourites":"Ulubione",
   "Sample catalog":"Przykładowy katalog",
+  "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.":"Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.",
+  "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.":"Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.",
   "the version on this computer":"wersja na tym komputerze",
   "Built on {DATE}":"z {DATE}",
   "New in this version":"Co nowego w tej wersji",

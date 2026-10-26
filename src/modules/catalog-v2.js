@@ -48,7 +48,7 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
   "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
-  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name","variables"];
+  "greet","stop","sample","evaluation","modified","hash","sig","notes","grew","desk","name","variables"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
 const V2_GREET_PARTS=3;
@@ -697,6 +697,8 @@ function catalogFromV2(data){
      written, and the reader downstream falls back to the built-in text on absence. */
   if(typeof data.facts==="string") out.facts=data.facts;
   if(data.sample) out.sample=1;
+  /* Named like sample, so a round trip keeps it and the hash covers it. Any other value is no mark. */
+  if(data.evaluation==="evaluation"||data.evaluation==="newer") out.evaluation=data.evaluation;
   // Validated above. Carried for the readers that act on them; nothing on this desk does yet.
   if(data.notes) out.notes=v2Copy(data.notes);
   if(data.grew) out.grew=v2Copy(data.grew);
@@ -808,6 +810,7 @@ function catalogToV2(c,opts){
   if(c.greet&&typeof c.greet==="object") out.greet=c.greet;
   if(c.stop&&typeof c.stop==="object") out.stop=c.stop;
   if(c.sample) out.sample=true;
+  if(c.evaluation==="evaluation"||c.evaluation==="newer") out.evaluation=c.evaluation;
   if(c.notes&&typeof c.notes==="object") out.notes=v2Copy(c.notes);
   if(c.grew&&typeof c.grew==="object") out.grew=v2Copy(c.grew);
   if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);

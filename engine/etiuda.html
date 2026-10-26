@@ -3882,6 +3882,11 @@ body.e-lanes #pillsSlot{display:none}
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
+/* The two published marks are a sentence, so they do not wear the sample's stamp. */
+#sampleMark b.mark-sentence{transform:none;white-space:normal;text-transform:none;
+  font:600 clamp(15px,2.1vw,22px)/1.35 var(--sans);letter-spacing:0;
+  max-width:36em;text-align:center;opacity:.72}
+:root[data-theme=light] #sampleMark b.mark-sentence{opacity:.78}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
@@ -4175,9 +4180,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
 <div id="eSay" aria-live="polite"></div>
-<!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
-     reader would otherwise meet it on every focus move; Manage's status line carries the same
-     fact as text. -->
+<!-- The sample stamp, or a published mark. aria-hidden: a screen reader would otherwise meet
+     it on every focus move. The sample's fact is also on Manage's status line. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <div id="fabStack" class="fab-stack">
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
@@ -6851,6 +6855,8 @@ What you type stays in this browser only.`;
     "Advanced": "Zaawansowane",
     "Favourites": "Ulubione",
     "Sample catalog": "Przykładowy katalog",
+    "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.": "Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.",
+    "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.": "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.",
     "the version on this computer": "wersja na tym komputerze",
     "Built on {DATE}": "z {DATE}",
     "New in this version": "Co nowego w tej wersji",
@@ -8939,7 +8945,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-25";
+  var E_BUILT = "2026-10-26";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -9050,6 +9056,7 @@ What you type stays in this browser only.`;
     "greet",
     "stop",
     "sample",
+    "evaluation",
     "modified",
     "hash",
     "sig",
@@ -9712,6 +9719,7 @@ What you type stays in this browser only.`;
     if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
     if (typeof data.facts === "string") out.facts = data.facts;
     if (data.sample) out.sample = 1;
+    if (data.evaluation === "evaluation" || data.evaluation === "newer") out.evaluation = data.evaluation;
     if (data.notes) out.notes = v2Copy(data.notes);
     if (data.grew) out.grew = v2Copy(data.grew);
     if (data.desk) out.desk = v2Copy(data.desk);
@@ -9829,6 +9837,7 @@ What you type stays in this browser only.`;
     if (c.greet && typeof c.greet === "object") out.greet = c.greet;
     if (c.stop && typeof c.stop === "object") out.stop = c.stop;
     if (c.sample) out.sample = true;
+    if (c.evaluation === "evaluation" || c.evaluation === "newer") out.evaluation = c.evaluation;
     if (c.notes && typeof c.notes === "object") out.notes = v2Copy(c.notes);
     if (c.grew && typeof c.grew === "object") out.grew = v2Copy(c.grew);
     if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
@@ -14192,6 +14201,7 @@ What you type stays in this browser only.`;
     if (data && Array.isArray(data.intentIds) && data.intentIds.length) cat.intentIds = data.intentIds.map(String);
     if (data && data.commentLang) cat.commentLang = String(data.commentLang);
     if (data && data.sample) cat.sample = 1;
+    if (data && (data.evaluation === "evaluation" || data.evaluation === "newer")) cat.evaluation = data.evaluation;
     if (data && data.categories && typeof data.categories === "object") {
       Object.keys(data.categories).forEach((k) => {
         if (k !== "fav") cat.categories[k] = String(data.categories[k] || k);
@@ -24160,7 +24170,7 @@ What you type stays in this browser only.`;
     if (Array.isArray(v)) return "[" + v.map(sharedCanon).join(",") + "]";
     return "{" + Object.keys(v).filter((k) => v[k] !== void 0).sort().map((k) => JSON.stringify(k) + ":" + sharedCanon(v[k])).join(",") + "}";
   }
-  var SHARED_OWN_KEYS = ["format", "kind", "id", "rev", "date", "hash", "sig", "modified", "grew", "desk", "sample", "cards", "tags"];
+  var SHARED_OWN_KEYS = ["format", "kind", "id", "rev", "date", "hash", "sig", "modified", "grew", "desk", "sample", "evaluation", "cards", "tags"];
   var SHARED_SEP = "";
   function sharedById(list2) {
     const m = /* @__PURE__ */ new Map();
@@ -24929,6 +24939,8 @@ What you type stays in this browser only.`;
     if (origin && origin.variables && typeof origin.variables === "object") out.variables = origin.variables;
     if (origin && origin.notes && typeof origin.notes === "object") out.notes = origin.notes;
     if (origin && origin.ext && typeof origin.ext === "object") out.ext = origin.ext;
+    const publishedMark = deskMarkOf(origin);
+    if (publishedMark) out.evaluation = publishedMark;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
     if (keptIds.some((x) => x)) out.intentIds = keptIds;
@@ -25420,6 +25432,10 @@ What you type stays in this browser only.`;
     }
     flushStats();
   }
+  function deskMarkOf(c) {
+    const v = c && c.evaluation;
+    return v === "evaluation" || v === "newer" ? v : "";
+  }
   function activateCatalog(c, opts) {
     if (looseUnexported()) {
       askLoose(() => takeCatalog(c, opts));
@@ -25480,6 +25496,8 @@ What you type stays in this browser only.`;
     try {
       if (c && c.sample) nsSet("Sample", "1");
       else nsDel("Sample");
+      if (deskMarkOf(c)) nsSet("DeskMark", deskMarkOf(c));
+      else nsDel("DeskMark");
     } catch (e) {
     }
     try {
@@ -25543,6 +25561,30 @@ What you type stays in this browser only.`;
     scheduleDeskBranch();
     const el = document.getElementById("sampleMark");
     if (!el) return;
+    const b = el.querySelector ? el.querySelector("b") : null;
+    const mark = nsGet("DeskMark");
+    let en = "", shown2 = "";
+    if (mark === "evaluation") {
+      en = "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.";
+      shown2 = t("Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.");
+    } else if (mark === "newer") {
+      en = "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
+      shown2 = t("Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.");
+    }
+    if (en && (cards || []).length > 0) {
+      if (b) {
+        b.className = "mark-sentence";
+        b.setAttribute("data-i18n-text", en);
+        b.textContent = shown2;
+      }
+      el.hidden = false;
+      return;
+    }
+    if (b) {
+      b.className = "";
+      b.setAttribute("data-i18n-text", "Sample catalog");
+      b.textContent = t("Sample catalog");
+    }
     let on = false;
     on = nsGet("Sample") === "1";
     el.hidden = !(on && (cards || []).length > 0 && sampleUntouched());
@@ -25654,7 +25696,7 @@ What you type stays in this browser only.`;
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("DeskMark"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
   var SHARE_KEEP = ["eAgent", "eLayers"];

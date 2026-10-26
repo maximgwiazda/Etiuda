@@ -587,6 +587,7 @@ function runUnitTests() {
   tourActTests();
   emptyDeskTests();
   catNowTests();
+  deskMarkTests();
   libraryHeadTests();
   lanePageKeyTests();
 }
@@ -1503,6 +1504,146 @@ function formatPassTests() {
   eq("834C an export takes notes and the carried fields from the origin, and not grew or desk",
      ["out.notes=origin.notes", "out.ext=origin.ext", "out.grew", "out.desk"].map(x => exporter.indexOf(x) > -1),
      [true, true, false, false]);
+}
+
+/* The published mark: a field on the catalog, a band that names which case it is, and a sample
+   that still shows and clears exactly as it did. */
+function deskMarkTests() {
+  const EN_EVAL = "Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.";
+  const PL_EVAL = "Wersja do oceny, opublikowana bez licencji. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.";
+  const EN_NEWER = "Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
+  const PL_NEWER = "Opublikowane przez wersję Studia nowszą niż ta, którą obejmuje licencja. Wszystko działa jak zwykle; jeśli oznaczenie nie zniknie, warto dać znać liderowi zespołu.";
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  eq("desk mark the two sentences are in the string table, English and Polish",
+    [langSrc.indexOf('"' + EN_EVAL + '":"' + PL_EVAL + '"') > -1,
+     langSrc.indexOf('"' + EN_NEWER + '":"' + PL_NEWER + '"') > -1],
+    [true, true]);
+
+  const V = v2Fns();
+  const base = () => ({
+    format: 2, kind: "etiuda-catalog", id: "toy-shop", rev: 1,
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } },
+           { id: "t-a-lamp", kind: "request", clause: { en: "a lamp", pl: "lampa" } }],
+    cards: [{ id: "c-hello", shelf: "t-open", bodyShape: "plain",
+              title: { en: "Hello" }, body: { en: "Hello there." }, requests: ["t-a-lamp"] }]
+  });
+  const round = (v) => {
+    const c = base();
+    if (v != null) c.evaluation = v;
+    return V.catalogToV2(V.catalogFromV2(c));
+  };
+  eq("desk mark the file's field is read and written back, and any other value is dropped",
+    [round("evaluation").evaluation, round("newer").evaluation, "evaluation" in round("nope"), "evaluation" in round(null)],
+    ["evaluation", "newer", false, false]);
+  eq("desk mark a catalog carrying the field still passes the loader",
+    [V.v2Problems(round("evaluation")), V.v2Problems(round("newer"))], [[], []]);
+  const kept = round("evaluation");
+  const stripped = JSON.parse(JSON.stringify(kept));
+  delete stripped.evaluation;
+  const bytes = (doc) => Buffer.from(V.v2SignedBytes(doc)).toString("hex");
+  eq("desk mark the content hash and the signed bytes both cover the field",
+    [V.v2ContentHash(kept) !== V.v2ContentHash(stripped), bytes(kept) !== bytes(stripped)],
+    [true, true]);
+  const exporter = extractDecl(fileSrc, "function currentCatalog(");
+  eq("desk mark an export copies the published mark off the origin and does not copy the sample flag",
+    [exporter.indexOf("out.evaluation=") > -1, exporter.indexOf("out.sample") > -1],
+    [true, false]);
+
+  const ns = {};
+  const band = { className: "", attrs: {}, textContent: "Sample catalog", setAttribute(k, v) { this.attrs[k] = v; } };
+  const mark = { hidden: true, querySelector: () => band };
+  const PL = { "Sample catalog": "Przykładowy katalog" };
+  PL[EN_EVAL] = PL_EVAL;
+  PL[EN_NEWER] = PL_NEWER;
+  let lang = "en";
+  const own = {
+    nsSet: (k, v) => { ns[k] = String(v); },
+    nsDel: (k) => { delete ns[k]; },
+    nsGet: (k) => (k in ns ? ns[k] : null),
+    document: { getElementById: (id) => (id === "sampleMark" ? mark : null) },
+    cards: [{ id: "c-hello" }],
+    pack: {},
+    cardOrderIsBase: () => true,
+    scheduleDeskBranch: () => {},
+    catalogLoaded: () => false,
+    storeCatalog: () => true,
+    pinned: (c) => c,
+    tellTaken: () => {},
+    flushLayer: () => {},
+    LAYER_KEYS: [],
+    hooks: { restartDesk() {} },
+    ssDel: () => {},
+    clearTimeout: () => {},
+    tabSaveTimer: 0,
+    t: (en) => (lang === "pl" ? (PL[en] == null ? en : PL[en]) : en)
+  };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let api = null;
+  try {
+    api = new Function("scope", "with(scope){\n"
+      + extractDecl(fileSrc, "function deskMarkOf(") + "\n"
+      + extractDecl(fileSrc, "function sampleUntouched(") + "\n"
+      + extractDecl(fileSrc, "function takeCatalog(") + "\n"
+      + extractDecl(fileSrc, "function syncSampleMark(") + "\n"
+      + "return {takeCatalog, syncSampleMark};\n}")(scope);
+  } catch (e) {
+    eq("catalog-file.js carries the desk mark", e.message, "sliced");
+    return;
+  }
+  const show = (c) => {
+    own.pack = {};
+    let err = "";
+    try { api.takeCatalog(c, {}); api.syncSampleMark(); }
+    catch (e) { err = e.message; }
+    return { err: err, hidden: mark.hidden, text: band.textContent, cls: band.className,
+      key: ns.DeskMark || "", sample: ns.Sample || "", en: band.attrs["data-i18n-text"] || "" };
+  };
+  lang = "en";
+  const ev = show({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+  lang = "pl";
+  api.syncSampleMark();
+  const evPl = band.textContent;
+  eq("desk mark an evaluation catalog shows its sentence, in English and in Polish, and does not set the sample flag",
+    [ev.err, ev.hidden, ev.text, ev.en, ev.cls, ev.key, ev.sample, evPl],
+    ["", false, EN_EVAL, EN_EVAL, "mark-sentence", "evaluation", "", PL_EVAL]);
+  lang = "en";
+  const nw = show({ evaluation: "newer", cards: [{ id: "c-hello" }] });
+  lang = "pl";
+  api.syncSampleMark();
+  eq("desk mark a newer catalog shows its sentence, in English and in Polish",
+    [nw.err, nw.hidden, nw.text, nw.key, band.textContent],
+    ["", false, EN_NEWER, "newer", PL_NEWER]);
+  lang = "en";
+  own.pack.overrides = { "c-hello": { en: "A changed reply" } };
+  api.syncSampleMark();
+  eq("desk mark a card's text edited leaves the newer sentence on the band",
+    [mark.hidden, band.textContent, ns.DeskMark || ""],
+    [false, EN_NEWER, "newer"]);
+  const cleared = show({ cards: [{ id: "c-hello" }] });
+  eq("desk mark loading a catalog without the field clears it and hides the band",
+    [cleared.err, cleared.hidden, cleared.key, cleared.sample],
+    ["", true, "", ""]);
+  lang = "en";
+  const sample = show({ sample: 1, cards: [{ id: "c-hello" }] });
+  lang = "pl";
+  api.syncSampleMark();
+  const samplePl = band.textContent;
+  lang = "en";
+  own.pack.overrides = { "c-hello": { en: "A changed reply" } };
+  api.syncSampleMark();
+  eq("desk mark the sample still shows until a card's text changes, and that edit hides it without a published mark",
+    [sample.err, sample.hidden, sample.text, sample.cls, sample.sample, sample.key, samplePl, mark.hidden, ns.Sample || "", ns.DeskMark || ""],
+    ["", false, "Sample catalog", "", "1", "", "Przykładowy katalog", true, "1", ""]);
+  const both = show({ sample: 1, evaluation: "evaluation", cards: [{ id: "c-hello" }] });
+  eq("desk mark a file that carries both shows the published sentence, not the sample stamp",
+    [both.err, both.hidden, both.text, both.key, both.sample],
+    ["", false, EN_EVAL, "evaluation", "1"]);
 }
 
 /* Spec 2.6 lines 399-401: where a label is present the copy control shows it in place of
@@ -5106,8 +5247,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1162;
-const UI_STRINGS_SHA256 = "483e4f67757ad044df86e8ee4c1e046490fb6ed10296b3dd54a945cb674e0b0a";
+const UI_STRINGS_COUNT = 1164;
+const UI_STRINGS_SHA256 = "7e2e1ae0513083abacb778487add0e1317848ca3d2297c38ab5d081e80af8a00";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

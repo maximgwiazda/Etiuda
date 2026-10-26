@@ -169,6 +169,10 @@ function currentCatalog(opts){
      the origin was, and an export is a new catalog. */
   if(origin&&origin.notes&&typeof origin.notes==="object") out.notes=origin.notes;
   if(origin&&origin.ext&&typeof origin.ext==="object") out.ext=origin.ext;
+  /* The published mark travels with an export. The sample flag does not, so an edit still
+     clears that one. A licensed file has none, and none is written. */
+  const publishedMark=deskMarkOf(origin);
+  if(publishedMark) out.evaluation=publishedMark;
   /* The file's request ids, re-indexed onto what survived the removals. The array is aligned
      with the ORIGINAL order, so an intent added at this desk is past its end and has none. */
   const wasIds=(origin&&Array.isArray(origin.intentIds))?origin.intentIds:[];
@@ -572,6 +576,12 @@ function flushLayer(){
   try{ hooks.flushPillState(); }catch(e){}
   flushStats();
 }
+/* A published catalog's mark, as the file names it. A sample is the other flag, and an edit
+   clears only that one. Anything else is no mark. */
+function deskMarkOf(c){
+  const v=c&&c.evaluation;
+  return (v==="evaluation"||v==="newer")?v:"";
+}
 /** Make a catalog the active one, and the desk starts again with it in place. The personal layer
  *  in view goes with the catalog it orbits; a new edition of the same catalog carries it forward. */
 function activateCatalog(c,opts){
@@ -635,6 +645,9 @@ function takeCatalog(c,opts){
   try{
     if(c && c.sample) nsSet("Sample","1");
     else nsDel("Sample");
+    /* Its own key. The sample flag clears on an edit, and one edit must not wipe this mark. */
+    if(deskMarkOf(c)) nsSet("DeskMark",deskMarkOf(c));
+    else nsDel("DeskMark");
   }catch(e){}
   /* WHICH FILE IN THE CATALOG FOLDER THIS CAME OUT OF, and when that file was last written.
      Nothing else on the desk records it, and the Library's list marks the row that is loaded.
@@ -719,6 +732,31 @@ function syncSampleMark(){
   scheduleDeskBranch();
   const el=document.getElementById("sampleMark");
   if(!el) return;
+  const b=el.querySelector ? el.querySelector("b") : null;
+  const mark=nsGet("DeskMark");
+  /* A published mark stays through the desk's own edits. The sample still clears on the first. */
+  let en="", shown="";
+  if(mark==="evaluation"){
+    en="Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.";
+    shown=t("Evaluation copy, published without a licence. Everything works as usual; if the mark stays, tell the team's lead.");
+  }else if(mark==="newer"){
+    en="Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.";
+    shown=t("Published by a version of Studio newer than its licence covers. Everything works as usual; if the mark stays, tell the team's lead.");
+  }
+  if(en && (cards||[]).length>0){
+    if(b){
+      b.className="mark-sentence";
+      b.setAttribute("data-i18n-text", en);
+      b.textContent=shown;
+    }
+    el.hidden=false;
+    return;
+  }
+  if(b){
+    b.className="";
+    b.setAttribute("data-i18n-text", "Sample catalog");
+    b.textContent=t("Sample catalog");
+  }
   let on=false;
   on=nsGet("Sample")==="1";
   el.hidden=!(on && (cards||[]).length>0 && sampleUntouched());
