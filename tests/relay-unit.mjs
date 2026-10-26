@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 315;
+const EXPECTED = 329;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1071,7 +1071,7 @@ async function main() {
   const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
   /* What a copy of relay/core.cjs hands the live exports object, which the team's module and the Worker keep: the object's
      factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
-  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "create2Bytes", "ROOT_PUB", "lapseOf"];
+  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "acceptRevocations", "create2Bytes", "ROOT_PUB", "lapseOf"];
   const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
   /* The text of relay/core.cjs the live exports stand for: the product's, or while a plant is on, that plant's edit, so a plant run
      inside another lifts a line of the edited text and both stay lifted. `edit` maps that text to the edited text, or to null where
@@ -1106,7 +1106,10 @@ async function main() {
     const gets = { n: 0 };
     const env = Object.assign({}, R.env, { TEAMS: { jurisdiction(j) {
       const s = R.env.TEAMS.jurisdiction(j);
-      return s && { idFromName: n => s.idFromName(n), get: id => { gets.n++; return s.get(id); } };
+      if (!s) return s;
+      const out = { idFromName: n => s.idFromName(n), get: id => { gets.n++; return s.get(id); } };
+      if (typeof s.acceptRevocations === "function") out.acceptRevocations = text => s.acceptRevocations(text);
+      return out;
     } } });
     return { env, gets };
   }
@@ -1346,6 +1349,8 @@ async function main() {
     /* The Worker's env with each team's object a RelayTeam over a ctx of its own, as the namespace makes them. */
     function sqlRelay(T) {
       const env = { BLOBS: S.memoryBucket(), NOW: () => Date.now() }, teams = new Map(), clock = { now: Date.now() };
+      /* The kept list, off to the side of any team's table, so a fetch count stays the fetches of the team itself. */
+      const revokedStore = S.memoryStore();
       const scoped = {
         idFromName(name) { return { name: String(name) }; },
         get(id) {
@@ -1354,6 +1359,7 @@ async function main() {
             return teams.get(id.name).team.fetch(request);
           } };
         },
+        acceptRevocations(text) { return C.acceptRevocations(text, K.ROOTS, revokedStore); },
       };
       env.TEAMS = { jurisdiction(j) { return j === "eu" ? scoped : null; } };
       return { env, clock, teams, bucket: env.BLOBS };
@@ -3190,14 +3196,30 @@ async function main() {
     const T0S = 1700000000000;
     const REVOKED_SAID = "That grant was signed by a revoked key, so the relay did not take it.";
     const SWEPT_SAID = "This team id is kept for its own lead, so a create under another key is not taken.";
-    function revDoc(keys, signer) {
+    function revDoc(keys, signer, serial) {
       const who = signer || K.ROOT;
-      const doc = { kind: "etiuda-revocations", format: 1, serial: 1, keys: keys.slice().sort(),
+      const doc = { kind: "etiuda-revocations", format: 1, serial: serial === undefined ? 1 : serial, keys: keys.slice().sort(),
         sig: { alg: "ed25519", keyId: who.id, value: "" } };
       doc.sig.value = crypto.sign(null, Buffer.from("etiuda-revocations\n" + doc.serial + "\n" + doc.keys.join(","), "utf8"), who.privateKey).toString("hex");
       return doc;
     }
-    const revText = (keys, signer) => JSON.stringify(revDoc(keys, signer));
+    const revText = (keys, signer, serial) => JSON.stringify(revDoc(keys, signer, serial));
+    /* The kept list, where the stand-in holds one. Absent on a relay that keeps nothing, so the leg fails its check instead of throwing. */
+    function keptRow(R) {
+      const store = R && R.revoked;
+      return store && typeof store.get === "function" ? store.get("revoked") : undefined;
+    }
+    function rootNoted(R) {
+      return call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), keyPair(false), R.clock.now) });
+    }
+    function hold(R, keys, serial) {
+      R.env.REVOKED = revText(keys, null, serial);
+      return rootNoted(R);
+    }
+    function delegateCreate(R) {
+      const lead = keyPair(false);
+      return call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), lead, R.clock.now, { grant: K.delegatedGrantFor(lead.pub, T0S) }) });
+    }
     const markOnly = (st, pub) => {
       if (!st) return false;
       const dump = st.dump();
@@ -3352,6 +3374,130 @@ async function main() {
         + ", delegated " + hDel.r.status + " " + (hDel.r.json && hDel.r.json.error) + " gets " + hDel.gets;
       return { ok, line };
     }
+    /* A lower serial that still names every kept key, so only the serial line keeps it out. */
+    async function sceneLower() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const held = await hold(R, [K.DELEGATE.pub], 2);
+      R.env.REVOKED = revText([K.DELEGATE.pub, hex(32)], null, 1);
+      const noted = await rootNoted(R);
+      const row = keptRow(R);
+      const again = await delegateCreate(R);
+      const ok = held.status === 200 && noted.status === 200 && noted.json && noted.json.listIgnored === "older" && noted.json.keptSerial === 2
+        && !!row && row.serial === 2 && row.keys.length === 1 && row.keys[0] === K.DELEGATE.pub && refused(again, "revoked");
+      const line = "982a a root-signed list with a lower serial is ignored and the kept list stays: noted " + noted.status
+        + " " + (noted.json && noted.json.listIgnored) + " serial " + (noted.json && noted.json.keptSerial)
+        + ", kept " + (row && row.serial) + ", delegated " + again.status + " " + (again.json && again.json.error);
+      return { ok, line };
+    }
+    /* A higher serial that leaves a kept key out. */
+    async function sceneFewer() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const other = hex(32);
+      const held = await hold(R, [K.DELEGATE.pub, other], 2);
+      R.env.REVOKED = revText([other], null, 3);
+      const noted = await rootNoted(R);
+      const row = keptRow(R);
+      const again = await delegateCreate(R);
+      const ok = held.status === 200 && refused(again, "revoked") && noted.json && noted.json.listIgnored === "fewer" && noted.json.keptSerial === 2
+        && !!row && row.serial === 2 && row.keys.length === 2;
+      const line = "982b a root-signed list that drops a kept key is ignored and that key stays revoked: noted " + (noted.json && noted.json.listIgnored)
+        + " serial " + (noted.json && noted.json.keptSerial) + ", kept " + (row && row.serial) + "/" + (row && row.keys && row.keys.length)
+        + ", delegated " + again.status + " " + (again.json && again.json.error);
+      return { ok, line };
+    }
+    /* An empty list is a smaller set: it names none of the kept keys. */
+    async function sceneEmpty() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const held = await hold(R, [K.DELEGATE.pub], 2);
+      R.env.REVOKED = revText([], null, 4);
+      const noted = await rootNoted(R);
+      const row = keptRow(R);
+      const again = await delegateCreate(R);
+      const ok = held.status === 200 && refused(again, "revoked") && noted.json && noted.json.listIgnored === "fewer" && noted.json.keptSerial === 2
+        && !!row && row.serial === 2 && row.keys.length === 1 && row.keys[0] === K.DELEGATE.pub;
+      const line = "982c a root-signed empty list is ignored and the kept key stays revoked: noted " + (noted.json && noted.json.listIgnored)
+        + " serial " + (noted.json && noted.json.keptSerial) + ", kept " + (row && row.serial) + "/" + (row && row.keys && row.keys.length)
+        + ", delegated " + again.status + " " + (again.json && again.json.error);
+      return { ok, line };
+    }
+    /* A list that fails to verify after a good one. The signature is not printed. */
+    async function sceneBad() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const held = await hold(R, [K.DELEGATE.pub], 2);
+      const bad = revDoc([hex(32)], null, 5);
+      bad.sig.value = (bad.sig.value[0] === "a" ? "b" : "a") + bad.sig.value.slice(1);
+      R.env.REVOKED = JSON.stringify(bad);
+      const noted = await rootNoted(R);
+      const row = keptRow(R);
+      const again = await delegateCreate(R);
+      const text = JSON.stringify(noted.json);
+      const ok = held.status === 200 && noted.json && noted.json.listIgnored === "unsigned" && noted.json.keptSerial === 2
+        && !!row && row.serial === 2 && text.indexOf(bad.sig.value) < 0 && refused(again, "revoked");
+      const line = "982d a list that does not verify after a good one is ignored and the kept list stays: noted " + (noted.json && noted.json.listIgnored)
+        + " serial " + (noted.json && noted.json.keptSerial) + ", kept " + (row && row.serial)
+        + ", delegated " + again.status + " " + (again.json && again.json.error);
+      return { ok, line };
+    }
+    /* The sweep's clear and its mark. A throw on the mark's put, between the two calls. */
+    async function sceneGap() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false), until = T0S + DAY;
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S, { grantOpts: { fields: { paid: false, until } } }) });
+      const st = R.stores.get(rt);
+      const realPut = st.put, realClear = st.clear;
+      let armed = false, threw = false;
+      st.clear = function () { armed = true; return realClear.call(st); };
+      st.put = function (k, v) { if (armed && k === "swept") throw new Error("between"); return realPut.call(st, k, v); };
+      R.clock.now = until + 30 * DAY;
+      try { await R.ring(rt); } catch (e) { threw = !!(e && String(e.message).indexOf("between") >= 0); }
+      const held = st.get("team");
+      const keptTeam = !!(held && held.lead.pub === lead.pub);
+      st.put = realPut;
+      st.clear = realClear;
+      const other = keyPair(false);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, other, R.clock.now) });
+      const ok = made.status === 200 && threw && keptTeam && again.status !== 200;
+      const line = "982e a throw between the sweep's clear and its mark leaves the team, so another key's create is not taken: threw " + threw
+        + ", kept " + keptTeam + ", again " + again.status + " " + (again.json && again.json.error);
+      return { ok, line };
+    }
+    async function sceneDevices() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false);
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S, { grant: K.delegatedGrantFor(lead.pub, T0S) }) });
+      R.env.REVOKED = revText([K.DELEGATE.pub]);
+      const w = { R, rt, lead, rev: 0 };
+      const desk = keyPair(true);
+      const posted = await devices(w, [{ id: desk.keyId, pub: desk.pub, desk: "k-" + hex(8) }]);
+      const st = R.stores.get(rt);
+      const rows = st ? st.list("dev:") : [];
+      const ok = made.status === 200 && refused(posted, "revoked") && rows.length === 0;
+      const line = "982f a devices call under a revoked service key is refused and enrols nothing: " + posted.status + " " + (posted.json && posted.json.error)
+        + ", rows " + rows.length;
+      return { ok, line };
+    }
+    async function sceneInvites() {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false);
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S, { grant: K.delegatedGrantFor(lead.pub, T0S) }) });
+      R.env.REVOKED = revText([K.DELEGATE.pub]);
+      const w = { R, rt, lead, rev: 0 };
+      const id = hex(16);
+      const posted = await invites(w, [{ id, hash: sha(hex(32)) }], []);
+      const st = R.stores.get(rt);
+      const row = st ? st.get("inv:" + id) : undefined;
+      const ok = made.status === 200 && refused(posted, "revoked") && row === undefined;
+      const line = "982g an invites call under a revoked service key is refused and keeps no invitation: " + posted.status + " " + (posted.json && posted.json.error)
+        + ", kept " + (row !== undefined);
+      return { ok, line };
+    }
     async function broken(base, plant, id, say) {
       let line = "";
       const p = await plant(async scene => {
@@ -3378,6 +3524,20 @@ async function main() {
     check(g.ok, g.line);
     const h = await sceneH();
     check(h.ok, h.line);
+    const lower = await sceneLower();
+    check(lower.ok, lower.line);
+    const fewer = await sceneFewer();
+    check(fewer.ok, fewer.line);
+    const empty = await sceneEmpty();
+    check(empty.ok, empty.line);
+    const bad = await sceneBad();
+    check(bad.ok, bad.line);
+    const gap = await sceneGap();
+    check(gap.ok, gap.line);
+    const devs = await sceneDevices();
+    check(devs.ok, devs.line);
+    const inv = await sceneInvites();
+    check(inv.ok, inv.line);
 
     await broken(a.ok, run => swapCore("swept !== lead.pub", "true", () => run(sceneA)),
       "980i", "swapping the swept lead's key for true refuses that lead too, which turns 980a red");
@@ -3403,6 +3563,20 @@ async function main() {
       "980s", "lifting plant:revoked-list honours a list whose signature does not hold, which turns 980g red");
     await broken(h.ok, run => liftCore("plant:revoked-root", () => run(sceneH)),
       "980t", "lifting plant:revoked-root refuses a grant the root itself signed, which turns 980h red");
+    await broken(lower.ok, run => liftCore("plant:revoked-serial", () => run(sceneLower)),
+      "982h", "lifting plant:revoked-serial accepts a lower serial that still names every kept key, which turns 982a red");
+    await broken(fewer.ok, run => liftCore("plant:revoked-fewer", () => run(sceneFewer)),
+      "982i", "lifting plant:revoked-fewer accepts a list that drops a kept key, which turns 982b red");
+    await broken(empty.ok, run => liftCore("plant:revoked-fewer", () => run(sceneEmpty)),
+      "982j", "lifting plant:revoked-fewer accepts an empty list, which turns 982c red");
+    await broken(bad.ok, run => liftCore("plant:revoked-list", () => run(sceneBad)),
+      "982k", "lifting plant:revoked-list honours a list that does not verify, which turns 982d red");
+    await broken(gap.ok, run => swapCore("store.atomic(() => { store.clear(); finish(); }); /* plant:swept-atomic */", "store.clear(); finish(); /* plant:swept-atomic */", () => run(sceneGap)),
+      "982l", "taking the sweep's clear and its mark out of the one atomic step lets another key take the id, which turns 982e red");
+    await broken(devs.ok, run => liftCore("plant:revoked-devices", () => run(sceneDevices)),
+      "982m", "lifting plant:revoked-devices accepts a devices call under a revoked key, which turns 982f red");
+    await broken(inv.ok, run => liftCore("plant:revoked-invites", () => run(sceneInvites)),
+      "982n", "lifting plant:revoked-invites accepts an invites call under a revoked key, which turns 982g red");
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

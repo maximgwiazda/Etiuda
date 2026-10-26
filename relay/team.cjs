@@ -87,8 +87,20 @@ function shut(ws, reason) {
 const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
 function teamObject(deps) {
+  /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
+     A call with no header reads deps.revoked, which is the kept list where the caller has one. */
+  let headerSet = false, headerKeys = null;
+  function useKept(request) {
+    const raw = request && request.headers ? request.headers.get("etiuda-kept") : null;
+    if (typeof raw !== "string") { headerSet = false; headerKeys = null; return; }
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (!Array.isArray(parsed) || parsed.some(k => typeof k !== "string")) { headerSet = false; headerKeys = null; return; }
+    headerSet = true;
+    headerKeys = parsed.slice();
+  }
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
-    revoked: typeof deps.revoked === "function" ? deps.revoked : () => [] });
+    revoked: () => headerSet ? headerKeys.slice() : (typeof deps.revoked === "function" ? deps.revoked() : []) });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
@@ -104,9 +116,10 @@ function teamObject(deps) {
     if (!m || !routeOf(request.method, url.pathname, prefix) || url.protocol !== "https:" || url.search !== "") return missing();
     /* A team gone by the clock is swept before anything is answered, should its alarm not have rung yet. */
     await sweepIfDue(); /* plant:sweep-lazy */
+    useKept(request);
     const rt = m[1], what = m[2] || "teams", method = request.method;
     if (what === "socket") return method === "GET" ? openSocket(request, bearer(request)) : missing();
-    if (m[3] !== undefined) return method === "GET" ? listSince(bearer(request), Number(m[3])) : missing();
+    if (m[3] !== undefined) return method === "GET" ? listSince(request, bearer(request), Number(m[3])) : missing();
     if (m[4] !== undefined) {
       if (method === "GET") return getBlob(bearer(request), m[4]);
       return method === "PUT" ? putBlob(request, rt, bearer(request), m[4]) : missing();
@@ -119,6 +132,7 @@ function teamObject(deps) {
     if (what !== "teams" && !c.hasTeam(rt)) return refusedFor("not-enrolled"); /* plant:team-first */
     const bytes = await readCapped(request, JSON_MAX);
     if (!bytes) return refusedFor("blob-size");
+    useKept(request);
     let body = null;
     try { body = JSON.parse(bytes.toString("utf8")); } catch { body = null; }
     if (what === "teams") {
@@ -147,10 +161,12 @@ function teamObject(deps) {
     return answer(r, x => ({ ok: true, dropped: x.dropped, used: x.used }));
   }
 
-  async function listSince(token, after) {
+  async function listSince(request, token, after) {
+    useKept(request);
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
     await dropObjects(c.prune());
+    useKept(request);
     const r = c.since(token, after);
     if (!r.ok) return refused(r);
     const lapse = Buffer.from(JSON.stringify(r.lapse), "utf8").toString("base64url");
@@ -174,11 +190,13 @@ function teamObject(deps) {
     if (!a.ok) return refused(a);
     const ct = await readCapped(request, a.max); /* plant:put-cap */
     if (!ct) return refusedFor("blob-size");
+    useKept(request);
     const j = c.judge(rt, token, m, id, ct);
     if (!j.ok) return refused(j);
     const obj = rt + "/" + id + "/" + crypto.randomBytes(8).toString("hex");
     c.record(obj); /* plant:r2-record */
     await r2.put(obj, ct);
+    useKept(request);
     const done = c.commit(rt, token, m, id, ct, obj);
     if (!done.ok) { await dropObjects([obj]); return refused(done); }
     if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, "not-enrolled");
@@ -255,6 +273,7 @@ function teamObject(deps) {
   }
 
   function webSocketMessage(ws, message) {
+    headerSet = false;
     const s = c.sessionByHash(attachmentOf(ws).ses);
     if (!s.ok) return shut(ws, s.reason);
     const lapsed = c.lapseGate(false);
@@ -326,8 +345,32 @@ function alarmOf(storage) {
 
 class RelayTeam {
   constructor(ctx, env) {
-    this.object = teamObject({ store: sqlStore(ctx.storage), r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined,
-      revoked: () => core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]), clock: () => Date.now(), sockets: hibernating(ctx) });
+    const store = sqlStore(ctx.storage);
+    this.listStore = store;
+    const self = this;
+    this.object = teamObject({ store, r2: env.BLOBS, alarm: alarmOf(ctx.storage), prefix: env ? env.API_PREFIX : undefined,
+      revoked: () => {
+        /* Headerless calls, a socket message among them. The object named for the list answers from its own storage.
+           Re-entering that object reads the row and does not ask itself again. */
+        if (self.listing) {
+          const row = store.get("revoked");
+          return row && Array.isArray(row.keys) ? row.keys.slice() : [];
+        }
+        const bound = env && env.TEAMS;
+        const ns = bound && typeof bound.jurisdiction === "function" ? bound.jurisdiction("eu") : null;
+        const stub = ns && typeof ns.get === "function" && typeof ns.idFromName === "function" ? ns.get(ns.idFromName("revoked")) : null;
+        if (stub && typeof stub.acceptRevocations === "function") {
+          const decided = stub.acceptRevocations(env && env.REVOKED);
+          return decided && Array.isArray(decided.keys) ? decided.keys : [];
+        }
+        return core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]);
+      },
+      clock: () => Date.now(), sockets: hibernating(ctx) });
+  }
+  acceptRevocations(text) {
+    this.listing = true;
+    try { return core.acceptRevocations(text, [core.ROOT_PUB], this.listStore); }
+    finally { this.listing = false; }
   }
   fetch(request) { return this.object.fetch(request); }
   alarm() { return this.object.alarm(); }

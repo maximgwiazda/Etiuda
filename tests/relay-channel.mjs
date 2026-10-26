@@ -5914,17 +5914,28 @@ async function scene990(mod) {
       && read(lead.mirror, "desks/" + DK.k.keyId + "/note.ec") === NOTE;
     const before = { lead: names9(lead.mirror), dk: names9(dk.mirror), de: names9(de.mirror) };
 
-    /* Past the sweep (the grant ended at day 30, read-only to day 120): the first call sweeps the team. */
+    /* Past the sweep (the grant ended at day 30, read-only to day 120): the first call sweeps the team. The store keeps
+       the lead's public key alone, the mark a later create under another key is refused by. */
     X.at(BASE + 121 * DAYMS);
     await settle(lead, dk, de);
-    const swept = X.store9().dump().length === 0;
+    const markOnly = () => {
+      const s = X.store9();
+      if (!s) return { ok: false, rows: "none" };
+      const d = s.dump();
+      let pub = null;
+      try { pub = d.length === 1 ? JSON.parse(d[0][1]) : null; } catch { pub = null; }
+      return { ok: d.length === 1 && d[0][0] === "swept" && pub === LEAD.pub, rows: d.map(e => e[0]).join(",") || "empty" };
+    };
+    const sweptNow = markOnly();
+    const swept = sweptNow.ok;
     const goneAt = [dk, de, lead].map(p => (p.ch.lapse() ? p.ch.lapse().step : "none"));
     /* While it is gone the lead takes the second desk off, with a new key; nothing is made again before the renewal. */
     X.K9.set(2, crypto.randomBytes(32));
     put(lead.mirror, C.TEAM_NAME, X.doc9(2, [DK]));
     X.at(BASE + 123 * DAYMS);
     await settle(lead, dk, de);
-    const stillSwept = X.store9().dump().length === 0;
+    const stillNow = markOnly();
+    const stillSwept = stillNow.ok;
 
     /* Renewed: the space made again under the same id by the lead's signed create, the roster as it stands enrolled, and a
        new edition published. Nothing is done for either desk. */
@@ -5941,7 +5952,7 @@ async function scene990(mod) {
     const keptReads = read(dk.mirror, "lane.ec") === ED9[1] && epoch9(dk.mirror) === 2 && dk.held.has(2) && dk.ch.online() && dk.ch.lapse() === null;
     const keptSends = read(lead.mirror, "desks/" + DK.k.keyId + "/after.ec") === AFTER && X.liveBy(DK.k.keyId) >= 2;
     const a = { ok: working && swept && goneAt.join() === "gone,gone,gone" && stillSwept && back && keptReads && keptSends,
-      line: "before " + working + ", swept " + swept + " (told " + goneAt.join(" ") + "), still swept before the renewal " + stillSwept
+      line: "before " + working + ", swept " + swept + " (rows " + sweptNow.rows + ", told " + goneAt.join(" ") + "), still swept before the renewal " + stillSwept + " (rows " + stillNow.rows + ")"
         + "; made again under the same id " + again.status + " and enrolled " + enrolledAgain.status + ", the lead's files back at the relay "
         + JSON.stringify(paths) + "; the kept desk reads the new edition and the new key's team file " + keptReads + " (seq " + dk.prog.state().seq
         + ") and its files reach the lead, the one from before the sweep sent again, " + keptSends + " (" + X.liveBy(DK.k.keyId) + " live)" };

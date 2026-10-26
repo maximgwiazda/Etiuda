@@ -224,8 +224,9 @@ function keptGrant(team, grant) {
 const isFresh = (t, now) => Math.abs(now - t) <= CALL_SKEW_MS;
 
 /* The revoked service keys' list, the same document the licence side reads: kind, format, serial, keys and sig, signed by a
-   root the relay already trusts, over the kind's line, the serial and the keys joined. A list that does not verify is no list,
-   and the relay says nothing of it. The relay judges the list it is given and keeps no older one. */
+   root the relay already trusts, over the kind's line, the serial and the keys joined. A list that does not verify is no list.
+   The last accepted list is kept. A later one replaces it only when it verifies, its serial is higher and it still names every
+   kept key. Anything else is ignored and the kept list stays. With nothing kept and nothing valid, no key is revoked. */
 const REVOKED_TEXT_MAX = 65536;
 const REVOKED_MAX = 256;
 const REVOCATIONS_KIND = "etiuda-revocations";
@@ -251,6 +252,46 @@ function revokedKeysOf(text, roots) {
   try { doc = JSON.parse(text); } catch { return []; }
   if (!revocationsHold(doc, roots)) return []; /* plant:revoked-list */
   return doc.keys.slice();
+}
+/* A verified list, or why the text is not one. `none` is no document. `unsigned` is a document whose signature does not hold. */
+function classifyRevocations(text, roots) {
+  if (typeof text !== "string" || text.length === 0 || text.length > REVOKED_TEXT_MAX) return { offered: null, why: "none" };
+  let doc = null;
+  try { doc = JSON.parse(text); } catch { return { offered: null, why: "none" }; }
+  if (!revocationsHold(doc, roots)) return { offered: null, why: "unsigned" };
+  return { offered: { serial: doc.serial, keys: doc.keys.slice() }, why: null };
+}
+function keptRevocations(store) {
+  const row = store && typeof store.get === "function" ? store.get("revoked") : undefined;
+  if (!row || typeof row !== "object" || Array.isArray(row) || !Number.isSafeInteger(row.serial) || !Array.isArray(row.keys)) return null;
+  return { serial: row.serial, keys: row.keys.slice() };
+}
+/* Whether `next` may replace `kept`. `next` null is no list. The same list again is not a change. */
+function laterList(kept, next) {
+  if (!next) return { take: false, why: "none" };
+  if (!kept) return { take: true, why: null };
+  if (next.serial === kept.serial && next.keys.join(",") === kept.keys.join(",")) return { take: false, why: "same" };
+  if (next.serial <= kept.serial) return { take: false, why: "older" }; /* plant:revoked-serial */
+  if (!kept.keys.every(k => next.keys.indexOf(k) > -1)) return { take: false, why: "fewer" }; /* plant:revoked-fewer */
+  return { take: true, why: null };
+}
+/* Keys to enforce, and why a text was not kept. The row is `{serial, keys}` under `revoked` in `store`. A list the hold-check
+   plant lets through is enforced for this call and not stored: the kept row stays. */
+function acceptRevocations(text, roots, store) {
+  const listed = revokedKeysOf(text, roots);
+  const seen = classifyRevocations(text, roots);
+  const kept = keptRevocations(store);
+  if (!seen.offered && listed.length > 0) {
+    return { keys: listed.slice(), serial: kept ? kept.serial : null, ignored: kept ? "unsigned" : null };
+  }
+  const decision = seen.offered ? laterList(kept, seen.offered) : { take: false, why: seen.why };
+  if (decision.take) {
+    const row = { serial: seen.offered.serial, keys: seen.offered.keys.slice() };
+    store.put("revoked", row);
+    return { keys: row.keys.slice(), serial: row.serial, ignored: null };
+  }
+  if (!kept) return { keys: [], serial: null, ignored: null };
+  return { keys: kept.keys.slice(), serial: kept.serial, ignored: decision.why === "same" ? null : decision.why };
 }
 
 /* The Etiuda-Blob header, base64url of JSON, as the fields the relay judges; anything else in it is dropped. */
@@ -365,6 +406,8 @@ function createCore(deps) {
   function devices(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
+    const blocked = grantRefused();
+    if (blocked) return blocked; /* plant:revoked-devices */
     const b = bodyOf(body);
     if (!Array.isArray(b.keys) || !Number.isSafeInteger(b.rev) || b.rev < 0 || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
@@ -438,6 +481,8 @@ function createCore(deps) {
   function invites(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
+    const blocked = grantRefused();
+    if (blocked) return blocked; /* plant:revoked-invites */
     const b = bodyOf(body);
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
@@ -981,7 +1026,7 @@ function createCore(deps) {
   }
   /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key. A sweep that
      finds no team keeps a mark already written, so a missed delete's retry does not drop it. Nothing else of the team is kept.
-     The mark is written after clear(), which drops the table on its own. */
+     With nothing left to delete, the drop and the mark are one atomic step, so a throw between them leaves the team. */
   function wipe(left) {
     const team = store.get("team");
     const prior = store.get("swept");
@@ -990,7 +1035,10 @@ function createCore(deps) {
     const finish = () => {
       if (mark) store.put("swept", mark); /* plant:swept-mark */
     };
-    if (!left.length && typeof store.clear === "function") { store.clear(); finish(); return; }
+    if (!left.length && typeof store.clear === "function") {
+      store.atomic(() => { store.clear(); finish(); }); /* plant:swept-atomic */
+      return;
+    }
     store.atomic(() => {
       for (const [k] of store.list("")) store.del(k);
       for (const obj of left) store.put("orphan:" + obj, 1);
@@ -1018,6 +1066,6 @@ function createCore(deps) {
 module.exports = {
   CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
-  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
+  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };
