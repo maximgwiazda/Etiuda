@@ -1191,6 +1191,7 @@ function deskEnvelopeBody(keysText) {
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
     + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
     + (Object.keys(teamLapseSeen).length ? ',"teamLapseSeen":' + JSON.stringify(teamLapseSeen) : "")
+    + (Object.keys(teamRelayGone).length ? ',"teamRelayGone":' + JSON.stringify(teamRelayGone) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
     + (ejectOwed ? ',"ejectOwed":' + JSON.stringify(ejectOwed) : "")
@@ -2542,6 +2543,7 @@ const teamSeen = new Set();                    // teams whose pinned lead key th
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
+let teamRelayGone = {};                        // team id -> true: the relay refused this desk as removed, so the desk stops asking and says so
 const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone|unknown):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
 const editionTeams = new Map();                // pin -> every team whose envelope held it; this run only
@@ -3072,6 +3074,10 @@ function finishJoin(admitted) {
   /* A key opened from the invitation's wrap lets this desk read before it is admitted. The request stays until the
      roster of the epoch accepted names this desk, which is still what lets the request go. */
   if (j.invite && j.invite.relay && !mine) return false;
+  /* A request withdrawn, or on its way to being withdrawn, is not admitted by a roster that names this desk, unless the relay
+     has enrolled its key. */
+  const takenBack = !!(j.invite && j.invite.relay && (j.invite.relay.withdrawn === true || j.invite.relay.withdrawing === true));
+  if (takenBack && !(relayChannel && relayChannel.enrolled && relayChannel.enrolled())) return false; /* plant:e4-not-joined */
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
   if (!joinTold) joinDone = { team: j.team, file: j.file };
@@ -3260,6 +3266,9 @@ function joinRequestDoc(j, reveal) {
 }
 function askJoin(file, name) {
   if (deskKeys === undefined) deskKeys = readDesk();
+  const w = teamJoin;
+  relayProbeMs = RELAY_PROBE_FIRST;
+  if (w && w.invite && w.invite.relay && (w.invite.relay.withdrawn === true || w.invite.relay.withdrawing === true)) return askAgain(w); /* plant:e4-ask-again-desk */
   const me = branchIdentity(), root = catalogFolder(), at = path.join(root, path.basename(String(file || "")));
   if (!me || !folderAnswers(root)) return joinView();
   const out = sealedOutside();
@@ -3277,9 +3286,49 @@ function askJoin(file, name) {
   persistDeskEnvelope();
   return joinView();
 }
+/* The relay has already accepted this invitation: it spent the token, or the invitation's wrap has given this desk a key.
+   Cancel then withdraws the request at the relay and keeps both. A folder invitation has neither, and still undoes. */
+function inviteAccepted(j) {
+  const inv = j && j.invite && j.invite.relay;
+  if (!inv || inv.end) return false;
+  const wrapped = Array.isArray(inv.wrapped) && inv.wrapped.some(n => Number.isInteger(n) && n >= 1);
+  if (wrapped) return true;
+  const channelProgram = relayChannel && relayChannel.program;
+  return !!(channelProgram && typeof channelProgram.tokenSpent === "function" && channelProgram.tokenSpent(inv.inv) === true);
+}
+/* The request leaves the mirror, so the channel sends its signed deletion on the invitation's session and the lead no longer
+   sees it. The join says withdrawing until the relay has taken that deletion (onWithdrawn). The token, the pin and the keys
+   stay, so Ask again sends the same request anew with no new link. */
+function withdrawJoin(j) {
+  if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already */ } }
+  j.invite.relay.withdrawing = true; /* plant:g2-withdrawing */
+  joinTold = false;
+  joinDone = null;
+  persistDeskEnvelope();
+  relaySoon();
+  return joinView();
+}
+/* Ask again after a withdrawal: the same request, signed anew, which the channel sends on the invitation's session as before.
+   The mark of the key held moves to now, so only a team file heeded after this, naming this desk, admits it. */
+function askAgain(j) {
+  const was = j.asked, held = j.held;
+  /* A withdrawal the relay has not taken yet is let go: the request written back is the one already sent, byte for byte (the
+     signature is deterministic), so nothing is owed and the request still standing at the relay is that one. */
+  const taken = j.invite.relay.withdrawing !== true; /* plant:n1-same-request */
+  if (taken) { j.asked = Date.now(); j.held = newestEpoch(j.team); }
+  try { writeJoin(joinRequestDoc(j, null)); }
+  catch (e) { j.asked = was; j.held = held; console.error("etiuda: the request to join could not be written - " + e.message); return joinView(); }
+  delete j.invite.relay.withdrawn;
+  delete j.invite.relay.withdrawing;
+  joinTold = false;
+  persistDeskEnvelope();
+  relaySoon();
+  return joinView();
+}
 function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
+  if (inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
   if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
@@ -3363,12 +3412,18 @@ function joinView() {
       }
     }
     /* The code is the lead's opening, whether or not the request came by invitation. The invite field names that lead. */
+    let relayEnd = "waiting";
+    if (j.invite && j.invite.relay && j.invite.relay.end) relayEnd = j.invite.relay.end; /* plant:h35-relay-state */
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
-                  state: j.refused ? "refused" : j.opened ? "code" : (j.invite && j.invite.relay && j.invite.relay.end) || "waiting",
+                  state: j.refused ? "refused" : j.opened ? "code" : relayEnd,
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
-    /* A relay join names its relay's host, so the page words it as one; the state is "used" or "ended" where the relay refused the token. */
+    /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
+    const left = j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length);
+    if (j.invite && j.invite.relay && j.invite.relay.withdrawn === true) view.join.withdrawn = true;
+    else if (left) view.join.keeps = false; /* plant:h35-keeps */
+    else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true) view.join.withdrawing = true;
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
@@ -3425,7 +3480,8 @@ function relayKept(r) {
     && typeof r.seal === "string" && r.seal !== ""
     && (r.wrap === undefined || (typeof r.wrap === "string" && r.wrap !== ""))
     && (r.wrapped === undefined || (Array.isArray(r.wrapped) && r.wrapped.length <= 64 && r.wrapped.every(n => Number.isInteger(n) && n >= 1))) /* plant:e4-wrapped */
-    && (r.end === undefined || r.end === "used" || r.end === "ended")
+    && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed")
+    && (r.withdrawn === undefined || r.withdrawn === true) && (r.withdrawing === undefined || r.withdrawing === true)
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
@@ -3577,6 +3633,7 @@ async function takeInvite(text, name, check) {
   teamJoin = j;
   joinTold = false;
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
+  delete teamRelayGone[parsed.team];
   if (!teamPins[parsed.team]) {
     teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public };
     teamSeen.delete(parsed.team);
@@ -3637,6 +3694,7 @@ function takeRelayInvite(parsed, name, me) {
     try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
   }
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
+  delete teamRelayGone[parsed.team];
   teamStamp = "";
   joinTold = false;
   persistDeskEnvelope();
@@ -3688,9 +3746,12 @@ function leadsView() {
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
+    const relayRemoved = teamRelayGone[t] === true;
     const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
-      lead: shown.lead || "", folder: shown.folder || "", removed: admitted && !!me && !!roster && roster.desks.indexOf(me) < 0,
+      lead: shown.lead || "", folder: shown.folder || "",
+      removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: !!named && named === teamPins[t].public };
+    if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
     if (head) row.head = head;
     const lapse = lapseShown(t);
@@ -3733,8 +3794,11 @@ function forgetLead(team, left) {
   teamRingAt = null;
   teamSeen.delete(team);
   delete teamLapseSeen[team];
+  delete teamRelayGone[team];
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
+  // A request already withdrawn waits nowhere, so it goes with the keys.
+  if (teamJoin && teamJoin.team === team && teamJoin.invite && teamJoin.invite.relay && teamJoin.invite.relay.withdrawn === true) teamJoin = null;
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
   for (const [pin, held] of Array.from(editionTeams)) {
     held.delete(team);
@@ -3768,8 +3832,18 @@ function relayFollowed(team) {
    heeded file names the relay and whose pin the rule above lets it follow. */
 function relayHere() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite") return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
-  const teams = Object.keys(teamChannel).filter(t => relayFollowed(t)).sort();
+  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite" && inv.end !== "removed" && teamRelayGone[j.team] !== true)
+    return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
+  const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] !== true).sort();
+  if (!teams.length) return null;
+  return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
+}
+/* A team this desk would follow, which the relay has refused. relayHere stays null until a fresh hello on it succeeds. */
+function relayFlagged() {
+  const j = teamJoin, inv = j && j.invite && j.invite.relay;
+  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite" && inv.end !== "removed" && teamRelayGone[j.team] === true)
+    return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
+  const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] === true).sort();
   if (!teams.length) return null;
   return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
 }
@@ -3802,12 +3876,33 @@ function relayConnect(url, headers, on) {
   ws.onerror = () => {};
   return { send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
 }
-let relayChannel = null, relayAt = "", relaySaidFor = new Set(), relayTimer = null;
+let relayChannel = null, relayAt = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
 function relaySoon() {
   clearTimeout(relayTimer);
   relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
   if (relayTimer.unref) relayTimer.unref();
 }
+/* While the relay has refused this desk, ask again later, so a later enrolment is a fresh hello and not a new invitation: a
+   minute first, twice as long after each probe up to an hour, and a minute again once a hello succeeds or the join changes. */
+const RELAY_PROBE_FIRST = 60 * 1000, RELAY_PROBE_MOST = 60 * 60 * 1000;
+let relayProbeMs = RELAY_PROBE_FIRST;
+function relayProbeLater() {
+  clearTimeout(relayProbeTimer);
+  relayProbeTimer = setTimeout(relayProbe, relayProbeMs);
+  if (relayProbeTimer.unref) relayProbeTimer.unref();
+}
+let relayProbing = false;
+function relayProbe() {
+  relayProbeTimer = null;
+  relayProbeMs = Math.min(relayProbeMs * 2, RELAY_PROBE_MOST); /* plant:c1-backoff */
+  relayProbing = true;
+  let c = null;
+  try { c = relayRun(); } finally { relayProbing = false; }
+  if (relayFlagged()) relayProbeLater();
+  return c;
+}
+/* The wait before the next probe, for the legs. */
+function relayProbeNext() { return relayProbeMs; }
 /* Starts, keeps or stops the channel layer to match relayHere, and says once for each team whose relay it will not follow. */
 function relayRun() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -3818,12 +3913,23 @@ function relayRun() {
       + " answered request, so this desk does not follow that address and keeps its folder");
   }
   const named = sayJoinPolicy().folder;
-  const want = named ? null : relayHere();
+  const open = named ? null : relayHere();
+  const flagged = !open && !named ? relayFlagged() : null; /* plant:h35-probe */
+  const want = open || flagged;
+  if (!want) { clearTimeout(relayProbeTimer); relayProbeTimer = null; }
+  if (!flagged) relayProbeMs = RELAY_PROBE_FIRST;
   if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
     + ", so this desk keeps that folder and not the relay its team file names");
   const pin = want ? teamPins[want.team] : null;
   const at = want && pin ? [want.team, want.rt, want.url, pin.public].join("|") : "";
-  if (at === relayAt && relayChannel) { relayChannel.kick(); return relayChannel; }
+  if (at === relayAt && relayChannel) {
+    /* A channel halted on a team the relay refused starts again only at the probe, so its pace is the backoff's. */
+    let restart = true;
+    restart = !!open || relayProbing; /* plant:n2-hush-wait */
+    if (typeof relayChannel.online === "function" && relayChannel.online()) relayChannel.kick();
+    else if (restart) relayChannel.start(); /* plant:h35-follow */
+    return relayChannel;
+  }
   if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); }
   relayAt = at;
   if (!at) return null;
@@ -3872,8 +3978,39 @@ function relayRun() {
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
     onInviteEnd: kind => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
-      if ((kind !== "used" && kind !== "ended") || !inv || inv.end === kind) return;
+      if ((kind !== "used" && kind !== "ended" && kind !== "removed") || !inv || inv.end === kind) return;
       inv.end = kind;
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+    },
+    /* A fresh hello succeeded. If this desk had stopped after a removal, it follows again: the relay has the key. */
+    onHere: () => {
+      if (teamRelayGone[team] !== true) return;
+      delete teamRelayGone[team]; /* plant:h35-return */
+      clearTimeout(relayProbeTimer);
+      relayProbeTimer = null;
+      relayProbeMs = RELAY_PROBE_FIRST;
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+      relaySoon();
+    },
+    /* The relay refused this desk as no longer on the team. Remember it, tell the page, and stop following that relay.
+       A second refusal while that is already remembered does not ask again at once. The minute's probe does. */
+    onRemoved: () => {
+      if (!SEALED_TEAM_RE.test(String(team))) return;
+      if (teamRelayGone[team] === true) { relayProbeLater(); return; } /* plant:h35-once */
+      teamRelayGone[team] = true; /* plant:h35-gone */
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+      relaySoon();
+      relayProbeLater();
+    },
+    /* The relay has taken the withdrawal, or holds no request of this invitation to take back: the join says withdrawn now. */
+    onWithdrawn: () => {
+      const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+      if (!inv || inv.withdrawing !== true) return;
+      delete inv.withdrawing;
+      inv.withdrawn = true; /* plant:g2-taken */
       persistDeskEnvelope();
       sendJoin(theWindow);
     },
@@ -3888,7 +4025,7 @@ function relayRun() {
        until the roster names this desk, which is still what lets it go. */
     onAnswer: answer => {
       const j = teamJoin;
-      if (!j || j.team !== team || !j.invite || !j.invite.relay) return;
+      if (!j || j.team !== team || !j.invite || !j.invite.relay || j.invite.relay.withdrawn === true || j.invite.relay.withdrawing === true) return;
       if (answer === "refused") {
         if (!j.refused) { j.refused = true; persistDeskEnvelope(); }
         return;
@@ -4439,6 +4576,9 @@ function readDesk() {
     if (doc && table(doc.teamLapseSeen)) Object.keys(doc.teamLapseSeen).forEach(t => {
       const v = doc.teamLapseSeen[t];
       if (SEALED_TEAM_RE.test(t) && typeof v === "string" && LAPSE_SEEN_RE.test(v)) teamLapseSeen[t] = v;
+    });
+    if (doc && table(doc.teamRelayGone)) Object.keys(doc.teamRelayGone).forEach(t => {
+      if (SEALED_TEAM_RE.test(t) && doc.teamRelayGone[t] === true) teamRelayGone[t] = true;
     });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });

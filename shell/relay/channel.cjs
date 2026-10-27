@@ -576,9 +576,8 @@ function createProgram(opts) {
     if (r.ok || r.reason === "not-roster") {
       const writer = r.ok ? r.writerKeyId : (blob && blob.writerKeyId);
       const at = r.ok ? r.epoch : (isCount(blob && blob.epoch) ? blob.epoch : epoch);
-      const ask = asked === true && r.ok && r.kind === "file"
-        && r.path.toLowerCase() === ("desks/" + writer + "/join.json").toLowerCase()
-        && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX;
+      const ask = asked === true && r.ok && (r.kind === "delete" || (r.kind === "file" && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX))
+        && r.path.toLowerCase() === ("desks/" + writer + "/join.json").toLowerCase();
       let gone = removedAfterMove(writer, at, r.ok);
       if (ask) gone = null; /* plant:ask-rejoin */
       if (gone) return gone;
@@ -866,7 +865,10 @@ function createProgram(opts) {
     const known = has(st.trust, String(m.epoch));
     const lead = m.writer === pin.lead.keyId;
     const rostered = known && st.trust[m.epoch].desks.some(d => d.keyId === m.writer);
-    if (!lead && !rostered && ctx && Array.isArray(ctx.inviteKeys) && typeof m.pub === "string" && HEX64.test(m.pub)
+    /* A key the roster already names, by a yes the relay refused, still asks or withdraws under the invitation's key. */
+    let asking = !rostered;
+    asking = !rostered || st.trust[m.epoch].desks.some(d => d.keyId === m.writer && d.public === m.pub); /* plant:e4-rostered-ask */
+    if (!lead && asking && ctx && Array.isArray(ctx.inviteKeys) && typeof m.pub === "string" && HEX64.test(m.pub)
       && branchIdOf(m.pub) === m.writer) {
       for (const k of ctx.inviteKeys) out.push({ key: k.key, trust: leadTrust([{ deskId: m.writer, keyId: m.writer, public: m.pub }]), asked: true });
     }
@@ -901,8 +903,9 @@ function createProgram(opts) {
     for (const x of t.tries) {
       if (x.refuse) { last = R(x.refuse); break; }
       const r = judge(blob, x.trust, m.epoch, x.key, floors, x.asked === true);
-      if (r.ok && x.asked && !(r.kind === "file" && r.path.toLowerCase() === ("desks/" + m.writer + "/join.json").toLowerCase()
-        && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX)) { last = R("outside-place"); break; }
+      /* The request, or its own deletion when the desk that asked withdraws it. */
+      if (r.ok && x.asked && !((r.kind === "delete" || (r.kind === "file" && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX)) /* plant:e4-lead-withdraw */
+        && r.path.toLowerCase() === ("desks/" + m.writer + "/join.json").toLowerCase())) { last = R("outside-place"); break; }
       if (r.ok) { r.size = blob.ciphertext.length; return { it, r }; }
       last = r;
       if (r.reason !== "bad-signature") break;
@@ -1241,6 +1244,12 @@ function createProgram(opts) {
     },
     tokenSpent(id) { return HEX32.test(String(id || "")) && st.tokenUsedIds[String(id)] === true; },
     inviteSent(id) { return HEX32.test(String(id || "")) && st.invitedIds[String(id)] === true; },
+    /* The request withdrawn at the relay: the invitation counts as not asked again, so a request written anew goes as the first. */
+    unmarkInvited(id) {
+      if (HEX32.test(String(id || ""))) delete st.invitedIds[String(id)];
+      st.invited = false;
+      persist();
+    },
     heldTeam,
     /* The lapse last told, and the relay's clock less this computer's at the last hello. */
     lapse: () => (st.lapse ? Object.assign({}, st.lapse) : null),
@@ -1316,7 +1325,8 @@ function createProgram(opts) {
    lead's answer; onAnswer(answer) on a desk, "joined" or "refused", once the lead's answer opens; request(method,
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
-   file lands; clock. */
+   file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
+   the channel stops asking; clock. */
 function createChannel(opts) {
   const o = opts || {};
   const mirror = path.resolve(o.mirror);
@@ -1332,6 +1342,9 @@ function createChannel(opts) {
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null;
+  /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
+  const ENROL_WAIT_MS = 5 * 60 * 1000;
+  let enrolWaitFrom = 0, removedTold = false;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -1500,6 +1513,7 @@ function createChannel(opts) {
     const ended = !!(r.json && r.json.error === "invite-ended");
     if (ended) inviteEnd("ended"); /* plant:S3-page-ended */
     if (ended) return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
+    if (t.reason === "removed") { inviteEnd("removed"); return t; } /* plant:h35-removed-end */
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed(inv.inv);
     t.said = INVITE_USED_SAID; /* plant:invite-used */
@@ -1507,8 +1521,8 @@ function createChannel(opts) {
     return t;
   }
 
-  /* The relay has refused this invitation's token, as spent ("used") or past its end ("ended"). The shell keeps that with
-     the request, which is where the page reads it; the console line is said besides. */
+  /* The relay has refused this invitation's token, as spent ("used"), past its end ("ended"), or made before this desk
+     was removed ("removed"). The shell keeps that with the request, which is where the page reads it. */
   function inviteEnd(kind) {
     if (typeof o.onInviteEnd === "function") o.onInviteEnd(kind);
   }
@@ -1854,10 +1868,32 @@ function createChannel(opts) {
     return r.refused || refusalOf(r);
   }
 
+  /* The request withdrawn: where this desk's own request is owed as a deletion after its one upload, that deletion goes on
+     the invitation's session under the invitation's key, superseding the request, and the invitation counts as not asked.
+     Null where none is owed. */
+  async function withdrawOwed() {
+    const who = me(), c = ctx();
+    if (!who || !who.privateKey || !c.inviteSeal || typeof who.place !== "string") return null;
+    const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
+    const op = prog.owed(who, c).find(x => x.kind === "delete" && x.rel.toLowerCase() === mine);
+    if (!op) return null;
+    const u = await upload(op, who, { epoch: Math.max(1, prog.state().leadEpoch), key: c.inviteSeal });
+    if (!u.ok) return u.lim || u.why;
+    prog.unmarkInvited(c.inviteId);
+    answerHeld = null;
+    if (typeof o.onWithdrawn === "function") o.onWithdrawn();
+    return { ok: true };
+  }
+
   async function cycle() {
     const s = await ensureSession();
     if (!s.ok) { refusedLapse(s); return s; }
-    if (session && session.by === "invite" && invitedNow()) return pullAnswer();
+    if (session && session.by === "invite" && invitedNow()) {
+      const w = await withdrawOwed(); /* plant:e4-withdraw-send */
+      return w || pullAnswer();
+    }
+    /* No request of this invitation stands at the relay, so a withdrawal the shell waits on has nothing left to take back. */
+    if (session && session.by === "invite" && typeof o.onWithdrawn === "function") o.onWithdrawn();
     const w = await pullWrap();
     if (!w.ok) return w;
     if (prog.suspect()) {
@@ -1874,6 +1910,28 @@ function createChannel(opts) {
     return f;
   }
 
+  /* A not-enrolled answer for an invitation the relay has not taken yet: the team or the token is still on its way.
+     A swept team that the relay no longer knows is not this wait, and neither is an invitation already spent. */
+  function awaitingEnrol(r) {
+    if (!r || r.ok || r.reason !== "not-enrolled") return false;
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    if (!inv || !HEX32.test(String(inv.inv)) || prog.tokenSpent(inv.inv) !== false) return false;
+    const last = prog.lapse();
+    if (last && last.swept !== null && relayNow() >= last.swept) return false;
+    if (!enrolWaitFrom) enrolWaitFrom = clock();
+    return clock() - enrolWaitFrom <= ENROL_WAIT_MS;
+  }
+  /* The relay has taken this desk off the team. Stop asking. The shell says so; a channel with no listener keeps the
+     poll it had, so a new invitation registered after the removal can still be tried (961c). */
+  function hushRemoved() {
+    running = false;
+    clearTimeout(retryTimer);
+    clearInterval(pollTimer);
+    clearInterval(pingTimer);
+    dropSocket();
+    session = null;
+    if (!removedTold) { removedTold = true; o.onRemoved(); }
+  }
   function kick() {
     if (!running) return;
     if (busy) { again = true; return; }
@@ -1882,8 +1940,34 @@ function createChannel(opts) {
         again = false;
         try {
           const r = await cycle();
-          backoff = RETRY_MIN_MS;
-          if (r && !r.ok && r.reason) sayOnce("the relay: " + r.said);
+          if (r && r.ok) {
+            enrolWaitFrom = 0;
+            backoff = RETRY_MIN_MS;
+            if (typeof o.onHere === "function") o.onHere();
+          }
+          else if (r && r.reason === "removed" && typeof o.onRemoved === "function") {
+            /* The bearer in hand was refused. One fresh hello, on the relay's own evidence: a success means the key is on the team again. */
+            session = null;
+            const resumed = await openSession(); /* plant:h35-fresh-hello */
+            if (resumed && resumed.ok) {
+              const followed = await cycle();
+              if (followed && followed.ok) {
+                enrolWaitFrom = 0;
+                backoff = RETRY_MIN_MS;
+                if (typeof o.onHere === "function") o.onHere();
+                return;
+              }
+            }
+            hushRemoved(); return; /* plant:h35-removed-hush */
+          }
+          else if (awaitingEnrol(r)) {
+            clearTimeout(retryTimer);
+            if (running) { retryTimer = setTimeout(kick, backoff); if (retryTimer.unref) retryTimer.unref(); } /* plant:h35-enrol-retry */
+            backoff = Math.min(backoff * 2, RETRY_MAX_MS);
+          } else {
+            backoff = RETRY_MIN_MS;
+            if (r && !r.ok && r.reason) sayOnce("the relay: " + r.said);
+          }
         } catch (e) {
           session = null;
           sayOnce("the relay does not answer, so this computer works on its mirror and keeps what it owes - " + (e && e.message));
@@ -1963,6 +2047,8 @@ function createChannel(opts) {
     program: prog, mirror, rt: o.rt,
     watchMode: () => watchMode,
     online: () => !!session,
+    /* The session is this key's own: the relay has enrolled it. */
+    enrolled: () => !!session && session.by === "key",
     socketOpen: () => !!sock,
     writeAnswer,
     lapse: lapseView,
