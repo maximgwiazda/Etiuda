@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 272;
+const EXPECTED = 274;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -4086,6 +4086,155 @@ try {
         + detail + ", sha " + (backSha ? "restored" : "differs"));
     } catch (e) {
       check(false, "996f threw: " + (e && e.stack ? e.stack : e));
+    }
+
+    /* The lead's yes enrols the key while this desk still holds the invitation's session, and the withdrawal goes on that session.
+       Enrolling drops the session in the same write, so the relay answers no-hello and the past-keep sentence is never said.
+       The yes is applied as that withdrawal is handed up: a yes any earlier lets the next cycle open a device session first. */
+    const PAST_KEEP = "The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed.";
+    function blobMetaOf(init) {
+      const h = init && init.headers;
+      if (!h) return null;
+      let raw = "";
+      if (typeof h.get === "function") raw = h.get("etiuda-blob") || "";
+      else for (const k of Object.keys(h)) if (k.toLowerCase() === "etiuda-blob") raw = h[k];
+      if (!raw) return null;
+      try { return JSON.parse(Buffer.from(String(raw), "base64url").toString("utf8")); } catch { return null; }
+    }
+    async function enrolThenWithdraw(src, tag) {
+      const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
+      let me = null;
+      R.clock.now += 1;
+      const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+      const secret = hex(16), inv = hex(16), token = hex(32), t0 = R.clock.now;
+      const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+      await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: t0, sig: signHex(LEAD, core.invitesBytes(rt, t0, add, [])) });
+      const pin = { teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+      const teamFile = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev,
+        channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+      const live = [{ id: inv, key: C.inviteSealKey(secret) }];
+      const wrapDoc = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: 1, key: key });
+      const seen = { yes: 0, sessions: null, deletion: null, armed: false };
+      const serve = async (url, init) => {
+        if (init && init.method === "GET" && String(url).endsWith("/wrap"))
+          return new Response(Buffer.from(JSON.stringify({ wrap: wrapDoc }), "utf8"), { status: 200, headers: { "content-type": "application/json" } });
+        const meta = blobMetaOf(init);
+        if (seen.armed && seen.yes === 0 && init && init.method === "PUT" && meta && meta.del === true && String(meta.place || "").indexOf("desk:") === 0) {
+          const en = await enrolDesk(rt, 1, [{ id: me.id, pub: me.key, desk: me.id }]);
+          seen.yes = en.status;
+          try { seen.sessions = R.stores.get(rt).list("ses:").length; } catch { seen.sessions = null; }
+          const res = await relayFetch(url, init);
+          let error = "";
+          try {
+            const body = await res.clone().json();
+            error = body && body.error ? String(body.error) : "";
+          } catch { error = ""; }
+          seen.deletion = { status: res.status, error: error };
+          return res;
+        }
+        return relayFetch(url, init);
+      };
+      const studioT = transport("g996-" + tag), studioMirror = path.join(LAB, "g996-studio-" + tag);
+      const studio = C.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "g996-" + tag + ".json"),
+        pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+        keyFor: () => key, sealEpoch: () => 1, inviteKeys: () => live,
+        request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
+      put(studioMirror, C.TEAM_NAME, teamFile(1, []));
+      studio.start();
+      await studio.idle();
+      deskTransport.down = false;
+      const share = path.join(LAB, "g996-share-" + tag);
+      const D = deskFrom("g996-desk-" + tag, share, src, null, serve);
+      try {
+        me = await D.ask("etiuda:branch-identity", true);
+        const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
+          lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+        await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+        const asked = path.join(studioMirror, "desks", me.id, "join.json");
+        const both = async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle(); };
+        const envNow = () => { try { return D.envelope(); } catch { return {}; } };
+        const cardOf = async () => {
+          const view = await D.ask("etiuda:team-join", "view");
+          const j = view && view.join || {};
+          const ch = D.api.relayRun();
+          const relay = envNow().teamJoin && envNow().teamJoin.invite && envNow().teamJoin.invite.relay || {};
+          return { view, joined: !!(view && view.joined && view.joined.team === team), unkept: j.unkept === true,
+            withdrawing: j.withdrawing === true, withdrawn: j.withdrawn === true, enrolled: !!(ch && ch.enrolled()), marked: relay.unkept === true };
+        };
+        const first = await until(async () => { await both(); const e = envNow(); return fs.existsSync(asked) && !!(e.teamKeys && e.teamKeys[team]); }, 8000);
+        const ch0 = D.api.relayRun();
+        const heldInvite = !!(ch0 && ch0.online() && !ch0.enrolled());
+        seen.armed = true;
+        await D.ask("etiuda:team-join", "cancel");
+        let before = null, said = false;
+        for (let i = 0; i < 8; i++) {
+          await both();
+          before = await cardOf();
+          if (before.unkept || before.marked) said = true;
+          if (seen.deletion) break;
+        }
+        const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(key, me.box, team, 1, me.id) };
+        put(studioMirror, C.TEAM_NAME, teamFile(2, [entry]));
+        await studio.kick(); await studio.idle();
+        let joined = false;
+        await until(async () => {
+          await both();
+          const c = await cardOf();
+          if (c.unkept || c.marked) said = true;
+          if (c.joined) joined = true;
+          return joined;
+        }, 8000);
+        const enrolled = !!R.stores.get(rt).get("dev:" + me.id);
+        return { made: made.status, first, heldInvite, yes: seen.yes, enrolled, sessions: seen.sessions, before: before && {
+          joined: before.joined, unkept: before.unkept, withdrawing: before.withdrawing, withdrawn: before.withdrawn,
+          enrolled: before.enrolled, marked: before.marked }, joined, said, past: said ? PAST_KEEP : "", deletion: seen.deletion };
+      } finally {
+        const stop = D && D.api.relayRun();
+        if (stop) { try { await stop.stop(); } catch { /* already stopped */ } }
+        try { await studio.stop(); } catch { /* already stopped */ }
+      }
+    }
+    const holds996g = g => !!(g && g.made === 200 && g.first === true && g.heldInvite === true && g.yes === 200 && g.enrolled === true
+      && g.sessions === 1 && g.before && g.before.unkept === false && g.joined === true && g.said === false && g.past === ""
+      && g.deletion && g.deletion.status === 401 && g.deletion.error === "no-hello");
+    try {
+      const g = await enrolThenWithdraw(mainNow, "leg");
+      check(holds996g(g), "996g the lead's yes enrols the key, then this desk withdraws on the invitation it still holds: the desk joins and the past-keep sentence is never said: " + JSON.stringify(g));
+    } catch (e) {
+      check(false, "996g threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const coreFile = path.join(ROOT, "relay", "core.cjs");
+      const coreDigest = sha(fs.readFileSync(coreFile));
+      const lines = fs.readFileSync(coreFile, "utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:enrol-sessions") >= 0);
+      let turned = false, detail = "plant line absent";
+      const liveCore = nodeRequire(coreFile);
+      const savedCore = liveCore.createCore;
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const dir = fs.mkdtempSync(path.join(LAB, "core-plant-"));
+        fs.mkdirSync(path.join(dir, "relay"), { recursive: true });
+        fs.mkdirSync(path.join(dir, "shell", "relay"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "relay", "core.cjs"), lines.join("\n"));
+        fs.writeFileSync(path.join(dir, "shell", "relay", "blob.cjs"), "module.exports = require(" + JSON.stringify(path.join(ROOT, "shell", "relay", "blob.cjs")) + ");\n");
+        const planted = nodeRequire(path.join(dir, "relay", "core.cjs"));
+        liveCore.createCore = planted.createCore;
+        try {
+          const g = await enrolThenWithdraw(mainNow, "plant");
+          turned = !!(g && g.first === true && g.yes === 200 && g.sessions !== 1 && g.said === true && g.past === PAST_KEEP
+            && g.deletion && g.deletion.error === "token-spent" && !holds996g(g));
+          detail = JSON.stringify(g);
+        } finally {
+          liveCore.createCore = savedCore;
+        }
+      }
+      const backSha = sha(fs.readFileSync(coreFile)) === coreDigest;
+      check(turned && backSha, "996h lifting plant:enrol-sessions leaves the invitation session alive, so the withdrawal reaches the desk as a refusal and 996g's claim fails, and the product file is never written: "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "996h threw: " + (e && e.stack ? e.stack : e));
     }
 
     /* C1: a desk the lead removed probes the relay less often each time, from a minute towards an hour, and a desk enrolled again
