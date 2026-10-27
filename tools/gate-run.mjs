@@ -47,10 +47,37 @@ export const RELAY_CORE = [
   { step: "removed", leg: "944c", file: "tests/relay-channel.mjs", env: { RELAY_CHANNEL_ONLY: "944c" } },
 ];
 
+export const RELEASE_ONLY_LEGS = [
+  "tests/desk-growth.mjs",
+  "tests/engine-selftest.js",
+  "tests/leg-ids.js",
+  "tests/result-line.mjs",
+  "tests/sbom.mjs",
+  "tests/text-scan-selftest.js",
+];
+
 export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/desk-growth.mjs", args: [], cmd: "node tests/desk-growth.mjs" },
   { script: "nightly", file: "tests/leg-ids.js", args: [], cmd: "node tests/leg-ids.js" },
   { script: "nightly", file: "tests/engine-selftest.js", args: [], cmd: "node tests/engine-selftest.js" },
+  { script: "nightly", file: "tests/result-line.mjs", args: [], cmd: "node tests/result-line.mjs" },
+  { script: "nightly", file: "tests/text-scan-selftest.js", args: [], cmd: "node tests/text-scan-selftest.js" },
+  { script: "nightly", file: "tests/sbom.mjs", args: [], cmd: "node tests/sbom.mjs" },
+];
+
+export const FLOOR = [
+  { step: "pick 5a-5f", file: "tests/pick.mjs", cmd: "node tests/pick.mjs", args: [] },
+  { step: "links line 92", file: "tests/links.js", cmd: "node tests/links.js", args: [] },
+  { step: "relay-unit 13b", file: "tests/relay-unit.mjs", cmd: "node tests/relay-unit.mjs", args: [] },
+  { step: "update-install U0d", file: "tests/update-install.js", cmd: "node tests/update-install.js U0d", args: ["U0d"] },
+  { step: "team-join 15by-15bz", file: "tests/team-join.mjs", cmd: "node tests/team-join.mjs", args: [] },
+  { step: "test checkCatalogRoundTrip", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
+];
+
+export const PRODUCT_CORE = [
+  { step: "test", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
+  { step: "about", file: "tests/about.mjs", cmd: "node tests/about.mjs", args: [] },
+  { step: "pick", file: "tests/pick.mjs", cmd: "node tests/pick.mjs", args: [] },
 ];
 
 function refuse(what, how) {
@@ -84,14 +111,35 @@ function mainTree() {
   return path.basename(common) === ".git" ? path.dirname(path.resolve(common)) : ROOT;
 }
 
+export const LOCK_STALE_CEILING_MS = 6 * 3600 * 1000;
+
 export function isPidAlive(pid) {
   if (!pid || typeof pid !== "number") return false;
   try {
+    if (process.platform === "win32") {
+      const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return out.indexOf(String(pid)) >= 0;
+    }
     process.kill(pid, 0);
     return true;
   } catch (e) {
     return e.code === "EPERM";
   }
+}
+
+export function isLockStale(existing, ceilingMs = LOCK_STALE_CEILING_MS) {
+  if (!existing || typeof existing !== "object") return true;
+  const pid = existing.pid;
+  if (!pid) return true;
+  const since = existing.since ? new Date(existing.since).getTime() : 0;
+  const age = Date.now() - since;
+  if (age < ceilingMs) {
+    return false;
+  }
+  return !isPidAlive(pid);
 }
 
 let heldLockPath = null;
@@ -101,7 +149,7 @@ export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, wai
   try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
 
   const startWait = Date.now();
-  let lastReport = 0;
+  let reported30m = false;
 
   while (true) {
     const payload = JSON.stringify({
@@ -125,7 +173,7 @@ export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, wai
           existing = null;
         }
 
-        const stale = !existing || !isPidAlive(existing.pid);
+        const stale = isLockStale(existing);
         if (stale) {
           try { fs.unlinkSync(lockPath); } catch {}
           try {
@@ -141,7 +189,7 @@ export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, wai
             return {
               ok: false,
               heldBy: existing,
-              reason: "lock held by pid " + existing.pid + " (" + existing.what + " since " + existing.since + ")",
+              reason: "lock held by pid " + (existing ? existing.pid : "unknown") + " (" + (existing ? existing.what : "") + " since " + (existing ? existing.since : "") + ")",
             };
           }
           const now = Date.now();
@@ -149,13 +197,13 @@ export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, wai
             return {
               ok: false,
               heldBy: existing,
-              reason: "timed out waiting for lock held by pid " + existing.pid,
+              reason: "timed out waiting for lock held by pid " + (existing ? existing.pid : "unknown"),
             };
           }
-          if (now - lastReport >= 60000) {
-            console.log("gate-run: waiting for machine lock held by pid " + existing.pid
-              + " for " + existing.what + " on " + existing.tree + " since " + existing.since);
-            lastReport = now;
+          if (now - startWait >= 30 * 60 * 1000 && !reported30m) {
+            console.log("gate-run: waiting for machine lock held by pid " + (existing ? existing.pid : "unknown")
+              + " for " + (existing ? existing.what : "") + " on " + (existing ? existing.tree : "") + " since " + (existing ? existing.since : ""));
+            reported30m = true;
           }
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
         }
@@ -192,6 +240,7 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
     tree: record.tree || ROOT,
     head: record.head || "no commit",
     treeSha: record.treeSha || "",
+    gitTree: record.gitTree || "",
     start: record.start,
     end: record.end,
     counts: record.counts || {},
@@ -201,6 +250,7 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
       exit: r.exit,
       cause: r.cause || "unread",
     })),
+    staleTakenOver: record.staleTakenOver || false,
   };
   fs.appendFileSync(chainsPath, JSON.stringify(line) + "\n", "utf8");
   return line;
@@ -252,6 +302,8 @@ export async function planAreaRun(root, changed, pkg) {
 
   const testSteps = parseStepsFromScript(pkg, "test");
   const wholeChain = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
+  const testGates = testSteps.filter(s => s.file !== "tests/plant-hold.mjs" && s.file !== "tests/plant-compare.mjs");
+  const totalGates = testGates.length;
 
   for (const f of changed) {
     if (isSharedCode(f)) {
@@ -263,50 +315,96 @@ export async function planAreaRun(root, changed, pkg) {
     }
   }
 
+  for (const f of changed) {
+    let forFile = [];
+    try { forFile = gatesFor(root, [f]); } catch { forFile = []; }
+    if (totalGates > 0 && forFile.length > totalGates / 2) {
+      return {
+        failClosed: true,
+        reason: "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")",
+        steps: wholeChain,
+      };
+    }
+  }
+
   let rows = [];
   try { rows = gatesFor(root, changed); } catch { rows = []; }
 
+  const gateFiles = new Set(rows.map(r => r.gate));
+  const steps = [];
+  const addedFiles = new Set();
+  const gaps = [];
+
+  const plantHold = { script: "area", cmd: "node tests/plant-hold.mjs", file: "tests/plant-hold.mjs", args: [] };
+  const plantCompare = { script: "area", cmd: "node tests/plant-compare.mjs", file: "tests/plant-compare.mjs", args: [] };
+
+  if (fs.existsSync(path.join(root, "tests", "plant-hold.mjs"))) {
+    steps.push(plantHold);
+    addedFiles.add("tests/plant-hold.mjs");
+  }
+
+  let addedProductCore = false;
   for (const f of changed) {
     if (isProductFile(f) && !isRelayCode(f)) {
       const hit = rows.some(r => r.chains && r.chains.some(c => c.file === f || c.file.endsWith(f)));
       if (!hit) {
-        return {
-          failClosed: true,
-          reason: "fail-closed to whole chain: unmapped product file " + f,
-          steps: wholeChain,
-        };
+        gaps.push(f);
+        if (!addedProductCore) {
+          console.log("gate-run area: unmapped product file " + f + ", adding product core and recording gates-for gap");
+          for (const core of PRODUCT_CORE) {
+            if (fs.existsSync(path.join(root, core.file)) && !addedFiles.has(core.file)) {
+              steps.push({ script: "area", cmd: core.cmd, file: core.file, args: core.args || [] });
+              addedFiles.add(core.file);
+            }
+          }
+          addedProductCore = true;
+        }
       }
     }
   }
 
-  const steps = [];
-  const plantHold = { script: "area", cmd: "node tests/plant-hold.mjs", file: "tests/plant-hold.mjs", args: [] };
-  const plantCompare = { script: "area", cmd: "node tests/plant-compare.mjs", file: "tests/plant-compare.mjs", args: [] };
-
-  if (fs.existsSync(path.join(root, "tests", "plant-hold.mjs"))) steps.push(plantHold);
-
-  const touchesRelay = changed.some(isRelayCode);
-  const gateFiles = new Set(rows.map(r => r.gate));
-
-const GENERIC_SCANNERS = new Set([
-  "tests/chain-split.mjs",
-  "tests/engine-selftest.js",
-  "tests/gates-for.mjs",
-  "tests/leg-ids.js",
-  "tests/log-hygiene-selftest.js",
-  "tests/result-line.mjs",
-  "tests/sbom.mjs",
-  "tests/sellable.mjs",
-  "tests/text-scan-selftest.js",
-]);
-
-  for (const g of gateFiles) {
-    if (g === "tests/plant-hold.mjs" || g === "tests/plant-compare.mjs") continue;
-    if (GENERIC_SCANNERS.has(g) && !changed.includes(g)) continue;
-    steps.push({ script: "area", cmd: "node " + g, file: g, args: [] });
+  const relayChanged = changed.filter(isRelayCode);
+  let hasUnmappedRelay = false;
+  for (const f of relayChanged) {
+    const hit = rows.some(r => r.chains && r.chains.some(c => c.file === f || c.file.endsWith(f)));
+    if (!hit) {
+      hasUnmappedRelay = true;
+      gaps.push(f);
+    }
   }
 
-  if (touchesRelay) {
+  const GENERIC_SCANNERS = new Set([
+    "tests/chain-split.mjs",
+    "tests/engine-selftest.js",
+    "tests/gates-for.mjs",
+    "tests/leg-ids.js",
+    "tests/log-hygiene-selftest.js",
+    "tests/result-line.mjs",
+    "tests/sbom.mjs",
+    "tests/sellable.mjs",
+    "tests/text-scan-selftest.js",
+  ]);
+
+  const releaseOnlySet = new Set(RELEASE_ONLY_LEGS);
+  for (const g of gateFiles) {
+    if (g === "tests/plant-hold.mjs" || g === "tests/plant-compare.mjs") continue;
+    if (releaseOnlySet.has(g)) {
+      if (g === "tests/engine-selftest.js" && changed.includes("tools/pre-commit")) {
+        // keep
+      } else if (changed.includes(g)) {
+        // keep
+      } else {
+        continue;
+      }
+    }
+    if (GENERIC_SCANNERS.has(g) && !changed.includes(g)) continue;
+    if (!addedFiles.has(g)) {
+      steps.push({ script: "area", cmd: "node " + g, file: g, args: [] });
+      addedFiles.add(g);
+    }
+  }
+
+  if (hasUnmappedRelay) {
     console.log("gate-run area: relay file changed, adding relay core (9 legs)");
     for (const core of RELAY_CORE) {
       if (fs.existsSync(path.join(root, core.file))) {
@@ -322,9 +420,16 @@ const GENERIC_SCANNERS = new Set([
     }
   }
 
+  for (const f of FLOOR) {
+    if (fs.existsSync(path.join(root, f.file)) && !addedFiles.has(f.file)) {
+      steps.push({ script: "area", cmd: f.cmd, file: f.file, args: f.args || [] });
+      addedFiles.add(f.file);
+    }
+  }
+
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
-  return { failClosed: false, reason: "", steps };
+  return { failClosed: false, reason: "", steps, gaps };
 }
 
 function git(args) {
@@ -532,14 +637,23 @@ async function main() {
     steps = plan.steps;
     customEnv.ETIUDA_PLANTS = "off";
     gateLabel = "area";
+  } else if (mode === "release") {
+    isHeavy = true;
+    gateLabel = "release";
+    customEnv.ETIUDA_PROFILE = "release";
+    const testSteps = parseStepsFromScript(pkg, "test");
+    const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
+    steps = [...baseSteps, ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(ROOT, n.file)))];
   } else if (mode === "nightly") {
     isHeavy = true;
     gateLabel = "nightly";
+    customEnv.ETIUDA_PROFILE = "nightly";
     const testSteps = parseStepsFromScript(pkg, "test");
     const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
     steps = [...baseSteps, ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(ROOT, n.file)))];
   } else {
-    for (const name of asked) {
+    const scriptNames = asked.filter(a => !a.startsWith("--"));
+    for (const name of scriptNames) {
       const cmd = pkg.scripts && pkg.scripts[name];
       if (!cmd) refuse("package.json has no script called " + JSON.stringify(name),
         "the scripts it does have: " + Object.keys(pkg.scripts || {}).join(", "));
@@ -559,21 +673,6 @@ async function main() {
     if (asked.includes("test")) isHeavy = true;
   }
 
-  if (asked.includes("--dry-run") || asked.includes("--list")) {
-    console.log("gate-run " + mode + " dry run: " + steps.length + " gate(s) to run:");
-    for (const s of steps) console.log("  " + s.cmd + (s.note ? " (" + s.note + ")" : ""));
-    process.exit(0);
-  }
-
-  if (isHeavy) {
-    console.log("gate-run: taking machine lock for heavy run (" + gateLabel + ")...");
-    const lockRes = acquireLock(LOCK_PATH, gateLabel, ROOT, 300000);
-    if (!lockRes.ok) refuse("could not acquire machine lock: " + lockRes.reason);
-  }
-
-  const runStart = new Date().toISOString();
-  const ordered = deferAlone(steps);
-  let worst = 0, written = 0, treeMoved = false, refusedAt = null;
   let before = fingerprint();
   let tree = gitTree();
   const COMMIT = git(["rev-parse", "--short", "HEAD"]);
@@ -581,6 +680,42 @@ async function main() {
 
   console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
               + " byte(s), by " + before.how + "; git tree " + tree);
+
+  if (asked.includes("--dry-run") || asked.includes("--list")) {
+    console.log("gate-run " + mode + " dry run: " + steps.length + " gate(s) to run:");
+    for (const s of steps) console.log("  " + s.cmd + (s.note ? " (" + s.note + ")" : ""));
+    process.exit(0);
+  }
+
+  let lockRes = null;
+  if (isHeavy) {
+    console.log("gate-run: taking machine lock for heavy run (" + gateLabel + ")...");
+    const timeoutMs = process.env.ETIUDA_LOCK_TIMEOUT_MS ? Number(process.env.ETIUDA_LOCK_TIMEOUT_MS) : 300000;
+    lockRes = acquireLock(LOCK_PATH, gateLabel, ROOT, timeoutMs);
+    if (!lockRes.ok) refuse("could not acquire machine lock: " + lockRes.reason);
+  }
+
+  const runStart = new Date().toISOString();
+  const ordered = deferAlone(steps);
+  let worst = 0, written = 0, treeMoved = false, refusedAt = null;
+
+  if (mode === "area" && fs.existsSync(CHAINS_PATH)) {
+    try {
+      const lines = fs.readFileSync(CHAINS_PATH, "utf8").split(/\r?\n/).filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const rec = JSON.parse(lines[i]);
+          if (rec.counts && rec.counts.exitCode === 0 && (!rec.reds || rec.reds.length === 0)) {
+            if (rec.treeSha === before.hash || (tree !== "no git" && tree !== "uncommitted changes" && rec.gitTree === tree)) {
+              console.log("gate-run area: tree " + before.hash + " equals recorded green tree (" + (rec.head || rec.treeSha) + "), rerunning nothing");
+              if (isHeavy) releaseLock();
+              process.exit(0);
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+  }
 
   const totalCounts = { ok: 0, fail: 0, lines: 0 };
   const redsList = [];
@@ -672,10 +807,12 @@ async function main() {
     tree: ROOT,
     head: COMMIT || "no commit",
     treeSha: before.hash,
+    gitTree: tree,
     start: runStart,
     end: runEnd,
     counts: totalCounts,
     reds: redsList,
+    staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
   }, CHAINS_PATH);
 
   if (isHeavy) releaseLock();

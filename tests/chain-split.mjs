@@ -39,6 +39,9 @@ export const NIGHTLY_ONLY = [
   "tests/desk-growth.mjs",
   "tests/engine-selftest.js",
   "tests/leg-ids.js",
+  "tests/result-line.mjs",
+  "tests/sbom.mjs",
+  "tests/text-scan-selftest.js",
 ];
 
 let asserted = 0, failed = 0;

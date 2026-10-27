@@ -56,6 +56,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ARGV = process.argv.slice(2);
 const DRY = ARGV.includes("--dry-run");
 const KEEP = ARGV.includes("--keep");
+
+if (ARGV.includes("U0d")) {
+  const rename = src => /\bapp\.(setName|setPath\(\s*["']userData)/.test(String(src || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, ""));
+  const treeMainRenames = rename(fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8"));
+  const pkg = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
+  const ok = !!P.userDataName(pkg) && !treeMainRenames;
+  console.log((ok ? "  ok   " : "  FAIL ") + "U0d package name " + JSON.stringify(P.userDataName(pkg))
+    + ", and main.js does not rename the app or move userData (" + treeMainRenames + ")");
+  console.log("#counts checks=1 failed=" + (ok ? 0 : 1) + " expected=1");
+  process.exit(ok ? 0 : 1);
+}
+
 const LEG = ARGV.includes("--all-users") ? "all-users" : ARGV.includes("--update") ? "update" : "";
 if (!LEG) {
   console.log("usage: node tests/update-install.js --update|--all-users [--dry-run] [--keep]");

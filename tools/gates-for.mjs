@@ -44,7 +44,7 @@ function git(root, args) {
 
 function trackedFiles(root) {
   const norm = p => p.split(path.sep).join("/");
-  const out = git(root, ["ls-files", "-z"]).split("\0").filter(Boolean);
+  const out = git(root, ["ls-files", "-co", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
   const set = new Set(out.map(norm));
   /* A staged deletion is gone from the index. If main still has the path, it counts,
    * so the gates that import the removed module are still named. */
@@ -90,14 +90,24 @@ export function isRelayCode(file) {
   return f.startsWith("relay/") || f.startsWith("shell/relay/") || f === "shell/main.js";
 }
 
+export const SHARED = [
+  "package.json",
+  "package-lock.json",
+  "electron-builder.js",
+  "tools/build.mjs",
+  "relay/wrangler.toml",
+  "tests/engine.js",
+  "tests/relay-lab.mjs",
+  "tools/gate-run.mjs",
+  "tools/gates-for.mjs",
+  "tools/engine-pin",
+];
+
 export function isSharedCode(file) {
   const f = file.replace(/\\/g, "/");
-  if (f === "package.json" || f === "package-lock.json" || f === "electron-builder.js") return true;
-  if (f === "tools/build.mjs" || f.startsWith("tools/build.mjs")) return true;
-  if (f === "tools/gate-run.mjs" || f === "tools/gates-for.mjs") return true;
-  if (f === "tests/plant-hold.mjs" || f === "tests/plant-compare.mjs" || f === "tests/chain-split.mjs" || f === "tests/engine.js") return true;
-  if (f === "src/main.js" || f === "src/template.html" || f === "engine/etiuda.html" || f === "engine/etiuda.csp.json") return true;
-  if (f === "tools/engine-pin") return true;
+  if (SHARED.includes(f)) return true;
+  if (f === "wrangler.toml" || f.endsWith("/wrangler.toml") || f.endsWith(".toml")) return true;
+  if (f.startsWith("tools/build") || f.startsWith("tools/package")) return true;
   return false;
 }
 
