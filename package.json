@@ -41,6 +41,7 @@
     "electron": "^44.3.0",
     "electron-builder": "26.15.3",
     "esbuild": "^0.28.2",
+    "miniflare": "4.20260730.0",
     "puppeteer-core": "^25.9.0"
   }
 }
