@@ -108,7 +108,9 @@ function run(l, names, cwd, extraEnv) {
   const r = spawnSync(process.execPath, [path.join(at, "tools", "gate-run.mjs")].concat(names), {
     cwd: at,
     encoding: "utf8",
-    env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs }, extraEnv),
+    /* Every lab run writes its chains line into the lab, never into the office's Workspace/etiuda-runs/chains.jsonl: a lab
+       tree is the same at every run, so a line left there would let the area run's equal-tree rule skip the next run's work. */
+    env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs, ETIUDA_CHAINS_PATH: path.join(path.dirname(l.runs), "chains.jsonl") }, extraEnv),
     timeout: 60000,
   });
   const byGate = {};
@@ -1061,8 +1063,9 @@ async function main() {
     ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
   });
   check(areaRun1.exit === 0 && "tests-g1" in areaRun1.byGate && !("tests-g2" in areaRun1.byGate),
-    "16a the area run selects exactly the legs that read the changed files plus plant-hold bracket: "
-    + Object.keys(areaRun1.byGate).join(", ") + "; exit " + areaRun1.exit);
+    "16a the area run selects exactly the legs that read the changed files plus plant-hold bracket: expected tests-g1 and not tests-g2, selected ["
+    + Object.keys(areaRun1.byGate).join(", ") + "]; exit " + areaRun1.exit
+    + (/rerunning nothing/.test(areaRun1.out) ? "; it reused a recorded tree" : ""));
 
   fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(areaPkg, null, 2) + " ");
   const areaRunShared = run(areaLab, ["area", "HEAD"], null, {
@@ -1120,8 +1123,8 @@ async function main() {
   const areaRunRelayMapped = run(areaLab, ["area", "HEAD"], null, {
     ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
   });
-  check(areaRunRelayMapped.out.indexOf("tests/g1.mjs") >= 0 && areaRunRelayMapped.out.indexOf("relay core (9 legs)") < 0,
-    "16g a mapped relay file runs every leg in one pass without plants replacing the 9-leg core: "
+  check(areaRunRelayMapped.out.indexOf("tests/g1.mjs") >= 0 && areaRunRelayMapped.out.indexOf("adding relay core") < 0,
+    "16g a mapped relay file runs every leg in one pass without plants, not the relay core: "
     + areaRunRelayMapped.out.trim().split(/\r?\n/).filter(l => /g1|relay core/i.test(l)).join(" | "));
   fs.writeFileSync(path.join(areaLab.lab, "relay", "core.cjs"), "module.exports = {};\n");
   fs.writeFileSync(path.join(areaLab.lab, "tests", "g1.mjs"), 'console.log("  ok   g1");\nprocess.exit(0);\n');

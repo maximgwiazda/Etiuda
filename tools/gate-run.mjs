@@ -32,19 +32,16 @@ const NO_VERDICT = 78;
 const DEFAULT_LOCK_PATH = "C:/Users/maxim/Workspace/etiuda-runs/machine.lock";
 export const LOCK_PATH = path.resolve(process.env.ETIUDA_LOCK_PATH || DEFAULT_LOCK_PATH);
 
-const DEFAULT_CHAINS_PATH = "C:/Users/maxim/Workspace/etiuda-runs/chains.jsonl";
-export const CHAINS_PATH = path.resolve(process.env.ETIUDA_CHAINS_PATH || DEFAULT_CHAINS_PATH);
 
+/* The relay core for an unmapped engine relay file, the test architect's choice (2026-10-28 00:13): the five relay files
+   once each, whole, about three minutes. No single-leg switch exists in relay-unit or relay-channel, so legs named one by one
+   ran each file whole, nine times over. It changes by his word only, or when real switches land. */
 export const RELAY_CORE = [
-  { step: "made", leg: "964e", file: "tests/relay-unit.mjs", env: { RELAY_UNIT_ONLY: "964e" } },
-  { step: "invited", leg: "941a", file: "tests/relay-channel.mjs", env: { RELAY_CHANNEL_ONLY: "941a" } },
-  { step: "joined", leg: "941d", file: "tests/relay-channel.mjs", env: { RELAY_CHANNEL_ONLY: "941d" } },
-  { step: "synced", leg: "940d", file: "tests/relay-channel.mjs", env: { RELAY_CHANNEL_ONLY: "940d" } },
-  { step: "renewed", leg: "977d", file: "tests/relay-unit.mjs", env: { RELAY_UNIT_ONLY: "977d" } },
-  { step: "lapsed or swept", leg: "977l", file: "tests/relay-unit.mjs", env: { RELAY_UNIT_ONLY: "977l" } },
-  { step: "revoked", leg: "983a", file: "tests/relay-unit.mjs", env: { RELAY_UNIT_ONLY: "983a" } },
-  { step: "left or withdrawn", leg: "942g", file: "tests/relay-channel.mjs", env: { RELAY_CHANNEL_ONLY: "942g" } },
-  { step: "removed", leg: "944c", file: "tests/relay-channel.mjs", env: { RELAY_CHANNEL_ONLY: "944c" } },
+  { step: "relay-unit", leg: "whole", file: "tests/relay-unit.mjs", env: {} },
+  { step: "relay-channel", leg: "whole", file: "tests/relay-channel.mjs", env: {} },
+  { step: "relay-blob", leg: "whole", file: "tests/relay-blob.mjs", env: {} },
+  { step: "relay-stub", leg: "whole", file: "tests/relay-stub.mjs", env: {} },
+  { step: "relay-workerd", leg: "whole", file: "tests/relay-workerd.mjs", env: {} },
 ];
 
 export const RELEASE_ONLY_LEGS = [
@@ -411,12 +408,12 @@ export async function planAreaRun(root, changed, pkg) {
   }
 
   if (hasUnmappedRelay) {
-    console.log("gate-run area: relay file changed, adding relay core (9 legs)");
+    console.log("gate-run area: relay file changed, adding relay core (" + RELAY_CORE.length + " files)");
     for (const core of RELAY_CORE) {
       if (fs.existsSync(path.join(root, core.file))) {
         steps.push({
           script: "area",
-          cmd: "node " + core.file + " (" + core.leg + ")",
+          cmd: "node " + core.file,
           file: core.file,
           args: [],
           env: core.env,
@@ -837,6 +834,10 @@ async function main() {
 }
 
 const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..", "etiuda-runs"));
+/* chains.jsonl sits beside the per-gate records it summarises: Workspace/etiuda-runs for the trees, a lab's own folder for a
+   lab. A lab that wrote into the office's file left trees there that the area run's equal-tree rule then reused (the test
+   architect's E1, 2026-10-28). */
+export const CHAINS_PATH = path.resolve(process.env.ETIUDA_CHAINS_PATH || path.join(RUNS, "chains.jsonl"));
 if (inside(ROOT, RUNS)) refuse("the runs folder is inside the repository: " + RUNS,
   "these files are a record of runs, not of the tree; put them beside it, not in it");
 fs.mkdirSync(RUNS, { recursive: true });
