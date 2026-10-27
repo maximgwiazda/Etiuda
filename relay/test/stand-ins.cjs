@@ -131,6 +131,9 @@ function relayEnv(opts) {
     hubs.set(name, hub);
     const obj = (o.team || team).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots,
       revoked: () => {
+        /* `wakeReadsText`: a woken object reads the REVOKED text alone, as the runtime's does (relay/team.cjs plant:revoked-wake),
+           so a leg can see what a route that carries no kept list would let through. */
+        if (o.wakeReadsText) return core.revokedKeysOf(env.REVOKED, o.roots);
         const decided = acceptRevocations(env.REVOKED);
         return decided && Array.isArray(decided.keys) ? decided.keys : [];
       }, alarm: alarmFor(name), prefix: env.API_PREFIX });

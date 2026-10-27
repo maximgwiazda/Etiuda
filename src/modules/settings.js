@@ -152,7 +152,7 @@ function teamHeadNote(h){
    sealed keys and bars the team once its Undo has lapsed. The head, where the shell has one, is a note under the
    name: the newest edition, when it was published, and how old the news is. It never disables a control. */
 function teamRowHtml(l,status,bar){
-  const notes=[l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
+  const notes=[l.relay?t("Relay: {HOST}").split("{HOST}").join(l.relay):l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
     l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */

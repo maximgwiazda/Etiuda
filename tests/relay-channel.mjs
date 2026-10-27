@@ -4094,7 +4094,7 @@ try {
     /* The lead's yes enrols the key while this desk still holds the invitation's session, and the withdrawal goes on that session.
        Enrolling drops the session in the same write, so the relay answers no-hello and the past-keep sentence is never said.
        The yes is applied as that withdrawal is handed up: a yes any earlier lets the next cycle open a device session first. */
-    const PAST_KEEP = "The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed.";
+    const PAST_KEEP = "The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed.";
     function blobMetaOf(init) {
       const h = init && init.headers;
       if (!h) return null;

@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 122;
+const EXPECTED = 125;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1594,8 +1594,8 @@ try {
     check(turned && same, "15cx lifting plant:g2-card, a withdrawal the relay has not taken shows the plain waiting card with Cancel (FAIL 15cp: pending not said): "
       + detail + ", sha " + (same ? "restored" : "differs"));
   }
-  const UNKEPT_EN = "The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed.";
-  const UNKEPT_PL = "Przekaźnik nie mógł wycofać tej prośby, bo nie przechowuje już tak starych zaproszeń. Lider zespołu może ją jeszcze widzieć, dopóki nie wygaśnie. Aby jednak dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
+  const UNKEPT_EN = "The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed.";
+  const UNKEPT_PL = "Przekaźnik nie przechowuje już tej prośby, więc nie dało się jej tam wycofać. Lider zespołu może ją jeszcze widzieć, dopóki nie wygaśnie. Aby jednak dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
   const HELD_EN = "The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it.";
   const HELD_PL = "Prośba jest wycofywana. Przekaźnik zespołu do czasu odnowienia działa tylko do odczytu, więc odnotuje wycofanie dopiero wtedy, a do tego czasu lider zespołu może ją jeszcze widzieć. Jeśli przekaźnik wcześniej usunie kopię zespołu, prośba zniknie razem z nią.";
   const unkeptDesk = await relayDesk("c5-unkept-card", { unkept: true });
@@ -2119,6 +2119,74 @@ try {
       + detail + ", sha " + (same ? "restored" : "differs"));
   }
 
+  // 15dq: (leave-while-waiting C1) inviteAccepted reads token spent from mirror state even with no channel running
+  const mirrorSpentYard = folder("mirror-spent-own");
+  const mirrorSpentRt = relayHex.h32, mirrorSpentInv = relayHex.h32;
+  const mirrorSpentDesk = await deskWith("h35-mirror-spent", mirrorSpentYard, {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: mirrorSpentRt, url: "https://relay.test/relay/v1", inv: mirrorSpentInv, token: sealText("token"), seal: sealText("seal") }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", relay: "relay.test" } },
+    teamSeen: [relayTeam]
+  });
+  const mirrorDir = path.join(mirrorSpentDesk.ud, "relay");
+  fs.mkdirSync(mirrorDir, { recursive: true });
+  fs.writeFileSync(path.join(mirrorDir, mirrorSpentRt + ".json"), JSON.stringify({
+    kind: "etiuda-relay-channel", v: 1, seq: 1, tokenUsedIds: { [mirrorSpentInv]: true }
+  }), "utf8");
+  await mirrorSpentDesk.join("forget", relayTeam);
+  const mirrorSpentEnv = mirrorSpentDesk.envelope();
+  const mirrorSpentWithdrawn = !!(mirrorSpentEnv.teamJoin && mirrorSpentEnv.teamJoin.invite
+    && mirrorSpentEnv.teamJoin.invite.relay && mirrorSpentEnv.teamJoin.invite.relay.withdrawing === true);
+  check(mirrorSpentWithdrawn,
+    "15dq with no channel running, a spent token kept in the mirror is read as spent, so the request is withdrawn: "
+    + mirrorSpentWithdrawn);
+
+  // 15dr: lifting plant:invite-spent-kept ignores mirror state and drops the request without withdrawal
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:invite-spent-kept") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines[at] = "  if (false) { /* plant:invite-spent-kept */";
+      const ud = path.join(LAB, "invite-spent-plant");
+      fs.mkdirSync(ud, { recursive: true });
+      const mDir = path.join(ud, "relay");
+      fs.mkdirSync(mDir, { recursive: true });
+      fs.writeFileSync(path.join(mDir, mirrorSpentRt + ".json"), JSON.stringify({
+        kind: "etiuda-relay-channel", v: 1, seq: 1, tokenUsedIds: { [mirrorSpentInv]: true }
+      }), "utf8");
+      const doc = JSON.parse(fs.readFileSync(path.join(mirrorSpentDesk.ud, "desk.json"), "utf8"));
+      doc.keys.eCatalogFolder = folder("invite-spent-plant-own");
+      doc.teamPins = { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } };
+      doc.teamJoin = {
+        team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+        invite: {
+          id: relayHex.id, proof: relayHex.h64,
+          lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+          relay: { rt: mirrorSpentRt, url: "https://relay.test/relay/v1", inv: mirrorSpentInv, token: sealText("token"), seal: sealText("seal") }
+        }
+      };
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(doc), "utf8");
+      const planted = loadDesk(ud, lines.join("\n"));
+      await planted.ask("etiuda:branch-identity", true);
+      await planted.join("forget", relayTeam);
+      const penv = planted.envelope();
+      turned = !penv.teamJoin;
+      detail = turned ? "teamJoin was absent (not withdrawn)" : "teamJoin was still withdrawn";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    check(turned && same, "15dr lifting plant:invite-spent-kept leaves the request not withdrawn when no channel is live (FAIL 15dq spent token in mirror withdraws request): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];
@@ -2490,6 +2558,22 @@ try {
     check(Object.keys(f).every(k => f[k]),
       "15bq Settings shows the team by the lead's name and the folder, the key beside them, with Leave this team and no Forget"
       + " this lead, in English and in Polish: " + JSON.stringify(f));
+  });
+
+  await legTry("15dp", async () => {
+    const relaySettingsDesk = await deskWith("h35-relay-settings", folder("relay-settings-own"), {
+      teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+      teamChannel: { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } },
+      teamShown: { [relayTeam]: { lead: "Lamp lead", relay: "relay.test" } }
+    });
+    await relaySettingsDesk.join("state");
+    const relaySetEn = await settingsAt(relaySettingsDesk, "en");
+    const relaySetPl = await settingsAt(relaySettingsDesk, "pl");
+    const relayHasHost = relaySetEn.indexOf("Relay: relay.test") >= 0 && relaySetPl.indexOf("Przekaźnik: relay.test") >= 0;
+    const relayNoMirror = relaySetEn.indexOf("Folder:") < 0 && relaySetEn.indexOf(relayHex.h32) < 0;
+    check(relayHasHost && relayNoMirror,
+      "15dp Settings shows a relay team's row with Relay: {HOST}, in English and in Polish, never the mirror's folder: host "
+      + relayHasHost + ", no mirror " + relayNoMirror);
   });
 
   /* The offer's wait, read from the page rather than copied here, so a change of that wait is the same change here. */

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 354;
+const EXPECTED = 360;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -3974,7 +3974,7 @@ async function main() {
         && second.status === 200 && second.json && second.json.listIgnored === "older" && second.json.keptSerial === 2
         && !!row && row.serial === 2 && row.keys.length === 1 && row.keys[0] === K.DELEGATE.pub
         && refused(bad, "revoked") && (badStore ? badStore.dump().length : 0) === 0
-        && R.revokedFetches.n === 3 && R.stores.has("revoked") === false;
+        && R.revokedFetches.n === 2 && R.stores.has("revoked") === false; /* one ask per REVOKED text: the third create reuses the second's */
       const line = "983b a revoked key's grant is refused through fetch, and an older list is kept: first " + first.status
         + " " + (first.json && first.json.listIgnored) + ", second " + (second.json && second.json.listIgnored)
         + " serial " + (second.json && second.json.keptSerial) + ", kept " + (row && row.serial)
@@ -4103,6 +4103,94 @@ async function main() {
       });
     check(door.ok && objectPlant.turned && objectPlant.back,
       "983h dropping the object's mark check answers an unmarked fetch, which turns 983d red, and the product file is never written: " + objectLine + "; " + objectPlant.detail);
+
+    async function sceneRevokedPathsOnly(worker) {
+      const R = dropListMethod(relayEnv());
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false);
+      const created = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S), worker });
+      const fetchesAfterCreate = R.revokedFetches.n;
+      const hello = await call(R, "POST", "/relay/v1/t/" + rt + "/hello", { json: {}, worker });
+      const fetchesAfterHello = R.revokedFetches.n;
+      const ok = created.status === 200 && hello.status === 200 && fetchesAfterCreate === 1 && fetchesAfterHello === 1;
+      const line = "983i route asks the list object once per REVOKED text, not before every request: create "
+        + created.status + " fetches " + fetchesAfterCreate + ", hello " + hello.status + " fetches " + fetchesAfterHello;
+      return { ok, line, fetchesDiff: fetchesAfterHello - fetchesAfterCreate };
+    }
+    const pathsOnly = await sceneRevokedPathsOnly();
+    check(pathsOnly.ok, pathsOnly.line);
+
+    let pathsLiftLine = "";
+    const pathsLift = await editWorker(swapped(
+      "if (held && held.text === text) return held.decided; /* plant:revoked-held */",
+      "/* plant:revoked-held */"), async mod => {
+      const r = await sceneRevokedPathsOnly(mod.routeWith(K.ROOTS, env => env.NOW()));
+      pathsLiftLine = r.line;
+      return r.ok === false;
+    });
+    check(pathsOnly.ok && pathsLift.turned && pathsLift.back,
+      "983j lifting plant:revoked-held asks the list object before every request, which turns 983i red, and the product file is never written: "
+      + pathsLiftLine + "; " + pathsLift.detail);
+
+    /* The test architect's E1 on relay-small-engine: a list text that names fewer keys is ignored and the kept key stays revoked,
+       and a team object woken cold reads the text alone, so every route a grant stands on must carry the kept list. */
+    async function sceneKeptEveryRoute(worker) {
+      const R = dropListMethod(relayEnv({ wakeReadsText: true }));
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false);
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S, { grant: K.delegatedGrantFor(lead.pub, T0S) }), worker });
+      R.env.REVOKED = revText([K.DELEGATE.pub], null, 2);
+      const held = await call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), keyPair(false), R.clock.now), worker });
+      R.env.REVOKED = revText([], null, 4);
+      R.restart();
+      const hello = await call(R, "POST", "/relay/v1/t/" + rt + "/hello", { json: {}, worker });
+      const ok = made.status === 200 && held.status === 200 && refused(hello, "revoked");
+      const line = "983m a hello on a team whose grant's service key only the kept list names, to an object woken cold after a list"
+        + " that names fewer keys, is refused as revoked: made " + made.status + ", held " + held.status + ", hello " + hello.status
+        + " " + (hello.json && hello.json.error);
+      return { ok, line };
+    }
+    const keptEvery = await sceneKeptEveryRoute();
+    check(keptEvery.ok, keptEvery.line);
+    let keptLiftLine = "";
+    const keptLift = await editWorker(swapped(
+      "    headers.set(\"etiuda-kept\", JSON.stringify(Array.isArray(keys) ? keys : [])); /* plant:kept-every-route */",
+      "    /* plant:kept-every-route */"), async mod => {
+      const r = await sceneKeptEveryRoute(mod.routeWith(K.ROOTS, env => env.NOW()));
+      keptLiftLine = r.line;
+      return r.ok === false;
+    });
+    check(keptEvery.ok && keptLift.turned && keptLift.back,
+      "983n lifting plant:kept-every-route sends no kept list, so the object woken cold reads the text alone, which turns 983m red, and the product file is never written: "
+      + keptLiftLine + "; " + keptLift.detail);
+
+    function checkRenewMade(coreMod) {
+      const store = S.memoryStore();
+      const rt = hex(16), lead = keyPair(false);
+      store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: 0, until: T0S + 1000, paid: T0S + 1000 });
+      const core = (coreMod || C).createCore({ store, clock: () => T0S, roots: K.ROOTS });
+      const res = core.renew(rt, { grant: K.grantFor(lead.pub, T0S, { fields: { until: T0S + 10 * DAY } }) });
+      const team = store.get("team");
+      const stamped = typeof team.made === "string" && /^[0-9a-f]{16}$/.test(team.made);
+      const ok = res.ok === true && stamped;
+      const line = "983k renew stamps made on a team that has none: ok " + res.ok + ", stamped " + (team && team.made);
+      return { ok, line, made: team && team.made };
+    }
+    const renewMade = checkRenewMade();
+    check(renewMade.ok, renewMade.line);
+
+    let renewLiftLine = "";
+    const renewLift = await swapCore(
+      "const made = needsMade ? random(8) : team.made; /* plant:renew-made */",
+      "const made = team.made; /* plant:renew-made */",
+      async () => {
+        const r = checkRenewMade();
+        renewLiftLine = r.line;
+        return r.ok === false;
+      });
+    check(renewMade.ok && renewLift.turned && renewLift.back,
+      "983l lifting plant:renew-made leaves a team with no made property unstamped on renew, which turns 983k red, and the product file is never written: "
+      + renewLiftLine + "; " + renewLift.detail);
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
