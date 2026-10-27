@@ -5,6 +5,18 @@
 const team = require("../team.cjs");
 const core = require("../core.cjs");
 
+/* The runtime's refusal of an RPC call on a class that does not extend DurableObject. The sentence is the runtime's.
+   The method and the class are named after it. A method the class does not implement is refused with a second sentence. */
+const PLAIN_RPC = "The receiving Durable Object does not support RPC, because its class was not declared with `extends DurableObject`. In order to enable RPC, make sure your class extends the special class `DurableObject`, which can be imported from the module \"cloudflare:workers\".";
+
+/* The base a leg extends so a stub may answer an RPC call. */
+class DurableObject {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+}
+
 /* get, put, del, list and atomic as relay/core.cjs uses them; values are kept as JSON text, as SQLite keeps them. */
 function memoryStore() {
   let data = new Map();
@@ -127,7 +139,12 @@ function relayEnv(opts) {
   }
   /* How many times the list object answered its route. A missing answer is not one. */
   const revokedFetches = { n: 0 };
-  /* A stub exposes fetch alone. Reading any other property throws, as a plain-class Durable Object stub does. */
+  /* fetch is answered for every class. Any other call is an RPC call, answered only when the bound class extends
+     DurableObject, and otherwise refused with the runtime's sentence, naming the method and the class. */
+  const bound = o.class || (o.team || team).RelayTeam;
+  const rpcOk = typeof bound === "function" && bound.prototype instanceof DurableObject;
+  const className = typeof bound === "function" && bound.name ? bound.name : "DurableObject";
+  const rpcLive = new Map();
   function stubFor(id) {
     const target = {
       fetch(request) {
@@ -145,7 +162,15 @@ function relayEnv(opts) {
         if (prop === "fetch") return obj.fetch;
         if (prop === "then") return undefined;
         if (typeof prop === "symbol") return obj[prop];
-        throw new TypeError("a plain-class Durable Object stub allows fetch alone");
+        const method = String(prop);
+        return function (...args) {
+          if (!rpcOk) throw new TypeError(PLAIN_RPC + " Method \"" + method + "\", class \"" + className + "\".");
+          const key = String(id.name);
+          if (!rpcLive.has(key)) rpcLive.set(key, new bound({}, env));
+          const fn = rpcLive.get(key)[prop];
+          if (typeof fn !== "function") throw new TypeError("The RPC receiver does not implement the method \"" + method + "\".");
+          return Promise.resolve().then(() => fn.apply(rpcLive.get(key), args));
+        };
       },
     });
   }
@@ -176,4 +201,4 @@ function relayEnv(opts) {
   };
 }
 
-module.exports = { memoryStore, memoryBucket, socketHub, relayEnv };
+module.exports = { memoryStore, memoryBucket, socketHub, relayEnv, DurableObject };
