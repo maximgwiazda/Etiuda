@@ -1391,7 +1391,10 @@ try {
   const pendingKept = !!(cancelEnv.teamJoin && cancelEnv.teamJoin.invite && cancelEnv.teamJoin.invite.relay
     && cancelEnv.teamJoin.invite.relay.withdrawing === true && cancelEnv.teamJoin.invite.relay.withdrawn === undefined
     && cancelEnv.teamKeys && cancelEnv.teamKeys[relayTeam]);
-  const pendingSaid = cardSaid(pendingHtml, COPY.waitEn, COPY.waitPl) && pendingKept && pendingHtml.en.indexOf(escPage(STAYS_EN)) < 0
+  const PENDING_EN = "The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request.";
+  const PENDING_PL = "Prośba jest wycofywana. Przekaźnik wkrótce to odnotuje, a do tego czasu lider zespołu może ją jeszcze widzieć.";
+  const pendingSaid = cardSaid(pendingHtml, PENDING_EN, PENDING_PL) && pendingKept && pendingHtml.en.indexOf(escPage(STAYS_EN)) < 0
+    && pendingHtml.en.indexOf(escPage(COPY.waitEn)) < 0 && pendingHtml.pl.indexOf(COPY.waitPl) < 0
     && pendingHtml.en.indexOf('data-join="cancel"') < 0 && pendingHtml.en.indexOf('data-join="ask"') < 0;
   /* The shell's own state once the relay has taken the withdrawal. */
   const takenDesk = await relayDesk("g2-taken-card", { wrapped: [1], withdrawn: true },
@@ -1402,7 +1405,7 @@ try {
     && staysHtml.en.indexOf(escPage(COPY.waitEn)) < 0 && staysHtml.pl.indexOf(COPY.waitPl) < 0 && staysHtml.en.indexOf(escPage(LEFT_EN)) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   check(pendingSaid && staysSaid,
-    "15cp cancelling a join the relay has already accepted, through the shell, keeps saying the request waits, with nothing to press, until the relay takes the"
+    "15cp cancelling a join the relay has already accepted, through the shell, says the request is being withdrawn, with nothing to press, until the relay takes the"
     + " withdrawal, and then says it is withdrawn and this desk keeps what the invitation gave it, in English and in Polish, offering Ask again with no second Cancel: pending "
     + (pendingSaid ? "said" : "not said") + ", withdrawing and key " + (pendingKept ? "kept" : "not kept") + ", taken " + (staysSaid ? "said" : "not said"));
   const leftDesk = await relayDesk("h35-left-card", {}, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam] });

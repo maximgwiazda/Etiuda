@@ -401,9 +401,9 @@ function joinParts(){
     if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
       line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
       body:meta, acts:[["ask",t("Ask again")]]};
-    /* Until the relay has taken the withdrawal the request still waits with the lead, so the card says so, with nothing to press. */
+    /* Until the relay has taken the withdrawal the lead may still see the request, so the card says so, with nothing to press. Claudette's words, 2026-10-27. */
     if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with."),
+      line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
       body:meta, acts:[]}; /* plant:g2-card */
     /* Claudette's words, 2026-10-27. */
     if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),

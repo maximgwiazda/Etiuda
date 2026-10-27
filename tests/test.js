@@ -5520,8 +5520,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1169;
-const UI_STRINGS_SHA256 = "259a4ec6712587fb0d60c98b11674f9b72fc7331c93c45a8690a6779a1c65a98";
+const UI_STRINGS_COUNT = 1170;
+const UI_STRINGS_SHA256 = "507c94836c1bbd49e1bd938de731e9bb2592e3429aaa9219861b8210aa5d366d";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
