@@ -1,0 +1,478 @@
+/* The relay Worker and its RelayTeam object, booted in workerd through miniflare, from the staging
+ * block of relay/wrangler.toml: the same bindings, prefix, compatibility date and flags, with storage
+ * and R2 held in memory. An empty create is refused, a create and a hello under the test root succeed,
+ * and a revoked service key is refused. A planted stub call is the empty create again. --worker and
+ * --team run the same requests against those two files.
+ *
+ *     node tests/relay-workerd.mjs
+ *     node tests/relay-workerd.mjs --worker <worker.mjs> --team <team.cjs>
+ */
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { Miniflare, supportedCompatibilityDate } from "miniflare";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const kit = require("../relay/test/grant-kit.cjs");
+const core = require("../relay/core.cjs");
+const B = require("../shell/relay/blob.cjs");
+
+const SPKI = Buffer.from("302a300506032b6570032100", "hex");
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const FAULT_SAID = "The relay could not answer that.";
+const WATCHED = ["relay/worker.mjs", "relay/team.cjs", "relay/core.cjs", "relay/wrangler.toml"];
+const FETCH_LINE = "const res = await stub.fetch(internalRevokedRequest(text)); /* plant:revoked-fetch */";
+const DECISION_LINE = "return decisionOf(res);";
+const PLANT_LINE = "if (stub && typeof stub.acceptRevocations === \"function\") return await stub.acceptRevocations(text);";
+
+const argv = process.argv.slice(2);
+let workerArg = null, teamArg = null;
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--worker") workerArg = argv[++i];
+  else if (argv[i] === "--team") teamArg = argv[++i];
+  else { console.log("SUITE DID NOT COMPLETE: unknown argument " + argv[i]); process.exit(78); }
+}
+if ((workerArg == null) !== (teamArg == null)) {
+  console.log("SUITE DID NOT COMPLETE: --worker and --team are a pair");
+  process.exit(78);
+}
+const planted = workerArg == null;
+const EXPECTED = planted ? 6 : 5;
+
+let asserted = 0, failed = 0;
+function check(ok, line) {
+  asserted++;
+  if (ok) console.log("  ok   " + line);
+  else { failed++; console.log("  FAIL " + line); }
+}
+
+function shaOf(file) {
+  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+const atStart = WATCHED.map(rel => ({ rel, sha: shaOf(path.join(ROOT, rel)) }));
+function bytesSame() {
+  return atStart.every(w => shaOf(path.join(ROOT, w.rel)) === w.sha);
+}
+
+function keyPair() {
+  const p = crypto.generateKeyPairSync("ed25519");
+  const pub = p.publicKey.export({ type: "spki", format: "der" }).subarray(SPKI.length).toString("hex");
+  return { keyId: pub, pub, privateKey: p.privateKey };
+}
+const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
+
+/* The revocation document the Worker accepts, signed by the test root over the delegated key. */
+function revokedText() {
+  const doc = { kind: "etiuda-revocations", format: 1, serial: 1, keys: [kit.DELEGATE.pub].slice().sort(),
+    sig: { alg: "ed25519", keyId: kit.ROOT.id, value: "" } };
+  doc.sig.value = signHex(kit.ROOT, core.revocationBytes(doc));
+  return JSON.stringify(doc);
+}
+
+function stripComment(line) {
+  let out = "", quote = false, esc = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quote) {
+      out += c;
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === "\"") quote = false;
+      continue;
+    }
+    if (c === "\"") { quote = true; out += c; continue; }
+    if (c === "#") break;
+    out += c;
+  }
+  return out.trim();
+}
+
+function skipWs(s, i) {
+  while (s[i] === " " || s[i] === "\t") i++;
+  return i;
+}
+
+function readString(s, i) {
+  if (s[i] !== "\"") throw new Error("toml string");
+  let out = "";
+  i++;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === "\\") {
+      const n = s[i + 1];
+      if (n === "n") out += "\n";
+      else if (n === "t") out += "\t";
+      else if (n === "r") out += "\r";
+      else if (n === "\\" || n === "\"") out += n;
+      else throw new Error("toml escape");
+      i += 2;
+      continue;
+    }
+    if (c === "\"") return { value: out, next: i + 1 };
+    out += c;
+    i++;
+  }
+  throw new Error("toml string did not end");
+}
+
+function readValue(s, i) {
+  i = skipWs(s, i);
+  const c = s[i];
+  if (c === "\"") return readString(s, i);
+  if (c === "[") return readArray(s, i);
+  if (c === "{") return readInline(s, i);
+  if (s.startsWith("true", i) && !/[A-Za-z0-9_]/.test(s[i + 4] || "")) return { value: true, next: i + 4 };
+  if (s.startsWith("false", i) && !/[A-Za-z0-9_]/.test(s[i + 5] || "")) return { value: false, next: i + 5 };
+  const num = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(s.slice(i));
+  if (num) return { value: Number(num[0]), next: i + num[0].length };
+  throw new Error("toml value " + JSON.stringify(s.slice(i, i + 40)));
+}
+
+function readArray(s, i) {
+  const out = [];
+  i = skipWs(s, i + 1);
+  if (s[i] === "]") return { value: out, next: i + 1 };
+  for (;;) {
+    const item = readValue(s, i);
+    out.push(item.value);
+    i = skipWs(s, item.next);
+    if (s[i] === ",") { i = skipWs(s, i + 1); if (s[i] === "]") return { value: out, next: i + 1 }; continue; }
+    if (s[i] === "]") return { value: out, next: i + 1 };
+    throw new Error("toml array");
+  }
+}
+
+function readKey(s, i) {
+  i = skipWs(s, i);
+  const m = /^[A-Za-z0-9_-]+/.exec(s.slice(i));
+  if (!m) throw new Error("toml key");
+  return { key: m[0], next: i + m[0].length };
+}
+
+function readInline(s, i) {
+  const out = {};
+  i = skipWs(s, i + 1);
+  if (s[i] === "}") return { value: out, next: i + 1 };
+  for (;;) {
+    const k = readKey(s, i);
+    i = skipWs(s, k.next);
+    if (s[i] !== "=") throw new Error("toml inline");
+    const item = readValue(s, i + 1);
+    out[k.key] = item.value;
+    i = skipWs(s, item.next);
+    if (s[i] === ",") { i = skipWs(s, i + 1); if (s[i] === "}") return { value: out, next: i + 1 }; continue; }
+    if (s[i] === "}") return { value: out, next: i + 1 };
+    throw new Error("toml inline");
+  }
+}
+
+function parseValue(text) {
+  const read = readValue(text, 0);
+  if (text.slice(read.next).trim() !== "") throw new Error("toml trailing " + JSON.stringify(text.slice(read.next)));
+  return read.value;
+}
+
+/* Comments, strings, arrays, inline tables, tables and arrays of tables. A line this cannot read throws. */
+function parseToml(text) {
+  const root = {};
+  let current = root;
+  const lines = text.split(/\r?\n/);
+  for (let n = 0; n < lines.length; n++) {
+    const line = stripComment(lines[n]);
+    if (line === "") continue;
+    const arrayHeader = /^\[\[([A-Za-z0-9_.-]+)\]\]$/.exec(line);
+    const tableHeader = /^\[([A-Za-z0-9_.-]+)\]$/.exec(line);
+    if (arrayHeader || tableHeader) {
+      const parts = (arrayHeader || tableHeader)[1].split(".");
+      let cursor = root;
+      for (let p = 0; p < parts.length - 1; p++) {
+        const part = parts[p];
+        if (cursor[part] === undefined) cursor[part] = {};
+        const next = cursor[part];
+        if (Array.isArray(next)) cursor = next[next.length - 1];
+        else if (next && typeof next === "object") cursor = next;
+        else throw new Error("toml table " + line);
+      }
+      const last = parts[parts.length - 1];
+      if (arrayHeader) {
+        if (cursor[last] === undefined) cursor[last] = [];
+        if (!Array.isArray(cursor[last])) throw new Error("toml array table " + line);
+        const made = {};
+        cursor[last].push(made);
+        current = made;
+      } else {
+        if (cursor[last] === undefined) cursor[last] = {};
+        if (!cursor[last] || typeof cursor[last] !== "object" || Array.isArray(cursor[last])) throw new Error("toml table " + line);
+        current = cursor[last];
+      }
+      continue;
+    }
+    const eq = line.indexOf("=");
+    if (eq < 0) throw new Error("toml line " + (n + 1) + ": " + line);
+    const key = line.slice(0, eq).trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(key)) throw new Error("toml key " + key);
+    current[key] = parseValue(line.slice(eq + 1).trim());
+  }
+  return root;
+}
+
+/* The staging date and flags, or the top block's where staging sets none. Bindings come from staging alone. */
+function stagingOf(doc) {
+  const staging = doc.env && doc.env.staging;
+  if (!staging || typeof staging !== "object" || Array.isArray(staging)) throw new Error("no [env.staging]");
+  const date = staging.compatibility_date !== undefined ? staging.compatibility_date : doc.compatibility_date;
+  const flags = staging.compatibility_flags !== undefined ? staging.compatibility_flags : doc.compatibility_flags;
+  const vars = staging.vars && typeof staging.vars === "object" && !Array.isArray(staging.vars) ? staging.vars : {};
+  const bindings = staging.durable_objects && Array.isArray(staging.durable_objects.bindings) ? staging.durable_objects.bindings : [];
+  const migrations = Array.isArray(staging.migrations) ? staging.migrations : [];
+  const buckets = Array.isArray(staging.r2_buckets) ? staging.r2_buckets : [];
+  return { date, flags, vars, bindings, migrations, buckets };
+}
+
+function relImport(fromDir, absTarget) {
+  let rel = path.relative(fromDir, absTarget).split(path.sep).join("/");
+  if (!rel.startsWith(".")) rel = "./" + rel;
+  return rel;
+}
+
+/* The leg entry. The test root is lent where production passes none, the same seam as the in-process legs.
+   This workerd binary has no jurisdiction, so the leg answers that call as the stand-in does. */
+function entrySource(coreImport, workerImport, pub, bindingName, jurisdiction) {
+  return [
+    "import core from " + JSON.stringify(coreImport) + ";",
+    "import { routeWith, RelayTeam } from " + JSON.stringify(workerImport) + ";",
+    "const roots = [" + JSON.stringify(pub) + "];",
+    "const make = core.createCore;",
+    "core.createCore = function (deps) {",
+    "  if (deps && deps.roots !== undefined) return make(deps);",
+    "  return make(Object.assign({}, deps, { roots: roots }));",
+    "};",
+    "core.ROOT_PUB = roots[0];",
+    "const worker = routeWith(roots);",
+    "const bindingName = " + JSON.stringify(bindingName) + ";",
+    "const jurisdiction = " + JSON.stringify(jurisdiction) + ";",
+    "function teamsOf(real) {",
+    "  return { jurisdiction(j) { return j === jurisdiction ? real : null; } };",
+    "}",
+    "export { RelayTeam };",
+    "export default {",
+    "  async fetch(request, env) {",
+    "    const next = new Proxy(env, {",
+    "      get(target, prop) {",
+    "        if (prop === bindingName) return teamsOf(target[prop]);",
+    "        const value = target[prop];",
+    "        return typeof value === \"function\" ? value.bind(target) : value;",
+    "      },",
+    "    });",
+    "    return worker.fetch(request, next);",
+    "  },",
+    "};",
+    "",
+  ].join("\n");
+}
+
+function plantText(workerText, teamImport, coreImport) {
+  const pair = FETCH_LINE + "\n      " + DECISION_LINE;
+  if (workerText.indexOf(pair) < 0) return null;
+  if (workerText.indexOf("import team from \"./team.cjs\";") < 0) return null;
+  if (workerText.indexOf("import core from \"./core.cjs\";") < 0) return null;
+  return workerText
+    .replace("import team from \"./team.cjs\";", "import team from " + JSON.stringify(teamImport) + ";")
+    .replace("import core from \"./core.cjs\";", "import core from " + JSON.stringify(coreImport) + ";")
+    .replace(pair, PLANT_LINE);
+}
+
+async function post(mf, urlPath, jsonText) {
+  const res = await mf.dispatchFetch("https://relay.invalid" + urlPath, { method: "POST", body: jsonText, duplex: "half" });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { json = null; }
+  return { status: res.status, json };
+}
+
+function isRefusal(r, reason) {
+  return !!r && r.status === 403 && !!r.json && r.json.error === reason && r.json.said === B.REASONS[reason]
+    && Object.keys(r.json).sort().join() === "error,said";
+}
+
+async function scene(mf, prefix, r2Name) {
+  const bucket = await mf.getR2Bucket(r2Name);
+  const listed = await bucket.list();
+  const empty = await post(mf, prefix + "teams", "{}");
+  const now = Date.now();
+  const lead = keyPair();
+  const rt = crypto.randomBytes(16).toString("hex");
+  const created = await post(mf, prefix + "teams", JSON.stringify(kit.createBody(rt, lead, now, bytes => signHex(lead, bytes))));
+  const hello = await post(mf, prefix + "t/" + rt + "/hello", "{}");
+  let session = null;
+  if (hello.json && typeof hello.json.challenge === "string") {
+    const sig = signHex(lead, core.helloBytes(rt, hello.json.challenge, lead.keyId));
+    session = await post(mf, prefix + "t/" + rt + "/session", JSON.stringify({ challenge: hello.json.challenge, key: lead.keyId, sig }));
+  }
+  const other = keyPair();
+  const rt2 = crypto.randomBytes(16).toString("hex");
+  const delegated = await post(mf, prefix + "teams", JSON.stringify(kit.createBody(rt2, other, now, bytes => signHex(other, bytes),
+    { grant: kit.delegatedGrantFor(other.pub, now) })));
+  return { listed, empty, created, hello, session, delegated, rt };
+}
+
+async function boot(scratch, scriptPath, cfg, bindings) {
+  const durableObjects = {};
+  for (const row of cfg.bindings) {
+    const sqlite = cfg.migrations.some(m => Array.isArray(m.new_sqlite_classes) && m.new_sqlite_classes.indexOf(row.class_name) > -1);
+    durableObjects[row.name] = { className: row.class_name, useSQLite: sqlite };
+  }
+  return new Miniflare({
+    scriptPath,
+    modules: true,
+    modulesRoot: os.tmpdir(),
+    compatibilityDate: cfg.date,
+    compatibilityFlags: cfg.flags,
+    bindings,
+    durableObjects,
+    durableObjectsPersist: false,
+    r2Buckets: cfg.buckets.map(row => row.binding),
+    r2Persist: false,
+  });
+}
+
+function brief(r) {
+  if (!r) return "none";
+  return r.status + " " + (r.json && (r.json.error || r.json.rt || "ok"));
+}
+
+/* The package export is the workerd package's own date, which can be earlier than a date the binary
+   still runs. The binary refuses a later date by naming it, so the leg boots the file's date. */
+let runtimeRefusal = "";
+process.on("unhandledRejection", err => {
+  runtimeRefusal = err && err.stack ? err.stack : String(err);
+  console.log("# unhandled " + runtimeRefusal.split("\n")[0]);
+});
+
+const started = Date.now();
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "relay-workerd-mf-"));
+console.log("# scratch " + scratch);
+console.log("# mode " + (planted ? "product" : "worker"));
+
+let sceneResult = null, sceneError = "", plantResult = null, plantNote = "", booted = false;
+let dateRan = "", flagsNote = "", prefixNote = "", classNote = "", bindingNote = "", r2Note = "";
+
+try {
+  if (!/^[0-9a-f]{64}$/.test(kit.ROOT.pub)) throw new Error("test root shape");
+  const doc = parseToml(fs.readFileSync(path.join(ROOT, "relay", "wrangler.toml"), "utf8"));
+  const cfg = stagingOf(doc);
+  dateRan = typeof cfg.date === "string" ? cfg.date : "";
+  flagsNote = JSON.stringify(cfg.flags);
+  const workerPath = workerArg ? path.resolve(workerArg) : path.join(ROOT, "relay", "worker.mjs");
+  const teamPath = teamArg ? path.resolve(teamArg) : path.join(ROOT, "relay", "team.cjs");
+  const workerText = fs.readFileSync(workerPath, "utf8");
+  const teamText = fs.readFileSync(teamPath, "utf8");
+  const exportName = (/export const ([A-Za-z0-9_]+) = team\.RelayTeam/.exec(workerText) || [])[1] || "";
+  const juris = /env\.([A-Za-z0-9_]+)\.jurisdiction\("([a-z]+)"\)/.exec(workerText) || [];
+  const bindingName = juris[1] || "";
+  const jurisdiction = juris[2] || "";
+  const r2Name = (/r2:\s*env\.([A-Za-z0-9_]+)/.exec(teamText) || [])[1] || "";
+  const binding = cfg.bindings.find(row => row && row.name === bindingName);
+  classNote = exportName + "/" + (binding && binding.class_name);
+  bindingNote = bindingName;
+  r2Note = r2Name + "/" + cfg.buckets.map(row => row.binding).join(",");
+  const prefix = typeof cfg.vars.API_PREFIX === "string" ? cfg.vars.API_PREFIX : "";
+  prefixNote = prefix;
+  const flagsOk = Array.isArray(cfg.flags) && cfg.flags.length > 0 && cfg.flags.every(f => typeof f === "string");
+  const dateOk = DATE_RE.test(dateRan);
+  const namesOk = !!binding && binding.class_name === exportName && cfg.buckets.some(row => row.binding === r2Name) && prefix !== "";
+  const stringVars = Object.keys(cfg.vars).every(k => typeof cfg.vars[k] === "string");
+  let coreFile = path.join(ROOT, "relay", "core.cjs");
+  let workerFile = workerPath;
+  if (!planted) {
+    fs.mkdirSync(path.join(scratch, "relay"), { recursive: true });
+    fs.mkdirSync(path.join(scratch, "shell", "relay"), { recursive: true });
+    fs.copyFileSync(workerPath, path.join(scratch, "relay", "worker.mjs"));
+    fs.copyFileSync(teamPath, path.join(scratch, "relay", "team.cjs"));
+    fs.copyFileSync(path.join(ROOT, "relay", "core.cjs"), path.join(scratch, "relay", "core.cjs"));
+    fs.copyFileSync(path.join(ROOT, "shell", "relay", "blob.cjs"), path.join(scratch, "shell", "relay", "blob.cjs"));
+    coreFile = path.join(scratch, "relay", "core.cjs");
+    workerFile = path.join(scratch, "relay", "worker.mjs");
+  }
+  const canBoot = dateOk && flagsOk && namesOk && stringVars && !cfg.vars.REVOKED;
+  console.log("# file date " + dateRan + " supported " + supportedCompatibilityDate + " boot " + canBoot);
+  if (canBoot) {
+    const bindings = Object.assign({}, cfg.vars, { REVOKED: revokedText() });
+    const entryPath = path.join(scratch, "entry.mjs");
+    fs.writeFileSync(entryPath, entrySource(relImport(scratch, coreFile), relImport(scratch, workerFile), kit.ROOT.pub, bindingName, jurisdiction));
+    let mf = null;
+    try {
+      mf = await boot(scratch, entryPath, cfg, bindings);
+      sceneResult = await scene(mf, prefix, r2Name);
+      booted = true;
+    } catch (e) {
+      sceneError = e && e.stack ? e.stack : String(e);
+    } finally {
+      if (mf) await mf.dispose();
+    }
+    if (planted) {
+      const plantedPath = path.join(scratch, "plant-worker.mjs");
+      const rewritten = plantText(fs.readFileSync(path.join(ROOT, "relay", "worker.mjs"), "utf8"),
+        relImport(scratch, path.join(ROOT, "relay", "team.cjs")), relImport(scratch, path.join(ROOT, "relay", "core.cjs")));
+      if (!rewritten) plantNote = "fetch line absent";
+      else {
+        fs.writeFileSync(plantedPath, rewritten);
+        const plantEntry = path.join(scratch, "plant-entry.mjs");
+        fs.writeFileSync(plantEntry, entrySource(relImport(scratch, path.join(ROOT, "relay", "core.cjs")), relImport(scratch, plantedPath), kit.ROOT.pub, bindingName, jurisdiction));
+        let mf2 = null;
+        try {
+          mf2 = await boot(scratch, plantEntry, cfg, bindings);
+          plantResult = await post(mf2, prefix + "teams", "{}");
+        } catch (e) {
+          plantNote = e && e.message ? e.message : String(e);
+        } finally {
+          if (mf2) await mf2.dispose();
+        }
+      }
+    }
+  }
+  const empty = sceneResult && sceneResult.empty;
+  const created = sceneResult && sceneResult.created;
+  const hello = sceneResult && sceneResult.hello;
+  const session = sceneResult && sceneResult.session;
+  const delegated = sceneResult && sceneResult.delegated;
+  const listed = sceneResult && sceneResult.listed;
+  check(isRefusal(empty, "bad-signature"),
+    "984a POST {} answers 403 bad-signature: " + brief(empty) + (sceneError ? " " + sceneError.split("\n")[0] : ""));
+  check(!!created && created.status === 200 && !!created.json && created.json.rt === sceneResult.rt && !created.json.error
+    && !!listed && Array.isArray(listed.objects),
+    "984b a test-root create answers 200 and R2 listed: " + brief(created) + " r2 " + (listed && listed.objects ? listed.objects.length : "none"));
+  const helloOk = !!hello && hello.status === 200 && !!hello.json && /^[0-9a-f]{32}$/.test(hello.json.challenge) && Number.isFinite(hello.json.until);
+  const sessionOk = !!session && session.status === 200 && !!session.json && /^[0-9a-f]{64}$/.test(session.json.session)
+    && Number.isFinite(session.json.until) && !!session.json.lapse && typeof session.json.lapse === "object" && typeof session.json.made === "string";
+  check(helloOk && sessionOk,
+    "984c a hello and the lead's session answer 200: hello " + brief(hello) + " session " + brief(session));
+  check(isRefusal(delegated, "revoked"),
+    "984d a grant from a revoked service key is refused: " + brief(delegated));
+  if (planted) {
+    const fault = !!plantResult && plantResult.status === 500 && !!plantResult.json && plantResult.json.error === "fault" && plantResult.json.said === FAULT_SAID;
+    check(fault, "984e a planted stub call answers 500 fault: " + (plantNote || brief(plantResult)));
+  }
+  check(booted && runtimeRefusal === "" && dateRan === cfg.date && dateOk && flagsOk && namesOk && bytesSame() && prefix === cfg.vars.API_PREFIX,
+    "984f ran on the staging compatibility date " + dateRan + " supported " + supportedCompatibilityDate
+    + " flags " + flagsNote + " prefix " + prefixNote + " class " + classNote + " binding " + bindingNote
+    + " r2 " + r2Note + " bytes " + (bytesSame() ? "same" : "CHANGED"));
+} catch (e) {
+  console.log("SUITE DID NOT COMPLETE: " + (e && e.stack ? e.stack : e));
+  process.exit(78);
+}
+
+console.log("# elapsed ms " + (Date.now() - started));
+console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+  process.exit(78);
+}
+const resultDate = booted ? dateRan : "not run";
+console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted + ", compatibility date " + resultDate
+  : "  RESULT: ok " + asserted + " check(s), compatibility date " + resultDate);
+process.exit(Math.min(failed, 63));
