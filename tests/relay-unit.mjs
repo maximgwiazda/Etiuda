@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 331;
+const EXPECTED = 339;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -3656,6 +3656,197 @@ async function main() {
       "return undefined; /* plant:revoked-wake */",
       T => run(() => sceneWake(T))),
       "982p", "lifting plant:revoked-wake leaves a hibernated socket open on a revoked key, which turns 982o red");
+  }
+
+  /* ---- 983: the list object is asked through fetch, the only call a plain-class stub allows ---- */
+  {
+    const T0S = 1700000000000;
+    const TEAM = require(path.join(ROOT, "relay", "team.cjs"));
+    function revDoc(keys, signer, serial) {
+      const who = signer || K.ROOT;
+      const doc = { kind: "etiuda-revocations", format: 1, serial: serial === undefined ? 1 : serial, keys: keys.slice().sort(),
+        sig: { alg: "ed25519", keyId: who.id, value: "" } };
+      doc.sig.value = crypto.sign(null, Buffer.from("etiuda-revocations\n" + doc.serial + "\n" + doc.keys.join(","), "utf8"), who.privateKey).toString("hex");
+      return doc;
+    }
+    const revText = (keys, signer, serial) => JSON.stringify(revDoc(keys, signer, serial));
+    /* The runtime namespace has no acceptRevocations. This drops the stand-in's, so the Worker takes the fetch path. */
+    function dropListMethod(R) {
+      const inner = R.env.TEAMS;
+      R.env.TEAMS = { jurisdiction(j) {
+        const s = inner.jurisdiction(j);
+        if (!s) return s;
+        return { idFromName: name => s.idFromName(name), get: id => s.get(id) };
+      } };
+      return R;
+    }
+    function isMissing(status, json) {
+      return status === 404 && !!json && json.error === "missing" && json.said === B.REASONS.missing
+        && Object.keys(json).sort().join() === "error,said";
+    }
+    async function readRaw(res) {
+      const text = Buffer.from(await res.arrayBuffer()).toString("utf8");
+      let json = null;
+      try { json = JSON.parse(text); } catch { json = null; }
+      return { status: res.status, json };
+    }
+    async function sceneUnset(worker) {
+      const R = dropListMethod(relayEnv());
+      R.clock.now = T0S;
+      const r = await call(R, "POST", "/relay/v1/teams", { json: {}, worker });
+      const row = R.revoked.get("revoked");
+      const ok = refused(r, "bad-signature") && R.revokedFetches.n === 1 && row === undefined && R.stores.has("revoked") === false;
+      const line = "983a a request with no list set is refused bad-signature through fetch: " + r.status + " "
+        + (r.json && r.json.error) + ", fetches " + R.revokedFetches.n + ", kept " + (row ? "row" : "none");
+      return { ok, line };
+    }
+    async function sceneList(worker) {
+      const R = dropListMethod(relayEnv());
+      R.clock.now = T0S;
+      R.env.REVOKED = revText([K.DELEGATE.pub], null, 2);
+      const firstLead = keyPair(false), firstRt = hex(16);
+      const first = await call(R, "POST", "/relay/v1/teams", { json: createBody(firstRt, firstLead, T0S), worker });
+      R.env.REVOKED = revText([K.DELEGATE.pub, hex(32)], null, 1);
+      const secondLead = keyPair(false), secondRt = hex(16);
+      const second = await call(R, "POST", "/relay/v1/teams", { json: createBody(secondRt, secondLead, T0S), worker });
+      const row = R.revoked.get("revoked");
+      const badLead = keyPair(false), badRt = hex(16);
+      const bad = await call(R, "POST", "/relay/v1/teams", {
+        json: createBody(badRt, badLead, T0S, { grant: K.delegatedGrantFor(badLead.pub, T0S) }), worker });
+      const badStore = R.stores.get(badRt);
+      const ok = first.status === 200 && first.json && first.json.rt === firstRt && first.json.listIgnored === undefined
+        && second.status === 200 && second.json && second.json.listIgnored === "older" && second.json.keptSerial === 2
+        && !!row && row.serial === 2 && row.keys.length === 1 && row.keys[0] === K.DELEGATE.pub
+        && refused(bad, "revoked") && (badStore ? badStore.dump().length : 0) === 0
+        && R.revokedFetches.n === 3 && R.stores.has("revoked") === false;
+      const line = "983b a revoked key's grant is refused through fetch, and an older list is kept: first " + first.status
+        + " " + (first.json && first.json.listIgnored) + ", second " + (second.json && second.json.listIgnored)
+        + " serial " + (second.json && second.json.keptSerial) + ", kept " + (row && row.serial)
+        + ", delegated " + bad.status + " " + (bad.json && bad.json.error) + ", fetches " + R.revokedFetches.n;
+      return { ok, line };
+    }
+    async function askObject(T, marked, body) {
+      try {
+        const X = require(path.join(ROOT, "relay", "test", "do-ctx.cjs"));
+        const obj = new T.RelayTeam(X.doCtx(), { BLOBS: S.memoryBucket() });
+        const headers = {};
+        if (marked) headers[T.REVOKED_MARK] = "1";
+        const init = { method: "POST", headers };
+        if (body !== undefined) { init.body = body; init.duplex = "half"; }
+        return readRaw(await obj.fetch(new Request("https://relay.test" + T.REVOKED_PATH, init)));
+      } catch (e) {
+        return { status: 0, json: { error: e && e.message ? e.message : "throw" } };
+      }
+    }
+    async function sceneDoor(worker) {
+      const R = relayEnv();
+      R.clock.now = T0S;
+      const list = revText([K.DELEGATE.pub]);
+      const use = worker || W;
+      const askedBefore = R.asked.length;
+      const client = await readRaw(await use.fetch(new Request("https://relay.test" + TEAM.REVOKED_PATH, {
+        method: "POST", headers: { [TEAM.REVOKED_MARK]: "1" }, body: list, duplex: "half" }), R.env));
+      const askedClient = R.asked.length - askedBefore;
+      const row = R.revoked.get("revoked");
+      const lead = keyPair(false), rt = hex(16);
+      const made = await call(R, "POST", "/relay/v1/teams", {
+        json: createBody(rt, lead, T0S, { grant: K.delegatedGrantFor(lead.pub, T0S) }), worker });
+      const staged = relayEnv();
+      staged.clock.now = T0S;
+      staged.env.API_PREFIX = "/relay-staging/v1/";
+      const stagedRes = await readRaw(await use.fetch(new Request("https://relay.test" + TEAM.REVOKED_PATH, {
+        method: "POST", headers: { [TEAM.REVOKED_MARK]: "1" }, body: list, duplex: "half" }), staged.env));
+      const D = relayEnv();
+      const scoped = D.env.TEAMS.jurisdiction("eu");
+      const stub = scoped.get(scoped.idFromName("revoked"));
+      const plain = await readRaw(await stub.fetch(new Request("https://relay.test" + TEAM.REVOKED_PATH, {
+        method: "POST", body: list, duplex: "half" })));
+      const rowPlain = D.revoked.get("revoked");
+      const marked = await readRaw(await stub.fetch(new Request("https://relay.test" + TEAM.REVOKED_PATH, {
+        method: "POST", headers: { [TEAM.REVOKED_MARK]: "1" }, body: list, duplex: "half" })));
+      const rowMarked = D.revoked.get("revoked");
+      const objPlain = await askObject(TEAM, false, list);
+      const objMark = await askObject(TEAM, true);
+      const objOk = isMissing(objPlain.status, objPlain.json) && objMark.status === 200 && objMark.json
+        && Array.isArray(objMark.json.keys) && objMark.json.keys.length === 0 && objMark.json.serial === null && objMark.json.ignored === null;
+      const ok = isMissing(client.status, client.json) && askedClient === 0 && row === undefined && R.revokedFetches.n === 0
+        && made.status === 200 && isMissing(stagedRes.status, stagedRes.json) && staged.asked.length === 0
+        && isMissing(plain.status, plain.json) && rowPlain === undefined
+        && marked.status === 200 && marked.json && marked.json.keys && marked.json.keys[0] === K.DELEGATE.pub && marked.json.serial === 1
+        && !!rowMarked && rowMarked.serial === 1 && D.revokedFetches.n === 1 && D.stores.has("revoked") === false
+        && objOk;
+      const line = "983d a client request to the list path is missing, and the object answers only with the mark: client "
+        + client.status + " " + (client.json && client.json.error) + " asked " + askedClient
+        + ", delegated " + made.status + " " + (made.json && made.json.error)
+        + ", staged " + stagedRes.status + " asked " + staged.asked.length
+        + ", direct " + plain.status + "/" + marked.status + " fetches " + D.revokedFetches.n
+        + ", object " + objPlain.status + "/" + objMark.status + " " + (objMark.json && (objMark.json.error || (objMark.json.keys && objMark.json.keys.length)));
+      return { ok, line, objPlain, objMark };
+    }
+
+    const unset = await sceneUnset();
+    check(unset.ok, unset.line);
+    const listed = await sceneList();
+    check(listed.ok, listed.line);
+    const shapedR = relayEnv();
+    const shapedScope = shapedR.env.TEAMS.jurisdiction("eu");
+    const shapedStub = shapedScope.get(shapedScope.idFromName("probe"));
+    const shapedNames = Object.getOwnPropertyNames(shapedStub);
+    let shapedThrew = false;
+    try { await shapedStub.acceptRevocations("x"); } catch (e) { shapedThrew = e instanceof TypeError; }
+    const onlyFetch = shapedNames.length === 1 && shapedNames[0] === "fetch" && typeof shapedStub.fetch === "function";
+    let rpcLine = "";
+    const rpc = await editWorker(swapped(
+      "const res = await stub.fetch(internalRevokedRequest(text)); /* plant:revoked-fetch */",
+      "const res = await stub.acceptRevocations(text); /* plant:revoked-fetch */"), async mod => {
+      const r = await sceneUnset(mod.routeWith(K.ROOTS, env => env.NOW()));
+      rpcLine = r.line;
+      return r.ok === false;
+    });
+    check(unset.ok && onlyFetch && shapedThrew && rpc.turned && rpc.back,
+      "983c the stand-in's stub exposes fetch alone, and a planted acceptRevocations call faults the unset request: names "
+      + shapedNames.join(",") + " threw " + shapedThrew + ", " + rpcLine + "; " + rpc.detail + (rpc.back ? "" : " sha CHANGED"));
+    const door = await sceneDoor();
+    check(door.ok, door.line);
+
+    let liftUnsetLine = "";
+    const liftUnset = await editWorker(lineLifted("plant:revoked-fetch"), async mod => {
+      const r = await sceneUnset(mod.routeWith(K.ROOTS, env => env.NOW()));
+      liftUnsetLine = r.line;
+      return r.ok === false;
+    });
+    check(unset.ok && liftUnset.turned && liftUnset.back,
+      "983e lifting plant:revoked-fetch faults the unset request, and the product file is never written: " + liftUnsetLine + "; " + liftUnset.detail);
+    let liftListLine = "";
+    const liftList = await editWorker(lineLifted("plant:revoked-fetch"), async mod => {
+      const r = await sceneList(mod.routeWith(K.ROOTS, env => env.NOW()));
+      liftListLine = r.line;
+      return r.ok === false;
+    });
+    check(listed.ok && liftList.turned && liftList.back,
+      "983f lifting plant:revoked-fetch lets the fetch path miss, which turns 983b red, and the product file is never written: " + liftListLine + "; " + liftList.detail);
+    let doorLine = "";
+    const doorPlant = await editWorker(swapped(
+      "if (url.pathname === team.REVOKED_PATH) return team.missing(); /* plant:revoked-door */",
+      "if (url.pathname === team.REVOKED_PATH) return new Response(\"{}\", { status: 200, headers: { \"content-type\": \"application/json\" } }); /* plant:revoked-door */"),
+    async mod => {
+      const r = await sceneDoor(mod.routeWith(K.ROOTS, env => env.NOW()));
+      doorLine = r.line;
+      return r.ok === false;
+    });
+    check(door.ok && doorPlant.turned && doorPlant.back,
+      "983g swapping the list path's refusal for a 200 answers the client, which turns 983d red, and the product file is never written: " + doorLine + "; " + doorPlant.detail);
+    let objectLine = "";
+    const objectPlant = await swapTeam(
+      "if (revokedPathname(request) && !revokedMarked(request)) return missing(); /* plant:revoked-object */",
+      "if (false) return missing(); /* plant:revoked-object */",
+      async T => {
+        const opened = await askObject(T, false, revText([K.DELEGATE.pub]));
+        objectLine = "object " + opened.status + " " + (opened.json && (opened.json.error || "answered"));
+        return !isMissing(opened.status, opened.json);
+      });
+    check(door.ok && objectPlant.turned && objectPlant.back,
+      "983h dropping the object's mark check answers an unmarked fetch, which turns 983d red, and the product file is never written: " + objectLine + "; " + objectPlant.detail);
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

@@ -15,6 +15,10 @@ const STATUS = {
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
 const DEFAULT_PREFIX = "/relay/v1/";
+/* The list object's own path. It sits outside every prefix the route table can name, so a client request is not a route. */
+const REVOKED_PATH = "/etiuda/revoked";
+/* Set on the one fetch the Worker makes for that object. A client request does not carry it through. */
+const REVOKED_MARK = "etiuda-revoked";
 /* One leading slash, one segment, then /v1/ and a trailing slash. A ".." cannot occur in that shape. */
 const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
 const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|hello|session|grant|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
@@ -70,6 +74,28 @@ async function readCapped(request, max) {
   return Buffer.concat(parts, total);
 }
 
+/* The list object's route: POST, https, no query, on its own path. The mark is the Worker's, value "1". */
+function revokedPathname(request) {
+  let url = null;
+  try { url = new URL(request.url); } catch { return false; }
+  return request.method === "POST" && url.protocol === "https:" && url.search === "" && url.pathname === REVOKED_PATH;
+}
+function revokedMarked(request) {
+  return revokedPathname(request) && request.headers.get(REVOKED_MARK) === "1";
+}
+/* The text, or undefined where there is none or it is over the list's cap. A longer text is no list. */
+async function revokedTextOf(request) {
+  const bytes = await readCapped(request, 65536);
+  if (!bytes || bytes.length === 0) return undefined;
+  return bytes.toString("utf8");
+}
+function revokedReply(decided) {
+  const keys = decided && Array.isArray(decided.keys) ? decided.keys.slice() : [];
+  const serial = decided && Number.isSafeInteger(decided.serial) ? decided.serial : null;
+  const ignored = decided && typeof decided.ignored === "string" ? decided.ignored : null;
+  return reply(200, { keys, serial, ignored });
+}
+
 function bearer(request) {
   const m = /^Bearer ([0-9a-f]{64})$/.exec(request.headers.get("authorization") || "");
   return m ? m[1] : null;
@@ -121,6 +147,13 @@ function teamObject(deps) {
   }
 
   async function route(request) {
+    /* The list path is outside the public table. A marked request is the Worker's; any other on that path is missing.
+       The roots are the ones this object was given, or the vendor's where it was given none. */
+    if (revokedPathname(request) && !revokedMarked(request)) return missing();
+    if (revokedPathname(request)) {
+      const roots = Array.isArray(deps.roots) && deps.roots.length > 0 ? deps.roots : [core.ROOT_PUB];
+      return revokedReply(core.acceptRevocations(await revokedTextOf(request), roots, deps.store));
+    }
     const url = new URL(request.url);
     if (prefix === null) return unavailable();
     const m = routeRe(prefix).exec(url.pathname);
@@ -377,10 +410,16 @@ class RelayTeam {
     try { return core.acceptRevocations(text, [core.ROOT_PUB], this.listStore); }
     finally { this.listing = false; }
   }
-  fetch(request) { return this.object.fetch(request); }
+  async fetch(request) {
+    /* An unmarked request on the list path is missing. Only the Worker's own fetch carries the mark. */
+    if (revokedPathname(request) && !revokedMarked(request)) return missing(); /* plant:revoked-object */
+    if (revokedPathname(request)) return revokedReply(this.acceptRevocations(await revokedTextOf(request)));
+    return this.object.fetch(request);
+  }
   alarm() { return this.object.alarm(); }
   webSocketMessage(ws, message) { return this.object.webSocketMessage(ws, message); }
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }
 
-module.exports = { JSON_MAX, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable };
+module.exports = { JSON_MAX, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
+  REVOKED_PATH, REVOKED_MARK, revokedPathname, revokedMarked, revokedTextOf, revokedReply };

@@ -125,19 +125,33 @@ function relayEnv(opts) {
     live.set(name, obj);
     return obj;
   }
-  /* A stub's methods answer promises, as a Durable Object stub's do. A call that does not await one has no list and no response. */
+  /* How many times the list object answered its route. A missing answer is not one. */
+  const revokedFetches = { n: 0 };
+  /* A stub exposes fetch alone. Reading any other property throws, as a plain-class Durable Object stub does. */
+  function stubFor(id) {
+    const target = {
+      fetch(request) {
+        return Promise.resolve().then(async () => {
+          if (String(id.name) !== "revoked") return objectFor(id.name).fetch(request);
+          if (!team.revokedMarked(request)) return team.missing();
+          const decided = acceptRevocations(await team.revokedTextOf(request));
+          revokedFetches.n += 1;
+          return team.revokedReply(decided);
+        });
+      },
+    };
+    return new Proxy(target, {
+      get(obj, prop) {
+        if (prop === "fetch") return obj.fetch;
+        if (prop === "then") return undefined;
+        if (typeof prop === "symbol") return obj[prop];
+        throw new TypeError("a plain-class Durable Object stub allows fetch alone");
+      },
+    });
+  }
   const scoped = {
     idFromName(name) { return { name: String(name) }; },
-    get(id) {
-      const obj = () => objectFor(id.name);
-      return {
-        fetch(request) { return Promise.resolve(obj().fetch(request)); },
-        alarm() { return Promise.resolve(obj().alarm()); },
-        webSocketMessage(ws, message) { return Promise.resolve(obj().webSocketMessage(ws, message)); },
-        webSocketClose(ws) { return Promise.resolve(obj().webSocketClose(ws)); },
-        acceptRevocations(text) { return Promise.resolve().then(() => acceptRevocations(text)); },
-      };
-    },
+    get(id) { return stubFor(id); },
     acceptRevocations,
   };
   const env = {
@@ -146,7 +160,7 @@ function relayEnv(opts) {
     NOW: () => clock.now,
   };
   return {
-    env, clock, bucket, asked, stores, hubs, alarms, revoked: revokedStore,
+    env, clock, bucket, asked, stores, hubs, alarms, revoked: revokedStore, revokedFetches,
     object: objectFor,
     async ring(name) {
       if (!alarms.has(name) || clock.now < alarms.get(name)) return false;

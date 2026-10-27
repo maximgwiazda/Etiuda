@@ -24,20 +24,47 @@ function rtOf(body) {
    root and the Worker's own clock. `clockOf` takes the env and answers the time in ms. */
 export function routeWith(roots, clockOf) {
   const nowOf = typeof clockOf === "function" ? clockOf : () => Date.now();
+  /* The one request the list object answers. The host is reserved, the path is outside every public prefix, and the mark
+     is set here. A string is the body; none is an unset list. */
+  function internalRevokedRequest(text) {
+    const headers = new Headers();
+    headers.set(team.REVOKED_MARK, "1");
+    const init = { method: "POST", headers };
+    if (typeof text === "string") { init.body = text; init.duplex = "half"; }
+    return new Request("https://relay.invalid" + team.REVOKED_PATH, init);
+  }
+  /* The object's answer, or a throw. A throw faults the request: a broken object must not be read as an empty list. */
+  async function decisionOf(res) {
+    const raw = await res.arrayBuffer();
+    let body = null;
+    try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { body = null; }
+    if (res.status !== 200 || !body || typeof body !== "object" || Array.isArray(body) || !Array.isArray(body.keys)
+      || body.keys.some(k => typeof k !== "string")) throw new Error("revoked");
+    return {
+      keys: body.keys,
+      serial: Number.isSafeInteger(body.serial) ? body.serial : null,
+      ignored: typeof body.ignored === "string" ? body.ignored : null,
+    };
+  }
   /* The last accepted list is kept. A later text replaces it only when it verifies, its serial is higher and it names every
-     kept key. A chief's own root-signed create or renewal is told when a text was ignored. The Worker's own logs are off. */
+     kept key. A chief's own root-signed create or renewal is told when a text was ignored. The Worker's own logs are off.
+     The in-process stand-in keeps the list on the namespace. The runtime's namespace has no such method, and its stub
+     allows fetch alone, so the list object is asked through fetch. */
   async function revokedDecision(teams, env) {
     const text = env ? env.REVOKED : undefined;
     if (teams && typeof teams.acceptRevocations === "function") return teams.acceptRevocations(text);
     if (teams && typeof teams.get === "function" && typeof teams.idFromName === "function") {
       const stub = teams.get(teams.idFromName("revoked"));
-      if (stub && typeof stub.acceptRevocations === "function") return await stub.acceptRevocations(text);
+      const res = await stub.fetch(internalRevokedRequest(text)); /* plant:revoked-fetch */
+      return decisionOf(res);
     }
     return { keys: core.revokedKeysOf(text, roots), serial: null, ignored: null };
   }
-  /* The keys this request enforces. Copied over any header the client sent, including an empty list. */
+  /* The keys this request enforces, over any header the client sent, including an empty list. The list mark is dropped,
+     so a client cannot carry it onto a team's request. */
   function carry(request, keys, body) {
     const headers = new Headers(request.headers);
+    headers.delete(team.REVOKED_MARK);
     headers.set("etiuda-kept", JSON.stringify(Array.isArray(keys) ? keys : []));
     const init = { method: request.method, headers };
     if (body !== undefined) { init.body = body; init.duplex = "half"; }
@@ -64,6 +91,8 @@ export function routeWith(roots, clockOf) {
     if (prefix === null) return team.unavailable(); /* plant:prefix */
     const url = new URL(request.url);
     if (url.protocol !== "https:" || url.search !== "") return team.missing();
+    /* A client request for the list object's path is missing before any object is named. */
+    if (url.pathname === team.REVOKED_PATH) return team.missing(); /* plant:revoked-door */
     const hit = team.routeOf(request.method, url.pathname, prefix);
     if (!hit) return team.missing(); /* plant:worker-route */
     let teams = env.TEAMS;
