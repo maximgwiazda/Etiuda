@@ -223,12 +223,13 @@ function gitTree() {
  * and the untracked ones that are not ignored. An ignored path is a seat's scratch and a build
  * artefact and node_modules, and a run that wrote one of those did not move the tree a gate
  * judges. Where there is no git at all - a `git archive | tar -x` lab, a temp folder - the file
- * list is a walk of the tree skipping `.git` and `node_modules`, and `treeHow` says which of the
+ * list is a walk of the tree skipping `.git`, `node_modules` and `.plant-hold`, and `treeHow` says which of the
  * two was used, because a fingerprint over a different file set is a different fingerprint and a
- * count without its method is an impression.
+ * count without its method is an impression. `.plant-hold` is ignored scratch the chain writes
+ * between steps; a checkout already leaves it out, and the walk does the same.
  * ------------------------------------------------------------------------------------------- */
 
-const SKIP_DIRS = new Set([".git", "node_modules"]);
+const SKIP_DIRS = new Set([".git", "node_modules", ".plant-hold"]);
 
 function walkInto(dir, prefix, out) {
   let entries;
@@ -260,7 +261,7 @@ function treeFiles() {
   if (names.length) return { how: "git ls-files -co --exclude-standard", files: names.sort(), unmerged: unmergedPaths() };
   const out = [];
   walkInto(ROOT, "", out);
-  return { how: "walk skipping .git and node_modules", files: out.sort(), unmerged: 0 };
+  return { how: "walk skipping .git, node_modules and .plant-hold", files: out.sort(), unmerged: 0 };
 }
 
 /* `git ls-files -u` prints `<mode> <object> <stage>\t<path>` per stage; the paths, counted once. */

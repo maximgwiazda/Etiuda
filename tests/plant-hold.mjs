@@ -124,8 +124,8 @@ export function holdPlant(root, fileAbs) {
   };
 }
 
-/* One record for the run, fsynced before this returns. It is not a tracked path. It belongs to
-   this parent process until the compare step has read it once; the next run writes its own. */
+/* One record for the run, fsynced before this returns. It is not a tracked path. Hold writes a
+   one-time id; the compare spends that id and will not judge it again. */
 const RECORD_NAME = "tree.record";
 
 function recordFile(root) {
@@ -206,9 +206,8 @@ function hashTracked(root, rel) {
 
 function serialize(rec) {
   const lines = [
-    "v=1",
-    "ppid=" + rec.ppid,
-    "used=" + rec.used,
+    "v=2",
+    (rec.spent ? "spent=" : "id=") + rec.id,
     "list=" + rec.list,
     "n=" + rec.files.length,
   ];
@@ -233,7 +232,6 @@ function writeRecord(root, rec) {
 }
 
 export function recordTree(root) {
-  if (!Number.isInteger(process.ppid) || process.ppid <= 0) throw new Error("plant record: this run has no parent");
   const listed = listTracked(root);
   const seen = new Set();
   const files = [];
@@ -243,22 +241,27 @@ export function recordTree(root) {
     files.push([rel, hashTracked(root, rel)]);
   }
   files.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  writeRecord(root, { ppid: process.ppid, used: 0, list: listed.mode, files });
+  writeRecord(root, {
+    id: crypto.randomBytes(16).toString("hex"),
+    spent: false,
+    list: listed.mode,
+    files,
+  });
   return files.length;
 }
 
 function parseRecord(text) {
   const lines = String(text).replace(/\r/g, "").split("\n");
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
-  if (lines.length < 5) return null;
-  if (lines[0] !== "v=1") return null;
-  const ppid = /^ppid=(\d+)$/.exec(lines[1]);
-  const used = /^used=([01])$/.exec(lines[2]);
-  const list = /^list=(git|walk)$/.exec(lines[3]);
-  const n = /^n=(\d+)$/.exec(lines[4]);
-  if (!ppid || !used || !list || !n) return null;
+  if (lines[0] === "v=1") return { stale: true };
+  if (lines.length < 4) return null;
+  if (lines[0] !== "v=2") return null;
+  const token = /^(id|spent)=([0-9a-f]{32})$/.exec(lines[1]);
+  const list = /^list=(git|walk)$/.exec(lines[2]);
+  const n = /^n=(\d+)$/.exec(lines[3]);
+  if (!token || !list || !n) return null;
   const count = Number(n[1]);
-  const body = lines.slice(5);
+  const body = lines.slice(4);
   if (body.length !== count) return null;
   const files = [];
   const seen = new Set();
@@ -272,7 +275,7 @@ function parseRecord(text) {
     seen.add(rel);
     files.push([rel, sha]);
   }
-  return { ppid: Number(ppid[1]), used: Number(used[1]), list: list[1], files };
+  return { id: token[2], spent: token[1] === "spent", list: list[1], files };
 }
 
 function readRecord(root) {
@@ -304,13 +307,12 @@ function diffLines(root, oldFiles, newPaths) {
   return lines;
 }
 
-/* A record from another parent, or one already read, names no file. The next run writes a
-   fresh record before it compares, so the earlier one does not decide that run. */
+/* A spent id, or a record listed another way, names no file. The next hold writes a fresh id. */
 export function compareTree(root) {
   const loaded = readRecord(root);
   if (loaded === "missing") return { ok: false, lines: ["plant record: none for this run"] };
   if (!loaded) return { ok: false, lines: ["plant record: unreadable"] };
-  if (loaded.ppid !== process.ppid || loaded.used !== 0) return { ok: false, lines: ["plant record: not from this run"] };
+  if (loaded.stale || loaded.spent) return { ok: false, lines: ["plant record: not from this run"] };
   let listed;
   try {
     listed = listTracked(root);
@@ -321,7 +323,7 @@ export function compareTree(root) {
   let lines;
   try {
     lines = diffLines(root, loaded.files, listed.paths);
-    writeRecord(root, { ppid: loaded.ppid, used: 1, list: loaded.list, files: loaded.files });
+    writeRecord(root, { id: loaded.id, spent: true, list: loaded.list, files: loaded.files });
   } catch (e) {
     return { ok: false, lines: ["plant record: unreadable"] };
   }
