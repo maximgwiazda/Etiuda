@@ -1746,6 +1746,7 @@ Module.prototype._compile = function (content, filename) {
     "linux-desk.js": "a machine-window gate on Linux: it needs the .deb installed or the AppImage and a display, so it runs by hand; its packages are judged by tests/linux-package.mjs in npm test",
     "linux-keyring.js": "a machine-window gate on Linux: it needs the .deb installed, a display, D-Bus and gnome-keyring, so it runs by hand; the shell's keyring choice is held in node by tests/shell-office.mjs 14 in npm test",
     "launch-wait.js": "a helper the window legs require, not a gate",
+    "plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate; its use is held by tests/plant-hold.mjs and tests/plant-compare.mjs",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard"];
   function reachOf(scripts, releaseSrc) {
