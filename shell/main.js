@@ -3422,8 +3422,12 @@ function joinView() {
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
     const left = j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length);
     if (j.invite && j.invite.relay && j.invite.relay.withdrawn === true) view.join.withdrawn = true;
+    else if (j.invite && j.invite.relay && j.invite.relay.unkept === true) view.join.unkept = true;
     else if (left) view.join.keeps = false; /* plant:h35-keeps */
-    else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true) view.join.withdrawing = true;
+    else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true && j.invite.relay.readonly === true) {
+      view.join.withdrawing = true;
+      view.join.readonly = true;
+    } else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true) view.join.withdrawing = true;
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
@@ -3482,6 +3486,7 @@ function relayKept(r) {
     && (r.wrapped === undefined || (Array.isArray(r.wrapped) && r.wrapped.length <= 64 && r.wrapped.every(n => Number.isInteger(n) && n >= 1))) /* plant:e4-wrapped */
     && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed")
     && (r.withdrawn === undefined || r.withdrawn === true) && (r.withdrawing === undefined || r.withdrawing === true)
+    && (r.unkept === undefined || r.unkept === true) && (r.readonly === undefined || r.readonly === true)
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
@@ -4010,7 +4015,26 @@ function relayRun() {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       if (!inv || inv.withdrawing !== true) return;
       delete inv.withdrawing;
+      delete inv.readonly;
       inv.withdrawn = true; /* plant:g2-taken */
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+    },
+    /* The relay refused the withdrawal for good. The request is no longer on its way out, and Ask again is not offered. */
+    onWithdrawUnkept: () => {
+      const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+      if (!inv || inv.withdrawing !== true) return;
+      delete inv.withdrawing;
+      delete inv.readonly;
+      inv.unkept = true; /* plant:c5-unkept-desk */
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+    },
+    /* The relay is read-only, so the withdrawal stays owed and goes once the relay will take a write. */
+    onWithdrawHeld: () => {
+      const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+      if (!inv || inv.withdrawing !== true || inv.readonly === true) return;
+      inv.readonly = true; /* plant:c5-held-desk */
       persistDeskEnvelope();
       sendJoin(theWindow);
     },

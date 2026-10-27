@@ -348,7 +348,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
+    tokenUsedIds: {}, invitedIds: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -374,6 +374,7 @@ function stateOf(x) {
   };
   s.tokenUsedIds = idSet(x.tokenUsedIds);
   s.invitedIds = idSet(x.invitedIds);
+  s.unkeptIds = idSet(x.unkeptIds);
   for (const [name, prefix] of [["counters", "c\n"], ["revs", "r\n"]]) {
     if (table(x[name])) for (const k of Object.keys(x[name])) if (k.startsWith(prefix) && count(x[name][k])) s[name][k] = x[name][k];
   }
@@ -1250,6 +1251,22 @@ function createProgram(opts) {
       st.invited = false;
       persist();
     },
+    /* The relay refused this invitation's withdrawal for good. The deletion is no longer owed, and a later cycle does not ask again. */
+    forgetSent(rel) {
+      const k = pathKey(rel);
+      const was = has(st.sent, k) ? st.sent[k] : null;
+      if (!was) return;
+      st.bytes = Math.max(0, st.bytes - (was.size || 0));
+      delete st.sent[k];
+      delete st.refused[k];
+      waiting.delete(k);
+      persist();
+    },
+    markUnkept(id) {
+      if (HEX32.test(String(id || ""))) st.unkeptIds[String(id)] = true;
+      persist();
+    },
+    unkept(id) { return HEX32.test(String(id || "")) && st.unkeptIds[String(id)] === true; },
     heldTeam,
     /* The lapse last told, and the relay's clock less this computer's at the last hello. */
     lapse: () => (st.lapse ? Object.assign({}, st.lapse) : null),
@@ -1873,12 +1890,30 @@ function createChannel(opts) {
      Null where none is owed. */
   async function withdrawOwed() {
     const who = me(), c = ctx();
+    if (c.inviteId && prog.unkept(c.inviteId)) return { ok: true };
     if (!who || !who.privateKey || !c.inviteSeal || typeof who.place !== "string") return null;
     const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
     const op = prog.owed(who, c).find(x => x.kind === "delete" && x.rel.toLowerCase() === mine);
     if (!op) return null;
     const u = await upload(op, who, { epoch: Math.max(1, prog.state().leadEpoch), key: c.inviteSeal });
-    if (!u.ok) return u.lim || u.why;
+    if (!u.ok) {
+      const why = u.lim || u.why;
+      let spent = false;
+      spent = !!(why && why.reason === "token-spent"); /* plant:c5-unkept */
+      if (spent) {
+        prog.forgetSent(op.rel);
+        if (c.inviteId) prog.markUnkept(c.inviteId);
+        if (typeof o.onWithdrawUnkept === "function") o.onWithdrawUnkept();
+        return { ok: true };
+      }
+      let held = false;
+      held = !!(why && why.reason === "team-lapsed"); /* plant:c5-held */
+      if (held) {
+        if (typeof o.onWithdrawHeld === "function") o.onWithdrawHeld();
+        return why;
+      }
+      return why;
+    }
     prog.unmarkInvited(c.inviteId);
     answerHeld = null;
     if (typeof o.onWithdrawn === "function") o.onWithdrawn();
