@@ -322,6 +322,8 @@ function createCore(deps) {
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
     }
+    /* A key not enrolled yet whose invitation's desk withdrew its request is not let in, and nothing in the set changes. */
+    for (const id of next.keys()) if (!store.get("dev:" + id) && withdrawnBy(id)) return no("withdrawn"); /* plant:e4-devices */
     const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
     store.atomic(() => {
       const ord = (store.get("ord") || 0) + 1;
@@ -347,6 +349,11 @@ function createCore(deps) {
       }
     });
     return { ok: true, rev: b.rev, withdrawn };
+  }
+
+  /* Whether the request a token hello bound to this key was withdrawn by its desk and not asked again. */
+  function withdrawnBy(key) {
+    return store.list("inv:").some(([, v]) => v.withdrawn === true && v.key === key);
   }
 
   /* A set that takes at least one key off the enrolled set and keeps each other key as it is, at its own desk. */
@@ -760,6 +767,7 @@ function createCore(deps) {
     if (!lead && !dev) return no("removed");
     if (lead && ANSWER_PLACE.test(String(m.place))) {
       if (m.id !== String(m.place).slice(7)) return no("outside-place");
+      if ((store.get("inv:" + m.id) || {}).withdrawn === true) return no("withdrawn"); /* plant:e4-answer */
       return { ok: true, team, s, max: B.BLOB_MAX, pub: team.lead.pub, lead: true, invite: null };
     }
     if (m.place !== (lead ? "root" : "desk:" + dev.desk) && !(lead && INVITE_PLACE.test(m.place))) return no("outside-place"); /* plant:put-place */
@@ -773,6 +781,7 @@ function createCore(deps) {
   function admitInvite(team, s, m) {
     const inv = store.get("inv:" + s.inv);
     if (!inv) return no("no-hello");
+    if (inv.uploaded && m.del === true) return admitWithdraw(team, s, m, inv);
     if (inv.uploaded) return no("token-spent"); /* plant:invite-once */
     if (inv.spentAt === undefined) return no("token-spent"); /* plant:invite-pruned */
     if (clock() - inv.spentAt > KEEP_MS) return no("token-spent"); /* plant:invite-keep */
@@ -788,6 +797,16 @@ function createCore(deps) {
     atDesk = typeof m.place === "string" && m.place.indexOf("desk:") === 0; /* plant:S3-invite-place */
     if (!atDesk || m.place === "root" || !ownDesk && deskHeld(m.place.slice(5))) return no("outside-place"); /* plant:invite-place */
     return { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub, lead: false, invite: s.inv, inv };
+  }
+
+  /* The desk that asked takes its request back: a deletion superseding that very request, on the invitation's session, by the
+     key its token hello bound and under that key's signature, while the key is not enrolled and inside the invitation's keep. */
+  function admitWithdraw(team, s, m, inv) {
+    if (!s.bound || m.writer !== s.bound || inv.key !== s.bound || !is(HEX64, inv.pub)) return no("no-hello"); /* plant:e4-withdraw-bound */
+    if (!is(HEX32, inv.asked) || m.supersedes !== inv.asked) return no("outside-place"); /* plant:e4-withdraw-chain */
+    if (store.get("dev:" + m.writer) !== undefined || inv.spentAt === undefined || clock() - inv.spentAt > KEEP_MS) return no("token-spent");
+    if (typeof m.place !== "string" || m.place.indexOf("desk:") !== 0) return no("outside-place");
+    return { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub: inv.pub, lead: false, invite: s.inv, inv, withdraw: true };
   }
 
   function deskHeld(desk) {
@@ -840,6 +859,17 @@ function createCore(deps) {
         let clear = false;
         clear = true; /* plant:S3-burn */
         if (clear) delete next.wrap;
+        /* A withdrawal leaves the invitation spent and not asked: its session reads again, and a new request from the same key
+           asks anew. An answer the lead wrote before it is no longer served, so the next answer is the lead's to that request. */
+        if (j.a.withdraw) {
+          next.uploaded = false;
+          next.withdrawn = true; /* plant:e4-withdrawn */
+          const answer = store.get("blob:" + j.a.invite);
+          if (answer && isAnswer(answer)) unserve(answer, drop);
+        } else {
+          next.asked = m.id;
+          delete next.withdrawn; /* plant:e4-ask-again */
+        }
         store.put("inv:" + j.a.invite, next); /* plant:invite-mark */
       }
       const rec = { id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
@@ -851,7 +881,8 @@ function createCore(deps) {
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
     });
-    return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop, uploadedInv: j.a.invite || null };
+    return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop,
+      uploadedInv: j.a.invite && !j.a.withdraw ? j.a.invite : null };
   }
 
   /* A blob no longer served: its bytes given back, its object for the caller to delete (its orphan row standing until the delete
@@ -863,6 +894,15 @@ function createCore(deps) {
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("tomb:" + m.id, { writer: m.writer, why, until: now + KEEP_MS });
     store.put(expiryKey(now + KEEP_MS, m.id), "tomb");
+    store.put("orphan:" + m.obj, 1);
+    drop.push(m.obj);
+  }
+
+  /* A blob no longer served and kept as no tombstone, so its id may be written again: the lead's answer to a request withdrawn. */
+  function unserve(m, drop) {
+    store.del("blob:" + m.id);
+    store.del("seq:" + pad(m.seq));
+    store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("orphan:" + m.obj, 1);
     drop.push(m.obj);
   }

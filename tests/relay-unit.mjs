@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 296;
+const EXPECTED = 302;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1114,6 +1114,110 @@ async function main() {
     check(readd.turned && readd.back,
       "3s lifting plant:readd-session leaves the withdrawn session standing as removed (FAIL 3i a key enrolled again opens a new session, and the session it held when withdrawn does not stay: the old bearer still answers removed): "
       + readd.detail + ", sha " + (readd.back ? "restored" : "differs"));
+  }
+  /* E4: once the relay has accepted an invitation's request, the desk that asked withdraws it with a deletion of that request on the
+     invitation's session. The lead no longer reads it, a yes on its way does not enrol the key, and a request sent again asks anew. */
+  {
+    const inviteRow = (w, id) => w.R.stores.get(w.rt).get("inv:" + id) || {};
+    const deletionOf = (w, who, place, supersedes, counter, signer) => {
+      const b = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: who.keyId, privateKey: (signer || who).privateKey },
+        path: "desks/" + place.slice(5) + "/join.json", body: "", counter, place, kind: "delete", supersedes });
+      return b;
+    };
+    const answerOf = (w, id, counter) => {
+      const b = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+        path: "join-answer.json", body: "{}", counter, kind: "file", id });
+      b.place = "answer:" + id;
+      return b;
+    };
+    /* A desk asks by invitation and its request is up: the relay has accepted it. */
+    async function asked(w) {
+      const token = hex(32), id = hex(16), who = keyPair(true), place = "desk:k-" + hex(8);
+      w.R.clock.now += 1;
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const hello = await boundHello(w, who, id, token);
+      const s = hello.json && hello.json.session;
+      const ask = sealJoin(w, who, 1, place);
+      const up = await put(w, s, ask, { extra: { pub: who.pub } });
+      return { id, who, place, s, ask, ok: hello.status === 200 && up.status === 200 };
+    }
+    /* Withdraw, then the lead's yes on its way: the key in a new set, and the answer joined. */
+    async function withdrawnYes() {
+      const w = await world();
+      const a = await asked(w);
+      const lead = await sessionOf(w, w.lead);
+      const gone = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 2));
+      const old = await getBlob(w, lead, a.ask.id);
+      const listed = await since(w, lead);
+      const del = (listed.json || []).filter(e => e.meta && e.meta.writer === a.who.keyId && e.meta.del === true).length;
+      const yes = await devices(w, w.devs.concat([{ id: a.who.keyId, pub: a.who.pub, desk: a.place.slice(5) }]));
+      const answered = await put(w, lead, answerOf(w, a.id, 9));
+      const row = inviteRow(w, a.id);
+      const enrolled = w.R.stores.get(w.rt).get("dev:" + a.who.keyId) !== undefined;
+      const again = await helloAs(w, a.who);
+      return { w, a, ok: a.ok, gone: gone.status, old: old.status, del, yes: yes.json && yes.json.error || yes.status,
+        answered: answered.json && answered.json.error || answered.status, withdrawn: row.withdrawn === true, uploaded: row.uploaded === true,
+        enrolled, invite: !!(again.json && again.json.invite === true) };
+    }
+    const withdrawnOk = g => g.ok && g.gone === 200 && g.old === 410 && g.del === 1 && g.yes === "withdrawn" && g.answered === "withdrawn"
+      && g.withdrawn && !g.uploaded && !g.enrolled && g.invite;
+    const told = g => JSON.stringify(Object.assign({}, g, { w: undefined, a: undefined }));
+    const g = await withdrawnYes();
+    check(withdrawnOk(g), "995a a desk withdraws the request the relay has accepted: the lead no longer reads it and is listed its deletion, and the lead's yes on its way"
+      + " neither enrols the key nor takes the answer joined: " + told(g));
+    /* Ask again: the same key sends its request anew on the same invitation's session, and the lead's yes then enrols it. */
+    async function askedAgain() {
+      const r = await withdrawnYes();
+      const { w, a } = r;
+      const lead = await sessionOf(w, w.lead);
+      const s = (await helloAs(w, a.who)).json.session;
+      const prior = (w.R.stores.get(w.rt).list("blob:").map(([, m]) => m).find(m => m.writer === a.who.keyId && m.del) || {}).id;
+      const anew = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: a.who.keyId, privateKey: a.who.privateKey },
+        path: "desks/" + a.place.slice(5) + "/join.json", body: "ask 3", counter: 3, place: a.place, kind: "file", supersedes: prior });
+      const re = await put(w, s, anew, { extra: { pub: a.who.pub } });
+      const listed = (await since(w, lead)).json || [];
+      const seen = listed.some(e => e.meta && e.meta.id === anew.id && e.meta.del === false && e.meta.pub === a.who.pub);
+      const row = inviteRow(w, a.id);
+      const yes = await devices(w, w.devs.concat([{ id: a.who.keyId, pub: a.who.pub, desk: a.place.slice(5) }]));
+      const after = await helloAs(w, a.who);
+      const device = after.status === 200 && after.json.invite !== true;
+      const reads = device ? (await since(w, after.json.session)).status : 0;
+      return { first: withdrawnOk(r), re: re.status, seen, withdrawn: row.withdrawn === true, uploaded: row.uploaded === true, yes: yes.status, device, reads };
+    }
+    const againOk = b => b.first && b.re === 200 && b.seen && !b.withdrawn && b.uploaded && b.yes === 200 && b.device && b.reads === 200;
+    const b = await askedAgain();
+    check(againOk(b), "995b after a withdrawal the desk asks again on the same invitation: the lead reads the request anew, and its yes enrols the key with no new invitation: "
+      + JSON.stringify(b));
+    /* A withdrawal not from the desk that asked: an enrolled desk on its own session, another invitation's desk on its own, a call with the
+       team's id and no session, and a deletion on the asking desk's session signed by another key. Each is refused and the request stays. */
+    async function forged() {
+      const w = await world();
+      const a = await asked(w), x = await asked(w);
+      const deskS = await sessionOf(w, w.desk);
+      const byDesk = await put(w, deskS, deletionOf(w, w.desk, "desk:" + w.deskId, a.ask.id, 5));
+      const byOther = await put(w, x.s, deletionOf(w, x.who, x.place, a.ask.id, 5));
+      const byNobody = await put(w, null, deletionOf(w, a.who, a.place, a.ask.id, 5));
+      const bySigner = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 6, x.who));
+      const lead = await sessionOf(w, w.lead);
+      const still = await getBlob(w, lead, a.ask.id);
+      const row = inviteRow(w, a.id);
+      return { ok: a.ok && x.ok, desk: byDesk.json && byDesk.json.error, other: byOther.json && byOther.json.error, nobody: byNobody.status,
+        signer: bySigner.json && bySigner.json.error, still: still.status, withdrawn: row.withdrawn === true };
+    }
+    const forgedOk = f => f.ok && f.desk === "outside-place" && f.other === "outside-place" && f.nobody === 401 && f.signer === "bad-signature"
+      && f.still === 200 && !f.withdrawn;
+    const f = await forged();
+    check(forgedOk(f), "995c a withdrawal from an enrolled desk, from another invitation's desk, with no session, or signed by another key is refused, and the request stays: "
+      + JSON.stringify(f));
+    const devLift = await liftCore("plant:e4-devices", async () => !withdrawnOk(await withdrawnYes()));
+    check(devLift.turned && devLift.back, "995d lifting plant:e4-devices lets the lead's yes on its way enrol a key whose request was withdrawn (FAIL 995a: the yes enrols the key): "
+      + devLift.detail + ", sha " + (devLift.back ? "restored" : "differs"));
+    const againLift = await liftCore("plant:e4-ask-again", async () => { const x = await askedAgain(); return x.first && x.re === 200 && !againOk(x); });
+    check(againLift.turned && againLift.back, "995e lifting plant:e4-ask-again leaves the request withdrawn after it is sent anew, so the lead's yes is refused (FAIL 995b: the yes does not enrol): "
+      + againLift.detail + ", sha " + (againLift.back ? "restored" : "differs"));
+    const chainLift = await liftCore("plant:put-chain", async () => { const x = await forged(); return x.ok && x.still !== 200; });
+    check(chainLift.turned && chainLift.back, "995f lifting plant:put-chain lets an enrolled desk's deletion take the request away (FAIL 995c: the request is no longer served): "
+      + chainLift.detail + ", sha " + (chainLift.back ? "restored" : "differs"));
   }
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {

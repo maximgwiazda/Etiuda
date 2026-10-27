@@ -3074,6 +3074,8 @@ function finishJoin(admitted) {
   /* A key opened from the invitation's wrap lets this desk read before it is admitted. The request stays until the
      roster of the epoch accepted names this desk, which is still what lets the request go. */
   if (j.invite && j.invite.relay && !mine) return false;
+  /* A request withdrawn is not admitted by a roster that names this desk, unless the relay has enrolled its key. */
+  if (j.invite && j.invite.relay && j.invite.relay.withdrawn === true && !(relayChannel && relayChannel.enrolled && relayChannel.enrolled())) return false; /* plant:e4-not-joined */
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
   if (!joinTold) joinDone = { team: j.team, file: j.file };
@@ -3262,6 +3264,9 @@ function joinRequestDoc(j, reveal) {
 }
 function askJoin(file, name) {
   if (deskKeys === undefined) deskKeys = readDesk();
+  const w = teamJoin;
+  relayProbeMs = RELAY_PROBE_FIRST;
+  if (w && w.invite && w.invite.relay && w.invite.relay.withdrawn === true) return askAgain(w); /* plant:e4-ask-again-desk */
   const me = branchIdentity(), root = catalogFolder(), at = path.join(root, path.basename(String(file || "")));
   if (!me || !folderAnswers(root)) return joinView();
   const out = sealedOutside();
@@ -3280,24 +3285,44 @@ function askJoin(file, name) {
   return joinView();
 }
 /* The relay has already accepted this invitation: it spent the token, or the invitation's wrap has given this desk a key.
-   Cancel then keeps both, until the lead answers. A folder invitation has neither, and still undoes. */
+   Cancel then withdraws the request at the relay and keeps both. A folder invitation has neither, and still undoes. */
 function inviteAccepted(j) {
   const inv = j && j.invite && j.invite.relay;
-  if (!inv) return false;
+  if (!inv || inv.end) return false;
   const wrapped = Array.isArray(inv.wrapped) && inv.wrapped.some(n => Number.isInteger(n) && n >= 1);
   if (wrapped) return true;
   const channelProgram = relayChannel && relayChannel.program;
   return !!(channelProgram && typeof channelProgram.tokenSpent === "function" && channelProgram.tokenSpent(inv.inv) === true);
 }
-function keepJoin(j) {
-  j.invite.relay.stays = true;
+/* The request leaves the mirror, so the channel sends its signed deletion on the invitation's session and the lead no longer
+   sees it. The token, the pin and the keys stay, so Ask again sends the same request anew with no new link. */
+function withdrawJoin(j) {
+  if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already */ } }
+  j.invite.relay.withdrawn = true;
+  joinTold = false;
+  joinDone = null;
   persistDeskEnvelope();
+  relaySoon();
+  return joinView();
+}
+/* Ask again after a withdrawal: the same request, signed anew, which the channel sends on the invitation's session as before.
+   The mark of the key held moves to now, so only a team file heeded after this, naming this desk, admits it. */
+function askAgain(j) {
+  const was = j.asked, held = j.held;
+  j.asked = Date.now();
+  j.held = newestEpoch(j.team);
+  try { writeJoin(joinRequestDoc(j, null)); }
+  catch (e) { j.asked = was; j.held = held; console.error("etiuda: the request to join could not be written - " + e.message); return joinView(); }
+  delete j.invite.relay.withdrawn;
+  joinTold = false;
+  persistDeskEnvelope();
+  relaySoon();
   return joinView();
 }
 function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
-  if (inviteAccepted(j)) return keepJoin(j); /* plant:h35-keep */
+  if (inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
   if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
@@ -3389,10 +3414,10 @@ function joinView() {
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
-    if (j.invite && j.invite.relay && j.invite.relay.stays === true) {
+    if (j.invite && j.invite.relay && j.invite.relay.withdrawn === true) view.join.withdrawn = true;
+    else if (j.invite && j.invite.relay && teamLeft[j.team]) {
       const held = !!(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length);
-      if (held) view.join.stays = true;
-      else view.join.keeps = false; /* plant:h35-keeps */
+      if (!held) view.join.keeps = false; /* plant:h35-keeps */
     }
   }
   view.sealed = sealedOutside();
@@ -3451,7 +3476,7 @@ function relayKept(r) {
     && (r.wrap === undefined || (typeof r.wrap === "string" && r.wrap !== ""))
     && (r.wrapped === undefined || (Array.isArray(r.wrapped) && r.wrapped.length <= 64 && r.wrapped.every(n => Number.isInteger(n) && n >= 1))) /* plant:e4-wrapped */
     && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed")
-    && (r.stays === undefined || r.stays === true)
+    && (r.withdrawn === undefined || r.withdrawn === true)
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
@@ -3767,6 +3792,8 @@ function forgetLead(team, left) {
   delete teamRelayGone[team];
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
+  // A request already withdrawn waits nowhere, so it goes with the keys.
+  if (teamJoin && teamJoin.team === team && teamJoin.invite && teamJoin.invite.relay && teamJoin.invite.relay.withdrawn === true) teamJoin = null;
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
   for (const [pin, held] of Array.from(editionTeams)) {
     held.delete(team);
@@ -3850,12 +3877,24 @@ function relaySoon() {
   relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
   if (relayTimer.unref) relayTimer.unref();
 }
-/* While the relay has refused this desk, ask again on the channel's own minute, so a later enrolment is a fresh hello and not a new invitation. */
+/* While the relay has refused this desk, ask again later, so a later enrolment is a fresh hello and not a new invitation: a
+   minute first, twice as long after each probe up to an hour, and a minute again once a hello succeeds or the join changes. */
+const RELAY_PROBE_FIRST = 60 * 1000, RELAY_PROBE_MOST = 60 * 60 * 1000;
+let relayProbeMs = RELAY_PROBE_FIRST;
 function relayProbeLater() {
   clearTimeout(relayProbeTimer);
-  relayProbeTimer = setTimeout(() => { relayProbeTimer = null; relayRun(); }, 60000);
+  relayProbeTimer = setTimeout(relayProbe, relayProbeMs);
   if (relayProbeTimer.unref) relayProbeTimer.unref();
 }
+function relayProbe() {
+  relayProbeTimer = null;
+  relayProbeMs = Math.min(relayProbeMs * 2, RELAY_PROBE_MOST); /* plant:c1-backoff */
+  const c = relayRun();
+  if (relayFlagged()) relayProbeLater();
+  return c;
+}
+/* The wait before the next probe, for the legs. */
+function relayProbeNext() { return relayProbeMs; }
 /* Starts, keeps or stops the channel layer to match relayHere, and says once for each team whose relay it will not follow. */
 function relayRun() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -3870,6 +3909,7 @@ function relayRun() {
   const flagged = !open && !named ? relayFlagged() : null; /* plant:h35-probe */
   const want = open || flagged;
   if (!want) { clearTimeout(relayProbeTimer); relayProbeTimer = null; }
+  if (!flagged) relayProbeMs = RELAY_PROBE_FIRST;
   if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
     + ", so this desk keeps that folder and not the relay its team file names");
   const pin = want ? teamPins[want.team] : null;
@@ -3938,6 +3978,7 @@ function relayRun() {
       delete teamRelayGone[team]; /* plant:h35-return */
       clearTimeout(relayProbeTimer);
       relayProbeTimer = null;
+      relayProbeMs = RELAY_PROBE_FIRST;
       persistDeskEnvelope();
       sendJoin(theWindow);
       relaySoon();
@@ -3964,7 +4005,7 @@ function relayRun() {
        until the roster names this desk, which is still what lets it go. */
     onAnswer: answer => {
       const j = teamJoin;
-      if (!j || j.team !== team || !j.invite || !j.invite.relay) return;
+      if (!j || j.team !== team || !j.invite || !j.invite.relay || j.invite.relay.withdrawn === true) return;
       if (answer === "refused") {
         if (!j.refused) { j.refused = true; persistDeskEnvelope(); }
         return;

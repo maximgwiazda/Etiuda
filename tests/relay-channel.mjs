@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 247;
+const EXPECTED = 255;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1622,7 +1622,7 @@ try {
   const APP = path.join(LAB, "app");
   fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-  const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam"];
+  const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -2983,7 +2983,7 @@ try {
   }
 
   /* C7, board 921. A desk takes a relay invitation and the invitation's copy lands. Cancel after the relay has accepted
-     keeps the request and whatever the invitation gave (hold 4): the desk stays on the mirror and the channel keeps
+     withdraws the request at the relay and keeps whatever the invitation gave (hold 4, E4): the desk stays on the mirror and the channel keeps
      running. A folder invitation, and a relay invitation the relay has not accepted, still puts back what it changed. */
   try {
     /* The shell `src` loaded over the desk folder `ud` and the envelope already in it, as a restarted desk loads. */
@@ -3121,14 +3121,14 @@ try {
     }
     const got = await cancelScene(fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"), "leg");
     const gotStays = !!(got.after && got.after.teamJoin && got.after.teamJoin.invite && got.after.teamJoin.invite.relay
-      && got.after.teamJoin.invite.relay.stays === true);
+      && got.after.teamJoin.invite.relay.withdrawn === true);
     check(got.pre && got.here !== null && got.folder !== got.share && got.stopped === false && gotStays,
-      "921a a desk takes a relay invitation, the invitation's copy lands, and cancel after the relay has accepted keeps the request, the mirror and the channel: "
+      "921a a desk takes a relay invitation, the invitation's copy lands, and cancel after the relay has accepted withdraws the request and keeps the mirror and the channel: "
       + (got.pre ? "the copy had landed" : "the copy had not (" + (got.refused ? "refused " + got.refused : "file " + got.file + ", channel " + got.named) + ")")
       + ", relayHere " + (got.here === null ? "null" : "answers")
       + ", folder " + (got.folder === got.share ? "the one from before" : "the mirror")
       + ", channel " + (got.stopped ? "stopped" : "running")
-      + ", stays " + (gotStays ? "yes" : "no")
+      + ", withdrawn " + (gotStays ? "yes" : "no")
       + (got.said ? "; " + got.said : ""));
     /* plant:h35-keep. Deleting that line puts the folder back and stops the channel, which is what Cancel did before a relay acceptance was kept. */
     const mainFile = path.join(ROOT, "shell", "main.js");
@@ -3223,10 +3223,10 @@ try {
     const gone = g => g.here === null && g.folder === g.share && g.stopped;
     const folderBack = g => g.folder === g.own && g.set === g.own && g.asks === 0 && g.after.teamJoin === undefined
       && slot(g, "teamShown") === undefined && slot(g, "teamChannel") === undefined && slot(g, "teamPinFrom") === undefined;
-    /* A relay cancel after the relay has accepted: the request stays, the mirror stays, the channel stays. */
+    /* A relay cancel after the relay has accepted: the request is withdrawn, the mirror stays, the channel stays. */
     const relayStays = g => {
       const r = g.after && g.after.teamJoin && g.after.teamJoin.invite && g.after.teamJoin.invite.relay;
-      return !!(r && r.stays === true);
+      return !!(r && r.withdrawn === true);
     };
     const keptOn = g => g.here !== null && g.folder !== g.share && g.stopped === false && relayStays(g);
     const verdict = {
@@ -3248,7 +3248,7 @@ try {
       admit: g => keptOn(g) && !!slot(g, "teamKeys") && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin)
         && slot(g, "teamPinFrom") === "invite" && !!slot(g, "teamChannel"),
       tamper: g => g.kept === false,
-      /* E4. The wrap's key stays, the leave stays lifted, and the request stays, because the relay has accepted. */
+      /* E4. The wrap's key stays and the leave stays lifted, because the relay has accepted, and the request is withdrawn. */
       wrap: g => keptOn(g) && !!slot(g, "teamKeys") && slot(g, "teamLeft") === undefined && !barredHere(g)
         && JSON.stringify(slot(g, "teamPins")) === JSON.stringify(leadPin) && slot(g, "teamPinFrom") === "invite"
         && !!slot(g, "teamChannel"),
@@ -3271,7 +3271,7 @@ try {
       + ", left " + (slot(g, "teamLeft") ? "kept" : "gone")
       + ", barred " + (barredHere(g) ? "yes" : "no")
       + ", join " + (g.after.teamJoin === undefined ? "gone" : "standing")
-      + ", stays " + (relayStays(g) ? "yes" : "no");
+      + ", withdrawn " + (relayStays(g) ? "yes" : "no");
     const toldFolder = g => (g.pre ? "the invitation had been taken" : "the invitation had not (" + (g.refused ? "refused " + g.refused : "its state was not as taken") + ")")
       + ", folder " + (g.folder === g.own ? "the one from before" : g.folder === g.yard ? "the invited one" : "another")
       + ", setting " + (g.set === g.own ? "back" : g.set === g.yard ? "the invited one" : "other")
@@ -3284,16 +3284,16 @@ try {
     const scenes = {};
     for (const name of Object.keys(asked)) scenes[name] = await runScene(fs.readFileSync(mainFile, "utf8"), name, name);
     check(scenes.pin.pre && verdict.pin(scenes.pin),
-      "921c a desk that held the lead's pin before a relay invitation the relay has accepted, and cancels, keeps the request and stays on the relay: "
+      "921c a desk that held the lead's pin before a relay invitation the relay has accepted, and cancels, withdraws the request and stays on the relay: "
       + told(scenes.pin));
     check(scenes.left.pre && verdict.left(scenes.left),
       "921d a desk that had left the team, and cancels a relay invitation the relay has accepted, stays on the relay and the leave stays lifted: "
       + told(scenes.left));
     check(scenes.key.pre && verdict.key(scenes.key),
-      "921e a desk that held the team's key before a relay invitation the relay has accepted, and cancels, keeps that key and the request and stays on the relay: "
+      "921e a desk that held the team's key before a relay invitation the relay has accepted, and cancels, keeps that key, withdraws the request and stays on the relay: "
       + told(scenes.key));
     check(scenes.twice.pre && verdict.twice(scenes.twice),
-      "921f a desk that takes the same relay invitation twice, and cancels after the relay has accepted, keeps the request and stays on the relay: "
+      "921f a desk that takes the same relay invitation twice, and cancels after the relay has accepted, withdraws the request and stays on the relay: "
       + told(scenes.twice));
     check(scenes.fresh.pre && verdict.fresh(scenes.fresh),
       "921j a desk that takes a folder invitation and cancels it before the lead admits it is back as before: the pin, the shown team and the request on the"
@@ -3303,28 +3303,28 @@ try {
     check(scenes.fleft.pre && verdict.fleft(scenes.fleft),
       "921l a desk that had left the team, and cancels a folder invitation before it is admitted, has its leave record and its bar again: " + toldFolder(scenes.fleft));
     check(scenes.restart.pre && verdict.restart(scenes.restart),
-      "921m a desk stopped and loaded again from desk.json between a relay invitation and its Cancel, after the relay has accepted, keeps the request and stays on the relay: "
+      "921m a desk stopped and loaded again from desk.json between a relay invitation and its Cancel, after the relay has accepted, withdraws the request and stays on the relay: "
       + told(scenes.restart));
     check(scenes.admit.pre && verdict.admit(scenes.admit),
       "921n a desk that keeps a key newer than the one it held at the invitation which the invitation's wrap did not give, and cancels after the relay has accepted,"
-      + " keeps the request and the key and stays on the relay: " + told(scenes.admit));
+      + " withdraws the request, keeps the key and stays on the relay: " + told(scenes.admit));
     check(scenes.tamper.pre && verdict.tamper(scenes.tamper),
       "921o a snapshot whose mark of the key held is not a count is not read back from desk.json, and the request that carried it is not kept: the request "
       + (scenes.tamper.kept ? "was kept" : "was dropped"));
     check(scenes.wrap.pre && verdict.wrap(scenes.wrap),
-      "921u a desk that had left the team, takes a relay invitation whose wrap opens the team key, and cancels after the relay has accepted, keeps that key and the request"
+      "921u a desk that had left the team, takes a relay invitation whose wrap opens the team key, and cancels after the relay has accepted, keeps that key, withdraws the request"
       + " and the leave stays lifted: " + told(scenes.wrap));
     check(scenes.wraphold.pre && verdict.wraphold(scenes.wraphold),
-      "921v a desk that held the team's key before the invitation, and cancels after the wrap opened that epoch and the relay has accepted, keeps the key and the request: "
+      "921v a desk that held the team's key before the invitation, and cancels after the wrap opened that epoch and the relay has accepted, keeps the key and withdraws the request: "
       + told(scenes.wraphold));
     check(scenes.wraprestart.pre && verdict.wraprestart(scenes.wraprestart),
-      "921w a desk stopped and loaded again from desk.json after the invitation's wrap opened the team key, and cancels after the relay has accepted, keeps that key and the request: "
+      "921w a desk stopped and loaded again from desk.json after the invitation's wrap opened the team key, and cancels after the relay has accepted, keeps that key and withdraws the request: "
       + told(scenes.wraprestart));
     check(scenes.wrapbad.pre && verdict.wrapbad(scenes.wrapbad),
       "921x a list of the epochs the wrap gave a key for that is not a list of counts is not read back from desk.json, and the request that carried it is not kept: the request "
       + (scenes.wrapbad.kept ? "was kept" : "was dropped"));
     check(scenes.wrapretake.pre && verdict.wrapretake(scenes.wrapretake),
-      "921y a desk that takes the invitation a second time after its wrap opened the team key, and cancels after the relay has accepted, keeps that key and the request: "
+      "921y a desk that takes the invitation a second time after its wrap opened the team key, and cancels after the relay has accepted, keeps that key and withdraws the request: "
       + told(scenes.wrapretake));
 
     /* The plants. Each leg above is red where the line it guards is lifted, the file is read back from disk and put back byte for byte. */
@@ -3454,7 +3454,7 @@ try {
 
     /* Holds 3 and 4. A desk the lead has taken off the relay is told and stops asking. An invitation registered before that
        removal is refused without being spent, and the card says a new one is needed. Cancelling after the relay has accepted
-       keeps the key and the request. */
+       withdraws the request and keeps the key. */
     const mainNow = fs.readFileSync(mainFile, "utf8");
     const enrolDesk = async (rt, rev, list) => {
       R.clock.now += 1;
@@ -3671,14 +3671,14 @@ try {
       const kept = await cancelScene(mainNow, "h35keep", { wrap: true });
       const relay = kept.after && kept.after.teamJoin && kept.after.teamJoin.invite && kept.after.teamJoin.invite.relay;
       const keyKept = !!(kept.after && kept.after.teamKeys && kept.after.teamKeys[kept.team]);
-      const staying = kept.here !== null && kept.stopped === false && keyKept && !!(relay && relay.stays === true);
+      const staying = kept.here !== null && kept.stopped === false && keyKept && !!(relay && relay.withdrawn === true);
       check(kept.pre && staying,
-        "993f cancelling a join the relay has already accepted keeps the request and the key the invitation gave: "
+        "993f cancelling a join the relay has already accepted withdraws the request and keeps the key the invitation gave: "
         + (kept.pre ? "the copy had landed" : "the copy had not")
         + ", relayHere " + (kept.here === null ? "null" : "answers")
         + ", channel " + (kept.stopped ? "stopped" : "running")
         + ", key " + (keyKept ? "kept" : "gone")
-        + ", stays " + (relay && relay.stays === true ? "yes" : "no"));
+        + ", withdrawn " + (relay && relay.withdrawn === true ? "yes" : "no"));
     } catch (e) {
       check(false, "993f threw: " + (e && e.stack ? e.stack : e));
     }
@@ -3697,10 +3697,215 @@ try {
           + ", key " + (keyKept ? "kept" : "gone");
       }
       const back = sha(fs.readFileSync(mainFile)) === sha(Buffer.from(mainNow));
-      check(turned && back, "993g lifting plant:h35-keep forgets the key and stops the channel (FAIL 993f cancelling a join the relay has already accepted keeps the request and the key the invitation gave: relayHere null, channel stopped, key gone, stays no): "
+      check(turned && back, "993g lifting plant:h35-keep forgets the key and stops the channel (FAIL 993f cancelling a join the relay has already accepted withdraws the request and keeps the key the invitation gave: relayHere null, channel stopped, key gone, withdrawn no): "
         + detail + ", sha " + (back ? "restored" : "differs"));
     } catch (e) {
       check(false, "993g threw: " + (e && e.stack ? e.stack : e));
+    }
+    /* E4 through the real channel and relay. A desk takes a relay invitation with its wrap, and its request reaches the lead's
+       mirror. Cancel withdraws it: the lead's mirror loses it, and the lead's yes on its way (the key in a new set, a team file
+       whose roster names the desk with its wrap) neither enrols the key nor admits the desk. Ask again sends the request anew, the
+       lead's mirror holds it again, and the lead's yes then admits the desk with no new invitation. `Cs` is the lead's channel layer. */
+    async function withdrawScene(src, tag, Cs) {
+      const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
+      R.clock.now += 1;
+      const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+      const secret = hex(16), inv = hex(16), token = hex(32), t0 = R.clock.now;
+      const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+      await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: t0, sig: signHex(LEAD, core.invitesBytes(rt, t0, add, [])) });
+      const pin = { teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+      const teamFile = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev,
+        channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+      const live = [{ id: inv, key: C.inviteSealKey(secret) }];
+      const wrapDoc = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: 1, key: key });
+      const serve = (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
+        ? new Response(Buffer.from(JSON.stringify({ wrap: wrapDoc }), "utf8"), { status: 200, headers: { "content-type": "application/json" } }) : null);
+      const studioT = transport("e4-" + tag), studioMirror = path.join(LAB, "e4-studio-" + tag);
+      const studio = Cs.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "e4-" + tag + ".json"),
+        pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+        keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1, inviteKeys: () => live,
+        request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
+      put(studioMirror, C.TEAM_NAME, teamFile(1, []));
+      studio.start();
+      await studio.idle();
+      deskTransport.down = false;
+      const share = path.join(LAB, "e4-share-" + tag);
+      const D = deskFrom("e4-desk-" + tag, share, src, null, serve);
+      const me = await D.ask("etiuda:branch-identity", true);
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+      const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      const asked = path.join(studioMirror, "desks", me.id, "join.json");
+      const both = async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle(); };
+      const envNow = () => { try { return D.envelope(); } catch { return {}; } };
+      const first = await until(async () => { await both(); const e = envNow(); return fs.existsSync(asked) && !!(e.teamKeys && e.teamKeys[team]); }, 8000);
+      await D.ask("etiuda:team-join", "cancel");
+      const gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 8000);
+      const row = [{ id: me.id, pub: me.key, desk: me.id }];
+      const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(key, me.box, team, 1, me.id) };
+      const yes = await enrolDesk(rt, 1, row);
+      put(studioMirror, C.TEAM_NAME, teamFile(2, [entry]));
+      await studio.kick(); await studio.idle();
+      let joinedEarly = false;
+      for (let i = 0; i < 3; i++) {
+        await both();
+        const v = await D.ask("etiuda:team-join", "view");
+        if (v && v.joined) joinedEarly = true;
+      }
+      const e1 = envNow();
+      const enrolledEarly = !!R.stores.get(rt).get("dev:" + me.id);
+      const kept = !!(e1.teamJoin && e1.teamJoin.invite && e1.teamJoin.invite.relay && e1.teamJoin.invite.relay.withdrawn === true
+        && e1.teamKeys && e1.teamKeys[team]);
+      await D.ask("etiuda:team-join", "ask", "", "Desk North");
+      const back = await until(async () => { await both(); return fs.existsSync(asked); }, 8000);
+      const yes2 = await enrolDesk(rt, 2, row);
+      put(studioMirror, C.TEAM_NAME, teamFile(3, [entry]));
+      await studio.kick(); await studio.idle();
+      let joined = false;
+      await until(async () => {
+        await both();
+        const v = await D.ask("etiuda:team-join", "view");
+        if (v && v.joined && v.joined.team === team) joined = true;
+        return joined;
+      }, 8000);
+      const e2 = envNow();
+      const live2 = D.api.relayRun();
+      try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench */ }
+      if (live2) { try { await live2.stop(); } catch { /* already stopped */ } }
+      try { await studio.stop(); } catch { /* already stopped */ }
+      return { made: made.status, taken: !taken.refused, first, gone, yes: yes.status, joinedEarly, enrolledEarly, kept,
+        back, yes2: yes2.status, joined, after: !e2.teamJoin };
+    }
+    const withdrawA = g => g.made === 200 && g.taken && g.first && g.gone && g.yes === 403 && !g.joinedEarly && !g.enrolledEarly && g.kept;
+    const withdrawB = g => withdrawA(g) && g.back && g.yes2 === 200 && g.joined && g.after;
+    let e4 = null;
+    try {
+      e4 = await withdrawScene(mainNow, "leg", C);
+      check(withdrawA(e4), "995g a desk cancels a request the relay has accepted: the lead's mirror loses it, and the lead's yes on its way neither enrols the key"
+        + " nor admits the desk, which keeps its key and its join: " + JSON.stringify(e4));
+      check(withdrawB(e4), "995h after that withdrawal Ask again puts the request back in the lead's mirror, and the lead's yes then admits the desk with no new invitation: "
+        + JSON.stringify(e4));
+    } catch (e) {
+      check(false, "995g threw: " + (e && e.stack ? e.stack : e));
+      check(false, "995h threw");
+    }
+    try {
+      const lifted = dropLine("plant:e4-not-joined")(mainNow);
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await withdrawScene(lifted, "plant-joined", C);
+        turned = g.first && g.gone && g.joinedEarly;
+        detail = "joined early " + g.joinedEarly;
+      }
+      const backSha = sha(fs.readFileSync(mainFile)) === sha(Buffer.from(mainNow));
+      check(turned && backSha, "995i lifting plant:e4-not-joined admits the withdrawn desk on the roster of the lead's yes on its way (FAIL 995g: the desk is admitted): "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "995i threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const lifted = dropLine("plant:e4-ask-again-desk")(mainNow);
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await withdrawScene(lifted, "plant-again", C);
+        turned = withdrawA(g) && !g.back && !g.joined;
+        detail = "asked back " + g.back + ", joined " + g.joined;
+      }
+      const backSha = sha(fs.readFileSync(mainFile)) === sha(Buffer.from(mainNow));
+      check(turned && backSha, "995j lifting plant:e4-ask-again-desk leaves Ask again unsent after a withdrawal, so the lead never sees the request again (FAIL 995h: not asked back): "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "995j threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const chFile = path.join(ROOT, "shell", "relay", "channel.cjs"), chText = fs.readFileSync(chFile, "utf8");
+      const lifted = swapText("plant:e4-lead-withdraw", 'r.kind === "delete" || ', '')(chText);
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await withdrawScene(mainNow, "plant-lead", loadPlantedChannel(lifted));
+        turned = g.first && !g.gone;
+        detail = "the lead's mirror " + (g.gone ? "lost the request" : "kept the request");
+      }
+      const backSha = sha(fs.readFileSync(chFile)) === sha(Buffer.from(chText));
+      check(turned && backSha, "995k lifting plant:e4-lead-withdraw leaves the request in the lead's mirror after the withdrawal (FAIL 995g: the lead's mirror keeps it): "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "995k threw: " + (e && e.stack ? e.stack : e));
+    }
+
+    try {
+      const chFile = path.join(ROOT, "shell", "relay", "channel.cjs"), chText = fs.readFileSync(chFile, "utf8");
+      const lifted = dropLine("plant:e4-rostered-ask")(chText);
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await withdrawScene(mainNow, "plant-rostered", loadPlantedChannel(lifted));
+        turned = withdrawA(g) && !g.back;
+        detail = "asked back " + g.back;
+      }
+      const backSha = sha(fs.readFileSync(chFile)) === sha(Buffer.from(chText));
+      check(turned && backSha, "995n lifting plant:e4-rostered-ask leaves the lead unable to open the request asked again once its roster names the desk (FAIL 995h: not asked back): "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "995n threw: " + (e && e.stack ? e.stack : e));
+    }
+
+    /* C1: a desk the lead removed probes the relay less often each time, from a minute towards an hour, and a desk enrolled again
+       follows on the next probe, its pace back to a minute. Each probe is asked through relayProbe, so no leg waits. */
+    async function backoffScene(src, tag) {
+      const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), share = path.join(LAB, "c1-share-" + tag);
+      R.clock.now += 1;
+      await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+      const D = deskFrom("c1-" + tag, share, src, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamKeys: { [team]: { 1: sealedKey(key) } },
+        teamShown: { [team]: { lead: "Ada Quay", folder: share } } });
+      const me = await D.ask("etiuda:branch-identity", true);
+      const row = [{ id: me.id, pub: me.key, desk: me.id }];
+      await enrolDesk(rt, 1, row);
+      deskTransport.down = false;
+      const online = await until(async () => { const c = D.api.relayRun(); if (c) { c.kick(); await c.idle(); } return !!(c && c.online()); }, 8000);
+      await enrolDesk(rt, 2, []);
+      const c0 = D.api.relayRun();
+      if (c0) { c0.kick(); await c0.idle(); }
+      const hushed = await until(() => D.api.relayHere() === null, 1500);
+      const waits = [D.api.relayProbeNext()];
+      for (let i = 0; i < 7; i++) {
+        const c = D.api.relayProbe();
+        if (c) await c.idle();
+        waits.push(D.api.relayProbeNext());
+      }
+      await enrolDesk(rt, 3, row);
+      const c = D.api.relayProbe();
+      if (c) await c.idle();
+      const followed = await until(async () => { const x = D.api.relayRun(); if (x) { x.kick(); await x.idle(); } return D.api.relayHere() !== null; }, 4000);
+      const reset = D.api.relayProbeNext();
+      try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench */ }
+      const live = D.api.relayRun();
+      if (live) { try { await live.stop(); } catch { /* already stopped */ } }
+      return { online, hushed, waits, followed, reset };
+    }
+    const MINUTE = 60 * 1000;
+    const paced = g => g.online && g.hushed && JSON.stringify(g.waits) === JSON.stringify([1, 2, 4, 8, 16, 32, 60, 60].map(n => n * MINUTE))
+      && g.followed && g.reset === MINUTE;
+    try {
+      const g = await backoffScene(mainNow, "leg");
+      check(paced(g), "995l a desk the lead removed probes after a minute, then twice as long after each probe up to an hour, and once enrolled again follows on the next probe"
+        + " with its pace back to a minute: " + JSON.stringify(g));
+    } catch (e) {
+      check(false, "995l threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const lifted = dropLine("plant:c1-backoff")(mainNow);
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await backoffScene(lifted, "plant");
+        turned = g.online && g.hushed && g.waits.every(w => w === MINUTE);
+        detail = "waits " + JSON.stringify(g.waits);
+      }
+      const backSha = sha(fs.readFileSync(mainFile)) === sha(Buffer.from(mainNow));
+      check(turned && backSha, "995m lifting plant:c1-backoff keeps every probe a minute apart (FAIL 995l: the waits do not grow): " + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "995m threw: " + (e && e.stack ? e.stack : e));
     }
   } catch (e) {
     check(false, "harness (the legs 921a to 921ae): " + (e && e.stack ? e.stack : e));

@@ -1090,14 +1090,14 @@ UI_STRINGS.pl={
   "{LEAD}'s team no longer includes this desk":"To stanowisko nie należy już do zespołu osoby {LEAD}",
   "The team no longer includes this desk":"To stanowisko nie należy już do zespołu",
   "Once the team's lead lets this desk in again, the catalog opens here by itself.":"Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
-  /* Lead engineer's draft for the copywriter. The desk has stopped asking; the catalog opens by itself only once the lead lets it in again. */
-  "This desk has stopped asking the relay. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself.":"To stanowisko przestało pytać przekaźnik. Katalogi na nim zostają bez zmian. Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
-  /* Lead engineer's draft for the copywriter. The team's lead removed this desk; the invitation was not spent by the desk leaving. */
-  "This invitation was made before the team's lead removed this desk, so it no longer works. The team's lead can make a new one.":"To zaproszenie powstało, zanim lider zespołu usunął to stanowisko, więc już nie działa. Nowe może wystawić lider zespołu.",
-  /* Claudette's words, 2026-10-27 01:23. */
-  "The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in.":"Przekaźnik przyjął już tę prośbę, więc zostaje ona do odpowiedzi lidera zespołu. Stanowisko zachowuje to, co dało mu zaproszenie, więc zgoda lidera nadal je wpuści.",
-  /* Lead engineer's draft for the copywriter. After Leave, the desk no longer keeps what the invitation gave. */
-  "This desk has left the team, so it no longer keeps what the invitation gave it. The request stays until the team's lead answers.":"To stanowisko opuściło zespół, więc nie zachowuje już tego, co dało mu zaproszenie. Prośba zostaje do odpowiedzi lidera zespołu.",
+  /* Claudette's words, 2026-10-27. */
+  "The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself.":"Według przekaźnika to stanowisko nie należy już do zespołu, więc nic nowego do niego nie dociera. Katalogi na nim zostają bez zmian. Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
+  /* Claudette's words, 2026-10-27. */
+  "This invitation was made before the team's lead removed this desk, so it no longer works. The lead can make a new one.":"To zaproszenie powstało, zanim lider zespołu wyłączył to stanowisko z zespołu, więc już nie działa. Nowe może wystawić lider zespołu.",
+  /* Claudette's words, 2026-10-27. */
+  "The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link.":"Prośba została wycofana: lider zespołu już jej nie widzi. Stanowisko zachowuje to, co dało mu zaproszenie, więc przycisk Poproś ponownie wyśle ją jeszcze raz bez nowego odnośnika.",
+  /* Claudette's words, 2026-10-27. */
+  "This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered.":"To stanowisko opuściło zespół, więc nie ma już tego, co dało mu zaproszenie. Prośba czeka u lidera zespołu na odpowiedź.",
   /* Claudette's words, 2026-10-27 01:23. */
   "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.":"Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",
   "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.":"Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",

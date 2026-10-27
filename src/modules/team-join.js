@@ -131,7 +131,7 @@ function joinShown(j){
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
-  if(j.stays===true) row.stays=true;
+  if(j.withdrawn===true) row.withdrawn=true;
   if(j.keeps===false) row.keeps=false;
   return row;
 }
@@ -396,13 +396,13 @@ function joinParts(){
   /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
-    if(j.stays===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      /* Claudette's words, 2026-10-27 01:23. */
-      line:t("The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in."),
-      body:meta, acts:[]};
-    /* Lead engineer's draft for the copywriter. */
+    /* Claudette's words, 2026-10-27. */
+    if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
+      line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
+      body:meta, acts:[["ask",t("Ask again")]]};
+    /* Claudette's words, 2026-10-27. */
     if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request stays until the team's lead answers."),
+      line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered."),
       body:meta, acts:[]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
@@ -412,8 +412,8 @@ function joinParts(){
   /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
      the team's lead removed this desk. Cancel the request clears it. */
   if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),
-    /* Lead engineer's draft for the copywriter. */
-    line:t("This invitation was made before the team's lead removed this desk, so it no longer works. The team's lead can make a new one."),
+    /* Claudette's words, 2026-10-27. */
+    line:t("This invitation was made before the team's lead removed this desk, so it no longer works. The lead can make a new one."),
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
@@ -440,9 +440,9 @@ function joinParts(){
     const title=gone.lead?t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead):t("The team no longer includes this desk");
     let hushLine=false;
     hushLine=gone.relayRemoved===true; /* plant:h35-hush-card */
-    /* Lead engineer's draft for the copywriter. */
+    /* Claudette's words, 2026-10-27. */
     if(hushLine) return {title:title,
-      line:t("This desk has stopped asking the relay. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
+      line:t("The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
       body:ask, acts:acts};
     return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
   }
