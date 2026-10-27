@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 240;
+const EXPECTED = 243;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3663,7 +3663,10 @@ try {
       const filesOf = dir => filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/") + "=" + sha(fs.readFileSync(f))).sort();
       const STAY = "The catalogs on this desk stay as they are and work as before.";
       const TITLES = ["The team's relay is due for renewal", "The team's relay is read-only until renewed",
-        "The team's relay has stopped", "The relay no longer holds the team's copy"];
+        "The team's relay has stopped", "The relay no longer holds the team's copy",
+        "The relay does not know the team just now"];
+      const UNKNOWN_BODY_EN = "The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.";
+      const UNKNOWN_BODY_PL = "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; przez przekaźnik nie przychodzi nic nowego. Przekaźnik usunął kopię zespołu po wygaśnięciu licencji albo zespół jeszcze do niego nie dotarł.";
 
       const paid = await lapseTeam("paid", { paid: true, until: BASE + 30 * DAYMS });
       const trial = await lapseTeam("trial", { paid: false, until: BASE + 14 * DAYMS });
@@ -3795,6 +3798,62 @@ try {
         + (same(before.paid, after.paid) && same(before.trial, after.trial) ? ", all still there with the same bytes" : ", not all still there")
         + ", the pins " + (pinsOf(paid) === pinsBefore.paid && pinsOf(trial) === pinsBefore.trial ? "kept" : "changed")
         + ", the comparison " + (control ? "reads a missing file" : "blind"));
+
+      /* (a) a not-enrolled refusal with no stored lapse tells the new step, and the Settings row and the notice say the title and body, in English and in Polish. */
+      const unmadeRt = hex(16), unmadeTeam = "t-" + hex(8);
+      const unmadeUd = path.join(LAB, "978-unmade");
+      fs.mkdirSync(unmadeUd, { recursive: true });
+      fs.writeFileSync(path.join(unmadeUd, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
+        teamPins: { [unmadeTeam]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [unmadeTeam]: "invite" },
+        teamChannel: { [unmadeTeam]: { kind: "relay", rt: unmadeRt, url: URLV1 } }, teamShown: { [unmadeTeam]: { lead: "Ada Quay" } } }), "utf8");
+      const unmadeDesk = loadDesk(unmadeUd, { fetch: lfetch });
+      const unmadeMe = await unmadeDesk.ask("etiuda:branch-identity", true);
+      const unmade = { name: "unmade", rt: unmadeRt, team: unmadeTeam, desk: unmadeDesk, me: unmadeMe, ud: unmadeUd };
+      desks.push(unmade);
+      await pumpL(unmade);
+      const uRow = await rowOf(unmade);
+      const madeI = lapseMade;
+      await feed(unmade);
+      const unmadeNoticeEn = notice();
+      const unmadeSetEn = settings("en");
+      const unmadeSetPl = settings("pl");
+      const up = document.getElementById("eTeamLapse");
+      if (up) up.remove();
+      ST.lsSet("eUiLang", "pl");
+      await feed(unmade);
+      const unmadeNoticePl = notice();
+      ST.lsSet("eUiLang", "en");
+      check(!!uRow && !!uRow.lapse && uRow.lapse.step === "unknown" && uRow.lapse.until === null
+        && lapseMade - madeI === 2
+        && unmadeNoticeEn === TITLES[4] + " " + UNKNOWN_BODY_EN
+        && unmadeNoticePl === "Przekaźnik nie zna teraz tego zespołu " + UNKNOWN_BODY_PL
+        && unmadeSetEn.indexOf(TITLES[4]) >= 0 && unmadeSetPl.indexOf("Przekaźnik nie zna teraz tego zespołu") >= 0,
+        "978i a not-enrolled refusal with no stored lapse tells unknown, and Settings and notice say the title and body in English and Polish: row "
+        + JSON.stringify(uRow && uRow.lapse) + ", notice en " + (unmadeNoticeEn === TITLES[4] + " " + UNKNOWN_BODY_EN ? "match" : JSON.stringify(unmadeNoticeEn))
+        + ", notice pl " + (unmadeNoticePl === "Przekaźnik nie zna teraz tego zespołu " + UNKNOWN_BODY_PL ? "match" : JSON.stringify(unmadeNoticePl))
+        + ", settings en " + (unmadeSetEn.indexOf(TITLES[4]) >= 0) + ", pl " + (unmadeSetPl.indexOf("Przekaźnik nie zna teraz tego zespołu") >= 0));
+      await dismiss();
+
+      /* (b) a not-enrolled refusal past a stored sweep still tells gone, as today. */
+      await pumpL(trial);
+      const trialSwept = await rowOf(trial);
+      check(!!trialSwept && !!trialSwept.lapse && trialSwept.lapse.step === "gone",
+        "978j a not-enrolled refusal past a stored sweep still tells gone, as today: row "
+        + JSON.stringify(trialSwept && trialSwept.lapse));
+
+      /* (c) a session the relay accepts afterwards clears the new step. */
+      const madeUnmade = await ladmin("POST", "/relay/v1/teams", K.createBody(unmadeRt, LEAD, RL.clock.now, bytes => signHex(LEAD, bytes), { grantOpts: { fields: { paid: true, until: RL.clock.now + 30 * DAYMS } } }));
+      if (madeUnmade.status !== 200) throw new Error("unmade team was not made: " + JSON.stringify(madeUnmade.json));
+      const unmadeKeys = [{ id: unmadeMe.id, pub: unmadeMe.key, desk: unmadeMe.id }];
+      const enUnmade = await ladmin("POST", "/relay/v1/t/" + unmadeRt + "/devices", { keys: unmadeKeys, rev: 1, t: RL.clock.now, sig: signHex(LEAD, core.devicesBytes(unmadeRt, 1, RL.clock.now, unmadeKeys)) });
+      if (enUnmade.status !== 200) throw new Error("unmade desk was not enrolled: " + JSON.stringify(enUnmade.json));
+      await pumpL(unmade);
+      await feed(unmade);
+      const clearedRow = await rowOf(unmade);
+      check(!!uRow && !!uRow.lapse && uRow.lapse.step === "unknown" && !!clearedRow && !clearedRow.lapse && !notice() && settings("en").indexOf(TITLES[4]) < 0,
+        "978k a session the relay accepts afterwards clears the new step: row "
+        + JSON.stringify(clearedRow && clearedRow.lapse) + ", notice " + (notice() ? "shown" : "gone")
+        + ", settings " + (settings("en").indexOf(TITLES[4]) >= 0 ? "says lapse" : "clear"));
     } catch (e) {
       check(false, "978 the lapse at the desk: " + (e && e.stack ? e.stack : e));
     } finally {

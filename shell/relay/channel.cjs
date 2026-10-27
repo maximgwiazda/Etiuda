@@ -146,7 +146,7 @@ const later = (a, b) => a.epoch > b.epoch || (a.epoch === b.epoch && a.counter >
 /* THE LAPSE. A session's reply and since's etiuda-lapse header tell where the team stands by its grants: {state, until,
    readOnly, swept}, state one of LAPSE_STATES (relay/core.cjs lapseOf). A hello's until less RELAY_CHALLENGE_MS is the
    relay's own time when it answered, so the step is judged by the relay's clock and not this computer's. */
-const LAPSE_STATES = ["working", "read-only", "lapsed", "gone"];
+const LAPSE_STATES = ["working", "read-only", "lapsed", "gone", "unknown"];
 const RELAY_CHALLENGE_MS = 5 * 60 * 1000;
 const instantOrNull = v => v === null || Number.isSafeInteger(v);
 /* The lapse as told, or null where it is not that shape. */
@@ -1402,6 +1402,7 @@ function createChannel(opts) {
     stopped = why.reason === "team-lapsed"; /* plant:lapse-refused */
     if (stopped) told(Object.assign({ until: null, readOnly: null, swept: null }, last, { state: past ? "gone" : "lapsed" }));
     else if (why.reason === "not-enrolled" && past) told(Object.assign({}, last, { state: "gone" })); /* plant:lapse-swept */
+    else if (why.reason === "not-enrolled" && (!last || last.state === "unknown")) told({ state: "unknown", until: null, readOnly: null, swept: null }); /* plant:lapse-unknown */
   }
   /* A session opened for a team the relay last said was swept, or whose sweep day has passed by the relay's clock, may meet
      a copy the relay made anew. That is only a question: the cycle asks the relay before anything is fetched (copyIsNew). */
@@ -1527,7 +1528,7 @@ function createChannel(opts) {
     if (device) dropSocket();
     session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
     sessionOpened(r.json);
-    told(r.json.lapse);
+    told(r.json.lapse); /* plant:lapse-cleared */
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
     return { ok: true };
   }

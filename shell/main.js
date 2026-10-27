@@ -2542,7 +2542,7 @@ const teamSeen = new Set();                    // teams whose pinned lead key th
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
-const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone):(-?[0-9]+|null)$/;
+const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone|unknown):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
 const editionTeams = new Map();                // pin -> every team whose envelope held it; this run only
 /* A later envelope of the same pin joins editionTeams and leaves the first team in place. */
