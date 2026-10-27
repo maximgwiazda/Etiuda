@@ -3,6 +3,7 @@
 # on etiuda.dev/relay-staging/v1/*. It holds no secret, only bindings.
 name = "etiuda-relay-staging"
 main = "worker.mjs"
+# When the live Worker is next deployed, it takes the date the leg runs on.
 compatibility_date = "2026-09-01"
 # shell/relay/blob.cjs and the relay's own signatures use node:crypto.
 compatibility_flags = ["nodejs_compat"]
@@ -32,6 +33,7 @@ jurisdiction = "eu"
 [env.staging]
 # Deployed only by `wrangler deploy --env staging`, by a chief of staff.
 name = "etiuda-relay-next"
+compatibility_date = "2026-08-06"
 routes = [{ pattern = "etiuda.dev/relay-staging/v1/*", zone_name = "etiuda.dev" }]
 
 [env.staging.vars]
