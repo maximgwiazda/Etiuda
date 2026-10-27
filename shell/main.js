@@ -306,6 +306,7 @@ function linkOfferView(view, parsed) {
     relay: String(view && view.offer && view.offer.relay || ""),
     link: true,
   };
+  if (view && view.offer && view.offer.left) base.offer.left = view.offer.left;
   return base;
 }
 function handLinkView(view) {
@@ -3420,14 +3421,20 @@ function joinView() {
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
-    const left = j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length);
-    if (j.invite && j.invite.relay && j.invite.relay.withdrawn === true) view.join.withdrawn = true;
-    else if (j.invite && j.invite.relay && j.invite.relay.unkept === true) view.join.unkept = true;
-    else if (left) view.join.keeps = false; /* plant:h35-keeps */
-    else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true && j.invite.relay.readonly === true) {
-      view.join.withdrawing = true;
-      view.join.readonly = true;
-    } else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true) view.join.withdrawing = true;
+    const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
+    const doubted = !!(j.invite && j.invite.relay && teamBarred.has(j.team) && !teamLeft[j.team]);
+    if (j.invite && j.invite.relay) {
+      if (left) view.join.left = true; /* plant:h35-keeps */
+      if (doubted) view.join.doubted = true;
+      if (j.invite.relay.withdrawn === true) view.join.withdrawn = true;
+      else if (j.invite.relay.unkept === true) view.join.unkept = true;
+      else if (j.invite.relay.withdrawing === true && j.invite.relay.readonly === true) {
+        view.join.withdrawing = true;
+        view.join.readonly = true;
+      } else if (j.invite.relay.withdrawing === true) {
+        view.join.withdrawing = true;
+      }
+    }
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
@@ -3549,7 +3556,11 @@ function readInvite(text) {
   if (settled) return Object.assign({}, view, { refused: settled });
   /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
      code and no folder, as the link's confirm offers it. */
-  if (parsed.relay) return Object.assign({}, view, { offer: { lead: parsed.lead.name, team: parsed.team, relay: new URL(parsed.relay.url).host } }); /* plant:relay-offer */
+  if (parsed.relay) {
+    const offer = { lead: parsed.lead.name, team: parsed.team, relay: new URL(parsed.relay.url).host };
+    if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
+    return Object.assign({}, view, { offer: offer }); /* plant:relay-offer */
+  }
   const where = folderHost(parsed.folder, process.env);
   const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
     host: where.host, cloud: where.cloud, local: where.local };
@@ -3802,8 +3813,21 @@ function forgetLead(team, left) {
   delete teamRelayGone[team];
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
-  // A request already withdrawn waits nowhere, so it goes with the keys.
-  if (teamJoin && teamJoin.team === team && teamJoin.invite && teamJoin.invite.relay && teamJoin.invite.relay.withdrawn === true) teamJoin = null;
+  // A request already withdrawn waits nowhere, so it goes with the keys; a waiting relay request is withdrawn.
+  if (teamJoin && teamJoin.team === team) {
+    if (teamJoin.invite && teamJoin.invite.relay) {
+      delete teamJoin.invite.relay.wrap;
+      if (teamJoin.invite.relay.withdrawn === true) teamJoin = null;
+      else if (inviteAccepted(teamJoin)) withdrawJoin(teamJoin); /* plant:forget-withdraw */
+      else {
+        if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone */ } }
+        teamJoin = null;
+      }
+    } else {
+      if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone */ } }
+      teamJoin = null;
+    }
+  }
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
   for (const [pin, held] of Array.from(editionTeams)) {
     held.delete(team);
@@ -3837,7 +3861,7 @@ function relayFollowed(team) {
    heeded file names the relay and whose pin the rule above lets it follow. */
 function relayHere() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite" && inv.end !== "removed" && teamRelayGone[j.team] !== true)
+  if (inv && (teamPins[j.team] || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] !== true)
     return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] !== true).sort();
   if (!teams.length) return null;
@@ -3846,7 +3870,7 @@ function relayHere() {
 /* A team this desk would follow, which the relay has refused. relayHere stays null until a fresh hello on it succeeds. */
 function relayFlagged() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite" && inv.end !== "removed" && teamRelayGone[j.team] === true)
+  if (inv && (teamPins[j.team] || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] === true)
     return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] === true).sort();
   if (!teams.length) return null;
@@ -3925,7 +3949,8 @@ function relayRun() {
   if (!flagged) relayProbeMs = RELAY_PROBE_FIRST;
   if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
     + ", so this desk keeps that folder and not the relay its team file names");
-  const pin = want ? teamPins[want.team] : null;
+  const j = teamJoin;
+  const pin = want ? (teamPins[want.team] || (want.joining && j && j.team === want.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null)) : null;
   const at = want && pin ? [want.team, want.rt, want.url, pin.public].join("|") : "";
   if (at === relayAt && relayChannel) {
     /* A channel halted on a team the relay refused starts again only at the probe, so its pace is the backoff's. */
@@ -3977,7 +4002,12 @@ function relayRun() {
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
       return out;
     },
-    onTeam: () => { teamStamp = ""; heedTeam(); },
+    onTeam: () => {
+      const j = teamJoin;
+      if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
+      teamStamp = "";
+      heedTeam();
+    },
     /* The team's lapse moved a step, so the page is told now. */
     onLapse: () => sendJoin(theWindow),
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
@@ -4063,6 +4093,8 @@ function relayRun() {
        epoch is marked in the join as the invitation's (`wrapped`) unless the desk held a key at it before, so that Cancel
        before admission forgets what the wrap gave and keeps what the desk had. */
     onTeamKey: (epoch, key) => {
+      const j = teamJoin;
+      if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return; /* plant:withdraw-arrivals */
       if (!Number.isInteger(epoch) || epoch < 1 || !Buffer.isBuffer(key) || key.length !== 32) return;
       try {
         if (!branchSealable()) throw new Error("safeStorage is not available");
