@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 267;
+const EXPECTED = 272;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3838,6 +3838,9 @@ try {
       check(false, "995gh threw, so 995g did not run: " + (e && e.stack ? e.stack : e));
       check(false, "995gh threw, so 995h did not run");
     }
+    check(!!e4 && e4.early === false && e4.takenView === true && e4.gone === true,
+      "996d the plain path still says the withdrawal is pending until the relay takes it, and then says it is withdrawn: "
+      + JSON.stringify(e4 && { early: e4.early, takenView: e4.takenView, gone: e4.gone }));
     try {
       const lifted = dropLine("plant:e4-not-joined")(mainNow);
       let turned = false, detail = "plant line absent";
@@ -3945,6 +3948,144 @@ try {
         + detail + ", sha " + (backSha ? "restored" : "differs"));
     } catch (e) {
       check(false, "995u threw: " + (e && e.stack ? e.stack : e));
+    }
+
+    /* A withdrawal the relay will not take. `spent`: the invitation is past the relay's keep, so the deletion is refused for good.
+       `held`: the team is read-only, so the deletion waits and goes once the lead renews. The session that sends it is opened while
+       the relay will still open one, and the clock then steps across the line inside that session's half hour. */
+    async function lateWithdraw(kind) {
+      const MIN = 60 * 1000;
+      const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
+      R.clock.now += 1;
+      const born = R.clock.now;
+      const made = await admin("POST", "/relay/v1/teams", createBody(rt, born));
+      const readOnlyAt = born + 30 * K.DAY + core.WORK_AFTER_MS;
+      if (kind === "held") R.clock.now = readOnlyAt - 2 * MIN;
+      const secret = hex(16), inv = hex(16), token = hex(32), t0 = R.clock.now;
+      const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+      await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: t0, sig: signHex(LEAD, core.invitesBytes(rt, t0, add, [])) });
+      const pin = { teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+      const teamFile = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+        channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+      const live = [{ id: inv, key: C.inviteSealKey(secret) }];
+      const wrapDoc = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: 1, key: key });
+      const serve = (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
+        ? new Response(Buffer.from(JSON.stringify({ wrap: wrapDoc }), "utf8"), { status: 200, headers: { "content-type": "application/json" } }) : null);
+      const studioT = transport("c5-" + kind), studioMirror = path.join(LAB, "c5-studio-" + kind + "-" + rt.slice(0, 4));
+      const studio = C.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "c5-" + kind + "-" + rt.slice(0, 4) + ".json"),
+        pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+        keyFor: () => key, sealEpoch: () => 1, inviteKeys: () => live,
+        request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
+      put(studioMirror, C.TEAM_NAME, teamFile);
+      studio.start();
+      await studio.idle();
+      deskTransport.down = false;
+      const share = path.join(LAB, "c5-share-" + kind + "-" + rt.slice(0, 4));
+      const D = deskFrom("c5-desk-" + kind + "-" + rt.slice(0, 4), share, mainNow, null, serve);
+      const me = await D.ask("etiuda:branch-identity", true);
+      const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
+        lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
+      await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
+      const asked = path.join(studioMirror, "desks", me.id, "join.json");
+      const both = async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle(); };
+      const first = await until(async () => { await both(); return fs.existsSync(asked); }, 8000);
+      if (kind === "spent") {
+        R.clock.now = t0 + core.KEEP_MS - 2 * MIN;
+        await both();
+        R.clock.now = t0 + core.KEEP_MS + MIN;
+      } else {
+        R.clock.now = readOnlyAt + MIN;
+      }
+      await D.ask("etiuda:team-join", "cancel");
+      await both();
+      const view = await D.ask("etiuda:team-join", "view");
+      const row = invRec(rt, inv) || {};
+      const ch = D.api.relayRun();
+      const owes = ch ? ch.program.owed({ keyId: me.id, place: "desk:" + me.id }, null).filter(op => /join\.json$/i.test(op.rel)).length : -1;
+      let renewed = 0, after = null, gone = false;
+      if (kind === "held") {
+        const grant = await admin("POST", "/relay/v1/t/" + rt + "/grant", { grant: K.grantFor(LEAD.pub, R.clock.now) });
+        renewed = grant.status;
+        gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 8000);
+        after = await D.ask("etiuda:team-join", "view");
+      }
+      const standing = fs.existsSync(asked);
+      const stop = D.api.relayRun();
+      if (stop) { try { await stop.stop(); } catch { /* already stopped */ } }
+      try { await studio.stop(); } catch { /* already stopped */ }
+      const j = view && view.join || {};
+      const n = after && after.join || {};
+      return { made: made.status, first, owes, standing, uploaded: row.uploaded === true, withdrawnAtRelay: row.withdrawn === true,
+        unkept: j.unkept === true, withdrawing: j.withdrawing === true, withdrawn: j.withdrawn === true, readonly: j.readonly === true,
+        renewed, gone, taken: n.withdrawn === true && n.withdrawing !== true && n.readonly !== true && n.unkept !== true };
+    }
+    function dropChannelLine(mark) {
+      const lines = fs.readFileSync(path.join(ROOT, "shell", "relay", "channel.cjs"), "utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(mark) >= 0);
+      if (at < 0) return null;
+      lines.splice(at, 1);
+      return lines.join("\n");
+    }
+    async function withPlantedChannel(text, fn) {
+      const copy = path.join(APP, "shell", "relay", "channel.cjs");
+      const before = fs.readFileSync(copy);
+      const drop = () => { for (const k of Object.keys(nodeRequire.cache)) if (path.normalize(k) === path.normalize(copy)) delete nodeRequire.cache[k]; };
+      try {
+        fs.writeFileSync(copy, text);
+        drop();
+        return await fn();
+      } finally {
+        fs.writeFileSync(copy, before);
+        drop();
+      }
+    }
+    let spent = null;
+    try {
+      spent = await lateWithdraw("spent");
+      const ended = spent.made === 200 && spent.first && spent.unkept && !spent.withdrawing && !spent.withdrawn
+        && spent.standing && !spent.withdrawnAtRelay && spent.owes === 0;
+      check(ended, "996b a withdrawal the relay refuses for good ends the waiting, the request stays with the lead and nothing more is owed: " + JSON.stringify(spent));
+    } catch (e) {
+      check(false, "996b threw: " + (e && e.stack ? e.stack : e));
+    }
+    let held = null;
+    try {
+      held = await lateWithdraw("held");
+      const waiting = held.made === 200 && held.first && held.withdrawing && held.readonly && !held.unkept && !held.withdrawn
+        && held.uploaded && !held.withdrawnAtRelay && held.owes === 1;
+      const moved = waiting && held.renewed === 200 && held.gone && held.taken;
+      check(moved, "996c a withdrawal while the relay is read-only stays owed, and once the lead renews the relay takes it and the card moves on: " + JSON.stringify(held));
+    } catch (e) {
+      check(false, "996c threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const lifted = dropChannelLine("plant:c5-unkept");
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await withPlantedChannel(lifted, () => lateWithdraw("spent"));
+        turned = g.first && !g.unkept && g.withdrawing && !g.withdrawnAtRelay && g.owes > 0;
+        detail = "unkept " + g.unkept + ", withdrawing " + g.withdrawing + ", owes " + g.owes;
+      }
+      const backSha = sha(fs.readFileSync(path.join(ROOT, "shell", "relay", "channel.cjs"))) === sha(fs.readFileSync(path.join(APP, "shell", "relay", "channel.cjs")));
+      check(turned && backSha, "996e lifting plant:c5-unkept leaves the desk waiting on a withdrawal the relay has refused for good (FAIL 996b: the waiting does not end): "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "996e threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const lifted = dropChannelLine("plant:c5-held");
+      let turned = false, detail = "plant line absent";
+      if (lifted !== null) {
+        const g = await withPlantedChannel(lifted, () => lateWithdraw("held"));
+        turned = g.first && g.withdrawing && !g.readonly && !g.withdrawnAtRelay;
+        detail = "readonly " + g.readonly + ", withdrawing " + g.withdrawing + ", at the relay " + g.withdrawnAtRelay;
+      }
+      const backSha = sha(fs.readFileSync(path.join(ROOT, "shell", "relay", "channel.cjs"))) === sha(fs.readFileSync(path.join(APP, "shell", "relay", "channel.cjs")));
+      check(turned && backSha, "996f lifting plant:c5-held leaves a read-only withdrawal saying it goes shortly (FAIL 996c: the card does not say the relay is read-only): "
+        + detail + ", sha " + (backSha ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "996f threw: " + (e && e.stack ? e.stack : e));
     }
 
     /* C1: a desk the lead removed probes the relay less often each time, from a minute towards an hour, and a desk enrolled again

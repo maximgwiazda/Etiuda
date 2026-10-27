@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 105;
+const EXPECTED = 110;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1573,6 +1573,84 @@ try {
     const same = fs.readFileSync(joinPath).equals(before);
     if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
     check(turned && same, "15cx lifting plant:g2-card, a withdrawal the relay has not taken shows the plain waiting card with Cancel (FAIL 15cp: pending not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  const UNKEPT_EN = "The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed.";
+  const UNKEPT_PL = "Przekaźnik nie mógł wycofać tej prośby, bo nie przechowuje już tak starych zaproszeń. Lider zespołu może ją jeszcze widzieć, dopóki nie wygaśnie. Aby jednak dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
+  const HELD_EN = "The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it.";
+  const HELD_PL = "Prośba jest wycofywana. Przekaźnik zespołu do czasu odnowienia działa tylko do odczytu, więc odnotuje wycofanie dopiero wtedy, a do tego czasu lider zespołu może ją jeszcze widzieć. Jeśli przekaźnik wcześniej usunie kopię zespołu, prośba zniknie razem z nią.";
+  const unkeptDesk = await relayDesk("c5-unkept-card", { unkept: true });
+  const unkeptHtml = await bothLang(unkeptDesk);
+  const unkeptSaid = cardSaid(unkeptHtml, UNKEPT_EN, UNKEPT_PL)
+    && unkeptHtml.en.indexOf('data-join="ask"') < 0 && unkeptHtml.en.indexOf('data-join="cancel"') < 0
+    && unkeptHtml.en.indexOf('data-join="load"') >= 0 && unkeptHtml.en.indexOf('data-join="join"') >= 0
+    && unkeptHtml.en.indexOf(escPage(PENDING_EN)) < 0 && unkeptHtml.pl.indexOf(PENDING_PL) < 0
+    && unkeptHtml.en.indexOf(escPage(STAYS_EN)) < 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(unkeptSaid,
+    "15cy a withdrawal the relay refuses for good ends the waiting and the card says the invitation is past its keep, in English and in Polish, with Join a team and Load another catalog and no Ask again: "
+    + (unkeptSaid ? "said" : "not said"));
+  const heldDesk = await relayDesk("c5-held-card", { withdrawing: true, readonly: true });
+  const heldHtml = await bothLang(heldDesk);
+  const heldSaid = cardSaid(heldHtml, HELD_EN, HELD_PL)
+    && heldHtml.en.indexOf('data-join="ask"') < 0 && heldHtml.en.indexOf('data-join="cancel"') < 0
+    && heldHtml.en.indexOf(escPage(PENDING_EN)) < 0 && heldHtml.en.indexOf(escPage(UNKEPT_EN)) < 0
+    && heldHtml.pl.indexOf(UNKEPT_PL) < 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(heldSaid,
+    "15cz a withdrawal while the team's relay is read-only says it takes the withdrawal when the relay is renewed, in English and in Polish, with nothing to press: "
+    + (heldSaid ? "said" : "not said"));
+  check(pendingSaid && staysSaid,
+    "15da the plain path still says the pending sentence and then the withdrawn one, in English and in Polish: pending "
+    + (pendingSaid ? "said" : "not said") + ", withdrawn " + (staysSaid ? "said" : "not said"));
+  {
+    const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+    const before = fs.readFileSync(joinPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:c5-card-unkept") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at - 2, 3);
+      const dir = fs.mkdtempSync(path.join(LAB, "join-plant-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+      window.E_HOST = hostOver(unkeptDesk);
+      planted.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 30));
+      ST.lsSet("eUiLang", "en");
+      const html = planted.teamJoinEmptyHtml();
+      turned = html.indexOf(escPage(UNKEPT_EN)) < 0;
+      detail = turned ? "the past-keep sentence was absent" : "the past-keep sentence was still said";
+    }
+    const same = fs.readFileSync(joinPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15db lifting plant:c5-card-unkept leaves the past-keep sentence unsaid (FAIL 15cy a withdrawal the relay refuses for good ends the waiting: not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  {
+    const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+    const before = fs.readFileSync(joinPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:c5-card-held") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at - 2, 3);
+      const dir = fs.mkdtempSync(path.join(LAB, "join-plant-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+      window.E_HOST = hostOver(heldDesk);
+      planted.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 30));
+      ST.lsSet("eUiLang", "en");
+      const html = planted.teamJoinEmptyHtml();
+      turned = html.indexOf(escPage(HELD_EN)) < 0;
+      detail = turned ? "the read-only sentence was absent" : "the read-only sentence was still said";
+    }
+    const same = fs.readFileSync(joinPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15dc lifting plant:c5-card-held leaves the read-only sentence unsaid (FAIL 15cz a withdrawal while the team's relay is read-only: not said): "
       + detail + ", sha " + (same ? "restored" : "differs"));
   }
 

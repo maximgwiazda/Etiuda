@@ -1095,8 +1095,11 @@ UI_STRINGS.pl={
   /* Claudette's words, 2026-10-27. */
   "This invitation was made before the team's lead removed this desk, so it no longer works. The lead can make a new one.":"To zaproszenie powstało, zanim lider zespołu wyłączył to stanowisko z zespołu, więc już nie działa. Nowe może wystawić lider zespołu.",
   /* Claudette's words, 2026-10-27. */
-  /* Claudette's words, 2026-10-27. */
   "The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request.":"Prośba jest wycofywana. Przekaźnik wkrótce to odnotuje, a do tego czasu lider zespołu może ją jeszcze widzieć.",
+  /* Claudette's words, 2026-10-27. */
+  "The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed.":"Przekaźnik nie mógł wycofać tej prośby, bo nie przechowuje już tak starych zaproszeń. Lider zespołu może ją jeszcze widzieć, dopóki nie wygaśnie. Aby jednak dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
+  /* Claudette's words, 2026-10-27. */
+  "The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it.":"Prośba jest wycofywana. Przekaźnik zespołu do czasu odnowienia działa tylko do odczytu, więc odnotuje wycofanie dopiero wtedy, a do tego czasu lider zespołu może ją jeszcze widzieć. Jeśli przekaźnik wcześniej usunie kopię zespołu, prośba zniknie razem z nią.",
   "The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link.":"Prośba została wycofana: lider zespołu już jej nie widzi. Stanowisko zachowuje to, co dało mu zaproszenie, więc przycisk Poproś ponownie wyśle ją jeszcze raz bez nowego odnośnika.",
   /* Claudette's words, 2026-10-27. */
   "This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered.":"To stanowisko opuściło zespół, więc nie ma już tego, co dało mu zaproszenie. Prośba czeka u lidera zespołu na odpowiedź.",

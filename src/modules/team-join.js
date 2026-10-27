@@ -68,7 +68,8 @@ function teamJoinShown(){
   return joinMode!=="" || (!!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed));
 }
 function teamCanJoin(){
-  return eHasJoin() && !(joinNow && (joinNow.join || leadToShow()));
+  const unkept=!!(joinNow && joinNow.join && joinNow.join.unkept===true);
+  return eHasJoin() && (unkept || !(joinNow && (joinNow.join || leadToShow())));
 }
 function leadToShow(){
   return ((joinNow&&joinNow.leads)||[]).filter(l=>l.admitted && !l.seen && !l.removed)[0]||null;
@@ -133,6 +134,8 @@ function joinShown(j){
   if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
   if(j.withdrawn===true) row.withdrawn=true;
   if(j.withdrawing===true) row.withdrawing=true;
+  if(j.unkept===true) row.unkept=true;
+  if(j.readonly===true) row.readonly=true;
   if(j.keeps===false) row.keeps=false;
   return row;
 }
@@ -403,6 +406,14 @@ function joinParts(){
     if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
       line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
       body:meta, acts:[["ask",t("Ask again")]]};
+    /* Claudette's words, 2026-10-27. */
+    if(j.unkept===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed."),
+      body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]}; /* plant:c5-card-unkept */
+    /* Claudette's words, 2026-10-27. */
+    if(j.withdrawing===true && j.readonly===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it."),
+      body:meta, acts:[]}; /* plant:c5-card-held */
     /* Until the relay has taken the withdrawal the lead may still see the request, so the card says so, with nothing to press. Claudette's words, 2026-10-27. */
     if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
