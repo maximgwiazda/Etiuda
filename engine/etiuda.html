@@ -7650,6 +7650,12 @@ What you type stays in this browser only.`;
     "{LEAD}'s team no longer includes this desk": "To stanowisko nie należy już do zespołu osoby {LEAD}",
     "The team no longer includes this desk": "To stanowisko nie należy już do zespołu",
     "Once the team's lead lets this desk in again, the catalog opens here by itself.": "Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
+    /* Lead engineer's draft for the copywriter. */
+    "This invitation was made before this desk left the team. Ask your lead for a new one.": "To zaproszenie powstało, zanim to stanowisko opuściło zespół. Nowe wystawi lider zespołu.",
+    /* Lead engineer's draft for the copywriter. */
+    "This request stays until the team's lead answers, and this desk keeps what the invitation gave it.": "Ta prośba zostaje do odpowiedzi lidera zespołu, a to stanowisko zachowuje to, co dało zaproszenie.",
+    /* Lead engineer's draft for the copywriter. */
+    "A new invitation from the team's lead lets this desk in again.": "Nowe zaproszenie od lidera zespołu wpuści to stanowisko ponownie.",
     "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
@@ -8939,7 +8945,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-26";
+  var E_BUILT = "2026-10-27";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -15062,6 +15068,7 @@ What you type stays in this browser only.`;
       team: String(j.team || "")
     };
     if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || ""), relay: String(j.invite.relay || "") };
+    if (j.stays === true) row.stays = true;
     return row;
   }
   function syncJoinDoor() {
@@ -15131,6 +15138,27 @@ What you type stays in this browser only.`;
       joinAsk("lapse-seen", team, step);
     });
   }
+  var relayGoneUp = "";
+  var relayGoneDismissed = /* @__PURE__ */ new Set();
+  function syncRelayRemoved() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function" || typeof document.createElement !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.relayRemoved === true && !relayGoneDismissed.has(x.team))[0] || null;
+    const want = l ? l.team : "", up = document.getElementById("eTeamRemoved");
+    if (want === relayGoneUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    relayGoneUp = want;
+    if (!l) return;
+    eNotice(
+      "eTeamRemoved",
+      t("This team no longer includes this desk."),
+      /* Lead engineer's draft for the copywriter. */
+      t("A new invitation from the team's lead lets this desk in again."),
+      () => {
+        relayGoneDismissed.add(want);
+        if (relayGoneUp === want) relayGoneUp = "";
+      }
+    );
+  }
   function joinTook(v, changed) {
     const s = v && typeof v === "object" ? v : {};
     const was = JSON.stringify(joinNow);
@@ -15148,6 +15176,7 @@ What you type stays in this browser only.`;
           removed: l.removed === true,
           policy: l.policy === true
         };
+        if (l.relayRemoved === true) row.relayRemoved = true;
         const head = headKept(l.head);
         if (head) row.head = head;
         const lapse = lapseKept(l.lapse);
@@ -15161,6 +15190,7 @@ What you type stays in this browser only.`;
     }
     syncJoinDoor();
     syncLapseNotice();
+    syncRelayRemoved();
     const refusal = s.linkRefusal;
     if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
       dropInvite();
@@ -15318,6 +15348,13 @@ What you type stays in this browser only.`;
     const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
     if (j && j.invite && j.state === "waiting") {
       const lead = String(j.invite.lead || "").trim() || t("the lead");
+      if (j.stays === true) return {
+        title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        /* Lead engineer's draft for the copywriter. */
+        line: t("This request stays until the team's lead answers, and this desk keeps what the invitation gave it."),
+        body: meta,
+        acts: []
+      };
       return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         line: j.invite.relay ? t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.") : t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
@@ -15325,6 +15362,13 @@ What you type stays in this browser only.`;
         acts: [["cancel", t("Cancel the request")]]
       };
     }
+    if (j && j.invite && j.invite.relay && j.state === "removed") return {
+      title: t("Join a team"),
+      /* Lead engineer's draft for the copywriter. */
+      line: t("This invitation was made before this desk left the team. Ask your lead for a new one."),
+      body: '<div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead || "").trim() || t("the lead"))) + '</div><div class="e-join-meta">' + esc(t("Team: {TEAM}").split("{TEAM}").join(j.team)) + '</div><div class="e-join-meta">' + esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay)) + "</div>",
+      acts: [["cancel", t("Cancel the request")], ["load", t("Load another catalog")]]
+    };
     if (j && j.invite && j.invite.relay && (j.state === "used" || j.state === "ended")) return {
       title: t("Join a team"),
       line: j.state === "used" ? t("This invitation has already been used. Ask your lead for a new one.") : t("This invitation has expired. Ask your lead for a new one."),

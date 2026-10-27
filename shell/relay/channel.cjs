@@ -1316,7 +1316,8 @@ function createProgram(opts) {
    lead's answer; onAnswer(answer) on a desk, "joined" or "refused", once the lead's answer opens; request(method,
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
-   file lands; clock. */
+   file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
+   the channel stops asking; clock. */
 function createChannel(opts) {
   const o = opts || {};
   const mirror = path.resolve(o.mirror);
@@ -1332,6 +1333,9 @@ function createChannel(opts) {
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null;
+  /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
+  const ENROL_WAIT_MS = 5 * 60 * 1000;
+  let enrolWaitFrom = 0, removedTold = false;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -1499,6 +1503,7 @@ function createChannel(opts) {
     const ended = !!(r.json && r.json.error === "invite-ended");
     if (ended) inviteEnd("ended"); /* plant:S3-page-ended */
     if (ended) return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
+    if (t.reason === "removed") { inviteEnd("removed"); return t; } /* plant:h35-removed-end */
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed(inv.inv);
     t.said = INVITE_USED_SAID; /* plant:invite-used */
@@ -1506,8 +1511,8 @@ function createChannel(opts) {
     return t;
   }
 
-  /* The relay has refused this invitation's token, as spent ("used") or past its end ("ended"). The shell keeps that with
-     the request, which is where the page reads it; the console line is said besides. */
+  /* The relay has refused this invitation's token, as spent ("used"), past its end ("ended"), or made before this desk
+     was removed ("removed"). The shell keeps that with the request, which is where the page reads it. */
   function inviteEnd(kind) {
     if (typeof o.onInviteEnd === "function") o.onInviteEnd(kind);
   }
@@ -1873,6 +1878,28 @@ function createChannel(opts) {
     return f;
   }
 
+  /* A not-enrolled answer for an invitation the relay has not taken yet: the team or the token is still on its way.
+     A swept team that the relay no longer knows is not this wait, and neither is an invitation already spent. */
+  function awaitingEnrol(r) {
+    if (!r || r.ok || r.reason !== "not-enrolled") return false;
+    const inv = typeof o.invite === "function" ? o.invite() : null;
+    if (!inv || !HEX32.test(String(inv.inv)) || prog.tokenSpent(inv.inv) !== false) return false;
+    const last = prog.lapse();
+    if (last && last.swept !== null && relayNow() >= last.swept) return false;
+    if (!enrolWaitFrom) enrolWaitFrom = clock();
+    return clock() - enrolWaitFrom <= ENROL_WAIT_MS;
+  }
+  /* The relay has taken this desk off the team. Stop asking. The shell says so; a channel with no listener keeps the
+     poll it had, so a new invitation registered after the removal can still be tried (961c). */
+  function hushRemoved() {
+    running = false;
+    clearTimeout(retryTimer);
+    clearInterval(pollTimer);
+    clearInterval(pingTimer);
+    dropSocket();
+    session = null;
+    if (!removedTold) { removedTold = true; o.onRemoved(); }
+  }
   function kick() {
     if (!running) return;
     if (busy) { again = true; return; }
@@ -1881,8 +1908,16 @@ function createChannel(opts) {
         again = false;
         try {
           const r = await cycle();
-          backoff = RETRY_MIN_MS;
-          if (r && !r.ok && r.reason) sayOnce("the relay: " + r.said);
+          if (r && r.ok) { enrolWaitFrom = 0; backoff = RETRY_MIN_MS; }
+          else if (r && r.reason === "removed" && typeof o.onRemoved === "function") { hushRemoved(); return; } /* plant:h35-removed-hush */
+          else if (awaitingEnrol(r)) {
+            clearTimeout(retryTimer);
+            if (running) { retryTimer = setTimeout(kick, backoff); if (retryTimer.unref) retryTimer.unref(); } /* plant:h35-enrol-retry */
+            backoff = Math.min(backoff * 2, RETRY_MAX_MS);
+          } else {
+            backoff = RETRY_MIN_MS;
+            if (r && !r.ok && r.reason) sayOnce("the relay: " + r.said);
+          }
         } catch (e) {
           session = null;
           sayOnce("the relay does not answer, so this computer works on its mirror and keeps what it owes - " + (e && e.message));

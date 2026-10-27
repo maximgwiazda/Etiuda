@@ -131,6 +131,7 @@ function joinShown(j){
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
+  if(j.stays===true) row.stays=true;
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -193,6 +194,26 @@ function syncLapseNotice(){
     joinAsk("lapse-seen", team, step);
   });
 }
+/* The relay told this desk it is no longer on the team. The notice says so, and only for that: a roster that has
+   dropped the desk already has its own sentence, and this one must not promise that the catalog opens by itself,
+   because the desk has stopped asking. */
+let relayGoneUp="";
+const relayGoneDismissed=new Set();
+function syncRelayRemoved(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function" || typeof document.createElement!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.relayRemoved===true && !relayGoneDismissed.has(x.team))[0]||null;
+  const want=l?l.team:"", up=document.getElementById("eTeamRemoved");
+  if(want===relayGoneUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  relayGoneUp=want;
+  if(!l) return;
+  eNotice("eTeamRemoved", t("This team no longer includes this desk."),
+    /* Lead engineer's draft for the copywriter. */
+    t("A new invitation from the team's lead lets this desk in again."), ()=>{
+      relayGoneDismissed.add(want);
+      if(relayGoneUp===want) relayGoneUp="";
+    });
+}
 function joinTook(v,changed){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
@@ -202,6 +223,7 @@ function joinTook(v,changed){
              const row={team:String(l.team),print:String(l.print||""),
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
                removed:l.removed===true,policy:l.policy===true};
+             if(l.relayRemoved===true) row.relayRemoved=true;
              const head=headKept(l.head);
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
@@ -215,6 +237,7 @@ function joinTook(v,changed){
   }
   syncJoinDoor();
   syncLapseNotice();
+  syncRelayRemoved();
   const refusal=s.linkRefusal;
   if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
     dropInvite();
@@ -372,12 +395,24 @@ function joinParts(){
   /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
+    if(j.stays===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      /* Lead engineer's draft for the copywriter. */
+      line:t("This request stays until the team's lead answers, and this desk keeps what the invitation gave it."),
+      body:meta, acts:[]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
-  /* A relay invitation the relay refused: its token was spent by another desk, or it ended unused. Cancel the request clears it. */
+  /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
+     this desk left. Cancel the request clears it. */
+  if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),
+    /* Lead engineer's draft for the copywriter. */
+    line:t("This invitation was made before this desk left the team. Ask your lead for a new one."),
+    body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
+      +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
+      +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
   if(j && j.invite && j.invite.relay && (j.state==="used" || j.state==="ended")) return {title:t("Join a team"),
     line:j.state==="used"?t("This invitation has already been used. Ask your lead for a new one."):t("This invitation has expired. Ask your lead for a new one."),
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'

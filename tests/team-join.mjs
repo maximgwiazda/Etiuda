@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 95;
+const EXPECTED = 97;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1333,6 +1333,30 @@ try {
     "15ck a relay invitation answered already used, or expired, is said on the join's card in English and in Polish, naming the team and the relay,"
     + " with Cancel the request and Load another catalog, and Cancel the request clears it: used " + (sayingUsed ? "said" : "not said")
     + ", expired " + (sayingEnded ? "said" : "not said") + ", acts " + (offered ? "offered" : "missing") + ", card " + (cleared ? "cleared" : "still there"));
+
+  /* A relay invitation the relay refused because this desk had already left, and a join the relay has accepted that the agent cancels. */
+  const REMOVED_EN = "This invitation was made before this desk left the team. Ask your lead for a new one.";
+  const REMOVED_PL = "To zaproszenie powstało, zanim to stanowisko opuściło zespół. Nowe wystawi lider zespołu.";
+  const STAYS_EN = "This request stays until the team's lead answers, and this desk keeps what the invitation gave it.";
+  const STAYS_PL = "Ta prośba zostaje do odpowiedzi lidera zespołu, a to stanowisko zachowuje to, co dało zaproszenie.";
+  const removedEn = cardIn("en", relayJoin("removed")), removedPl = cardIn("pl", relayJoin("removed"));
+  const removedSaid = removedEn.indexOf(escPage(REMOVED_EN)) >= 0 && removedPl.indexOf(REMOVED_PL) >= 0
+    && removedEn.indexOf("Waiting for the lead to open the request") < 0
+    && removedEn.indexOf(escPage(COPY.waitEn)) < 0 && removedPl.indexOf(COPY.waitPl) < 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(!!tookFn && removedSaid,
+    "15co a relay invitation the relay refused as made before this desk left says a new invitation is needed, in English and in Polish: "
+    + (removedSaid ? "said" : "not said"));
+  const staysView = { join: { file: "", state: "waiting", code: "", asked: 1, name: "Nia", team: RELAY_TEAM, stays: true,
+    invite: { lead: "Lamp lead", relay: "relay.test" } }, leads: [] };
+  const staysEn = cardIn("en", staysView), staysPl = cardIn("pl", staysView);
+  const staysSaid = staysEn.indexOf(escPage(STAYS_EN)) >= 0 && staysPl.indexOf(STAYS_PL) >= 0
+    && staysEn.indexOf('data-join="cancel"') < 0 && staysEn.indexOf(escPage(COPY.waitEn)) < 0
+    && staysPl.indexOf(COPY.waitPl) < 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(!!tookFn && staysSaid,
+    "15cp cancelling a join the relay has already accepted says the request stays and this desk keeps what the invitation gave it,"
+    + " in English and in Polish, with no second Cancel: " + (staysSaid ? "said" : "not said"));
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];
