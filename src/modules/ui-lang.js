@@ -1090,12 +1090,12 @@ UI_STRINGS.pl={
   "{LEAD}'s team no longer includes this desk":"To stanowisko nie należy już do zespołu osoby {LEAD}",
   "The team no longer includes this desk":"To stanowisko nie należy już do zespołu",
   "Once the team's lead lets this desk in again, the catalog opens here by itself.":"Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
-  /* Lead engineer's draft for the copywriter. */
-  "This invitation was made before this desk left the team. Ask your lead for a new one.":"To zaproszenie powstało, zanim to stanowisko opuściło zespół. Nowe wystawi lider zespołu.",
-  /* Lead engineer's draft for the copywriter. */
-  "This request stays until the team's lead answers, and this desk keeps what the invitation gave it.":"Ta prośba zostaje do odpowiedzi lidera zespołu, a to stanowisko zachowuje to, co dało zaproszenie.",
-  /* Lead engineer's draft for the copywriter. */
-  "A new invitation from the team's lead lets this desk in again.":"Nowe zaproszenie od lidera zespołu wpuści to stanowisko ponownie.",
+  /* Claudette's words, 2026-10-27 01:23. */
+  "This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one.":"To zaproszenie powstało, zanim to stanowisko opuściło zespół, więc już nie działa. Nowe może wystawić lider zespołu.",
+  /* Claudette's words, 2026-10-27 01:23. */
+  "The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in.":"Przekaźnik przyjął już tę prośbę, więc zostaje ona do odpowiedzi lidera zespołu. Stanowisko zachowuje to, co dało mu zaproszenie, więc zgoda lidera nadal je wpuści.",
+  /* Claudette's words, 2026-10-27 01:23. */
+  "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.":"Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",
   "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.":"Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
   "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.":"Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
   "Newest edition {E}, published {WHEN}. The team's news: {AGE}.":"Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",

@@ -1335,10 +1335,10 @@ try {
     + ", expired " + (sayingEnded ? "said" : "not said") + ", acts " + (offered ? "offered" : "missing") + ", card " + (cleared ? "cleared" : "still there"));
 
   /* A relay invitation the relay refused because this desk had already left, and a join the relay has accepted that the agent cancels. */
-  const REMOVED_EN = "This invitation was made before this desk left the team. Ask your lead for a new one.";
-  const REMOVED_PL = "To zaproszenie powstało, zanim to stanowisko opuściło zespół. Nowe wystawi lider zespołu.";
-  const STAYS_EN = "This request stays until the team's lead answers, and this desk keeps what the invitation gave it.";
-  const STAYS_PL = "Ta prośba zostaje do odpowiedzi lidera zespołu, a to stanowisko zachowuje to, co dało zaproszenie.";
+  const REMOVED_EN = "This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one.";
+  const REMOVED_PL = "To zaproszenie powstało, zanim to stanowisko opuściło zespół, więc już nie działa. Nowe może wystawić lider zespołu.";
+  const STAYS_EN = "The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in.";
+  const STAYS_PL = "Przekaźnik przyjął już tę prośbę, więc zostaje ona do odpowiedzi lidera zespołu. Stanowisko zachowuje to, co dało mu zaproszenie, więc zgoda lidera nadal je wpuści.";
   const removedEn = cardIn("en", relayJoin("removed")), removedPl = cardIn("pl", relayJoin("removed"));
   const removedSaid = removedEn.indexOf(escPage(REMOVED_EN)) >= 0 && removedPl.indexOf(REMOVED_PL) >= 0
     && removedEn.indexOf("Waiting for the lead to open the request") < 0

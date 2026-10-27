@@ -208,8 +208,8 @@ function syncRelayRemoved(){
   relayGoneUp=want;
   if(!l) return;
   eNotice("eTeamRemoved", t("This team no longer includes this desk."),
-    /* Lead engineer's draft for the copywriter. */
-    t("A new invitation from the team's lead lets this desk in again."), ()=>{
+    /* Claudette's words, 2026-10-27 01:23. */
+    t("The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again."), ()=>{
       relayGoneDismissed.add(want);
       if(relayGoneUp===want) relayGoneUp="";
     });
@@ -396,8 +396,8 @@ function joinParts(){
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
     if(j.stays===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      /* Lead engineer's draft for the copywriter. */
-      line:t("This request stays until the team's lead answers, and this desk keeps what the invitation gave it."),
+      /* Claudette's words, 2026-10-27 01:23. */
+      line:t("The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in."),
       body:meta, acts:[]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
@@ -407,8 +407,8 @@ function joinParts(){
   /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
      this desk left. Cancel the request clears it. */
   if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),
-    /* Lead engineer's draft for the copywriter. */
-    line:t("This invitation was made before this desk left the team. Ask your lead for a new one."),
+    /* Claudette's words, 2026-10-27 01:23. */
+    line:t("This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one."),
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
