@@ -3806,7 +3806,13 @@ try {
       fs.writeFileSync(path.join(unmadeUd, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
         teamPins: { [unmadeTeam]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [unmadeTeam]: "invite" },
         teamChannel: { [unmadeTeam]: { kind: "relay", rt: unmadeRt, url: URLV1 } }, teamShown: { [unmadeTeam]: { lead: "Ada Quay" } } }), "utf8");
-      const unmadeDesk = loadDesk(unmadeUd, { fetch: lfetch });
+      let blockSince = false;
+      const unmadeDesk = loadDesk(unmadeUd, { fetch: (url, init) => {
+        if (blockSince && url.indexOf("/since/") >= 0) {
+          return Promise.resolve(new Response(JSON.stringify({ error: "temporary" }), { status: 503, headers: { "content-type": "application/json" } }));
+        }
+        return lfetch(url, init);
+      } });
       const unmadeMe = await unmadeDesk.ask("etiuda:branch-identity", true);
       const unmade = { name: "unmade", rt: unmadeRt, team: unmadeTeam, desk: unmadeDesk, me: unmadeMe, ud: unmadeUd };
       desks.push(unmade);
@@ -3847,10 +3853,12 @@ try {
       const unmadeKeys = [{ id: unmadeMe.id, pub: unmadeMe.key, desk: unmadeMe.id }];
       const enUnmade = await ladmin("POST", "/relay/v1/t/" + unmadeRt + "/devices", { keys: unmadeKeys, rev: 1, t: RL.clock.now, sig: signHex(LEAD, core.devicesBytes(unmadeRt, 1, RL.clock.now, unmadeKeys)) });
       if (enUnmade.status !== 200) throw new Error("unmade desk was not enrolled: " + JSON.stringify(enUnmade.json));
+      blockSince = true;
       await pumpL(unmade);
       await feed(unmade);
       const clearedRow = await rowOf(unmade);
-      check(!!uRow && !!uRow.lapse && uRow.lapse.step === "unknown" && !!clearedRow && !clearedRow.lapse && !notice() && settings("en").indexOf(TITLES[4]) < 0,
+      const chLapse = unmade.desk.api.relayRun() ? unmade.desk.api.relayRun().lapse() : null;
+      check(!!uRow && !!uRow.lapse && uRow.lapse.step === "unknown" && !chLapse && !!clearedRow && !clearedRow.lapse && !notice() && settings("en").indexOf(TITLES[4]) < 0,
         "978k a session the relay accepts afterwards clears the new step: row "
         + JSON.stringify(clearedRow && clearedRow.lapse) + ", notice " + (notice() ? "shown" : "gone")
         + ", settings " + (settings("en").indexOf(TITLES[4]) >= 0 ? "says lapse" : "clear"));

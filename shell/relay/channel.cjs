@@ -1467,7 +1467,7 @@ function createChannel(opts) {
            (N4): a request lost on the way, or a quit before it went, is sent again without the token. */
         session = { token: r.json.session, at: clock(), by: r.json.invite === true ? "invite" : "key" }; /* plant:n4-resume */
         sessionOpened(r.json);
-        told(r.json.lapse);
+        told(r.json.lapse); /* plant:lapse-cleared */
         if (session.by === "invite" && inv && HEX32.test(String(inv.inv))) session.inv = String(inv.inv);
         return { ok: true };
       }
@@ -1528,7 +1528,7 @@ function createChannel(opts) {
     if (device) dropSocket();
     session = { token: r.json.session, at: clock(), by: device ? "key" : "invite" };
     sessionOpened(r.json);
-    told(r.json.lapse); /* plant:lapse-cleared */
+    told(r.json.lapse);
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
     return { ok: true };
   }
