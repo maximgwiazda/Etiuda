@@ -15073,6 +15073,7 @@ What you type stays in this browser only.`;
     };
     if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || ""), relay: String(j.invite.relay || "") };
     if (j.withdrawn === true) row.withdrawn = true;
+    if (j.withdrawing === true) row.withdrawing = true;
     if (j.keeps === false) row.keeps = false;
     return row;
   }
@@ -15359,6 +15360,12 @@ What you type stays in this browser only.`;
         line: t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
         body: meta,
         acts: [["ask", t("Ask again")]]
+      };
+      if (j.withdrawing === true) return {
+        title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        line: t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with."),
+        body: meta,
+        acts: []
       };
       if (j.keeps === false) return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),

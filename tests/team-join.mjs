@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 104;
+const EXPECTED = 105;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1384,18 +1384,27 @@ try {
   ST.lsSet("eUiLang", "en");
   await pageOn(cancelDesk);
   await press("cancel");
-  const staysHtml = await bothLang(cancelDesk);
+  /* No relay answers this desk, so the withdrawal has not been taken: the card says the request still waits, with nothing to press. */
+  const pendingHtml = await bothLang(cancelDesk);
   let cancelEnv = {};
   try { cancelEnv = cancelDesk.envelope(); } catch { cancelEnv = {}; }
-  const withdrawnKept = !!(cancelEnv.teamJoin && cancelEnv.teamJoin.invite && cancelEnv.teamJoin.invite.relay
-    && cancelEnv.teamJoin.invite.relay.withdrawn === true && cancelEnv.teamKeys && cancelEnv.teamKeys[relayTeam]);
-  const staysSaid = cardSaid(staysHtml, STAYS_EN, STAYS_PL) && withdrawnKept
+  const pendingKept = !!(cancelEnv.teamJoin && cancelEnv.teamJoin.invite && cancelEnv.teamJoin.invite.relay
+    && cancelEnv.teamJoin.invite.relay.withdrawing === true && cancelEnv.teamJoin.invite.relay.withdrawn === undefined
+    && cancelEnv.teamKeys && cancelEnv.teamKeys[relayTeam]);
+  const pendingSaid = cardSaid(pendingHtml, COPY.waitEn, COPY.waitPl) && pendingKept && pendingHtml.en.indexOf(escPage(STAYS_EN)) < 0
+    && pendingHtml.en.indexOf('data-join="cancel"') < 0 && pendingHtml.en.indexOf('data-join="ask"') < 0;
+  /* The shell's own state once the relay has taken the withdrawal. */
+  const takenDesk = await relayDesk("g2-taken-card", { wrapped: [1], withdrawn: true },
+    { teamKeys: { [relayTeam]: { 1: keptKey } }, teamSeen: [relayTeam] });
+  const staysHtml = await bothLang(takenDesk);
+  const staysSaid = cardSaid(staysHtml, STAYS_EN, STAYS_PL)
     && staysHtml.en.indexOf('data-join="cancel"') < 0 && staysHtml.en.indexOf('data-join="ask"') >= 0
     && staysHtml.en.indexOf(escPage(COPY.waitEn)) < 0 && staysHtml.pl.indexOf(COPY.waitPl) < 0 && staysHtml.en.indexOf(escPage(LEFT_EN)) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
-  check(staysSaid,
-    "15cp cancelling a join the relay has already accepted, through the shell, says the request is withdrawn and this desk keeps what the invitation gave it,"
-    + " in English and in Polish, and offers Ask again with no second Cancel: " + (staysSaid ? "said" : "not said") + ", withdrawn and key " + (withdrawnKept ? "kept" : "not kept"));
+  check(pendingSaid && staysSaid,
+    "15cp cancelling a join the relay has already accepted, through the shell, keeps saying the request waits, with nothing to press, until the relay takes the"
+    + " withdrawal, and then says it is withdrawn and this desk keeps what the invitation gave it, in English and in Polish, offering Ask again with no second Cancel: pending "
+    + (pendingSaid ? "said" : "not said") + ", withdrawing and key " + (pendingKept ? "kept" : "not kept") + ", taken " + (staysSaid ? "said" : "not said"));
   const leftDesk = await relayDesk("h35-left-card", {}, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam] });
   const leftHtml = await bothLang(leftDesk);
   const leftSaid = cardSaid(leftHtml, LEFT_EN, LEFT_PL) && leftHtml.en.indexOf(escPage(STAYS_EN)) < 0 && leftHtml.pl.indexOf(STAYS_PL) < 0;
@@ -1526,7 +1535,7 @@ try {
       const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
       fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
       const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
-      window.E_HOST = hostOver(cancelDesk);
+      window.E_HOST = hostOver(takenDesk);
       planted.wireTeamJoin();
       await new Promise(r => setTimeout(r, 30));
       ST.lsSet("eUiLang", "en");
@@ -1538,7 +1547,32 @@ try {
     if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
     check(turned && same, "15cw lifting plant:e4-card, the card after a withdrawal says no withdrawn sentence and offers no Ask again (FAIL 15cp cancelling a join the relay has already accepted, through the shell, says the request is withdrawn: not said): "
       + detail + ", sha " + (same ? "restored" : "differs"));
+  }  {
+    const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+    const before = fs.readFileSync(joinPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:g2-card") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at - 2, 3);
+      const dir = fs.mkdtempSync(path.join(LAB, "join-plant-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+      window.E_HOST = hostOver(cancelDesk);
+      planted.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 30));
+      ST.lsSet("eUiLang", "en");
+      const html = planted.teamJoinEmptyHtml();
+      turned = html.indexOf('data-join="cancel"') >= 0;
+      detail = turned ? "the waiting card offers Cancel again" : JSON.stringify(html.replace(/<svg[\s\S]*?<\/svg>/g, "").slice(0, 180));
+    }
+    const same = fs.readFileSync(joinPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15cx lifting plant:g2-card, a withdrawal the relay has not taken shows the plain waiting card with Cancel (FAIL 15cp: pending not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
   }
+
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];

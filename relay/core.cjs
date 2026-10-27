@@ -836,7 +836,10 @@ function createCore(deps) {
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
     if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
-    if (m.epoch < a.team.epoch) return no("epoch"); /* plant:put-epoch */
+    /* A withdrawal carries no body, so it is taken at the epoch its request was sealed at, however far the team has moved since. */
+    let floorEpoch = a.team.epoch;
+    floorEpoch = a.withdraw ? 1 : a.team.epoch; /* plant:g2-withdraw-epoch */
+    if (m.epoch < floorEpoch) return no("epoch"); /* plant:put-epoch */
     /* Above the epoch the lead's uploads have raised, only the lead. A desk at an epoch the team has not reached is
        refused. Before any lead upload the team is at epoch 1, which is where a team's files begin (F7). */
     if (!a.lead && m.epoch > (a.team.epoch > 0 ? a.team.epoch : 1)) return no("epoch"); /* plant:put-above */

@@ -1880,6 +1880,7 @@ function createChannel(opts) {
     if (!u.ok) return u.lim || u.why;
     prog.unmarkInvited(c.inviteId);
     answerHeld = null;
+    if (typeof o.onWithdrawn === "function") o.onWithdrawn();
     return { ok: true };
   }
 
@@ -1890,6 +1891,8 @@ function createChannel(opts) {
       const w = await withdrawOwed(); /* plant:e4-withdraw-send */
       return w || pullAnswer();
     }
+    /* No request of this invitation stands at the relay, so a withdrawal the shell waits on has nothing left to take back. */
+    if (session && session.by === "invite" && typeof o.onWithdrawn === "function") o.onWithdrawn();
     const w = await pullWrap();
     if (!w.ok) return w;
     if (prog.suspect()) {

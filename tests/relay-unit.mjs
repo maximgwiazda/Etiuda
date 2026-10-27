@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 305;
+const EXPECTED = 307;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1260,6 +1260,26 @@ async function main() {
     const newestLift = await liftCore("plant:e5-newest", async () => { const x = await secondLink(); return x.up2 === 200 && x.answered === 200 && x.read !== 200; });
     check(newestLift.turned && newestLift.back, "995q lifting plant:e5-newest resumes the first invitation's session, which is not served the answer to the second (FAIL 995o: read not 200): "
       + newestLift.detail + ", sha " + (newestLift.back ? "restored" : "differs"));
+    /* G2: the lead moves the team to epoch 2 after the request, and the desk's withdrawal, sealed at the request's epoch 1, is taken. */
+    async function movedWithdraw() {
+      const w = await world();
+      const a = await asked(w);
+      const lead = await sessionOf(w, w.lead);
+      const move = await put(w, lead, sealAs(w, w.lead, "etiuda-team.json", 7, { epoch: 2 }));
+      const team = w.R.stores.get(w.rt).get("team") || {};
+      const gone = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 8));
+      const old = await getBlob(w, lead, a.ask.id);
+      const yes = await devices(w, w.devs.concat([{ id: a.who.keyId, pub: a.who.pub, desk: a.place.slice(5) }]));
+      return { ok: a.ok, move: move.status, epoch: team.epoch, gone: gone.json && gone.json.error || gone.status, old: old.status,
+        withdrawn: inviteRow(w, a.id).withdrawn === true, yes: yes.json && yes.json.error || yes.status };
+    }
+    const movedOk = x => x.ok && x.move === 200 && x.epoch === 2 && x.gone === 200 && x.old === 410 && x.withdrawn && x.yes === "withdrawn";
+    const mv = await movedWithdraw();
+    check(movedOk(mv), "995w after the lead moves the team to a new epoch, the desk's withdrawal sealed at the request's epoch is taken, the request is no longer"
+      + " served, and the lead's yes is refused: " + JSON.stringify(mv));
+    const epochLift = await liftCore("plant:g2-withdraw-epoch", async () => { const x = await movedWithdraw(); return x.ok && x.epoch === 2 && x.gone === "epoch" && x.old === 200; });
+    check(epochLift.turned && epochLift.back, "995x lifting plant:g2-withdraw-epoch refuses that withdrawal as epoch, and the request stays (FAIL 995w: gone epoch): "
+      + epochLift.detail + ", sha " + (epochLift.back ? "restored" : "differs"));
   }
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {

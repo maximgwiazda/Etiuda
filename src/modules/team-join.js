@@ -132,6 +132,7 @@ function joinShown(j){
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
   if(j.withdrawn===true) row.withdrawn=true;
+  if(j.withdrawing===true) row.withdrawing=true;
   if(j.keeps===false) row.keeps=false;
   return row;
 }
@@ -400,6 +401,10 @@ function joinParts(){
     if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
       line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
       body:meta, acts:[["ask",t("Ask again")]]};
+    /* Until the relay has taken the withdrawal the request still waits with the lead, so the card says so, with nothing to press. */
+    if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with."),
+      body:meta, acts:[]}; /* plant:g2-card */
     /* Claudette's words, 2026-10-27. */
     if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered."),
