@@ -233,6 +233,7 @@ function joinTook(v,changed){
              const row={team:String(l.team),print:String(l.print||""),
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
                removed:l.removed===true,policy:l.policy===true};
+             if(typeof l.relay==="string" && l.relay) row.relay=String(l.relay);
              if(l.relayRemoved===true) row.relayRemoved=true;
              const head=headKept(l.head);
              if(head) row.head=head;
@@ -423,9 +424,9 @@ function joinParts(){
     if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
       line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
       body:meta, acts:[["ask",t("Ask again")]]};
-    /* Claudette's words, 2026-10-27. */
+    /* Claudette's words, 2026-10-27 20:37. */
     if(j.unkept===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:t("The relay could not withdraw this request, because it no longer keeps invitations that old. The team's lead may still see the request until it expires. To join after all, a new invitation from the team's lead is needed."),
+      line:t("The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed."),
       body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]}; /* plant:c5-card-unkept */
     /* Claudette's words, 2026-10-27. */
     if(j.withdrawing===true && j.readonly===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),

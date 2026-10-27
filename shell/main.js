@@ -2896,7 +2896,7 @@ function readRingFile(root) {
    Undefined on the folder channel. Before this run has heeded a file there, a pinned team kept as on the relay is no ring. */
 function relayRingAt(root) {
   if (teamRingAt && teamRingAt.root === root) return teamRingAt.relay ? teamRingAt.ring : undefined;
-  return Object.keys(teamChannel).some(t => !!teamPins[t] && (teamShown[t] || {}).folder === root) ? null : undefined;
+  return Object.keys(teamChannel).some(t => !!teamPins[t] && ((teamChannel[t] && teamChannel[t].rt && relayMirrorOf(teamChannel[t].rt) === root) || (teamShown[t] || {}).folder === root)) ? null : undefined;
 }
 /* The ring a catalog's signature is read against. */
 function readRing() {
@@ -2990,9 +2990,20 @@ function heedTeam() {
   if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
   if (r.unbar) { teamBarred.delete(r.team); delete teamLeft[r.team]; }
   let changed = r.changed;
-  if (r.team && teamPins[r.team] && (teamShown[r.team] || {}).folder !== root) {
-    teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: root });
-    changed = true;
+  if (r.team && teamPins[r.team]) {
+    if (channel && channel.kind === "relay") {
+      let host = "";
+      try { host = new URL(channel.url).host; } catch { host = ""; }
+      if (host && ((teamShown[r.team] || {}).relay !== host || (teamShown[r.team] || {}).folder)) {
+        teamShown[r.team] = Object.assign({}, teamShown[r.team], { relay: host });
+        delete teamShown[r.team].folder;
+        changed = true;
+      }
+    } else if ((teamShown[r.team] || {}).folder !== root) {
+      teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: root });
+      delete teamShown[r.team].relay;
+      changed = true;
+    }
   }
   if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch > (teamEpochSeen[r.team] || 0)) {
     teamEpochSeen[r.team] = r.epoch;
@@ -3294,8 +3305,18 @@ function inviteAccepted(j) {
   if (!inv || inv.end) return false;
   const wrapped = Array.isArray(inv.wrapped) && inv.wrapped.some(n => Number.isInteger(n) && n >= 1);
   if (wrapped) return true;
+  if (inv.tokenSpent === true) return true;
   const channelProgram = relayChannel && relayChannel.program;
-  return !!(channelProgram && typeof channelProgram.tokenSpent === "function" && channelProgram.tokenSpent(inv.inv) === true);
+  if (channelProgram && typeof channelProgram.tokenSpent === "function" && channelProgram.tokenSpent(inv.inv) === true) return true;
+  if (inv.rt && inv.inv) { /* plant:invite-spent-kept */
+    try {
+      const stateFile = relayMirrorOf(inv.rt) + ".json";
+      const st = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+      if (st && st.tokenUsedIds && st.tokenUsedIds[inv.inv] === true) return true;
+      if (st && st.tokenUsed === true && (!st.tokenUsedIds || Object.keys(st.tokenUsedIds).length === 0)) return true;
+    } catch { /* mirror absent or damaged */ }
+  }
+  return false;
 }
 /* The request leaves the mirror, so the channel sends its signed deletion on the invitation's session and the lead no longer
    sees it. The join says withdrawing until the relay has taken that deletion (onWithdrawn). The token, the pin and the keys
@@ -3494,6 +3515,7 @@ function relayKept(r) {
     && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed")
     && (r.withdrawn === undefined || r.withdrawn === true) && (r.withdrawing === undefined || r.withdrawing === true)
     && (r.unkept === undefined || r.unkept === true) && (r.readonly === undefined || r.readonly === true)
+    && (r.tokenSpent === undefined || r.tokenSpent === true)
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
@@ -3696,7 +3718,9 @@ function takeRelayInvite(parsed, name, me) {
   teamJoin = j;
   if (!teamPins[parsed.team]) { teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public }; teamSeen.delete(parsed.team); }
   teamPinFrom[parsed.team] = "invite";
-  teamShown[parsed.team] = Object.assign({ folder: relayMirrorOf(parsed.relay.rt) }, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
+  let relayHost = "";
+  try { relayHost = new URL(parsed.relay.url).host; } catch { relayHost = ""; }
+  teamShown[parsed.team] = Object.assign(relayHost ? { relay: relayHost } : {}, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
@@ -3763,10 +3787,15 @@ function leadsView() {
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
     const relayRemoved = teamRelayGone[t] === true;
+    let relayHost = shown.relay || "";
+    if (!relayHost && teamChannel[t] && teamChannel[t].kind === "relay" && teamChannel[t].url) {
+      try { relayHost = new URL(teamChannel[t].url).host; } catch { relayHost = ""; }
+    }
     const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
-      lead: shown.lead || "", folder: shown.folder || "",
+      lead: shown.lead || "", folder: relayHost ? "" : (shown.folder || ""),
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: !!named && named === teamPins[t].public };
+    if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
     if (head) row.head = head;
@@ -4622,6 +4651,7 @@ function readDesk() {
       const o = {};
       if (shownName(v.lead)) o.lead = v.lead;
       if (typeof v.folder === "string" && v.folder && v.folder.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(v.folder)) o.folder = v.folder;
+      if (typeof v.relay === "string" && v.relay && v.relay.length <= 256 && !/[\u0000-\u001f\u007f]/.test(v.relay)) o.relay = v.relay;
       teamShown[t] = o;
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });

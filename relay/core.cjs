@@ -374,9 +374,11 @@ function createCore(deps) {
     if (why === "revoked") return no("revoked"); /* plant:renew-revoked */
     if (why !== null) return no("bad-grant"); /* plant:renew-grant */
     const next = keptGrant(team, b.grant);
+    const needsMade = typeof team.made !== "string" || !team.made;
+    const made = needsMade ? random(8) : team.made; /* plant:renew-made */
     store.atomic(() => {
-      if (next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil) {
-        const row = Object.assign({}, team, { until: next.until, paid: next.paid });
+      if (needsMade || next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil) {
+        const row = Object.assign({}, team, { until: next.until, paid: next.paid, made });
         delete row.paidUntil;
         if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
         store.put("team", row);

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 354;
+const EXPECTED = 358;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -4103,6 +4103,62 @@ async function main() {
       });
     check(door.ok && objectPlant.turned && objectPlant.back,
       "983h dropping the object's mark check answers an unmarked fetch, which turns 983d red, and the product file is never written: " + objectLine + "; " + objectPlant.detail);
+
+    async function sceneRevokedPathsOnly(worker) {
+      const R = dropListMethod(relayEnv());
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false);
+      const created = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S), worker });
+      const fetchesAfterCreate = R.revokedFetches.n;
+      const hello = await call(R, "POST", "/relay/v1/t/" + rt + "/hello", { json: {}, worker });
+      const fetchesAfterHello = R.revokedFetches.n;
+      const ok = created.status === 200 && hello.status === 200 && fetchesAfterCreate === 1 && fetchesAfterHello === 1;
+      const line = "983i route asks for revoked on /teams and /grant alone, and non-teams/grant requests make no calls to the revoked object: create "
+        + created.status + " fetches " + fetchesAfterCreate + ", hello " + hello.status + " fetches " + fetchesAfterHello;
+      return { ok, line, fetchesDiff: fetchesAfterHello - fetchesAfterCreate };
+    }
+    const pathsOnly = await sceneRevokedPathsOnly();
+    check(pathsOnly.ok, pathsOnly.line);
+
+    let pathsLiftLine = "";
+    const pathsLift = await editWorker(swapped(
+      "const needRevoked = hit.what === \"teams\" || hit.what === \"grant\"; /* plant:revoked-paths-only */",
+      "const needRevoked = true; /* plant:revoked-paths-only */"), async mod => {
+      const r = await sceneRevokedPathsOnly(mod.routeWith(K.ROOTS, env => env.NOW()));
+      pathsLiftLine = r.line;
+      return r.ok === false;
+    });
+    check(pathsOnly.ok && pathsLift.turned && pathsLift.back,
+      "983j lifting plant:revoked-paths-only asks for the revoked object on other requests, which turns 983i red, and the product file is never written: "
+      + pathsLiftLine + "; " + pathsLift.detail);
+
+    function checkRenewMade(coreMod) {
+      const store = S.memoryStore();
+      const rt = hex(16), lead = keyPair(false);
+      store.put("team", { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: 0, until: T0S + 1000, paid: T0S + 1000 });
+      const core = (coreMod || C).createCore({ store, clock: () => T0S, roots: K.ROOTS });
+      const res = core.renew(rt, { grant: K.grantFor(lead.pub, T0S, { fields: { until: T0S + 10 * DAY } }) });
+      const team = store.get("team");
+      const stamped = typeof team.made === "string" && /^[0-9a-f]{16}$/.test(team.made);
+      const ok = res.ok === true && stamped;
+      const line = "983k renew stamps made on a team that has none: ok " + res.ok + ", stamped " + (team && team.made);
+      return { ok, line, made: team && team.made };
+    }
+    const renewMade = checkRenewMade();
+    check(renewMade.ok, renewMade.line);
+
+    let renewLiftLine = "";
+    const renewLift = await swapCore(
+      "const made = needsMade ? random(8) : team.made; /* plant:renew-made */",
+      "const made = team.made; /* plant:renew-made */",
+      async () => {
+        const r = checkRenewMade();
+        renewLiftLine = r.line;
+        return r.ok === false;
+      });
+    check(renewMade.ok && renewLift.turned && renewLift.back,
+      "983l lifting plant:renew-made leaves a team with no made property unstamped on renew, which turns 983k red, and the product file is never written: "
+      + renewLiftLine + "; " + renewLift.detail);
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

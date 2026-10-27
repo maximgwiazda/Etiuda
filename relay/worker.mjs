@@ -65,7 +65,7 @@ export function routeWith(roots, clockOf) {
   function carry(request, keys, body) {
     const headers = new Headers(request.headers);
     headers.delete(team.REVOKED_MARK);
-    headers.set("etiuda-kept", JSON.stringify(Array.isArray(keys) ? keys : []));
+    if (keys !== undefined && keys !== null) headers.set("etiuda-kept", JSON.stringify(Array.isArray(keys) ? keys : []));
     const init = { method: request.method, headers };
     if (body !== undefined) { init.body = body; init.duplex = "half"; }
     return new Request(request.url, init);
@@ -97,7 +97,8 @@ export function routeWith(roots, clockOf) {
     if (!hit) return team.missing(); /* plant:worker-route */
     let teams = env.TEAMS;
     teams = env.TEAMS.jurisdiction("eu"); /* plant:eu */
-    const decided = await revokedDecision(teams, env);
+    const needRevoked = hit.what === "teams" || hit.what === "grant"; /* plant:revoked-paths-only */
+    const decided = needRevoked ? await revokedDecision(teams, env) : null;
     const keys = decided && Array.isArray(decided.keys) ? decided.keys : [];
     if (hit.what === "teams") {
       const bytes = await team.readCapped(request, team.JSON_MAX);
@@ -121,8 +122,8 @@ export function routeWith(roots, clockOf) {
         if (why === "revoked") return team.refusedFor("revoked"); /* plant:worker-revoked */
         if (why) return team.refusedFor("bad-grant"); /* plant:worker-renew */
       }
-      forward = carry(request, keys, bytes);
-    } else forward = carry(request, keys, request.body === null || request.body === undefined ? undefined : request.body);
+      forward = carry(request, needRevoked ? keys : undefined, bytes);
+    } else forward = carry(request, needRevoked ? keys : undefined, request.body === null || request.body === undefined ? undefined : request.body);
     const res = await teams.get(teams.idFromName(hit.rt)).fetch(forward);
     return hit.what === "grant" ? noted(res, decided, grant) : res;
   }
