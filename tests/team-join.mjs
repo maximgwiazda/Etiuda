@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 115;
+const EXPECTED = 121;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -47,15 +47,27 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs"];
+  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
+function makeResponse(status, json, headers = {}) {
+  const buf = Buffer.from(JSON.stringify(json), "utf8");
+  return {
+    status,
+    headers: {
+      get: n => headers[n.toLowerCase()] || (n.toLowerCase() === "content-type" ? "application/json" : null)
+    },
+    arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+  };
+}
+const RelayChannel = () => nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+
 /* One desk over its own user-data folder, the shell evaluated afresh, from `src` where a leg gives one; the safeStorage
    stand-in is reversible. */
-function loadDesk(ud, src) {
+function loadDesk(ud, src, opts) {
   const said = [], invoke = {}, on = {};
   // Every way the shell can log is kept, so a leg can say what reached the log and what did not.
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
@@ -65,18 +77,23 @@ function loadDesk(ud, src) {
     encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
     decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
   };
+  const net = opts && opts.net ? opts.net : (opts && opts.fetch ? { fetch: opts.fetch } : inert);
   const electron = {
     app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
            whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert,
+    BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage,
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     (src || SRC) + "\nreturn { " + EXPOSE.join(", ")
       + ", setFolder: v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; teamStamp = ''; } };")(
-    n => (n === "electron" ? electron : nodeRequire(n)),
+    n => {
+      if (n === "electron") return electron;
+      if (opts && opts.relayChannel && n.endsWith(path.join("relay", "channel.cjs"))) return opts.relayChannel;
+      return nodeRequire(n);
+    },
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -392,12 +409,12 @@ try {
     "15ag a proof made under another secret or another commitment does not match the request");
 
   /* ---- what an invitation may not move: a lead this desk already trusts, or one it was told does not match ------- */
-  const deskWith = async (name, own, extra) => {
+  const deskWith = async (name, own, extra, src, opts) => {
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
       keys: { eCatalogFolder: own, eUiLang: "en" } }, extra || {})), "utf8");
-    const D = loadDesk(ud);
+    const D = loadDesk(ud, src, opts);
     await D.ask("etiuda:branch-identity", true);
     await D.join("state");
     return D;
@@ -1339,12 +1356,13 @@ try {
   const REMOVED_PL = "To zaproszenie powstało, zanim lider zespołu wyłączył to stanowisko z zespołu, więc już nie działa. Nowe może wystawić lider zespołu.";
   const STAYS_EN = "The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link.";
   const STAYS_PL = "Prośba została wycofana: lider zespołu już jej nie widzi. Stanowisko zachowuje to, co dało mu zaproszenie, więc przycisk Poproś ponownie wyśle ją jeszcze raz bez nowego odnośnika.";
-  const LEFT_EN = "This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered.";
-  const LEFT_PL = "To stanowisko opuściło zespół, więc nie ma już tego, co dało mu zaproszenie. Prośba czeka u lidera zespołu na odpowiedź.";
+  const LEFT_EN = "This desk has left the team and keeps nothing the invitation gave it. Its request is withdrawn, and the team's lead no longer sees it. To join, a new invitation from the team's lead is needed.";
+  const LEFT_PL = "To stanowisko opuściło zespół i nie ma już niczego, co dało mu zaproszenie. Prośba została wycofana i lider zespołu już jej nie widzi. Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
   const HUSH_EN = "The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself.";
   const HUSH_PL = "Według przekaźnika to stanowisko nie należy już do zespołu, więc nic nowego do niego nie dociera. Katalogi na nim zostają bez zmian. Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.";
   const ROSTER_EN = "Once the team's lead lets this desk in again, the catalog opens here by itself.";
   const sealText = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+  const seal32 = crypto.randomBytes(32).toString("base64");
   const relayTeam = "t-5c1a77e0b3d94f20";
   const relayHex = { id: "0123456789abcdef", h32: "ab".repeat(16), h64: "cd".repeat(32) };
   const bothLang = async D => {
@@ -1356,15 +1374,16 @@ try {
     ST.lsSet("eUiLang", "en");
     return { en, pl };
   };
-  const relayDesk = (name, relayExtra, more) => {
+  const relayDesk = (name, relayExtra, more, src, opts) => {
     const own = folder(name + "-own");
     const join = { team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
       invite: { id: relayHex.id, proof: relayHex.h64, lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
         relay: Object.assign({ rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32,
-          token: sealText("token"), seal: sealText("seal") }, relayExtra || {}) } };
+          token: sealText("token"), seal: sealText(seal32) }, relayExtra || {}) } };
     return deskWith(name, own, Object.assign({ teamJoin: join,
       teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
-      teamShown: { [relayTeam]: { lead: "Lamp lead", folder: own } } }, more || {}));
+      teamPinFrom: { [relayTeam]: "invite" },
+      teamShown: { [relayTeam]: { lead: "Lamp lead", folder: own } } }, more || {}), src, opts);
   };
   const cardSaid = (html, en, pl) => html.en.indexOf(escPage(en)) >= 0 && html.pl.indexOf(pl) >= 0;
   const removedDesk = await relayDesk("h35-removed-card", { end: "removed" });
@@ -1408,7 +1427,7 @@ try {
     "15cp cancelling a join the relay has already accepted, through the shell, says the request is being withdrawn, with nothing to press, until the relay takes the"
     + " withdrawal, and then says it is withdrawn and this desk keeps what the invitation gave it, in English and in Polish, offering Ask again with no second Cancel: pending "
     + (pendingSaid ? "said" : "not said") + ", withdrawing and key " + (pendingKept ? "kept" : "not kept") + ", taken " + (staysSaid ? "said" : "not said"));
-  const leftDesk = await relayDesk("h35-left-card", {}, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const leftDesk = await relayDesk("h35-left-card", { withdrawn: true }, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
   const leftHtml = await bothLang(leftDesk);
   const leftSaid = cardSaid(leftHtml, LEFT_EN, LEFT_PL) && leftHtml.en.indexOf(escPage(STAYS_EN)) < 0 && leftHtml.pl.indexOf(STAYS_PL) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
@@ -1706,22 +1725,55 @@ try {
     + matchCanJoin + ", withdrawn " + matchWithdrawn);
 
   /* Hold 2: relay link's confirm card shows disclosure and left heading for a desk that left */
-  tookFn({ offer: { link: true, lead: "Lamp lead", team: relayTeam, relay: "relay.test", left: "2026-09-01T08:30:00.000Z" } });
+  const leftDesk15df = await deskWith("h35-left-15df", folder("left-15df-own"), {
+    teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" },
+    teamBarred: [relayTeam],
+    teamPins: {},
+    teamShown: {}
+  });
+  const relayBlob15df = inviteBlob({
+    team: relayTeam,
+    relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", token: relayHex.h64, inv: relayHex.h32 },
+    lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+    secret: newSecret()
+  });
+  const linkArg15df = "etiuda:join#" + relayBlob15df.slice("etiuda-join:".length);
+
+  // Shell's reading of pasted relay invitation
+  await pageOn(leftDesk15df);
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, relayBlob15df);
+  await press("read");
+  ST.lsSet("eUiLang", "en");
+  const pasteConfirmHtml = TJ.teamJoinEmptyHtml();
+  ST.lsSet("eUiLang", "pl");
+  const pasteConfirmPl = TJ.teamJoinEmptyHtml();
+  await press("back");
+
+  // Shell's reading of link relay invitation
+  const linkGot = leftDesk15df.api.acceptLink(linkArg15df);
+  if (tookFn && linkGot && linkGot.offer) tookFn({ offer: linkGot.offer });
   ST.lsSet("eUiLang", "en");
   const relayConfirmHtml = TJ.teamJoinEmptyHtml();
   ST.lsSet("eUiLang", "pl");
   const relayConfirmPl = TJ.teamJoinEmptyHtml();
+  await press("back");
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+
   const discEn = "Once this desk joins, the team's lead can see which catalog it uses";
   const discPl = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko";
   const leftHeadEn = "This desk left this team on 1 September 2026. Join it again?";
   const leftHeadPl = "To stanowisko opuściło ten zespół 1 września 2026. Dołączyć do niego ponownie?";
-  const confirmHasDisc = relayConfirmHtml.indexOf(escPage(discEn)) >= 0 && relayConfirmPl.indexOf(escPage(discPl)) >= 0;
-  const confirmHasLeftEn = relayConfirmHtml.indexOf(leftHeadEn) >= 0;
-  const confirmHasLeftPl = relayConfirmPl.indexOf(leftHeadPl) >= 0;
-  check(confirmHasDisc && confirmHasLeftEn && confirmHasLeftPl,
+
+  const pasteHasDisc = pasteConfirmHtml.indexOf(escPage(discEn)) >= 0 && pasteConfirmPl.indexOf(escPage(discPl)) >= 0;
+  const pasteHasLeft = pasteConfirmHtml.indexOf(leftHeadEn) >= 0 && pasteConfirmPl.indexOf(leftHeadPl) >= 0;
+  const linkHasDisc = relayConfirmHtml.indexOf(escPage(discEn)) >= 0 && relayConfirmPl.indexOf(escPage(discPl)) >= 0;
+  const linkHasLeft = relayConfirmHtml.indexOf(leftHeadEn) >= 0 && relayConfirmPl.indexOf(leftHeadPl) >= 0;
+
+  check(pasteHasDisc && pasteHasLeft && linkHasDisc && linkHasLeft,
     "15df the relay link's confirm card shows the disclosure, and the left heading for a desk that left, in English and in Polish: disclosure "
-    + confirmHasDisc + ", left heading en " + confirmHasLeftEn + ", pl " + confirmHasLeftPl);
+    + (pasteHasDisc && linkHasDisc) + ", left heading en " + (pasteConfirmHtml.indexOf(leftHeadEn) >= 0 && relayConfirmHtml.indexOf(leftHeadEn) >= 0)
+    + ", pl " + (pasteConfirmPl.indexOf(leftHeadPl) >= 0 && relayConfirmPl.indexOf(leftHeadPl) >= 0));
   {
     const mainPath = path.join(ROOT, "shell", "main.js");
     const before = fs.readFileSync(mainPath);
@@ -1779,6 +1831,271 @@ try {
     }
     const same = fs.readFileSync(joinPath).equals(before);
     check(turned && same, "15dh lifting plant:relay-confirm-disclosure leaves the disclosure unshown on the relay link confirm card (FAIL 15df the relay link's confirm card shows the disclosure: disclosure absent): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+
+  // 15di: after Leave this team, the deletion reaches the relay stand-in and marks the request withdrawn
+  const leaveStandCalls = [];
+  const standFetchLeave = async (url, init) => {
+    leaveStandCalls.push({ method: init.method, url });
+    if (init.method === "POST" && url.endsWith("/hello")) {
+      return makeResponse(200, { challenge: crypto.randomBytes(16).toString("hex"), until: Date.now() + 60000 });
+    }
+    if (init.method === "POST" && url.endsWith("/session")) {
+      return makeResponse(200, { session: crypto.randomBytes(32).toString("hex"), invite: true });
+    }
+    if (init.method === "PUT" && url.includes("/b/")) {
+      let meta = null;
+      try { meta = JSON.parse(Buffer.from(init.headers["etiuda-blob"], "base64url").toString("utf8")); } catch {}
+      leaveStandCalls.push({ del: meta && meta.del });
+      return makeResponse(200, { ok: true });
+    }
+    return makeResponse(404, { error: "not-found" });
+  };
+  const leaveStandYard = folder("h35-leave-stand-own");
+  const leaveStandDesk = await deskWith("h35-leave-stand", leaveStandYard, {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText(seal32), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamPinFrom: { [relayTeam]: "invite" },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: leaveStandYard } },
+    teamKeys: { [relayTeam]: { 1: keptKey } },
+    teamSeen: [relayTeam]
+  }, null, { fetch: standFetchLeave });
+  const meLeaveStand = await leaveStandDesk.ask("etiuda:branch-identity", true);
+  const relayDirLeave = path.join(leaveStandDesk.ud, "relay");
+  fs.mkdirSync(relayDirLeave, { recursive: true });
+  fs.writeFileSync(path.join(relayDirLeave, relayHex.h32 + ".json"), JSON.stringify({
+    kind: "etiuda-relay-channel", v: 1, seq: 1, own: 1, bytes: 100, leadEpoch: 1,
+    invitedIds: { [relayHex.h32]: true },
+    sent: {
+      ["desks/" + meLeaveStand.id + "/join.json"]: {
+        id: crypto.randomBytes(16).toString("hex"), epoch: 1, counter: 1, size: 100, del: false, sha: crypto.randomBytes(32).toString("hex")
+      }
+    }
+  }), "utf8");
+  await leaveStandDesk.join("leave", relayTeam);
+  for (let i = 0; i < 50; i++) {
+    const e = leaveStandDesk.envelope();
+    if (e.teamJoin && e.teamJoin.invite && e.teamJoin.invite.relay && e.teamJoin.invite.relay.withdrawn === true) break;
+    await new Promise(r => setTimeout(r, 20));
+  }
+  const leaveStandEnv = leaveStandDesk.envelope();
+  const leaveStandWithdrawn = !!(leaveStandEnv.teamJoin && leaveStandEnv.teamJoin.invite && leaveStandEnv.teamJoin.invite.relay && leaveStandEnv.teamJoin.invite.relay.withdrawn === true);
+  const leaveDelReached = leaveStandCalls.some(c => c.del === true);
+  check(leaveDelReached && leaveStandWithdrawn,
+    "15di after Leave this team, the deletion reaches the relay stand-in and marks the request withdrawn: reached "
+    + leaveDelReached + ", withdrawn " + leaveStandWithdrawn);
+
+  // 15dj: after It does not match, the deletion actually reaches the relay stand-in
+  const matchStandCalls = [];
+  const standFetchMatch = async (url, init) => {
+    matchStandCalls.push({ method: init.method, url });
+    if (init.method === "POST" && url.endsWith("/hello")) {
+      return makeResponse(200, { challenge: crypto.randomBytes(16).toString("hex"), until: Date.now() + 60000 });
+    }
+    if (init.method === "POST" && url.endsWith("/session")) {
+      return makeResponse(200, { session: crypto.randomBytes(32).toString("hex"), invite: true });
+    }
+    if (init.method === "PUT" && url.includes("/b/")) {
+      let meta = null;
+      try { meta = JSON.parse(Buffer.from(init.headers["etiuda-blob"], "base64url").toString("utf8")); } catch {}
+      matchStandCalls.push({ del: meta && meta.del });
+      return makeResponse(200, { ok: true });
+    }
+    return makeResponse(404, { error: "not-found" });
+  };
+  const matchStandYard = folder("h35-match-stand-own");
+  const matchStandDesk = await deskWith("h35-match-stand", matchStandYard, {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText(seal32), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamPinFrom: { [relayTeam]: "invite" },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: matchStandYard } },
+    teamKeys: { [relayTeam]: { 1: keptKey } },
+    teamSeen: [relayTeam]
+  }, null, { fetch: standFetchMatch });
+  const meMatchStand = await matchStandDesk.ask("etiuda:branch-identity", true);
+  const relayDirMatch = path.join(matchStandDesk.ud, "relay");
+  fs.mkdirSync(relayDirMatch, { recursive: true });
+  fs.writeFileSync(path.join(relayDirMatch, relayHex.h32 + ".json"), JSON.stringify({
+    kind: "etiuda-relay-channel", v: 1, seq: 1, own: 1, bytes: 100, leadEpoch: 1,
+    invitedIds: { [relayHex.h32]: true },
+    sent: {
+      ["desks/" + meMatchStand.id + "/join.json"]: {
+        id: crypto.randomBytes(16).toString("hex"), epoch: 1, counter: 1, size: 100, del: false, sha: crypto.randomBytes(32).toString("hex")
+      }
+    }
+  }), "utf8");
+  await matchStandDesk.join("forget", relayTeam);
+  for (let i = 0; i < 50; i++) {
+    const e = matchStandDesk.envelope();
+    if (e.teamJoin && e.teamJoin.invite && e.teamJoin.invite.relay && e.teamJoin.invite.relay.withdrawn === true) break;
+    await new Promise(r => setTimeout(r, 20));
+  }
+  const matchStandEnv = matchStandDesk.envelope();
+  const matchStandWithdrawn = !!(matchStandEnv.teamJoin && matchStandEnv.teamJoin.invite && matchStandEnv.teamJoin.invite.relay && matchStandEnv.teamJoin.invite.relay.withdrawn === true);
+  const matchDelReached = matchStandCalls.some(c => c.del === true);
+  check(matchDelReached && matchStandWithdrawn,
+    "15dj after It does not match, the deletion reaches the relay stand-in and marks the request withdrawn: reached "
+    + matchDelReached + ", withdrawn " + matchStandWithdrawn);
+
+  // 15dk: after Leave this team, cards say what is true across withdrawing, read-only and landed, buttons work
+  const leaveCauseEn = "This desk has left the team and keeps nothing the invitation gave it.";
+  const leaveCausePl = "To stanowisko opuściło zespół i nie ma już niczego, co dało mu zaproszenie.";
+  const forwardEn = "To join, a new invitation from the team's lead is needed.";
+  const forwardPl = "Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
+
+  const statusWithdrawingEn = "Its request is being withdrawn; the relay takes the withdrawal shortly, and until then the team's lead may still see it.";
+  const statusWithdrawingPl = "Prośba jest wycofywana; przekaźnik wkrótce to odnotuje, a do tego czasu lider zespołu może ją jeszcze widzieć.";
+  const statusReadonlyEn = "Its request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request; if the relay clears the team's copy first, the request goes with it.";
+  const statusReadonlyPl = "Prośba jest wycofywana. Przekaźnik zespołu do czasu odnowienia działa tylko do odczytu, więc odnotuje wycofanie dopiero wtedy, a do tego czasu lider zespołu może ją jeszcze widzieć; jeśli przekaźnik wcześniej usunie kopię zespołu, prośba zniknie razem z nią.";
+  const statusLandedEn = "Its request is withdrawn, and the team's lead no longer sees it.";
+  const statusLandedPl = "Prośba została wycofana i lider zespołu już jej nie widzi.";
+
+  const s1En = [leaveCauseEn, statusWithdrawingEn, forwardEn].join(" ");
+  const s1Pl = [leaveCausePl, statusWithdrawingPl, forwardPl].join(" ");
+  const s2En = [leaveCauseEn, statusReadonlyEn, forwardEn].join(" ");
+  const s2Pl = [leaveCausePl, statusReadonlyPl, forwardPl].join(" ");
+  const s3En = [leaveCauseEn, statusLandedEn, forwardEn].join(" ");
+  const s3Pl = [leaveCausePl, statusLandedPl, forwardPl].join(" ");
+
+  const deskS1 = await relayDesk("e2-leave-s1", { withdrawing: true }, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlS1 = await bothLang(deskS1);
+  await pageOn(deskS1);
+  const canJoinS1 = TJ.teamCanJoin();
+
+  const deskS2 = await relayDesk("e2-leave-s2", { withdrawing: true, readonly: true }, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlS2 = await bothLang(deskS2);
+  await pageOn(deskS2);
+  const canJoinS2 = TJ.teamCanJoin();
+
+  const deskS3 = await relayDesk("e2-leave-s3", { withdrawn: true }, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlS3 = await bothLang(deskS3);
+  await pageOn(deskS3);
+  const canJoinS3 = TJ.teamCanJoin();
+
+  const buttonsWork = html => html.indexOf('data-join="join"') >= 0 && html.indexOf('data-join="load"') >= 0 && html.indexOf('data-join="ask"') < 0;
+  const leaveCardsOk = cardSaid(htmlS1, s1En, s1Pl) && buttonsWork(htmlS1.en) && canJoinS1
+    && cardSaid(htmlS2, s2En, s2Pl) && buttonsWork(htmlS2.en) && canJoinS2
+    && cardSaid(htmlS3, s3En, s3Pl) && buttonsWork(htmlS3.en) && canJoinS3;
+  check(leaveCardsOk,
+    "15dk after Leave this team, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog: "
+    + (leaveCardsOk ? "all 3 states said" : "mismatched"));
+
+  // 15dl: after It does not match, cards say what is true across withdrawing, read-only and landed, buttons work
+  const matchCauseEn = "The key shown did not match the team's lead's, so this desk does not trust it and keeps nothing the invitation gave it.";
+  const matchCausePl = "Pokazany klucz nie zgadzał się z kluczem lidera zespołu, więc to stanowisko mu nie ufa i nie ma już niczego, co dało mu zaproszenie.";
+
+  const s4En = [matchCauseEn, statusWithdrawingEn, forwardEn].join(" ");
+  const s4Pl = [matchCausePl, statusWithdrawingPl, forwardPl].join(" ");
+  const s5En = [matchCauseEn, statusReadonlyEn, forwardEn].join(" ");
+  const s5Pl = [matchCausePl, statusReadonlyPl, forwardPl].join(" ");
+  const s6En = [matchCauseEn, statusLandedEn, forwardEn].join(" ");
+  const s6Pl = [matchCausePl, statusLandedPl, forwardPl].join(" ");
+
+  const deskS4 = await relayDesk("e2-match-s4", { withdrawing: true }, { teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlS4 = await bothLang(deskS4);
+  await pageOn(deskS4);
+  const canJoinS4 = TJ.teamCanJoin();
+
+  const deskS5 = await relayDesk("e2-match-s5", { withdrawing: true, readonly: true }, { teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlS5 = await bothLang(deskS5);
+  await pageOn(deskS5);
+  const canJoinS5 = TJ.teamCanJoin();
+
+  const deskS6 = await relayDesk("e2-match-s6", { withdrawn: true }, { teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlS6 = await bothLang(deskS6);
+  await pageOn(deskS6);
+  const canJoinS6 = TJ.teamCanJoin();
+
+  const matchCardsOk = cardSaid(htmlS4, s4En, s4Pl) && buttonsWork(htmlS4.en) && canJoinS4
+    && cardSaid(htmlS5, s5En, s5Pl) && buttonsWork(htmlS5.en) && canJoinS5
+    && cardSaid(htmlS6, s6En, s6Pl) && buttonsWork(htmlS6.en) && canJoinS6;
+  check(matchCardsOk,
+    "15dl after It does not match, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog: "
+    + (matchCardsOk ? "all 3 states said" : "mismatched"));
+
+  // 15dm: while withdrawing after a forget or a leave, nothing that arrives is kept
+  let arrivalChannelOpts = null;
+  const arrivalRelayStand = {
+    ...RelayChannel(),
+    createChannel: opts => { arrivalChannelOpts = opts; return { start: noop, stop: async () => {}, kick: noop, online: () => true }; }
+  };
+  const arrivalDesk = await deskWith("h35-arrivals", folder("arrivals-own"), {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText(seal32), wrap: sealText("wrap"), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamPinFrom: { [relayTeam]: "invite" },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: folder("arrivals-own") } },
+    teamKeys: { [relayTeam]: { 1: keptKey } },
+    teamSeen: [relayTeam]
+  }, null, { relayChannel: arrivalRelayStand });
+  await arrivalDesk.join("forget", relayTeam);
+  arrivalDesk.api.relayRun();
+  const arrivalEnvBefore = arrivalDesk.envelope();
+  const wrapDeleted = !(arrivalEnvBefore.teamJoin && arrivalEnvBefore.teamJoin.invite && arrivalEnvBefore.teamJoin.invite.relay && arrivalEnvBefore.teamJoin.invite.relay.wrap);
+  if (arrivalChannelOpts) {
+    if (typeof arrivalChannelOpts.onTeamKey === "function") arrivalChannelOpts.onTeamKey(2, crypto.randomBytes(32));
+    if (typeof arrivalChannelOpts.onAnswer === "function") arrivalChannelOpts.onAnswer("joined");
+    if (typeof arrivalChannelOpts.onTeam === "function") arrivalChannelOpts.onTeam();
+  }
+  const arrivalEnvAfter = arrivalDesk.envelope();
+  const noKeyKept = !(arrivalEnvAfter.teamKeys && arrivalEnvAfter.teamKeys[relayTeam] && arrivalEnvAfter.teamKeys[relayTeam][2]);
+  check(wrapDeleted && noKeyKept,
+    "15dm while withdrawing after a forget or a leave, nothing that arrives is kept: wrap deleted "
+    + wrapDeleted + ", arrival key kept " + !noKeyKept);
+
+  // 15dn: lifting plant:withdraw-arrivals keeps arrivals while withdrawing
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:withdraw-arrivals") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      let plantedOpts = null;
+      const relayStand = {
+        ...RelayChannel(),
+        createChannel: opts => { plantedOpts = opts; return { start: noop, stop: async () => {}, kick: noop, online: () => true }; }
+      };
+      const ud = path.join(LAB, "h35-arrivals-plant");
+      fs.mkdirSync(ud, { recursive: true });
+      const own = folder("h35-arrivals-plant-own");
+      const doc = JSON.parse(fs.readFileSync(path.join(arrivalDesk.ud, "desk.json"), "utf8"));
+      doc.keys.eCatalogFolder = own;
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(doc), "utf8");
+      const planted = loadDesk(ud, lines.join("\n"), { relayChannel: relayStand });
+      await planted.ask("etiuda:branch-identity", true);
+      planted.api.relayRun();
+      if (plantedOpts && typeof plantedOpts.onTeamKey === "function") {
+        plantedOpts.onTeamKey(2, crypto.randomBytes(32));
+      }
+      const env = planted.envelope();
+      turned = !!(env.teamKeys && env.teamKeys[relayTeam] && env.teamKeys[relayTeam][2]);
+      detail = turned ? "team key was kept while withdrawing" : "team key was not kept";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    check(turned && same, "15dn lifting plant:withdraw-arrivals keeps arrivals while withdrawing (FAIL 15dm while withdrawing after a forget or a leave, nothing that arrives is kept: arrivals ignored): "
       + detail + ", sha " + (same ? "restored" : "differs"));
   }
 

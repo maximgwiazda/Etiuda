@@ -3421,15 +3421,20 @@ function joinView() {
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
-    const left = j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length);
-    if (j.invite && j.invite.relay && j.invite.relay.withdrawn === true) view.join.withdrawn = true;
-    else if (j.invite && j.invite.relay && j.invite.relay.unkept === true) view.join.unkept = true;
-    else if (left) view.join.keeps = false; /* plant:h35-keeps */
-    else if (j.invite && j.invite.relay && !teamPins[j.team]) view.join.withdrawn = true;
-    else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true && j.invite.relay.readonly === true) {
-      view.join.withdrawing = true;
-      view.join.readonly = true;
-    } else if (j.invite && j.invite.relay && j.invite.relay.withdrawing === true) view.join.withdrawing = true;
+    const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
+    const doubted = !!(j.invite && j.invite.relay && teamBarred.has(j.team) && !teamLeft[j.team]);
+    if (j.invite && j.invite.relay) {
+      if (left) view.join.left = true; /* plant:h35-keeps */
+      if (doubted) view.join.doubted = true;
+      if (j.invite.relay.withdrawn === true) view.join.withdrawn = true;
+      else if (j.invite.relay.unkept === true) view.join.unkept = true;
+      else if (j.invite.relay.withdrawing === true && j.invite.relay.readonly === true) {
+        view.join.withdrawing = true;
+        view.join.readonly = true;
+      } else if (j.invite.relay.withdrawing === true) {
+        view.join.withdrawing = true;
+      }
+    }
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
@@ -3811,6 +3816,7 @@ function forgetLead(team, left) {
   // A request already withdrawn waits nowhere, so it goes with the keys; a waiting relay request is withdrawn.
   if (teamJoin && teamJoin.team === team) {
     if (teamJoin.invite && teamJoin.invite.relay) {
+      delete teamJoin.invite.relay.wrap;
       if (teamJoin.invite.relay.withdrawn === true) teamJoin = null;
       else if (inviteAccepted(teamJoin)) withdrawJoin(teamJoin); /* plant:forget-withdraw */
       else {
@@ -3996,7 +4002,12 @@ function relayRun() {
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
       return out;
     },
-    onTeam: () => { teamStamp = ""; heedTeam(); },
+    onTeam: () => {
+      const j = teamJoin;
+      if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
+      teamStamp = "";
+      heedTeam();
+    },
     /* The team's lapse moved a step, so the page is told now. */
     onLapse: () => sendJoin(theWindow),
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
@@ -4082,6 +4093,8 @@ function relayRun() {
        epoch is marked in the join as the invitation's (`wrapped`) unless the desk held a key at it before, so that Cancel
        before admission forgets what the wrap gave and keeps what the desk had. */
     onTeamKey: (epoch, key) => {
+      const j = teamJoin;
+      if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return; /* plant:withdraw-arrivals */
       if (!Number.isInteger(epoch) || epoch < 1 || !Buffer.isBuffer(key) || key.length !== 32) return;
       try {
         if (!branchSealable()) throw new Error("safeStorage is not available");

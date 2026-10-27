@@ -69,7 +69,7 @@ function teamJoinShown(){
 }
 function teamCanJoin(){
   const unkept=!!(joinNow && joinNow.join && joinNow.join.unkept===true);
-  const left=!!(joinNow && joinNow.join && (joinNow.join.keeps===false || joinNow.join.withdrawn===true));
+  const left=!!(joinNow && joinNow.join && (joinNow.join.left===true || joinNow.join.doubted===true || joinNow.join.keeps===false || joinNow.join.withdrawn===true));
   return eHasJoin() && (unkept || left || !(joinNow && (joinNow.join || leadToShow())));
 }
 function leadToShow(){
@@ -138,6 +138,8 @@ function joinShown(j){
   if(j.unkept===true) row.unkept=true;
   if(j.readonly===true) row.readonly=true;
   if(j.keeps===false) row.keeps=false;
+  if(j.left===true) row.left=true;
+  if(j.doubted===true) row.doubted=true;
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -398,6 +400,22 @@ function joinParts(){
   /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
+    const isLeft=j.left===true;
+    const isDoubted=j.doubted===true;
+    if(isLeft || isDoubted){
+      const cause=isLeft
+        ? t("This desk has left the team and keeps nothing the invitation gave it.")
+        : t("The key shown did not match the team's lead's, so this desk does not trust it and keeps nothing the invitation gave it.");
+      const status=(j.withdrawing===true && j.readonly===true)
+        ? t("Its request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request; if the relay clears the team's copy first, the request goes with it.")
+        : j.withdrawing===true
+        ? t("Its request is being withdrawn; the relay takes the withdrawal shortly, and until then the team's lead may still see it.")
+        : t("Its request is withdrawn, and the team's lead no longer sees it.");
+      const forward=t("To join, a new invitation from the team's lead is needed.");
+      return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        line:cause+" "+status+" "+forward,
+        body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]};
+    }
     /* Claudette's words, 2026-10-27. */
     if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
       line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
@@ -414,10 +432,6 @@ function joinParts(){
     if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
       body:meta, acts:[]}; /* plant:g2-card */
-    /* Claudette's words, 2026-10-27. */
-    if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered."),
-      body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
