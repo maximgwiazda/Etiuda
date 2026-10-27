@@ -78,6 +78,9 @@ catalogs/
 # --- Scratch --------------------------------------------------------------------------------
 # Probes, previews, screenshots, timings. Real work, none of it the product.
 /scratch/
+# A plant held in the checkout: the mark names the file, its sha256 and a backup.
+# The commit hook and the test chain refuse while a mark is here.
+/.plant-hold/
 /previews/
 *.tmp
 

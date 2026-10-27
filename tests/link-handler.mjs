@@ -7,7 +7,7 @@
  * the confirm. The full URL, a double-wrapped form, more than 8192 characters and a folder
  * document are said and refused, with no I/O and the token unspent. An etiuda: argument is never
  * read as a file. A plant deletes the one line that holds each guard and the file is put back by
- * its sha256.
+ * its sha256. The plant runs in a scratch copy of the tree, so a kill leaves the checkout as it was.
  *
  * A relay invitation is judged by what it is: pasted as etiuda-join:<payload> or as https://etiuda.dev/join#<payload>, or opened by
  * the link, it shows the link's confirm, asks no check code and joins on yes; a folder invitation keeps its code (3hp). The paste box
@@ -25,6 +25,10 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.env.ETIUDA_PLANTS_COPY !== "1") {
+  const { runInPlantsCopy } = await import("./plants-tree.mjs");
+  process.exit(await runInPlantsCopy(ROOT, fileURLToPath(import.meta.url), "link-handler"));
+}
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 

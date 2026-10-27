@@ -15,7 +15,9 @@
  *     node tests/rollback-floor.mjs        exit code is the number of failed checks, capped at 63
  *
  * The shell runs from a copy of shell/ in a temp folder, so the folder above it holds no catalog
- * of the checkout's. No window variable is set. Machine policy is the stand-in in tests/reg-stand.cjs.
+ * of the checkout's. Two plants still rewrite shell/main.js; the whole file runs in a scratch
+ * copy of the tree, so a kill leaves the checkout as it was. No window variable is set. Machine
+ * policy is the stand-in in tests/reg-stand.cjs.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -28,6 +30,10 @@ import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.env.ETIUDA_PLANTS_COPY !== "1") {
+  const { runInPlantsCopy } = await import("./plants-tree.mjs");
+  process.exit(await runInPlantsCopy(ROOT, fileURLToPath(import.meta.url), "rollback-floor"));
+}
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
