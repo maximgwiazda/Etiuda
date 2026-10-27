@@ -65,19 +65,45 @@ function trackedFiles(root) {
   return set;
 }
 
-function changedFiles(root) {
+export function changedFiles(root, base = "main...HEAD") {
   const have = name => {
     try { git(root, ["rev-parse", "--verify", "--quiet", name]); return true; }
     catch (e) { return false; }
   };
   const lines = [];
-  if (have("main")) lines.push(git(root, ["diff", "--name-only", "-z", "main...HEAD"]));
-  lines.push(git(root, ["diff", "--name-only", "-z", "HEAD"]));
-  lines.push(git(root, ["diff", "--name-only", "-z", "--cached"]));
-  lines.push(git(root, ["ls-files", "--others", "--exclude-standard", "-z"]));
+  const b = base.includes("...") ? base.split("...")[0] : base;
+  if (have(b)) {
+    const diffArg = base.includes("...") ? base : `${base}...HEAD`;
+    try { lines.push(git(root, ["diff", "--name-only", "-z", diffArg])); } catch (e) {}
+    try { lines.push(git(root, ["diff", "--name-only", "-z", b, "HEAD"])); } catch (e) {}
+  }
+  try { lines.push(git(root, ["diff", "--name-only", "-z", "HEAD"])); } catch (e) {}
+  try { lines.push(git(root, ["diff", "--name-only", "-z", "--cached"])); } catch (e) {}
+  try { lines.push(git(root, ["ls-files", "--others", "--exclude-standard", "-z"])); } catch (e) {}
   const set = new Set();
   for (const block of lines) for (const p of block.split("\0")) if (p) set.add(p.split(path.sep).join("/"));
   return [...set].sort();
+}
+
+export function isRelayCode(file) {
+  const f = file.replace(/\\/g, "/");
+  return f.startsWith("relay/") || f.startsWith("shell/relay/") || f === "shell/main.js";
+}
+
+export function isSharedCode(file) {
+  const f = file.replace(/\\/g, "/");
+  if (f === "package.json" || f === "package-lock.json" || f === "electron-builder.js") return true;
+  if (f === "tools/build.mjs" || f.startsWith("tools/build.mjs")) return true;
+  if (f === "tools/gate-run.mjs" || f === "tools/gates-for.mjs") return true;
+  if (f === "tests/plant-hold.mjs" || f === "tests/plant-compare.mjs" || f === "tests/chain-split.mjs" || f === "tests/engine.js") return true;
+  if (f === "src/main.js" || f === "src/template.html" || f === "engine/etiuda.html" || f === "engine/etiuda.csp.json") return true;
+  if (f === "tools/engine-pin") return true;
+  return false;
+}
+
+export function isProductFile(file) {
+  const f = file.replace(/\\/g, "/");
+  return f.startsWith("src/") || f.startsWith("shell/") || f.startsWith("relay/") || f.startsWith("engine/") || f === "Etiuda.html" || f === "etiuda-catalog.js";
 }
 
 export function relOf(root, abs) {

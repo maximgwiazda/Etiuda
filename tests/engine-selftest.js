@@ -1748,7 +1748,7 @@ Module.prototype._compile = function (content, filename) {
     "launch-wait.js": "a helper the window legs require, not a gate",
     "plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate; its use is held by tests/plant-hold.mjs and tests/plant-compare.mjs",
   };
-  const CHAIN_SCRIPTS = ["test", "split-guard"];
+  const CHAIN_SCRIPTS = ["test", "split-guard", "nightly"];
   function reachOf(scripts, releaseSrc) {
     const code = releaseSrc.replace(/\/\*[\s\S]*?\*\//g, "").split(/\r?\n/)
       .map(l => l.replace(/(^|\s)\/\/.*$/, "")).join("\n");

@@ -38,7 +38,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 46;
+const EXPECTED = 59;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -67,6 +67,9 @@ function makeLab(kind, stubs, opts) {
   fs.mkdirSync(path.join(lab, "tests"), { recursive: true });
   fs.mkdirSync(runs);
   fs.copyFileSync(TOOL, path.join(lab, "tools", "gate-run.mjs"));
+  if (opts && opts.gatesFor && fs.existsSync(path.join(ROOT, "tools", "gates-for.mjs"))) {
+    fs.copyFileSync(path.join(ROOT, "tools", "gates-for.mjs"), path.join(lab, "tools", "gates-for.mjs"));
+  }
   const scripts = {};
   for (const name of Object.keys(stubs)) {
     scripts[name] = "node tests/" + name + ".mjs";
@@ -100,19 +103,21 @@ function prints(okLines, failLines, extra) {
 /** Run the lab's copy of the tool over the named npm scripts, and return the lines it wrote,
  *  indexed by gate. The gate name is the tool's own mangling of the step's path, and the legs
  *  below pin it as a frozen literal rather than recomputing it here. */
-function run(l, names, cwd) {
+function run(l, names, cwd, extraEnv) {
   const at = cwd || l.lab;
   const r = spawnSync(process.execPath, [path.join(at, "tools", "gate-run.mjs")].concat(names), {
     cwd: at,
     encoding: "utf8",
-    env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs }),
+    env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs }, extraEnv),
     timeout: 60000,
   });
   const byGate = {};
   const files = fs.existsSync(l.runs) ? fs.readdirSync(l.runs).filter(f => f.endsWith(".json")) : [];
   for (const f of files.sort()) {
-    const line = JSON.parse(fs.readFileSync(path.join(l.runs, f), "utf8"));
-    byGate[line.gate] = line;
+    try {
+      const line = JSON.parse(fs.readFileSync(path.join(l.runs, f), "utf8"));
+      byGate[line.gate] = line;
+    } catch (e) {}
   }
   return { exit: r.status, out: String(r.stdout || "") + String(r.stderr || ""), byGate, files };
 }
@@ -910,6 +915,173 @@ function main() {
     + "), desk-growth carries it (" + deskHas + "), the tree's faults are "
     + (treeFaults.length ? treeFaults.join("; ") : "none")
     + "; a misspelling stays in place (" + missOrder + ") and so does a late line (" + lateOrder + ")");
+
+  /* ---- 13. THE MACHINE LOCK (rule 13) ---------------------------------------------------- */
+  const lockLab = makeLab("lock", {
+    heavy: 'import fs from "node:fs";\nconst lp = process.env.ETIUDA_LOCK_PATH;\nconst held = fs.existsSync(lp);\nlet parsed = null;\ntry { parsed = JSON.parse(fs.readFileSync(lp, "utf8")); } catch (e) {}\nconsole.log("HELD " + held + " PID " + (parsed && parsed.pid));\nprocess.exit(0);\n',
+  });
+  const lockPath = path.join(lockLab.root, "machine.lock");
+  const lockRun = run(lockLab, ["heavy"], null, { ETIUDA_LOCK_PATH: lockPath, ETIUDA_HEAVY: "1" });
+  const lockAfter = fs.existsSync(lockPath);
+  check(lockRun.out.indexOf("HELD true") >= 0 && !lockAfter && lockRun.exit === 0,
+    "13a the machine lock is taken exclusively for a heavy run and released at exit: "
+    + lockRun.out.trim() + "; lock file exists after exit: " + lockAfter);
+
+  fs.writeFileSync(lockPath, JSON.stringify({
+    pid: 99999999, host: os.hostname(), tree: lockLab.lab, what: "stale-run", since: new Date(Date.now() - 3600000).toISOString()
+  }) + "\n");
+  const staleRun = run(lockLab, ["heavy"], null, { ETIUDA_LOCK_PATH: lockPath, ETIUDA_HEAVY: "1" });
+  check(staleRun.out.indexOf("took over stale lock") >= 0 && staleRun.exit === 0,
+    "13b a stale lock whose pid is dead is taken over and the log names the takeover: "
+    + staleRun.out.trim().split(/\r?\n/).filter(l => /lock/i.test(l)).join(" | "));
+
+  const waitRun = run(lockLab, ["wait-lock"], null, { ETIUDA_LOCK_PATH: lockPath });
+  check(waitRun.exit === 0,
+    "13c wait-lock exits 0 immediately when no lock is held: exit " + waitRun.exit);
+
+  /* ---- 14. chains.jsonl ------------------------------------------------------------------- */
+  const chainsLab = makeLab("chains", {
+    okgate: prints(2, 0, "process.exit(0);"),
+    failgate: prints(1, 1, "process.exit(1);"),
+  });
+  const chainsPath = path.join(chainsLab.runs, "chains.jsonl");
+  const chainsRun1 = run(chainsLab, ["okgate"], null, { ETIUDA_CHAINS_PATH: chainsPath });
+  let chainLines = [];
+  try { chainLines = fs.readFileSync(chainsPath, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) {}
+  check(chainLines.length === 1 && chainLines[0].gate === "okgate" && chainLines[0].tree
+    && chainLines[0].head && chainLines[0].treeSha && chainLines[0].start && chainLines[0].end
+    && chainLines[0].counts && Array.isArray(chainLines[0].reds) && chainLines[0].reds.length === 0,
+    "14a gate-run appends one JSON line per run to chains.jsonl with gate, tree, head, treeSha, start, end, counts and reds: "
+    + JSON.stringify(chainLines[0]));
+
+  const chainsRun2 = run(chainsLab, ["failgate"], null, { ETIUDA_CHAINS_PATH: chainsPath });
+  try { chainLines = fs.readFileSync(chainsPath, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) {}
+  const redEntry = chainLines[1] && chainLines[1].reds && chainLines[1].reds[0];
+  check(chainLines.length === 2 && !!redEntry && redEntry.cause === "unread",
+    "14b a red run records its failing gates in chains.jsonl with cause unread: "
+    + JSON.stringify(redEntry));
+
+  /* ---- 15. THE NIGHTLY PROFILE (rule 3) --------------------------------------------------- */
+  const nightlyLab = makeLab("nightly", {
+    failgate: prints(1, 1, "process.exit(1);"),
+    leaf: prints(2, 0, "process.exit(0);"),
+  });
+  const tempNightly = run(nightlyLab, ["nightly"]);
+  check(tempNightly.exit === 78 && /refuses to run from a folder under %TEMP%/i.test(tempNightly.out),
+    "15a the nightly profile refuses to run from a folder under %TEMP% with exit 78: "
+    + tempNightly.out.trim().split(/\r?\n/).slice(-3).join(" | "));
+
+  const chainsNightlyPath = path.join(nightlyLab.runs, "chains.jsonl");
+  const allowedNightly = run(nightlyLab, ["nightly"], null, {
+    ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+    ETIUDA_CHAINS_PATH: chainsNightlyPath,
+    ETIUDA_LOCK_PATH: path.join(nightlyLab.root, "machine.lock"),
+  });
+  const failRecord = Object.values(allowedNightly.byGate).find(g => g.exit !== 0);
+  check(allowedNightly.exit !== 0 && !!failRecord && failRecord.cause === "unread",
+    "15b nightly with allow-temp runs the whole chain and a red gate record carries cause unread: "
+    + JSON.stringify(failRecord && { gate: failRecord.gate, exit: failRecord.exit, cause: failRecord.cause }));
+
+  const failFile = allowedNightly.files.find(f => {
+    try { return JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, f), "utf8")).exit !== 0; } catch (e) { return false; }
+  });
+  const markRun = run(nightlyLab, ["mark-cause", path.join(nightlyLab.runs, failFile || "none"), "product"], null, {
+    ETIUDA_CHAINS_PATH: chainsNightlyPath,
+  });
+  let markedRec = null;
+  try { markedRec = JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, failFile || "none"), "utf8")); } catch (e) {}
+  check(markRun.exit === 0 && !!markedRec && markedRec.cause === "product",
+    "15c mark-cause updates the cause field in the gate record and in chains.jsonl: "
+    + JSON.stringify(markedRec && { gate: markedRec.gate, cause: markedRec.cause }));
+
+  /* ---- 16. THE AREA RUN (rule 1) ---------------------------------------------------------- */
+  const areaLab = makeLab("area", {
+    g1: prints(2, 0, "process.exit(0);"),
+    g2: prints(2, 0, "process.exit(0);"),
+  }, {
+    git: true,
+    gatesFor: true,
+    files: {
+      "src/leaf.mjs": "export const leaf = 1;\n",
+      "src/other.mjs": "export const other = 2;\n",
+      "relay/core.cjs": "module.exports = {};\n",
+    }
+  });
+  const areaPkg = JSON.parse(fs.readFileSync(path.join(areaLab.lab, "package.json"), "utf8"));
+  areaPkg.scripts = {
+    test: "node tests/plant-hold.mjs && node tests/g1.mjs && node tests/g2.mjs && node tests/plant-compare.mjs",
+    g1: "node tests/g1.mjs",
+    g2: "node tests/g2.mjs",
+  };
+  fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(areaPkg, null, 2) + "\n");
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "plant-hold.mjs"), 'console.log("  ok   plant-hold");\nprocess.exit(0);\n');
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "plant-compare.mjs"), 'console.log("  ok   plant-compare");\nprocess.exit(0);\n');
+  spawnSync("git", ["add", "."], { cwd: areaLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "initial"], { cwd: areaLab.lab });
+
+  fs.writeFileSync(path.join(areaLab.lab, "src", "leaf.mjs"), "export const leaf = 99;\n");
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "g1.mjs"),
+    'import fs from "node:fs";\n' + prints(2, 0, 'process.exit(0);') + '\nconst text = fs.readFileSync("src/leaf.mjs", "utf8");\n');
+
+  const areaRun1 = run(areaLab, ["area", "HEAD"], null, {
+    ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
+  });
+  check(areaRun1.exit === 0 && "tests-g1" in areaRun1.byGate && !("tests-g2" in areaRun1.byGate),
+    "16a the area run selects exactly the legs that read the changed files plus plant-hold bracket: "
+    + Object.keys(areaRun1.byGate).join(", ") + "; exit " + areaRun1.exit);
+
+  fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(areaPkg, null, 2) + " ");
+  const areaRunShared = run(areaLab, ["area", "HEAD"], null, {
+    ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
+  });
+  check(areaRunShared.out.indexOf("fail-closed to whole chain") >= 0,
+    "16b the area run fails closed to the whole chain on an unmapped product file and on shared code: "
+    + areaRunShared.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
+
+  fs.writeFileSync(path.join(areaLab.lab, "src", "leaf.mjs"), "export const leaf = 1;\n");
+  fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(areaPkg, null, 2) + "\n");
+  fs.writeFileSync(path.join(areaLab.lab, "relay", "core.cjs"), "module.exports = { changed: true };\n");
+  const areaRunRelay = run(areaLab, ["area", "HEAD"], null, {
+    ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
+  });
+  check(areaRunRelay.out.indexOf("relay core") >= 0,
+    "16c the area run adds the relay core when a relay file is changed: "
+    + areaRunRelay.out.trim().split(/\r?\n/).filter(l => /relay/i.test(l)).join(" | "));
+
+  /* ---- 17. PLANTS OUT OF MERGES (rule 2) -------------------------------------------------- */
+  const plantLab = makeLab("plants", {
+    plantleg: [
+      'const off = process.env.ETIUDA_PLANTS === "off";',
+      'let asserted = 0, skipped = 0;',
+      'asserted++; console.log("  ok   base leg");',
+      'if (!off) { asserted++; console.log("  ok   planted leg"); } else { skipped++; console.log("  SKIP  planted leg"); }',
+      'console.log("#counts checks=" + asserted + " skipped=" + skipped + " expected=2");',
+      'const ok = asserted + skipped === 2;',
+      'process.exit(ok ? 0 : 78);',
+    ].join("\n"),
+  });
+  const plantRunOn = run(plantLab, ["plantleg"]);
+  const plantRunOff = run(plantLab, ["plantleg"], null, { ETIUDA_PLANTS: "off" });
+  check(plantRunOn.exit === 0 && plantRunOn.byGate["tests-plantleg"].counts.ok === 2
+    && plantRunOff.exit === 0 && plantRunOff.byGate["tests-plantleg"].counts.ok === 1
+    && plantRunOff.byGate["tests-plantleg"].counts.skipped === 1,
+    "17a ETIUDA_PLANTS=off causes a planting leg to skip its planted half and report skipped in counts: "
+    + "on=" + JSON.stringify(plantRunOn.byGate["tests-plantleg"].counts)
+    + " off=" + JSON.stringify(plantRunOff.byGate["tests-plantleg"].counts));
+
+  const brokenPlantLab = makeLab("plants-broken", {
+    brokenleg: [
+      'const off = process.env.ETIUDA_PLANTS === "off";',
+      'let asserted = 0, skipped = 0;',
+      'asserted++; console.log("  ok   base leg");',
+      'console.log("#counts checks=" + asserted + " skipped=" + skipped + " expected=2");',
+      'const ok = asserted + skipped === 2;',
+      'process.exit(ok ? 0 : 78);',
+    ].join("\n"),
+  });
+  const brokenRun = run(brokenPlantLab, ["brokenleg"], null, { ETIUDA_PLANTS: "off" });
+  check(brokenRun.exit === 78,
+    "17b the expected floor still refuses if a leg is missing rather than skipped: exit " + brokenRun.exit);
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
