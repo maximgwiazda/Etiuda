@@ -131,6 +131,9 @@ function joinShown(j){
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
+  if(j.withdrawn===true) row.withdrawn=true;
+  if(j.withdrawing===true) row.withdrawing=true;
+  if(j.keeps===false) row.keeps=false;
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -195,6 +198,26 @@ function syncLapseNotice(){
     joinAsk("lapse-seen", team, step);
   });
 }
+/* The relay told this desk it is no longer on the team. The notice says so, and only for that: a roster that has
+   dropped the desk already has its own sentence, and this one must not promise that the catalog opens by itself,
+   because the desk has stopped asking. */
+let relayGoneUp="";
+const relayGoneDismissed=new Set();
+function syncRelayRemoved(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function" || typeof document.createElement!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.relayRemoved===true && !relayGoneDismissed.has(x.team))[0]||null;
+  const want=l?l.team:"", up=document.getElementById("eTeamRemoved");
+  if(want===relayGoneUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  relayGoneUp=want;
+  if(!l) return;
+  eNotice("eTeamRemoved", t("This team no longer includes this desk."),
+    /* Claudette's words, 2026-10-27 01:23. */
+    t("The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again."), ()=>{
+      relayGoneDismissed.add(want);
+      if(relayGoneUp===want) relayGoneUp="";
+    });
+}
 function joinTook(v,changed){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
@@ -204,6 +227,7 @@ function joinTook(v,changed){
              const row={team:String(l.team),print:String(l.print||""),
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
                removed:l.removed===true,policy:l.policy===true};
+             if(l.relayRemoved===true) row.relayRemoved=true;
              const head=headKept(l.head);
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
@@ -217,6 +241,7 @@ function joinTook(v,changed){
   }
   syncJoinDoor();
   syncLapseNotice();
+  syncRelayRemoved();
   const refusal=s.linkRefusal;
   if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
     dropInvite();
@@ -374,12 +399,32 @@ function joinParts(){
   /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
+    /* Claudette's words, 2026-10-27. */
+    if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
+      line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
+      body:meta, acts:[["ask",t("Ask again")]]};
+    /* Until the relay has taken the withdrawal the lead may still see the request, so the card says so, with nothing to press. Claudette's words, 2026-10-27. */
+    if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
+      body:meta, acts:[]}; /* plant:g2-card */
+    /* Claudette's words, 2026-10-27. */
+    if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered."),
+      body:meta, acts:[]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
-  /* A relay invitation the relay refused: its token was spent by another desk, or it ended unused. Cancel the request clears it. */
+  /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
+     the team's lead removed this desk. Cancel the request clears it. */
+  if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),
+    /* Claudette's words, 2026-10-27. */
+    line:t("This invitation was made before the team's lead removed this desk, so it no longer works. The lead can make a new one."),
+    body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
+      +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
+      +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
   if(j && j.invite && j.invite.relay && (j.state==="used" || j.state==="ended")) return {title:t("Join a team"),
     line:j.state==="used"?t("This invitation has already been used. Ask your lead for a new one."):t("This invitation has expired. Ask your lead for a new one."),
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
@@ -398,8 +443,16 @@ function joinParts(){
   const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]];
   /* A team whose roster no longer lists this desk says so in place of the ask a desk never on it gets. */
   const gone=s?((joinNow&&joinNow.leads)||[]).filter(x=>x.team===s.team && x.removed)[0]:null;
-  if(gone) return {title:gone.lead?t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead):t("The team no longer includes this desk"),
-    line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
+  if(gone){
+    const title=gone.lead?t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead):t("The team no longer includes this desk");
+    let hushLine=false;
+    hushLine=gone.relayRemoved===true; /* plant:h35-hush-card */
+    /* Claudette's words, 2026-10-27. */
+    if(hushLine) return {title:title,
+      line:t("The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
+      body:ask, acts:acts};
+    return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
+  }
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
     line:t("Once the team's lead lets this desk in, the catalog opens here by itself."), body:ask, acts:acts};
 }
