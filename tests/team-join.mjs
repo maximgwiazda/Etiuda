@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 110;
+const EXPECTED = 115;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1408,7 +1408,7 @@ try {
     "15cp cancelling a join the relay has already accepted, through the shell, says the request is being withdrawn, with nothing to press, until the relay takes the"
     + " withdrawal, and then says it is withdrawn and this desk keeps what the invitation gave it, in English and in Polish, offering Ask again with no second Cancel: pending "
     + (pendingSaid ? "said" : "not said") + ", withdrawing and key " + (pendingKept ? "kept" : "not kept") + ", taken " + (staysSaid ? "said" : "not said"));
-  const leftDesk = await relayDesk("h35-left-card", {}, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam] });
+  const leftDesk = await relayDesk("h35-left-card", {}, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
   const leftHtml = await bothLang(leftDesk);
   const leftSaid = cardSaid(leftHtml, LEFT_EN, LEFT_PL) && leftHtml.en.indexOf(escPage(STAYS_EN)) < 0 && leftHtml.pl.indexOf(STAYS_PL) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
@@ -1651,6 +1651,134 @@ try {
     const same = fs.readFileSync(joinPath).equals(before);
     if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
     check(turned && same, "15dc lifting plant:c5-card-held leaves the read-only sentence unsaid (FAIL 15cz a withdrawal while the team's relay is read-only: not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+
+  /* Hold 1: desk leaving while relay request waits is not locked out, request withdrawn */
+  const leaveWaitYard = folder("h35-leave-wait-own");
+  const leaveWaitDesk = await deskWith("h35-leave-waiting", leaveWaitYard, {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText("seal"), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: leaveWaitYard } },
+    teamKeys: { [relayTeam]: { 1: keptKey } },
+    teamSeen: [relayTeam]
+  });
+  await leaveWaitDesk.join("leave", relayTeam);
+  await pageOn(leaveWaitDesk);
+  const leaveCanJoin = TJ.teamCanJoin();
+  const leaveEnv = leaveWaitDesk.envelope();
+  const leaveWithdrawn = !!(leaveEnv.teamJoin && leaveEnv.teamJoin.invite && leaveEnv.teamJoin.invite.relay
+    && (leaveEnv.teamJoin.invite.relay.withdrawing === true || leaveEnv.teamJoin.invite.relay.withdrawn === true));
+  check(leaveCanJoin && leaveWithdrawn,
+    "15dd a desk with a relay request waiting presses Leave this team, staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
+    + leaveCanJoin + ", withdrawn " + leaveWithdrawn);
+
+  const matchWaitYard = folder("h35-match-wait-own");
+  const matchWaitDesk = await deskWith("h35-match-waiting", matchWaitYard, {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText("seal"), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: matchWaitYard } },
+    teamKeys: { [relayTeam]: { 1: keptKey } },
+    teamSeen: [relayTeam]
+  });
+  await matchWaitDesk.join("forget", relayTeam);
+  await pageOn(matchWaitDesk);
+  const matchCanJoin = TJ.teamCanJoin();
+  const matchEnv = matchWaitDesk.envelope();
+  const matchWithdrawn = !!(matchEnv.teamJoin && matchEnv.teamJoin.invite && matchEnv.teamJoin.invite.relay
+    && (matchEnv.teamJoin.invite.relay.withdrawing === true || matchEnv.teamJoin.invite.relay.withdrawn === true));
+  check(matchCanJoin && matchWithdrawn,
+    "15de a desk with a relay request waiting presses It does not match, staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
+    + matchCanJoin + ", withdrawn " + matchWithdrawn);
+
+  /* Hold 2: relay link's confirm card shows disclosure and left heading for a desk that left */
+  tookFn({ offer: { link: true, lead: "Lamp lead", team: relayTeam, relay: "relay.test", left: "2026-09-01T08:30:00.000Z" } });
+  ST.lsSet("eUiLang", "en");
+  const relayConfirmHtml = TJ.teamJoinEmptyHtml();
+  ST.lsSet("eUiLang", "pl");
+  const relayConfirmPl = TJ.teamJoinEmptyHtml();
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  const discEn = "Once this desk joins, the team's lead can see which catalog it uses";
+  const discPl = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko";
+  const leftHeadEn = "This desk left this team on 1 September 2026. Join it again?";
+  const leftHeadPl = "To stanowisko opuściło ten zespół 1 września 2026. Dołączyć do niego ponownie?";
+  const confirmHasDisc = relayConfirmHtml.indexOf(escPage(discEn)) >= 0 && relayConfirmPl.indexOf(escPage(discPl)) >= 0;
+  const confirmHasLeftEn = relayConfirmHtml.indexOf(leftHeadEn) >= 0;
+  const confirmHasLeftPl = relayConfirmPl.indexOf(leftHeadPl) >= 0;
+  check(confirmHasDisc && confirmHasLeftEn && confirmHasLeftPl,
+    "15df the relay link's confirm card shows the disclosure, and the left heading for a desk that left, in English and in Polish: disclosure "
+    + confirmHasDisc + ", left heading en " + confirmHasLeftEn + ", pl " + confirmHasLeftPl);
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:forget-withdraw") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const ud = path.join(LAB, "forget-withdraw-plant");
+      fs.mkdirSync(ud, { recursive: true });
+      const own = folder("forget-withdraw-plant-own");
+      const doc = JSON.parse(fs.readFileSync(path.join(leaveWaitDesk.ud, "desk.json"), "utf8"));
+      doc.keys.eCatalogFolder = own;
+      doc.teamPins = { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } };
+      doc.teamJoin = {
+        team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+        invite: {
+          id: relayHex.id, proof: relayHex.h64,
+          lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+          relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText("seal"), wrapped: [1] }
+        }
+      };
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(doc), "utf8");
+      const planted = loadDesk(ud, lines.join("\n"));
+      await planted.ask("etiuda:branch-identity", true);
+      await planted.join("leave", relayTeam);
+      const penv = planted.envelope();
+      turned = !(penv.teamJoin && penv.teamJoin.invite && penv.teamJoin.invite.relay && penv.teamJoin.invite.relay.withdrawing === true);
+      detail = turned ? "request was not withdrawn" : "request was still withdrawn";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    check(turned && same, "15dg lifting plant:forget-withdraw leaves the request not withdrawn after Leave this team (FAIL 15dd a desk with a relay request waiting presses Leave this team: request not withdrawn): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  {
+    const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+    const before = fs.readFileSync(joinPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:relay-confirm-disclosure") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const dir = fs.mkdtempSync(path.join(LAB, "join-plant-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+      let pTook = null;
+      window.E_HOST = { onTeamJoin: fn => { pTook = fn; }, teamJoin: () => Promise.resolve({ sealed: null, join: null, leads: [] }) };
+      planted.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 30));
+      pTook({ offer: { link: true, lead: "Lamp lead", team: relayTeam, relay: "relay.test", left: "2026-09-01T08:30:00.000Z" } });
+      const html = planted.teamJoinEmptyHtml();
+      turned = html.indexOf(escPage(discEn)) < 0;
+      detail = turned ? "the disclosure was absent" : "the disclosure was still said";
+    }
+    const same = fs.readFileSync(joinPath).equals(before);
+    check(turned && same, "15dh lifting plant:relay-confirm-disclosure leaves the disclosure unshown on the relay link confirm card (FAIL 15df the relay link's confirm card shows the disclosure: disclosure absent): "
       + detail + ", sha " + (same ? "restored" : "differs"));
   }
 

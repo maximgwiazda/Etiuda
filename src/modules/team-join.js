@@ -69,7 +69,8 @@ function teamJoinShown(){
 }
 function teamCanJoin(){
   const unkept=!!(joinNow && joinNow.join && joinNow.join.unkept===true);
-  return eHasJoin() && (unkept || !(joinNow && (joinNow.join || leadToShow())));
+  const left=!!(joinNow && joinNow.join && (joinNow.join.keeps===false || joinNow.join.withdrawn===true));
+  return eHasJoin() && (unkept || left || !(joinNow && (joinNow.join || leadToShow())));
 }
 function leadToShow(){
   return ((joinNow&&joinNow.leads)||[]).filter(l=>l.admitted && !l.seen && !l.removed)[0]||null;
@@ -104,7 +105,7 @@ function readTook(v,n,sent){
   if(n!==joinReads || joinMode!=="paste") return false;
   const o=v&&typeof v==="object"?v.offer:null;
   if(o && typeof o.relay==="string" && o.relay){
-    joinOffer={lead:String(o.lead||""),team:String(o.team||""),relay:String(o.relay),code:""};
+    joinOffer={lead:String(o.lead||""),team:String(o.team||""),relay:String(o.relay),code:"",left:String(o.left||"")};
     joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm"; /* plant:paste-relay */
   }else if(o && typeof o.folder==="string"){
     joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
@@ -255,7 +256,7 @@ function joinTook(v,changed){
   }
   const offer=s.offer;
   if(offer && offer.link===true && typeof offer.relay==="string" && offer.relay){
-    joinOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:""};
+    joinOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
     joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm"; /* plant:link-page */
     paintJoin();
@@ -333,27 +334,22 @@ function joinInviteParts(){
     body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
       +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>'+joinDisclosure(),
     acts:[["read",t("Continue")],["back",t("Cancel")]]};
-  /* A relay invitation, opened by a link or pasted, names its lead, its team and the relay's host, and it asks for no check code. */
-  if(joinMode==="confirm" && joinOffer && joinOffer.relay){
-    const o=joinOffer;
-    const line=t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
-    return {title:t("Join this team?"), line:line,
-      body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
-        +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(o.team))+'</div>'
-        +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(o.relay))+'</div>',
-      acts:[["invite",t("Join this team")],["back",t("Cancel")]]};
-  }
   /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
     const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its five digits here.");
     const title=o.left?t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)):t("Join this team?");
     /* The relay link names the lead, the team and the host, and it asks for no code. */
-    if(o.relay) return {title:title, line:"",
-      body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
-        +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(o.team))+'</div>'
-        +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(o.relay))+'</div>'
-        +joinDisclosure(),
-      acts:[["invite",t("Join this team"),false],["back",t("Cancel")]]};
+    if(o.relay){
+      const line=t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
+      let disc="";
+      disc=joinDisclosure(); /* plant:relay-confirm-disclosure */
+      return {title:title, line:line,
+        body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
+          +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(o.team))+'</div>'
+          +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(o.relay))+'</div>'
+          +disc,
+        acts:[["invite",t("Join this team"),false],["back",t("Cancel")]]};
+    }
     return {title:title, line:joinWhere(o),
       body:'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
         +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
@@ -421,7 +417,7 @@ function joinParts(){
     /* Claudette's words, 2026-10-27. */
     if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request waits with the team's lead until it is answered."),
-      body:meta, acts:[]};
+      body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
