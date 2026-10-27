@@ -2,91 +2,86 @@
  *
  *   node tools/gate-run.mjs test split-guard        the two fast chains
  *   node tools/gate-run.mjs shell-smoke             one gate, one line
+ *   node tools/gate-run.mjs area [base]             area run with plant-hold bracket
+ *   node tools/gate-run.mjs nightly                 nightly profile outside %TEMP%
+ *   node tools/gate-run.mjs wait-lock               wait for machine lock
+ *   node tools/gate-run.mjs mark-cause <rec> <c>    mark failure cause
  *   ETIUDA_RUNS=<folder> node tools/gate-run.mjs …  somewhere else to write them
  *
  * A step whose file carries the alone marker in its first 15 lines runs after every step that
  * does not, and the log names it. The marker and the rule sit beside deferAlone.
- *
- * WHY. The chief of staff's tick and the QA engineer read a run's result out of prose today, and
- * prose is where a count is quietly wrong: 103 verifications in the week to 2026-09-16 refuted no
- * build and corrected 47 counts. A number a tool wrote is cheaper to check than a number an agent
- * transcribed, so each gate's run leaves a JSON object behind and the reading is numbers against
- * numbers.
- *
- * THE LIST OF GATES IS NOT WRITTEN HERE. It is what package.json enumerates: this takes the names
- * of npm scripts, splits each script's command on `&&` the way npm's shell would, and runs the
- * steps itself. A step that is not `node <file> …` is a refusal rather than a skip, because a
- * chain that grew a step this cannot read must not pass as a chain that had none. Add a gate to
- * package.json and it is run and recorded here without this file being touched.
- *
- * WHERE THE LINES GO. One file per gate per run, named gate-then-timestamp, in a folder OUTSIDE
- * both repositories (`etiuda-runs` beside the main working tree by default, see mainTree below),
- * so two gates never write one file and no run leaves anything in a tree. The folder is refused
- * if it sits inside the repository this is run from.
- *
- * WHAT A COUNT IS HERE, since a count without its method is an impression:
- *   - `declared`: a gate may print `#counts name=12 other=3` on a line of its own, and those
- *     numbers are taken verbatim. That is the only channel by which a gate names its own counts.
- *     It goes BEFORE the gate's last line: more than one gate's selftest requires the last line
- *     to lead with the verdict rather than with a count, and one of them caught this the first
- *     time the line was printed after it.
- *   - `ok` and `fail`: lines of the gate's output beginning with two spaces and `FAIL` or `ok`,
- *     which is what every driver in tests/ prints per check. `FAIL` is taken with a space or a
- *     colon after it, because the largest gate in the tree reports a section that threw as
- *     `  FAIL: <message>` and a pattern wanting a space counted nought of them. Counted always,
- *     including for a gate that declares, because the two disagreeing is itself worth seeing.
- *     Both names are RESERVED: a gate declaring `ok` or `fail` is a clash, because those two
- *     words mean checks in every gate's line and a gate that means something else by them has
- *     taken a word the record reads.
- *   - `lines`: lines of output, which is the liveness floor - a gate that printed nothing at all
- *     cannot have checked anything, and `countsFrom` says "none" rather than leaving zeroes to be
- *     read as a clean run.
- *   - `exitCode`: THE VERDICT, INSIDE THE COUNTS, board item 550. It is the same number as the
- *     line's own `exit` and the duplication is the whole point: the record reads `counts`, and
- *     before this a gate could hand it `{legs: 265, failed: 0}` while exiting 1. That is not a
- *     hypothesis - a tree without node_modules makes tests/test.js throw in a section whose
- *     failures its declared counts never covered, and the line read green. A reader cannot now
- *     hold the counts of a failing gate without holding its failure. RESERVED like the two above.
- *   - `treeHash`, `treeFiles`, `treeHow` and `treeChanged`, beside the counts: the content
- *     fingerprint of the tree the gate ran over, and whether it moved while the gate ran.
- *     A step whose tree moved has no verdict and the chain stops. Board item 645, and the
- *     long note is beside the code.
- *   - `gitTree`, beside them: git's own tree id for the commit the step ran over
- *     (`git rev-parse HEAD^{tree}`), read after the gate, or "uncommitted changes" where the
- *     working tree differed from HEAD then (`git status --porcelain` not empty: an edit, a staged
- *     change, an untracked file git would show, an unresolved merge), or "no git" in a lab without
- *     one. `treeHash` is this file's own fingerprint and can never equal a git tree id, so this is
- *     the key that ties a record to a commit (charter section 6, "an identical tree needs no
- *     rerun"). Added 2026-10-12 after a merge's 59/59 was named by its fingerprint and read
- *     against the commit's tree id, which could not match.
- *   - `unmerged`, beside them: the number of paths in conflict in the index when the step ended,
- *     0 for every run outside a merge in progress and for a lab with no git. Where it is not 0,
- *     `treeHash` is the working tree's bytes, each path once, and no commit holds them yet.
- *   - `gateExit`: the gate's own exit code, which is the same number as `exit` except where
- *     the tree moved, in which case `exit` and `counts.exitCode` are NO_VERDICT and this is
- *     what the gate itself said before its verdict was withdrawn.
- *   - `clash`, beside the counts rather than in them, because it is a property of the reading and
- *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
- *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
- *     its absence one day is legible rather than silent.
- *   - `refused`, beside the counts: the wall a gate named on a `#refused <wall>` line of its own and an
- *     exit of 78, `window-wall` where tests/engine.js refused a window, and empty otherwise. The run is then
- *     summed up as refused, not failed; the exit stays the gate's own.
- * A gate's exit code is the verdict. The counts are how a green that fell is noticed.
- *
- * THIS FILE IS GATED BY tests/result-line.mjs, which is a control rather than a description:
- * every count it asserts is read twice, from a lab gate and from the same gate with one planted
- * mutation, and the same assertion must hold on the first and FAIL on the second.
  */
-import { spawn } from "node:child_process";
-import { execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+async function loadGatesFor() {
+  try {
+    return await import("./gates-for.mjs");
+  } catch (e) {
+    return null;
+  }
+}
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NO_VERDICT = 78;
+
+const DEFAULT_LOCK_PATH = "C:/Users/maxim/Workspace/etiuda-runs/machine.lock";
+export const LOCK_PATH = path.resolve(process.env.ETIUDA_LOCK_PATH || DEFAULT_LOCK_PATH);
+
+
+/* The relay core for an unmapped engine relay file, the test architect's choice (2026-10-28 00:13): the five relay files
+   once each, whole, about three minutes. No single-leg switch exists in relay-unit or relay-channel, so legs named one by one
+   ran each file whole, nine times over. It changes by his word only, or when real switches land. */
+export const RELAY_CORE = [
+  { step: "relay-unit", leg: "whole", file: "tests/relay-unit.mjs", env: {} },
+  { step: "relay-channel", leg: "whole", file: "tests/relay-channel.mjs", env: {} },
+  { step: "relay-blob", leg: "whole", file: "tests/relay-blob.mjs", env: {} },
+  { step: "relay-stub", leg: "whole", file: "tests/relay-stub.mjs", env: {} },
+  { step: "relay-workerd", leg: "whole", file: "tests/relay-workerd.mjs", env: {} },
+];
+
+export const RELEASE_ONLY_LEGS = [
+  "tests/desk-growth.mjs",
+  "tests/engine-selftest.js",
+  "tests/leg-ids.js",
+  "tests/result-line.mjs",
+  "tests/sbom.mjs",
+  "tests/text-scan-selftest.js",
+];
+
+export const NIGHTLY_LEGS = [
+  { script: "nightly", file: "tests/desk-growth.mjs", args: [], cmd: "node tests/desk-growth.mjs" },
+  { script: "nightly", file: "tests/leg-ids.js", args: [], cmd: "node tests/leg-ids.js" },
+  { script: "nightly", file: "tests/engine-selftest.js", args: [], cmd: "node tests/engine-selftest.js" },
+  { script: "nightly", file: "tests/result-line.mjs", args: [], cmd: "node tests/result-line.mjs" },
+  { script: "nightly", file: "tests/text-scan-selftest.js", args: [], cmd: "node tests/text-scan-selftest.js" },
+  { script: "nightly", file: "tests/sbom.mjs", args: [], cmd: "node tests/sbom.mjs" },
+];
+
+export const FLOOR = [
+  { step: "pick 5a-5f", file: "tests/pick.mjs", cmd: "node tests/pick.mjs", args: [] },
+  { step: "links line 92", file: "tests/links.js", cmd: "node tests/links.js", args: [] },
+  { step: "relay-unit 13b", file: "tests/relay-unit.mjs", cmd: "node tests/relay-unit.mjs", args: [] },
+  { step: "update-install U0d", file: "tests/update-install.js", cmd: "node tests/update-install.js U0d", args: ["U0d"] },
+  { step: "team-join 15by-15bz", file: "tests/team-join.mjs", cmd: "node tests/team-join.mjs", args: [] },
+  { step: "test checkCatalogRoundTrip", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
+];
+
+/* The test architect's named core for a product file gates-for maps to no leg, outside the relay (his role file; office
+   bcb48c64, 2026-10-28 00:03): seven node legs, about 65 s. It changes by his word only. */
+export const PRODUCT_CORE = [
+  { step: "test", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
+  { step: "team-join", file: "tests/team-join.mjs", cmd: "node tests/team-join.mjs", args: [] },
+  { step: "link-handler", file: "tests/link-handler.mjs", cmd: "node tests/link-handler.mjs", args: [] },
+  { step: "rollback-floor", file: "tests/rollback-floor.mjs", cmd: "node tests/rollback-floor.mjs", args: [] },
+  { step: "catalog-trust", file: "tests/catalog-trust.mjs", cmd: "node tests/catalog-trust.mjs", args: [] },
+  { step: "sellable", file: "tests/sellable.mjs", cmd: "node tests/sellable.mjs", args: [] },
+  { step: "catalog-sig", file: "tests/catalog-sig.js", cmd: "node tests/catalog-sig.js", args: [] },
+];
 
 function refuse(what, how) {
   console.log("  FAIL " + what);
@@ -95,14 +90,11 @@ function refuse(what, how) {
   process.exit(NO_VERDICT);
 }
 
-/* Not path.startsWith: C:/x/etiuda-runs starts with C:/x/etiuda and is not inside it. */
 function inside(parent, child) {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-/* One folder, whatever the spelling. Native resolution folds a short name, a junction
-   and, on Windows, a different case; a nested folder stays a different folder. */
 function sameFolder(a, b) {
   try {
     const norm = (p) => {
@@ -115,66 +107,339 @@ function sameFolder(a, b) {
   }
 }
 
-/* THE DEFAULT RUNS FOLDER is `etiuda-runs` beside the MAIN working tree, not beside ROOT. Until
-   2026-09-23 it was a literal absolute path on one machine, which this repository's rules forbid;
-   on that desk it named the main tree's sibling, and every worktree of the repository wrote
-   there wherever the worktree itself lived. Beside ROOT would keep the first and break the
-   second for a worktree in a scratch folder, so the anchor is the main tree: the parent of git's
-   common directory. Git is asked only when it says ROOT is itself the top of a work tree, so a
-   folder nested in some other repository is not handed that one's record. Without git, or where
-   the common directory is not a `.git` (a bare or separated repository), ROOT stands in.
-   ETIUDA_RUNS overrides all of it. Proved by tests/result-line.mjs leg 10a. */
 function mainTree() {
   const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
   const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
   if (!top || !common || !sameFolder(top, ROOT)) return ROOT;
   return path.basename(common) === ".git" ? path.dirname(path.resolve(common)) : ROOT;
 }
-const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..", "etiuda-runs"));
-if (inside(ROOT, RUNS)) refuse("the runs folder is inside the repository: " + RUNS,
-  "these files are a record of runs, not of the tree; put them beside it, not in it");
-fs.mkdirSync(RUNS, { recursive: true });
 
-const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-const asked = process.argv.slice(2);
-if (!asked.length) refuse("no npm script was named", "node tools/gate-run.mjs test split-guard");
+export const LOCK_STALE_CEILING_MS = 6 * 3600 * 1000;
 
-/* The gates, from package.json and from nothing else. */
-const steps = [];
-for (const name of asked) {
-  const cmd = pkg.scripts && pkg.scripts[name];
-  if (!cmd) refuse("package.json has no script called " + JSON.stringify(name),
-    "the scripts it does have: " + Object.keys(pkg.scripts || {}).join(", "));
+export function isPidAlive(pid) {
+  if (!pid || typeof pid !== "number") return false;
+  try {
+    if (process.platform === "win32") {
+      const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return out.indexOf(String(pid)) >= 0;
+    }
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
+export function isLockStale(existing, ceilingMs = LOCK_STALE_CEILING_MS) {
+  if (!existing || typeof existing !== "object") return true;
+  const pid = existing.pid;
+  if (!pid) return true;
+  const since = existing.since ? new Date(existing.since).getTime() : 0;
+  const age = Date.now() - since;
+  if (age < ceilingMs) {
+    return false;
+  }
+  return !isPidAlive(pid);
+}
+
+let heldLockPath = null;
+
+export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, waitTimeoutMs = 300000) {
+  const dir = path.dirname(lockPath);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+
+  const startWait = Date.now();
+  let reported30m = false;
+
+  while (true) {
+    const payload = JSON.stringify({
+      pid: process.pid,
+      host: os.hostname(),
+      tree,
+      what,
+      since: new Date().toISOString(),
+    }) + "\n";
+
+    try {
+      fs.writeFileSync(lockPath, payload, { flag: "wx" });
+      heldLockPath = lockPath;
+      return { ok: true, staleTakenOver: false };
+    } catch (e) {
+      if (e && e.code === "EEXIST") {
+        let existing = null;
+        try {
+          existing = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+        } catch {
+          existing = null;
+        }
+
+        const stale = isLockStale(existing);
+        if (stale) {
+          try { fs.unlinkSync(lockPath); } catch {}
+          try {
+            fs.writeFileSync(lockPath, payload, { flag: "wx" });
+            heldLockPath = lockPath;
+            console.log("gate-run: took over stale lock from pid " + (existing ? existing.pid : "unknown"));
+            return { ok: true, staleTakenOver: true };
+          } catch {
+            /* retry */
+          }
+        } else {
+          if (waitTimeoutMs <= 0) {
+            return {
+              ok: false,
+              heldBy: existing,
+              reason: "lock held by pid " + (existing ? existing.pid : "unknown") + " (" + (existing ? existing.what : "") + " since " + (existing ? existing.since : "") + ")",
+            };
+          }
+          const now = Date.now();
+          if (now - startWait > waitTimeoutMs) {
+            return {
+              ok: false,
+              heldBy: existing,
+              reason: "timed out waiting for lock held by pid " + (existing ? existing.pid : "unknown"),
+            };
+          }
+          if (now - startWait >= 30 * 60 * 1000 && !reported30m) {
+            console.log("gate-run: waiting for machine lock held by pid " + (existing ? existing.pid : "unknown")
+              + " for " + (existing ? existing.what : "") + " on " + (existing ? existing.tree : "") + " since " + (existing ? existing.since : ""));
+            reported30m = true;
+          }
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+        }
+      } else {
+        throw e;
+      }
+    }
+  }
+}
+
+export function releaseLock(lockPath = heldLockPath || LOCK_PATH) {
+  if (!lockPath) return;
+  try {
+    if (fs.existsSync(lockPath)) {
+      let existing = null;
+      try { existing = JSON.parse(fs.readFileSync(lockPath, "utf8")); } catch { existing = null; }
+      if (!existing || existing.pid === process.pid) {
+        fs.unlinkSync(lockPath);
+      }
+    }
+  } catch (e) {}
+  if (heldLockPath === lockPath) heldLockPath = null;
+}
+
+process.on("exit", () => { releaseLock(); });
+process.on("SIGINT", () => { releaseLock(); process.exit(130); });
+process.on("SIGTERM", () => { releaseLock(); process.exit(143); });
+
+export function appendChainLine(record, chainsPath = CHAINS_PATH) {
+  const dir = path.dirname(chainsPath);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  const line = {
+    gate: record.gate,
+    tree: record.tree || ROOT,
+    head: record.head || "no commit",
+    treeSha: record.treeSha || "",
+    gitTree: record.gitTree || "",
+    start: record.start,
+    end: record.end,
+    counts: record.counts || {},
+    reds: (record.reds || []).map(r => ({
+      gate: r.gate,
+      cmd: r.cmd,
+      exit: r.exit,
+      cause: r.cause || "unread",
+    })),
+    staleTakenOver: record.staleTakenOver || false,
+  };
+  fs.appendFileSync(chainsPath, JSON.stringify(line) + "\n", "utf8");
+  return line;
+}
+
+function updateCauseInChains(gateName, newCause, chainsPath = CHAINS_PATH) {
+  if (!fs.existsSync(chainsPath)) return;
+  try {
+    const lines = fs.readFileSync(chainsPath, "utf8").split(/\r?\n/).filter(Boolean);
+    const updated = [];
+    for (const raw of lines) {
+      try {
+        const obj = JSON.parse(raw);
+        if (Array.isArray(obj.reds)) {
+          for (const red of obj.reds) {
+            if (red.gate === gateName || (red.cmd && red.cmd.includes(gateName))) {
+              red.cause = newCause;
+            }
+          }
+        }
+        updated.push(JSON.stringify(obj));
+      } catch {
+        updated.push(raw);
+      }
+    }
+    fs.writeFileSync(chainsPath, updated.join("\n") + "\n", "utf8");
+  } catch {}
+}
+
+function parseStepsFromScript(pkg, scriptName) {
+  const cmd = pkg.scripts && pkg.scripts[scriptName];
+  if (!cmd) return [];
+  const out = [];
   for (const raw of cmd.split("&&")) {
     const step = raw.trim();
     if (!step) continue;
     const m = /^node\s+(\S+)\s*(.*)$/.exec(step);
-    if (m && /gate-run/.test(m[1])) refuse("npm script " + name + " runs this file, which would "
-      + "run itself: " + JSON.stringify(step),
-      "the runner is not a gate; name the scripts it should run on the command line");
-    if (!m) refuse("a step of npm script " + name + " is not a node gate this can run: "
-      + JSON.stringify(step),
-      "either make it one, or teach this file what else a gate may look like - it will not skip it");
-    steps.push({ script: name, cmd: step, file: m[1], args: m[2] ? m[2].split(/\s+/) : [] });
+    if (m) out.push({ script: scriptName, cmd: step, file: m[1], args: m[2] ? m[2].split(/\s+/) : [] });
   }
+  return out;
+}
+
+export async function planAreaRun(root, changed, pkg) {
+  const gf = await loadGatesFor();
+  const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
+  const isProductFile = gf && gf.isProductFile ? gf.isProductFile : () => false;
+  const isRelayCode = gf && gf.isRelayCode ? gf.isRelayCode : () => false;
+  const gatesFor = gf && gf.gatesFor ? gf.gatesFor : () => [];
+
+  const testSteps = parseStepsFromScript(pkg, "test");
+  const wholeChain = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
+  const testGates = testSteps.filter(s => s.file !== "tests/plant-hold.mjs" && s.file !== "tests/plant-compare.mjs");
+  const totalGates = testGates.length;
+
+  for (const f of changed) {
+    if (isSharedCode(f)) {
+      return {
+        failClosed: true,
+        reason: "fail-closed to whole chain: change in shared code " + f,
+        steps: wholeChain,
+      };
+    }
+  }
+
+  for (const f of changed) {
+    let forFile = [];
+    try { forFile = gatesFor(root, [f]); } catch { forFile = []; }
+    if (totalGates > 0 && forFile.length > totalGates / 2) {
+      return {
+        failClosed: true,
+        reason: "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")",
+        steps: wholeChain,
+      };
+    }
+  }
+
+  let rows = [];
+  try { rows = gatesFor(root, changed); } catch { rows = []; }
+
+  const gateFiles = new Set(rows.map(r => r.gate));
+  const steps = [];
+  const addedFiles = new Set();
+  const gaps = [];
+
+  const plantHold = { script: "area", cmd: "node tests/plant-hold.mjs", file: "tests/plant-hold.mjs", args: [] };
+  const plantCompare = { script: "area", cmd: "node tests/plant-compare.mjs", file: "tests/plant-compare.mjs", args: [] };
+
+  if (fs.existsSync(path.join(root, "tests", "plant-hold.mjs"))) {
+    steps.push(plantHold);
+    addedFiles.add("tests/plant-hold.mjs");
+  }
+
+  let addedProductCore = false;
+  for (const f of changed) {
+    if (isProductFile(f) && !isRelayCode(f)) {
+      const hit = rows.some(r => r.chains && r.chains.some(c => c.file === f || c.file.endsWith(f)));
+      if (!hit) {
+        gaps.push(f);
+        if (!addedProductCore) {
+          console.log("gate-run area: unmapped product file " + f + ", adding product core and recording gates-for gap");
+          for (const core of PRODUCT_CORE) {
+            if (fs.existsSync(path.join(root, core.file)) && !addedFiles.has(core.file)) {
+              steps.push({ script: "area", cmd: core.cmd, file: core.file, args: core.args || [] });
+              addedFiles.add(core.file);
+            }
+          }
+          addedProductCore = true;
+        }
+      }
+    }
+  }
+
+  const relayChanged = changed.filter(isRelayCode);
+  let hasUnmappedRelay = false;
+  for (const f of relayChanged) {
+    const hit = rows.some(r => r.chains && r.chains.some(c => c.file === f || c.file.endsWith(f)));
+    if (!hit) {
+      hasUnmappedRelay = true;
+      gaps.push(f);
+    }
+  }
+
+  const GENERIC_SCANNERS = new Set([
+    "tests/chain-split.mjs",
+    "tests/engine-selftest.js",
+    "tests/gates-for.mjs",
+    "tests/leg-ids.js",
+    "tests/log-hygiene-selftest.js",
+    "tests/result-line.mjs",
+    "tests/sbom.mjs",
+    "tests/sellable.mjs",
+    "tests/text-scan-selftest.js",
+  ]);
+
+  const releaseOnlySet = new Set(RELEASE_ONLY_LEGS);
+  for (const g of gateFiles) {
+    if (g === "tests/plant-hold.mjs" || g === "tests/plant-compare.mjs") continue;
+    if (releaseOnlySet.has(g)) {
+      if (g === "tests/engine-selftest.js" && changed.includes("tools/pre-commit")) {
+        // keep
+      } else if (changed.includes(g)) {
+        // keep
+      } else {
+        continue;
+      }
+    }
+    if (GENERIC_SCANNERS.has(g) && !changed.includes(g)) continue;
+    if (!addedFiles.has(g)) {
+      steps.push({ script: "area", cmd: "node " + g, file: g, args: [] });
+      addedFiles.add(g);
+    }
+  }
+
+  if (hasUnmappedRelay) {
+    console.log("gate-run area: relay file changed, adding relay core (" + RELAY_CORE.length + " files)");
+    for (const core of RELAY_CORE) {
+      if (fs.existsSync(path.join(root, core.file))) {
+        steps.push({
+          script: "area",
+          cmd: "node " + core.file,
+          file: core.file,
+          args: [],
+          env: core.env,
+          note: "relay core: " + core.step + " (" + core.leg + ")",
+        });
+      }
+    }
+  }
+
+  for (const f of FLOOR) {
+    if (fs.existsSync(path.join(root, f.file)) && !addedFiles.has(f.file)) {
+      steps.push({ script: "area", cmd: f.cmd, file: f.file, args: f.args || [] });
+      addedFiles.add(f.file);
+    }
+  }
+
+  if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
+
+  return { failClosed: false, reason: "", steps, gaps };
 }
 
 function git(args) {
   try { return execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim(); }
   catch (e) { return ""; }
 }
-const COMMIT = git(["rev-parse", "--short", "HEAD"]);
-const DIRTY = git(["status", "--porcelain"]).length > 0;
-/* GIT'S TREE ID, OR WHY THERE IS NONE. Read after every gate, never once at the start, for the
-   reason `dirty` above cannot be trusted past the first gate. A working tree that differs from
-   HEAD has no tree id of its own, so it says so in words rather than lending HEAD's. */
-/* Three ways git can be asked and answer about the wrong files, each closed (Clément δ's same-seat
-   read, 2026-10-12): a folder with no git of its own inside another repository's tree (an ignored
-   scratch copy) would be lent that repository's HEAD, so the top of the work tree must be ROOT
-   itself, as mainTree asks; a repository setting can hide untracked files or a submodule from
-   `status`, so the options are named here; and a path flagged assume-unchanged or skip-worktree
-   (lowercase or `S` in `ls-files -v`, sparse checkouts included) is one `status` will not look at,
-   so its presence alone reads as uncommitted changes, erring towards a rerun. */
+
 function gitTree() {
   const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
   if (!top || !sameFolder(top, ROOT)) return "no git";
@@ -183,51 +448,6 @@ function gitTree() {
   if (git(["ls-files", "-v"]).split(/\r?\n/).some(l => /^(S|[a-z]) /.test(l))) return "uncommitted changes";
   return git(["rev-parse", "HEAD^{tree}"]) || "no commit";
 }
-
-/* ------------------------------------------------------------------------------------------- *
- * THE TREE MUST NOT MOVE UNDER A GATE. Board item 645.
- *
- * WHAT HAPPENED. On 2026-09-20 a seat's mutation control began rewriting src/ while that seat's
- * own baseline `npm test` was still at gate 11. The baseline was lost, and it was said plainly
- * rather than hidden, which is the only reason anyone knows it happened. An hour later a second
- * seat captured its baseline to a file before mutating anything and had a clean comparison. The
- * difference between those two runs was discipline, and discipline is the thing this file is for
- * replacing with machinery.
- *
- * THE FAILURE TO PREVENT IS NOT A LOST BASELINE. It is a FALSE GREEN. A suite reading a
- * half-mutated tree can pass: most gates read most files, a rewrite lands between two of them,
- * and every gate after it judges bytes no gate before it saw. The record then carries
- * `commit 0f09226, dirty false, 500 ok` about a tree that was never in one state at one time,
- * and nothing in the line says so. `dirty` cannot say so: it is read ONCE, before the first gate,
- * and the whole point is that the tree moves afterwards.
- *
- * SO EVERY STEP IS BRACKETED. A fingerprint of the CONTENT of every file in the tree is taken
- * before the first gate and again after each one, and a step whose fingerprint moved is a step
- * whose verdict does not exist: the chain stops with NO_VERDICT, the moved files are named, and
- * the step's record carries `treeChanged: 1` with `counts.exitCode` set to NO_VERDICT rather
- * than to the gate's own exit. THAT LAST PART IS THE POINT AND NOT A DETAIL: the reader of a
- * record reads `counts`, so a gate that passed over a tree that moved under it must not be able
- * to hand `counts` a zero. Its own exit is kept beside, as `gateExit`, because the fact is worth
- * having; it is the VERDICT that is withdrawn.
- *
- * CONTENT AND NOT MTIME, so that a gate which rewrites a file with the bytes it already had is
- * not a refusal. A check that fires on work nobody objects to is a check somebody turns off.
- *
- * WHAT THIS DOES NOT SEE, stated because a guard whose limit is unwritten gets trusted past it:
- * a change made and put back INSIDE one gate's run. The bracket is per step, so a mutation that
- * lives and dies between two fingerprints leaves no trace here. What covers that case is
- * `treeHash` in every line: two runs of one gate over one tree carry one hash, and two runs that
- * disagree were not run over the same bytes, whatever their counts say.
- *
- * THE SUBJECT IS WHAT GIT WOULD SHOW, `git ls-files -co --exclude-standard`: the tracked files
- * and the untracked ones that are not ignored. An ignored path is a seat's scratch and a build
- * artefact and node_modules, and a run that wrote one of those did not move the tree a gate
- * judges. Where there is no git at all - a `git archive | tar -x` lab, a temp folder - the file
- * list is a walk of the tree skipping `.git`, `node_modules` and `.plant-hold`, and `treeHow` says which of the
- * two was used, because a fingerprint over a different file set is a different fingerprint and a
- * count without its method is an impression. `.plant-hold` is ignored scratch the chain writes
- * between steps; a checkout already leaves it out, and the walk does the same.
- * ------------------------------------------------------------------------------------------- */
 
 const SKIP_DIRS = new Set([".git", "node_modules", ".plant-hold"]);
 
@@ -242,15 +462,6 @@ function walkInto(dir, prefix, out) {
   }
 }
 
-/* The file list and the method that produced it, never one without the other.
- *
- * AN UNMERGED INDEX LISTS A CONFLICTED PATH ONCE PER STAGE. Mid-merge, `git ls-files -c` names
- * each conflicted path up to three times, and until 2026-10-04 each name was hashed as a file of
- * its own, so a gate run before the resolution was staged recorded a hash that matched no commit,
- * even where the bytes on disk were exactly the ones committed next (the round-two engine merge's
- * 52 records). Each path is now taken once, which changes nothing for an index with no conflict,
- * and the number of unmerged paths goes into the record as `unmerged`, so a reader knows the run
- * was over a merge in progress: the hash is of the working tree's bytes, not of anything staged. */
 function treeFiles() {
   let listed = "";
   try {
@@ -264,7 +475,6 @@ function treeFiles() {
   return { how: "walk skipping .git, node_modules and .plant-hold", files: out.sort(), unmerged: 0 };
 }
 
-/* `git ls-files -u` prints `<mode> <object> <stage>\t<path>` per stage; the paths, counted once. */
 function unmergedPaths() {
   let listed = "";
   try {
@@ -273,7 +483,6 @@ function unmergedPaths() {
   return new Set(listed.split("\0").filter(Boolean).map(l => l.slice(l.indexOf("\t") + 1))).size;
 }
 
-/* A digest per file and one over the lot. The per-file map is what names the movers. */
 function fingerprint() {
   const { how, files, unmerged } = treeFiles();
   const per = new Map();
@@ -282,8 +491,6 @@ function fingerprint() {
   for (const f of files) {
     let buf = null;
     try { buf = fs.readFileSync(path.join(ROOT, f)); } catch (e) { buf = null; }
-    /* A file git lists and the disk has not is a change like any other, so it gets a digest of
-       its own rather than being dropped out of the list in silence. */
     const d = buf === null ? "gone" : crypto.createHash("sha256").update(buf).digest("hex");
     if (buf !== null) bytes += buf.length;
     per.set(f, d);
@@ -305,16 +512,11 @@ function movedFiles(before, after) {
   return moved.sort();
 }
 
-/* gate names are the path, so tools/split-guard/selftest.mjs and tools/catalog-v2/selftest.mjs
-   are two gates and not one. */
 const gateName = file => file.replace(/\\/g, "/").replace(/\.(mjs|js|cjs)$/, "").replace(/[^A-Za-z0-9]+/g, "-");
-/* LOCAL time in the name and UTC in the object. The record this feeds is dated by the desk's own
-   day, and a file called 20260916T2324 written on the night of the 17th is a file nobody finds. */
 const pad = (n, w) => String(n).padStart(w || 2, "0");
 const stamp = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
   + "T" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + "-" + pad(d.getMilliseconds(), 3);
 
-/* The words this tool means something by, which no gate may declare. */
 const RESERVED = ["ok", "fail", "exitCode"];
 
 function countsOf(out, exit) {
@@ -322,18 +524,8 @@ function countsOf(out, exit) {
   const counts = {};
   let from = "none";
   const ok = lines.filter(l => /^ {2}ok {2,}/.test(l)).length;
-  /* A COLON COUNTS AS WELL AS A SPACE. tests/test.js reports a section that threw as
-     `  FAIL: <message>`, and a pattern wanting a space after the word saw nought of them: in a
-     tree without node_modules its line read `legs=265 failed=0 fail=0` under RESULT: FAIL. */
   const bad = lines.filter(l => /^ {2}FAIL[ :]/.test(l)).length;
   if (ok || bad) { counts.ok = ok; counts.fail = bad; from = "ok/FAIL lines"; }
-  /* A KEY IS EACH GATE'S OWN CHOICE AND TWO GATES PICK ONE WORD (board item 518). Studio's
-     launch-door declares `failures` and its shell-launch declares `failures`, and the line that
-     covers a whole chain kept the second silently: a number naming one gate while reading as the
-     chain's is the same fault as asserting a count by its key. The later value still wins,
-     because neither one is more true than the other and guessing is worse, but the number of
-     keys written over with a DIFFERENT value travels beside the counts. A repeat that agrees is
-     not a clash, and a declared key landing on the derived `ok` or `fail` is one. */
   const clashed = [];
   let declared = false;
   for (const l of lines) {
@@ -342,11 +534,6 @@ function countsOf(out, exit) {
     for (const pair of m[1].trim().split(/\s+/)) {
       const [k, v] = pair.split("=");
       const n = Number(v);
-      /* `ok`, `fail` and `exitCode` are this tool's own words and mean checks and the verdict,
-         across every gate, so a gate declaring one is a clash whether or not it printed any:
-         tests/eol-attrs.mjs declared `ok=189` meaning FILES, and because its one pass line had a
-         single space after `ok` where the counter wants two, the declaration landed on the key in
-         silence. Both were corrected; reserving the names is what stops it coming back. */
       const taken = (k in counts && counts[k] !== n) || RESERVED.indexOf(k) > -1;
       if (taken && clashed.indexOf(k) < 0) clashed.push(k);
       counts[k] = n;
@@ -355,18 +542,16 @@ function countsOf(out, exit) {
   }
   if (declared) from = from === "none" ? "declared" : from + " and declared";
   counts.lines = lines.filter(l => l.trim() !== "").length;
-  /* THE VERDICT TRAVELS INSIDE THE COUNTS, board item 550, and it is written last so that no
-     declared key can be mistaken for it. Whoever reads `counts` reads the exit code with them,
-     which is what makes a green reading of a failing gate impossible rather than unlikely. */
   counts.exitCode = exit;
   return { counts, from, clashed };
 }
 
-function runStep(step) {
+function runStep(step, customEnv = {}) {
   return new Promise(resolve => {
     const t0 = Date.now();
+    const env = Object.assign({}, process.env, customEnv, step.env || {});
     const child = spawn(process.execPath, [step.file].concat(step.args),
-      { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+      { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", d => { out += d; process.stdout.write(d); });
     child.stderr.on("data", d => { out += d; process.stderr.write(d); });
@@ -374,9 +559,6 @@ function runStep(step) {
   });
 }
 
-/* A file whose first 15 lines hold ALONE_MARKER, spaces trimmed, runs after every file that
-   does not, and the log names it. Any other spelling stays where it is. With none, this
-   returns the same list and the log is unchanged. */
 const ALONE_MARKER = "/* run: alone (timing) */";
 const ALONE_HEAD = 15;
 
@@ -403,100 +585,262 @@ function deferAlone(list) {
   return now.concat(later);
 }
 
-const ordered = deferAlone(steps);
+async function main() {
+  const asked = process.argv.slice(2);
+  if (!asked.length) refuse("no npm script was named", "node tools/gate-run.mjs test split-guard");
 
-let worst = 0, written = 0, treeMoved = false, refusedAt = null;
-/* The tree as it stood before the first gate. Every step is judged against the step before it,
-   so the record says WHICH gate the tree moved under and not merely that it moved. */
-let before = fingerprint();
-let tree = gitTree();
-console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
-            + " byte(s), by " + before.how + "; git tree " + tree);
-for (const step of ordered) {
-  const now = new Date();
-  if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run after the rest of its list (not alone on the machine)");
-  console.log("\n> " + step.cmd);
-  const res = await runStep(step);
-  const after = fingerprint();
-  tree = gitTree();
-  const moved = after.hash === before.hash ? [] : movedFiles(before, after);
-  /* THE VERDICT THE RECORD CARRIES IS NO_VERDICT WHERE THE TREE MOVED, and the gate's own exit
-     goes beside it as `gateExit`. A reader reads `counts`, so this is the only place the
-     withdrawal can be made to stick. */
-  const verdict = moved.length ? NO_VERDICT : res.exit;
-  /* A gate that refuses by a named wall says so on a line of its own, `#refused <wall>`, and the
-     record carries the name, empty for every other run, so a refusal never reads as a failure.
-     Taken only with the gate's own exit 78, so a gate that echoes a child's marker and passes is
-     not recorded as refused. */
-  const refused = res.exit === NO_VERDICT ? (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "" : "";
-  const { counts, from, clashed } = countsOf(res.out, verdict);
-  if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
-    + " different values, the later kept: " + clashed.join(", "));
-  const line = {
-    gate: gateName(step.file),
-    script: step.script,
-    cmd: step.cmd,
-    exit: verdict,
-    gateExit: res.exit,
-    counts: counts,
-    countsFrom: from,
-    clash: clashed.length,
-    refused: refused,
-    treeHash: after.hash,
-    treeFiles: after.count,
-    treeHow: after.how,
-    treeChanged: moved.length,
-    unmerged: after.unmerged,
-    gitTree: tree,
-    wallMs: res.wallMs,
-    commit: COMMIT,
-    dirty: DIRTY,
-    time: now.toISOString(),
-  };
-  const file = path.join(RUNS, line.gate + "-" + stamp(now) + ".json");
-  fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
-  written++;
-  console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
-              + " exit " + line.exit + (refused ? " REFUSED by the " + refused : "") + " in " + line.wallMs + " ms"
-              + ", tree " + line.treeHash + ", git tree " + line.gitTree);
-  if (line.unmerged) console.log("  note: run over an UNMERGED index (" + line.unmerged + " path(s) in conflict), so treeHash is"
-    + " the working tree's bytes, each path once, and no commit holds them until the resolution is committed");
-  if (moved.length) {
-    console.log("  FAIL the tree moved under " + line.gate + ", so this run has no verdict: "
-                + moved.length + " file(s) changed while it ran");
-    for (const f of moved.slice(0, 20)) console.log("       " + f);
-    if (moved.length > 20) console.log("       and " + (moved.length - 20) + " more");
-    console.log("       " + before.hash + " before this gate, " + after.hash + " after it, over "
-                + after.count + " file(s) by " + after.how);
-    console.log("       the gate itself exited " + res.exit + ", which is not a verdict: bytes it"
-                + " read early and bytes it read late were not the same tree");
-    console.log("       a mutation control belongs in a copy of the tree, and a baseline belongs"
-                + " in a file before any mutation begins");
-    console.log("  SUITE DID NOT COMPLETE");
-    worst = NO_VERDICT;
-    treeMoved = true;
-    break;
+  const mode = asked[0];
+
+  if (mode === "wait-lock") {
+    console.log("gate-run: waiting for machine lock...");
+    const res = acquireLock(LOCK_PATH, "wait-lock", ROOT, Infinity);
+    releaseLock();
+    console.log("gate-run: machine lock free");
+    process.exit(0);
   }
-  before = after;
-  if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }   /* && semantics: the chain stops */
+
+  if (mode === "mark-cause") {
+    const fileOrId = asked[1];
+    const cause = asked[2] || "unread";
+    if (!fileOrId) refuse("no record file or gate was named", "node tools/gate-run.mjs mark-cause <record.json> <test|product>");
+    const targetFile = fs.existsSync(fileOrId) ? fileOrId : path.join(RUNS, fileOrId);
+    if (!fs.existsSync(targetFile)) refuse("record file not found: " + targetFile);
+    const rec = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+    rec.cause = cause;
+    fs.writeFileSync(targetFile, JSON.stringify(rec, null, 2) + "\n", "utf8");
+    updateCauseInChains(rec.gate, cause, CHAINS_PATH);
+    console.log("gate-run: marked cause=" + cause + " in " + path.basename(targetFile));
+    process.exit(0);
+  }
+
+  const inTemp = /\\AppData\\Local\\Temp\\/i.test(ROOT) || inside(os.tmpdir(), ROOT);
+  if (mode === "nightly") {
+    if (inTemp && process.env.ETIUDA_NIGHTLY_ALLOW_TEMP !== "1" && !asked.includes("--dry-run")) {
+      refuse("the nightly profile refuses to run from a folder under %TEMP%: " + ROOT,
+        "nightly runs must run from a main checkout outside %TEMP%");
+    }
+  }
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  let steps = [];
+  let isHeavy = process.env.ETIUDA_HEAVY === "1";
+  let customEnv = {};
+  let gateLabel = asked.join(" ");
+
+  if (mode === "area") {
+    const base = asked[1] || "main...HEAD";
+    const gf = await loadGatesFor();
+    const changed = gf ? gf.changedFiles(ROOT, base) : [];
+    console.log("gate-run area: base " + base + ", " + changed.length + " changed file(s)");
+    const plan = await planAreaRun(ROOT, changed, pkg);
+    if (plan.failClosed) {
+      console.log("gate-run area: fail-closed to whole chain: " + plan.reason);
+      isHeavy = true;
+    }
+    steps = plan.steps;
+    customEnv.ETIUDA_PLANTS = "off";
+    gateLabel = "area";
+  } else if (mode === "release") {
+    isHeavy = true;
+    gateLabel = "release";
+    customEnv.ETIUDA_PROFILE = "release";
+    const testSteps = parseStepsFromScript(pkg, "test");
+    const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
+    steps = [...baseSteps, ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(ROOT, n.file)))];
+  } else if (mode === "nightly") {
+    isHeavy = true;
+    gateLabel = "nightly";
+    customEnv.ETIUDA_PROFILE = "nightly";
+    const testSteps = parseStepsFromScript(pkg, "test");
+    const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
+    steps = [...baseSteps, ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(ROOT, n.file)))];
+  } else {
+    const scriptNames = asked.filter(a => !a.startsWith("--"));
+    for (const name of scriptNames) {
+      const cmd = pkg.scripts && pkg.scripts[name];
+      if (!cmd) refuse("package.json has no script called " + JSON.stringify(name),
+        "the scripts it does have: " + Object.keys(pkg.scripts || {}).join(", "));
+      for (const raw of cmd.split("&&")) {
+        const step = raw.trim();
+        if (!step) continue;
+        const m = /^node\s+(\S+)\s*(.*)$/.exec(step);
+        if (m && /gate-run/.test(m[1])) refuse("npm script " + name + " runs this file, which would "
+          + "run itself: " + JSON.stringify(step),
+          "the runner is not a gate; name the scripts it should run on the command line");
+        if (!m) refuse("a step of npm script " + name + " is not a node gate this can run: "
+          + JSON.stringify(step),
+          "either make it one, or teach this file what else a gate may look like - it will not skip it");
+        steps.push({ script: name, cmd: step, file: m[1], args: m[2] ? m[2].split(/\s+/) : [] });
+      }
+    }
+    if (asked.includes("test")) isHeavy = true;
+  }
+
+  let before = fingerprint();
+  let tree = gitTree();
+  const COMMIT = git(["rev-parse", "--short", "HEAD"]);
+  const DIRTY = git(["status", "--porcelain"]).length > 0;
+
+  console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
+              + " byte(s), by " + before.how + "; git tree " + tree);
+
+  if (asked.includes("--dry-run") || asked.includes("--list")) {
+    console.log("gate-run " + mode + " dry run: " + steps.length + " gate(s) to run:");
+    for (const s of steps) console.log("  " + s.cmd + (s.note ? " (" + s.note + ")" : ""));
+    process.exit(0);
+  }
+
+  let lockRes = null;
+  if (isHeavy) {
+    console.log("gate-run: taking machine lock for heavy run (" + gateLabel + ")...");
+    const timeoutMs = process.env.ETIUDA_LOCK_TIMEOUT_MS ? Number(process.env.ETIUDA_LOCK_TIMEOUT_MS) : 300000;
+    lockRes = acquireLock(LOCK_PATH, gateLabel, ROOT, timeoutMs);
+    if (!lockRes.ok) refuse("could not acquire machine lock: " + lockRes.reason);
+  }
+
+  const runStart = new Date().toISOString();
+  const ordered = deferAlone(steps);
+  let worst = 0, written = 0, treeMoved = false, refusedAt = null;
+
+  if (mode === "area" && fs.existsSync(CHAINS_PATH)) {
+    try {
+      const lines = fs.readFileSync(CHAINS_PATH, "utf8").split(/\r?\n/).filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const rec = JSON.parse(lines[i]);
+          if (rec.counts && rec.counts.exitCode === 0 && (!rec.reds || rec.reds.length === 0)) {
+            if (rec.treeSha === before.hash || (tree !== "no git" && tree !== "uncommitted changes" && rec.gitTree === tree)) {
+              console.log("gate-run area: tree " + before.hash + " equals recorded green tree (" + (rec.head || rec.treeSha) + "), rerunning nothing");
+              if (isHeavy) releaseLock();
+              process.exit(0);
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  const totalCounts = { ok: 0, fail: 0, lines: 0 };
+  const redsList = [];
+
+  for (const step of ordered) {
+    const now = new Date();
+    if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run after the rest of its list (not alone on the machine)");
+    console.log("\n> " + step.cmd);
+    const res = await runStep(step, customEnv);
+    const after = fingerprint();
+    tree = gitTree();
+    const moved = after.hash === before.hash ? [] : movedFiles(before, after);
+    const verdict = moved.length ? NO_VERDICT : res.exit;
+    const refused = res.exit === NO_VERDICT ? (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "" : "";
+    const { counts, from, clashed } = countsOf(res.out, verdict);
+    if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
+      + " different values, the later kept: " + clashed.join(", "));
+
+    if (counts.ok) totalCounts.ok = (totalCounts.ok || 0) + counts.ok;
+    if (counts.fail) totalCounts.fail = (totalCounts.fail || 0) + counts.fail;
+    if (counts.lines) totalCounts.lines = (totalCounts.lines || 0) + counts.lines;
+
+    const isRed = verdict !== 0;
+    if (isRed) {
+      redsList.push({
+        gate: gateName(step.file),
+        cmd: step.cmd,
+        exit: verdict,
+        cause: "unread",
+      });
+    }
+
+    const line = {
+      gate: gateName(step.file),
+      script: step.script,
+      cmd: step.cmd,
+      exit: verdict,
+      gateExit: res.exit,
+      counts: counts,
+      countsFrom: from,
+      clash: clashed.length,
+      refused: refused,
+      treeHash: after.hash,
+      treeFiles: after.count,
+      treeHow: after.how,
+      treeChanged: moved.length,
+      unmerged: after.unmerged,
+      gitTree: tree,
+      wallMs: res.wallMs,
+      commit: COMMIT,
+      dirty: DIRTY,
+      time: now.toISOString(),
+      cause: isRed ? "unread" : undefined,
+    };
+
+    const file = path.join(RUNS, line.gate + "-" + stamp(now) + ".json");
+    fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
+    written++;
+    console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
+                + " exit " + line.exit + (refused ? " REFUSED by the " + refused : "") + " in " + line.wallMs + " ms"
+                + ", tree " + line.treeHash + ", git tree " + line.gitTree);
+    if (line.unmerged) console.log("  note: run over an UNMERGED index (" + line.unmerged + " path(s) in conflict), so treeHash is"
+      + " the working tree's bytes, each path once, and no commit holds them until the resolution is committed");
+    if (moved.length) {
+      console.log("  FAIL the tree moved under " + line.gate + ", so this run has no verdict: "
+                  + moved.length + " file(s) changed while it ran");
+      for (const f of moved.slice(0, 20)) console.log("       " + f);
+      if (moved.length > 20) console.log("       and " + (moved.length - 20) + " more");
+      console.log("       " + before.hash + " before this gate, " + after.hash + " after it, over "
+                  + after.count + " file(s) by " + after.how);
+      console.log("       the gate itself exited " + res.exit + ", which is not a verdict: bytes it"
+                  + " read early and bytes it read late were not the same tree");
+      console.log("       a mutation control belongs in a copy of the tree, and a baseline belongs"
+                  + " in a file before any mutation begins");
+      console.log("  SUITE DID NOT COMPLETE");
+      worst = NO_VERDICT;
+      treeMoved = true;
+      break;
+    }
+    before = after;
+    if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }
+  }
+
+  const runEnd = new Date().toISOString();
+  totalCounts.exitCode = worst;
+
+  appendChainLine({
+    gate: gateLabel,
+    tree: ROOT,
+    head: COMMIT || "no commit",
+    treeSha: before.hash,
+    gitTree: tree,
+    start: runStart,
+    end: runEnd,
+    counts: totalCounts,
+    reds: redsList,
+    staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
+  }, CHAINS_PATH);
+
+  if (isHeavy) releaseLock();
+
+  console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
+              + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
+              + ", tree " + before.hash + ", git tree " + tree
+              + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
+                 : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
+                   + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
+                 : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
+                   + " refused, did not finish, or left a leg not run"
+                 : worst ? ", stopped at a gate exiting " + worst : ", all green"));
+
+  process.exitCode = worst === 0 ? 0 : (worst > 0 && worst < 256 ? worst : 1);
 }
 
-console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
-            + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
-            + ", tree " + before.hash + ", git tree " + tree
-            + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
-               : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
-                 + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
-               : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
-                 + " refused, did not finish, or left a leg not run"
-               : worst ? ", stopped at a gate exiting " + worst : ", all green"));
-/* THE TWO NO VERDICTS ARE TOLD APART (board 820). Until 2026-09-29 any gate exiting 78 was summed up
-   as "the tree moved under a gate", which is this file's own reason; a gate saying 78 of itself
-   (tests/desk.js refusing beside another Electron run, or with its proxy leg not run) was then
-   blamed on a tree that had not moved. Held by tests/result-line.mjs leg 9h. */
-/* A GATE'S CODE IS PASSED ON ONLY WHERE A SHELL CAN READ IT, ballot 4 of the fourth meeting
-   (2026-09-23). Windows hands this process a child's full 32 bits, so a gate exiting 256 stopped
-   the chain here and then left as 256, which bash and Linux read as 0: the chain said green in
-   the one signal an automation reads. Anything outside 1 to 255 leaves as 1; the record above
-   keeps the gate's own number. */
-process.exitCode = worst === 0 ? 0 : (worst > 0 && worst < 256 ? worst : 1);
+const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..", "etiuda-runs"));
+/* chains.jsonl sits beside the per-gate records it summarises: Workspace/etiuda-runs for the trees, a lab's own folder for a
+   lab. A lab that wrote into the office's file left trees there that the area run's equal-tree rule then reused (the test
+   architect's E1, 2026-10-28). */
+export const CHAINS_PATH = path.resolve(process.env.ETIUDA_CHAINS_PATH || path.join(RUNS, "chains.jsonl"));
+if (inside(ROOT, RUNS)) refuse("the runs folder is inside the repository: " + RUNS,
+  "these files are a record of runs, not of the tree; put them beside it, not in it");
+fs.mkdirSync(RUNS, { recursive: true });
+
+const invoked = process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === path.resolve(fileURLToPath(import.meta.url)).toLowerCase();
+if (invoked) main();

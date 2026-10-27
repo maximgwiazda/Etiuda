@@ -44,7 +44,7 @@ function git(root, args) {
 
 function trackedFiles(root) {
   const norm = p => p.split(path.sep).join("/");
-  const out = git(root, ["ls-files", "-z"]).split("\0").filter(Boolean);
+  const out = git(root, ["ls-files", "-co", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
   const set = new Set(out.map(norm));
   /* A staged deletion is gone from the index. If main still has the path, it counts,
    * so the gates that import the removed module are still named. */
@@ -65,19 +65,55 @@ function trackedFiles(root) {
   return set;
 }
 
-function changedFiles(root) {
+export function changedFiles(root, base = "main...HEAD") {
   const have = name => {
     try { git(root, ["rev-parse", "--verify", "--quiet", name]); return true; }
     catch (e) { return false; }
   };
   const lines = [];
-  if (have("main")) lines.push(git(root, ["diff", "--name-only", "-z", "main...HEAD"]));
-  lines.push(git(root, ["diff", "--name-only", "-z", "HEAD"]));
-  lines.push(git(root, ["diff", "--name-only", "-z", "--cached"]));
-  lines.push(git(root, ["ls-files", "--others", "--exclude-standard", "-z"]));
+  const b = base.includes("...") ? base.split("...")[0] : base;
+  if (have(b)) {
+    const diffArg = base.includes("...") ? base : `${base}...HEAD`;
+    try { lines.push(git(root, ["diff", "--name-only", "-z", diffArg])); } catch (e) {}
+    try { lines.push(git(root, ["diff", "--name-only", "-z", b, "HEAD"])); } catch (e) {}
+  }
+  try { lines.push(git(root, ["diff", "--name-only", "-z", "HEAD"])); } catch (e) {}
+  try { lines.push(git(root, ["diff", "--name-only", "-z", "--cached"])); } catch (e) {}
+  try { lines.push(git(root, ["ls-files", "--others", "--exclude-standard", "-z"])); } catch (e) {}
   const set = new Set();
   for (const block of lines) for (const p of block.split("\0")) if (p) set.add(p.split(path.sep).join("/"));
   return [...set].sort();
+}
+
+export function isRelayCode(file) {
+  const f = file.replace(/\\/g, "/");
+  return f.startsWith("relay/") || f.startsWith("shell/relay/") || f === "shell/main.js";
+}
+
+export const SHARED = [
+  "package.json",
+  "package-lock.json",
+  "electron-builder.js",
+  "tools/build.mjs",
+  "relay/wrangler.toml",
+  "tests/engine.js",
+  "tests/relay-lab.mjs",
+  "tools/gate-run.mjs",
+  "tools/gates-for.mjs",
+  "tools/engine-pin",
+];
+
+export function isSharedCode(file) {
+  const f = file.replace(/\\/g, "/");
+  if (SHARED.includes(f)) return true;
+  if (f === "wrangler.toml" || f.endsWith("/wrangler.toml") || f.endsWith(".toml")) return true;
+  if (f.startsWith("tools/build") || f.startsWith("tools/package")) return true;
+  return false;
+}
+
+export function isProductFile(file) {
+  const f = file.replace(/\\/g, "/");
+  return f.startsWith("src/") || f.startsWith("shell/") || f.startsWith("relay/") || f.startsWith("engine/") || f === "Etiuda.html" || f === "etiuda-catalog.js";
 }
 
 export function relOf(root, abs) {

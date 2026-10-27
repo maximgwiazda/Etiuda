@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 15;
+const EXPECTED = 16;
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -288,6 +288,20 @@ try {
   } finally {
     try { fs.rmSync(lab2, { recursive: true, force: true }); } catch (e) { /* the lazy plant's own directory */ }
   }
+
+  const gfTool = await import("../tools/gates-for.mjs");
+  const sharedList = gfTool.SHARED || [];
+  const required = [
+    "package.json", "package-lock.json", "electron-builder.js", "tools/build.mjs",
+    "relay/wrangler.toml", "tests/engine.js", "tests/relay-lab.mjs",
+    "tools/gate-run.mjs", "tools/gates-for.mjs", "tools/engine-pin"
+  ];
+  const allInShared = required.every(f => sharedList.includes(f));
+  const isSharedFn = typeof gfTool.isSharedCode === "function";
+  const identifies = isSharedFn && required.every(f => gfTool.isSharedCode(f));
+  check(Array.isArray(gfTool.SHARED) && allInShared && identifies,
+    "gf16 SHARED list is exported and isSharedCode identifies all members and config: "
+    + (Array.isArray(gfTool.SHARED) ? sharedList.join(", ") : "not exported"));
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {

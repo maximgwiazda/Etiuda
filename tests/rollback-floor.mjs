@@ -30,7 +30,8 @@ import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-if (process.env.ETIUDA_PLANTS_COPY !== "1") {
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+if (!PLANTS_OFF && process.env.ETIUDA_PLANTS_COPY !== "1") {
   const { runInPlantsCopy } = await import("./plants-tree.mjs");
   process.exit(await runInPlantsCopy(ROOT, fileURLToPath(import.meta.url), "rollback-floor"));
 }
@@ -39,11 +40,15 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 77;
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-rollback-floor-"));
@@ -1636,34 +1641,38 @@ try {
   /* plant:epoch-rev. Deleting that line, leaving the file valid script, lets a lower epoch through the floor. A lower
      rev at the same epoch is still refused. The desk this file already loaded keeps the copy it started with. */
   {
-    const src = path.join(ROOT, "shell", "main.js");
-    const before = fs.readFileSync(src);
-    const digest = crypto.createHash("sha256").update(before).digest("hex");
-    let turned = false, detail = "plant line absent";
-    try {
-      const lines = before.toString("utf8").split(/\n/);
-      const at = lines.findIndex(l => l.indexOf("plant:epoch-rev") >= 0);
-      if (at >= 0) {
-        lines.splice(at, 1);
-        fs.writeFileSync(src, lines.join("\n"));
-        const text = fs.readFileSync(src, "utf8");
-        const start = text.indexOf("function teamRevRefused");
-        const end = text.indexOf("function rosterIdsOf");
-        const fn = new Function(text.slice(start, end) + "\nreturn teamRevRefused;")();
-        const lower = fn({ epoch: 2, rev: 3 }, 1, 9);
-        const sameEpoch = fn({ epoch: 2, rev: 3 }, 2, 1);
-        turned = lower === false && sameEpoch === true;
-        detail = "lower epoch refused " + lower + ", same epoch lower rev refused " + sameEpoch;
+    if (PLANTS_OFF) {
+      skip("900p lifting plant:epoch-rev lets a lower epoch through, the same-epoch floor still refuses, and the file is put back");
+    } else {
+      const src = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(src);
+      const digest = crypto.createHash("sha256").update(before).digest("hex");
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = before.toString("utf8").split(/\n/);
+        const at = lines.findIndex(l => l.indexOf("plant:epoch-rev") >= 0);
+        if (at >= 0) {
+          lines.splice(at, 1);
+          fs.writeFileSync(src, lines.join("\n"));
+          const text = fs.readFileSync(src, "utf8");
+          const start = text.indexOf("function teamRevRefused");
+          const end = text.indexOf("function rosterIdsOf");
+          const fn = new Function(text.slice(start, end) + "\nreturn teamRevRefused;")();
+          const lower = fn({ epoch: 2, rev: 3 }, 1, 9);
+          const sameEpoch = fn({ epoch: 2, rev: 3 }, 2, 1);
+          turned = lower === false && sameEpoch === true;
+          detail = "lower epoch refused " + lower + ", same epoch lower rev refused " + sameEpoch;
+        }
+      } catch (e) {
+        detail = e && e.message ? e.message : String(e);
+      } finally {
+        fs.writeFileSync(src, before);
       }
-    } catch (e) {
-      detail = e && e.message ? e.message : String(e);
-    } finally {
-      fs.writeFileSync(src, before);
+      const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
+      check(turned && restored,
+        "900p lifting plant:epoch-rev lets a lower epoch through, the same-epoch floor still refuses, and the file is put back: "
+        + detail + ", sha " + (restored ? "restored" : "differs"));
     }
-    const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
-    check(turned && restored,
-      "900p lifting plant:epoch-rev lets a lower epoch through, the same-epoch floor still refuses, and the file is put back: "
-      + detail + ", sha " + (restored ? "restored" : "differs"));
   }
   /* Board 931 (6): a lead-signed team file at a newer epoch with no rev raises the floor to that epoch at rev 0 and does
      not delete it, so an older epoch put back on the share is still refused. With no floor kept, a file with no rev
@@ -1727,30 +1736,34 @@ try {
      floor is then deleted again and the epoch 1 file put back is not refused at it (its roster stays out either way, by the
      epoch seen). The file is put back by sha256. */
   {
-    const src = path.join(ROOT, "shell", "main.js");
-    const before = fs.readFileSync(src);
-    const digest = crypto.createHash("sha256").update(before).digest("hex");
-    let turned = false, detail = "plant line absent";
-    try {
-      const lines = before.toString("utf8").split(/\n/);
-      const at = lines.findIndex(l => l.indexOf("plant:floor-raise") >= 0);
-      if (at >= 0) {
-        lines.splice(at, 1);
-        fs.writeFileSync(src, lines.join("\n"));
-        const lifted = fs.readFileSync(src, "utf8");
-        const R = risen("floor-raise-lifted", ud => loadDesk(ud, lifted));
-        turned = R.raised === "null" && !R.saidBack;
-        detail = "floor " + R.raised + ", epoch 1 file put back gives roster " + R.back + ", said below " + R.saidBack;
+    if (PLANTS_OFF) {
+      skip("931p lifting plant:floor-raise deletes the floor again, so the epoch 1 file is no longer refused at it, and the file is put back");
+    } else {
+      const src = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(src);
+      const digest = crypto.createHash("sha256").update(before).digest("hex");
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = before.toString("utf8").split(/\n/);
+        const at = lines.findIndex(l => l.indexOf("plant:floor-raise") >= 0);
+        if (at >= 0) {
+          lines.splice(at, 1);
+          fs.writeFileSync(src, lines.join("\n"));
+          const lifted = fs.readFileSync(src, "utf8");
+          const R = risen("floor-raise-lifted", ud => loadDesk(ud, lifted));
+          turned = R.raised === "null" && !R.saidBack;
+          detail = "floor " + R.raised + ", epoch 1 file put back gives roster " + R.back + ", said below " + R.saidBack;
+        }
+      } catch (e) {
+        detail = e && e.message ? e.message : String(e);
+      } finally {
+        fs.writeFileSync(src, before);
       }
-    } catch (e) {
-      detail = e && e.message ? e.message : String(e);
-    } finally {
-      fs.writeFileSync(src, before);
+      const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
+      check(turned && restored,
+        "931p lifting plant:floor-raise deletes the floor again, so the epoch 1 file is no longer refused at it, and the file is put back: "
+        + detail + ", sha " + (restored ? "restored" : "differs"));
     }
-    const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
-    check(turned && restored,
-      "931p lifting plant:floor-raise deletes the floor again, so the epoch 1 file is no longer refused at it, and the file is put back: "
-      + detail + ", sha " + (restored ? "restored" : "differs"));
   }
   {
     const SHARE = folder("relay-ring");
@@ -1828,10 +1841,10 @@ try {
 }
 
 check(regStand.held(), "888q every reg call was answered by the stand-in (" + regStand.said() + ")");
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
-console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
+console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)" + (skipped ? ", " + skipped + " skipped" : ""));
 process.exit(Math.min(failed, 63));
