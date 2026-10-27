@@ -233,9 +233,14 @@ function stagingOf(doc) {
   return { date, flags, vars, bindings, migrations, buckets };
 }
 
+/* Every file the entry reaches is copied into the scratch folder, which is also workerd's modulesRoot, so no import
+   climbs out of it wherever the checkout and the temp folder sit (the test architect's E1, 2026-10-27). Each import
+   made is kept, and 984f fails on one that climbs. */
+const imports = [];
 function relImport(fromDir, absTarget) {
   let rel = path.relative(fromDir, absTarget).split(path.sep).join("/");
   if (!rel.startsWith(".")) rel = "./" + rel;
+  imports.push(rel);
   return rel;
 }
 
@@ -329,7 +334,7 @@ async function boot(scratch, scriptPath, cfg, bindings) {
   return new Miniflare({
     scriptPath,
     modules: true,
-    modulesRoot: os.tmpdir(),
+    modulesRoot: scratch,
     compatibilityDate: cfg.date,
     compatibilityFlags: cfg.flags,
     bindings,
@@ -388,7 +393,7 @@ try {
   const stringVars = Object.keys(cfg.vars).every(k => typeof cfg.vars[k] === "string");
   let coreFile = path.join(ROOT, "relay", "core.cjs");
   let workerFile = workerPath;
-  if (!planted) {
+  {
     fs.mkdirSync(path.join(scratch, "relay"), { recursive: true });
     fs.mkdirSync(path.join(scratch, "shell", "relay"), { recursive: true });
     fs.copyFileSync(workerPath, path.join(scratch, "relay", "worker.mjs"));
@@ -417,12 +422,12 @@ try {
     if (planted) {
       const plantedPath = path.join(scratch, "plant-worker.mjs");
       const rewritten = plantText(fs.readFileSync(path.join(ROOT, "relay", "worker.mjs"), "utf8"),
-        relImport(scratch, path.join(ROOT, "relay", "team.cjs")), relImport(scratch, path.join(ROOT, "relay", "core.cjs")));
+        relImport(scratch, path.join(scratch, "relay", "team.cjs")), relImport(scratch, coreFile));
       if (!rewritten) plantNote = "fetch line absent";
       else {
         fs.writeFileSync(plantedPath, rewritten);
         const plantEntry = path.join(scratch, "plant-entry.mjs");
-        fs.writeFileSync(plantEntry, entrySource(relImport(scratch, path.join(ROOT, "relay", "core.cjs")), relImport(scratch, plantedPath), kit.ROOT.pub, bindingName, jurisdiction));
+        fs.writeFileSync(plantEntry, entrySource(relImport(scratch, coreFile), relImport(scratch, plantedPath), kit.ROOT.pub, bindingName, jurisdiction));
         let mf2 = null;
         try {
           mf2 = await boot(scratch, plantEntry, cfg, bindings);
@@ -457,10 +462,12 @@ try {
     const fault = !!plantResult && plantResult.status === 500 && !!plantResult.json && plantResult.json.error === "fault" && plantResult.json.said === FAULT_SAID;
     check(fault, "984e a planted stub call answers 500 fault: " + (plantNote || brief(plantResult)));
   }
-  check(booted && runtimeRefusal === "" && dateRan === cfg.date && dateOk && flagsOk && namesOk && bytesSame() && prefix === cfg.vars.API_PREFIX,
+  const climbs = imports.filter(rel => !rel.startsWith("./") || rel.split("/").indexOf("..") > -1);
+  check(booted && runtimeRefusal === "" && dateRan === cfg.date && dateOk && flagsOk && namesOk && bytesSame() && prefix === cfg.vars.API_PREFIX
+    && imports.length > 0 && climbs.length === 0,
     "984f ran on the staging compatibility date " + dateRan + " supported " + supportedCompatibilityDate
     + " flags " + flagsNote + " prefix " + prefixNote + " class " + classNote + " binding " + bindingNote
-    + " r2 " + r2Note + " bytes " + (bytesSame() ? "same" : "CHANGED"));
+    + " r2 " + r2Note + " bytes " + (bytesSame() ? "same" : "CHANGED") + " imports " + imports.length + " climbing " + JSON.stringify(climbs));
 } catch (e) {
   console.log("SUITE DID NOT COMPLETE: " + (e && e.stack ? e.stack : e));
   process.exit(78);
