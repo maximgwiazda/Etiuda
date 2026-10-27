@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 358;
+const EXPECTED = 360;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -3974,7 +3974,7 @@ async function main() {
         && second.status === 200 && second.json && second.json.listIgnored === "older" && second.json.keptSerial === 2
         && !!row && row.serial === 2 && row.keys.length === 1 && row.keys[0] === K.DELEGATE.pub
         && refused(bad, "revoked") && (badStore ? badStore.dump().length : 0) === 0
-        && R.revokedFetches.n === 3 && R.stores.has("revoked") === false;
+        && R.revokedFetches.n === 2 && R.stores.has("revoked") === false; /* one ask per REVOKED text: the third create reuses the second's */
       const line = "983b a revoked key's grant is refused through fetch, and an older list is kept: first " + first.status
         + " " + (first.json && first.json.listIgnored) + ", second " + (second.json && second.json.listIgnored)
         + " serial " + (second.json && second.json.keptSerial) + ", kept " + (row && row.serial)
@@ -4113,7 +4113,7 @@ async function main() {
       const hello = await call(R, "POST", "/relay/v1/t/" + rt + "/hello", { json: {}, worker });
       const fetchesAfterHello = R.revokedFetches.n;
       const ok = created.status === 200 && hello.status === 200 && fetchesAfterCreate === 1 && fetchesAfterHello === 1;
-      const line = "983i route asks for revoked on /teams and /grant alone, and non-teams/grant requests make no calls to the revoked object: create "
+      const line = "983i route asks the list object once per REVOKED text, not before every request: create "
         + created.status + " fetches " + fetchesAfterCreate + ", hello " + hello.status + " fetches " + fetchesAfterHello;
       return { ok, line, fetchesDiff: fetchesAfterHello - fetchesAfterCreate };
     }
@@ -4122,15 +4122,47 @@ async function main() {
 
     let pathsLiftLine = "";
     const pathsLift = await editWorker(swapped(
-      "const needRevoked = hit.what === \"teams\" || hit.what === \"grant\"; /* plant:revoked-paths-only */",
-      "const needRevoked = true; /* plant:revoked-paths-only */"), async mod => {
+      "if (held && held.text === text) return held.decided; /* plant:revoked-held */",
+      "/* plant:revoked-held */"), async mod => {
       const r = await sceneRevokedPathsOnly(mod.routeWith(K.ROOTS, env => env.NOW()));
       pathsLiftLine = r.line;
       return r.ok === false;
     });
     check(pathsOnly.ok && pathsLift.turned && pathsLift.back,
-      "983j lifting plant:revoked-paths-only asks for the revoked object on other requests, which turns 983i red, and the product file is never written: "
+      "983j lifting plant:revoked-held asks the list object before every request, which turns 983i red, and the product file is never written: "
       + pathsLiftLine + "; " + pathsLift.detail);
+
+    /* The test architect's E1 on relay-small-engine: a list text that names fewer keys is ignored and the kept key stays revoked,
+       and a team object woken cold reads the text alone, so every route a grant stands on must carry the kept list. */
+    async function sceneKeptEveryRoute(worker) {
+      const R = dropListMethod(relayEnv({ wakeReadsText: true }));
+      R.clock.now = T0S;
+      const rt = hex(16), lead = keyPair(false);
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, T0S, { grant: K.delegatedGrantFor(lead.pub, T0S) }), worker });
+      R.env.REVOKED = revText([K.DELEGATE.pub], null, 2);
+      const held = await call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), keyPair(false), R.clock.now), worker });
+      R.env.REVOKED = revText([], null, 4);
+      R.restart();
+      const hello = await call(R, "POST", "/relay/v1/t/" + rt + "/hello", { json: {}, worker });
+      const ok = made.status === 200 && held.status === 200 && refused(hello, "revoked");
+      const line = "983m a hello on a team whose grant's service key only the kept list names, to an object woken cold after a list"
+        + " that names fewer keys, is refused as revoked: made " + made.status + ", held " + held.status + ", hello " + hello.status
+        + " " + (hello.json && hello.json.error);
+      return { ok, line };
+    }
+    const keptEvery = await sceneKeptEveryRoute();
+    check(keptEvery.ok, keptEvery.line);
+    let keptLiftLine = "";
+    const keptLift = await editWorker(swapped(
+      "    headers.set(\"etiuda-kept\", JSON.stringify(Array.isArray(keys) ? keys : [])); /* plant:kept-every-route */",
+      "    /* plant:kept-every-route */"), async mod => {
+      const r = await sceneKeptEveryRoute(mod.routeWith(K.ROOTS, env => env.NOW()));
+      keptLiftLine = r.line;
+      return r.ok === false;
+    });
+    check(keptEvery.ok && keptLift.turned && keptLift.back,
+      "983n lifting plant:kept-every-route sends no kept list, so the object woken cold reads the text alone, which turns 983m red, and the product file is never written: "
+      + keptLiftLine + "; " + keptLift.detail);
 
     function checkRenewMade(coreMod) {
       const store = S.memoryStore();
