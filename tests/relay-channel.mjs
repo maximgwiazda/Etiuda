@@ -6067,7 +6067,11 @@ async function scene992(mod, o) {
     const working = read(desk.mirror, "lane.ec") === ED9[0];
     X.at(BASE + 121 * DAYMS);
     await settle(lead, desk);
-    const swept = X.store9().dump().length === 0;
+    /* A swept store keeps the lead's public key alone. An empty store is a team never made. */
+    const sweptRows = X.store9() ? X.store9().dump() : [];
+    let sweptPub = null;
+    try { sweptPub = sweptRows.length === 1 ? JSON.parse(sweptRows[0][1]) : null; } catch { sweptPub = null; }
+    const swept = sweptRows.length === 1 && sweptRows[0][0] === "swept" && sweptPub === LEAD.pub;
     await desk.ch.stop();
     const kept = JSON.parse(fs.readFileSync(stateAt, "utf8"));
     if (x.noLapse) delete kept.lapse;

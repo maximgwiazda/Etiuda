@@ -3277,10 +3277,12 @@ async function main() {
       const cBadRt = hex(16);
       const cBad = await countedCall(W, cR, "POST", "/relay/v1/teams", { json: createBody(cBadRt, keyPair(false), T0S, { grant: null }) });
       const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 1 && !!cTeam && cTeam.epoch === 0
-        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,paid,rt,until"
+        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,made,paid,rt,until"
+        && /^[0-9a-f]{16}$/.test(cTeam.made)
         && refused(cBad.r, "bad-grant") && cBad.gets === 0 && (cR.stores.get(cBadRt) ? cR.stores.get(cBadRt).dump().length : 0) === 0;
       const line = "980c an id never made is judged as today: a valid grant is taken and keeps no mark, and a create with no grant is bad-grant with no object woken: "
         + cMade.r.status + " gets " + cMade.gets + ", swept " + JSON.stringify(cSt && cSt.get("swept"))
+        + ", row " + (cTeam ? Object.keys(cTeam).sort().join() : "none")
         + ", bad " + cBad.r.status + " " + (cBad.r.json && cBad.r.json.error) + " gets " + cBad.gets;
       return { ok, line };
     }
