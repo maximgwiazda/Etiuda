@@ -539,13 +539,17 @@ function createCore(deps) {
   function boundInvite(key) {
     const now = clock();
     const skipUploaded = false;
+    let best = null;
     for (const [k, v] of store.list("inv:")) {
       if (!v.spent || v.key !== key || !is(HEX64, v.pub)) continue;
       if (skipUploaded && v.uploaded) continue;
       if (now - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
-      return { id: k.slice(4), inv: v };
+      /* A key bound to more than one invitation resumes the one it spent last, whose request the lead answers. */
+      const row = { id: k.slice(4), inv: v };
+      if (!best) best = row;
+      else if (v.spentAt > best.inv.spentAt) best = row; /* plant:e5-newest */
     }
-    return null;
+    return best;
   }
 
   function failedTry(id, inv) {
@@ -869,6 +873,8 @@ function createCore(deps) {
         } else {
           next.asked = m.id;
           delete next.withdrawn; /* plant:e4-ask-again */
+          /* A request is the key's current one, on whichever invitation: an earlier invitation's withdrawal by the same key ends. */
+          for (const [k, v] of store.list("inv:")) if (v.withdrawn === true && v.key === m.writer) { const x = Object.assign({}, v); delete x.withdrawn; store.put(k, x); } /* plant:e5-clear */
         }
         store.put("inv:" + j.a.invite, next); /* plant:invite-mark */
       }

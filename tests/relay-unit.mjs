@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 302;
+const EXPECTED = 305;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1218,6 +1218,48 @@ async function main() {
     const chainLift = await liftCore("plant:put-chain", async () => { const x = await forged(); return x.ok && x.still !== 200; });
     check(chainLift.turned && chainLift.back, "995f lifting plant:put-chain lets an enrolled desk's deletion take the request away (FAIL 995c: the request is no longer served): "
       + chainLift.detail + ", sha " + (chainLift.back ? "restored" : "differs"));
+    /* E5: one key, two invitations. The desk withdraws its request on the first, then takes a new link: a token hello and a request
+       on the second. That request is the key's current one, so the lead's yes enrols it; and before the yes, the key's own hello
+       resumes the second invitation's session, so the desk reads the answer the lead wrote to the request it answers. The first
+       invitation's id sorts before the second's, so a hello that took the first row in the store's order would land on the first. */
+    async function secondLink() {
+      const w = await world();
+      const who = keyPair(true), place = "desk:k-" + hex(8);
+      const id1 = "00" + hex(15), id2 = "ff" + hex(15), tok1 = hex(32), tok2 = hex(32);
+      w.R.clock.now += 1;
+      await invites(w, [{ id: id1, hash: sha(tok1) }], []);
+      const s1 = (await boundHello(w, who, id1, tok1)).json.session;
+      const ask1 = sealJoin(w, who, 1, place);
+      const up1 = await put(w, s1, ask1, { extra: { pub: who.pub } });
+      const del = deletionOf(w, who, place, ask1.id, 2);
+      const gone = await put(w, s1, del);
+      w.R.clock.now += 1;
+      await invites(w, [{ id: id2, hash: sha(tok2) }], []);
+      w.R.clock.now += 1;
+      const hello2 = await boundHello(w, who, id2, tok2);
+      const ask2 = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: who.keyId, privateKey: who.privateKey },
+        path: "desks/" + place.slice(5) + "/join.json", body: "ask 3", counter: 3, place, kind: "file", supersedes: del.id });
+      const up2 = await put(w, hello2.json && hello2.json.session, ask2, { extra: { pub: who.pub } });
+      const lead = await sessionOf(w, w.lead);
+      const answered = await put(w, lead, answerOf(w, id2, 9));
+      const resumed = await helloAs(w, who);
+      const read = await getBlob(w, resumed.json && resumed.json.session, id2);
+      const yes = await devices(w, w.devs.concat([{ id: who.keyId, pub: who.pub, desk: place.slice(5) }]));
+      const after = await helloAs(w, who);
+      return { up1: up1.status, gone: gone.status, up2: up2.status, answered: answered.status, read: read.status,
+        yes: yes.json && yes.json.error || yes.status, device: after.status === 200 && after.json.invite !== true,
+        first: !!inviteRow(w, id1).withdrawn };
+    }
+    const secondOk = x => x.up1 === 200 && x.gone === 200 && x.up2 === 200 && x.answered === 200 && x.read === 200 && x.yes === 200 && x.device && !x.first;
+    const second = await secondLink();
+    check(secondOk(second), "995o a desk that withdrew its request on one invitation asks on a new one: that request ends the withdrawal, the key's hello resumes the new"
+      + " invitation's session and reads the lead's answer to it, and the lead's yes enrols the key: " + JSON.stringify(second));
+    const clearLift = await liftCore("plant:e5-clear", async () => { const x = await secondLink(); return x.up2 === 200 && x.yes === "withdrawn"; });
+    check(clearLift.turned && clearLift.back, "995p lifting plant:e5-clear leaves the first invitation's withdrawal standing, so the lead's yes on the second is refused (FAIL 995o: yes withdrawn): "
+      + clearLift.detail + ", sha " + (clearLift.back ? "restored" : "differs"));
+    const newestLift = await liftCore("plant:e5-newest", async () => { const x = await secondLink(); return x.up2 === 200 && x.answered === 200 && x.read !== 200; });
+    check(newestLift.turned && newestLift.back, "995q lifting plant:e5-newest resumes the first invitation's session, which is not served the answer to the second (FAIL 995o: read not 200): "
+      + newestLift.detail + ", sha " + (newestLift.back ? "restored" : "differs"));
   }
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {
