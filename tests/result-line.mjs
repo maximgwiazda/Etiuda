@@ -397,7 +397,7 @@ function main() {
      arm's - the ONLY difference between the two records is the verdict that was withdrawn. */
   const TR_FILES = { "src/thing.js": "export const a = 1;\n", ".gitignore": "junk/\n" };
   const TR_GIT_HOW = "git ls-files -co --exclude-standard";
-  const TR_WALK_HOW = "walk skipping .git and node_modules";
+  const TR_WALK_HOW = "walk skipping .git, node_modules and .plant-hold";
   const NL = String.fromCharCode(10);
   /* A stub that prints n passing checks and then does `body`, exiting 0 either way. */
   const trStub = (n, body) => 'import fs from "node:fs";' + NL

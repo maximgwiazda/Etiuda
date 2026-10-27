@@ -68,7 +68,11 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
 
 `npm test` runs every command in `package.json`'s `test` script, in order, and stops at the first that fails;
 `npm pkg get scripts.test` prints them (48 at e994d95). This file does not repeat the list, which went stale here
-once (23 commands unnamed by 2026-10-13): the script is the source. None of them needs a fixture or a browser.
+once (23 commands unnamed by 2026-10-13): the script is the source. The first command refuses while
+`.plant-hold/` holds a mark, and it prints how to put the named file back. It also records the sha256
+of every tracked file, with a one-time id. Both `test` and `split-guard` end with `node tests/plant-compare.mjs`,
+which names each tracked file whose sha256 changed. The compare spends that id, and a second compare
+with no new record is refused. None of them needs a fixture or a browser.
 `test.js` runs without `ETIUDA_FIXTURES` and reports the sections that need one as NOT RUN, so its exit 0 there is
 not the whole suite. `npm run smoke` needs both.
 

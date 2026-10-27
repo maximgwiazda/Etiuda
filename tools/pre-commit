@@ -16,6 +16,27 @@
 # refuses: a guard that goes quiet when its ammunition is missing is the failure this prevents.
 set -u
 
+# A held plant refuses before the scan. The mark names the file, its sha256 and a backup,
+# and it is written before the first changed byte. A kill runs no restore, so the next
+# commit stops until the file is put back.
+top="$(git rev-parse --show-toplevel)"
+hold_dir="$top/.plant-hold"
+if [ -d "$hold_dir" ]; then
+  hold_hit=0
+  for m in "$hold_dir"/*.hold; do
+    [ -f "$m" ] || continue
+    hold_hit=1
+    echo "etiuda plant-hold: a plant is held, so this is refused." >&2
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        file=*|sha256=*|backup=*) echo "  ${line%%=*} ${line#*=}" >&2 ;;
+      esac
+    done < "$m"
+    echo "  Restore the file from the backup, check the sha256, then remove the mark and the backup." >&2
+  done
+  [ "$hold_hit" = 1 ] && exit 1
+fi
+
 git_dir="$(git rev-parse --git-dir)"
 # THE LIST IS THE REPOSITORY'S, NOT THE WORKTREE'S (2026-10-12). It is read from git's common
 # directory, the main checkout's .git, so every worktree reads the one list and none needs a copy.

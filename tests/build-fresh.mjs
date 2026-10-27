@@ -13,8 +13,7 @@
  * its own idea of how the artefact is assembled would fail the day the assembly changed and
  * would blame the wrong thing. The cost is that build.mjs writes: the bytes are read first
  * and put back when any of them differ, so a failing run leaves the tree as it found it.
- * Interrupt it mid-build and the outputs are a rebuild of src/, which is what `npm run build`
- * would have made anyway, and git will say so.
+ * The run is a scratch copy of the tree, so a kill during the build leaves the checkout as it was.
  *
  * THE SUBJECT IS build.mjs's OWN LIST, not one written here. There are three outputs now - the
  * artefact, the policy pin whose absence is a window that will not start, and the bubble Studio
@@ -22,11 +21,17 @@
  * blind the day a fourth is added. */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { relative } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build, OUTPUTS, OUT_FILE } from '../tools/build.mjs';
 
 const sha256 = b => createHash('sha256').update(b).digest('hex');
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+if (process.env.ETIUDA_PLANTS_COPY !== "1") {
+  const { runInPlantsCopy } = await import("./plants-tree.mjs");
+  const tree = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  process.exit(await runInPlantsCopy(tree, fileURLToPath(import.meta.url), "build-fresh"));
+}
 const rel = p => relative(ROOT, p).split('\\').join('/');
 
 const before = OUTPUTS.map(p => readFileSync(p));

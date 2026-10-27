@@ -1,6 +1,7 @@
 /* The relay's blob rules, shell/relay/blob.cjs, held to relay/test/target-contract.md: the bytes and each size step's
  * edge, a blob that does not open once moved, the upload signature apart from the desk file's, the counter and rev
  * floors, every bad path, the writer's place, the limits, the reasons word for word, and no throw on hostile input.
+ * A plant runs in a scratch copy of the tree, so a kill leaves the checkout as it was.
  *
  *     node tests/relay-blob.mjs        exit code is the number of failed checks, capped at 63; 78 where it did not complete
  */
@@ -11,6 +12,10 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.env.ETIUDA_PLANTS_COPY !== "1") {
+  const { runInPlantsCopy } = await import("./plants-tree.mjs");
+  process.exit(await runInPlantsCopy(ROOT, fileURLToPath(import.meta.url), "relay-blob"));
+}
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 63;
