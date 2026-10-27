@@ -1908,8 +1908,26 @@ function createChannel(opts) {
         again = false;
         try {
           const r = await cycle();
-          if (r && r.ok) { enrolWaitFrom = 0; backoff = RETRY_MIN_MS; }
-          else if (r && r.reason === "removed" && typeof o.onRemoved === "function") { hushRemoved(); return; } /* plant:h35-removed-hush */
+          if (r && r.ok) {
+            enrolWaitFrom = 0;
+            backoff = RETRY_MIN_MS;
+            if (typeof o.onHere === "function") o.onHere();
+          }
+          else if (r && r.reason === "removed" && typeof o.onRemoved === "function") {
+            /* The bearer in hand was refused. One fresh hello, on the relay's own evidence: a success means the key is on the team again. */
+            session = null;
+            const resumed = await openSession(); /* plant:h35-fresh-hello */
+            if (resumed && resumed.ok) {
+              const followed = await cycle();
+              if (followed && followed.ok) {
+                enrolWaitFrom = 0;
+                backoff = RETRY_MIN_MS;
+                if (typeof o.onHere === "function") o.onHere();
+                return;
+              }
+            }
+            hushRemoved(); return; /* plant:h35-removed-hush */
+          }
           else if (awaitingEnrol(r)) {
             clearTimeout(retryTimer);
             if (running) { retryTimer = setTimeout(kick, backoff); if (retryTimer.unref) retryTimer.unref(); } /* plant:h35-enrol-retry */

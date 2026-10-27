@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 245;
+const EXPECTED = 247;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3494,6 +3494,7 @@ try {
       const grew = deskTransport.log.length - mark;
       const quiet = grew === 0;
       const goneHere = await until(() => D.api.relayHere() === null, 500);
+      try { await D.ask("etiuda:team-join", "leave", team); } catch { /* the measurements above stand */ }
       if (ch) { try { await ch.stop(); } catch { /* already stopped */ } }
       check(made.status === 200 && enrolled.status === 200 && dropped.status === 200 && online && told && quiet && goneHere,
         "993a a desk the lead removed is told, stops asking the relay, and no longer follows it: made " + made.status
@@ -3505,7 +3506,7 @@ try {
     }
     try {
       const lines = mainNow.split(/\n/);
-      const at = lines.findIndex(l => l.indexOf("plant:h35-gone") >= 0);
+      const at = lines.findIndex(l => l.indexOf("= true; /* plant:h35-gone */") >= 0);
       let turned = false, detail = "plant line absent";
       if (at >= 0) {
         lines.splice(at, 1);
@@ -3527,18 +3528,110 @@ try {
         await enrolDesk(rt, 2, []);
         const ch = D.api.relayRun();
         if (ch) { ch.kick(); await ch.idle(); }
+        const mark = deskTransport.log.length;
+        const grew = await until(() => deskTransport.log.length > mark, 2000);
+        const here = D.api.relayHere();
         const view = await D.ask("etiuda:team-join", "state");
         const lead = view && Array.isArray(view.leads) ? view.leads.filter(l => l.team === team)[0] : null;
         const told = !!(lead && lead.removed === true && lead.relayRemoved === true);
-        turned = !told;
-        detail = told ? "still told" : "not told (removed " + (lead ? lead.removed : "no lead") + ")";
-        if (ch) { try { await ch.stop(); } catch { /* already stopped */ } }
+        turned = !told && here !== null && grew;
+        detail = "told " + (told ? "yes" : "no") + ", here " + (here ? "answers" : "null") + ", transport " + (grew ? "grew" : "quiet");
+        try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench the plant-lifted restart */ }
+        const live = D.api.relayRun();
+        if (live) { try { await live.stop(); } catch { /* already stopped */ } }
       }
       const back = sha(fs.readFileSync(mainFile)) === sha(Buffer.from(mainNow));
-      check(turned && back, "993c lifting plant:h35-gone leaves the window untold (FAIL 993a a desk the lead removed is told, stops asking the relay, and no longer follows it: told {\"removed\":false}, here still answers): "
+      check(turned && back, "993c lifting plant:h35-gone, the desk still follows: the window stays untold, relayHere answers, and the transport grows (FAIL 993c the desk does not follow after the removal: transport quiet): "
         + detail + ", sha " + (back ? "restored" : "differs"));
     } catch (e) {
       check(false, "993c threw: " + (e && e.stack ? e.stack : e));
+    }
+    /* Remove, re-add, and the next edition lands. The leg asks relayRun itself, so it does not wait out the minute's probe. */
+    async function readdScene(src, tag) {
+      const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), share = path.join(LAB, "h35-readd-" + tag);
+      R.clock.now += 1;
+      const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+      const pin = { teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+      const teamFile = rev => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev,
+        channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
+      const studioT = transport("h35-readd-" + tag), studioMirror = path.join(LAB, "h35-readd-studio-" + tag);
+      const studio = C.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "h35-readd-" + tag + ".json"),
+        pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+        keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1, inviteKeys: () => [],
+        request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
+      const D = deskFrom("h35-readd-desk-" + tag, share, src, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamKeys: { [team]: { 1: sealedKey(key) } },
+        teamShown: { [team]: { lead: "Ada Quay", folder: share } } });
+      const me = await D.ask("etiuda:branch-identity", true);
+      const row = me && me.id ? [{ id: me.id, pub: me.key, desk: me.id }] : [];
+      const enrolled = row.length ? await enrolDesk(rt, 1, row) : { status: 0 };
+      put(studioMirror, "board.ec", JSON.stringify(D.api.sealCatalog(key, team, 1, catalogText(1))));
+      put(studioMirror, C.TEAM_NAME, teamFile(1));
+      studio.start();
+      await studio.idle();
+      deskTransport.down = false;
+      const first = await until(async () => {
+        const c = D.api.relayRun();
+        if (c) { c.kick(); await c.idle(); }
+        return !!(c && c.online() && factsOf(D.api.readCatalog() || "") === 1);
+      }, 8000);
+      const dropped = await enrolDesk(rt, 2, []);
+      const ch0 = D.api.relayRun();
+      if (ch0) { ch0.kick(); await ch0.idle(); }
+      const hushed = await until(() => D.api.relayHere() === null, 1500);
+      put(studioMirror, "board.ec", JSON.stringify(D.api.sealCatalog(key, team, 1, catalogText(2))));
+      put(studioMirror, C.TEAM_NAME, teamFile(2));
+      await studio.kick(); await studio.idle();
+      const whileHushed = factsOf(D.api.readCatalog() || "");
+      const back = await enrolDesk(rt, 3, row);
+      const standing = R.stores.get(rt).dump().some(([k, v]) => {
+        if (!String(k).startsWith("ses:")) return false;
+        let s = null;
+        try { s = JSON.parse(v); } catch { s = null; }
+        return !!(s && s.removed === true && s.key === me.id);
+      });
+      const followed = await until(async () => {
+        const c = D.api.relayRun();
+        if (c) { c.kick(); await c.idle(); }
+        return D.api.relayHere() !== null && factsOf(D.api.readCatalog() || "") === 2;
+      }, 8000);
+      let env = {};
+      try { env = D.envelope(); } catch { env = {}; }
+      const gone = !!(env.teamRelayGone && env.teamRelayGone[team]);
+      const here = D.api.relayHere();
+      const rev = factsOf(D.api.readCatalog() || "");
+      try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench */ }
+      const live = D.api.relayRun();
+      if (live) { try { await live.stop(); } catch { /* already stopped */ } }
+      try { await studio.stop(); } catch { /* already stopped */ }
+      return { made: made.status, enrolled: enrolled.status, dropped: dropped.status, back: back.status,
+        first, hushed, whileHushed, standing, followed, gone, here: here !== null, rev, id: me && me.id };
+    }
+    try {
+      const g = await readdScene(mainNow, "land");
+      const landed = g.made === 200 && g.enrolled === 200 && g.dropped === 200 && g.back === 200 && g.first && g.hushed
+        && g.whileHushed !== 2 && !g.standing && g.followed && !g.gone && g.here && g.rev === 2;
+      check(landed, "993j a desk the lead removed and then enrols again follows on the relay's own evidence, keeps no removed session, and the next edition lands: "
+        + JSON.stringify(g));
+    } catch (e) {
+      check(false, "993j threw: " + (e && e.stack ? e.stack : e));
+    }
+    try {
+      const lines = mainNow.split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:h35-return") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const g = await readdScene(lines.join("\n"), "plant");
+        turned = g.first && g.hushed && g.back === 200 && !g.here && g.rev !== 2;
+        detail = "here " + (g.here ? "answers" : "null") + ", rev " + g.rev + ", first " + g.first;
+      }
+      const back = sha(fs.readFileSync(mainFile)) === sha(Buffer.from(mainNow));
+      check(turned && back, "993k lifting plant:h35-return leaves the desk hushed after a fresh hello, so the next edition does not land (FAIL 993j a desk the lead removed and then enrols again follows on the relay's own evidence, keeps no removed session, and the next edition lands: relayHere null, rev not 2): "
+        + detail + ", sha " + (back ? "restored" : "differs"));
+    } catch (e) {
+      check(false, "993k threw: " + (e && e.stack ? e.stack : e));
     }
     try {
       const rt = hex(16), team = "t-" + hex(8), share = path.join(LAB, "h35-old-share");

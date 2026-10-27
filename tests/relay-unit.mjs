@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 295;
+const EXPECTED = 296;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -168,6 +168,7 @@ const since = (w, token, n) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/
 const getBlob = (w, token, id) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/b/" + id, { token });
 const socket = (w, token, o) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/socket", Object.assign({ token }, o || {}));
 const dumpText = w => JSON.stringify(w.R.stores.get(w.rt).dump());
+const sessionRemoved = (w, keyId) => w.R.stores.get(w.rt).list("ses:").some(([, s]) => !!(s && s.removed === true && s.key === keyId));
 const sent = (w, id) => { const ws = w.R.hubs.get(w.rt).byId(id); return ws ? ws.sent.map(m => JSON.parse(m)) : null; };
 const wsOf = (w, id) => { for (const hub of w.R.hubs.values()) { const f = hub.open.concat([]).find(s => s.id === id); if (f) return f; } return null; };
 
@@ -344,8 +345,8 @@ async function main() {
     const back = await devices(w, w.devs);
     const fresh = await helloAs(w, w.desk);
     const old = await since(w, deskS);
-    check(back.status === 200 && fresh.status === 200 && refused(old, "removed"),
-      "3i a key enrolled again opens a new session, and the session it held when withdrawn stays removed");
+    check(back.status === 200 && fresh.status === 200 && refused(old, "no-hello") && !sessionRemoved(w, w.desk.keyId),
+      "3i a key enrolled again opens a new session, and the session it held when withdrawn does not stay");
   }
 
   /* ---- 4: invites ---- */
@@ -1099,6 +1100,21 @@ async function main() {
   /* A text swapped in place of the one place `from` stands, for a guard that is part of a line; and the line carrying a plant tag lifted. */
   const swapCore = (from, to, fn) => plantCore(swapped(from, to), fn, "swap text absent");
   const liftCore = (tag, fn) => plantCore(lineLifted(tag), fn, "plant line absent");
+  /* A re-enrol deletes the session marked removed. Lifting that line leaves the old bearer removed, and the row standing. */
+  {
+    const readd = await liftCore("plant:readd-session", async () => {
+      const w = await world();
+      const a = await helloAs(w, w.desk);
+      const deskS = a.json.session;
+      await devices(w, w.devs.slice(1));
+      const back = await devices(w, w.devs);
+      const old = await since(w, deskS);
+      return back.status === 200 && refused(old, "removed") && sessionRemoved(w, w.desk.keyId);
+    });
+    check(readd.turned && readd.back,
+      "3s lifting plant:readd-session leaves the withdrawn session standing as removed (FAIL 3i a key enrolled again opens a new session, and the session it held when withdrawn does not stay: the old bearer still answers removed): "
+      + readd.detail + ", sha " + (readd.back ? "restored" : "differs"));
+  }
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {
     const gets = { n: 0 };

@@ -3381,13 +3381,19 @@ function joinView() {
       }
     }
     /* The code is the lead's opening, whether or not the request came by invitation. The invite field names that lead. */
+    let relayEnd = "waiting";
+    if (j.invite && j.invite.relay && j.invite.relay.end) relayEnd = j.invite.relay.end; /* plant:h35-relay-state */
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
-                  state: j.refused ? "refused" : j.opened ? "code" : (j.invite && j.invite.relay && j.invite.relay.end) || "waiting",
+                  state: j.refused ? "refused" : j.opened ? "code" : relayEnd,
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
-    if (j.invite && j.invite.relay && j.invite.relay.stays === true) view.join.stays = true;
+    if (j.invite && j.invite.relay && j.invite.relay.stays === true) {
+      const held = !!(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length);
+      if (held) view.join.stays = true;
+      else view.join.keeps = false; /* plant:h35-keeps */
+    }
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
@@ -3800,6 +3806,15 @@ function relayHere() {
   if (!teams.length) return null;
   return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
 }
+/* A team this desk would follow, which the relay has refused. relayHere stays null until a fresh hello on it succeeds. */
+function relayFlagged() {
+  const j = teamJoin, inv = j && j.invite && j.invite.relay;
+  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite" && inv.end !== "removed" && teamRelayGone[j.team] === true)
+    return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
+  const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] === true).sort();
+  if (!teams.length) return null;
+  return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
+}
 function relayMirrorOf(rt) { return path.join(app.getPath("userData"), "relay", rt); }
 function relayOpened(sealed) {
   try { return safeStorage.decryptString(Buffer.from(String(sealed), "base64")); } catch { return null; }
@@ -3829,11 +3844,17 @@ function relayConnect(url, headers, on) {
   ws.onerror = () => {};
   return { send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
 }
-let relayChannel = null, relayAt = "", relaySaidFor = new Set(), relayTimer = null;
+let relayChannel = null, relayAt = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
 function relaySoon() {
   clearTimeout(relayTimer);
   relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
   if (relayTimer.unref) relayTimer.unref();
+}
+/* While the relay has refused this desk, ask again on the channel's own minute, so a later enrolment is a fresh hello and not a new invitation. */
+function relayProbeLater() {
+  clearTimeout(relayProbeTimer);
+  relayProbeTimer = setTimeout(() => { relayProbeTimer = null; relayRun(); }, 60000);
+  if (relayProbeTimer.unref) relayProbeTimer.unref();
 }
 /* Starts, keeps or stops the channel layer to match relayHere, and says once for each team whose relay it will not follow. */
 function relayRun() {
@@ -3845,12 +3866,19 @@ function relayRun() {
       + " answered request, so this desk does not follow that address and keeps its folder");
   }
   const named = sayJoinPolicy().folder;
-  const want = named ? null : relayHere();
+  const open = named ? null : relayHere();
+  const flagged = !open && !named ? relayFlagged() : null; /* plant:h35-probe */
+  const want = open || flagged;
+  if (!want) { clearTimeout(relayProbeTimer); relayProbeTimer = null; }
   if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
     + ", so this desk keeps that folder and not the relay its team file names");
   const pin = want ? teamPins[want.team] : null;
   const at = want && pin ? [want.team, want.rt, want.url, pin.public].join("|") : "";
-  if (at === relayAt && relayChannel) { relayChannel.kick(); return relayChannel; }
+  if (at === relayAt && relayChannel) {
+    if (typeof relayChannel.online === "function" && relayChannel.online()) relayChannel.kick();
+    else relayChannel.start(); /* plant:h35-follow */
+    return relayChannel;
+  }
   if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); }
   relayAt = at;
   if (!at) return null;
@@ -3904,13 +3932,26 @@ function relayRun() {
       persistDeskEnvelope();
       sendJoin(theWindow);
     },
-    /* The relay refused this desk as no longer on the team. Remember it, tell the page, and stop following that relay. */
+    /* A fresh hello succeeded. If this desk had stopped after a removal, it follows again: the relay has the key. */
+    onHere: () => {
+      if (teamRelayGone[team] !== true) return;
+      delete teamRelayGone[team]; /* plant:h35-return */
+      clearTimeout(relayProbeTimer);
+      relayProbeTimer = null;
+      persistDeskEnvelope();
+      sendJoin(theWindow);
+      relaySoon();
+    },
+    /* The relay refused this desk as no longer on the team. Remember it, tell the page, and stop following that relay.
+       A second refusal while that is already remembered does not ask again at once. The minute's probe does. */
     onRemoved: () => {
       if (!SEALED_TEAM_RE.test(String(team))) return;
+      if (teamRelayGone[team] === true) { relayProbeLater(); return; } /* plant:h35-once */
       teamRelayGone[team] = true; /* plant:h35-gone */
       persistDeskEnvelope();
       sendJoin(theWindow);
       relaySoon();
+      relayProbeLater();
     },
     /* The invitation's one upload has gone, so its wrap is not asked for again and the key that opens it is forgotten. */
     onWrapGone: () => {

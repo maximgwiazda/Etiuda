@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 97;
+const EXPECTED = 103;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1334,29 +1334,182 @@ try {
     + " with Cancel the request and Load another catalog, and Cancel the request clears it: used " + (sayingUsed ? "said" : "not said")
     + ", expired " + (sayingEnded ? "said" : "not said") + ", acts " + (offered ? "offered" : "missing") + ", card " + (cleared ? "cleared" : "still there"));
 
-  /* A relay invitation the relay refused because this desk had already left, and a join the relay has accepted that the agent cancels. */
-  const REMOVED_EN = "This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one.";
-  const REMOVED_PL = "To zaproszenie powstało, zanim to stanowisko opuściło zespół, więc już nie działa. Nowe może wystawić lider zespołu.";
+  /* The shell's own state, painted by the page. A constructed view is not this card. */
+  const REMOVED_EN = "This invitation was made before the team's lead removed this desk, so it no longer works. The team's lead can make a new one.";
+  const REMOVED_PL = "To zaproszenie powstało, zanim lider zespołu usunął to stanowisko, więc już nie działa. Nowe może wystawić lider zespołu.";
   const STAYS_EN = "The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in.";
   const STAYS_PL = "Przekaźnik przyjął już tę prośbę, więc zostaje ona do odpowiedzi lidera zespołu. Stanowisko zachowuje to, co dało mu zaproszenie, więc zgoda lidera nadal je wpuści.";
-  const removedEn = cardIn("en", relayJoin("removed")), removedPl = cardIn("pl", relayJoin("removed"));
-  const removedSaid = removedEn.indexOf(escPage(REMOVED_EN)) >= 0 && removedPl.indexOf(REMOVED_PL) >= 0
-    && removedEn.indexOf("Waiting for the lead to open the request") < 0
-    && removedEn.indexOf(escPage(COPY.waitEn)) < 0 && removedPl.indexOf(COPY.waitPl) < 0;
+  const LEFT_EN = "This desk has left the team, so it no longer keeps what the invitation gave it. The request stays until the team's lead answers.";
+  const LEFT_PL = "To stanowisko opuściło zespół, więc nie zachowuje już tego, co dało mu zaproszenie. Prośba zostaje do odpowiedzi lidera zespołu.";
+  const HUSH_EN = "This desk has stopped asking the relay. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself.";
+  const HUSH_PL = "To stanowisko przestało pytać przekaźnik. Katalogi na nim zostają bez zmian. Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.";
+  const ROSTER_EN = "Once the team's lead lets this desk in again, the catalog opens here by itself.";
+  const sealText = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+  const relayTeam = "t-5c1a77e0b3d94f20";
+  const relayHex = { id: "0123456789abcdef", h32: "ab".repeat(16), h64: "cd".repeat(32) };
+  const bothLang = async D => {
+    ST.lsSet("eUiLang", "en");
+    await pageOn(D);
+    const en = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const pl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    return { en, pl };
+  };
+  const relayDesk = (name, relayExtra, more) => {
+    const own = folder(name + "-own");
+    const join = { team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: { id: relayHex.id, proof: relayHex.h64, lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: Object.assign({ rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32,
+          token: sealText("token"), seal: sealText("seal") }, relayExtra || {}) } };
+    return deskWith(name, own, Object.assign({ teamJoin: join,
+      teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+      teamShown: { [relayTeam]: { lead: "Lamp lead", folder: own } } }, more || {}));
+  };
+  const cardSaid = (html, en, pl) => html.en.indexOf(escPage(en)) >= 0 && html.pl.indexOf(pl) >= 0;
+  const removedDesk = await relayDesk("h35-removed-card", { end: "removed" });
+  const removedHtml = await bothLang(removedDesk);
+  const removedSaid = cardSaid(removedHtml, REMOVED_EN, REMOVED_PL)
+    && removedHtml.en.indexOf("Waiting for the lead to open the request") < 0
+    && removedHtml.en.indexOf(escPage(COPY.waitEn)) < 0 && removedHtml.pl.indexOf(COPY.waitPl) < 0
+    && removedHtml.en.indexOf("this desk left") < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
-  check(!!tookFn && removedSaid,
-    "15co a relay invitation the relay refused as made before this desk left says a new invitation is needed, in English and in Polish: "
+  check(removedSaid,
+    "15co a relay invitation the relay refused because the team's lead removed this desk says a new invitation is needed, in English and in Polish, from the shell's own state: "
     + (removedSaid ? "said" : "not said"));
-  const staysView = { join: { file: "", state: "waiting", code: "", asked: 1, name: "Nia", team: RELAY_TEAM, stays: true,
-    invite: { lead: "Lamp lead", relay: "relay.test" } }, leads: [] };
-  const staysEn = cardIn("en", staysView), staysPl = cardIn("pl", staysView);
-  const staysSaid = staysEn.indexOf(escPage(STAYS_EN)) >= 0 && staysPl.indexOf(STAYS_PL) >= 0
-    && staysEn.indexOf('data-join="cancel"') < 0 && staysEn.indexOf(escPage(COPY.waitEn)) < 0
-    && staysPl.indexOf(COPY.waitPl) < 0;
+  const keptKey = sealText(crypto.randomBytes(32).toString("base64"));
+  const cancelDesk = await relayDesk("h35-cancel-card", { wrapped: [1] },
+    { teamKeys: { [relayTeam]: { 1: keptKey } }, teamSeen: [relayTeam] });
+  const cancelSeed = JSON.stringify(cancelDesk.envelope());
+  ST.lsSet("eUiLang", "en");
+  await pageOn(cancelDesk);
+  await press("cancel");
+  const staysHtml = await bothLang(cancelDesk);
+  const staysSaid = cardSaid(staysHtml, STAYS_EN, STAYS_PL)
+    && staysHtml.en.indexOf('data-join="cancel"') < 0 && staysHtml.en.indexOf(escPage(COPY.waitEn)) < 0
+    && staysHtml.pl.indexOf(COPY.waitPl) < 0 && staysHtml.en.indexOf(escPage(LEFT_EN)) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
-  check(!!tookFn && staysSaid,
-    "15cp cancelling a join the relay has already accepted says the request stays and this desk keeps what the invitation gave it,"
+  check(staysSaid,
+    "15cp cancelling a join the relay has already accepted, through the shell, says the request stays and this desk keeps what the invitation gave it,"
     + " in English and in Polish, with no second Cancel: " + (staysSaid ? "said" : "not said"));
+  const leftDesk = await relayDesk("h35-left-card", { stays: true });
+  const leftHtml = await bothLang(leftDesk);
+  const leftSaid = cardSaid(leftHtml, LEFT_EN, LEFT_PL) && leftHtml.en.indexOf(escPage(STAYS_EN)) < 0 && leftHtml.pl.indexOf(STAYS_PL) < 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(leftSaid,
+    "15cq after Leave, the card says this desk no longer keeps what the invitation gave it, in English and in Polish, from the shell's own state: "
+    + (leftSaid ? "said" : "not said"));
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:h35-keeps") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const ud = path.join(LAB, "h35-left-plant");
+      fs.mkdirSync(ud, { recursive: true });
+      const own = folder("h35-left-plant-own");
+      const doc = JSON.parse(fs.readFileSync(path.join(leftDesk.ud, "desk.json"), "utf8"));
+      doc.keys.eCatalogFolder = own;
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(doc), "utf8");
+      const planted = loadDesk(ud, lines.join("\n"));
+      await planted.ask("etiuda:branch-identity", true);
+      const html = await bothLang(planted);
+      turned = html.en.indexOf(escPage(LEFT_EN)) < 0;
+      detail = turned ? "the leave sentence was absent" : "the leave sentence was still said";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15cr lifting plant:h35-keeps leaves the card saying the desk still keeps what the invitation gave, or not the leave sentence (FAIL 15cq after Leave, the card says this desk no longer keeps what the invitation gave it: not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  const hushYard = folder("h35-hush-yard");
+  put(hushYard, "lamps.ec", P.sealCatalog(crypto.randomBytes(32), relayTeam, 1, A1));
+  const hushDesk = await deskWith("h35-hush-card", hushYard, {
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamPinFrom: { [relayTeam]: "answer" },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: hushYard } },
+    teamRelayGone: { [relayTeam]: true } });
+  const hushHtml = await bothLang(hushDesk);
+  const hushSaid = cardSaid(hushHtml, HUSH_EN, HUSH_PL) && hushHtml.en.indexOf("This desk has stopped asking the relay.") >= 0;
+  const rosterOnly = hushHtml.en.indexOf(escPage(HUSH_EN)) >= 0;
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(hushSaid && rosterOnly,
+    "15cs after the relay has removed this desk, the card says it has stopped asking and that the catalog opens here by itself only once the lead lets it in again, in English and in Polish, from the shell's own state: "
+    + (hushSaid ? "said" : "not said"));
+  {
+    const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+    const before = fs.readFileSync(joinPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:h35-hush-card") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const dir = fs.mkdtempSync(path.join(LAB, "join-plant-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+      window.E_HOST = hostOver(hushDesk);
+      planted.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 30));
+      ST.lsSet("eUiLang", "en");
+      const html = planted.teamJoinEmptyHtml();
+      turned = html.indexOf("This desk has stopped asking the relay.") < 0 && html.indexOf(escPage(ROSTER_EN)) >= 0;
+      detail = turned ? "the roster sentence, not the hush sentence" : JSON.stringify(html.replace(/<svg[\s\S]*?<\/svg>/g, "").slice(0, 180));
+    }
+    const same = fs.readFileSync(joinPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15ct lifting plant:h35-hush-card keeps the self-opening sentence after the relay has removed this desk (FAIL 15cs after the relay has removed this desk, the card says it has stopped asking: not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:h35-relay-state") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const ud = path.join(LAB, "h35-removed-plant");
+      fs.mkdirSync(ud, { recursive: true });
+      fs.copyFileSync(path.join(removedDesk.ud, "desk.json"), path.join(ud, "desk.json"));
+      const planted = loadDesk(ud, lines.join("\n"));
+      await planted.ask("etiuda:branch-identity", true);
+      const html = await bothLang(planted);
+      turned = html.en.indexOf(escPage(REMOVED_EN)) < 0;
+      detail = turned ? "the removed sentence was absent" : "the removed sentence was still said";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15cu lifting plant:h35-relay-state leaves the removed sentence unsaid (FAIL 15co a relay invitation the relay refused because the team's lead removed this desk says a new invitation is needed: not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:h35-keep") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const ud = path.join(LAB, "h35-cancel-plant");
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), cancelSeed, "utf8");
+      const planted = loadDesk(ud, lines.join("\n"));
+      await planted.ask("etiuda:branch-identity", true);
+      ST.lsSet("eUiLang", "en");
+      await pageOn(planted);
+      await press("cancel");
+      const html = TJ.teamJoinEmptyHtml();
+      turned = html.indexOf(escPage(STAYS_EN)) < 0;
+      detail = turned ? "the stays sentence was absent" : "the stays sentence was still said";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    check(turned && same, "15cv lifting plant:h35-keep clears a cancel the relay has already accepted, so the stays sentence is absent (FAIL 15cp cancelling a join the relay has already accepted, through the shell, says the request stays: not said): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];

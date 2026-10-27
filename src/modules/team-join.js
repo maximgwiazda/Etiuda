@@ -132,6 +132,7 @@ function joinShown(j){
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
   if(j.stays===true) row.stays=true;
+  if(j.keeps===false) row.keeps=false;
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -399,16 +400,20 @@ function joinParts(){
       /* Claudette's words, 2026-10-27 01:23. */
       line:t("The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in."),
       body:meta, acts:[]};
+    /* Lead engineer's draft for the copywriter. */
+    if(j.keeps===false) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("This desk has left the team, so it no longer keeps what the invitation gave it. The request stays until the team's lead answers."),
+      body:meta, acts:[]};
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
   /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
-     this desk left. Cancel the request clears it. */
+     the team's lead removed this desk. Cancel the request clears it. */
   if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),
-    /* Claudette's words, 2026-10-27 01:23. */
-    line:t("This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one."),
+    /* Lead engineer's draft for the copywriter. */
+    line:t("This invitation was made before the team's lead removed this desk, so it no longer works. The team's lead can make a new one."),
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
@@ -431,8 +436,16 @@ function joinParts(){
   const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]];
   /* A team whose roster no longer lists this desk says so in place of the ask a desk never on it gets. */
   const gone=s?((joinNow&&joinNow.leads)||[]).filter(x=>x.team===s.team && x.removed)[0]:null;
-  if(gone) return {title:gone.lead?t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead):t("The team no longer includes this desk"),
-    line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
+  if(gone){
+    const title=gone.lead?t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead):t("The team no longer includes this desk");
+    let hushLine=false;
+    hushLine=gone.relayRemoved===true; /* plant:h35-hush-card */
+    /* Lead engineer's draft for the copywriter. */
+    if(hushLine) return {title:title,
+      line:t("This desk has stopped asking the relay. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
+      body:ask, acts:acts};
+    return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
+  }
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
     line:t("Once the team's lead lets this desk in, the catalog opens here by itself."), body:ask, acts:acts};
 }

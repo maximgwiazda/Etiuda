@@ -7650,10 +7650,14 @@ What you type stays in this browser only.`;
     "{LEAD}'s team no longer includes this desk": "To stanowisko nie należy już do zespołu osoby {LEAD}",
     "The team no longer includes this desk": "To stanowisko nie należy już do zespołu",
     "Once the team's lead lets this desk in again, the catalog opens here by itself.": "Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
-    /* Claudette's words, 2026-10-27 01:23. */
-    "This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one.": "To zaproszenie powstało, zanim to stanowisko opuściło zespół, więc już nie działa. Nowe może wystawić lider zespołu.",
+    /* Lead engineer's draft for the copywriter. The desk has stopped asking; the catalog opens by itself only once the lead lets it in again. */
+    "This desk has stopped asking the relay. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself.": "To stanowisko przestało pytać przekaźnik. Katalogi na nim zostają bez zmian. Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
+    /* Lead engineer's draft for the copywriter. The team's lead removed this desk; the invitation was not spent by the desk leaving. */
+    "This invitation was made before the team's lead removed this desk, so it no longer works. The team's lead can make a new one.": "To zaproszenie powstało, zanim lider zespołu usunął to stanowisko, więc już nie działa. Nowe może wystawić lider zespołu.",
     /* Claudette's words, 2026-10-27 01:23. */
     "The relay had already received this request, so it stays until the team's lead answers. This desk keeps what the invitation gave it, so a yes still lets it in.": "Przekaźnik przyjął już tę prośbę, więc zostaje ona do odpowiedzi lidera zespołu. Stanowisko zachowuje to, co dało mu zaproszenie, więc zgoda lidera nadal je wpuści.",
+    /* Lead engineer's draft for the copywriter. After Leave, the desk no longer keeps what the invitation gave. */
+    "This desk has left the team, so it no longer keeps what the invitation gave it. The request stays until the team's lead answers.": "To stanowisko opuściło zespół, więc nie zachowuje już tego, co dało mu zaproszenie. Prośba zostaje do odpowiedzi lidera zespołu.",
     /* Claudette's words, 2026-10-27 01:23. */
     "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.": "Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",
     "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
@@ -15069,6 +15073,7 @@ What you type stays in this browser only.`;
     };
     if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || ""), relay: String(j.invite.relay || "") };
     if (j.stays === true) row.stays = true;
+    if (j.keeps === false) row.keeps = false;
     return row;
   }
   function syncJoinDoor() {
@@ -15355,6 +15360,12 @@ What you type stays in this browser only.`;
         body: meta,
         acts: []
       };
+      if (j.keeps === false) return {
+        title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        line: t("This desk has left the team, so it no longer keeps what the invitation gave it. The request stays until the team's lead answers."),
+        body: meta,
+        acts: []
+      };
       return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         line: j.invite.relay ? t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.") : t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
@@ -15364,8 +15375,8 @@ What you type stays in this browser only.`;
     }
     if (j && j.invite && j.invite.relay && j.state === "removed") return {
       title: t("Join a team"),
-      /* Claudette's words, 2026-10-27 01:23. */
-      line: t("This invitation was made before this desk left the team, so it no longer works. The team's lead can make a new one."),
+      /* Lead engineer's draft for the copywriter. */
+      line: t("This invitation was made before the team's lead removed this desk, so it no longer works. The team's lead can make a new one."),
       body: '<div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead || "").trim() || t("the lead"))) + '</div><div class="e-join-meta">' + esc(t("Team: {TEAM}").split("{TEAM}").join(j.team)) + '</div><div class="e-join-meta">' + esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay)) + "</div>",
       acts: [["cancel", t("Cancel the request")], ["load", t("Load another catalog")]]
     };
@@ -15396,12 +15407,18 @@ What you type stays in this browser only.`;
     const ask = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
     const acts = [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]];
     const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
-    if (gone) return {
-      title: gone.lead ? t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead) : t("The team no longer includes this desk"),
-      line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."),
-      body: ask,
-      acts
-    };
+    if (gone) {
+      const title = gone.lead ? t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead) : t("The team no longer includes this desk");
+      let hushLine = false;
+      hushLine = gone.relayRemoved === true;
+      if (hushLine) return {
+        title,
+        line: t("This desk has stopped asking the relay. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
+        body: ask,
+        acts
+      };
+      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask, acts };
+    }
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),

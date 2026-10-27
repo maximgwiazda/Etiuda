@@ -334,7 +334,9 @@ function createCore(deps) {
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       store.put("devrev", b.rev);
       for (const [k, s] of store.list("ses:")) {
-        if (withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+        if (s.key && withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+        /* A key put back is on the team again. The session marked removed while it was off does not stay, so that bearer is no hello. */
+        else if (s.key && s.removed && next.has(s.key)) store.del(k); /* plant:readd-session */
         if (s.bound && next.has(s.bound)) store.del(k);
       }
       /* An invitation's session is held by no key of its own, so the key it binds is read from the session or the invitation:
