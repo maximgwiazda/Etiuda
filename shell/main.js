@@ -2992,11 +2992,13 @@ function heedTeam() {
   let changed = r.changed;
   if (r.team && teamPins[r.team]) {
     if (channel && channel.kind === "relay") {
+      /* The folder stays beside the host: readRingFile keys on it, so a relay team's folder never has its etiuda-ring.json
+         believed, a restart included. Settings shows the host (leadsView). */
       let host = "";
       try { host = new URL(channel.url).host; } catch { host = ""; }
-      if (host && ((teamShown[r.team] || {}).relay !== host || (teamShown[r.team] || {}).folder)) {
-        teamShown[r.team] = Object.assign({}, teamShown[r.team], { relay: host });
-        delete teamShown[r.team].folder;
+      const was = teamShown[r.team] || {};
+      if (was.folder !== root || (host && was.relay !== host)) {
+        teamShown[r.team] = Object.assign({}, was, { folder: root }, host ? { relay: host } : {}); /* plant:relay-shown-folder */
         changed = true;
       }
     } else if ((teamShown[r.team] || {}).folder !== root) {
@@ -3720,7 +3722,7 @@ function takeRelayInvite(parsed, name, me) {
   teamPinFrom[parsed.team] = "invite";
   let relayHost = "";
   try { relayHost = new URL(parsed.relay.url).host; } catch { relayHost = ""; }
-  teamShown[parsed.team] = Object.assign(relayHost ? { relay: relayHost } : {}, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
+  teamShown[parsed.team] = Object.assign({ folder: relayMirrorOf(parsed.relay.rt) }, relayHost ? { relay: relayHost } : {}, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
