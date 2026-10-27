@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 353;
+const EXPECTED = 354;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1337,6 +1337,25 @@ async function main() {
     const sw = await sweptWithdraw();
     check(sweptOk(sw), "995z a withdrawal after a sweep is not-enrolled, and after that lead makes the team again it is no-hello and the team carries no withdrawal: "
       + JSON.stringify(sw));
+    /* A withdrawal is a write. admit asks the lapse before the withdrawal, so once the team is read-only the deletion is refused
+       and the request stays. The session is opened while the team still works, inside the half hour a session lives. */
+    async function lapsedWithdraw() {
+      const w = await world();
+      w.R.clock.now = 60 * DAY - MIN;
+      const a = await asked(w);
+      const opened = w.R.clock.now;
+      w.R.clock.now = 60 * DAY;
+      const gone = a.ok ? await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 2)) : { status: 0, json: null };
+      const st = w.R.stores.get(w.rt);
+      const still = a.ok && st.get("blob:" + a.ask.id);
+      const row = a.ok ? inviteRow(w, a.id) : {};
+      const team = st.get("team") || {};
+      return { ok: a.ok, opened, gone: gone.json && gone.json.error || gone.status,
+        still: !!still && still.del !== true, withdrawn: row.withdrawn === true, state: C.lapseOf(team, w.R.clock.now).state };
+    }
+    const lapsedOk = x => x.ok && x.opened < 60 * DAY && x.state === "read-only" && x.gone === "team-lapsed" && x.still && !x.withdrawn;
+    const lw = await lapsedWithdraw();
+    check(lapsedOk(lw), "996a a withdrawal once the team is read-only is refused team-lapsed, and the request stays: " + JSON.stringify(lw));
   }
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {
