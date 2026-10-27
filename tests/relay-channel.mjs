@@ -3835,8 +3835,8 @@ try {
       check(withdrawB(e4), "995h after that withdrawal Ask again puts the request back in the lead's mirror, and the lead's yes then admits the desk with no new invitation: "
         + JSON.stringify(e4));
     } catch (e) {
-      check(false, "995g threw: " + (e && e.stack ? e.stack : e));
-      check(false, "995h threw");
+      check(false, "995gh threw, so 995g did not run: " + (e && e.stack ? e.stack : e));
+      check(false, "995gh threw, so 995h did not run");
     }
     try {
       const lifted = dropLine("plant:e4-not-joined")(mainNow);
