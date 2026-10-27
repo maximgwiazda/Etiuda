@@ -74,10 +74,16 @@ export const FLOOR = [
   { step: "test checkCatalogRoundTrip", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
 ];
 
+/* The test architect's named core for a product file gates-for maps to no leg, outside the relay (his role file; office
+   bcb48c64, 2026-10-28 00:03): seven node legs, about 65 s. It changes by his word only. */
 export const PRODUCT_CORE = [
   { step: "test", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
-  { step: "about", file: "tests/about.mjs", cmd: "node tests/about.mjs", args: [] },
-  { step: "pick", file: "tests/pick.mjs", cmd: "node tests/pick.mjs", args: [] },
+  { step: "team-join", file: "tests/team-join.mjs", cmd: "node tests/team-join.mjs", args: [] },
+  { step: "link-handler", file: "tests/link-handler.mjs", cmd: "node tests/link-handler.mjs", args: [] },
+  { step: "rollback-floor", file: "tests/rollback-floor.mjs", cmd: "node tests/rollback-floor.mjs", args: [] },
+  { step: "catalog-trust", file: "tests/catalog-trust.mjs", cmd: "node tests/catalog-trust.mjs", args: [] },
+  { step: "sellable", file: "tests/sellable.mjs", cmd: "node tests/sellable.mjs", args: [] },
+  { step: "catalog-sig", file: "tests/catalog-sig.js", cmd: "node tests/catalog-sig.js", args: [] },
 ];
 
 function refuse(what, how) {
