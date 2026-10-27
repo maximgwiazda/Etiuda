@@ -150,7 +150,7 @@ function headKept(h){
   return {edition:edition, published:published, t:h.t};
 }
 /* The lapse the shell judged for a relay team past its grant, or nothing: a team inside its grant sends none. */
-const LAPSE_STEPS=["grace","read-only","lapsed","gone"];
+const LAPSE_STEPS=["grace","read-only","lapsed","gone","unknown"];
 const instantOk=v=>v===null || Number.isSafeInteger(v);
 function lapseKept(v){
   if(!v || typeof v!=="object" || LAPSE_STEPS.indexOf(v.step)<0 || !instantOk(v.until) || !instantOk(v.readOnly) || !instantOk(v.swept)) return null;
@@ -172,6 +172,8 @@ function lapseWords(l){
   if(l.step==="lapsed") return {title:t("The team's relay has stopped"),
     body:[t("The licence or trial it came with has ended."), stay, kept("The relay keeps the team's copy until {DATE}."),
       t("The team's lead can start it again from Studio with a licence.")].filter(Boolean).join(" ")};
+  if(l.step==="unknown") return {title:t("The relay does not know the team just now"), /* plant:lapse-unknown-words */
+    body:t("The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.")};
   return {title:t("The relay no longer holds the team's copy"), body:[stay, t("If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.")].join(" ")};
 }
 /* The team's row in Settings says the title, for as long as the step lasts. */
