@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 121;
+const EXPECTED = 122;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2027,6 +2027,26 @@ try {
   check(matchCardsOk,
     "15dl after It does not match, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog: "
     + (matchCardsOk ? "all 3 states said" : "mismatched"));
+
+  // 15do: after Leave or It does not match, a withdrawal the relay refused because it no longer holds the request (a sweep, or
+  // past its keep) is said as that, never as withdrawn (the test architect's E5 on leave-while-waiting; Claudette's words, 21:11)
+  const statusUnkeptEn = "The relay no longer holds its request, so it could not be withdrawn there; the team's lead may still see it until it expires.";
+  const statusUnkeptPl = "Przekaźnik nie przechowuje już tej prośby, więc nie dało się jej tam wycofać; lider zespołu może ją jeszcze widzieć, dopóki nie wygaśnie.";
+  const deskU1 = await relayDesk("e5-leave-unkept", { unkept: true }, { teamLeft: { [relayTeam]: "2026-09-01T08:30:00.000Z" }, teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlU1 = await bothLang(deskU1);
+  await pageOn(deskU1);
+  const canJoinU1 = TJ.teamCanJoin();
+  const deskU2 = await relayDesk("e5-match-unkept", { unkept: true }, { teamBarred: [relayTeam], teamPins: {}, teamShown: {} });
+  const htmlU2 = await bothLang(deskU2);
+  await pageOn(deskU2);
+  const canJoinU2 = TJ.teamCanJoin();
+  const u1 = cardSaid(htmlU1, [leaveCauseEn, statusUnkeptEn, forwardEn].join(" "), [leaveCausePl, statusUnkeptPl, forwardPl].join(" "));
+  const u2 = cardSaid(htmlU2, [matchCauseEn, statusUnkeptEn, forwardEn].join(" "), [matchCausePl, statusUnkeptPl, forwardPl].join(" "));
+  const notLanded = htmlU1.en.indexOf(escPage(statusLandedEn)) < 0 && htmlU2.en.indexOf(escPage(statusLandedEn)) < 0;
+  const unkeptOk = u1 && u2 && notLanded && buttonsWork(htmlU1.en) && buttonsWork(htmlU2.en) && canJoinU1 && canJoinU2;
+  check(unkeptOk,
+    "15do after Leave or It does not match, a withdrawal the relay could not take, because it no longer holds the request, is said so and not as withdrawn: "
+    + "leave " + u1 + ", match " + u2 + ", not landed " + notLanded + ", can join " + (canJoinU1 && canJoinU2));
 
   // 15dm: while withdrawing after a forget or a leave, nothing that arrives is kept
   let arrivalChannelOpts = null;

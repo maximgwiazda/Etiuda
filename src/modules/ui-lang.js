@@ -1107,6 +1107,8 @@ UI_STRINGS.pl={
   "Its request is being withdrawn; the relay takes the withdrawal shortly, and until then the team's lead may still see it.":"Prośba jest wycofywana; przekaźnik wkrótce to odnotuje, a do tego czasu lider zespołu może ją jeszcze widzieć.",
   "Its request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request; if the relay clears the team's copy first, the request goes with it.":"Prośba jest wycofywana. Przekaźnik zespołu do czasu odnowienia działa tylko do odczytu, więc odnotuje wycofanie dopiero wtedy, a do tego czasu lider zespołu może ją jeszcze widzieć; jeśli przekaźnik wcześniej usunie kopię zespołu, prośba zniknie razem z nią.",
   "Its request is withdrawn, and the team's lead no longer sees it.":"Prośba została wycofana i lider zespołu już jej nie widzi.",
+  /* Claudette's words, 2026-10-27 21:11. */
+  "The relay no longer holds its request, so it could not be withdrawn there; the team's lead may still see it until it expires.":"Przekaźnik nie przechowuje już tej prośby, więc nie dało się jej tam wycofać; lider zespołu może ją jeszcze widzieć, dopóki nie wygaśnie.",
   "To join, a new invitation from the team's lead is needed.":"Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
   /* Claudette's words, 2026-10-27 01:23. */
   "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.":"Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",

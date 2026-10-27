@@ -402,6 +402,7 @@ function joinParts(){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
     const isLeft=j.left===true;
     const isDoubted=j.doubted===true;
+    /* Cause, status and way forward, joined: Claudette's words, 2026-10-27 20:05, and the unkept status 21:11. */
     if(isLeft || isDoubted){
       const cause=isLeft
         ? t("This desk has left the team and keeps nothing the invitation gave it.")
@@ -410,6 +411,8 @@ function joinParts(){
         ? t("Its request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request; if the relay clears the team's copy first, the request goes with it.")
         : j.withdrawing===true
         ? t("Its request is being withdrawn; the relay takes the withdrawal shortly, and until then the team's lead may still see it.")
+        : j.unkept===true /* plant:e5-unkept */
+        ? t("The relay no longer holds its request, so it could not be withdrawn there; the team's lead may still see it until it expires.")
         : t("Its request is withdrawn, and the team's lead no longer sees it.");
       const forward=t("To join, a new invitation from the team's lead is needed.");
       return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
