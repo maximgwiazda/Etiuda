@@ -2843,7 +2843,8 @@ try {
     + " folder, is never followed to the relay address it names: ring " + (ringPinned ? "pinned" : "no pin") + ", wrap " + (wrapPinned ? "pinned" : "no pin")
     + ", folder " + (E.api.catalogFolder() === share ? "the share" : E.api.catalogFolder()) + ", calls to the named address " + foreign.length);
 
-  /* The lead forgotten while a relay invitation waits: the request stays, and the desk goes back to its own folder. */
+  /* The lead forgotten while a relay invitation waits, before the lead has taken it: the relay holds nothing of this desk to
+     withdraw, so the request goes with the lead (leave-while-waiting), and the desk goes back to its own folder. */
   const shareF = path.join(LAB, "forget-share");
   fs.mkdirSync(shareF, { recursive: true });
   const F = newDesk("forget-desk", shareF);
@@ -2855,9 +2856,11 @@ try {
   await F.ask("etiuda:team-join", "forget", TEAM2);
   const leftFor = F.api.catalogFolder();
   const runF = F.api.relayRun();
-  check(!takenF.refused && onMirror && leftFor === shareF && !runF && !!F.envelope().teamJoin,
-    "942g a lead forgotten while a relay invitation waits takes the desk off the mirror back to its folder, and no channel runs, the"
-    + " request kept: on the mirror " + onMirror + ", then " + (leftFor === shareF ? "its folder" : leftFor) + ", channel " + (runF ? "running" : "none"));
+  const keptF = !!F.envelope().teamJoin;
+  check(!takenF.refused && onMirror && leftFor === shareF && !runF && !keptF,
+    "942g a lead forgotten while a relay invitation waits, before the lead has taken it, takes the desk off the mirror back to its"
+    + " folder, no channel runs, and the request goes with the lead: on the mirror " + onMirror + ", then "
+    + (leftFor === shareF ? "its folder" : leftFor) + ", channel " + (runF ? "running" : "none") + ", request " + (keptF ? "kept" : "gone"));
 
   /* Machine policy names a folder while a followed relay exists: the folder wins and no channel starts. */
   if (process.platform !== "win32") {
