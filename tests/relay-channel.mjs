@@ -20,10 +20,10 @@
  * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
  * other team's head is dropped and said. A folder team shows nothing new. A catch-up passes over a blob as the program's
  * own only where its own record shows it sent that id: a lead restored to a fresh profile catches up its team file and the
- * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched (970c), and
- * an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e) and, older than the last sent,
- * changes nothing (970f). A clock behind the relay still uploads once a superseded own blob has raised the counter (970o).
- * A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
+ * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched in the
+ * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
+ * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
+ * blob has raised the counter (970o). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
  * copy removed; a team inside its grant shows nothing, and no step removes anything from the desk (978). Throwaway keys and
  * invented words only;
@@ -50,7 +50,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 276;
+const EXPECTED = 277;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5366,7 +5366,8 @@ async function ownTwo(mod) {
   await a.ch.stop(); await b.ch.stop();
   return out;
 }
-/* A program's own upload, in its record, is not fetched again. */
+/* A program's own upload, in its record, is not fetched in the cycle that lists it. The cycle after that one lists
+   nothing new, so a count taken there stays at zero even when the record-based skip is gone. */
 async function ownRecorded(mod) {
   const { mk, teamText } = await ownSetup(mod);
   const lead = mk("own-s1");
@@ -5374,7 +5375,6 @@ async function ownRecorded(mod) {
   put(lead.mirror, "guide.ec", OWN_G1);
   lead.ch.start();
   await lead.ch.idle();
-  await once(lead);
   const since = lead.t.log.length;
   await once(lead);
   const after = lead.t.log.slice(since);
@@ -5509,7 +5509,13 @@ try {
     + ", edit " + t.edited + ", back " + t.back + ", live blobs " + t.chain);
   const k = await ownRecorded(C);
   check(k.listed && k.fetched === 0 && k.puts === 0 && k.guide === OWN_G1,
-    "970c a program's own upload, in its record, is listed on the next catch-up and not fetched, and nothing is sent or changed: listed " + k.listed + ", fetched " + k.fetched + ", uploads " + k.puts);
+    "970c a program's own upload, in its record, is listed in the next cycle and not fetched in that cycle, and nothing is sent or changed: listed " + k.listed + ", fetched " + k.fetched + ", uploads " + k.puts);
+  const skipPlant = await liftChannel("plant:own-skip", async mod => {
+    const x = await ownRecorded(mod);
+    return x.listed && x.fetched > 0;
+  });
+  check(skipPlant.turned && skipPlant.back, "970q lifting plant:own-skip fetches the program's own upload in the cycle that lists it, and the product file is never written: "
+    + skipPlant.detail + ", sha " + (skipPlant.back ? "restored" : "differs"));
   const e = await ownKeptRestore(C);
   check(e.mirror === OWN_G2 && e.team && e.puts === 1 && e.chain === 2 && e.relayHolds === OWN_G2,
     "970d an own blob fetched on a restored profile does not overwrite a newer edit already in its mirror: the edit stays, goes up once as the replacement of that blob, and a third profile reads it from the relay: mirror "
