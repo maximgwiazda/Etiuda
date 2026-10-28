@@ -67,6 +67,8 @@ function makeLab(kind, stubs, opts) {
   fs.mkdirSync(path.join(lab, "tests"), { recursive: true });
   fs.mkdirSync(runs);
   fs.copyFileSync(TOOL, path.join(lab, "tools", "gate-run.mjs"));
+  /* gate-run takes its lock through tools/machine-lock.mjs, so a lab carries it too. */
+  fs.copyFileSync(path.join(ROOT, "tools", "machine-lock.mjs"), path.join(lab, "tools", "machine-lock.mjs"));
   if (opts && opts.gatesFor && fs.existsSync(path.join(ROOT, "tools", "gates-for.mjs"))) {
     fs.copyFileSync(path.join(ROOT, "tools", "gates-for.mjs"), path.join(lab, "tools", "gates-for.mjs"));
   }
@@ -417,7 +419,8 @@ async function main() {
     + 'fs.writeFileSync(R + "' + rel + '", ' + JSON.stringify(text) + ');';
   const trRemoves = rel => 'fs.unlinkSync(R + "' + rel + '");';
 
-  /* 9a a quiet run carries the fingerprint, and both gates carry the same one. */
+  /* 9a a quiet run carries the fingerprint, and both gates carry the same one. A lab holds tools/machine-lock.mjs beside
+     gate-run since the lock moved there (2026-10-28), so its file counts are one more than before. */
   const trQuiet = makeLab("tree-quiet", { one: trStub(3), two: trStub(2) },
     { files: TR_FILES, git: true });
   const trQuietRun = run(trQuiet, ["one", "two"]);
@@ -425,7 +428,7 @@ async function main() {
   check(trQuietRun.exit === 0 && trQuietOne && trQuietTwo && trQuietOne.treeChanged === 0
     && trQuietTwo.treeChanged === 0 && trQuietOne.treeHow === TR_GIT_HOW
     && /^[0-9a-f]{16}$/.test(trQuietOne.treeHash) && trQuietOne.treeHash === trQuietTwo.treeHash
-    && trQuietOne.treeFiles === 6 && trQuietOne.gateExit === 0,
+    && trQuietOne.treeFiles === 7 && trQuietOne.gateExit === 0,
     "9a a run over a tree that did not move records one fingerprint for every gate: "
     + (trQuietOne && trQuietOne.treeHash) + " over " + (trQuietOne && trQuietOne.treeFiles)
     + " file(s) by " + JSON.stringify(trQuietOne && trQuietOne.treeHow) + ", treeChanged "
@@ -546,7 +549,7 @@ async function main() {
   const trIgnoredRun = run(trIgnored, ["scratch", "after"]);
   const trIgnoredGate = trIgnoredRun.byGate["tests-scratch"];
   check(trIgnoredRun.exit === 0 && trIgnoredGate && trIgnoredGate.treeChanged === 0
-    && trIgnoredGate.treeFiles === 6 && trIgnoredRun.files.length === 2,
+    && trIgnoredGate.treeFiles === 7 && trIgnoredRun.files.length === 2,
     "9f THE CONTROL: a gate writing into a path .gitignore covers moved nothing the guard is"
     + " looking at - exit " + trIgnoredRun.exit + ", treeChanged "
     + (trIgnoredGate && trIgnoredGate.treeChanged) + " over "
@@ -565,7 +568,7 @@ async function main() {
   const trWalkQuiet = trWalkRun.byGate["tests-quiet"];
   const trWalkMoved = trWalkRun.byGate["tests-mutate"];
   check(trWalkRun.exit === 78 && trWalkQuiet && trWalkQuiet.treeHow === TR_WALK_HOW
-    && trWalkQuiet.treeChanged === 0 && trWalkQuiet.treeFiles === 7 && trWalkMoved
+    && trWalkQuiet.treeChanged === 0 && trWalkQuiet.treeFiles === 8 && trWalkMoved
     && trWalkMoved.treeHow === TR_WALK_HOW && trWalkMoved.treeChanged === 1
     && trWalkMoved.counts.exitCode === 78 && trWalkMoved.gateExit === 0
     && !trWalkRun.byGate["tests-after"],
@@ -933,7 +936,7 @@ async function main() {
     pid: 99999999, host: os.hostname(), tree: lockLab.lab, what: "stale-run", since: new Date(Date.now() - 7 * 3600000).toISOString()
   }) + "\n");
   const staleRun = run(lockLab, ["heavy"], null, { ETIUDA_LOCK_PATH: lockPath, ETIUDA_HEAVY: "1" });
-  check(staleRun.out.indexOf("took over stale lock") >= 0 && staleRun.exit === 0,
+  check(staleRun.out.indexOf("took over a stale lock") >= 0 && staleRun.exit === 0,
     "13b a stale lock whose pid is dead is taken over and the log names the takeover: "
     + staleRun.out.trim().split(/\r?\n/).filter(l => /lock/i.test(l)).join(" | "));
 
@@ -941,18 +944,17 @@ async function main() {
     pid: 99999999, host: os.hostname(), tree: lockLab.lab, what: "recent-dead-run", since: new Date(Date.now() - 3600000).toISOString()
   }) + "\n");
   const recentDeadRun = run(lockLab, ["heavy"], null, { ETIUDA_LOCK_PATH: lockPath, ETIUDA_HEAVY: "1", ETIUDA_LOCK_TIMEOUT_MS: "500" });
-  check(recentDeadRun.exit === 78 && recentDeadRun.out.indexOf("could not acquire machine lock") >= 0
-    && recentDeadRun.out.indexOf("took over") < 0,
-    "13d a dead pid under 6h ceiling is not stale and not taken over: exit " + recentDeadRun.exit);
+  check(recentDeadRun.exit === 0 && recentDeadRun.out.indexOf("took over a stale lock") >= 0,
+    "13d a dead holder an hour old is taken over at once, whatever its age: exit " + recentDeadRun.exit);
 
   const gr = await import("../tools/gate-run.mjs");
   const hasStaleFn = typeof gr.isLockStale === "function";
-  const deadRecent = hasStaleFn && !gr.isLockStale({ pid: 99999999, since: new Date(Date.now() - 3600000).toISOString() });
-  const deadOld = hasStaleFn && gr.isLockStale({ pid: 99999999, since: new Date(Date.now() - 7 * 3600000).toISOString() });
+  const deadRecent = hasStaleFn && gr.isLockStale({ pid: 99999999, since: new Date(Date.now() - 3600000).toISOString() });
   const liveOld = hasStaleFn && !gr.isLockStale({ pid: process.pid, since: new Date(Date.now() - 10 * 3600000).toISOString() });
-  check(hasStaleFn && deadRecent && deadOld && liveOld,
-    "13e the lock's tasklist rule, using a scratch lock path: stale only when tasklist finds no process and start time is past 6h: "
-    + (hasStaleFn ? "deadRecent=" + deadRecent + " deadOld=" + deadOld + " liveOld=" + liveOld : "isLockStale not exported"));
+  const reused = hasStaleFn && gr.isLockStale({ pid: process.pid, started: "2001-01-01T00:00:00.0000000Z", since: new Date().toISOString() });
+  check(hasStaleFn && deadRecent && liveOld && reused,
+    "13e stale only when no process has the holder's pid with its creation time: "
+    + (hasStaleFn ? "deadRecent=" + deadRecent + " liveOld=" + liveOld + " reusedPid=" + reused : "isLockStale not exported"));
 
   try { fs.unlinkSync(lockPath); } catch (e) {}
   const waitRun = run(lockLab, ["wait-lock"], null, { ETIUDA_LOCK_PATH: lockPath });

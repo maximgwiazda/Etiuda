@@ -17,6 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { acquire as takeLock, release as freeLock, holderAlive } from "./machine-lock.mjs";
 
 async function loadGatesFor() {
   try {
@@ -49,6 +50,7 @@ export const RELEASE_ONLY_LEGS = [
   "tests/engine-selftest.js",
   "tests/leg-ids.js",
   "tests/result-line.mjs",
+  "tests/machine-lock.mjs",
   "tests/sbom.mjs",
   "tests/text-scan-selftest.js",
 ];
@@ -58,6 +60,7 @@ export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/leg-ids.js", args: [], cmd: "node tests/leg-ids.js" },
   { script: "nightly", file: "tests/engine-selftest.js", args: [], cmd: "node tests/engine-selftest.js" },
   { script: "nightly", file: "tests/result-line.mjs", args: [], cmd: "node tests/result-line.mjs" },
+  { script: "nightly", file: "tests/machine-lock.mjs", args: [], cmd: "node tests/machine-lock.mjs" },
   { script: "nightly", file: "tests/text-scan-selftest.js", args: [], cmd: "node tests/text-scan-selftest.js" },
   { script: "nightly", file: "tests/sbom.mjs", args: [], cmd: "node tests/sbom.mjs" },
 ];
@@ -114,120 +117,25 @@ function mainTree() {
   return path.basename(common) === ".git" ? path.dirname(path.resolve(common)) : ROOT;
 }
 
-export const LOCK_STALE_CEILING_MS = 6 * 3600 * 1000;
-
-export function isPidAlive(pid) {
-  if (!pid || typeof pid !== "number") return false;
-  try {
-    if (process.platform === "win32") {
-      const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      return out.indexOf(String(pid)) >= 0;
-    }
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return e.code === "EPERM";
-  }
-}
-
-export function isLockStale(existing, ceilingMs = LOCK_STALE_CEILING_MS) {
-  if (!existing || typeof existing !== "object") return true;
-  const pid = existing.pid;
-  if (!pid) return true;
-  const since = existing.since ? new Date(existing.since).getTime() : 0;
-  const age = Date.now() - since;
-  if (age < ceilingMs) {
-    return false;
-  }
-  return !isPidAlive(pid);
+/* The lock is tools/machine-lock.mjs's: the holder is a PID with its process creation time, stale only when no process has
+   that pair, age a warning only (rule 13; agreed by the test architect and Claude beta, 2026-10-28 00:46). These keep
+   gate-run's own names. */
+export function isLockStale(existing) {
+  return !holderAlive(existing);
 }
 
 let heldLockPath = null;
 
 export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, waitTimeoutMs = 300000) {
-  const dir = path.dirname(lockPath);
-  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
-
-  const startWait = Date.now();
-  let reported30m = false;
-
-  while (true) {
-    const payload = JSON.stringify({
-      pid: process.pid,
-      host: os.hostname(),
-      tree,
-      what,
-      since: new Date().toISOString(),
-    }) + "\n";
-
-    try {
-      fs.writeFileSync(lockPath, payload, { flag: "wx" });
-      heldLockPath = lockPath;
-      return { ok: true, staleTakenOver: false };
-    } catch (e) {
-      if (e && e.code === "EEXIST") {
-        let existing = null;
-        try {
-          existing = JSON.parse(fs.readFileSync(lockPath, "utf8"));
-        } catch {
-          existing = null;
-        }
-
-        const stale = isLockStale(existing);
-        if (stale) {
-          try { fs.unlinkSync(lockPath); } catch {}
-          try {
-            fs.writeFileSync(lockPath, payload, { flag: "wx" });
-            heldLockPath = lockPath;
-            console.log("gate-run: took over stale lock from pid " + (existing ? existing.pid : "unknown"));
-            return { ok: true, staleTakenOver: true };
-          } catch {
-            /* retry */
-          }
-        } else {
-          if (waitTimeoutMs <= 0) {
-            return {
-              ok: false,
-              heldBy: existing,
-              reason: "lock held by pid " + (existing ? existing.pid : "unknown") + " (" + (existing ? existing.what : "") + " since " + (existing ? existing.since : "") + ")",
-            };
-          }
-          const now = Date.now();
-          if (now - startWait > waitTimeoutMs) {
-            return {
-              ok: false,
-              heldBy: existing,
-              reason: "timed out waiting for lock held by pid " + (existing ? existing.pid : "unknown"),
-            };
-          }
-          if (now - startWait >= 30 * 60 * 1000 && !reported30m) {
-            console.log("gate-run: waiting for machine lock held by pid " + (existing ? existing.pid : "unknown")
-              + " for " + (existing ? existing.what : "") + " on " + (existing ? existing.tree : "") + " since " + (existing ? existing.since : ""));
-            reported30m = true;
-          }
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
-        }
-      } else {
-        throw e;
-      }
-    }
-  }
+  const r = takeLock({ lockPath, what, tree, waitMs: waitTimeoutMs, say: (l) => console.log(l.replace(/^machine-lock:/, "gate-run:")) });
+  if (r.ok) heldLockPath = lockPath;
+  return { ok: r.ok, staleTakenOver: !!r.takenOver, heldBy: r.heldBy, reason: r.ok ? "" : (r.reason.indexOf("held by") >= 0 && waitTimeoutMs > 0
+    ? "timed out waiting for " + r.reason : r.reason) };
 }
 
 export function releaseLock(lockPath = heldLockPath || LOCK_PATH) {
   if (!lockPath) return;
-  try {
-    if (fs.existsSync(lockPath)) {
-      let existing = null;
-      try { existing = JSON.parse(fs.readFileSync(lockPath, "utf8")); } catch { existing = null; }
-      if (!existing || existing.pid === process.pid) {
-        fs.unlinkSync(lockPath);
-      }
-    }
-  } catch (e) {}
+  freeLock({ lockPath });
   if (heldLockPath === lockPath) heldLockPath = null;
 }
 
@@ -376,6 +284,7 @@ export async function planAreaRun(root, changed, pkg) {
     }
   }
 
+  /* sellable is not here: it guards a floor property and stays at every merge it reaches (the test architect's guard, 2026-10-27 23:03). */
   const GENERIC_SCANNERS = new Set([
     "tests/chain-split.mjs",
     "tests/engine-selftest.js",
@@ -384,7 +293,6 @@ export async function planAreaRun(root, changed, pkg) {
     "tests/log-hygiene-selftest.js",
     "tests/result-line.mjs",
     "tests/sbom.mjs",
-    "tests/sellable.mjs",
     "tests/text-scan-selftest.js",
   ]);
 
