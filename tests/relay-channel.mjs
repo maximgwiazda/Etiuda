@@ -23,7 +23,9 @@
  * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched in the
  * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
  * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
- * blob has raised the counter (970o). An invitation upload whose reply was lost is counted as sent when the retry is
+ * blob has raised the counter (970o). An answer the list does not serve can raise the same floor, and a second program
+ * whose clock is behind that counter is still refused on its next cycle (970r, red until that is fixed). An invitation
+ * upload whose reply was lost is counted as sent when the retry is
  * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
  * is admitted (966h). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
@@ -52,7 +54,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 283;
+const EXPECTED = 284;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5564,6 +5566,69 @@ try {
     + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
+}
+
+/* The lead's answer is not on the list (relay/core.cjs since drops an answer place). Its counter still raises the
+   writer's floor. A second program on the same key, its clock behind that counter, learns only the counters the list
+   serves. 970o is taken on the first upload because the high counter is on a blob the catch-up opens. Here the first
+   upload and the next cycle are both refused, and the file stays owed. */
+async function answerFloor(mod) {
+  const low = 1000, high = 10000000;
+  let clock = low;
+  const teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const box = boxPair();
+  const a = opened(mod, "ans-a-" + tag, tm, LEAD, "root", {
+    clock: () => clock, agree: () => Buffer.alloc(32, 7), keyFor: () => teamKey, sealEpoch: () => 1,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: box.pub }),
+  });
+  let b = null;
+  const out = { ans: null, teamCounter: 0, floor: 0, ownAtCatch: 0, tookFirst: false, tookSecond: false, said: [] };
+  try {
+    put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+    a.ch.start();
+    await a.ch.idle();
+    await once(a);
+    const sentTeam = a.prog.state().sent[C.TEAM_NAME];
+    out.teamCounter = sentTeam ? sentTeam.counter : 0;
+    clock = high;
+    out.ans = await a.ch.writeAnswer({ inv: hex(16), deskId: "k-" + "ab".repeat(8), deskBox: "cd".repeat(32),
+      leadBox: box.pub, answer: "joined" });
+    const counters = relayStore(tm.rt).get("counters") || {};
+    out.floor = Number(counters["c\n" + LEAD.keyId + "\n1"]) || 0;
+    await a.ch.stop();
+    b = opened(mod, "ans-b-" + tag, tm, LEAD, "root", {
+      clock: () => low, keyFor: () => teamKey, sealEpoch: () => 1,
+    });
+    b.ch.start();
+    await b.ch.idle();
+    out.ownAtCatch = b.prog.state().own;
+    put(b.mirror, "second.ec", "a file the second program writes\n");
+    await once(b);
+    const first = b.prog.state().sent["second.ec"];
+    out.tookFirst = !!(first && first.counter > out.floor);
+    await once(b);
+    const second = b.prog.state().sent["second.ec"];
+    out.tookSecond = !!(second && second.counter > out.floor);
+    out.said = b.said.slice();
+  } finally {
+    try { await a.ch.stop(); } catch { /* already stopped */ }
+    if (b) try { await b.ch.stop(); } catch { /* already stopped */ }
+  }
+  return out;
+}
+try {
+  const c = await answerFloor(C);
+  const replay = c.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  check(c.ans && c.ans.ok === true && c.floor > c.teamCounter && c.ownAtCatch >= c.teamCounter && c.ownAtCatch < c.floor && c.tookFirst,
+    "970r two programs on one key, the floor raised by an answer the list does not serve: the second program's clock is behind that counter, the catch-up raises own only as far as a listed blob, and its upload is taken on the first cycle: answer "
+    + (c.ans && c.ans.ok ? "written" : (c.ans && c.ans.reason) || "none")
+    + ", team counter " + c.teamCounter + ", floor " + c.floor + ", own after the catch-up " + c.ownAtCatch
+    + ", first cycle " + (c.tookFirst ? "taken" : "refused") + ", next cycle " + (c.tookSecond ? "taken" : "refused")
+    + (replay ? ", said replay-counter" : ""));
+} catch (e) {
+  check(false, "harness (the leg 970r): " + (e && e.stack ? e.stack : e));
 }
 
 /* An invitation's one upload whose reply never came back. The next cycle is told the token is spent, which is that upload
