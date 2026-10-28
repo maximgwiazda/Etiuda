@@ -224,7 +224,7 @@ function createTarget(limits) {
     if (!privateKey) return { ok: true, token: null, held: false };
     const ch = challenge({ relayTeamId: rt });
     if (!ch.nonce) return ch;
-    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: keyId,
+    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: keyId, pub: keyId,
       sig: sign(privateKey, C.helloBytes(rt, ch.nonce, keyId)) } });
     if (r.status !== 200) return refusalOf(r);
     sessions.set(rt + ":" + keyId, { token: r.json.session, until: r.json.until });

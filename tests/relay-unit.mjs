@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 360;
+const EXPECTED = 418;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -138,7 +138,7 @@ async function helloAs(w, key, o) {
   const nonce = opts.nonce || await challenge(w, rt);
   const sig = opts.sig !== undefined ? opts.sig : signHex(opts.signer || key, C.helloBytes(opts.signedRt || rt, nonce, key.keyId));
   const body = { challenge: nonce, key: key.keyId, sig };
-  if (opts.pub) body.pub = opts.pub;
+  if (!opts.omitPub) body.pub = opts.pub || key.pub;
   return call(w.R, "POST", "/relay/v1/t/" + rt + "/session", { json: body });
 }
 async function tokenHello(w, inv, token, nonce, key) {
@@ -169,6 +169,16 @@ const getBlob = (w, token, id) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/b/"
 const socket = (w, token, o) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/socket", Object.assign({ token }, o || {}));
 const dumpText = w => JSON.stringify(w.R.stores.get(w.rt).dump());
 const sessionRemoved = (w, keyId) => w.R.stores.get(w.rt).list("ses:").some(([, s]) => !!(s && s.removed === true && s.key === keyId));
+/* How many times the signature primitive runs during one call. Restored before the next check. */
+async function withVerifyCount(fn) {
+  const real = crypto.verify;
+  let n = 0;
+  crypto.verify = function () { n += 1; return real.apply(this, arguments); };
+  try {
+    const r = await fn();
+    return { n, r };
+  } finally { crypto.verify = real; }
+}
 const sent = (w, id) => { const ws = w.R.hubs.get(w.rt).byId(id); return ws ? ws.sent.map(m => JSON.parse(m)) : null; };
 const wsOf = (w, id) => { for (const hub of w.R.hubs.values()) { const f = hub.open.concat([]).find(s => s.id === id); if (f) return f; } return null; };
 
@@ -270,8 +280,8 @@ async function main() {
     const text = dumpText(w);
     const team = w.R.stores.get(w.rt).get("team");
     check(!!team && team.rt === w.rt && team.lead.keyId === w.lead.keyId && team.lead.pub === w.lead.pub
-      && Object.keys(team).sort().join() === "epoch,lead,made,paid,rt,until" && /^[0-9a-f]{16}$/.test(team.made),
-      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor, the grant's until and paid and the copy's stamp only");
+      && Object.keys(team).sort().join() === "epoch,lead,made,paid,rt,secret,until" && /^[0-9a-f]{16}$/.test(team.made),
+      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor, the grant's until and paid, the copy's stamp and the team's secret");
     const v = { R: relayEnv(), rt: hex(16), lead: keyPair(false) };
     const marker = "TeamName" + hex(4);
     const named = await create(v, v.lead, 0, { name: marker, teamId: marker });
@@ -325,6 +335,16 @@ async function main() {
     for (let i = 0; i < 1001; i++) { const k = keyPair(false); many.push({ id: k.keyId, pub: k.pub, desk: "k-" + i.toString(16).padStart(6, "0") }); }
     const full = await devices(w, many);
     check(refused(full, "team-size") && w.rev === 1, "3f more than 1000 enrolled keys are refused");
+    const devStale = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+      keys: w.devs, rev: w.rev + 1, t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+    check(refused(devStale.r, "nonce-stale") && devStale.n === 0,
+      "934h a devices call more than 5 minutes old, signed with garbage, is refused nonce-stale and the signature is not checked: "
+      + (devStale.r.json && devStale.r.json.error) + ", verify " + devStale.n);
+    const unsignedRev = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+      keys: w.devs, rev: w.rev, t: w.R.clock.now, sig: "ab".repeat(64) } });
+    check(refused(unsignedRev, "bad-signature"),
+      "936c a devices call at the stored rev, signed with garbage, is a bad signature: "
+      + (unsignedRev.json && unsignedRev.json.error));
 
     const lead = await sessionOf(w, w.lead), deskS = a.json.session, otherS = b.json.session;
     const up = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
@@ -363,6 +383,20 @@ async function main() {
     check(refused(forged, "bad-signature"), "4b invitations signed by a desk are refused");
     const stale = await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], [], { t: w.R.clock.now - 5 * MIN - 1 });
     check(refused(stale, "nonce-stale"), "4c invitations more than 5 minutes old are refused");
+    const invStale = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+      add: [{ id: hex(16), hash: sha(hex(32)) }], drop: [], t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+    check(refused(invStale.r, "nonce-stale") && invStale.n === 0,
+      "934i an invitations call more than 5 minutes old, signed with garbage, is refused nonce-stale and the signature is not checked: "
+      + (invStale.r.json && invStale.r.json.error) + ", verify " + invStale.n);
+    const unsignedW = await world();
+    const addUnsigned = [{ id: hex(16), hash: sha(hex(32)) }];
+    const tUnsigned = unsignedW.R.clock.now;
+    const storedUnsigned = await invites(unsignedW, addUnsigned, [], { t: tUnsigned });
+    const replayUnsigned = await call(unsignedW.R, "POST", "/relay/v1/t/" + unsignedW.rt + "/invites", { json: {
+      add: addUnsigned, drop: [], t: tUnsigned, sig: "ab".repeat(64) } });
+    check(storedUnsigned.status === 200 && refused(replayUnsigned, "bad-signature"),
+      "936e an invitations call already stored, sent again with a garbage signature, is a bad signature: "
+      + (replayUnsigned.json && replayUnsigned.json.error));
     const add2 = [{ id: hex(16), hash: sha(hex(32)) }];
     const first = await invites(w, add2, []);
     const replayed = await invites(w, add2, []);
@@ -393,22 +427,97 @@ async function main() {
     check(shapes.every(r => refused(r, "bad-signature")), "4h an invitation or a drop out of shape is refused");
   }
 
+  /* ---- 934 sockets, a paged prune and spent markers kept out of the scans ---- */
+  {
+    const w = await world();
+    const deskS = await sessionOf(w, w.desk);
+    const first = await socket(w, deskS);
+    const ws1 = wsOf(w, first.socket);
+    const second = await socket(w, deskS);
+    const ws2 = wsOf(w, second.socket);
+    check(!!ws1 && !!ws1.closed && ws1.closed.code === 4400 && ws1.closed.reason === "replaced" && !!ws2 && !ws2.closed,
+      "934l a second socket on one session closes the first, reason replaced: "
+      + (ws1 && ws1.closed ? ws1.closed.code + " " + ws1.closed.reason : "open"));
+    const live = await socket(w, await sessionOf(w, w.other));
+    const big = wsOf(w, live.socket);
+    await w.R.object(w.rt).webSocketMessage(big, "x".repeat(257));
+    check(!!big && !!big.closed && big.closed.code === 4400 && big.sent.length === 0,
+      "934m a frame of 257 bytes closes the socket before it is parsed: " + (big && big.closed && big.closed.code) + ", sent " + (big && big.sent.length));
+    const who = await sessionOf(w, w.lead);
+    const sub = await socket(w, who);
+    const heldWs = wsOf(w, sub.socket);
+    w.R.clock.now = C.SESSION_MS + 1;
+    const rang = await w.R.ring(w.rt);
+    check(rang === true && !!heldWs && !!heldWs.closed && heldWs.closed.code === 4401,
+      "934n the alarm closes a socket whose session has ended: rang " + rang + ", code " + (heldWs && heldWs.closed && heldWs.closed.code));
+    const box = w.R.stores.get(w.rt);
+    const future = String(10 * DAY).padStart(16, "0");
+    for (let i = 0; i < 10000; i++) box.put("kx:" + future + ":" + i.toString(16).padStart(32, "0"), "tomb");
+    let kxRows = 0;
+    const realList = box.list.bind(box);
+    box.list = (prefix, opts) => {
+      const rows = realList(prefix, opts);
+      if (prefix === "kx:") kxRows += rows.length;
+      return rows;
+    };
+    await since(w, await sessionOf(w, w.lead));
+    check(kxRows === 256, "934o prune over 10000 future kx rows reads one page: " + kxRows);
+    const m = await world();
+    const mb = m.R.stores.get(m.rt);
+    for (let i = 0; i < 1000; i++) mb.put("inv:" + i.toString(16).padStart(32, "0"), { spent: true });
+    await since(m, await sessionOf(m, m.lead));
+    let markerRows = 0;
+    const bare = v => !!(v && v.spent === true && v.spentAt === undefined && v.hash === undefined);
+    const real2 = mb.list.bind(mb), realGet = mb.get.bind(mb);
+    mb.list = (prefix, opts) => {
+      const rows = real2(prefix, opts);
+      if (prefix === "inv:" || prefix === "sp:") markerRows += rows.filter(([, v]) => bare(v)).length;
+      return rows;
+    };
+    mb.get = k => {
+      const v = realGet(k);
+      if (typeof k === "string" && k.indexOf("sp:") === 0 && bare(v)) markerRows += 1;
+      return v;
+    };
+    await invites(m, [{ id: hex(16), hash: sha(hex(32)) }], []);
+    await call(m.R, "GET", "/relay/v1/t/" + m.rt + "/states", { token: await sessionOf(m, m.lead) });
+    await helloAs(m, keyPair(true));
+    check(markerRows === 0, "934q invites, states and a key hello read none of a thousand spent markers: " + markerRows);
+  }
+
   /* ---- 5: challenges ---- */
   {
     const w = await world();
     w.R.clock.now = 1000;
+    const bare = w.R.stores.get(w.rt).get("team");
+    delete bare.secret;
+    w.R.stores.get(w.rt).put("team", bare);
     const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} });
+    const secret = (w.R.stores.get(w.rt).get("team") || {}).secret;
+    const second = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} });
     check(r.status === 200 && /^[0-9a-f]{32}$/.test(r.json.challenge) && r.json.until === 1000 + 5 * MIN
-      && Object.keys(r.json).sort().join() === "challenge,until", "5a a challenge is 16 random bytes in hex, living 5 minutes");
+      && Object.keys(r.json).sort().join() === "challenge,until" && w.R.stores.get(w.rt).list("ch:").length === 0
+      && /^[0-9a-f]{64}$/.test(secret) && (w.R.stores.get(w.rt).get("team") || {}).secret === secret && second.status === 200,
+      "5a a challenge is 32 hex characters, living 5 minutes, not kept as a ch: row, and a team with no secret is given one once");
     const nobody = hex(16);
     const none = await call(w.R, "POST", "/relay/v1/t/" + nobody + "/hello", { json: {} });
     const keptNothing = !w.R.stores.get(nobody) || w.R.stores.get(nobody).dump().length === 0;
     check(refused(none, "not-enrolled") && keptNothing, "5b a challenge for a team never made is refused, and nothing is kept for it");
     const firstNonce = await challenge(w);
-    for (let i = 0; i < 256; i++) await challenge(w);
-    const live = w.R.stores.get(w.rt).list("ch:").length;
-    const oldest = await helloAs(w, w.desk, { nonce: firstNonce });
-    check(live === 256 && refused(oldest, "hello-replay"), "5c past 256 live challenges the oldest is let go: " + live + " kept");
+    for (let i = 0; i < 1000; i++) await challenge(w);
+    const opened = await helloAs(w, w.desk, { nonce: firstNonce });
+    const box = w.R.stores.get(w.rt);
+    box.put("ch:" + "ab".repeat(16), { at: 1, n: 1 });
+    await since(w, opened.json && opened.json.session);
+    check(opened.status === 200 && box.list("ch:").length === 0,
+      "5c the stored challenge cap is gone: a stranger's thousand challenge requests leave the first challenge able to open a session, and a left-over ch: row is dropped at the next prune: "
+      + opened.status + " " + (opened.json && opened.json.error));
+    const n = await challenge(w);
+    const flipped = n.slice(0, -1) + (n.endsWith("0") ? "1" : "0");
+    const forged = await helloAs(w, w.desk, { nonce: flipped });
+    const honest = await helloAs(w, w.desk, { nonce: n });
+    check(refused(forged, "hello-replay") && honest.status === 200,
+      "5d a challenge whose mac does not hold is refused, and the challenge itself still opens: " + (forged.json && forged.json.error));
   }
 
   /* ---- 6: a session by key ---- */
@@ -452,10 +561,32 @@ async function main() {
       "6i a removed key's hello unsigned, forged, zeroed or under a named key is a bad signature, and only a genuine one says removed");
     const v = await world();
     const firstS = await sessionOf(v, v.other);
-    for (let i = 0; i < 1024; i++) { v.R.clock.now += 1; await sessionOf(v, v.other); }
+    for (let i = 0; i < 1024; i++) {
+      /* Spent challenges are capped at 256 while they are inside their five minutes. Step past that life every 256 hellos so those rows drop, and every session, which lasts 30 minutes, stays. */
+      if (i % 256 === 255) v.R.clock.now += C.CHALLENGE_MS + 1;
+      else v.R.clock.now += 1;
+      await sessionOf(v, v.other);
+    }
     const liveS = v.R.stores.get(v.rt).list("ses:").length;
     const evicted = await since(v, firstS);
     check(liveS === 1024 && refused(evicted, "no-hello"), "6j past 1024 live sessions the one nearest its end is let go: " + liveS + " kept");
+    const knownBad = await helloAs(w, w.desk, { sig: "ab".repeat(64) });
+    const unknownKey = keyPair(true);
+    const unknownBad = await helloAs(w, unknownKey, { sig: "ab".repeat(64) });
+    check(refused(knownBad, "bad-signature") && refused(unknownBad, "bad-signature") && knownBad.json.said === unknownBad.json.said,
+      "6k a known key and an unknown key, each with a signature that does not hold, are answered alike: "
+      + (knownBad.json && knownBad.json.error) + ", " + (unknownBad.json && unknownBad.json.error));
+    const otherPub = keyPair(false);
+    const mismatched = await helloAs(w, w.desk, { pub: otherPub.pub });
+    const bare = await helloAs(w, w.desk, { omitPub: true });
+    check(refused(mismatched, "bad-signature") && refused(bare, "bad-signature"),
+      "6l a public half that is not the key's, and a hello with no public half, are each a bad signature: "
+      + (mismatched.json && mismatched.json.error) + ", " + (bare.json && bare.json.error));
+    const own = await helloAs(w, unknownKey);
+    check(refused(own, "not-enrolled"), "6m an unknown key whose signature holds is not enrolled: " + (own.json && own.json.error));
+    await devices(w, w.devs.slice(1));
+    const goneOk = await helloAs(w, w.desk);
+    check(refused(goneOk, "removed"), "6n a removed key whose signature holds is removed: " + (goneOk.json && goneOk.json.error));
   }
 
   /* ---- 7: a session by invitation ---- */
@@ -473,13 +604,94 @@ async function main() {
       "7b a wrong token, or the stored hash presented as the token, is refused, and the right token still opens");
     const t3 = hex(32), id3 = hex(16);
     await invites(w, [{ id: id3, hash: sha(t3) }], []);
+    const attacker = keyPair(true);
     let twentieth = null;
-    for (let i = 1; i <= 20; i++) twentieth = await tokenHello(w, id3, "wrong-" + i);
-    const locked = await tokenHello(w, id3, t3);
-    check(refused(twentieth, "not-enrolled") && refused(locked, "token-tries"),
-      "7c after 20 wrong tokens the right one is refused as tried too many times, and the twentieth was still a wrong token");
+    for (let i = 1; i <= 20; i++) twentieth = await tokenHello(w, id3, "wrong-" + i, null, attacker);
+    const locked = await tokenHello(w, id3, "wrong-21", null, attacker);
+    const otherKey = await tokenHello(w, id3, t3);
+    check(refused(twentieth, "not-enrolled") && refused(locked, "token-tries") && otherKey.status === 200,
+      "7c twenty wrong tokens from one key are still a wrong token, the twenty-first locks that key only, and another key's right token still binds: "
+      + (twentieth.json && twentieth.json.error) + ", " + (locked.json && locked.json.error) + ", other " + otherKey.status);
     const stray = await tokenHello(w, hex(16), t3);
     check(refused(stray, "not-enrolled"), "7d an invitation the relay does not hold opens nothing");
+    const tTry = hex(32), idTry = hex(16), whoTry = keyPair(true);
+    await invites(w, [{ id: idTry, hash: sha(tTry) }], []);
+    const nonceTry = await challenge(w);
+    const wrongTry = await tokenHello(w, idTry, "nope", nonceTry, whoTry);
+    const reused = await tokenHello(w, idTry, tTry, nonceTry, whoTry);
+    check(refused(wrongTry, "not-enrolled") && refused(reused, "hello-replay"),
+      "7g a wrong token spends its challenge, so the same challenge cannot then bind: "
+      + (wrongTry.json && wrongTry.json.error) + ", " + (reused.json && reused.json.error));
+    const tMany = hex(32), idMany = hex(16);
+    await invites(w, [{ id: idMany, hash: sha(tMany) }], []);
+    for (let i = 0; i < 65; i++) await tokenHello(w, idMany, "nope-" + i);
+    const manyRows = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
+    const sixtySixth = await tokenHello(w, idMany, tMany);
+    const droppedMany = await invites(w, [], [idMany]);
+    const leftMany = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
+    check(manyRows === 64 && sixtySixth.status === 200 && droppedMany.status === 200 && leftMany === 0,
+      "7h sixty-five keys' wrong tries leave 64 rows, the sixty-sixth key's right token still binds, and dropping the invitation leaves no try row: "
+      + manyRows + " rows, bind " + sixtySixth.status + ", left " + leftMany);
+    const capW = await world();
+    const tCap = hex(32), idCap = hex(16);
+    await invites(capW, [{ id: idCap, hash: sha(tCap) }], []);
+    const nonceCap = await challenge(capW);
+    let lastCap = await tokenHello(capW, idCap, "nope-0", nonceCap);
+    for (let i = 1; i < 256; i++) lastCap = await tokenHello(capW, idCap, "nope-" + i);
+    const boxCap = capW.R.stores.get(capW.rt);
+    const atCap = boxCap.list("chu:").length;
+    const overCap = await tokenHello(capW, idCap, "nope-256");
+    const heldCap = boxCap.list("chu:").length;
+    const stillCap = await tokenHello(capW, idCap, "nope-0", nonceCap);
+    const keptCap = boxCap.get("chu:" + nonceCap) !== undefined;
+    capW.R.clock.now += C.CHALLENGE_MS + 1;
+    const laterCap = await tokenHello(capW, idCap, "nope-later");
+    const laterRows = boxCap.list("chu:").length;
+    check(refused(lastCap, "not-enrolled") && atCap === 256 && refused(overCap, "rate") && heldCap === 256
+      && refused(stillCap, "hello-replay") && keptCap
+      && refused(laterCap, "not-enrolled") && laterRows === 1,
+      "936a 257 wrong tries, and no list, keep spent challenges at 256, the next hello is rate, and the first spent challenge is still held; past five minutes the next wrong try is the only row: "
+      + atCap + " then " + heldCap + ", last " + (lastCap.json && lastCap.json.error) + ", over " + (overCap.json && overCap.json.error)
+      + ", replay " + (stillCap.json && stillCap.json.error) + ", later " + laterRows + " " + (laterCap.json && laterCap.json.error));
+    const scan = await world();
+    const scanBox = scan.R.stores.get(scan.rt);
+    for (let i = 0; i < 1000; i++) scanBox.put("inv:" + hex(16), { spent: true, spentAt: 1, key: hex(32), pub: hex(32), hash: hex(32) });
+    let scanLists = 0;
+    const scanList = scanBox.list.bind(scanBox);
+    scanBox.list = (prefix, opts) => { if (prefix === "inv:") scanLists++; return scanList(prefix, opts); };
+    const scanHello = await helloAs(scan, keyPair(true));
+    check(refused(scanHello, "not-enrolled") && scanLists === 0,
+      "7i a key hello beside a thousand invitations reads none of them: lists " + scanLists + ", " + (scanHello.json && scanHello.json.error));
+    const indexed = await world();
+    const indexedWho = keyPair(true), indexedId = hex(16);
+    indexed.R.stores.get(indexed.rt).put("inv:" + indexedId, { hash: hex(32), fails: 0, spent: true, uploaded: false, at: 1,
+      spentAt: indexed.R.clock.now, ord: 5, key: indexedWho.keyId, pub: indexedWho.pub });
+    const indexedBefore = await helloAs(indexed, indexedWho);
+    await since(indexed, await sessionOf(indexed, indexed.lead));
+    const indexedAfter = await helloAs(indexed, indexedWho);
+    check(refused(indexedBefore, "not-enrolled") && indexedAfter.status === 200 && indexedAfter.json && indexedAfter.json.invite === true,
+      "7p a binding kept before the index existed is not resumed until the next prune, and then it is: "
+      + (indexedBefore.json && indexedBefore.json.error) + ", after " + indexedAfter.status);
+    const boundW = await world();
+    const whoOld = keyPair(true), whoNew = keyPair(true);
+    const tokenOld = hex(32), idOld = hex(16), tokenKeep = hex(32), idKeep = hex(16), tokenNew = hex(32), idNew = hex(16);
+    await invites(boundW, [{ id: idOld, hash: sha(tokenOld) }, { id: idKeep, hash: sha(tokenKeep) }], []);
+    const helloOld = await tokenHello(boundW, idOld, tokenOld, null, whoOld);
+    const helloKeep = await tokenHello(boundW, idKeep, tokenKeep, null, whoNew);
+    const boxBound = boundW.R.stores.get(boundW.rt);
+    const spentOld = (boxBound.get("inv:" + idOld) || {}).spentAt;
+    boundW.R.clock.now = spentOld + C.KEEP_MS;
+    await invites(boundW, [{ id: idNew, hash: sha(tokenNew) }], []);
+    const helloNew = await tokenHello(boundW, idNew, tokenNew, null, whoNew);
+    boundW.R.clock.now += 1;
+    const prunedBound = await since(boundW, await sessionOf(boundW, boundW.lead));
+    const oldBk = boxBound.get("bk:" + whoOld.keyId), newBk = boxBound.get("bk:" + whoNew.keyId);
+    check(helloOld.status === 200 && helloKeep.status === 200 && helloNew.status === 200 && prunedBound.status === 200
+      && boxBound.get("inv:" + idOld) === undefined && JSON.stringify(boxBound.get("sp:" + idOld)) === "{\"spent\":true}"
+      && oldBk === undefined && boxBound.get("inv:" + idKeep) === undefined
+      && boxBound.get("inv:" + idNew) !== undefined && newBk === idNew,
+      "936g a pruned invitation takes its bk row with it, and a newer binding of a key whose older invitation is pruned in the same pass stays: "
+      + "old " + (oldBk === undefined ? "gone" : oldBk) + ", newer " + newBk);
 
     /* F9 of the slice 1 review: a spent invitation stays spent past the 30-day keep, whether the lead sends its id again or
        not, and the relay keeps of it only that it was spent. The test architect's f9 reproduction is 7e, its control 7E. */
@@ -497,9 +709,9 @@ async function main() {
     w.R.clock.now += 1000;
     const revive = await invites(w, [{ id: id5, hash: sha(t5) }], []);
     const after = await tokenHello(w, id5, t5);
-    const kept = w.R.stores.get(w.rt).get("inv:" + id5);
+    const kept = w.R.stores.get(w.rt).get("sp:" + id5);
     check(pruned.status === 200 && refused(late, "token-spent") && revive.status === 200 && refused(after, "token-spent")
-      && JSON.stringify(kept) === "{\"spent\":true}",
+      && w.R.stores.get(w.rt).get("inv:" + id5) === undefined && JSON.stringify(kept) === "{\"spent\":true}",
       "7e f9: past the 30-day keep, its prune run, a spent invitation's token is still refused as spent, the lead sending its id again makes"
       + " it live in no way, and the relay keeps of it only that it was spent: " + (late.json && late.json.error) + ", then "
       + (after.json && after.json.error || "a session") + ", kept " + JSON.stringify(kept));
@@ -512,7 +724,7 @@ async function main() {
     const back = await invites(w, [{ id: id6, hash: sha(t6) }, { id: id7, hash: sha(t7) }], []);
     const spent6 = await tokenHello(w, id6, t6), fresh7 = await tokenHello(w, id7, t7);
     check(used6.status === 200 && back.status === 200 && refused(spent6, "token-spent") && fresh7.status === 200
-      && JSON.stringify(w.R.stores.get(w.rt).get("inv:" + id6)) === "{\"spent\":true}",
+      && w.R.stores.get(w.rt).get("inv:" + id6) === undefined && JSON.stringify(w.R.stores.get(w.rt).get("sp:" + id6)) === "{\"spent\":true}",
       "7f a spent invitation the lead drops and then sends again stays spent, kept as only that it was spent, while one dropped unused may"
       + " be sent again and opens: " + (spent6.json && spent6.json.error || "a session") + ", the unused " + fresh7.status);
   }
@@ -791,8 +1003,8 @@ async function main() {
     const forged = await helloAs(w, binder, { signer: keyPair(true) });
     const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: await challenge(w), key: binder.keyId } });
     const stillLists = await since(w, own.json && own.json.session);
-    check(bind5.status === 200 && own.status === 200 && own.json.invite === true && refused(forged, "not-enrolled")
-      && refused(bare, "not-enrolled") && stillLists.status === 200,
+    check(bind5.status === 200 && own.status === 200 && own.json.invite === true && refused(forged, "bad-signature")
+      && refused(bare, "bad-signature") && stillLists.status === 200,
       "10i a hello naming a bound key, signed by another key or by none, opens nothing and lets no session go: the forged one "
       + (forged.json && forged.json.error || "OPENED A SESSION") + ", the unsigned one " + (bare.json && bare.json.error || "OPENED A SESSION")
       + ", the desk's resumed session then listing " + stillLists.status);
@@ -824,11 +1036,11 @@ async function main() {
     const s = inside.json && inside.json.session;
     const unpruned = await put(w, s, ask(1), { extra: { pub: early.pub } });
     const listed = await since(w, await sessionOf(w, w.lead));
-    const kept = w.R.stores.get(w.rt).get("inv:" + a.id);
+    const kept = w.R.stores.get(w.rt).get("sp:" + a.id);
     const pruned = await put(w, s, ask(2), { extra: { pub: early.pub } });
     const said = r => (r.json && r.json.error) || String(r.status);
     check(a.ok && b.ok && inside.status === 200 && inside.json.invite === true && refused(past, "not-enrolled")
-      && refused(unpruned, "token-spent") && listed.status === 200 && JSON.stringify(kept) === "{\"spent\":true}"
+      && refused(unpruned, "token-spent") && listed.status === 200 && w.R.stores.get(w.rt).get("inv:" + a.id) === undefined && JSON.stringify(kept) === "{\"spent\":true}"
       && refused(pruned, "token-spent"),
       "10j a bound key's resume ends when the invitation's 30-day keep does, a list between or not: a minute inside the keep "
       + said(inside) + ", a minute past it with no list between " + said(past) + "; the session opened inside the keep uploads past"
@@ -1102,6 +1314,181 @@ async function main() {
   /* A text swapped in place of the one place `from` stands, for a guard that is part of a line; and the line carrying a plant tag lifted. */
   const swapCore = (from, to, fn) => plantCore(swapped(from, to), fn, "swap text absent");
   const liftCore = (tag, fn) => plantCore(lineLifted(tag), fn, "plant line absent");
+  /* The stored challenge cap is rewritten: a mac, a window, a spent mark and a drop of leftover ch: rows. Each plant is its own leg. */
+  {
+    const macLift = await liftCore("plant:challenge-mac", async () => {
+      const p = await world();
+      const issued = await challenge(p);
+      const bad = issued.slice(0, -1) + (issued.endsWith("0") ? "1" : "0");
+      const got = await helloAs(p, p.desk, { nonce: bad });
+      return got.status === 200;
+    });
+    check(macLift.turned && macLift.back, "5e lifting plant:challenge-mac lets a challenge with a bad mac open a session, and the product file is never written: "
+      + macLift.detail + ", sha " + (macLift.back ? "restored" : "differs"));
+    const useLift = await liftCore("plant:challenge-use", async () => {
+      const p = await world();
+      const issued = await challenge(p);
+      const a = await helloAs(p, p.desk, { nonce: issued });
+      const b = await helloAs(p, p.desk, { nonce: issued });
+      return a.status === 200 && b.status === 200;
+    });
+    check(useLift.turned && useLift.back, "5f lifting plant:challenge-use lets one challenge open two sessions, and the product file is never written: "
+      + useLift.detail + ", sha " + (useLift.back ? "restored" : "differs"));
+    const windowLift = await liftCore("plant:challenge-window", async () => {
+      const p = await world();
+      p.R.clock.now = 10000;
+      const issued = await challenge(p);
+      p.R.clock.now += 5 * MIN + 1;
+      const got = await helloAs(p, p.desk, { nonce: issued });
+      return got.status === 200;
+    });
+    check(windowLift.turned && windowLift.back, "5g lifting plant:challenge-window lets a challenge older than 5 minutes open a session, and the product file is never written: "
+      + windowLift.detail + ", sha " + (windowLift.back ? "restored" : "differs"));
+    const usedLift = await liftCore("plant:challenge-used", async () => {
+      const p = await world();
+      const issued = await challenge(p);
+      const a = await helloAs(p, p.desk, { nonce: issued });
+      const b = await helloAs(p, p.desk, { nonce: issued });
+      return a.status === 200 && b.status === 200;
+    });
+    check(usedLift.turned && usedLift.back, "5h lifting plant:challenge-used lets a spent challenge open a second session, and the product file is never written: "
+      + usedLift.detail + ", sha " + (usedLift.back ? "restored" : "differs"));
+    const dropLift = await liftCore("plant:challenge-drop", async () => {
+      const p = await world();
+      const opened = await helloAs(p, p.desk);
+      const box = p.R.stores.get(p.rt);
+      box.put("ch:" + "cd".repeat(16), { at: 1, n: 1 });
+      await since(p, opened.json && opened.json.session);
+      return box.list("ch:").length === 1;
+    });
+    check(dropLift.turned && dropLift.back, "5i lifting plant:challenge-drop leaves a ch: row after the next prune, and the product file is never written: "
+      + dropLift.detail + ", sha " + (dropLift.back ? "restored" : "differs"));
+  }
+  {
+    const shapeLift = await liftCore("plant:hello-shape", async () => {
+      const p = await world();
+      const got = await helloAs(p, p.desk, { sig: "ab".repeat(64) });
+      return got.status === 200;
+    });
+    check(shapeLift.turned && shapeLift.back, "6o lifting plant:hello-shape lets a hello with a bad signature open a session, and the product file is never written: "
+      + shapeLift.detail + ", sha " + (shapeLift.back ? "restored" : "differs"));
+    const keyLift = await liftCore("plant:token-key", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16), who = keyPair(true);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      for (let i = 1; i <= 20; i++) await tokenHello(p, id, "wrong-" + i, null, who);
+      const right = await tokenHello(p, id, token, null, who);
+      return right.status === 200;
+    });
+    check(keyLift.turned && keyLift.back, "7j lifting plant:token-key lets a key past its twenty wrong tokens bind with the right one, and the product file is never written: "
+      + keyLift.detail + ", sha " + (keyLift.back ? "restored" : "differs"));
+    const capLift = await liftCore("plant:try-cap", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      for (let i = 0; i < 65; i++) await tokenHello(p, id, "nope-" + i);
+      return p.R.stores.get(p.rt).list("tf:" + id + ":").length === 65;
+    });
+    check(capLift.turned && capLift.back, "7k lifting plant:try-cap keeps a sixty-fifth key's wrong try, and the product file is never written: "
+      + capLift.detail + ", sha " + (capLift.back ? "restored" : "differs"));
+    const spendTry = await liftCore("plant:try-spend", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16), who = keyPair(true);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      const nonce = await challenge(p);
+      await tokenHello(p, id, "nope", nonce, who);
+      const again = await tokenHello(p, id, token, nonce, who);
+      return again.status === 200;
+    });
+    check(spendTry.turned && spendTry.back, "7l lifting plant:try-spend lets a wrong token's challenge bind on the retry, and the product file is never written: "
+      + spendTry.detail + ", sha " + (spendTry.back ? "restored" : "differs"));
+    const challengeCap = await liftCore("plant:challenge-cap", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      let last = null;
+      for (let i = 0; i < 257; i++) last = await tokenHello(p, id, "nope-" + i);
+      return p.R.stores.get(p.rt).list("chu:").length > 256 || !refused(last, "rate");
+    });
+    check(challengeCap.turned && challengeCap.back, "936b lifting plant:challenge-cap lets a 257th wrong try keep another spent challenge, and the product file is never written: "
+      + challengeCap.detail + ", sha " + (challengeCap.back ? "restored" : "differs"));
+    const devFreshLift = await liftCore("plant:devices-fresh", async () => {
+      const w = await world();
+      const got = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+        keys: w.devs, rev: w.rev + 1, t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+      return !refused(got.r, "nonce-stale") && got.n > 0;
+    });
+    check(devFreshLift.turned && devFreshLift.back, "934j lifting plant:devices-fresh checks that garbage signature, and the product file is never written: "
+      + devFreshLift.detail + ", sha " + (devFreshLift.back ? "restored" : "differs"));
+    const invFreshLift = await liftCore("plant:invites-fresh", async () => {
+      const w = await world();
+      const got = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+        add: [{ id: hex(16), hash: sha(hex(32)) }], drop: [], t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+      return !refused(got.r, "nonce-stale") && got.n > 0;
+    });
+    check(invFreshLift.turned && invFreshLift.back, "934k lifting plant:invites-fresh checks that garbage signature, and the product file is never written: "
+      + invFreshLift.detail + ", sha " + (invFreshLift.back ? "restored" : "differs"));
+    const devUnsigned = await liftCore("plant:devices-unsigned", async () => {
+      const w = await world();
+      const got = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+        keys: w.devs, rev: w.rev, t: w.R.clock.now, sig: "ab".repeat(64) } });
+      return !refused(got, "bad-signature");
+    });
+    check(devUnsigned.turned && devUnsigned.back, "936d lifting plant:devices-unsigned tells an unsigned devices call the stored rev, and the product file is never written: "
+      + devUnsigned.detail + ", sha " + (devUnsigned.back ? "restored" : "differs"));
+    const invUnsigned = await liftCore("plant:invites-unsigned", async () => {
+      const w = await world();
+      const add = [{ id: hex(16), hash: sha(hex(32)) }];
+      const t = w.R.clock.now;
+      const first = await invites(w, add, [], { t });
+      const again = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+        add, drop: [], t, sig: "ab".repeat(64) } });
+      return first.status === 200 && !refused(again, "bad-signature");
+    });
+    check(invUnsigned.turned && invUnsigned.back, "936f lifting plant:invites-unsigned tells an unsigned repeat that the body was stored, and the product file is never written: "
+      + invUnsigned.detail + ", sha " + (invUnsigned.back ? "restored" : "differs"));
+    const bindingDrop = await liftCore("plant:binding-drop", async () => {
+      const p = await world();
+      const who = keyPair(true);
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      const hello = await tokenHello(p, id, token, null, who);
+      p.R.clock.now += C.KEEP_MS + 1;
+      await since(p, await sessionOf(p, p.lead));
+      return hello.status === 200 && p.R.stores.get(p.rt).get("bk:" + who.keyId) !== undefined;
+    });
+    check(bindingDrop.turned && bindingDrop.back, "936h lifting plant:binding-drop leaves a bk row after its invitation is pruned, and the product file is never written: "
+      + bindingDrop.detail + ", sha " + (bindingDrop.back ? "restored" : "differs"));
+    const pageLift = await liftCore("plant:kx-page", async () => {
+      const p = await world();
+      const pb = p.R.stores.get(p.rt);
+      const future = String(10 * DAY).padStart(16, "0");
+      for (let i = 0; i < 10000; i++) pb.put("kx:" + future + ":" + i.toString(16).padStart(32, "0"), "tomb");
+      let n = 0;
+      const real = pb.list.bind(pb);
+      pb.list = (prefix, opts) => {
+        const rows = real(prefix, opts);
+        if (prefix === "kx:") n += rows.length;
+        return rows;
+      };
+      await since(p, await sessionOf(p, p.lead));
+      return n === 10000;
+    });
+    check(pageLift.turned && pageLift.back, "934p lifting plant:kx-page reads every future kx row, and the product file is never written: "
+      + pageLift.detail + ", sha " + (pageLift.back ? "restored" : "differs"));
+    const markLift = await liftCore("plant:spent-mark", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      await tokenHello(p, id, token);
+      p.R.clock.now += C.KEEP_MS + 1;
+      await since(p, await sessionOf(p, p.lead));
+      const late = await tokenHello(p, id, token);
+      return !refused(late, "token-spent");
+    });
+    check(markLift.turned && markLift.back, "934r lifting plant:spent-mark lets a pruned token hello answer as anything but spent, and the product file is never written: "
+      + markLift.detail + ", sha " + (markLift.back ? "restored" : "differs"));
+  }
   /* A re-enrol deletes the session marked removed. Lifting that line leaves the old bearer removed, and the row standing. */
   {
     const readd = await liftCore("plant:readd-session", async () => {
@@ -1605,7 +1992,7 @@ async function main() {
     /* The Worker's env with each team's object a RelayTeam over a ctx of its own, as the namespace makes them. */
     function sqlRelay(T) {
       const env = { BLOBS: S.memoryBucket(), NOW: () => Date.now() }, teams = new Map(), clock = { now: Date.now() };
-      /* The kept list, off to the side of any team's table, so a fetch count stays the fetches of the team itself. */
+      /* The kept list, off to the side of any team's table, so it is not a fetch. A create's count is the lead object and then the team. */
       const revokedStore = S.memoryStore();
       const scoped = {
         idFromName(name) { return { name: String(name) }; },
@@ -1730,7 +2117,7 @@ async function main() {
     }
     const WANT_TRACE = {
       added: [200, 200, 200], states: ["1:unused", "2:used", "3:unused", "4:used", "5:unused"], usedAt: ["number", "number"],
-      dropped: [200, ["1", "2"], ["2"]], wraps: ["no-hello", "missing"], states2: ["2:used", "3:unused", "4:used", "5:unused"],
+      dropped: [200, ["1", "2"], ["2"]], wraps: ["no-hello", "missing"], states2: ["3:unused", "4:used", "5:unused"],
       desk: [200, 200, "removed"], since: [[1, 2, 3], [2, 3], []],
     };
     async function pruneProbe(w, store, at) {
@@ -1746,7 +2133,7 @@ async function main() {
       const lead = await sessionOf(w, w.lead);
       const r = await since(w, lead, 0);
       return { status: r.status, kx: store.list("kx:").map(([k]) => k.slice(20)), tombs: [A, B, Cc].map(id => store.get("tomb:" + id) !== undefined),
-        spentOld: store.get("inv:" + D), spentNew: (store.get("inv:" + E) || {}).hash === sha(E), orphan: store.get("orphan:objects/x") === undefined,
+        spentOld: store.get("sp:" + D), spentNew: (store.get("inv:" + E) || {}).hash === sha(E), orphan: store.get("orphan:objects/x") === undefined,
         team: store.get("team") !== undefined };
     }
     const wantPrune = { status: 200, kx: [idN(0xc)], tombs: [false, false, true], spentOld: { spent: true }, spentNew: true, orphan: true, team: true };
@@ -1807,7 +2194,7 @@ async function main() {
       const rt = hex(16), lead = keyPair(false), t = Date.now(), base = "/relay/v1/t/" + rt;
       const made = await ask(team, "POST", "/relay/v1/teams", { json: createBody(rt, lead, t) });
       const n = (await ask(team, "POST", base + "/hello", { json: {} })).json.challenge;
-      const ses = await ask(team, "POST", base + "/session", { json: { challenge: n, key: lead.keyId, sig: signHex(lead, C.helloBytes(rt, n, lead.keyId)) } });
+      const ses = await ask(team, "POST", base + "/session", { json: { challenge: n, key: lead.keyId, pub: lead.pub, sig: signHex(lead, C.helloBytes(rt, n, lead.keyId)) } });
       const token = ses.json.session;
       const none = await ask(team, "GET", base + "/since/0"), list = await ask(team, "GET", base + "/since/0", { token });
       const woken = raise(T, ctx, env).team;
@@ -1946,10 +2333,10 @@ async function main() {
       const again = await countedCall(W, R, "POST", p + "/hello", { json: {} });
       return { before, made: [made.r.status, made.gets], after, again: again.r.status };
     };
-    const WANT_CREATED = { before: [[], []], made: [200, 1], after: [["kv"], ["team"]], again: 200 };
+    const WANT_CREATED = { before: [[], []], made: [200, 2], after: [["kv"], ["team"]], again: 200 };
     const cr = await created(T0);
     check(same(cr, WANT_CREATED),
-      "968b a read before the create leaves no table, the create makes the kv table and the team row through one object fetch, and the team then answers: " + JSON.stringify(cr));
+      "968b a read before the create leaves no table, the create makes the kv table and the team row through two object fetches, the lead's and the team's, and the team then answers: " + JSON.stringify(cr));
 
     /* The store itself: a table that is not there reads as empty and is not made by a read or a delete; the first write makes it. */
     const lazyStore = T => {
@@ -2111,7 +2498,7 @@ async function main() {
     });
     check(baseFirst && back(pFirst),
       "968o lifting the object's team check before it reads turns 968f red, and the product file is never written: " + how(pFirst));
-    const pRoots = await swapTeam("clock: () => Date.now(), sockets: hibernating(ctx) }", "clock: () => Date.now(), sockets: hibernating(ctx), roots: [\"" + K.ROOT.pub + "\"] }", async T => !same(await safe(() => bareRefused(T)), { status: 403, error: "bad-grant", tables: [] }));
+    const pRoots = await swapTeam("clock: () => Date.now(), sockets: hibernating(ctx), teams: env && env.TEAMS ? env.TEAMS : null }", "clock: () => Date.now(), sockets: hibernating(ctx), teams: env && env.TEAMS ? env.TEAMS : null, roots: [\"" + K.ROOT.pub + "\"] }", async T => !same(await safe(() => bareRefused(T)), { status: 403, error: "bad-grant", tables: [] }));
     check(baseBare && back(pRoots),
       "968p handing RelayTeam's object the test root turns 968g red, and the product file is never written: " + how(pRoots));
   }
@@ -2134,6 +2521,7 @@ async function main() {
     const statesOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", { token });
     const wrapOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/wrap", { token });
     const rowOf = (w, id) => w.R.stores.get(w.rt).get("inv:" + id);
+    const markOf = (w, id) => w.R.stores.get(w.rt).get("sp:" + id);
     const heldCount = w => w.R.stores.get(w.rt).list("inv:").length;
     /* An invitation added with a wrap and opened by a desk's key that it binds: its session is the bound one. */
     async function opened(w, wrap, extra) {
@@ -2237,7 +2625,7 @@ async function main() {
       const c = await opened(w, goodWrap());
       w.R.clock.now += C.KEEP_MS + 1;
       await since(w, await sessionOf(w, w.lead));
-      const prunedAtFirst = JSON.stringify(rowOf(w, c.id));
+      const prunedAtFirst = JSON.stringify(markOf(w, c.id));
       const a = await opened(w, goodWrap()), b = await opened(w, goodWrap());
       const joined = await put(w, b.session, sealJoin(w, b.who, 1, "desk:k-" + hex(8)), { extra: { pub: b.who.pub } });
       const d = await opened(w, goodWrap());
@@ -2248,11 +2636,11 @@ async function main() {
         { id: d.id, wrap: later }, { id: e, wrap: later }]);
       const rowA = rowOf(w, a.id), rowB = rowOf(w, b.id), served = await wrapOf(w, a.session);
       check(prunedAtFirst === "{\"spent\":true}" && a.ok && b.ok && d.ok && joined.status === 200 && re.status === 200 && eq(rowA.wrap, fresh) && !("oldWrap" in rowA)
-        && rowB.uploaded === true && rowB.wrap === undefined && JSON.stringify(rowOf(w, c.id)) === "{\"spent\":true}" && rowOf(w, unknown) === undefined
-        && JSON.stringify(rowOf(w, d.id)) === "{\"spent\":true}" && rowOf(w, e) === undefined && served.status === 200 && eq(served.json.wrap, fresh),
+        && rowB.uploaded === true && rowB.wrap === undefined && rowOf(w, c.id) === undefined && JSON.stringify(markOf(w, c.id)) === "{\"spent\":true}" && rowOf(w, unknown) === undefined
+        && rowOf(w, d.id) === undefined && JSON.stringify(markOf(w, d.id)) === "{\"spent\":true}" && rowOf(w, e) === undefined && served.status === 200 && eq(served.json.wrap, fresh),
       "970f a re-seal replaces the wrap of an invitation opened and not yet admitted, and serves it to the key it bound, and leaves as it was an admitted invitation (no wrap),"
         + " one kept only as spent, an id the relay does not hold, and ids dropped in the same call: " + re.status + ", opened " + JSON.stringify(rowA && rowA.wrap)
-        + ", admitted " + JSON.stringify(rowB && rowB.wrap) + ", spent " + JSON.stringify(rowOf(w, c.id)));
+        + ", admitted " + JSON.stringify(rowB && rowB.wrap) + ", spent " + JSON.stringify(markOf(w, c.id)));
       const big = { epoch: 1, ct: "ab".repeat(600) };
       const refusedBig = await invitesW(w, [], [], [{ id: a.id, wrap: big }]);
       const refusedShape = await invitesW(w, [], [], [{ id: a.id, wrap: { epoch: 0, ct: "aa" } }]);
@@ -2307,11 +2695,11 @@ async function main() {
       const outs = [bare, await statesOf(w, hex(32)), await statesOf(w, "short")];
       const nonLead = [await statesOf(w, await sessionOf(w, w.desk)), await statesOf(w, o.session)];
       check(refused(noTeam, "not-enrolled") && outs.every(r => refused(r, "no-hello")) && nonLead.every(r => refused(r, "not-enrolled"))
-        && states.status === 200 && Array.isArray(states.json.states) && states.json.states.length === 4 && asked.status === 200 && p.ok
-        && eq(byId(p.id), { id: p.id, state: "used", usedAt: null }) && eq(byId(u), { id: u, state: "unused", usedAt: null })
+        && states.status === 200 && Array.isArray(states.json.states) && states.json.states.length === 3 && asked.status === 200 && p.ok
+        && byId(p.id) === undefined && eq(byId(u), { id: u, state: "unused", usedAt: null })
         && eq(byId(o.id), { id: o.id, state: "used", usedAt: openedAt }) && eq(byId(q.id), { id: q.id, state: "asked", usedAt: q0 }),
       "970i the states are told to the lead alone (a team never made, no session, a session never issued and a desk's or an invitation's are each refused) and give each"
-        + " invitation as unused, used with the time of its hello, used with no time where only that it was spent is kept, or asked with the time of the hello kept after the upload: "
+        + " invitation as unused, used with the time of its hello, or asked with the time of the hello kept after the upload, and a pruned spent id is not in the list: "
         + JSON.stringify(states.json && states.json.states));
     }
 
@@ -2338,9 +2726,22 @@ async function main() {
       await put(w, lead, b1);
       await put(w, lead, b2);
       const tomb = await getBlob(w, only.token, b1.id), standing = await getBlob(w, only.token, b2.id), unknown = await getBlob(w, only.token, hex(16));
-      check(only.ok && refused(tomb, "superseded") && refused(standing, "not-enrolled") && refused(unknown, "missing"),
-      "970k an uploaded invitation's session is told a superseded id is superseded, a blob that stands not-enrolled and an id the relay never held missing: "
+      check(only.ok && refused(tomb, "not-enrolled") && refused(standing, "not-enrolled") && refused(unknown, "not-enrolled"),
+      "970k an uploaded invitation's session is told the same refusal for a superseded id, a blob that stands and an id the relay never held: "
         + [tomb, standing, unknown].map(r => r.json && r.json.error).join(","));
+      const sameLift = await liftCore("plant:answer-same", async () => {
+        const y = await world();
+        const yOnly = await answerOnly(y);
+        const yLead = await sessionOf(y, y.lead);
+        const y1 = sealAs(y, y.lead, "a.ec", 1), y2 = sealAs(y, y.lead, "b.ec", 2, { supersedes: y1.id });
+        await put(y, yLead, y1);
+        await put(y, yLead, y2);
+        const a = await getBlob(y, yOnly.token, y1.id), b = await getBlob(y, yOnly.token, y2.id), c = await getBlob(y, yOnly.token, hex(16));
+        const errs = [a, b, c].map(r => r.json && r.json.error);
+        return errs[0] !== "not-enrolled" || errs[1] !== "not-enrolled" || errs[2] !== "not-enrolled";
+      });
+      check(sameLift.turned && sameLift.back, "970l lifting plant:answer-same lets that session tell those three ids apart, and the product file is never written: "
+        + sameLift.detail + ", sha " + (sameLift.back ? "restored" : "differs"));
     }
 
     /* The lead's answer is served to the session of the invitation it answers once that invitation's upload is made, and to no other session:
@@ -2524,7 +2925,7 @@ async function main() {
       for (const make of row.good || []) {
         const ctx = ctxOf(), grant = make(ctx), R = fresh();
         const w = await viaWorker(worker, R, bodyFor(ctx, { grant })), kept = teamOf(R, ctx.rt);
-        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.until !== grant.until || kept.paid !== grant.paid) return false;
+        if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.until !== grant.until || kept.paid !== grant.paid) return false;
       }
       return true;
     }
@@ -2588,11 +2989,11 @@ async function main() {
       const leaks = [grant.sig.value, grant.kind].concat(grant.via ? [grant.via.sig.value] : []).filter(s => dump.indexOf(s) > -1).length;
       return { w, kept, grant, ctx, leaks };
     };
-    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,until"
+    const keptFor = x => x.w.r.status === 200 && x.w.gets === 2 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,secret,until"
       && x.kept.until === x.grant.until && x.kept.paid === x.grant.paid && x.kept.lead.keyId === x.ctx.lead.keyId && x.leaks === 0;
     const byRoot = await madeUnder(gf({ paid: true })), byDelegate = await madeUnder(ctx => K.delegatedGrantFor(ctx.lead.pub, ctx.now, { fields: { paid: false } }));
     check(keptFor(byRoot) && byRoot.kept.paid === true,
-      "964e a create under a grant signed by the root makes the team through the Worker with one object fetch, and the team keeps the grant's until and paid and nothing else of it");
+      "964e a create under a grant signed by the root makes the team through the Worker with two object fetches, the lead's and the team's, and the team keeps the grant's until and paid and nothing else of it");
     check(keptFor(byDelegate) && byDelegate.kept.paid === false,
       "964f a create under a grant signed by a delegated key, with the root's delegation inside it, makes the team the same way, keeping that grant's paid: false");
     /* The same lead creating again keeps the later until, and the paid of the grant that gave it. */
@@ -2616,7 +3017,7 @@ async function main() {
       sceneOk[i] = await scene(ROWS[i], W);
       check(sceneOk[i],
         "965" + letter(i) + " " + ROWS[i].say + " is refused by the Worker with no object fetched and nothing stored, and by the object with nothing kept"
-        + (ROWS[i].edge ? "; " + ROWS[i].edge + " is made, reaching the object once and keeping the grant's until and paid" : ""));
+        + (ROWS[i].edge ? "; " + ROWS[i].edge + " is made, reaching the lead's object and the team's, and keeping the grant's until and paid" : ""));
     }
     /* ---- 966: the line each one guards, lifted in turn, lets the same probes through, and the product file is never written ---- */
     for (let i = 0; i < ROWS.length; i++) {
@@ -2664,9 +3065,9 @@ async function main() {
     const baseI = await endedVia(W);
     const workerPlant = await editWorker(lineLifted("plant:worker-grant"), async mod => {
       const w = await endedVia(mod.routeWith(K.ROOTS, env => env.NOW()));
-      return w.gets === 1 && w.refusedBad && w.kept === undefined;
+      return w.gets === 3 && w.refusedBad && w.kept === undefined;
     });
-    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create wake its object once, which refuses it itself, and the product file is never written: "
+    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create reserve a place, wake its team object and release the place, and the product file is never written: "
       + workerPlant.detail + ", sha " + (workerPlant.back ? "unchanged" : "CHANGED"));
 
     /* ---- 971: a team's lead is a key under an id that comes from it, and no desk is that key (the test architect's K1, board 935) ---- */
@@ -2699,12 +3100,12 @@ async function main() {
       for (const form of ["pub", "branch"]) {
         const lead = asForm(keyPair(false), form), ctx = { rt: hex(16), lead, now: T0 }, R = fresh();
         const w = await viaWorker(W, R, bodyFor(ctx, {})), kept = teamOf(R, ctx.rt);
-        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+        if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
       }
       return true;
     };
     const idB = await bothForms();
-    check(idB, "971b a create whose lead key id is the lead's public key, or its branch id, is made, reaching the object once and keeping that id");
+    check(idB, "971b a create whose lead key id is the lead's public key, or its branch id, is made, reaching the lead's object and the team's, and keeping that id");
 
     /* The shared vector's create names its lead's key by an id that comes from it, and the relay judges that create whole. */
     const vectorKeyId = vec => {
@@ -2782,7 +3183,7 @@ async function main() {
       const kp = keyPair(false), lead = { keyId: studioOf(kp.pub), pub: kp.pub, privateKey: kp.privateKey };
       const ctx = { rt: hex(16), lead, now: T0 }, body = bodyFor(ctx, {});
       const R = fresh(), w = await viaWorker(W, R, body), kept = teamOf(R, ctx.rt);
-      if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+      if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
       const R2 = fresh(), o = await viaObject(R2, ctx.rt, body), kept2 = teamOf(R2, ctx.rt);
       if (o.status !== 200 || !kept2 || kept2.lead.keyId !== lead.keyId) return false;
       const liar = { keyId: studioOf(keyPair(false).pub), pub: kp.pub, privateKey: kp.privateKey }, ctx2 = { rt: hex(16), lead: liar, now: T0 }, bad = bodyFor(ctx2, {});
@@ -2792,7 +3193,7 @@ async function main() {
       return refused(o4, "bad-signature") && teamOf(R4, ctx2.rt) === undefined;
     }
     const idS = await studioScene();
-    check(idS, "972e a create whose lead key id is \"studio-\" and 16 hex of the sha256 of its pub is made through the Worker with one object fetch and by the object, keeping that id; one whose studio id is of another pub is refused bad-signature, with no object fetched and nothing kept");
+    check(idS, "972e a create whose lead key id is \"studio-\" and 16 hex of the sha256 of its pub is made through the Worker with two object fetches, the lead's and the team's, and by the object, keeping that id; one whose studio id is of another pub is refused bad-signature, with no object fetched and nothing kept");
     const pStudio = await liftCore("plant:lead-studio-id", async () => !(await studioScene()));
     check(idS && pStudio.turned && pStudio.back, "972f lifting plant:lead-studio-id refuses the studio form of the lead's own pub, and the product file is never written: "
       + pStudio.detail + ", sha " + (pStudio.back ? "unchanged" : "CHANGED"));
@@ -2815,7 +3216,7 @@ async function main() {
     async function wakesObject(worker, ts) {
       for (const t of ts) {
         const ctx = ctxOf(), R = fresh(), w = await viaWorker(worker, R, bodyAt(ctx, t));
-        if (w.gets !== 1 || !refused(w.r, "nonce-stale") || teamOf(R, ctx.rt) !== undefined) return false;
+        if (w.gets !== 3 || !refused(w.r, "nonce-stale") || teamOf(R, ctx.rt) !== undefined) return false;
       }
       return true;
     }
@@ -2829,18 +3230,18 @@ async function main() {
     const edgeScene = async () => {
       for (const t of [T0 - SKEW, T0, T0 + SKEW]) {
         const ctx = ctxOf(), R = fresh(), w = await viaWorker(W, R, bodyAt(ctx, t)), kept = teamOf(R, ctx.rt);
-        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== ctx.lead.keyId) return false;
+        if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.lead.keyId !== ctx.lead.keyId) return false;
       }
       return true;
     };
     const staleC = await edgeScene();
     check(staleC,
-      "973c a create whose t is exactly the skew behind, at, or exactly the skew ahead of the relay's clock is made through the Worker with one object fetch");
+      "973c a create whose t is exactly the skew behind, at, or exactly the skew ahead of the relay's clock is made through the Worker with two object fetches, the lead's and the team's");
     const wFresh = await editWorker(lineLifted("plant:worker-fresh"), async mod => {
       const w = mod.routeWith(K.ROOTS, env => env.NOW());
       return (await wakesObject(w, lateTs)) && (await wakesObject(w, aheadTs));
     });
-    check(staleA && staleB && staleC && wFresh.turned && wFresh.back, "973d lifting plant:worker-fresh makes a stale or far-ahead create wake its object once, which refuses it itself, and the product file is never written: "
+    check(staleA && staleB && staleC && wFresh.turned && wFresh.back, "973d lifting plant:worker-fresh makes a stale or far-ahead create reserve a place, wake its team object and release the place, and the product file is never written: "
       + wFresh.detail + ", sha " + (wFresh.back ? "unchanged" : "CHANGED"));
 
     /* ---- 974: a repeat create whose grant ends as the team's does keeps the paid of either (the test architect's F3, board 935) ---- */
@@ -2887,7 +3288,7 @@ async function main() {
     const overNo = () => { const ctx = ctxOf(), g = overGrant(ctx); return !C.grantOk(g, ctx.lead.pub, T0, K.ROOTS) && C.grantWhy(g, ctx.lead.pub, T0, K.ROOTS) === "via-span"; };
     const spanB = C.DELEGATION_MAX_MS === YEAR_MS && yearOk() && (await scene(yearRow, W));
     check(spanB, "975a the delegation's longest span is DELEGATION_MAX_MS of 366 days in milliseconds, exported, and a grant via a delegation of exactly 366 days is taken by grantOk"
-      + " and made through the Worker with one object fetch, keeping the grant's until and paid");
+      + " and made through the Worker with two object fetches, the lead's and the team's, keeping the grant's until and paid");
     const spanC = overNo() && (await scene(overRows[0], W)) && (await scene(overRows[1], W));
     check(spanC, "975b a grant via a delegation of 366 days and a millisecond, or of two years, is refused by grantOk as via-span, by the Worker with no object fetched and nothing stored,"
       + " and by the object with nothing kept");
@@ -3062,7 +3463,7 @@ async function main() {
       return {
         a: sameJ(working, wantRoutes(told(w.until, true, "working"), true)),
         b: sameJ(reading, wantRoutes(ro, false)),
-        c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, false])
+        c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, true])
           && sameJ(gone, { rang: true, bucket: 0, store: 1, mark: true, alarm: false, hello: "not-enrolled", socket: [4400, true] }),
         detail: JSON.stringify({ working, reading, late, gone, armed: w.armedAtCreate === w.until + READ }),
       };
@@ -3091,7 +3492,10 @@ async function main() {
       at(w, -2 * MIN);
       const L = await sessionOf(w, w.lead), D = await sessionOf(w, w.desk);
       const J = (await tokenHello(w, w.inv.id, w.inv.token, null, keyPair(true))).json.session;
-      const ws1 = wsOf(w, (await socket(w, D)).socket), ws2 = wsOf(w, (await socket(w, D)).socket);
+      const openedDesk = await socket(w, D);
+      const ws1 = wsOf(w, openedDesk.socket);
+      const openedLead = await socket(w, L);
+      const ws2 = wsOf(w, openedLead.socket);
       const out = { before: [tail(await since(w, D)), tail(await wrapOf(w, J)), tail(await statesOf(w, L))] };
       at(w, 0);
       out.hello = await helloKeys(w);
@@ -3302,7 +3706,7 @@ async function main() {
       + " upload, devices, invites and an invitation's token hello are answered: " + (paid.detail || paid.failed));
     check(paid.b === true, "977b at the end and 31 days it is read-only: hello, sessions told read-only, since, fetch, socket and states are answered, and an upload,"
       + " devices, invites and a token hello are refused team-lapsed, the token left unspent");
-    check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only and the alarm has not rung; at 91 days it rings,"
+    check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only, and the alarm a socket brought forward rings without sweeping; at 91 days it rings,"
       + " deletes every object of the team, keeps the lead's public key and nothing else, clears the alarm and closes its sockets, and hello is answered not-enrolled");
     const restored = await held(() => restoreScene());
     check(restored.ok === true, "977d a renewal while read-only, a later grant for the team's lead, is answered with the team working under the new until, and an upload,"
@@ -3424,7 +3828,7 @@ async function main() {
     });
     check(renewal.zero === true && workerRenew.turned && workerRenew.back, label() + " lifting plant:worker-renew makes a renewal whose grant does not hold wake"
       + " its object once, which refuses it itself, and the product file is never written: " + how2(workerRenew));
-    const devicesSig = 'if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */';
+    const devicesSig = 'if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */';
     const earlyGate = await swapCore(devicesSig, "if (lapseGate(true)) return lapseGate(true); " + devicesSig, async () => {
       const r = await held(() => silentScene());
       return r.ok === false && typeof r.detail === "string" && r.detail.indexOf("team-lapsed") > -1;
@@ -3445,6 +3849,31 @@ async function main() {
     const sameKey = await swapCore("held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk", "true", async () => red(await held(() => withdrawScene()), "ok"));
     check(base["977q"] && sameKey.turned && sameKey.back, label() + " judging a removal by key ids alone lets a read-only team's call move a kept key to another desk,"
       + " which turns 977q red, and the product file is never written: " + how2(sameKey));
+    const oneLift = await editTeam(lineLifted("plant:socket-one"), async T => {
+      const p = await world({ team: T });
+      const s = await sessionOf(p, p.desk);
+      const a = await socket(p, s), b = await socket(p, s);
+      const first = wsOf(p, a.socket);
+      return !!first && !first.closed && !!wsOf(p, b.socket);
+    });
+    check(oneLift.turned && oneLift.back, "934s lifting plant:socket-one leaves both sockets of one session open, and the product file is never written: " + how2(oneLift));
+    const frameLift = await editTeam(lineLifted("plant:frame-cap"), async T => {
+      const p = await world({ team: T });
+      const opened = await socket(p, await sessionOf(p, p.desk));
+      const ws = wsOf(p, opened.socket);
+      await p.R.object(p.rt).webSocketMessage(ws, "x".repeat(257));
+      return !!ws && !ws.closed;
+    });
+    check(frameLift.turned && frameLift.back, "934t lifting plant:frame-cap leaves a 257-byte frame's socket open, and the product file is never written: " + how2(frameLift));
+    const endLift = await editTeam(lineLifted("plant:socket-ended"), async T => {
+      const p = await world({ team: T });
+      const opened = await socket(p, await sessionOf(p, p.desk));
+      const ws = wsOf(p, opened.socket);
+      p.R.clock.now = C.SESSION_MS + 1;
+      await p.R.ring(p.rt);
+      return !!ws && !ws.closed;
+    });
+    check(endLift.turned && endLift.back, "934u lifting plant:socket-ended leaves a socket open after its session has ended, and the product file is never written: " + how2(endLift));
   }
 
   /* ---- 980: a swept id is kept for its own lead, and a revoked service key's grant is refused ---- */
@@ -3517,7 +3946,7 @@ async function main() {
       const other = keyPair(false);
       const hit = await countedCall(W, row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, other, row.R.clock.now) });
       const bad = await countedCall(W, row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, other, row.R.clock.now, { grant: null }) });
-      const ok = refused(hit.r, "swept-other-lead") && hit.r.json.said === SWEPT_SAID && hit.gets === 1 && markOnly(row.st, row.lead.pub)
+      const ok = refused(hit.r, "swept-other-lead") && hit.r.json.said === SWEPT_SAID && hit.gets === 3 && markOnly(row.st, row.lead.pub)
         && refused(bad.r, "bad-grant") && bad.gets === 0;
       const line = "980b a swept team re-created by another key with a valid grant is refused swept-other-lead, and a grant that does not hold is still bad-grant: "
         + hit.r.status + " " + (hit.r.json && hit.r.json.error) + " gets " + hit.gets + ", mark " + (markOnly(row.st, row.lead.pub) ? "kept" : "lost")
@@ -3532,8 +3961,8 @@ async function main() {
       const cSt = cR.stores.get(cRt), cTeam = cSt && cSt.get("team");
       const cBadRt = hex(16);
       const cBad = await countedCall(W, cR, "POST", "/relay/v1/teams", { json: createBody(cBadRt, keyPair(false), T0S, { grant: null }) });
-      const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 1 && !!cTeam && cTeam.epoch === 0
-        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,made,paid,rt,until"
+      const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 2 && !!cTeam && cTeam.epoch === 0
+        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,made,paid,rt,secret,until"
         && /^[0-9a-f]{16}$/.test(cTeam.made)
         && refused(cBad.r, "bad-grant") && cBad.gets === 0 && (cR.stores.get(cBadRt) ? cR.stores.get(cBadRt).dump().length : 0) === 0;
       const line = "980c an id never made is judged as today: a valid grant is taken and keeps no mark, and a create with no grant is bad-grant with no object woken: "
@@ -3593,7 +4022,7 @@ async function main() {
       const created = await countedCall(W, accepted, "POST", "/relay/v1/teams", { json: createBody(same, eLead, T0S, { grant: eGrant }) });
       const hello = created.r.status === 200 ? await call(accepted, "POST", "/relay/v1/t/" + same + "/hello", { json: {} }) : { status: 0, json: null };
       const renewal = await countedCall(W, accepted, "POST", "/relay/v1/t/" + same + "/grant", { json: { grant: K.delegatedGrantFor(eLead.pub, T0S, { fields: { until: T0S + 20 * DAY } }) } });
-      const ok = accepted.env.REVOKED === undefined && created.r.status === 200 && created.gets === 1 && hello.status === 200 && !!hello.json && !!hello.json.challenge
+      const ok = accepted.env.REVOKED === undefined && created.r.status === 200 && created.gets === 2 && hello.status === 200 && !!hello.json && !!hello.json.challenge
         && renewal.r.status === 200 && renewal.gets === 1;
       const line = "980f the same delegated grant with no list set is accepted at create, hello and renewal: create " + created.r.status + " gets " + created.gets
         + ", hello " + hello.status + ", renew " + renewal.r.status + " " + (renewal.r.json && renewal.r.json.error) + " gets " + renewal.gets;
@@ -3625,7 +4054,7 @@ async function main() {
       const hHello = hMade.r.status === 200 ? await call(hR, "POST", "/relay/v1/t/" + hRt + "/hello", { json: {} }) : { status: 0, json: null };
       const hOther = hex(16), hLead2 = keyPair(false);
       const hDel = await countedCall(W, hR, "POST", "/relay/v1/teams", { json: createBody(hOther, hLead2, T0S, { grant: K.delegatedGrantFor(hLead2.pub, T0S) }) });
-      const ok = hMade.r.status === 200 && hMade.gets === 1 && hSt && hSt.get("grantKey") === undefined && hHello.status === 200
+      const ok = hMade.r.status === 200 && hMade.gets === 2 && hSt && hSt.get("grantKey") === undefined && hHello.status === 200
         && refused(hDel.r, "revoked") && hDel.gets === 0;
       const line = "980h a root-signed grant is accepted while the list is set, and a delegated grant beside it is refused: create " + hMade.r.status
         + " gets " + hMade.gets + ", grantKey " + JSON.stringify(hSt && hSt.get("grantKey")) + ", hello " + hHello.status
@@ -4191,6 +4620,342 @@ async function main() {
     check(renewMade.ok && renewLift.turned && renewLift.back,
       "983l lifting plant:renew-made leaves a team with no made property unstamped on renew, which turns 983k red, and the product file is never written: "
       + renewLiftLine + "; " + renewLift.detail);
+  }
+
+  /* ---- 934: the smallest ciphertext and the live-blob cap (board 934 (7)) ---- */
+  {
+    const BLOB_MIN = B.PAD_FLOOR + B.TAG_BYTES;
+    function census(w) {
+      const st = w.R.stores.get(w.rt);
+      const rows = st.list("blob:").length;
+      return { rows, n: st.get("blobs"), ok: st.get("blobs") === rows };
+    }
+    /* A ciphertext of `len` bytes signed over its own associated data, so the signature would hold and only the size can refuse it. */
+    function signedCt(w, writer, len, extra) {
+      const o = extra || {};
+      const id = o.id || hex(16);
+      const counter = o.counter;
+      const supersedes = o.supersedes == null ? null : o.supersedes;
+      const epoch = o.epoch || 1;
+      const place = o.place || (writer === w.lead ? "root" : "desk:" + w.deskId);
+      const fields = { relayTeamId: w.rt, epoch, id, supersedes, writerKeyId: writer.keyId, counter };
+      const ciphertext = Buffer.alloc(len, 9);
+      const signature = B.signUpload(writer.privateKey, B.aadOf(fields), ciphertext);
+      return { id, epoch, supersedes, writerKeyId: writer.keyId, counter, deletion: false, signature, nonce: hex(12), ciphertext, place };
+    }
+    function seedBlobs(w, n, writer) {
+      const st = w.R.stores.get(w.rt);
+      const ids = [];
+      for (let i = 0; i < n; i++) {
+        const id = hex(16);
+        ids.push(id);
+        st.put("blob:" + id, { id, supersedes: null, epoch: 1, writer: writer.keyId, counter: 1, del: false,
+          size: 0, sig: hex(64), nonce: hex(12), seq: 1, at: w.R.clock.now, obj: w.rt + "/" + id + "/seed" });
+      }
+      return ids;
+    }
+    const w = await world();
+    const lead = await sessionOf(w, w.lead);
+    const short = await put(w, lead, signedCt(w, w.lead, BLOB_MIN - 1, { counter: 1 }));
+    const exact = sealAs(w, w.lead, "floor.ec", 1);
+    const taken = await put(w, lead, exact);
+    const said = r => (r.json && r.json.error) || String(r.status);
+    check(BLOB_MIN === 4112 && C.BLOB_MIN === 4112 && C.BLOBS_MAX === 4096 && refused(short, "blob-size") && short.status === 413
+      && taken.status === 200 && exact.ciphertext.length >= 4112 && census(w).ok && census(w).rows === 1,
+      "934a a ciphertext of 4111 bytes is refused blob-size before it can be kept, and one of 4112 is taken: "
+      + said(short) + " " + short.status + ", taken " + taken.status + " len " + exact.ciphertext.length
+      + ", rows " + census(w).rows + " count " + census(w).n);
+
+    const cap = await world();
+    const desk = await sessionOf(cap, cap.desk);
+    const ids = seedBlobs(cap, 4096, cap.desk);
+    const before = census(cap);
+    const extra = await put(cap, desk, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/over.ec", 1));
+    const unwritten = census(cap);
+    await since(cap, desk);
+    const migrated = census(cap);
+    const over = await put(cap, desk, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/next.ec", 2, { supersedes: ids[0] }));
+    const held = census(cap);
+    const del = await put(cap, desk, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/gone.ec", 3, { supersedes: ids[1], kind: "delete" }));
+    const afterDel = census(cap);
+    cap.R.clock.now += C.KEEP_MS + 1;
+    const later = await sessionOf(cap, cap.desk);
+    await since(cap, later);
+    const freed = census(cap);
+    const again = await put(cap, later, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/room.ec", 4));
+    const filled = census(cap);
+    check(before.n === undefined && before.rows === 4096 && refused(extra, "team-size") && unwritten.n === undefined && unwritten.rows === 4096
+      && migrated.ok && migrated.rows === 4096 && over.status === 200 && held.ok && held.rows === 4096
+      && del.status === 200 && afterDel.ok && afterDel.rows === 4096
+      && freed.ok && freed.rows === 4095 && again.status === 200 && filled.ok && filled.rows === 4096,
+      "934b the 4097th live blob is refused team-size, a supersede at the cap is taken, and the expiry of a deletion record frees one: "
+      + "extra " + said(extra) + ", supersede " + over.status + ", deletion " + del.status
+      + ", after expiry " + freed.rows + ", next " + again.status + " " + said(again) + ", rows " + filled.rows);
+
+    const life = await world();
+    const ls = await sessionOf(life, life.lead);
+    const steps = [];
+    const note = (name, ok) => { if (!ok) steps.push(name); };
+    const first = sealAs(life, life.lead, "a.ec", 1);
+    const up = await put(life, ls, first);
+    note("upload", up.status === 200 && census(life).ok && census(life).rows === 1);
+    const next = sealAs(life, life.lead, "a.ec", 2, { supersedes: first.id });
+    const sup = await put(life, ls, next);
+    note("supersede", sup.status === 200 && census(life).ok && census(life).rows === 1);
+    const gone = await put(life, ls, sealAs(life, life.lead, "a.ec", 3, { supersedes: next.id, kind: "delete" }));
+    note("deletion", gone.status === 200 && census(life).ok && census(life).rows === 1);
+    life.R.clock.now += C.KEEP_MS + 1;
+    const ls2 = await sessionOf(life, life.lead);
+    await since(life, ls2);
+    note("expiry", census(life).ok && census(life).rows === 0);
+    const token = hex(32), inv = hex(16), who = keyPair(true), place = "desk:k-" + hex(8);
+    life.R.clock.now += 1;
+    const added = await invites(life, [{ id: inv, hash: sha(token) }], []);
+    const hello = await boundHello(life, who, inv, token);
+    const ask = sealJoin(life, who, 1, place);
+    const asked = await put(life, hello.json && hello.json.session, ask, { extra: { pub: who.pub } });
+    const answer = B.seal({ relayTeamId: life.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: life.lead.keyId, privateKey: life.lead.privateKey }, path: "join-answer.json", body: "{}", counter: 4, kind: "file", id: inv });
+    answer.place = "answer:" + inv;
+    const posted = await put(life, ls2, answer);
+    const beforeWithdraw = census(life);
+    await devices(life, life.devs.slice(1));
+    const removed = census(life);
+    note("removal", removed.ok && removed.rows === beforeWithdraw.rows && removed.rows === 2 && asked.status === 200 && posted.status === 200);
+    const withdrawal = B.seal({ relayTeamId: life.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + place.slice(5) + "/join.json", body: "",
+      counter: 2, place, kind: "delete", supersedes: ask.id });
+    const withdrew = await put(life, hello.json && hello.json.session, withdrawal);
+    const afterWithdraw = census(life);
+    note("withdrawal", withdrew.status === 200 && afterWithdraw.ok && afterWithdraw.rows === beforeWithdraw.rows - 1);
+    life.R.clock.now += 100 * DAY;
+    const rang = await life.R.ring(life.rt);
+    const left = life.R.stores.get(life.rt);
+    const sweptRows = left.list("blob:").length;
+    note("sweep", rang === true && sweptRows === 0 && left.get("blobs") === undefined && added.status === 200 && hello.status === 200);
+    check(steps.length === 0, "934c the live count equals the blob rows after an upload, a supersede, a deletion, its expiry, a removal, a withdrawal and a sweep: "
+      + (steps.length ? steps.join(", ") : "each held") + "; withdrawal " + withdrew.status + " " + said(withdrew));
+
+    const minLift = await liftCore("plant:blob-min", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      const r = await put(p, s, signedCt(p, p.lead, BLOB_MIN - 1, { counter: 1 }));
+      return r.status === 200;
+    });
+    check(minLift.turned && minLift.back, "934d lifting plant:blob-min keeps a signed ciphertext of 4111 bytes, and the product file is never written: "
+      + minLift.detail + ", sha " + (minLift.back ? "restored" : "differs"));
+    const capLift = await liftCore("plant:blob-cap", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.desk);
+      seedBlobs(p, 4096, p.desk);
+      const r = await put(p, s, sealAs(p, p.desk, "desks/" + p.deskId + "/over.ec", 1));
+      return r.status === 200;
+    });
+    check(capLift.turned && capLift.back, "934e lifting plant:blob-cap keeps a 4097th live blob, and the product file is never written: "
+      + capLift.detail + ", sha " + (capLift.back ? "restored" : "differs"));
+    const recountLift = await liftCore("plant:blob-recount", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      await put(p, s, sealAs(p, p.lead, "a.ec", 1));
+      const st = p.R.stores.get(p.rt);
+      st.put("blobs", 7);
+      await since(p, s);
+      return st.get("blobs") !== st.list("blob:").length;
+    });
+    check(recountLift.turned && recountLift.back, "934f lifting plant:blob-recount leaves a drifted live count after prune, and the product file is never written: "
+      + recountLift.detail + ", sha " + (recountLift.back ? "restored" : "differs"));
+    const noteLift = await liftCore("plant:blob-note", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      const st = p.R.stores.get(p.rt);
+      const core = C.createCore({ store: st, clock: () => p.R.clock.now, roots: K.ROOTS });
+      const one = sealAs(p, p.lead, "a.ec", 1);
+      const two = sealAs(p, p.lead, "b.ec", 2);
+      core.commit(p.rt, s, metaOf(one), one.id, one.ciphertext, "obj-1");
+      core.commit(p.rt, s, metaOf(two), two.id, two.ciphertext, "obj-2");
+      const rows = st.list("blob:").length;
+      return rows === 2 && st.get("blobs") !== rows;
+    });
+    check(noteLift.turned && noteLift.back, "934g lifting plant:blob-note leaves the live count behind the rows when prune has not run, and the product file is never written: "
+      + noteLift.detail + ", sha " + (noteLift.back ? "restored" : "differs"));
+  }
+
+  /* ---- 935: one lead key holds at most 25 live teams (board 935 (7)). The count is this run's, recorded as Claudius's. ---- */
+  {
+    const CAP = 25;
+    const SAID = "This signing key already holds as many teams as the relay allows.";
+    const T0L = 1800000000000;
+    const teamSrc = require(path.join(ROOT, "relay", "team.cjs"));
+    function envAt(teamMod) {
+      const R = relayEnv(teamMod ? { team: teamMod } : {});
+      R.clock.now = T0L;
+      return R;
+    }
+    function leadList(R, lead) {
+      const st = R.stores.get("lead:" + lead.keyId);
+      if (!st) return null;
+      const row = st.get("lead");
+      return row && Array.isArray(row.rts) ? row.rts.slice() : null;
+    }
+    async function namesCall(worker, R, body) {
+      const names = [];
+      const env = Object.assign({}, R.env, { TEAMS: { jurisdiction(j) {
+        const s = R.env.TEAMS.jurisdiction(j);
+        if (!s) return s;
+        const out = {
+          idFromName: n => s.idFromName(n),
+          get: id => { names.push(String(id && id.name)); return s.get(id); },
+        };
+        if (typeof s.acceptRevocations === "function") out.acceptRevocations = text => s.acceptRevocations(text);
+        return out;
+      } } });
+      const r = await call(R, "POST", "/relay/v1/teams", { json: body, worker: worker || W, env });
+      return { r, names };
+    }
+    async function fill(R, lead, n, now, opts) {
+      const rts = [];
+      for (let i = 0; i < n; i++) {
+        const rt = hex(16);
+        const r = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now, opts) });
+        if (r.status !== 200) return { ok: false, rts, status: r.status, error: r.json && r.json.error };
+        rts.push(rt);
+      }
+      return { ok: true, rts };
+    }
+    async function capScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      const rt = hex(16);
+      const over = await namesCall(W, R, createBody(rt, lead, now));
+      const names = over.names;
+      return {
+        madeOk: made.ok, status: over.r.status, refused: refused(over.r, "team-count"),
+        said: over.r.json && over.r.json.said, names,
+        teamFetches: names.filter(n => n === rt).length,
+        leadOnly: names.length === 1 && names[0] === "lead:" + lead.keyId,
+        stored: R.stores.has(rt),
+      };
+    }
+    async function repeatScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { madeOk: false, status: 0, copies: -1, length: -1, again: { status: 0, json: null } };
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(made.rts[0], lead, now) });
+      const list = leadList(R, lead);
+      const copies = list ? list.filter(x => x === made.rts[0]).length : -1;
+      return { madeOk: true, status: again.status, copies, length: list ? list.length : -1, again };
+    }
+    async function sweepScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now, until = now + DAY;
+      const made = await fill(R, lead, CAP, now, { grantOpts: { fields: { paid: false, until } } });
+      if (!made.ok) return { madeOk: false, rang: false, gone: false, length: -1, again: 0 };
+      R.clock.now = until + 30 * DAY;
+      const swept = made.rts[0];
+      const rang = await R.ring(swept);
+      const afterSweep = leadList(R, lead);
+      const gone = !!(afterSweep && afterSweep.indexOf(swept) < 0);
+      const freshRt = hex(16);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(freshRt, lead, R.clock.now) });
+      return { madeOk: true, rang, gone, length: afterSweep ? afterSweep.length : -1, again: again.status };
+    }
+    async function freedScene(worker, teamMod) {
+      const R = envAt(teamMod), owner = keyPair(false), now = R.clock.now, until = now + DAY;
+      const sweptRt = hex(16);
+      const owned = await call(R, "POST", "/relay/v1/teams", { json: createBody(sweptRt, owner, now, { grantOpts: { fields: { paid: false, until } } }) });
+      R.clock.now = until + 30 * DAY;
+      const rang = await R.ring(sweptRt);
+      const lead = keyPair(false);
+      const made = await fill(R, lead, CAP - 1, R.clock.now);
+      const hit = await countedCall(worker || W, R, "POST", "/relay/v1/teams", { json: createBody(sweptRt, lead, R.clock.now) });
+      const list = leadList(R, lead);
+      const listed = list ? list.indexOf(sweptRt) >= 0 : null;
+      const freshRt = hex(16);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(freshRt, lead, R.clock.now) });
+      const st = R.stores.get(sweptRt);
+      const marked = !!(st && st.get("team") === undefined && st.get("swept") === owner.pub);
+      return {
+        owned: owned.status, rang, madeOk: made.ok, hit, listed, marked,
+        length: list ? list.length : -1, again: again.status,
+      };
+    }
+    async function reapScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { madeOk: false, beforeHas: false, status: 0, deadGone: false, added: false, again: { status: 0, json: null } };
+      const dead = made.rts[0];
+      R.stores.get(dead).del("team");
+      const before = leadList(R, lead);
+      const rt = hex(16);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now) });
+      const after = leadList(R, lead);
+      return {
+        madeOk: true, beforeHas: !!(before && before.indexOf(dead) >= 0 && before.length === CAP),
+        status: again.status, deadGone: !!(after && after.indexOf(dead) < 0),
+        added: !!(after && after.indexOf(rt) >= 0), again,
+      };
+    }
+    async function editTeam(edit, fn) {
+      const digest = sha(fs.readFileSync(PRODUCT.team));
+      let turned = false, detail = "plant line absent";
+      try {
+        const edited = edit(fs.readFileSync(PRODUCT.team, "utf8"));
+        if (edited !== null) {
+          const dir = copyOf({ "relay/team.cjs": edited, "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+    }
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const cap = await capScene();
+    check(teamSrc.TEAMS_PER_LEAD === CAP && B.REASONS["team-count"] === SAID && cap.madeOk && cap.status === 403 && cap.refused
+      && cap.leadOnly && cap.teamFetches === 0 && cap.stored === false,
+      "935a the 26th distinct team of one lead is refused team-count, 403, and the new team object is not fetched (the one get is the lead object): "
+      + JSON.stringify({ status: cap.status, said: cap.said, names: cap.names, stored: cap.stored, made: cap.madeOk }));
+    const rep = await repeatScene();
+    check(rep.madeOk && rep.status === 200 && rep.copies === 1 && rep.length === CAP,
+      "935b a repeat create of a team the lead already holds is taken at the bound, and the lead's list keeps that id once: "
+      + JSON.stringify({ status: rep.status, copies: rep.copies, length: rep.length }));
+    const sw = await sweepScene();
+    check(sw.madeOk && sw.rang === true && sw.gone === true && sw.length === CAP - 1 && sw.again === 200,
+      "935c a swept team leaves the lead's list before the next create, and that create is taken: "
+      + JSON.stringify({ rang: sw.rang, gone: sw.gone, length: sw.length, again: sw.again }));
+    const freed = await freedScene();
+    check(freed.owned === 200 && freed.rang === true && freed.madeOk && refused(freed.hit.r, "swept-other-lead") && freed.hit.gets === 3
+      && freed.listed === false && freed.length === CAP - 1 && freed.marked && freed.again === 200,
+      "935d a create the team object then refuses, at the bound, is dropped from the lead's list before the next create, which is taken: "
+      + JSON.stringify({ hit: freed.hit.r.status, error: freed.hit.r.json && freed.hit.r.json.error, gets: freed.hit.gets,
+        listed: freed.listed, length: freed.length, again: freed.again, marked: freed.marked }));
+    const reap = await reapScene();
+    check(reap.madeOk && reap.beforeHas && reap.status === 200 && reap.deadGone && reap.added,
+      "935e a lead row of 25 that still names a team the object no longer holds is reclaimed by the next new create: "
+      + JSON.stringify({ before: reap.beforeHas, status: reap.status, deadGone: reap.deadGone, added: reap.added }));
+    const capLift = await editTeam(lineLifted("plant:team-count"), async T => {
+      const r = await capScene(T);
+      return r.status === 200 && r.stored === true;
+    });
+    check(cap.status === 403 && capLift.turned && capLift.back, "935f lifting plant:team-count lets the 26th team be made, and the product file is never written: " + how(capLift));
+    const repLift = await editTeam(lineLifted("plant:lead-repeat"), async T => {
+      const r = await repeatScene(T);
+      return refused(r.again, "team-count");
+    });
+    check(rep.status === 200 && repLift.turned && repLift.back, "935g lifting plant:lead-repeat refuses a repeat create at the bound as team-count, and the product file is never written: " + how(repLift));
+    const reapLift = await editTeam(lineLifted("plant:lead-reap"), async T => {
+      const r = await reapScene(T);
+      return refused(r.again, "team-count") && r.deadGone === false;
+    });
+    check(reap.status === 200 && reapLift.turned && reapLift.back, "935h lifting plant:lead-reap leaves a dead team in the count and refuses the next new create, and the product file is never written: " + how(reapLift));
+    const freeLift = await editWorker(lineLifted("plant:lead-free"), async mod => {
+      const r = await freedScene(mod.routeWith(K.ROOTS, env => env.NOW()));
+      return r.listed === true;
+    });
+    check(freed.listed === false && freeLift.turned && freeLift.back, "935i lifting plant:lead-free leaves a refused create's id on the lead's list, and the product file is never written: " + how(freeLift));
+    const dropLift = await editTeam(lineLifted("plant:lead-drop"), async T => {
+      const r = await sweepScene(T);
+      return r.rang === true && r.gone === false && r.length === CAP;
+    });
+    check(sw.gone === true && dropLift.turned && dropLift.back, "935j lifting plant:lead-drop leaves a swept team on the lead's list, and the product file is never written: " + how(dropLift));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

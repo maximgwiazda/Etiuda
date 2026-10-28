@@ -39,6 +39,7 @@ const REASONS = Object.freeze({
   "bad-path": "That path stays outside the team folder.",
   "blob-size": "That file is larger than the relay accepts.",
   "team-size": "The team has reached the space the relay keeps.",
+  "team-count": "This signing key already holds as many teams as the relay allows.",
   "rate": "That many uploads in a minute is more than the relay accepts.",
   "forged-delete": "A deletion needs its writer's signature, so nothing was removed.",
   "superseded": "An older blob of that chain is no longer served.",
