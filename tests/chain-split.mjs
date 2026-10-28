@@ -40,6 +40,7 @@ export const NIGHTLY_ONLY = [
   "tests/engine-selftest.js",
   "tests/leg-ids.js",
   "tests/result-line.mjs",
+  "tests/machine-lock.mjs",
   "tests/sbom.mjs",
   "tests/text-scan-selftest.js",
 ];
