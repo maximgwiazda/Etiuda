@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 386;
+const EXPECTED = 390;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -169,6 +169,16 @@ const getBlob = (w, token, id) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/b/"
 const socket = (w, token, o) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/socket", Object.assign({ token }, o || {}));
 const dumpText = w => JSON.stringify(w.R.stores.get(w.rt).dump());
 const sessionRemoved = (w, keyId) => w.R.stores.get(w.rt).list("ses:").some(([, s]) => !!(s && s.removed === true && s.key === keyId));
+/* How many times the signature primitive runs during one call. Restored before the next check. */
+async function withVerifyCount(fn) {
+  const real = crypto.verify;
+  let n = 0;
+  crypto.verify = function () { n += 1; return real.apply(this, arguments); };
+  try {
+    const r = await fn();
+    return { n, r };
+  } finally { crypto.verify = real; }
+}
 const sent = (w, id) => { const ws = w.R.hubs.get(w.rt).byId(id); return ws ? ws.sent.map(m => JSON.parse(m)) : null; };
 const wsOf = (w, id) => { for (const hub of w.R.hubs.values()) { const f = hub.open.concat([]).find(s => s.id === id); if (f) return f; } return null; };
 
@@ -325,6 +335,11 @@ async function main() {
     for (let i = 0; i < 1001; i++) { const k = keyPair(false); many.push({ id: k.keyId, pub: k.pub, desk: "k-" + i.toString(16).padStart(6, "0") }); }
     const full = await devices(w, many);
     check(refused(full, "team-size") && w.rev === 1, "3f more than 1000 enrolled keys are refused");
+    const devStale = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+      keys: w.devs, rev: w.rev + 1, t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+    check(refused(devStale.r, "nonce-stale") && devStale.n === 0,
+      "934h a devices call more than 5 minutes old, signed with garbage, is refused nonce-stale and the signature is not checked: "
+      + (devStale.r.json && devStale.r.json.error) + ", verify " + devStale.n);
 
     const lead = await sessionOf(w, w.lead), deskS = a.json.session, otherS = b.json.session;
     const up = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
@@ -363,6 +378,11 @@ async function main() {
     check(refused(forged, "bad-signature"), "4b invitations signed by a desk are refused");
     const stale = await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], [], { t: w.R.clock.now - 5 * MIN - 1 });
     check(refused(stale, "nonce-stale"), "4c invitations more than 5 minutes old are refused");
+    const invStale = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+      add: [{ id: hex(16), hash: sha(hex(32)) }], drop: [], t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+    check(refused(invStale.r, "nonce-stale") && invStale.n === 0,
+      "934i an invitations call more than 5 minutes old, signed with garbage, is refused nonce-stale and the signature is not checked: "
+      + (invStale.r.json && invStale.r.json.error) + ", verify " + invStale.n);
     const add2 = [{ id: hex(16), hash: sha(hex(32)) }];
     const first = await invites(w, add2, []);
     const replayed = await invites(w, add2, []);
@@ -1264,6 +1284,22 @@ async function main() {
     });
     check(spendTry.turned && spendTry.back, "7l lifting plant:try-spend lets a wrong token's challenge bind on the retry, and the product file is never written: "
       + spendTry.detail + ", sha " + (spendTry.back ? "restored" : "differs"));
+    const devFreshLift = await liftCore("plant:devices-fresh", async () => {
+      const w = await world();
+      const got = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+        keys: w.devs, rev: w.rev + 1, t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+      return !refused(got.r, "nonce-stale") && got.n > 0;
+    });
+    check(devFreshLift.turned && devFreshLift.back, "934j lifting plant:devices-fresh checks that garbage signature, and the product file is never written: "
+      + devFreshLift.detail + ", sha " + (devFreshLift.back ? "restored" : "differs"));
+    const invFreshLift = await liftCore("plant:invites-fresh", async () => {
+      const w = await world();
+      const got = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+        add: [{ id: hex(16), hash: sha(hex(32)) }], drop: [], t: w.R.clock.now - 5 * MIN - 1, sig: "ab".repeat(64) } }));
+      return !refused(got.r, "nonce-stale") && got.n > 0;
+    });
+    check(invFreshLift.turned && invFreshLift.back, "934k lifting plant:invites-fresh checks that garbage signature, and the product file is never written: "
+      + invFreshLift.detail + ", sha " + (invFreshLift.back ? "restored" : "differs"));
   }
   /* A re-enrol deletes the session marked removed. Lifting that line leaves the old bearer removed, and the row standing. */
   {

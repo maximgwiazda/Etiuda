@@ -420,15 +420,6 @@ function createCore(deps) {
     if (blocked) return blocked; /* plant:revoked-devices */
     const b = bodyOf(body);
     if (!Array.isArray(b.keys) || !Number.isSafeInteger(b.rev) || b.rev < 0 || !Number.isSafeInteger(b.t)) return no("bad-signature");
-    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
-    if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
-    /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved. */
-    const lapsedDevices = lapseGate(true);
-    let removing = false;
-    removing = lapseState() === "read-only" && onlyRemoves(b.keys); /* plant:lapse-withdraw */
-    if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
-    if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
-    if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
     for (const k of b.keys) {
       /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
@@ -437,6 +428,16 @@ function createCore(deps) {
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
     }
+    if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
+    if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
+    if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
+    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
+    /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved.
+       The lapse is asked after the signature: a key that signed nothing is not told the team has lapsed. */
+    const lapsedDevices = lapseGate(true);
+    let removing = false;
+    removing = lapseState() === "read-only" && onlyRemoves(b.keys); /* plant:lapse-withdraw */
+    if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
     /* A key not enrolled yet whose invitation's desk withdrew its request is not let in, and nothing in the set changes. */
     for (const id of next.keys()) if (!store.get("dev:" + id) && withdrawnBy(id)) return no("withdrawn"); /* plant:e4-devices */
     const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
@@ -505,21 +506,13 @@ function createCore(deps) {
     const b = bodyOf(body);
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
-    let covered = undefined;
-    covered = b.wraps; /* plant:S3-wrap-signed */
-    const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
-    if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
-    if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
-    const lapsedInvites = lapseGate(true);
-    if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
-    const seen = "seen:" + sha256(bytes);
-    if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
     const wrapRows = b.wraps || [];
     const shaped = b.add.every(a => !!a && typeof a === "object" && !Array.isArray(a) && is(HEX32, a.id) && is(HEX64, a.hash)
       && (a.until === undefined || Number.isSafeInteger(a.until)))
       && b.drop.every(d => is(HEX32, d))
       && wrapRows.every(w => !!w && typeof w === "object" && !Array.isArray(w) && is(HEX32, w.id));
     if (!shaped) return no("bad-signature"); /* plant:invites-shape */
+    if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
     const prepared = [];
     for (const a of b.add) {
       let kept = null;
@@ -536,6 +529,15 @@ function createCore(deps) {
       if (!taken.ok) return taken;
       replacing.push({ id: w.id, wrap: taken.wrap });
     }
+    let covered = undefined;
+    covered = b.wraps; /* plant:S3-wrap-signed */
+    const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
+    const seen = "seen:" + sha256(bytes);
+    if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
+    if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
+    /* The lapse is asked after the signature, as on the devices route. */
+    const lapsedInvites = lapseGate(true);
+    if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
     const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a]));
