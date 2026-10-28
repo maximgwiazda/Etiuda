@@ -1308,7 +1308,7 @@ function coverApp(root, tracked, gateRel, files, dirs, refer, get) {
   }
 }
 
-function windowKind(abs) {
+export function windowKind(abs) {
   let text;
   try { text = fs.readFileSync(abs, "utf8"); }
   catch (e) { return "node"; }

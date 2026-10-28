@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 74;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1208,6 +1208,38 @@ async function main() {
     "16j a diff confined to the gate tools runs their own legs and the floor, and one mixing them with another file fails closed: "
     + areaToolsOnly.out.trim().split(/\r?\n/).filter(l => /fail-closed|confined|own legs|gate\(s\) to run/i.test(l)).join(" | ")
     + " || mixed: " + areaToolsMixed.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
+
+  /* A window gate gates-for names is left out of the area run and named, never run whole (the window wall). */
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "win.mjs"), 'import "../src/winread.mjs";\nE.windowWall("tests/win.mjs");\nconsole.log("  ok   win");\n');
+  fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 1;\n");
+  const winPkg = JSON.parse(fs.readFileSync(path.join(areaLab.lab, "package.json"), "utf8"));
+  winPkg.scripts.win = "node tests/win.mjs";
+  fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(winPkg, null, 2) + "\n");
+  spawnSync("git", ["add", "."], { cwd: areaLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "a window gate"], { cwd: areaLab.lab });
+  fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 2;\n");
+  const areaWindow = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 1;\n");
+  check(areaWindow.out.indexOf("window gate tests/win.mjs left out") >= 0 && areaWindow.out.indexOf("  node tests/win.mjs") < 0,
+    "16k a window gate gates-for names for the diff is left out of the area run and named, not run whole: "
+    + areaWindow.out.trim().split(/\r?\n/).filter(l => /win|gate\(s\) to run/i.test(l)).join(" | "));
+
+  /* No FLOOR entry is one the window wall refuses: a file gates-for classes window is named by a node arm, and that arm,
+     run here with ETIUDA_WINDOWS unset, exits 0 without the wall's marker (the test architect's leg, 2026-10-28). */
+  const gfFloor = await import("../tools/gates-for.mjs");
+  const floorBad = [];
+  for (const f of gr.FLOOR || []) {
+    const kind = typeof gfFloor.windowKind === "function" ? gfFloor.windowKind(path.join(ROOT, f.file)) : "unknown";
+    if (kind === "node") continue;
+    if (!f.args || !f.args.length) { floorBad.push(f.file + " (" + kind + ", whole file)"); continue; }
+    const armEnv = Object.assign({}, process.env);
+    for (const k of Object.keys(armEnv)) if (k.toUpperCase() === "ETIUDA_WINDOWS") delete armEnv[k];
+    const arm = spawnSync(process.execPath, [path.join(ROOT, f.file), ...f.args], { cwd: ROOT, encoding: "utf8", env: armEnv, timeout: 120000 });
+    const said = String(arm.stdout || "") + String(arm.stderr || "");
+    if (arm.status !== 0 || /#refused/.test(said)) floorBad.push(f.cmd + " (exit " + arm.status + (/#refused/.test(said) ? ", refused" : "") + ")");
+  }
+  check(Array.isArray(gr.FLOOR) && gr.FLOOR.length > 0 && floorBad.length === 0,
+    "16l no FLOOR entry is one the window wall refuses: " + (floorBad.length ? floorBad.join("; ") : (gr.FLOOR || []).length + " entries, each node or a node arm that ran"));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";

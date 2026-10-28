@@ -67,7 +67,7 @@ export const NIGHTLY_LEGS = [
 
 export const FLOOR = [
   { step: "pick 5a-5f", file: "tests/pick.mjs", cmd: "node tests/pick.mjs", args: [] },
-  { step: "links line 92", file: "tests/links.js", cmd: "node tests/links.js", args: [] },
+  { step: "links open-external (line 92)", file: "tests/links.js", cmd: "node tests/links.js open-external", args: ["open-external"] },
   { step: "relay-unit 13b", file: "tests/relay-unit.mjs", cmd: "node tests/relay-unit.mjs", args: [] },
   { step: "update-install U0d", file: "tests/update-install.js", cmd: "node tests/update-install.js U0d", args: ["U0d"] },
   { step: "team-join 15by-15bz", file: "tests/team-join.mjs", cmd: "node tests/team-join.mjs", args: [] },
@@ -263,7 +263,11 @@ export async function planAreaRun(root, changed, pkg) {
   let rows = [];
   if (!toolsOnly) { try { rows = gatesFor(root, changed); } catch { rows = []; } }
 
-  const gateFiles = new Set(rows.map(r => r.gate));
+  /* A window gate is walled (rule 13's window wall): it runs only when argued, never picked up by a merge, as the whole run
+     never runs one. The area run names it and leaves it out, so it stays a subset of the whole run plus the floor. */
+  const windowGates = [...new Set(rows.filter(r => r.kind === "window").map(r => r.gate))];
+  for (const w of windowGates) console.log("gate-run area: window gate " + w + " left out, walled: argued separately");
+  const gateFiles = new Set(rows.filter(r => r.kind !== "window").map(r => r.gate));
   const steps = [];
   const addedFiles = new Set();
   const gaps = [];
