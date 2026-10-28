@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 129;
+const EXPECTED = 131;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -2308,6 +2308,115 @@ try {
     }
   }
 
+  /* Cancel on a refused relay request whose invitation the relay had taken withdraws it, and the request ends once the
+     relay takes that withdrawal or refuses it for good. What the invitation changed is put back, and a new invitation
+     for that team is taken. A waiting request, the same cancel, still keeps the pin and says withdrawn. */
+  const relayStand = () => {
+    const box = { opts: null };
+    box.channel = Object.assign({}, RelayChannel(), {
+      createChannel: o => { box.opts = o; return { start: noop, stop: async () => {}, kick: noop, online: () => true }; }
+    });
+    return box;
+  };
+  const refusedAcceptedDesk = (name, stand) => deskWith(name, folder(name + "-own"), {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      refused: true,
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        before: { barred: false, epoch: 0 },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32,
+          token: sealText("token"), seal: sealText(seal32), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamPinFrom: { [relayTeam]: "invite" },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: folder(name + "-mirror"), relay: "relay.test" } },
+    teamChannel: { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } },
+    teamKeys: { [relayTeam]: { 1: keptKey } }
+  }, null, { relayChannel: stand.channel });
+  const invitationBack = env => {
+    const pins = env.teamPins || {}, keys = env.teamKeys || {}, from = env.teamPinFrom || {};
+    const shown = env.teamShown || {}, channel = env.teamChannel || {};
+    return !env.teamJoin && !pins[relayTeam] && !keys[relayTeam] && !from[relayTeam] && !shown[relayTeam] && !channel[relayTeam];
+  };
+  const answerWithdrawal = async (D, stand, which) => {
+    await D.join("cancel");
+    D.api.relayRun();
+    await new Promise(r => setTimeout(r, 30));
+    const fn = stand.opts && stand.opts[which];
+    if (typeof fn === "function") fn();
+    return D.envelope();
+  };
+  const freshRelayBlob = () => inviteBlob({
+    team: relayTeam,
+    relay: { rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1",
+      token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") },
+    lead: lampLead, secret: newSecret()
+  });
+  const takenStand = relayStand(), unkeptStand = relayStand(), waitingStand = relayStand();
+  const takenDeskE = await refusedAcceptedDesk("h35-refused-end-taken", takenStand);
+  const takenSeed = fs.readFileSync(path.join(takenDeskE.ud, "desk.json"));
+  const unkeptDeskE = await refusedAcceptedDesk("h35-refused-end-unkept", unkeptStand);
+  const waitingDeskE = await deskWith("h35-refused-end-waiting", folder("h35-refused-end-waiting-own"), {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        before: { barred: false, epoch: 0 },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32,
+          token: sealText("token"), seal: sealText(seal32), wrapped: [1] }
+      }
+    },
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamPinFrom: { [relayTeam]: "invite" },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", folder: folder("h35-refused-end-waiting-mirror"), relay: "relay.test" } },
+    teamChannel: { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } },
+    teamKeys: { [relayTeam]: { 1: keptKey } }
+  }, null, { relayChannel: waitingStand.channel });
+  const takenEnv = await answerWithdrawal(takenDeskE, takenStand, "onWithdrawn");
+  const takenAgain = takenEnv && !takenEnv.teamJoin ? await takenDeskE.join("invite", freshRelayBlob(), "Nia") : null;
+  const unkeptEnv = await answerWithdrawal(unkeptDeskE, unkeptStand, "onWithdrawUnkept");
+  const unkeptAgain = unkeptEnv && !unkeptEnv.teamJoin ? await unkeptDeskE.join("invite", freshRelayBlob(), "Nia") : null;
+  const waitingEnv = await answerWithdrawal(waitingDeskE, waitingStand, "onWithdrawn");
+  const takenEnded = invitationBack(takenEnv) && !!(takenAgain && takenAgain.join && takenAgain.join.state === "waiting" && takenAgain.join.state !== "refused");
+  const unkeptEnded = invitationBack(unkeptEnv) && !!(unkeptAgain && unkeptAgain.join && unkeptAgain.join.state === "waiting" && unkeptAgain.join.state !== "refused");
+  const waitingKept = !!(waitingEnv.teamJoin && waitingEnv.teamJoin.invite && waitingEnv.teamJoin.invite.relay
+    && waitingEnv.teamJoin.invite.relay.withdrawn === true && waitingEnv.teamPins && waitingEnv.teamPins[relayTeam]);
+  check(takenEnded && unkeptEnded && waitingKept,
+    "15dw after Cancel on a refused relay request the relay had taken, the request ends whether the relay takes the withdrawal or refuses it for good, what the invitation changed is put back, and a new invitation for that team is taken; a waiting request stays withdrawn with its pin: taken "
+    + (takenEnded ? "ended" : "still there") + ", unkept " + (unkeptEnded ? "ended" : "still there") + ", waiting " + (waitingKept ? "kept" : "lost"));
+
+  // 15dx: lifting plant:refused-cancel-ends leaves the refused request in place after the relay takes the withdrawal
+  {
+    if (PLANTS_OFF) {
+      skip("15dx lifting plant:refused-cancel-ends leaves a refused relay request in place after Cancel, the relay having taken the withdrawal");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:refused-cancel-ends") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const stand = relayStand();
+        const ud = path.join(LAB, "h35-refused-end-plant");
+        fs.mkdirSync(ud, { recursive: true });
+        fs.writeFileSync(path.join(ud, "desk.json"), takenSeed);
+        const planted = loadDesk(ud, lines.join("\n"), { relayChannel: stand.channel });
+        await planted.ask("etiuda:branch-identity", true);
+        const env = await answerWithdrawal(planted, stand, "onWithdrawn");
+        turned = !!(env.teamJoin && env.teamPins && env.teamPins[relayTeam]);
+        detail = turned ? "the request and the pin stayed" : "the request ended with the plant line lifted";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15dx lifting plant:refused-cancel-ends leaves a refused relay request in place after Cancel, the relay having taken the withdrawal (FAIL 15dw: taken still there): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];
   const wasLoad = HK.hooks.loadCatalogFromFolder;
@@ -2714,9 +2823,35 @@ try {
     const relayNoMirror = relayLibEn.indexOf(relayHex.h32) < 0 && relayLibEn.indexOf("open-folder") < 0;
     const folderLibEn = await libraryAt(Dl, "en");
     const folderLibUnchanged = folderLibEn.indexOf('id="mgCatFolder"') >= 0 && folderLibEn.indexOf("open-folder") >= 0 && folderLibEn.indexOf("Relay:") < 0;
-    check(relayHasHost && relayNoChange && relayNoMirror && folderLibUnchanged,
-      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, while a folder team stays unchanged: host "
-      + relayHasHost + ", no change " + relayNoChange + ", no mirror " + relayNoMirror + ", folder " + folderLibUnchanged);
+    const folderOpen = folder("lib-folder-open"), relayPlace = folder("lib-relay-place");
+    const noneOpen = folder("lib-none-open"), relayOther = folder("lib-relay-other");
+    const pinBoth = { keyId: LEAD.keyId, public: LEAD.public };
+    const relayCh = { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } };
+    const folderTeamDesk = await deskWith("h35-lib-folder", folderOpen, {
+      teamPins: { [TEAM]: pinBoth, [relayTeam]: pinBoth },
+      teamPinFrom: { [TEAM]: "answer", [relayTeam]: "invite" },
+      teamShown: {
+        [TEAM]: { lead: "Lamp lead", folder: folderOpen },
+        [relayTeam]: { lead: "Lamp lead", folder: relayPlace, relay: "relay.test" }
+      },
+      teamChannel: relayCh
+    });
+    const noneDesk = await deskWith("h35-lib-none", noneOpen, {
+      teamPins: { [relayTeam]: pinBoth },
+      teamPinFrom: { [relayTeam]: "invite" },
+      teamShown: { [relayTeam]: { lead: "Lamp lead", folder: relayOther, relay: "relay.test" } },
+      teamChannel: relayCh
+    });
+    const seesFolder = (html, open) => html.indexOf('id="mgCatFolder"') >= 0 && html.indexOf(open) >= 0
+      && html.indexOf("Change folder") >= 0 && html.indexOf("Relay:") < 0;
+    const folderTeamHtml = await libraryAt(folderTeamDesk, "en");
+    const noneHtml = await libraryAt(noneDesk, "en");
+    const folderTeamSees = seesFolder(folderTeamHtml, folderOpen);
+    const noneSees = seesFolder(noneHtml, noneOpen);
+    check(relayHasHost && relayNoChange && relayNoMirror && folderLibUnchanged && folderTeamSees && noneSees,
+      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, while a folder team stays unchanged, and a relay desk that opens a folder team's catalog or a catalog of no team sees that folder and Change folder: host "
+      + relayHasHost + ", no change " + relayNoChange + ", no mirror " + relayNoMirror + ", folder " + folderLibUnchanged
+      + ", folder team " + folderTeamSees + ", none " + noneSees);
   });
 
   // 15dv: lifting plant:library-relay-host shows mirror folder and Change folder on a relay team's Library

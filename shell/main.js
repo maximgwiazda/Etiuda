@@ -3405,6 +3405,25 @@ function undoInvite(team, b, inv) {
   relaySoon();
   catalogFolderChanged();
 }
+/* A refused request whose invitation the relay had already taken is withdrawn like a waiting one, and then it ends:
+   the request is let go and what the invitation changed is put back, whether the relay takes the withdrawal or
+   refuses it for good. A waiting request is left as it was, so Ask again still has what the invitation gave. */
+function endRefusedRelay(j) {
+  if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already */ } }
+  const team = j.team, inv = j.invite, b = inv && inv.before, wrapped = (inv && inv.relay && inv.relay.wrapped) || [];
+  const putBack = !!(b && newestEpoch(team, wrapped) === (b.epoch || 0));
+  teamJoin = null;
+  joinTold = false;
+  joinDone = null;
+  if (putBack) undoInvite(team, b, inv);
+  persistDeskEnvelope();
+  sendJoin(theWindow);
+}
+function refusedWithdrawEnds(j) {
+  if (!j || j.refused !== true || !j.invite || !j.invite.relay) return false;
+  endRefusedRelay(j); /* plant:refused-cancel-ends */
+  return true;
+}
 /* Moves the request on and says where it stands: admitted once this desk keeps a newer key for the team than when it
    asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so.
    `leads` is leadsView's. */
@@ -3794,7 +3813,7 @@ function leadsView() {
       try { relayHost = new URL(teamChannel[t].url).host; } catch { relayHost = ""; }
     }
     const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
-      lead: shown.lead || "", folder: relayHost ? "" : (shown.folder || ""),
+      lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: !!named && named === teamPins[t].public };
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
@@ -4075,16 +4094,19 @@ function relayRun() {
     onWithdrawn: () => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       if (!inv || inv.withdrawing !== true) return;
+      if (refusedWithdrawEnds(j)) return;
       delete inv.withdrawing;
       delete inv.readonly;
       inv.withdrawn = true; /* plant:g2-taken */
       persistDeskEnvelope();
       sendJoin(theWindow);
     },
-    /* The relay refused the withdrawal for good. The request is no longer on its way out, and Ask again is not offered. */
+    /* The relay refused the withdrawal for good. The request is no longer on its way out, and Ask again is not offered.
+       A refused request ends here too, the same as when the relay takes the withdrawal. */
     onWithdrawUnkept: () => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       if (!inv || inv.withdrawing !== true) return;
+      if (refusedWithdrawEnds(j)) return;
       delete inv.withdrawing;
       delete inv.readonly;
       inv.unkept = true; /* plant:c5-unkept-desk */

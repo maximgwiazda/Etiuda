@@ -574,6 +574,23 @@ function mgIntentRow(i,catOf,linked){
       '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
     '</span></div>';
 }
+/* The Library names the relay only while the catalog open is that relay team's own. The relay's folder is the mirror
+   the shell shows for it. Where the relay names no folder, the open catalog is its own unless another team's folder
+   is the one open. A folder team's catalog, and a catalog of no team, keep the folder and Change folder. */
+function normCatalogFolder(p){
+  return String(p||"").replace(/[\\/]+$/,"").toLowerCase()
+}
+function libraryOnRelay(){
+  const open=normCatalogFolder(eCatalogFolder())
+  if(!open) return false
+  const leads=teamLeads().filter(l=>l&&!l.removed)
+  const relay=leads.filter(l=>l.relay)
+  if(!relay.length) return false
+  if(leads.some(l=>!l.relay && normCatalogFolder(l.folder)===open)) return false
+  const place=normCatalogFolder(relay[0].folder)
+  if(!place) return true
+  return place===open
+}
 function openManage(justHtml){
   applyCatsToGlobal();
 
@@ -614,7 +631,7 @@ function openManage(justHtml){
   const hiddenIntentCount=mgIntentIdxs.filter(i=>isIntentHiddenIdx(i)).length;
 
   let relayLead=null;
-  relayLead=teamLeads().filter(l=>l&&l.relay&&!l.removed)[0]||null; /* plant:library-relay-host */
+  if(libraryOnRelay()) relayLead=teamLeads().filter(l=>l&&l.relay&&!l.removed)[0]||null; /* plant:library-relay-host */
   const dataTail=relayLead
     ? '<span class="ec-where"><small>'+esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay))+'</small></span>'
     : eCatalogFolder()
