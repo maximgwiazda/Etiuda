@@ -702,7 +702,32 @@ function isJs(abs) {
   return /\.(mjs|js|cjs)$/.test(abs);
 }
 
+const analyzeCache = new Map();
+const trackedKeyCache = new WeakMap();
+
+/* A plan for every chain file re-reads this tree. The bytes have not moved, so the read is reused. */
+function trackedKey(tracked) {
+  let key = trackedKeyCache.get(tracked);
+  if (key) return key;
+  key = tracked.size + "\0" + [...tracked].join("\0");
+  trackedKeyCache.set(tracked, key);
+  return key;
+}
+
 function analyze(abs, root, tracked) {
+  let stamp = "missing";
+  try {
+    const st = fs.statSync(abs);
+    stamp = st.mtimeMs + ":" + st.size;
+  } catch (e) { /* a missing file is its own stamp */ }
+  const key = path.resolve(abs) + "\0" + stamp + "\0" + (tracked ? trackedKey(tracked) : "");
+  if (analyzeCache.has(key)) return analyzeCache.get(key);
+  const value = analyzeUncached(abs, root, tracked);
+  analyzeCache.set(key, value);
+  return value;
+}
+
+function analyzeUncached(abs, root, tracked) {
   let text;
   try { text = fs.readFileSync(abs, "utf8"); }
   catch (e) { return { loads: [], reads: [], dirs: [], globs: [], wantsGlob: false, edges: [] }; }

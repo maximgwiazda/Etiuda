@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 80;
+const EXPECTED = 81;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1302,6 +1302,26 @@ async function main() {
   check(!selfPlan.failClosed && selfPlan.steps.length > 0 && !selfPlan.steps.some(s => s.file === "tools/gate-run.mjs"),
     "16p an area run never schedules the gate runner itself: for tests/relay-workerd.mjs it runs "
     + selfPlan.steps.map(s => s.file).join(", "));
+
+  /* For every file the npm test chain names, that file alone schedules only the chain, the bracket and the floor.
+     Static: planAreaRun starts nothing. Removing the runner's guard names tools/gate-run.mjs. */
+  const chainFiles = String(selfPkg.scripts && selfPkg.scripts.test || "").split("&&").map(s => {
+    const m = /^\s*node\s+(\S+)/.exec(s.trim());
+    return m ? m[1].replace(/\\/g, "/") : "";
+  }).filter(Boolean);
+  const chainAllow = new Set([...chainFiles, "tests/plant-hold.mjs", "tests/plant-compare.mjs", "tools/child-cap.mjs",
+    ...(gr.FLOOR || []).map(f => f.file)]);
+  const chainOutside = [];
+  for (const file of chainFiles) {
+    const one = await gr.planAreaRun(ROOT, [file], selfPkg);
+    for (const s of one.steps || []) {
+      const rel = String(s.file || "").replace(/\\/g, "/");
+      if (!chainAllow.has(rel)) chainOutside.push(file + " -> " + rel);
+    }
+  }
+  check(chainFiles.length > 0 && chainOutside.length === 0,
+    "16q a chain file's plan holds only the chain, the bracket and the floor: "
+    + (chainOutside.length ? chainOutside.slice(0, 6).join("; ") : chainFiles.length + " files"));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";
