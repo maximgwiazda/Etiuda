@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 420;
+const EXPECTED = 422;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -89,7 +89,9 @@ async function call(R, method, p, o) {
 }
 
 const refused = (r, reason) => !!r && r.status >= 400 && r.status < 500 && !!r.json && r.json.error === reason
-  && r.json.said === B.REASONS[reason] && Object.keys(r.json).sort().join() === "error,said" && !r.meta && !r.socket;
+  && r.json.said === B.REASONS[reason]
+  && (Object.keys(r.json).sort().join() === "error,said" || (reason === "replay-counter" && typeof r.json.floor === "number" && Object.keys(r.json).sort().join() === "error,floor,said"))
+  && !r.meta && !r.socket;
 
 /* The relay's env with the test root its team objects accept a grant under, and a create's body carrying a grant of that root. */
 const relayEnv = o => S.relayEnv(Object.assign({ roots: K.ROOTS }, o || {}));
@@ -871,14 +873,16 @@ async function main() {
     check(refused(f, "bad-signature") && real.status === 200, "9g a forged upload at counter 100 leaves the floor where it was, so the lead's counter 1 is then taken");
     const equal = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/c.ec", 1)), lower = await put(w, lead, sealAs(w, w.lead, "x.ec", 1));
     const otherFirst = await put(w, other, sealAs(w, w.other, "desks/" + w.otherId + "/a.ec", 1));
-    check(refused(equal, "replay-counter") && refused(lower, "replay-counter") && otherFirst.status === 200,
+    check(refused(equal, "replay-counter") && equal.json.floor === 1 && refused(lower, "replay-counter") && lower.json.floor === 1 && otherFirst.status === 200,
       "9h a counter at or below its writer's last is refused, and the floor is the writer's own");
     const reused = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/c.ec", 5, { id: blob.id }));
-    check(refused(reused, "replay-counter"), "9i an id the team already holds is refused, whatever the counter");
+    check(refused(reused, "replay-counter") && reused.json.floor === undefined, "9i an id the team already holds is refused, whatever the counter");
     const leadBlob = sealAs(w, w.lead, "notes.ec", 2);
     await put(w, lead, leadBlob);
     const theirs = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/d.ec", 6, { supersedes: leadBlob.id }));
     const ownNext = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/in-use.ec", 7, { supersedes: blob.id }));
+    const tombReused = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/c.ec", 10, { id: blob.id }));
+    check(refused(tombReused, "replay-counter") && tombReused.json.floor === undefined, "9i-tomb a tomb id is refused replay-counter with no floor, whatever the counter");
     const deskBlob = sealAs(w, w.other, "desks/" + w.otherId + "/b.ec", 2);
     await put(w, other, deskBlob);
     const leadOver = await put(w, lead, sealAs(w, w.lead, "y.ec", 3, { supersedes: deskBlob.id }));
@@ -4846,6 +4850,15 @@ async function main() {
     });
     check(noteLift.turned && noteLift.back, "934g lifting plant:blob-note leaves the live count behind the rows when prune has not run, and the product file is never written: "
       + noteLift.detail + ", sha " + (noteLift.back ? "restored" : "differs"));
+    const floorLift = await liftCore("plant:put-counter-floor", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      await put(p, s, sealAs(p, p.lead, "a.ec", 5));
+      const replay = await put(p, s, sealAs(p, p.lead, "b.ec", 1));
+      return replay.json && replay.json.error === "replay-counter" && replay.json.floor === undefined;
+    });
+    check(floorLift.turned && floorLift.back, "934v lifting plant:put-counter-floor omits the floor from a counter replay refusal: "
+      + floorLift.detail + ", sha " + (floorLift.back ? "restored" : "differs"));
   }
 
   /* ---- 935: one lead key holds at most 25 live teams (board 935 (7)). The count is this run's, recorded as Claudius's. ---- */

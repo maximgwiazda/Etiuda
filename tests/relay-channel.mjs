@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 288;
+const EXPECTED = 292;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5628,8 +5628,8 @@ async function answerFloor(mod) {
 try {
   const c = await answerFloor(C);
   const replay = c.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
-  check(c.ans && c.ans.ok === true && c.floor > c.teamCounter && c.ownAtCatch >= c.teamCounter && c.ownAtCatch < c.floor && c.tookFirst,
-    "970r the known limit until the relay names the floor: an answer the list does not serve raises it, the second program's clock never reaches that counter, and a retry cannot take the upload: answer "
+  check(c.ans && c.ans.ok === true && c.floor > c.teamCounter && c.ownAtCatch >= c.teamCounter && c.ownAtCatch < c.floor && !c.tookFirst && c.tookSecond,
+    "970r the relay names the floor: an answer the list does not serve raises it, the first upload cycle takes the floor from the refusal, and the next cycle clears the retry: answer "
     + (c.ans && c.ans.ok ? "written" : (c.ans && c.ans.reason) || "none")
     + ", team counter " + c.teamCounter + ", floor " + c.floor + ", own after the catch-up " + c.ownAtCatch
     + ", first cycle " + (c.tookFirst ? "taken" : "refused") + ", next cycle " + (c.tookSecond ? "taken" : "refused")
@@ -5769,6 +5769,100 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 970u): " + (e && e.stack ? e.stack : e));
+}
+async function floorPastBound(mod) {
+  const clock = 1000, teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), name = "fpb-" + tag;
+  const t = transport(name);
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1,
+    request: t.request,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+  });
+  const out = { refused: false, ownBefore: 0, ownAfter: 0, saidBound: false };
+  try {
+    put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+    desk.ch.start();
+    await desk.ch.idle();
+    out.ownBefore = desk.prog.state().own;
+    putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER);
+    put(desk.mirror, "owed.ec", "a file\n");
+    desk.ch.kick();
+    await desk.ch.idle();
+    out.ownAfter = desk.prog.state().own;
+    out.saidBound = desk.said.some(l => l.indexOf("the relay named a counter floor past the bound, so that was not taken") >= 0);
+    out.refused = !desk.prog.state().sent["owed.ec"] && desk.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+  return out;
+}
+try {
+  const x = await floorPastBound(C);
+  check(x.refused && x.ownAfter === x.ownBefore + 1 && x.ownAfter < Number.MAX_SAFE_INTEGER && x.saidBound,
+    "970w a floor past the bound leaves the counter unchanged by the refusal, and is refused and said: before "
+    + x.ownBefore + ", after " + x.ownAfter + ", said " + x.saidBound);
+  const planted = await liftChannel("plant:floor-bound", async mod => {
+    const y = await floorPastBound(mod);
+    return y.ownAfter === Number.MAX_SAFE_INTEGER;
+  });
+  check(planted.turned && planted.back, "970x lifting plant:floor-bound takes the floor past the bound into the counter, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970w): " + (e && e.stack ? e.stack : e));
+}
+async function floorlessBackoff(mod) {
+  const clock = 1000, teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), name = "flb-" + tag;
+  const t = transport(name);
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1,
+    request: t.request,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+  });
+  const out = { delays: [] };
+  try {
+    return await withMinute(async ({ pending, fire, mark }) => {
+      put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+      desk.ch.start();
+      await desk.ch.idle();
+      putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER);
+      put(desk.mirror, "owed.ec", "a file\n");
+      let marked = mark();
+      desk.ch.kick();
+      await desk.ch.idle();
+      for (let i = 0; i < 3; i++) {
+        const armed = pending(marked);
+        if (armed.length === 1) {
+          out.delays.push(armed[0].ms);
+          if (i < 2) {
+            marked = mark();
+            fire(armed[0]);
+            await desk.ch.idle();
+          }
+        }
+      }
+      return out;
+    });
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+}
+try {
+  const x = await floorlessBackoff(C);
+  check(x.delays.length === 3 && x.delays[0] === COUNTER_MINUTE_MS && x.delays[1] === COUNTER_MINUTE_MS && x.delays[2] === 2000,
+    "970y three floorless replay-counter refusals back off after three tries, and the next try waits the normal backoff, not 60 s: delays "
+    + JSON.stringify(x.delays));
+  const planted = await liftChannel("plant:counter-backoff", async mod => {
+    const y = await floorlessBackoff(mod);
+    return y.delays.length === 3 && y.delays[2] === COUNTER_MINUTE_MS;
+  });
+  check(planted.turned && planted.back, "970z lifting plant:counter-backoff leaves the third try waiting 60 s, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970y): " + (e && e.stack ? e.stack : e));
 }
 
 /* An invitation's one upload whose reply never came back. The next cycle is told the token is spent, which is that upload

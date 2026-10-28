@@ -1376,6 +1376,12 @@ function createProgram(opts) {
     },
     suspect: () => st.suspect === true,
     settled() { if (st.suspect) { st.suspect = false; persist(); } },
+    raiseOwn(counter) {
+      if (Number.isSafeInteger(counter)) {
+        st.own = Math.max(st.own, counter);
+        persist();
+      }
+    },
   };
   return api;
 }
@@ -1416,6 +1422,21 @@ function createChannel(opts) {
   let wrapPhase = "need", wrapHeld = null;
   let watchers = [], settle = null, retryTimer = null, counterTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
   let counterOwed = false;
+  /* The bound the relay puts on an accepted counter (blob.cjs isCount: Number.MAX_SAFE_INTEGER). */
+  const COUNTER_BOUND = Number.MAX_SAFE_INTEGER;
+  let floorlessTries = 0;
+
+  function takeFloor(floor) {
+    if (floor === undefined) return false;
+    let past = false;
+    past = !Number.isSafeInteger(floor) || floor < 1 || floor >= COUNTER_BOUND; /* plant:floor-bound */
+    if (past) {
+      sayOnce("the relay named a counter floor past the bound, so that was not taken"); /* draft words: copywriter */
+      return false;
+    }
+    prog.raiseOwn(floor); /* plant:take-floor */
+    return true;
+  }
   const said = new Set();
   const sayOnce = line => { if (!said.has(line)) { said.add(line); say(line); } };
 
@@ -1446,7 +1467,10 @@ function createChannel(opts) {
   function refusalOf(r) {
     const j = r && r.json;
     const reason = j && typeof j.error === "string" && has(B.REASONS, j.error) ? j.error : null;
-    return reason ? R(reason) : { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
+    if (!reason) return { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
+    const out = R(reason);
+    if (j && j.floor !== undefined) out.floor = j.floor;
+    return out;
   }
 
   /* THE LAPSE, kept with the program's record so a restart still knows it, and handed on through onLapse(view) whenever
@@ -1778,7 +1802,11 @@ function createChannel(opts) {
   function scheduleCounterRetry() {
     if (!running) return;
     clearTimeout(counterTimer);
-    counterTimer = setTimeout(() => { counterTimer = null; kick(); }, COUNTER_RETRY_MS);
+    let waitBackoff = false;
+    waitBackoff = floorlessTries >= 3; /* plant:counter-backoff */
+    const delay = waitBackoff ? backoff : COUNTER_RETRY_MS;
+    if (waitBackoff) backoff = Math.min(backoff * 2, RETRY_MAX_MS);
+    counterTimer = setTimeout(() => { counterTimer = null; kick(); }, delay);
     if (counterTimer.unref) counterTimer.unref();
   }
   function clearCounterRetry() {
@@ -1803,7 +1831,7 @@ function createChannel(opts) {
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
-      if (u.ok) continue;
+      if (u.ok) { floorlessTries = 0; continue; }
       if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
@@ -1818,8 +1846,12 @@ function createChannel(opts) {
       if (spentSent) { prog.sentOut(op, u.blob); forgetWrap(); continue; }
       /* true: the relay answered. That refusal waits; it is not kept by content hash. */
       const waits = prog.refusedOut(op, u.why, true);
-      if (u.why && u.why.reason === "replay-counter") sawReplay = true; /* plant:counter-retry */
-      if (waits && HALTS.indexOf(u.why.reason) >= 0) { counterOwed = false; clearCounterRetry(); return { ok: true }; }
+      if (u.why && u.why.reason === "replay-counter") {
+        sawReplay = true; /* plant:counter-retry */
+        const taken = takeFloor(u.why.floor);
+        if (taken) floorlessTries = 0; else floorlessTries += 1;
+      }
+      if (waits && HALTS.indexOf(u.why.reason) >= 0) { floorlessTries = 0; counterOwed = false; clearCounterRetry(); return { ok: true }; }
     }
     counterOwed = sawReplay;
     if (sawReplay || answerDue) scheduleCounterRetry();
@@ -1962,10 +1994,14 @@ function createChannel(opts) {
     const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
       del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
     const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
-    if (r.status === 200) { answerDue = null; if (!counterOwed) clearCounterRetry(); return { ok: true }; }
+    if (r.status === 200) { answerDue = null; floorlessTries = 0; if (!counterOwed) clearCounterRetry(); return { ok: true }; }
     const why = r.refused || refusalOf(r);
-    if (why && why.reason === "replay-counter") answerDue = { answer: s.answer, inv: String(s.inv), deskId: s.deskId, deskBox: s.deskBox, leadBox: s.leadBox }; /* plant:answer-retry */
-    if (why && HALTS.indexOf(why.reason) >= 0) { answerDue = null; counterOwed = false; clearCounterRetry(); return why; }
+    if (why && why.reason === "replay-counter") {
+      answerDue = { answer: s.answer, inv: String(s.inv), deskId: s.deskId, deskBox: s.deskBox, leadBox: s.leadBox }; /* plant:answer-retry */
+      const taken = takeFloor(why.floor);
+      if (taken) floorlessTries = 0; else floorlessTries += 1;
+    }
+    if (why && HALTS.indexOf(why.reason) >= 0) { answerDue = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return why; }
     if (answerDue) scheduleCounterRetry();
     return why;
   }
@@ -2157,6 +2193,7 @@ function createChannel(opts) {
     running = false;
     clearTimeout(settle); clearTimeout(retryTimer); clearCounterRetry(); clearInterval(pollTimer); clearInterval(pingTimer);
     closeWatchers();
+    floorlessTries = 0;
     if (sock) { try { sock.close(); } catch { /* gone */ } sock = null; }
     session = null;
     if (busy) await busy;

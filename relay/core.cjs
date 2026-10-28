@@ -1036,7 +1036,16 @@ function createCore(deps) {
     if (liveCount + adding > BLOBS_MAX) return no("team-size"); /* plant:blob-cap */
     const aad = B.aadOf({ relayTeamId: rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter });
     if (!aad || !B.verifyUpload(a.pub, aad, ct, m.sig)) return no("bad-signature"); /* plant:put-sig */
-    if (!B.counterFresh(store.get("counters") || {}, m.writer, m.epoch, m.counter).ok) return no("replay-counter"); /* plant:put-counter */
+    if (!B.counterFresh(store.get("counters") || {}, m.writer, m.epoch, m.counter).ok) {
+      const counters = store.get("counters") || {};
+      const floor = counters["c\n" + m.writer + "\n" + m.epoch];
+      const floorVal = Number.isSafeInteger(floor) ? floor : 0;
+      let nameFloor = true;
+      nameFloor = !!(a.s && a.s.key === m.writer); /* plant:counter-floor-auth */
+      let resFloor = null;
+      resFloor = nameFloor ? floorVal : null; /* plant:put-counter-floor */
+      return resFloor !== null ? Object.assign(no("replay-counter"), { floor: resFloor }) : no("replay-counter");
+    }
     if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
