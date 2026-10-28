@@ -1255,9 +1255,14 @@ async function main() {
   const closedPlan = await gr.planAreaRun(ROOT, ["package.json"], closedPkg);
   const closedMissing = (gr.FLOOR || []).filter(f => !(closedPlan.steps || []).some(s => s.cmd === f.cmd
     || (s.file === f.file && !(s.args || []).length))).map(f => f.cmd);
-  check(closedPlan.failClosed === true && (gr.FLOOR || []).length > 0 && closedMissing.length === 0,
+  /* And not by luck: a chain holding no floor file at all gets every entry from withFloor, before plant-compare. */
+  const bare = typeof gr.withFloor === "function" ? gr.withFloor(ROOT, [{ cmd: "node tests/plant-compare.mjs", file: "tests/plant-compare.mjs", args: [] }]) : [];
+  const bareMissing = (gr.FLOOR || []).filter(f => !bare.some(s => s.cmd === f.cmd)).map(f => f.cmd);
+  if (!bare.length || bare[bare.length - 1].file !== "tests/plant-compare.mjs") bareMissing.push("plant-compare not last");
+  check(closedPlan.failClosed === true && (gr.FLOOR || []).length > 0 && closedMissing.length === 0 && bareMissing.length === 0,
     "16m a fail-closed plan runs every FLOOR entry: " + (closedPlan.failClosed ? "fail-closed, " : "NOT fail-closed, ")
-    + (closedMissing.length ? "missing " + closedMissing.join("; ") : (gr.FLOOR || []).length + " entries among " + (closedPlan.steps || []).length + " steps"));
+    + (closedMissing.length ? "missing " + closedMissing.join("; ") : (gr.FLOOR || []).length + " entries among " + (closedPlan.steps || []).length + " steps")
+    + (bareMissing.length ? "; a bare chain misses " + bareMissing.join("; ") : "; a bare chain gets all " + (gr.FLOOR || []).length));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";
