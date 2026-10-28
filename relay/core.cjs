@@ -18,6 +18,8 @@ const TOKEN_TRIES = 20;
 const TRY_KEYS_MAX = 64;
 /* Spent challenges held at once. 256 is the cap the stored challenges had. A live row is never dropped, because dropping it would let that challenge be used again. Past the cap the hello is refused rate. */
 const CHALLENGES_MAX = 256;
+/* Wrong-token spends tagged with one invitation, of the cap above. Past this share that try is refused rate. */
+const CHALLENGE_SHARE = 64;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
 /* The shortest ciphertext a padded seal can be, and the most live blobs one team may hold. */
@@ -645,10 +647,17 @@ function createCore(deps) {
     if (store.list("tf:" + inv + ":").length >= TRY_KEYS_MAX) return; /* plant:try-cap */
     store.put(row, 1);
   }
+  /* The spent time is the row itself, from before a row was tagged, or the at of a tagged row. Anything else is not live. */
+  function spentAt(row) {
+    if (typeof row === "number") return row;
+    if (row && typeof row.at === "number") return row.at;
+    return null;
+  }
   /* Expired spent-challenge rows go on the write, so a caller who never lists cannot keep them. A live row stays. */
   function dropExpiredChallenges(now) {
-    for (const [k, atSpent] of store.list("chu:")) {
-      if (typeof atSpent !== "number" || now - atSpent > CHALLENGE_MS) store.del(k);
+    for (const [k, row] of store.list("chu:")) {
+      const at = spentAt(row);
+      if (at === null || now - at > CHALLENGE_MS) store.del(k);
     }
   }
   function roomForChallenge(now) {
@@ -656,10 +665,16 @@ function createCore(deps) {
     if (store.list("chu:").length >= CHALLENGES_MAX) return false; /* plant:challenge-cap */
     return true;
   }
-  function spendChallenge(nonce) {
+  function challengeShare(inv) {
+    let n = 0;
+    for (const [, row] of store.list("chu:")) if (row && row.inv === inv) n++;
+    return n;
+  }
+  function spendChallenge(nonce, inv) {
     const now = clock();
     if (!roomForChallenge(now)) return false;
-    store.put("chu:" + nonce, now); /* plant:try-spend */
+    if (is(HEX32, inv) && challengeShare(inv) >= CHALLENGE_SHARE) return false; /* plant:challenge-share */
+    store.put("chu:" + nonce, { at: now, inv }); /* plant:try-spend */
     return true;
   }
   /* The newest binding wins. Lifting the comparison keeps the binding already indexed. */
@@ -687,10 +702,10 @@ function createCore(deps) {
     if (!inv) return no("not-enrolled");
     if (inv.spent) return no("token-spent"); /* plant:token-spent */
     const tries = store.get(tryRow(b.inv, b.key));
-    if (typeof tries === "number" && tries >= TOKEN_TRIES) { if (!spendChallenge(b.challenge)) return no("rate"); return no("token-tries"); } /* plant:token-key */
+    if (typeof tries === "number" && tries >= TOKEN_TRIES) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); return no("token-tries"); } /* plant:token-key */
     const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX && is(HEX64, inv.hash)
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
-    if (!right) { if (!spendChallenge(b.challenge)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
+    if (!right) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
     /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
        still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
     let ended = false;
@@ -776,7 +791,7 @@ function createCore(deps) {
     if (!roomForChallenge(now)) return no("rate");
     store.atomic(() => {
       also && also();
-      store.put("chu:" + nonce, now); /* plant:challenge-use */
+      store.put("chu:" + nonce, { at: now, inv: who.inv || null }); /* plant:challenge-use */
       const held = store.list("ses:").filter(([k, s]) => (s.until < now ? (store.del(k), false) : true)).sort((a, b) => a[1].until - b[1].until);
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
@@ -1243,7 +1258,7 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
+  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

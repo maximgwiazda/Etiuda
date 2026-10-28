@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 418;
+const EXPECTED = 420;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -626,33 +626,83 @@ async function main() {
     await invites(w, [{ id: idMany, hash: sha(tMany) }], []);
     for (let i = 0; i < 65; i++) await tokenHello(w, idMany, "nope-" + i);
     const manyRows = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
+    w.R.clock.now += C.CHALLENGE_MS + 1;
+    await tokenHello(w, idMany, "nope-after");
+    const afterRows = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
     const sixtySixth = await tokenHello(w, idMany, tMany);
     const droppedMany = await invites(w, [], [idMany]);
     const leftMany = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
-    check(manyRows === 64 && sixtySixth.status === 200 && droppedMany.status === 200 && leftMany === 0,
-      "7h sixty-five keys' wrong tries leave 64 rows, the sixty-sixth key's right token still binds, and dropping the invitation leaves no try row: "
-      + manyRows + " rows, bind " + sixtySixth.status + ", left " + leftMany);
+    check(manyRows === 64 && afterRows === 64 && sixtySixth.status === 200 && droppedMany.status === 200 && leftMany === 0,
+      "7h sixty-five keys' wrong tries leave 64 rows, one more after those spent challenges have expired still leaves 64, the next key's right token still binds, and dropping the invitation leaves no try row: "
+      + manyRows + " then " + afterRows + ", bind " + sixtySixth.status + ", left " + leftMany);
     const capW = await world();
-    const tCap = hex(32), idCap = hex(16);
-    await invites(capW, [{ id: idCap, hash: sha(tCap) }], []);
+    const shares = [];
+    for (let n = 0; n < 4; n++) shares.push({ id: hex(16), hash: sha(hex(32)) });
+    await invites(capW, shares, []);
     const nonceCap = await challenge(capW);
-    let lastCap = await tokenHello(capW, idCap, "nope-0", nonceCap);
-    for (let i = 1; i < 256; i++) lastCap = await tokenHello(capW, idCap, "nope-" + i);
+    let lastCap = await tokenHello(capW, shares[0].id, "nope-0", nonceCap);
+    for (let n = 0; n < 4; n++) {
+      for (let i = n === 0 ? 1 : 0; i < 64; i++) lastCap = await tokenHello(capW, shares[n].id, "nope-" + n + "-" + i);
+    }
     const boxCap = capW.R.stores.get(capW.rt);
     const atCap = boxCap.list("chu:").length;
-    const overCap = await tokenHello(capW, idCap, "nope-256");
+    const over = { id: hex(16), hash: sha(hex(32)) };
+    await invites(capW, [over], []);
+    const overCap = await tokenHello(capW, over.id, "nope-over");
     const heldCap = boxCap.list("chu:").length;
-    const stillCap = await tokenHello(capW, idCap, "nope-0", nonceCap);
+    const stillCap = await tokenHello(capW, shares[0].id, "nope-0", nonceCap);
     const keptCap = boxCap.get("chu:" + nonceCap) !== undefined;
     capW.R.clock.now += C.CHALLENGE_MS + 1;
-    const laterCap = await tokenHello(capW, idCap, "nope-later");
+    const laterCap = await tokenHello(capW, over.id, "nope-later");
     const laterRows = boxCap.list("chu:").length;
     check(refused(lastCap, "not-enrolled") && atCap === 256 && refused(overCap, "rate") && heldCap === 256
       && refused(stillCap, "hello-replay") && keptCap
       && refused(laterCap, "not-enrolled") && laterRows === 1,
-      "936a 257 wrong tries, and no list, keep spent challenges at 256, the next hello is rate, and the first spent challenge is still held; past five minutes the next wrong try is the only row: "
+      "936a four invitations' wrong tries, and no list, keep spent challenges at 256, the next invitation's hello is rate, and the first spent challenge is still held; past five minutes the next wrong try is the only row: "
       + atCap + " then " + heldCap + ", last " + (lastCap.json && lastCap.json.error) + ", over " + (overCap.json && overCap.json.error)
       + ", replay " + (stillCap.json && stillCap.json.error) + ", later " + laterRows + " " + (laterCap.json && laterCap.json.error));
+    const shareW = await world();
+    const shareToken = hex(32), shareId = hex(16);
+    await invites(shareW, [{ id: shareId, hash: sha(shareToken) }], []);
+    const shareNonce = await challenge(shareW);
+    const shareBox = shareW.R.stores.get(shareW.rt);
+    const legacyNonce = "ab".repeat(16), junkNonce = "cd".repeat(16), legacyAt = shareW.R.clock.now;
+    shareBox.put("chu:" + legacyNonce, legacyAt);
+    shareBox.put("chu:" + junkNonce, "stale");
+    const tagged = () => shareBox.list("chu:").filter(([, row]) => row && row.inv === shareId);
+    let shareSpent = 0, shareRate = 0, shareMax = 0;
+    const firstShare = await tokenHello(shareW, shareId, "nope-0", shareNonce);
+    if (refused(firstShare, "not-enrolled")) shareSpent++;
+    else if (refused(firstShare, "rate")) shareRate++;
+    shareMax = tagged().length;
+    for (let i = 1; i < 256; i++) {
+      const answer = await tokenHello(shareW, shareId, "nope-" + i);
+      if (refused(answer, "not-enrolled")) shareSpent++;
+      else if (refused(answer, "rate")) shareRate++;
+      const n = tagged().length;
+      if (n > shareMax) shareMax = n;
+    }
+    const shareRows = tagged();
+    const shareReplay = await tokenHello(shareW, shareId, "nope-0", shareNonce);
+    const shareKept = shareBox.get("chu:" + shareNonce);
+    const shareHello = await helloAs(shareW, shareW.desk);
+    const shareKeptAfter = shareBox.get("chu:" + shareNonce) !== undefined;
+    const shareOtherId = hex(16);
+    await invites(shareW, [{ id: shareOtherId, hash: sha(hex(32)) }], []);
+    const shareOther = await tokenHello(shareW, shareOtherId, "nope-other");
+    const shareBound = await tokenHello(shareW, shareId, shareToken);
+    const shareTotal = shareBox.list("chu:").length;
+    check(C.CHALLENGE_SHARE === 64 && shareSpent === 64 && shareRate === 192 && shareMax === 64
+      && shareRows.length === 64 && shareRows.every(([, row]) => typeof row.at === "number" && row.inv === shareId)
+      && refused(shareReplay, "hello-replay") && !!shareKept && shareKept.inv === shareId
+      && shareHello.status === 200 && /^[0-9a-f]{64}$/.test(shareHello.json && shareHello.json.session)
+      && shareKeptAfter && refused(shareOther, "not-enrolled") && shareBound.status === 200
+      && shareBox.get("chu:" + legacyNonce) === legacyAt && shareBox.get("chu:" + junkNonce) === undefined
+      && shareTotal <= 256,
+      "936i 256 wrong tries on one invitation keep 64 spent challenges tagged with it, the rest are rate, and an enrolled key's hello is still issued: "
+      + shareSpent + " spent, " + shareRate + " rate, max " + shareMax + ", hello " + shareHello.status
+      + ", other " + (shareOther.json && shareOther.json.error) + ", bind " + shareBound.status
+      + ", replay " + (shareReplay.json && shareReplay.json.error) + ", rows " + shareTotal);
     const scan = await world();
     const scanBox = scan.R.stores.get(scan.rt);
     for (let i = 0; i < 1000; i++) scanBox.put("inv:" + hex(16), { spent: true, spentAt: 1, key: hex(32), pub: hex(32), hash: hex(32) });
@@ -1386,10 +1436,12 @@ async function main() {
       const p = await world();
       const token = hex(32), id = hex(16);
       await invites(p, [{ id, hash: sha(token) }], []);
-      for (let i = 0; i < 65; i++) await tokenHello(p, id, "nope-" + i);
+      for (let i = 0; i < 64; i++) await tokenHello(p, id, "nope-" + i);
+      p.R.clock.now += C.CHALLENGE_MS + 1;
+      await tokenHello(p, id, "nope-64");
       return p.R.stores.get(p.rt).list("tf:" + id + ":").length === 65;
     });
-    check(capLift.turned && capLift.back, "7k lifting plant:try-cap keeps a sixty-fifth key's wrong try, and the product file is never written: "
+    check(capLift.turned && capLift.back, "7k lifting plant:try-cap keeps a sixty-fifth key's wrong try once the spent challenges have expired, and the product file is never written: "
       + capLift.detail + ", sha " + (capLift.back ? "restored" : "differs"));
     const spendTry = await liftCore("plant:try-spend", async () => {
       const p = await world();
@@ -1404,14 +1456,30 @@ async function main() {
       + spendTry.detail + ", sha " + (spendTry.back ? "restored" : "differs"));
     const challengeCap = await liftCore("plant:challenge-cap", async () => {
       const p = await world();
-      const token = hex(32), id = hex(16);
-      await invites(p, [{ id, hash: sha(token) }], []);
-      let last = null;
-      for (let i = 0; i < 257; i++) last = await tokenHello(p, id, "nope-" + i);
+      const ids = [];
+      for (let n = 0; n < 4; n++) {
+        const id = hex(16);
+        ids.push(id);
+        await invites(p, [{ id, hash: sha(hex(32)) }], []);
+      }
+      for (let n = 0; n < 4; n++) for (let i = 0; i < 64; i++) await tokenHello(p, ids[n], "nope-" + n + "-" + i);
+      const overId = hex(16);
+      await invites(p, [{ id: overId, hash: sha(hex(32)) }], []);
+      const last = await tokenHello(p, overId, "nope-over");
       return p.R.stores.get(p.rt).list("chu:").length > 256 || !refused(last, "rate");
     });
-    check(challengeCap.turned && challengeCap.back, "936b lifting plant:challenge-cap lets a 257th wrong try keep another spent challenge, and the product file is never written: "
+    check(challengeCap.turned && challengeCap.back, "936b lifting plant:challenge-cap lets a fifth invitation's wrong try keep a 257th spent challenge, and the product file is never written: "
       + challengeCap.detail + ", sha " + (challengeCap.back ? "restored" : "differs"));
+    const shareLift = await liftCore("plant:challenge-share", async () => {
+      const p = await world();
+      const id = hex(16);
+      await invites(p, [{ id, hash: sha(hex(32)) }], []);
+      for (let i = 0; i < 256; i++) await tokenHello(p, id, "nope-" + i);
+      const hello = await helloAs(p, p.desk);
+      return hello.status !== 200;
+    });
+    check(shareLift.turned && shareLift.back, "936j lifting plant:challenge-share lets one invitation's wrong tries fill the spent challenges, so an enrolled key's hello is refused, and the product file is never written: "
+      + shareLift.detail + ", sha " + (shareLift.back ? "restored" : "differs"));
     const devFreshLift = await liftCore("plant:devices-fresh", async () => {
       const w = await world();
       const got = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
