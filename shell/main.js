@@ -1202,23 +1202,41 @@ function deskEnvelopeBody(keysText) {
 }
 /* A RENAME OVER A FILE ANOTHER PROGRAM HAS OPEN IS REFUSED ON WINDOWS for as long as it holds
    it, and a virus scanner or a sync client opening a file just written is the ordinary case, so
-   the rename is asked again for half a second before the refusal stands. */
+   the rename is asked again for a few seconds (60 retries of 50 ms) before the refusal stands. */
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+const RENAME_RETRIES = 60;
+const RENAME_WAIT_MS = 50;
 function renamePatiently(from, to) {
   for (let i = 1; ; i++) {
     try { fs.renameSync(from, to); return; }
     catch (e) {
-      if (i >= 10 || RENAME_BUSY.indexOf(e.code) < 0) throw e;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      if (i >= RENAME_RETRIES || RENAME_BUSY.indexOf(e.code) < 0) throw e; /* plant:rename-retries */
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RENAME_WAIT_MS);
     }
   }
 }
+/* A temporary name no other writer can have: this process, a count of its own writes, and random bytes. The shell loads
+   no module it did not have (pick 5c), so no thread id: the count and the random part already set two writers apart. */
+let tempCount = 0;
+function uniqueTempPath(file) {
+  tempCount = (tempCount + 1) % 1e9;
+  const rand = crypto.randomBytes(6).toString("hex");
+  return file + "." + process.pid + "." + tempCount + "." + rand + ".tmp"; /* plant:unique-temp */
+}
 /* Temp file then rename, so a failed write never leaves half a file under the name, and a
-   refused one leaves no temp file behind it. Throws what stopped it. */
+   refused one leaves no temp file behind it. The temp name is unique per write to prevent collisions
+   on shared folders, fsynced to disk before the rename, and unlinked on every failure path.
+   Throws what stopped it. */
 function writeReplacing(file, text) {
-  const tmp = file + ".tmp";
+  const tmp = uniqueTempPath(file);
   try {
     fs.writeFileSync(tmp, text, "utf8");
+    const fd = fs.openSync(tmp, "r+");
+    try {
+      fs.fsyncSync(fd); /* plant:write-fsync */
+    } finally {
+      fs.closeSync(fd);
+    }
     renamePatiently(tmp, file);
   } catch (e) {
     try { fs.unlinkSync(tmp); } catch { /* never made */ }
