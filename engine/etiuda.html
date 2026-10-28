@@ -30046,6 +30046,21 @@ What you type stays in this browser only.`;
     const trash = '<button type="button" class="danger mg-trash" data-remove-intent="' + esc(iid) + '" title="Delete this intent" aria-label="Delete this intent">' + ICON_TRASH + "</button>";
     return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '">' + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n">' + (linked.get(iid) || 0) + '</span><span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
+  function normCatalogFolder(p) {
+    return String(p || "").replace(/[\\/]+$/, "").toLowerCase();
+  }
+  function libraryRelayLead() {
+    const open = normCatalogFolder(eCatalogFolder());
+    if (!open) return null;
+    const leads = teamLeads().filter((l) => l && !l.removed);
+    if (leads.some((l) => !l.relay && normCatalogFolder(l.folder) === open)) return null;
+    const relay = leads.filter((l) => l.relay);
+    if (!relay.length) return null;
+    const match = relay.find((l) => normCatalogFolder(l.folder) === open);
+    if (match) return match;
+    if (relay.length === 1 && !normCatalogFolder(relay[0].folder)) return relay[0];
+    return null;
+  }
   function openManage(justHtml) {
     applyCatsToGlobal();
     const mgGoneIntents = new Set(pack.intentRemoved || []);
@@ -30062,7 +30077,7 @@ What you type stays in this browser only.`;
     const hiddenCardCount = (cards || []).filter((m) => m && m._hidden).length;
     const hiddenIntentCount = mgIntentIdxs.filter((i) => isIntentHiddenIdx(i)).length;
     let relayLead = null;
-    relayLead = teamLeads().filter((l) => l && l.relay && !l.removed)[0] || null;
+    relayLead = libraryRelayLead();
     const dataTail = relayLead ? '<span class="ec-where"><small>' + esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay)) + "</small></span>" : eCatalogFolder() ? '<span class="ec-where"><code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>" : "";
     const mgBody = "" + mgSec(
       "catmac",

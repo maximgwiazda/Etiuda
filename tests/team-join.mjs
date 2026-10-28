@@ -2848,10 +2848,29 @@ try {
     const noneHtml = await libraryAt(noneDesk, "en");
     const folderTeamSees = seesFolder(folderTeamHtml, folderOpen);
     const noneSees = seesFolder(noneHtml, noneOpen);
-    check(relayHasHost && relayNoChange && relayNoMirror && folderLibUnchanged && folderTeamSees && noneSees,
-      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, while a folder team stays unchanged, and a relay desk that opens a folder team's catalog or a catalog of no team sees that folder and Change folder: host "
+    const relayTeam2 = "t-" + crypto.randomBytes(8).toString("hex"), relayPlace2 = folder("lib-relay-two");
+    const twoRelayDesk = await deskWith("h35-lib-two-relay", relayPlace2, {
+      teamPins: { [relayTeam]: pinBoth, [relayTeam2]: pinBoth },
+      teamPinFrom: { [relayTeam]: "invite", [relayTeam2]: "invite" },
+      teamShown: {
+        [relayTeam]: { lead: "Lamp lead", folder: relayPlace, relay: "relay.test" },
+        [relayTeam2]: { lead: "Lamp lead", folder: relayPlace2, relay: "relay-two.test" }
+      },
+      teamChannel: {
+        [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" },
+        [relayTeam2]: { kind: "relay", rt: crypto.randomBytes(16).toString("hex"), url: "https://relay-two.test/relay/v1" }
+      }
+    });
+    const twoRelayLibEn = await libraryAt(twoRelayDesk, "en");
+    const twoRelayLibPl = await libraryAt(twoRelayDesk, "pl");
+    const twoRelayHasHost = twoRelayLibEn.indexOf("Relay: relay-two.test") >= 0 && twoRelayLibPl.indexOf("Przekaźnik: relay-two.test") >= 0;
+    const twoRelayNoChange = twoRelayLibEn.indexOf('id="mgCatFolder"') < 0 && twoRelayLibEn.indexOf("Change folder") < 0;
+    const twoRelayNoMirror = twoRelayLibEn.indexOf("open-folder") < 0;
+    const twoRelaySees = twoRelayHasHost && twoRelayNoChange && twoRelayNoMirror;
+    check(relayHasHost && relayNoChange && relayNoMirror && folderLibUnchanged && folderTeamSees && noneSees && twoRelaySees,
+      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, while a folder team stays unchanged, and a relay desk that opens a folder team's catalog or a catalog of no team sees that folder and Change folder, and a two-relay-team desk opening the second sees that relay host: host "
       + relayHasHost + ", no change " + relayNoChange + ", no mirror " + relayNoMirror + ", folder " + folderLibUnchanged
-      + ", folder team " + folderTeamSees + ", none " + noneSees);
+      + ", folder team " + folderTeamSees + ", none " + noneSees + ", second relay " + twoRelaySees);
   });
 
   // 15dv: lifting plant:library-relay-host shows mirror folder and Change folder on a relay team's Library

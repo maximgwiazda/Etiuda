@@ -580,16 +580,17 @@ function mgIntentRow(i,catOf,linked){
 function normCatalogFolder(p){
   return String(p||"").replace(/[\\/]+$/,"").toLowerCase()
 }
-function libraryOnRelay(){
+function libraryRelayLead(){
   const open=normCatalogFolder(eCatalogFolder())
-  if(!open) return false
+  if(!open) return null
   const leads=teamLeads().filter(l=>l&&!l.removed)
+  if(leads.some(l=>!l.relay && normCatalogFolder(l.folder)===open)) return null
   const relay=leads.filter(l=>l.relay)
-  if(!relay.length) return false
-  if(leads.some(l=>!l.relay && normCatalogFolder(l.folder)===open)) return false
-  const place=normCatalogFolder(relay[0].folder)
-  if(!place) return true
-  return place===open
+  if(!relay.length) return null
+  const match=relay.find(l=>normCatalogFolder(l.folder)===open)
+  if(match) return match
+  if(relay.length===1 && !normCatalogFolder(relay[0].folder)) return relay[0]
+  return null
 }
 function openManage(justHtml){
   applyCatsToGlobal();
@@ -631,7 +632,7 @@ function openManage(justHtml){
   const hiddenIntentCount=mgIntentIdxs.filter(i=>isIntentHiddenIdx(i)).length;
 
   let relayLead=null;
-  if(libraryOnRelay()) relayLead=teamLeads().filter(l=>l&&l.relay&&!l.removed)[0]||null; /* plant:library-relay-host */
+  relayLead=libraryRelayLead(); /* plant:library-relay-host */
   const dataTail=relayLead
     ? '<span class="ec-where"><small>'+esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay))+'</small></span>'
     : eCatalogFolder()
