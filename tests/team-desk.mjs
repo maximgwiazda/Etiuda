@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 57;
+const EXPECTED = 58;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -555,7 +555,8 @@ try {
         + " " + said(refusedQ.r) + ", then " + said(stillQ.r) + ", team " + stillEnv.team);
     }
 
-    /* The folder's own team seals an export when that team held the pin, whichever envelope was read first.
+    /* The folder's own team seals an export when that team held the pin, whichever envelope was read first,
+       and when that team's envelope lies unread in the folder after another team's was read.
        A claim that does not open, and a folder that holds the pin under two teams, still refuse. */
     {
       const prevSave = process.env.ETIUDA_TEST_SAVE_AS;
@@ -623,6 +624,25 @@ try {
         "14ax with team A's envelope read before team B's, the export at B's folder is sealed for B and the pin stays"
         + " the team read first: pin " + JSON.stringify(inletNamed) + ", " + said(inletGot.r) + ", team " + inletGot.env.team
         + ", B's key opens it " + (inletByB === inletMade ? "yes" : "no") + ", A's key opens it " + (inletByA ? "yes" : "no"));
+      const moor = await pair("moor");
+      const moorB = await moor.admit(moor.homeB, moor.TB, moor.KB);
+      const moorPin = await moor.pinOf();
+      const moorMe = await moor.D.ask("etiuda:branch-identity", true);
+      put(moor.homeA, "etiuda-team.json", JSON.stringify(teamFile({ team: TEAM, epoch: 1, roster: [entry(moorMe, K1, 1, TEAM)], exportsSealed: true })));
+      put(moor.homeA, "lamps.ec", seal(K1, 1, A2, TEAM));
+      moor.point(moor.homeA);
+      const moorMade = text(catalog("lamp-export", 4, "Moor board", "2026-10-18"));
+      const moorBody = "Good day, Moor board.";
+      const moorGot = await take(moor.D, folder("moor-save"), "Moor.ec", moorMade, moorPin);
+      const moorNamed = moor.D.api.teamOf(moorPin);
+      const moorByA = opensWith(moorGot.env, K1), moorByB = opensWith(moorGot.env, moor.KB);
+      check(moorB === A2.trim() && moorNamed === moor.TB && moorGot.env.team === TEAM && moorGot.env.kind === "etiuda-sealed"
+        && moorByA === moorMade && moorByB === null
+        && !!moorGot.out && moorGot.out.indexOf(moorBody) < 0,
+        "14ba with team B's envelope read and team A's envelope lying unread in A's folder, the export at A's folder is sealed for A"
+        + " and the pin stays the team read first: pin " + JSON.stringify(moorNamed) + ", " + said(moorGot.r) + ", team " + moorGot.env.team
+        + ", A's key opens it " + (moorByA === moorMade ? "yes" : "no") + ", B's key opens it " + (moorByB ? "yes" : "no")
+        + ", the body " + (moorGot.out && moorGot.out.indexOf(moorBody) >= 0 ? "is in the file" : "is not in the file"));
       const reed = await pair("reed");
       const reedA = await reed.admit(reed.homeA, TEAM, K1);
       const reedPin = await reed.pinOf();

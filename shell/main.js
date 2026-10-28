@@ -2000,6 +2000,10 @@ function sealFor(catalogId, pin, root) {
   let team = asked ? (editionTeam.get(asked) || "") : "";
   if (asked && (!team || pinsTorn(root, asked))) return null;
   let cover = team ? teamCovering(root, catalogId) : null;
+  /* The scan above stops once editionTeam holds the pin, so a folder team this run has not opened is read here. */
+  if (asked && cover && !(editionTeams.get(asked) && editionTeams.get(asked).has(String(cover.id)))) {
+    ecFilesIn(root).forEach(f => ecFacts(f, "")); /* plant:seal-read */
+  }
   /* Seal for the folder's own team where editionTeams holds that team and the folder is not torn, so the first read does not decide the export. */
   if (asked && cover && !pinsTorn(root, asked)) {
     const held = editionTeams.get(asked);
