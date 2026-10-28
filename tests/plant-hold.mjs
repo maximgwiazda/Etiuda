@@ -346,19 +346,34 @@ export function countPlantMarkers(text) {
   return counts;
 }
 
+function gitRefuse(cmd, res) {
+  const errText = (res.stderr ? String(res.stderr) : "") ||
+    (res.error ? String(res.error.message) : "") ||
+    ("exit " + res.status);
+  const firstLine = errText.split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || "unknown error";
+  console.error(`${cmd}: ${firstLine}`);
+  process.exit(78);
+}
+
 export function checkPlantMarkers(root) {
-  if (!fs.existsSync(path.join(root, ".git"))) return [];
+  const headCmd = `git -C ${root} rev-parse --verify HEAD`;
   const headCheck = spawnSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
     windowsHide: true,
     encoding: "utf8",
   });
-  if (headCheck.status !== 0) return [];
+  if (headCheck.status !== 0) {
+    gitRefuse(headCmd, headCheck);
+  }
 
+  const grepCmd = `git -C ${root} -c core.quotePath=false grep -lz plant: HEAD --`;
   const grepRes = spawnSync("git", ["-C", root, "-c", "core.quotePath=false", "grep", "-lz", "plant:", "HEAD", "--"], {
     windowsHide: true,
     maxBuffer: 32 << 20,
   });
-  if (grepRes.status !== 0) return [];
+  if (grepRes.status === 1) return [];
+  if (grepRes.status !== 0) {
+    gitRefuse(grepCmd, grepRes);
+  }
 
   const filesAtHead = [];
   for (const raw of splitZero(grepRes.stdout)) {
@@ -371,6 +386,7 @@ export function checkPlantMarkers(root) {
 
   if (filesAtHead.length === 0) return [];
 
+  const catCmd = `git -C ${root} cat-file --batch`;
   const catInput = filesAtHead.map(f => "HEAD:" + f).join("\n") + "\n";
   const catRes = spawnSync("git", ["-C", root, "cat-file", "--batch"], {
     input: catInput,
@@ -378,7 +394,9 @@ export function checkPlantMarkers(root) {
     maxBuffer: 64 << 20,
   });
 
-  if (catRes.status !== 0) return [];
+  if (catRes.status !== 0) {
+    gitRefuse(catCmd, catRes);
+  }
 
   const buf = catRes.stdout;
   let offset = 0;
@@ -559,6 +577,21 @@ export function runSelftest() {
     check(recCount === 1, "recordTree records 1 tracked file in lab repo");
     const cmpClean = compareTree(lab);
     check(cmpClean.ok === true, "compareTree on unchanged tree reports ok");
+
+    // Check 10: a root that is not a git repository gives 78 naming git command and error
+    const plainDir = fs.mkdtempSync(path.join(os.tmpdir(), "plant-guard-notgit-"));
+    try {
+      fs.writeFileSync(path.join(plainDir, "sample.js"), "// plant:test-marker\n");
+      const cliNotGit = spawnSync(process.execPath, [selfScript, "--guard", "--root", plainDir], {
+        windowsHide: true,
+        encoding: "utf8",
+      });
+      const notGitOut = (cliNotGit.stderr || "") + (cliNotGit.stdout || "");
+      check(cliNotGit.status === 78 && notGitOut.includes("git") && (notGitOut.includes("not a git repository") || notGitOut.includes("rev-parse")),
+        "root that is not a git repository gives 78 naming git command and error: exit " + cliNotGit.status);
+    } finally {
+      fs.rmSync(plainDir, { recursive: true, force: true });
+    }
 
   } finally {
     fs.rmSync(lab, { recursive: true, force: true });
