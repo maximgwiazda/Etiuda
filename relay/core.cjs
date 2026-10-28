@@ -14,9 +14,17 @@ const CALL_SKEW_MS = 5 * 60 * 1000;
 const DELEGATION_MAX_MS = 366 * 86400000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
+/* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
+const TRY_KEYS_MAX = 64;
+/* Spent challenges held at once. 256 is the cap the stored challenges had. A live row is never dropped, because dropping it would let that challenge be used again. Past the cap the hello is refused rate. */
+const CHALLENGES_MAX = 256;
+/* Wrong-token spends tagged with one invitation, of the cap above. Past this share that try is refused rate. */
+const CHALLENGE_SHARE = 64;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
-const CHALLENGES_MAX = 256;
+/* The shortest ciphertext a padded seal can be, and the most live blobs one team may hold. */
+const BLOB_MIN = B.PAD_FLOOR + B.TAG_BYTES;
+const BLOBS_MAX = 4096;
 const SESSIONS_MAX = 1024;
 const KEYS_MAX = 1000;
 const SINCE_MAX = 1000;
@@ -357,7 +365,9 @@ function createCore(deps) {
     /* `made` stamps this copy of the team: kept by a repeat create, new once a sweep has emptied the store, and told at each session. */
     const made = team && typeof team.made === "string" ? team.made : random(8);
     store.atomic(() => {
-      store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made }, paidApart));
+      const row = Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made }, paidApart);
+      if (typeof row.secret !== "string") row.secret = team && typeof team.secret === "string" ? team.secret : random(32);
+      store.put("team", row);
       store.del("swept");
       remember(b.grant);
     });
@@ -414,15 +424,6 @@ function createCore(deps) {
     if (blocked) return blocked; /* plant:revoked-devices */
     const b = bodyOf(body);
     if (!Array.isArray(b.keys) || !Number.isSafeInteger(b.rev) || b.rev < 0 || !Number.isSafeInteger(b.t)) return no("bad-signature");
-    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
-    if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
-    /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved. */
-    const lapsedDevices = lapseGate(true);
-    let removing = false;
-    removing = lapseState() === "read-only" && onlyRemoves(b.keys); /* plant:lapse-withdraw */
-    if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
-    if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
-    if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
     for (const k of b.keys) {
       /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
@@ -431,6 +432,16 @@ function createCore(deps) {
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
     }
+    if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
+    if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
+    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */
+    if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
+    /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved.
+       The lapse is asked after the signature: a key that signed nothing is not told the team has lapsed. */
+    const lapsedDevices = lapseGate(true);
+    let removing = false;
+    removing = lapseState() === "read-only" && onlyRemoves(b.keys); /* plant:lapse-withdraw */
+    if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
     /* A key not enrolled yet whose invitation's desk withdrew its request is not let in, and nothing in the set changes. */
     for (const id of next.keys()) if (!store.get("dev:" + id) && withdrawnBy(id)) return no("withdrawn"); /* plant:e4-devices */
     const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
@@ -499,21 +510,13 @@ function createCore(deps) {
     const b = bodyOf(body);
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
-    let covered = undefined;
-    covered = b.wraps; /* plant:S3-wrap-signed */
-    const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
-    if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
-    if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
-    const lapsedInvites = lapseGate(true);
-    if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
-    const seen = "seen:" + sha256(bytes);
-    if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
     const wrapRows = b.wraps || [];
     const shaped = b.add.every(a => !!a && typeof a === "object" && !Array.isArray(a) && is(HEX32, a.id) && is(HEX64, a.hash)
       && (a.until === undefined || Number.isSafeInteger(a.until)))
       && b.drop.every(d => is(HEX32, d))
       && wrapRows.every(w => !!w && typeof w === "object" && !Array.isArray(w) && is(HEX32, w.id));
     if (!shaped) return no("bad-signature"); /* plant:invites-shape */
+    if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
     const prepared = [];
     for (const a of b.add) {
       let kept = null;
@@ -530,9 +533,19 @@ function createCore(deps) {
       if (!taken.ok) return taken;
       replacing.push({ id: w.id, wrap: taken.wrap });
     }
+    let covered = undefined;
+    covered = b.wraps; /* plant:S3-wrap-signed */
+    const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
+    if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */ /* plant:invites-unsigned */
+    const seen = "seen:" + sha256(bytes);
+    if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
+    /* The lapse is asked after the signature, as on the devices route. */
+    const lapsedInvites = lapseGate(true);
+    if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
-    const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a]));
+    const revived = new Set(prepared.filter(a => store.get("sp:" + a.id)).map(a => a.id));
+    const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id) && !revived.has(a.id)).map(a => [a.id, a]));
     const live = [...held].filter(([id, v]) => !v.spent && !drop.has(id)).length + added.size;
     if (live > INVITES_MAX) return no("team-size"); /* plant:invites-cap */
     const now = clock();
@@ -548,7 +561,8 @@ function createCore(deps) {
         let nameUsed = false;
         nameUsed = !!(was && was.spent); /* plant:S3-cancel */
         if (nameUsed) used.push(id);
-        if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
+        if (was && was.spent) store.put("sp:" + id, SPENT); /* plant:spent-drop */
+        for (const [t] of store.list("tf:" + id + ":")) store.del(t);
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
       for (const [id, row] of added) {
@@ -574,18 +588,35 @@ function createCore(deps) {
     return { ok: true, dropped: [...drop], used };
   }
 
+  /* 32 bytes, hex. A team from before this secret was kept is given one the first time it is asked. */
+  function secretOf(team) {
+    if (typeof team.secret === "string" && /^[0-9a-f]{64}$/.test(team.secret)) return team.secret;
+    const secret = random(32);
+    store.put("team", Object.assign({}, team, { secret }));
+    return secret;
+  }
+  function macOf(secret, rt, tBuf, r) {
+    return crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(Buffer.concat([Buffer.from(rt, "utf8"), tBuf, r])).digest().subarray(0, 8);
+  }
+  /* Four bytes, the clock in seconds, big-endian. A clock behind the epoch is the same bits as a uint32 past 2038, and the
+     window takes the reading, signed or unsigned, that falls inside it. The two readings are 136 years apart, so at most one does. */
+  function timeBuf(now) {
+    const buf = Buffer.alloc(4);
+    buf.writeUInt32BE(Math.floor(now / 1000) >>> 0);
+    return buf;
+  }
+  function timeAt(buf, now) {
+    const unsigned = buf.readUInt32BE(0) * 1000, signed = buf.readInt32BE(0) * 1000;
+    const near = ms => now - ms <= CHALLENGE_MS && ms - now <= CHALLENGE_MS;
+    return near(signed) && !near(unsigned) ? signed : unsigned;
+  }
   function challenge(rt) {
-    if (!teamOf(rt)) return no("not-enrolled"); /* plant:challenge-team */
+    const team = teamOf(rt);
+    if (!team) return no("not-enrolled"); /* plant:challenge-team */
     const blocked = grantRefused();
     if (blocked) return blocked;
-    const now = clock(), nonce = random(16), n = (store.get("chn") || 0) + 1;
-    store.atomic(() => {
-      const held = store.list("ch:").sort((a, b) => a[1].n - b[1].n);
-      const live = held.filter(([k, c]) => (now - c.at > CHALLENGE_MS ? (store.del(k), false) : true));
-      for (const [k] of live.slice(0, Math.max(0, live.length - CHALLENGES_MAX + 1))) store.del(k); /* plant:challenge-cap */
-      store.put("chn", n);
-      store.put("ch:" + nonce, { at: now, n });
-    });
+    const now = clock(), tBuf = timeBuf(now), r = crypto.randomBytes(4);
+    const nonce = Buffer.concat([tBuf, r, macOf(secretOf(team), rt, tBuf, r)]).toString("hex");
     return { ok: true, challenge: nonce, until: now + CHALLENGE_MS };
   }
 
@@ -597,20 +628,84 @@ function createCore(deps) {
     const blocked = grantRefused();
     if (blocked) return blocked;
     const b = bodyOf(body);
-    const ch = is(HEX32, b.challenge) ? store.get("ch:" + b.challenge) : undefined;
-    if (ch === undefined) return no("hello-replay"); /* plant:challenge-once */
-    if (clock() - ch.at > CHALLENGE_MS) return no("nonce-stale"); /* plant:challenge-life */
+    const raw = is(HEX32, b.challenge) ? Buffer.from(b.challenge, "hex") : null;
+    const secret = typeof team.secret === "string" ? team.secret : "";
+    const tBuf = raw ? raw.subarray(0, 4) : null, r = raw ? raw.subarray(4, 8) : null, mac = raw ? raw.subarray(8, 16) : null;
+    const expect = raw && /^[0-9a-f]{64}$/.test(secret) ? macOf(secret, rt, tBuf, r) : null;
+    if (!expect || !crypto.timingSafeEqual(expect, mac)) return no("hello-replay"); /* plant:challenge-mac */
+    const at = timeAt(tBuf, clock());
+    if (clock() - at > CHALLENGE_MS || at - clock() > CHALLENGE_MS) return no("nonce-stale"); /* plant:challenge-window */
+    if (store.get("chu:" + b.challenge) !== undefined) return no("hello-replay"); /* plant:challenge-used */
     return b.invite !== undefined ? byToken(rt, b) : byKey(team, rt, b);
   }
 
+  function tryRow(inv, key) { return "tf:" + inv + ":" + key; }
+  /* Past 64 keys noteTry counts nothing. The try is still refused, and the missing count is harmless only with the 256-bit token. */
+  function noteTry(inv, key) {
+    const row = tryRow(inv, key), held = store.get(row);
+    if (typeof held === "number") { store.put(row, held + 1); return; }
+    if (store.list("tf:" + inv + ":").length >= TRY_KEYS_MAX) return; /* plant:try-cap */
+    store.put(row, 1);
+  }
+  /* The spent time is the row itself, from before a row was tagged, or the at of a tagged row. Anything else is not live. */
+  function spentAt(row) {
+    if (typeof row === "number") return row;
+    if (row && typeof row.at === "number") return row.at;
+    return null;
+  }
+  /* Expired spent-challenge rows go on the write, so a caller who never lists cannot keep them. A live row stays. */
+  function dropExpiredChallenges(now) {
+    for (const [k, row] of store.list("chu:")) {
+      const at = spentAt(row);
+      if (at === null || now - at > CHALLENGE_MS) store.del(k);
+    }
+  }
+  function roomForChallenge(now) {
+    dropExpiredChallenges(now);
+    if (store.list("chu:").length >= CHALLENGES_MAX) return false; /* plant:challenge-cap */
+    return true;
+  }
+  function challengeShare(inv) {
+    let n = 0;
+    for (const [, row] of store.list("chu:")) if (row && row.inv === inv) n++;
+    return n;
+  }
+  function spendChallenge(nonce, inv) {
+    const now = clock();
+    if (!roomForChallenge(now)) return false;
+    if (is(HEX32, inv) && challengeShare(inv) >= CHALLENGE_SHARE) return false; /* plant:challenge-share */
+    store.put("chu:" + nonce, { at: now, inv }); /* plant:try-spend */
+    return true;
+  }
+  /* The newest binding wins. Lifting the comparison keeps the binding already indexed. */
+  function indexBinding(key, id) {
+    const cur = store.get("bk:" + key);
+    const prev = is(HEX32, cur) ? store.get("inv:" + cur) : null;
+    let take = !prev;
+    if (prev && clock() > (prev.spentAt || 0)) take = true; /* plant:e5-newest */
+    if (take) store.put("bk:" + key, id);
+  }
+  /* A pruned or dropped spent invitation is kept under sp:, out of every inv: scan. */
+  function spentMarker(id) {
+    let marked = false;
+    marked = is(HEX32, id) && store.get("sp:" + id) !== undefined; /* plant:spent-mark */
+    return marked;
+  }
   function byToken(rt, b) {
+    /* The binding is judged before the token, so a hello that does not bind answers the same whether or not the invitation is known. */
+    const binds = isId(b.key) && is(HEX128, b.sig) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
+    let allowUnbound = true;
+    allowUnbound = false; /* plant:S3-unbound */
+    if (!binds && !allowUnbound) return no("bad-signature");
     const inv = is(HEX32, b.inv) ? store.get("inv:" + b.inv) : undefined;
+    if (!inv && spentMarker(b.inv)) return no("token-spent");
     if (!inv) return no("not-enrolled");
-    if (inv.fails >= TOKEN_TRIES) return no("token-tries"); /* plant:token-tries */
     if (inv.spent) return no("token-spent"); /* plant:token-spent */
-    const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX
+    const tries = store.get(tryRow(b.inv, b.key));
+    if (typeof tries === "number" && tries >= TOKEN_TRIES) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); return no("token-tries"); } /* plant:token-key */
+    const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX && is(HEX64, inv.hash)
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
-    if (!right) return failedTry(b.inv, inv); /* plant:token-match */
+    if (!right) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
     /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
        still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
     let ended = false;
@@ -625,12 +720,6 @@ function createCore(deps) {
       });
       return no("invite-ended");
     }
-    /* The first use is this hello, and only where it binds the desk's own key. A right token that binds no key is refused
-       and spends nothing: the token stays unspent, the failure is not one of the 20 tries, and the challenge is kept. */
-    const binds = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
-    let allowUnbound = true;
-    allowUnbound = false; /* plant:S3-unbound */
-    if (!binds && !allowUnbound) return no("bad-signature");
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
     if (binds) {
       const gone = store.get("gone:" + b.key);
@@ -645,6 +734,7 @@ function createCore(deps) {
       const next = Object.assign({}, inv, { spent: true, spentAt: clock() }); /* plant:token-spend */
       if (binds) { next.key = b.key; next.pub = b.pub; }
       store.put("inv:" + b.inv, next);
+      if (binds) indexBinding(b.key, b.inv);
     });
   }
 
@@ -652,39 +742,29 @@ function createCore(deps) {
      time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). After the one upload the
      same key still opens a session, until it is enrolled, the invitation is dropped or the keep ends. */
   function boundInvite(key) {
-    const now = clock();
-    const skipUploaded = false;
-    let best = null;
-    for (const [k, v] of store.list("inv:")) {
-      if (!v.spent || v.key !== key || !is(HEX64, v.pub)) continue;
-      if (skipUploaded && v.uploaded) continue;
-      if (now - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
-      /* A key bound to more than one invitation resumes the one it spent last, whose request the lead answers. */
-      const row = { id: k.slice(4), inv: v };
-      if (!best) best = row;
-      else if (v.spentAt > best.inv.spentAt) best = row; /* plant:e5-newest */
-    }
-    return best;
-  }
-
-  function failedTry(id, inv) {
-    store.atomic(() => store.put("inv:" + id, Object.assign({}, inv, { fails: inv.fails + 1 })));
-    return no("not-enrolled");
+    const id = store.get("bk:" + key);
+    if (!is(HEX32, id)) return null;
+    const v = store.get("inv:" + id);
+    if (!v || !v.spent || v.key !== key || !is(HEX64, v.pub)) return null;
+    if (clock() - v.spentAt > KEEP_MS) return null; /* plant:bound-keep */
+    return { id, inv: v };
   }
 
   function byKey(team, rt, b) {
-    if (!isId(b.key)) return no("not-enrolled");
     const msg = helloBytes(rt, b.challenge, b.key);
+    const matches = b.key === team.lead.keyId ? leadKeyMatches(b.key, b.pub) : keyMatches(b.key, b.pub);
+    /* Shape, the public half and the signature, before any question of whether the key is known. A Studio lead's id is the studio- form. */
+    if (!isId(b.key) || !is(HEX128, b.sig) || !matches || !verified(b.pub, msg, b.sig)) return no("bad-signature"); /* plant:hello-shape */
     if (b.key === team.lead.keyId) {
-      if (!verified(team.lead.pub, msg, b.sig)) return no("bad-signature"); /* plant:lead-sig */
+      if (team.lead.pub !== b.pub) return no("bad-signature"); /* plant:lead-sig */
       return issue(b.challenge, { key: b.key, inv: null });
     }
     const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
-    if (!dev && gone && !verified(gone.pub, msg, b.sig)) return no("bad-signature"); /* plant:removed-sig */
     if (!dev && gone) {
+      if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
       const held = boundInvite(b.key);
-      if (held && registeredAfter(held.inv, gone) && verified(held.inv.pub, msg, b.sig))
+      if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
@@ -693,13 +773,13 @@ function createCore(deps) {
     if (!dev) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
-      if (held && verified(held.inv.pub, msg, b.sig)) /* plant:invite-resume */
+      if (held && held.inv.pub === b.pub) /* plant:invite-resume */
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("not-enrolled"); /* plant:key-enrolled */
     }
-    if (!verified(dev.pub, msg, b.sig)) return no("bad-signature"); /* plant:key-sig */
+    if (dev.pub !== b.pub) return no("bad-signature"); /* plant:key-sig */
     return issue(b.challenge, { key: b.key, inv: null });
   }
 
@@ -708,9 +788,10 @@ function createCore(deps) {
     const lapsedSession = lapseGate(false);
     if (lapsedSession) return lapsedSession; /* plant:lapse-session */
     const token = random(32), now = clock(), until = now + SESSION_MS;
+    if (!roomForChallenge(now)) return no("rate");
     store.atomic(() => {
       also && also();
-      store.del("ch:" + nonce); /* plant:challenge-spend */
+      store.put("chu:" + nonce, { at: now, inv: who.inv || null }); /* plant:challenge-use */
       const held = store.list("ses:").filter(([k, s]) => (s.until < now ? (store.del(k), false) : true)).sort((a, b) => a[1].until - b[1].until);
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
@@ -860,10 +941,9 @@ function createCore(deps) {
     if (ownAnswer) return { ok: true, meta: served(m), obj: m.obj };
     if (s.quiet) return no("removed");
     if (answerOnly(s)) {
-      if (m) return no("not-enrolled");
-      const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
-      if (tomb && now <= tomb.until) return no(tomb.why);
-      return no("missing");
+      /* The answer itself, not written yet, is missing. Every other id is the same refusal. */
+      if (!m && is(HEX32, id) && id === s.inv) return no("missing");
+      return no("not-enrolled"); /* plant:answer-same */
     }
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
@@ -901,6 +981,7 @@ function createCore(deps) {
      no upload after it, a list between or not (C2 of the read of cf90c15). */
   function admitInvite(team, s, m) {
     const inv = store.get("inv:" + s.inv);
+    if (!inv && spentMarker(s.inv)) return no("token-spent");
     if (!inv) return no("no-hello");
     if (inv.uploaded && m.del === true) return admitWithdraw(team, s, m, inv);
     if (inv.uploaded) return no("token-spent"); /* plant:invite-once */
@@ -946,6 +1027,13 @@ function createCore(deps) {
     const a = admit(rt, token, m, pathId);
     if (!a.ok) return a;
     if (ct.length > a.max) return no("blob-size"); /* plant:put-size */
+    /* An empty withdrawal is the one ciphertext the floor does not bind. The product's withdrawal is a padded deletion, so it is not empty. */
+    if (!(a.withdraw && ct.length === 0) && ct.length < BLOB_MIN) return no("blob-size"); /* plant:blob-min */
+    const prior = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
+    const adding = prior ? 0 : 1;
+    const heldCount = store.get("blobs");
+    const liveCount = typeof heldCount === "number" ? heldCount : store.list("blob:").length;
+    if (liveCount + adding > BLOBS_MAX) return no("team-size"); /* plant:blob-cap */
     const aad = B.aadOf({ relayTeamId: rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter });
     if (!aad || !B.verifyUpload(a.pub, aad, ct, m.sig)) return no("bad-signature"); /* plant:put-sig */
     if (!B.counterFresh(store.get("counters") || {}, m.writer, m.epoch, m.counter).ok) return no("replay-counter"); /* plant:put-counter */
@@ -1003,6 +1091,7 @@ function createCore(deps) {
       if (j.a.invite) rec.pub = j.a.pub;
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
+      noteBlobs(1);
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
@@ -1011,10 +1100,18 @@ function createCore(deps) {
       uploadedInv: j.a.invite && !j.a.withdraw ? j.a.invite : null };
   }
 
+  /* Where the count row is missing, the blob rows after this change are the count. */
+  function noteBlobs(delta) {
+    const held = store.get("blobs");
+    if (typeof held !== "number") store.put("blobs", store.list("blob:").length);
+    else store.put("blobs", held + delta); /* plant:blob-note */
+  }
+
   /* A blob no longer served: its bytes given back, its object for the caller to delete (its orphan row standing until the delete
      is made), and its id kept 30 days as a tombstone, so a fetch says why and a later upload cannot reuse it. */
   function bury(m, why, now, drop) {
     store.del("blob:" + m.id);
+    noteBlobs(-1);
     store.del("seq:" + pad(m.seq));
     if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
@@ -1027,6 +1124,7 @@ function createCore(deps) {
   /* A blob no longer served and kept as no tombstone, so its id may be written again: the lead's answer to a request withdrawn. */
   function unserve(m, drop) {
     store.del("blob:" + m.id);
+    noteBlobs(-1);
     store.del("seq:" + pad(m.seq));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("orphan:" + m.obj, 1);
@@ -1038,20 +1136,48 @@ function createCore(deps) {
   function prune() {
     const now = clock(), drop = [];
     store.atomic(() => {
-      for (const [k, kind] of store.list("kx:")) {
-        if (Number(k.slice(3, 19)) >= now) break;
-        const id = k.slice(20);
-        store.del(k);
-        if (kind === "tomb") { store.del("tomb:" + id); continue; }
-        const m = store.get("blob:" + id);
-        if (m && expired(m, now)) bury(m, "expired", now, drop);
+      let kxAfter = "kx:";
+      for (;;) {
+        let pageLimit = 0;
+        pageLimit = 256; /* plant:kx-page */
+        const page = store.list("kx:", pageLimit ? { after: kxAfter, limit: pageLimit } : { after: kxAfter });
+        if (!page.length) break;
+        let rest = false;
+        for (const [k, kind] of page) {
+          if (Number(k.slice(3, 19)) >= now) { rest = true; break; }
+          const id = k.slice(20);
+          store.del(k);
+          if (kind === "tomb") { store.del("tomb:" + id); continue; }
+          const m = store.get("blob:" + id);
+          if (m && expired(m, now)) bury(m, "expired", now, drop);
+        }
+        if (rest || page.length < 256) break;
+        kxAfter = page[page.length - 1][0];
       }
+      /* A binding already indexed stays: the newest one was chosen when it was written. A binding from before the index
+         is written once, and where one key bound more than one invitation the later spentAt is the one kept. */
+      const pending = new Map();
       for (const [k, v] of store.list("inv:")) {
-        if (!v.spent || v.spentAt === undefined || now - v.spentAt <= KEEP_MS) continue;
+        if (!v || !v.spent || !isId(v.key) || !is(HEX64, v.pub)) continue;
+        if (is(HEX32, store.get("bk:" + v.key))) continue;
+        const at = v.spentAt || 0, held = pending.get(v.key);
+        if (!held || at > held.at) pending.set(v.key, { id: k.slice(4), at });
+      }
+      for (const [key, row] of pending) store.put("bk:" + key, row.id);
+      for (const [k, v] of store.list("inv:")) {
+        if (!v || v.spent !== true) continue;
+        const id = k.slice(4);
+        const bare = v.spentAt === undefined;
+        if (!bare && now - v.spentAt <= KEEP_MS) continue;
+        for (const [t] of store.list("tf:" + id + ":")) store.del(t);
+        if (isId(v.key) && store.get("bk:" + v.key) === id) store.del("bk:" + v.key); /* plant:binding-drop */
         store.del(k);
-        store.put(k, SPENT); /* plant:spent-kept */
+        store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
       for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
+      for (const [k] of store.list("ch:")) store.del(k); /* plant:challenge-drop */
+      dropExpiredChallenges(now);
+      store.put("blobs", store.list("blob:").length); /* plant:blob-recount */
     });
     return drop;
   }
@@ -1113,16 +1239,26 @@ function createCore(deps) {
     return from !== null && from > clock() ? from : l.swept;
   }
   const lapseState = () => lapseOf(store.get("team"), clock()).state;
+  /* The next instant the lapse changes while sockets are open: working to read-only, read-only to gone, or a trial's end. */
+  function nextLapse() {
+    const team = store.get("team");
+    if (!team) return null;
+    const now = clock(), l = lapseOf(team, now), times = [];
+    if (l.readOnly !== null && l.readOnly > now) times.push(l.readOnly);
+    if (l.swept !== null && l.swept > now) times.push(l.swept);
+    if (paidEnd(team) === null && l.until !== null && l.until > now) times.push(l.until);
+    return times.length ? Math.min.apply(null, times) : null;
+  }
 
   /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
   const hasTeam = rt => teamOf(rt) !== null;
 
   return { create, renew, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
+    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
 module.exports = {
-  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
+  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

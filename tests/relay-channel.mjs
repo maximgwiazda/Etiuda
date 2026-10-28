@@ -163,11 +163,12 @@ function keyPair(branch, keyId) {
 }
 const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
 
-let C = null, B = null, S = null, W = null, core = null, K = null;
+let C = null, B = null, S = null, W = null, core = null, K = null, teamMod = null;
 try {
   C = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
   B = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
   core = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
+  teamMod = nodeRequire(path.join(ROOT, "relay", "team.cjs"));
   S = nodeRequire(path.join(ROOT, "relay", "test", "stand-ins.cjs"));
   K = nodeRequire(path.join(ROOT, "relay", "test", "grant-kit.cjs"));
   W = (await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href)).routeWith(K.ROOTS, env => env.NOW());
@@ -217,7 +218,12 @@ function transport(name) {
 async function admin(method, p, json) {
   const res = await relayFetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" },
     body: Buffer.from(JSON.stringify(json), "utf8") });
-  return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  const out = { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  /* This file makes far more than 25 teams with one lead key, and it never sweeps them. The product counts live teams
+     per key. Giving the place back leaves the team where it is. It only stops this file's own creates filling the list. */
+  if (teamMod && method === "POST" && p === "/relay/v1/teams" && out.status === 200 && json && json.lead && typeof json.rt === "string")
+    await R.object("lead:" + json.lead.keyId).fetch(teamMod.leadRequest({ op: "release", rt: json.rt }));
+  return out;
 }
 
 /* ---- the team: its lead, its desks, its key and its files ------------------------------------------------------- */
@@ -417,7 +423,7 @@ try {
     const ch = JSON.parse(s.bytes.toString()).challenge;
     const who = prog === other ? OTHER : STRAY;
     const ses = await prog.t.request("POST", URLV1 + "/t/" + RT + "/session", { "content-type": "application/json" },
-      Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
+      Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
     const token = JSON.parse(ses.bytes.toString()).session;
     const r = await prog.t.request("PUT", URLV1 + "/t/" + RT + "/b/" + b.id,
       { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(metaOf(b))).toString("base64url") }, b.ciphertext);

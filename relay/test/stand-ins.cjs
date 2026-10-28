@@ -136,7 +136,7 @@ function relayEnv(opts) {
         if (o.wakeReadsText) return core.revokedKeysOf(env.REVOKED, o.roots);
         const decided = acceptRevocations(env.REVOKED);
         return decided && Array.isArray(decided.keys) ? decided.keys : [];
-      }, alarm: alarmFor(name), prefix: env.API_PREFIX });
+      }, alarm: alarmFor(name), prefix: env.API_PREFIX, teams: () => scoped });
     live.set(name, obj);
     return obj;
   }

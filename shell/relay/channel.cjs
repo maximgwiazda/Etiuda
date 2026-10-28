@@ -279,20 +279,31 @@ function inPlace(place, rel) {
 /* ---- the mirror on disk ---------------------------------------------------------------------------------------- */
 
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+const RENAME_RETRIES = 60;
+const RENAME_WAIT_MS = 50;
 function renamePatiently(from, to) {
   for (let i = 1; ; i++) {
     try { fs.renameSync(from, to); return; }
     catch (e) {
-      if (i >= 10 || RENAME_BUSY.indexOf(e.code) < 0) throw e;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      if (i >= RENAME_RETRIES || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RENAME_WAIT_MS);
     }
   }
 }
 /* Temp file then rename, as the shell writes a share. The shell passes its own writeReplacing in; this is the same act for
-   a host that has none. */
+   a host that has none. The temp name is unique per write, fsynced before rename, and unlinked on failure. */
+let tempCount = 0;
 function writeWhole(file, text) {
-  const tmp = file + ".tmp";
-  try { fs.writeFileSync(tmp, text, "utf8"); renamePatiently(tmp, file); }
+  /* This process, a count of its own writes and random bytes: no thread id, since the shell loads no module it did not
+     have (pick 5c). */
+  tempCount = (tempCount + 1) % 1e9;
+  const tmp = file + "." + process.pid + "." + tempCount + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  try {
+    fs.writeFileSync(tmp, text, "utf8");
+    const fd = fs.openSync(tmp, "r+");
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    renamePatiently(tmp, file);
+  }
   catch (e) { try { fs.unlinkSync(tmp); } catch { /* never made */ } throw e; }
 }
 
@@ -1523,7 +1534,7 @@ function createChannel(opts) {
     const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
     if (who && who.privateKey) {
       const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-      const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
+      const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
       /* An invitation's session for this key is an earlier invitation's where a fresh one waits unspent and this program
          has used one before: since slice 3 the relay answers a bound key with its invitation's session after the upload too
          (for the lead's answer alone), so taking it would hold the desk there and never spend the fresh token, and the fresh
@@ -1591,7 +1602,7 @@ function createChannel(opts) {
     const ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
     const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
+    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
     if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session))) return refusalOf(r);
     let device = false;
     device = r.json.invite !== true; /* plant:S3-device */

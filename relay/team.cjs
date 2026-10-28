@@ -10,7 +10,7 @@ const core = require("./core.cjs");
 const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
-  "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "epoch": 409, "replay-counter": 409,
+  "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "team-count": 403, "epoch": 409, "replay-counter": 409,
   "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "withdrawn": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403 };
@@ -19,6 +19,13 @@ const DEFAULT_PREFIX = "/relay/v1/";
 const REVOKED_PATH = "/etiuda/revoked";
 /* Set on the one fetch the Worker makes for that object. A client request does not carry it through. */
 const REVOKED_MARK = "etiuda-revoked";
+/* One lead key holds at most this many live teams. The number is Claudius's, 2026-10-28. The lead's object is named
+   lead:<key id>, outside the public table, and a team object answers whether it still holds its team on the held path. */
+const TEAMS_PER_LEAD = 25;
+const LEAD_PATH = "/etiuda/lead";
+const LEAD_MARK = "etiuda-lead";
+const HELD_PATH = "/etiuda/held";
+const HELD_MARK = "etiuda-held";
 /* One leading slash, one segment, then /v1/ and a trailing slash. A ".." cannot occur in that shape. */
 const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
 const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|hello|session|grant|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
@@ -96,6 +103,33 @@ function revokedReply(decided) {
   return reply(200, { keys, serial, ignored });
 }
 
+/* The namespace a lead object uses to ask the teams it lists. A binding with a jurisdiction is asked for eu. A getter
+   is called. With none, a reserve at the bound cannot reap, and a sweep's drop does nothing. */
+function namespaceOf(teams) {
+  let t = teams;
+  if (typeof t === "function") { try { t = t(); } catch { return null; } }
+  if (!t || typeof t !== "object") return null;
+  if (typeof t.jurisdiction === "function") { try { t = t.jurisdiction("eu"); } catch { return null; } }
+  if (!t || typeof t.get !== "function" || typeof t.idFromName !== "function") return null;
+  return t;
+}
+function markedPath(request, pathname, mark) {
+  let url = null;
+  try { url = new URL(request.url); } catch { return false; }
+  return request.method === "POST" && url.protocol === "https:" && url.search === "" && url.pathname === pathname
+    && request.headers.get(mark) === "1";
+}
+function leadRequest(body) {
+  const headers = new Headers();
+  headers.set(LEAD_MARK, "1");
+  return new Request("https://relay.invalid" + LEAD_PATH, { method: "POST", headers, body: JSON.stringify(body), duplex: "half" });
+}
+function heldRequest() {
+  const headers = new Headers();
+  headers.set(HELD_MARK, "1");
+  return new Request("https://relay.invalid" + HELD_PATH, { method: "POST", headers, body: "{}", duplex: "half" });
+}
+
 function bearer(request) {
   const m = /^Bearer ([0-9a-f]{64})$/.exec(request.headers.get("authorization") || "");
   return m ? m[1] : null;
@@ -146,6 +180,59 @@ function teamObject(deps) {
     try { return await route(request); } catch { return fault(); }
   }
 
+  /* Whether the team object still holds a team. A throw is a blip: the caller keeps the id. */
+  async function asksHeld(ns, rt) {
+    const res = await ns.get(ns.idFromName(rt)).fetch(heldRequest());
+    const raw = await res.arrayBuffer();
+    let body = null;
+    try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { body = null; }
+    if (res.status !== 200 || !body || typeof body.held !== "boolean") throw new Error("held");
+    return body.held;
+  }
+  async function dropLead(leadKey, heldRt) {
+    const ns = namespaceOf(deps.teams);
+    if (!ns) return;
+    await ns.get(ns.idFromName("lead:" + leadKey)).fetch(leadRequest({ op: "release", rt: heldRt }));
+  }
+  /* Reserve or release one rt on this lead's list. A repeat of an id already listed is taken and does not raise the
+     count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused. */
+  async function leadAnswer(request) {
+    const bytes = await readCapped(request, JSON_MAX);
+    let body = null;
+    try { body = bytes ? JSON.parse(bytes.toString("utf8")) : null; } catch { body = null; }
+    const op = body && (body.op === "reserve" || body.op === "release") ? body.op : null;
+    const rt = body && typeof body.rt === "string" && /^[0-9a-f]{32}$/.test(body.rt) ? body.rt : null;
+    if (!op || !rt) return missing();
+    if (op === "release") {
+      const row = deps.store.get("lead");
+      const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => x !== rt) : [];
+      deps.store.put("lead", { rts });
+      return reply(200, { ok: true });
+    }
+    const row = deps.store.get("lead");
+    let rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    if (rts.indexOf(rt) !== -1) return reply(200, { ok: true }); /* plant:lead-repeat */
+    let full = rts.length >= TEAMS_PER_LEAD;
+    if (full) {
+      const ns = namespaceOf(deps.teams);
+      if (ns) {
+        const live = [];
+        for (const id of rts) {
+          let holds = true;
+          try { holds = await asksHeld(ns, id); } catch { holds = true; }
+          if (holds) live.push(id);
+        }
+        rts = live; /* plant:lead-reap */
+        deps.store.put("lead", { rts });
+        full = rts.length >= TEAMS_PER_LEAD;
+      }
+    }
+    if (full) return refusedFor("team-count"); /* plant:team-count */
+    rts.push(rt);
+    deps.store.put("lead", { rts });
+    return reply(200, { ok: true });
+  }
+
   async function route(request) {
     /* The list path is outside the public table. A marked request is the Worker's; any other on that path is missing.
        The roots are the ones this object was given, or the vendor's where it was given none. */
@@ -153,6 +240,13 @@ function teamObject(deps) {
     if (revokedPathname(request)) {
       const roots = Array.isArray(deps.roots) && deps.roots.length > 0 ? deps.roots : [core.ROOT_PUB];
       return revokedReply(core.acceptRevocations(await revokedTextOf(request), roots, deps.store));
+    }
+    /* The lead's list and the held question sit outside the public table too. An unmarked request on either path is missing.
+       Neither sweeps: a held question during a reserve must not call back into the lead object. */
+    if (markedPath(request, LEAD_PATH, LEAD_MARK)) return leadAnswer(request);
+    if (markedPath(request, HELD_PATH, HELD_MARK)) {
+      const row = deps.store.get("team");
+      return reply(200, { held: !!(row && typeof row.rt === "string") });
     }
     const url = new URL(request.url);
     if (prefix === null) return unavailable();
@@ -257,10 +351,18 @@ function teamObject(deps) {
     }
   }
 
-  /* The alarm set to the team's next instant: a trial's until while it works, else its sweep. */
+  /* The alarm set to the team's next instant. With sockets open, no later than the earlier of a session's end and the next lapse change. */
   async function arm() {
     if (!alarm) return;
-    const at = c.alarmAt();
+    let at = c.alarmAt();
+    if (sockets.all().length) {
+      const lapseAt = c.nextLapse();
+      if (lapseAt !== null && (at === null || lapseAt < at)) at = lapseAt;
+      for (const ws of sockets.all()) {
+        const s = c.sessionByHash(attachmentOf(ws).ses);
+        if (s.ok && (at === null || s.until < at)) at = s.until; /* plant:socket-alarm */
+      }
+    }
     if (at !== null) await alarm.set(at);
   }
 
@@ -275,31 +377,46 @@ function teamObject(deps) {
     return sweeping;
   }
   async function sweep() {
+    const row = deps.store.get("team");
+    const leadKey = row && row.lead && typeof row.lead.keyId === "string" ? row.lead.keyId : null;
+    const heldRt = row && typeof row.rt === "string" ? row.rt : null;
     const left = [];
     for (const obj of c.heldObjects()) {
       try { await r2.delete(obj); } catch { left.push(obj); } /* plant:sweep-delete */
     }
     closeWhere(() => true, "team-lapsed");
     c.wipe(left); /* plant:sweep-wipe */
+    if (leadKey && heldRt) { try { await dropLead(leadKey, heldRt); } catch { /* a missed drop is reclaimed at the next reserve */ } } /* plant:lead-drop */
     if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : alarm.clear());
     return true;
   }
 
   /* The alarm: the sweep where it is due; otherwise a trial's sockets closed at its until, and the alarm set to the next instant. */
+  function closeEnded() {
+    for (const ws of sockets.all()) {
+      const s = c.sessionByHash(attachmentOf(ws).ses);
+      if (!s.ok) shut(ws, s.reason); /* plant:socket-ended */
+    }
+  }
+
   async function onAlarm() {
     if (await sweepIfDue()) return;
+    closeEnded();
     if (c.lapseState() === "lapsed") closeWhere(() => true, "team-lapsed"); /* plant:lapse-close */
     await arm();
   }
 
-  function openSocket(request, token) {
+  async function openSocket(request, token) {
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
     if (s.quiet) return refusedFor("removed");
     const blocked = c.readGate(token);
     if (blocked) return refused(blocked);
     if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") return missing();
-    return sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
+    for (const ws of sockets.all()) if (attachmentOf(ws).ses === s.hash) ws.close(4400, "replaced"); /* plant:socket-one */
+    const accepted = sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
+    await arm();
+    return accepted;
   }
 
   function announce(done) {
@@ -323,6 +440,7 @@ function teamObject(deps) {
     if (!s.ok) return shut(ws, s.reason);
     const lapsed = c.lapseGate(false);
     if (lapsed) return shut(ws, lapsed.reason); /* plant:lapse-ping */
+    if (Buffer.byteLength(String(message)) > 256) return ws.close(4400, ""); /* plant:frame-cap */
     let msg = null;
     try { msg = JSON.parse(String(message)); } catch { msg = null; }
     if (msg && msg.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
@@ -390,6 +508,7 @@ function alarmOf(storage) {
 
 class RelayTeam {
   constructor(ctx, env) {
+    if (typeof ctx.setWebSocketAutoResponse === "function" && typeof WebSocketRequestResponsePair === "function") ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}')); /* plant:ping-auto */
     const store = sqlStore(ctx.storage);
     this.listStore = store;
     const self = this;
@@ -403,7 +522,7 @@ class RelayTeam {
         }
         return core.revokedKeysOf(env && env.REVOKED, [core.ROOT_PUB]); /* plant:revoked-wake */
       },
-      clock: () => Date.now(), sockets: hibernating(ctx) });
+      clock: () => Date.now(), sockets: hibernating(ctx), teams: env && env.TEAMS ? env.TEAMS : null });
   }
   acceptRevocations(text) {
     this.listing = true;
@@ -421,5 +540,6 @@ class RelayTeam {
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }
 
-module.exports = { JSON_MAX, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
-  REVOKED_PATH, REVOKED_MARK, revokedPathname, revokedMarked, revokedTextOf, revokedReply };
+module.exports = { JSON_MAX, TEAMS_PER_LEAD, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
+  REVOKED_PATH, REVOKED_MARK, revokedPathname, revokedMarked, revokedTextOf, revokedReply,
+  LEAD_PATH, LEAD_MARK, HELD_PATH, HELD_MARK, leadRequest, heldRequest };
