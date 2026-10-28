@@ -5786,7 +5786,7 @@ async function floorPastBound(mod) {
     desk.ch.start();
     await desk.ch.idle();
     out.ownBefore = desk.prog.state().own;
-    putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER);
+    putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER - 10);
     put(desk.mirror, "owed.ec", "a file\n");
     desk.ch.kick();
     await desk.ch.idle();
@@ -5800,12 +5800,12 @@ async function floorPastBound(mod) {
 }
 try {
   const x = await floorPastBound(C);
-  check(x.refused && x.ownAfter === x.ownBefore + 1 && x.ownAfter < Number.MAX_SAFE_INTEGER && x.saidBound,
+  check(x.refused && x.ownAfter === x.ownBefore + 1 && x.ownAfter < Number.MAX_SAFE_INTEGER - 10 && x.saidBound,
     "970w a floor past the bound leaves the counter unchanged by the refusal, and is refused and said: before "
     + x.ownBefore + ", after " + x.ownAfter + ", said " + x.saidBound);
   const planted = await liftChannel("plant:floor-bound", async mod => {
     const y = await floorPastBound(mod);
-    return y.ownAfter === Number.MAX_SAFE_INTEGER;
+    return y.ownAfter === Number.MAX_SAFE_INTEGER - 10;
   });
   check(planted.turned && planted.back, "970x lifting plant:floor-bound takes the floor past the bound into the counter, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
@@ -5822,13 +5822,13 @@ async function floorlessBackoff(mod) {
     request: t.request,
     me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
   });
-  const out = { delays: [] };
+  const out = { delays: [], pendingAfterThird: -1 };
   try {
     return await withMinute(async ({ pending, fire, mark }) => {
       put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
       desk.ch.start();
       await desk.ch.idle();
-      putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER);
+      putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER - 10);
       put(desk.mirror, "owed.ec", "a file\n");
       let marked = mark();
       desk.ch.kick();
@@ -5844,6 +5844,7 @@ async function floorlessBackoff(mod) {
           }
         }
       }
+      out.pendingAfterThird = pending(marked).length;
       return out;
     });
   } finally {
@@ -5852,14 +5853,14 @@ async function floorlessBackoff(mod) {
 }
 try {
   const x = await floorlessBackoff(C);
-  check(x.delays.length === 3 && x.delays[0] === COUNTER_MINUTE_MS && x.delays[1] === COUNTER_MINUTE_MS && x.delays[2] === 2000,
-    "970y three floorless replay-counter refusals back off after three tries, and the next try waits the normal backoff, not 60 s: delays "
-    + JSON.stringify(x.delays));
+  check(x.delays.length === 2 && x.delays[0] === COUNTER_MINUTE_MS && x.delays[1] === COUNTER_MINUTE_MS && x.pendingAfterThird === 0,
+    "970y three floorless replay-counter refusals set no timer after three tries, so the desk stops until the next kick: delays "
+    + JSON.stringify(x.delays) + ", pending after third " + x.pendingAfterThird);
   const planted = await liftChannel("plant:counter-backoff", async mod => {
     const y = await floorlessBackoff(mod);
-    return y.delays.length === 3 && y.delays[2] === COUNTER_MINUTE_MS;
+    return y.pendingAfterThird === 1;
   });
-  check(planted.turned && planted.back, "970z lifting plant:counter-backoff leaves the third try waiting 60 s, and the product file is never written: "
+  check(planted.turned && planted.back, "970z lifting plant:counter-backoff leaves a counter timer pending after three tries, and the product file is never written: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 970y): " + (e && e.stack ? e.stack : e));

@@ -1422,14 +1422,14 @@ function createChannel(opts) {
   let wrapPhase = "need", wrapHeld = null;
   let watchers = [], settle = null, retryTimer = null, counterTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
   let counterOwed = false;
-  /* The bound the relay puts on an accepted counter (blob.cjs isCount: Number.MAX_SAFE_INTEGER). */
-  const COUNTER_BOUND = Number.MAX_SAFE_INTEGER;
-  let floorlessTries = 0;
+  /* A floor is taken only if it leaves room: at most 100 years of ms past this program's clock. */
+  const COUNTER_AHEAD_MAX_MS = 100 * 365.25 * 24 * 60 * 60 * 1000;
+  let floorlessFile = null, floorlessTries = 0;
 
   function takeFloor(floor) {
     if (floor === undefined) return false;
     let past = false;
-    past = !Number.isSafeInteger(floor) || floor < 1 || floor >= COUNTER_BOUND; /* plant:floor-bound */
+    past = !Number.isSafeInteger(floor) || floor < 1 || floor > clock() + COUNTER_AHEAD_MAX_MS; /* plant:floor-bound */
     if (past) {
       sayOnce("the relay named a counter floor past the bound, so that was not taken"); /* draft words: copywriter */
       return false;
@@ -1802,11 +1802,10 @@ function createChannel(opts) {
   function scheduleCounterRetry() {
     if (!running) return;
     clearTimeout(counterTimer);
-    let waitBackoff = false;
-    waitBackoff = floorlessTries >= 3; /* plant:counter-backoff */
-    const delay = waitBackoff ? backoff : COUNTER_RETRY_MS;
-    if (waitBackoff) backoff = Math.min(backoff * 2, RETRY_MAX_MS);
-    counterTimer = setTimeout(() => { counterTimer = null; kick(); }, delay);
+    let stopRetries = false;
+    stopRetries = floorlessTries >= 3; /* plant:counter-backoff */
+    if (stopRetries) return;
+    counterTimer = setTimeout(() => { counterTimer = null; kick(); }, COUNTER_RETRY_MS);
     if (counterTimer.unref) counterTimer.unref();
   }
   function clearCounterRetry() {
@@ -1831,7 +1830,7 @@ function createChannel(opts) {
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
-      if (u.ok) { floorlessTries = 0; continue; }
+      if (u.ok) { floorlessFile = null; floorlessTries = 0; continue; }
       if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
@@ -1848,10 +1847,17 @@ function createChannel(opts) {
       const waits = prog.refusedOut(op, u.why, true);
       if (u.why && u.why.reason === "replay-counter") {
         sawReplay = true; /* plant:counter-retry */
+        const fileKey = op.invite ? "invite:" + op.invite.id : pathKey(op.rel);
         const taken = takeFloor(u.why.floor);
-        if (taken) floorlessTries = 0; else floorlessTries += 1;
+        if (taken) {
+          floorlessFile = null;
+          floorlessTries = 0;
+        } else {
+          if (floorlessFile === fileKey) floorlessTries += 1;
+          else { floorlessFile = fileKey; floorlessTries = 1; }
+        }
       }
-      if (waits && HALTS.indexOf(u.why.reason) >= 0) { floorlessTries = 0; counterOwed = false; clearCounterRetry(); return { ok: true }; }
+      if (waits && HALTS.indexOf(u.why.reason) >= 0) { floorlessFile = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return { ok: true }; }
     }
     counterOwed = sawReplay;
     if (sawReplay || answerDue) scheduleCounterRetry();
@@ -1994,14 +2000,21 @@ function createChannel(opts) {
     const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
       del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
     const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
-    if (r.status === 200) { answerDue = null; floorlessTries = 0; if (!counterOwed) clearCounterRetry(); return { ok: true }; }
+    if (r.status === 200) { answerDue = null; floorlessFile = null; floorlessTries = 0; if (!counterOwed) clearCounterRetry(); return { ok: true }; }
     const why = r.refused || refusalOf(r);
     if (why && why.reason === "replay-counter") {
       answerDue = { answer: s.answer, inv: String(s.inv), deskId: s.deskId, deskBox: s.deskBox, leadBox: s.leadBox }; /* plant:answer-retry */
       const taken = takeFloor(why.floor);
-      if (taken) floorlessTries = 0; else floorlessTries += 1;
+      if (taken) {
+        floorlessFile = null;
+        floorlessTries = 0;
+      } else {
+        const fileKey = "answer:" + s.inv;
+        if (floorlessFile === fileKey) floorlessTries += 1;
+        else { floorlessFile = fileKey; floorlessTries = 1; }
+      }
     }
-    if (why && HALTS.indexOf(why.reason) >= 0) { answerDue = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return why; }
+    if (why && HALTS.indexOf(why.reason) >= 0) { answerDue = null; floorlessFile = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return why; }
     if (answerDue) scheduleCounterRetry();
     return why;
   }
@@ -2193,6 +2206,7 @@ function createChannel(opts) {
     running = false;
     clearTimeout(settle); clearTimeout(retryTimer); clearCounterRetry(); clearInterval(pollTimer); clearInterval(pingTimer);
     closeWatchers();
+    floorlessFile = null;
     floorlessTries = 0;
     if (sock) { try { sock.close(); } catch { /* gone */ } sock = null; }
     session = null;
