@@ -691,6 +691,80 @@ function watchCatalog(win) {
   watchDesks(win);
   watchAsks(win);
   tryCatalogAsk(win);
+  armShareStat(win);
+}
+/* fs.watch on a share drops events without an error. Catalog names are stat'd every 30s, the wait
+   already used before asking a share again, and a change is read as a watch event. A folder on
+   this computer's own disk is left to the watch, and one stat is in flight. */
+const SHARE_STAT_MS = 30000;
+let shareStatTimer = null, shareStatBusy = false, shareStatPrimed = false, shareStatGen = 0;
+let shareStatSeen = new Map();
+let shareStatPrime = null;
+function shareDropsWatch(dir) { return !folderHost(dir).local; }
+function shareStatStop() {
+  if (shareStatTimer) clearInterval(shareStatTimer);
+  shareStatTimer = null;
+  shareStatBusy = false;
+  shareStatPrimed = false;
+  shareStatSeen = new Map();
+  shareStatPrime = null;
+  shareStatGen++;
+}
+function catalogStatRows(dir) {
+  let timer = null;
+  const slow = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("stat slow")), FOLDER_ASK_MS);
+    if (timer.unref) timer.unref();
+  });
+  const work = fs.promises.readdir(dir).then(names => Promise.all(names.filter(isCatalogName).map(n => {
+    const file = path.join(dir, n);
+    return fs.promises.stat(file).then(st => ({ file: file, sig: st.mtimeMs + ":" + st.size }), () => null);
+  }))).then(rows => {
+    const out = new Map();
+    (rows || []).forEach(row => { if (row) out.set(row.file, row.sig); });
+    return out;
+  });
+  work.then(() => clearTimeout(timer), () => clearTimeout(timer));
+  return Promise.race([work, slow]);
+}
+function shareStatMoved(next) {
+  if (!shareStatPrimed) return false;
+  if (next.size !== shareStatSeen.size) return true;
+  for (const [file, sig] of next) if (shareStatSeen.get(file) !== sig) return true;
+  return false;
+}
+function shareStatApply(dir, next, win) {
+  if (watchedFolder !== dir) return;
+  const moved = shareStatMoved(next);
+  shareStatSeen = next;
+  shareStatPrimed = true;
+  if (!moved) return; /* plant:f2-share-quiet */
+  clearTimeout(catalogSettle);
+  catalogSettle = setTimeout(() => catalogChanged(win), 300); /* plant:f2-share-stat */
+}
+function shareStatTick(win) {
+  if (shareStatBusy) return Promise.resolve(false);
+  const dir = watchedFolder;
+  if (!dir || !shareDropsWatch(dir) || !folderAnswers(dir)) return Promise.resolve(false);
+  const gen = ++shareStatGen;
+  shareStatBusy = true;
+  return catalogStatRows(dir).then(next => {
+    if (gen !== shareStatGen) return false;
+    shareStatApply(dir, next, win);
+    return true;
+  }, () => false).then(v => { if (gen === shareStatGen) shareStatBusy = false; return v; });
+}
+function armShareStat(win) {
+  shareStatStop();
+  const dir = watchedFolder;
+  if (!dir || !shareDropsWatch(dir) || !folderAnswers(dir)) return;
+  shareStatPrime = catalogStatRows(dir).then(next => {
+    if (watchedFolder !== dir || shareStatPrimed) return;
+    shareStatSeen = next;
+    shareStatPrimed = true;
+  }, () => { if (watchedFolder === dir && !shareStatPrimed) shareStatPrimed = true; });
+  shareStatTimer = setInterval(() => { shareStatTick(win); }, SHARE_STAT_MS);
+  if (shareStatTimer && shareStatTimer.unref) shareStatTimer.unref();
 }
 /* A COLLEAGUE'S FILE CHANGES ONE FOLDER DOWN, in desks/<id>/, where the folder's own watch does not reach, so desks/ has a
    watch of its own over its subfolders alone. With no desks/ yet there is none, and the folder's watch arms it when one appears. */
