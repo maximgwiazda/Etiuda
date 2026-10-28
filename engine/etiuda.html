@@ -7691,6 +7691,7 @@ What you type stays in this browser only.`;
     /* Claudette's words, 2026-10-27 */
     "The relay does not know the team just now": "Przekaźnik nie zna teraz tego zespołu",
     "The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; przez przekaźnik nie przychodzi nic nowego. Przekaźnik usunął kopię zespołu po wygaśnięciu licencji albo zespół jeszcze do niego nie dotarł.",
+    "When the team is back on the relay, this desk follows by itself while it is still in the team; nothing is needed here.": "Gdy zespół wróci na przekaźnik, to stanowisko dołączy samo, o ile nadal należy do zespołu; tutaj nic nie trzeba robić.",
     "Studio's signing key": "Klucz podpisu Studia",
     "A desk's key": "Klucz stanowiska",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
@@ -8964,7 +8965,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-27";
+  var E_BUILT = "2026-10-28";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -15147,7 +15148,10 @@ What you type stays in this browser only.`;
     if (l.step === "unknown") return {
       title: t("The relay does not know the team just now"),
       /* plant:lapse-unknown-words */
-      body: t("The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.")
+      body: [
+        t("The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet."),
+        t("When the team is back on the relay, this desk follows by itself while it is still in the team; nothing is needed here.")
+      ].join(" ")
     };
     return { title: t("The relay no longer holds the team's copy"), body: [stay, t("If the team's lead renews the licence, this desk rejoins by itself while it is still in the team; nothing is needed here.")].join(" ") };
   }

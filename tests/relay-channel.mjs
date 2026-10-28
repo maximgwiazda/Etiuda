@@ -4553,8 +4553,8 @@ try {
       const TITLES = ["The team's relay is due for renewal", "The team's relay is read-only until renewed",
         "The team's relay has stopped", "The relay no longer holds the team's copy",
         "The relay does not know the team just now"];
-      const UNKNOWN_BODY_EN = "The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.";
-      const UNKNOWN_BODY_PL = "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; przez przekaźnik nie przychodzi nic nowego. Przekaźnik usunął kopię zespołu po wygaśnięciu licencji albo zespół jeszcze do niego nie dotarł.";
+      const UNKNOWN_BODY_EN = "The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet. When the team is back on the relay, this desk follows by itself while it is still in the team; nothing is needed here.";
+      const UNKNOWN_BODY_PL = "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; przez przekaźnik nie przychodzi nic nowego. Przekaźnik usunął kopię zespołu po wygaśnięciu licencji albo zespół jeszcze do niego nie dotarł. Gdy zespół wróci na przekaźnik, to stanowisko dołączy samo, o ile nadal należy do zespołu; tutaj nic nie trzeba robić.";
 
       const paid = await lapseTeam("paid", { paid: true, until: BASE + 30 * DAYMS });
       const trial = await lapseTeam("trial", { paid: false, until: BASE + 14 * DAYMS });
