@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 16;
+const EXPECTED = 17;
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -302,6 +302,21 @@ try {
   check(Array.isArray(gfTool.SHARED) && allInShared && identifies,
     "gf16 SHARED list is exported and isSharedCode identifies all members and config: "
     + (Array.isArray(gfTool.SHARED) ? sharedList.join(", ") : "not exported"));
+
+  const toolsOnlyFn = typeof gfTool.isGateToolsOnly === "function" ? gfTool.isGateToolsOnly : () => "not exported";
+  const toolCases = [
+    [["tools/gate-run.mjs"], true],
+    [["tools/gates-for.mjs", "tests/result-line.mjs", "tests/gates-for.mjs"], true],
+    [["tools\\gate-run.mjs"], true],
+    [["tools/gate-run.mjs", "src/leaf.mjs"], false],
+    [["tools/gate-run.mjs", "package.json"], false],
+    [["tools/machine-lock.mjs"], false],
+    [[], false],
+  ];
+  const toolMisses = toolCases.filter(([files, want]) => toolsOnlyFn(files) !== want);
+  check(toolMisses.length === 0,
+    "gf17 a diff is confined to the gate tools only when every file is gate-run, gates-for or their own tests: "
+    + (toolMisses.length ? "wrong on " + JSON.stringify(toolMisses.map(([f]) => f)) : toolCases.length + " cases right"));
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {

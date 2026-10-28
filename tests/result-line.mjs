@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 70;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -176,8 +176,8 @@ async function main() {
     && typeof dBase.wallMs === "number" && typeof dBase.time === "string"
     && "commit" in dBase && "dirty" in dBase && dBase.refused === ""
     && Object.keys(dBase).sort().join(",")
-       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,gitTree,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
-    "1d the line's shape is the nineteen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
+       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,gitTree,refused,run,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
+    "1d the line's shape is the twenty keys the record reads (`run` the start of the run it belongs to), `refused` empty on a gate that refused nothing, gate named from the step's path: "
     + Object.keys(dBase).sort().join(","));
 
   /* ---- 2. THE DECLARED CHANNEL ------------------------------------------------------------ */
@@ -987,6 +987,11 @@ async function main() {
     "14b a red run records its failing gates in chains.jsonl with cause unread: "
     + JSON.stringify(redEntry));
 
+  const timed = chainLines.map(c => c.gates);
+  check(timed.length === 2 && timed.every(g => Array.isArray(g) && g.length === 1 && Number.isFinite(g[0].wallMs) && g[0].wallMs >= 0)
+    && timed[0][0].exit === 0 && timed[1][0].exit !== 0 && !!redEntry && timed[1][0].gate === redEntry.gate,
+    "14c each chains line says which gates ate its run, one {gate, wallMs, exit} per gate run: " + JSON.stringify(timed));
+
   /* ---- 15. THE NIGHTLY PROFILE (rule 3) --------------------------------------------------- */
   const nightlyLab = makeLab("nightly", {
     failgate: prints(1, 1, "process.exit(1);"),
@@ -1011,14 +1016,53 @@ async function main() {
   const failFile = allowedNightly.files.find(f => {
     try { return JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, f), "utf8")).exit !== 0; } catch (e) { return false; }
   });
-  const markRun = run(nightlyLab, ["mark-cause", path.join(nightlyLab.runs, failFile || "none"), "product"], null, {
+  /* A second run red on the same gate, so a mark of the first has another run's row to leave alone (rule 10, the test
+     architect's criterion of 2026-10-28 09:38: a mark names one red of one run and changes nothing else). */
+  const secondNightly = run(nightlyLab, ["nightly"], null, {
+    ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+    ETIUDA_CHAINS_PATH: chainsNightlyPath,
+    ETIUDA_LOCK_PATH: path.join(nightlyLab.root, "machine.lock"),
+  });
+  const marksPath = path.join(path.dirname(chainsNightlyPath), "marks.jsonl");
+  const bytesOf = (f) => { try { return fs.readFileSync(f, "utf8"); } catch (e) { return null; } };
+  const failPath = path.join(nightlyLab.runs, failFile || "none");
+  const chainsBefore = bytesOf(chainsNightlyPath), recordBefore = bytesOf(failPath);
+  const markRun = run(nightlyLab, ["mark-cause", failPath, "product-catch", "not-escaped"], null, {
     ETIUDA_CHAINS_PATH: chainsNightlyPath,
   });
-  let markedRec = null;
-  try { markedRec = JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, failFile || "none"), "utf8")); } catch (e) {}
-  check(markRun.exit === 0 && !!markedRec && markedRec.cause === "product",
-    "15c mark-cause updates the cause field in the gate record and in chains.jsonl: "
-    + JSON.stringify(markedRec && { gate: markedRec.gate, cause: markedRec.cause }));
+  const marks = (gr.readMarks ? gr.readMarks(marksPath) : []);
+  let nightlyLines = [];
+  try { nightlyLines = fs.readFileSync(chainsNightlyPath, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) {}
+  const failGate = failRecord && failRecord.gate;
+  check(markRun.exit === 0 && marks.length === 1 && marks[0].cause === "product-catch" && marks[0].escaped === false
+    && marks[0].gate === failGate && !!nightlyLines[0] && marks[0].run.start === nightlyLines[0].start
+    && bytesOf(chainsNightlyPath) === chainsBefore && bytesOf(failPath) === recordBefore,
+    "15c mark-cause appends one mark keyed to its run to marks.jsonl and rewrites neither chains.jsonl nor the record: exit "
+    + markRun.exit + ", marks " + JSON.stringify(marks.map(m => ({ gate: m.gate, cause: m.cause, escaped: m.escaped, start: m.run && m.run.start })))
+    + ", chains " + (bytesOf(chainsNightlyPath) === chainsBefore ? "unchanged" : "REWRITTEN")
+    + ", record " + (bytesOf(failPath) === recordBefore ? "unchanged" : "REWRITTEN"));
+
+  const firstMark = nightlyLines[0] ? (gr.markOf ? gr.markOf(nightlyLines[0], failGate, marks) : null) : null;
+  const secondMark = nightlyLines[1] ? (gr.markOf ? gr.markOf(nightlyLines[1], failGate, marks) : "no markOf") : "no second run";
+  check(secondNightly.exit !== 0 && nightlyLines.length === 2 && nightlyLines[0].start !== nightlyLines[1].start
+    && !!firstMark && secondMark === null && nightlyLines[1].reds.every(r => r.cause === "unread"),
+    "15e marking one run's red leaves another run's red of the same gate unread: first "
+    + (firstMark ? firstMark.cause : "unmarked") + ", second " + (secondMark === null ? "unread" : JSON.stringify(secondMark))
+    + ", runs " + nightlyLines.length);
+
+  const marksBefore = bytesOf(marksPath);
+  const leafRun = run(nightlyLab, ["leaf"], null, { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  const greenFile = leafRun.files.find(f => {
+    try { return JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, f), "utf8")).exit === 0; } catch (e) { return false; }
+  });
+  const badCause = run(nightlyLab, ["mark-cause", failPath, "product", "not-escaped"], null, { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  const noEscape = run(nightlyLab, ["mark-cause", failPath, "machine"], null, { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  const green = run(nightlyLab, ["mark-cause", path.join(nightlyLab.runs, greenFile || "none"), "machine", "escaped"], null,
+    { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  check(badCause.exit === 78 && noEscape.exit === 78 && green.exit === 78 && !!greenFile && bytesOf(marksPath) === marksBefore,
+    "15f a cause outside rule 10's four, a mark that does not say whether the red escaped, and a green record are each refused"
+    + " and write nothing: exits " + [badCause.exit, noEscape.exit, green.exit].join(", ")
+    + ", marks " + (bytesOf(marksPath) === marksBefore ? "unchanged" : "CHANGED"));
 
   const profileLab = makeLab("profile", {
     showprof: 'console.log("PROFILE=" + process.env.ETIUDA_PROFILE);\nprocess.exit(0);\n',
@@ -1141,6 +1185,68 @@ async function main() {
   check(areaRunFloor.out.indexOf("tests/pick.mjs") >= 0 && areaRunFloor.out.indexOf("tests/links.js") >= 0,
     "16h floor legs run at every merge whatever gates-for names: "
     + areaRunFloor.out.trim().split(/\r?\n/).filter(l => /pick|links/i.test(l)).join(" | "));
+
+  /* Rule 1 as amended 2026-10-28: a diff confined to the gate tools selects their own legs and the floor from gates-for itself;
+     one that mixes a gate tool with any other file still fails closed. */
+  /* The legs above leave edits in the lab; they are committed first, so the diff is the gate tool's alone. */
+  spawnSync("git", ["add", "."], { cwd: areaLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "before 16j"], { cwd: areaLab.lab });
+  const labTool = path.join(areaLab.lab, "tools", "gate-run.mjs");
+  const labToolBytes = fs.readFileSync(labTool, "utf8");
+  fs.appendFileSync(labTool, "// touched by leg 16j\n");
+  fs.writeFileSync(path.join(areaLab.lab, "tests/result-line.mjs"), "console.log('  ok   own');\nprocess.exit(0);\n");
+  const areaToolsOnly = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  fs.writeFileSync(path.join(areaLab.lab, "src", "mixed.mjs"), "export const mixed = 1;\n");
+  const areaToolsMixed = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  fs.unlinkSync(path.join(areaLab.lab, "src", "mixed.mjs"));
+  fs.unlinkSync(path.join(areaLab.lab, "tests/result-line.mjs"));
+  fs.writeFileSync(labTool, labToolBytes);
+  check(areaToolsOnly.out.indexOf("fail-closed") < 0 && areaToolsOnly.out.indexOf("confined to the gate tools") >= 0
+    && areaToolsOnly.out.indexOf("node tests/result-line.mjs") >= 0 && areaToolsOnly.out.indexOf("tests/pick.mjs") >= 0
+    && areaToolsOnly.out.indexOf("tests/g1.mjs") < 0
+    && areaToolsMixed.out.indexOf("fail-closed to whole chain: change in shared code tools/gate-run.mjs") >= 0,
+    "16j a diff confined to the gate tools runs their own legs and the floor, and one mixing them with another file fails closed: "
+    + areaToolsOnly.out.trim().split(/\r?\n/).filter(l => /fail-closed|confined|own legs|gate\(s\) to run/i.test(l)).join(" | ")
+    + " || mixed: " + areaToolsMixed.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
+
+  /* A window gate gates-for names is left out of the area run and named, never run whole (the window wall). */
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "win.mjs"), 'import "../src/winread.mjs";\nE.windowWall("tests/win.mjs");\nconsole.log("  ok   win");\n');
+  fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 1;\n");
+  const winPkg = JSON.parse(fs.readFileSync(path.join(areaLab.lab, "package.json"), "utf8"));
+  winPkg.scripts.win = "node tests/win.mjs";
+  fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(winPkg, null, 2) + "\n");
+  spawnSync("git", ["add", "."], { cwd: areaLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "a window gate"], { cwd: areaLab.lab });
+  fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 2;\n");
+  const areaWindow = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  const winChains = path.join(areaLab.runs, "chains-16k.jsonl");
+  const areaWindowRun = run(areaLab, ["area", "HEAD"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"), ETIUDA_CHAINS_PATH: winChains });
+  let winLine = null;
+  try { winLine = JSON.parse(fs.readFileSync(winChains, "utf8").trim().split(/\r?\n/).pop()); } catch (e) {}
+  fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 1;\n");
+  check(areaWindow.out.indexOf("window gate tests/win.mjs left out") >= 0 && areaWindow.out.indexOf("  node tests/win.mjs") < 0
+    && !!winLine && Array.isArray(winLine.walled) && winLine.walled.length === 1 && winLine.walled[0] === "tests/win.mjs"
+    && areaWindowRun.out.indexOf("REFUSED") < 0,
+    "16k a window gate gates-for names for the diff is left out of the area run, named, and recorded as walled in its chains line: "
+    + areaWindow.out.trim().split(/\r?\n/).filter(l => /win|gate\(s\) to run/i.test(l)).join(" | ")
+    + " || walled " + JSON.stringify(winLine && winLine.walled));
+
+  /* No FLOOR entry is one the window wall refuses: a file gates-for classes window is named by a node arm, and that arm,
+     run here with ETIUDA_WINDOWS unset, exits 0 without the wall's marker (the test architect's leg, 2026-10-28). */
+  const gfFloor = await import("../tools/gates-for.mjs");
+  const floorBad = [];
+  for (const f of gr.FLOOR || []) {
+    const kind = typeof gfFloor.windowKind === "function" ? gfFloor.windowKind(path.join(ROOT, f.file)) : "unknown";
+    if (kind === "node") continue;
+    if (!f.args || !f.args.length) { floorBad.push(f.file + " (" + kind + ", whole file)"); continue; }
+    const armEnv = Object.assign({}, process.env);
+    for (const k of Object.keys(armEnv)) if (k.toUpperCase() === "ETIUDA_WINDOWS") delete armEnv[k];
+    const arm = spawnSync(process.execPath, [path.join(ROOT, f.file), ...f.args], { cwd: ROOT, encoding: "utf8", env: armEnv, timeout: 120000 });
+    const said = String(arm.stdout || "") + String(arm.stderr || "");
+    if (arm.status !== 0 || /#refused/.test(said)) floorBad.push(f.cmd + " (exit " + arm.status + (/#refused/.test(said) ? ", refused" : "") + ")");
+  }
+  check(Array.isArray(gr.FLOOR) && gr.FLOOR.length > 0 && floorBad.length === 0,
+    "16l no FLOOR entry is one the window wall refuses: " + (floorBad.length ? floorBad.join("; ") : (gr.FLOOR || []).length + " entries, each node or a node arm that ran"));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";

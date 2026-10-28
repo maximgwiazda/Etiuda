@@ -1,6 +1,7 @@
 /* A web address leaves the desk only for a click on it: the shell's hand-off, driven in the shell.
  *
  *   node tests/links.js
+ *   node tests/links.js open-external    the floor's check alone: no window, no port, no lab
  *
  * THE CLAIM. An http(s) address reaches the default browser only when the agent clicked the link
  * that names it. A navigation, a window.open or a synthetic click the page makes by script never
@@ -40,6 +41,29 @@ const path = require("node:path");
 const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const HANDED = "etiuda-test: handed ";
+const OUT = /\bopenExternal\b/g;
+
+/** The shell's two files and the lab's copy of main.js with its one call of openExternal stubbed, and how many calls of
+ *  openExternal the three hold between them. The lab is counted too: a call spelt any other way survives the stub, and must
+ *  stop the run before a click reaches the real browser. */
+function shellOutCalls() {
+  const main = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const pre = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
+  const lab = main.split("shell.openExternal(")
+    .join("((u) => console.log(" + JSON.stringify(HANDED) + " + JSON.stringify(String(u))))(");
+  return { main, pre, lab, count: (main.match(OUT) || []).length + (pre.match(OUT) || []).length + (lab.match(OUT) || []).length };
+}
+
+/* THE NODE ARM, `node tests/links.js open-external`: the floor's one check, that the shell holds exactly one call of
+   openExternal, read off the files with no window, so it runs at every merge (the test architect's FLOOR, 2026-10-28). */
+if (process.argv.slice(2).includes("open-external")) {
+  const n = shellOutCalls().count;
+  console.log((n === 1 ? "  ok   " : "  FAIL ") + "the shell holds exactly one call of openExternal, so the stub in the lab is the only way out: " + n);
+  console.log("#counts checks=1 failed=" + (n === 1 ? 0 : 1));
+  process.exit(n === 1 ? 0 : 1);
+}
+
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PORT = E.portBlock("links");
@@ -58,19 +82,12 @@ function electronExe() {
   return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
 }
 
-const HANDED = "etiuda-test: handed ";
-const OUT = /\bopenExternal\b/g;
 const APP = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-links-"));
 let outCalls = -1;
 function buildApp() {
   for (const d of ["shell", "engine", "userdata", "documents"]) fs.mkdirSync(path.join(APP, d), { recursive: true });
-  const main = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
-  const pre = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
-  const lab = main.split("shell.openExternal(")
-    .join("((u) => console.log(" + JSON.stringify(HANDED) + " + JSON.stringify(String(u))))(");
-  /* The lab is counted too: a call spelt any other way survives the stub, and must stop the run
-     before a click reaches the real browser. */
-  outCalls = (main.match(OUT) || []).length + (pre.match(OUT) || []).length + (lab.match(OUT) || []).length;
+  const { pre, lab, count } = shellOutCalls();
+  outCalls = count;
   fs.writeFileSync(path.join(APP, "shell", "main.js"), lab, "utf8");
   fs.writeFileSync(path.join(APP, "shell", "preload.js"), pre, "utf8");
   for (const f of ["win-proxy.cjs", "page-watch.cjs"])
