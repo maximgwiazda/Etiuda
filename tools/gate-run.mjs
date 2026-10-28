@@ -256,7 +256,7 @@ export function profileSteps(root, pkg) {
   return [...withFloor(root, baseSteps), ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(root, n.file)))];
 }
 
-export async function planAreaRun(root, changed, pkg) {
+export async function planAreaRun(root, changed, pkg, base = "main") {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
   const isProductFile = gf && gf.isProductFile ? gf.isProductFile : () => false;
@@ -321,6 +321,15 @@ export async function planAreaRun(root, changed, pkg) {
         addedFiles.add(g);
       }
     }
+  }
+
+  /* A test file added, removed or renamed selects chain-split, which holds every test file to a chain (gates-for's
+     testsListChanged; the test architect's edge, 2026-10-28). */
+  if (gf && typeof gf.testsListChanged === "function" && gf.testsListChanged(root, changed, base)
+      && fs.existsSync(path.join(root, "tests", "chain-split.mjs")) && !addedFiles.has("tests/chain-split.mjs")) {
+    steps.push({ script: "area", cmd: "node tests/chain-split.mjs", file: "tests/chain-split.mjs", args: [],
+      note: "a test file added, removed or renamed" });
+    addedFiles.add("tests/chain-split.mjs");
   }
 
   let addedProductCore = false;
@@ -617,7 +626,7 @@ async function main() {
     const gf = await loadGatesFor();
     const changed = gf ? gf.changedFiles(ROOT, base) : [];
     console.log("gate-run area: base " + base + ", " + changed.length + " changed file(s)");
-    const plan = await planAreaRun(ROOT, changed, pkg);
+    const plan = await planAreaRun(ROOT, changed, pkg, base);
     if (plan.failClosed) {
       console.log("gate-run area: fail-closed to whole chain: " + plan.reason);
       isHeavy = true;

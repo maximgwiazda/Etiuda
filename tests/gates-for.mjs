@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 17;
+const EXPECTED = 18;
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -318,6 +318,37 @@ try {
   check(toolMisses.length === 0,
     "gf17 a diff is confined to the gate tools only when every file is gate-run, gates-for or their own tests: "
     + (toolMisses.length ? "wrong on " + JSON.stringify(toolMisses.map(([f]) => f)) : toolCases.length + " cases right"));
+
+  /* A diff that adds, removes or renames a file under tests/ selects chain-split (the test architect's edge, 2026-10-28:
+     child-cap's test file reached no chain on a tools-only merge). Staged in a lab repository against its main. */
+  const listLab = fs.mkdtempSync(path.join(os.tmpdir(), "gates-for-list-"));
+  let listCases = [];
+  try {
+    fs.mkdirSync(path.join(listLab, "tests"));
+    fs.mkdirSync(path.join(listLab, "src"));
+    for (const f of ["tests/a.mjs", "tests/old.mjs", "src/x.mjs"]) fs.writeFileSync(path.join(listLab, f), "// " + f + "\n");
+    git(["init", "-q", "-b", "main"], listLab);
+    git(["add", "."], listLab);
+    git(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "lab"], listLab);
+    fs.writeFileSync(path.join(listLab, "tests", "a.mjs"), "// changed\n");
+    fs.writeFileSync(path.join(listLab, "tests", "b.mjs"), "// added\n");
+    fs.rmSync(path.join(listLab, "tests", "old.mjs"));
+    const listFn = typeof gfTool.testsListChanged === "function" ? gfTool.testsListChanged : () => "not exported";
+    listCases = [
+      [["tests/a.mjs"], false],
+      [["tests/b.mjs"], true],
+      [["tests/old.mjs"], true],
+      [["tests/old.mjs", "tests/b.mjs"], true],
+      [["src/x.mjs", "tests/a.mjs"], false],
+      [[], false],
+    ].map(([files, want]) => [files, want, listFn(listLab, files, "main")]);
+  } finally {
+    try { fs.rmSync(listLab, { recursive: true, force: true }); } catch (e) { /* the leg's own directory */ }
+  }
+  const listMisses = listCases.filter(([, want, got]) => got !== want);
+  check(listCases.length === 6 && listMisses.length === 0,
+    "gf18 a test file added, removed or renamed against the base selects chain-split, a test file only changed does not: "
+    + (listMisses.length ? "wrong on " + JSON.stringify(listMisses) : listCases.length + " cases right"));
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {
