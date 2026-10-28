@@ -34,6 +34,10 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
+/* These legs set the plant switch and the profile themselves, arm by arm. Run inside an area run, this file inherits
+   ETIUDA_PLANTS=off from it, and a "plants on" arm would then run with them off (17a went red that way, 2026-10-28). */
+delete process.env.ETIUDA_PLANTS;
+delete process.env.ETIUDA_PROFILE;
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
