@@ -467,7 +467,7 @@ async function sweepScene(mf, prefix, r2Name, bindingName) {
     await new Promise(r => setTimeout(r, 50));
     const res = await stubT.fetch("https://do/__test/state");
     stateT = await res.json();
-    if (stateT.swept) break;
+    if (stateT.swept || (stateT.alarm === null && (await bucket.list()).objects.filter(o => o.key.startsWith(rtT + "/")).length === 0)) break;
   }
 
   // Poll P state: wait until P's alarm has rung or swept
