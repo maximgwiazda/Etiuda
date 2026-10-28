@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 79;
+const EXPECTED = 80;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1294,6 +1294,14 @@ async function main() {
     "16o a test file new against the base that starts six child processes turns the area run red, its count stated: exit "
     + capRun.exit + " | " + capRun.out.trim().split(/\r?\n/).filter(l => /child-cap/.test(l)).join(" | ")
     + " | step " + (capStep ? capStep.cmd : "none"));
+
+  /* The runner never schedules itself. gates-for names tools/gate-run.mjs as a gate (npm run gates runs it, and its lists
+     name relay legs), and an area run that called it bare refused with 78 (the workerd-sweep merge, 2026-10-28). */
+  const selfPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const selfPlan = await gr.planAreaRun(ROOT, ["tests/relay-workerd.mjs"], selfPkg, "origin/main");
+  check(!selfPlan.failClosed && selfPlan.steps.length > 0 && !selfPlan.steps.some(s => s.file === "tools/gate-run.mjs"),
+    "16p an area run never schedules the gate runner itself: for tests/relay-workerd.mjs it runs "
+    + selfPlan.steps.map(s => s.file).join(", "));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";
