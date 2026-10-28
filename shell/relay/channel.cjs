@@ -348,7 +348,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -374,6 +374,7 @@ function stateOf(x) {
   };
   s.tokenUsedIds = idSet(x.tokenUsedIds);
   s.invitedIds = idSet(x.invitedIds);
+  s.replyLostIds = idSet(x.replyLostIds);
   s.unkeptIds = idSet(x.unkeptIds);
   for (const [name, prefix] of [["counters", "c\n"], ["revs", "r\n"]]) {
     if (table(x[name])) for (const k of Object.keys(x[name])) if (k.startsWith(prefix) && count(x[name][k])) s[name][k] = x[name][k];
@@ -1134,6 +1135,7 @@ function createProgram(opts) {
     if (op.byInvite) {
       st.invited = true;
       if (HEX32.test(String(op.inviteId || ""))) st.invitedIds[String(op.inviteId)] = true; /* plant:invite-id-sent */
+      if (HEX32.test(String(op.inviteId || ""))) delete st.replyLostIds[String(op.inviteId)];
     }
     persist();
   }
@@ -1257,6 +1259,12 @@ function createProgram(opts) {
     },
     tokenSpent(id) { return HEX32.test(String(id || "")) && st.tokenUsedIds[String(id)] === true; },
     inviteSent(id) { return HEX32.test(String(id || "")) && st.invitedIds[String(id)] === true; },
+    /* The invitation's one upload went out and no reply came back. A later token-spent on that same upload counts as sent. */
+    markReplyLost(id) {
+      if (HEX32.test(String(id || ""))) st.replyLostIds[String(id)] = true;
+      persist();
+    },
+    replyLost(id) { return HEX32.test(String(id || "")) && st.replyLostIds[String(id)] === true; },
     /* The request withdrawn at the relay: the invitation counts as not asked again, so a request written anew goes as the first. */
     unmarkInvited(id) {
       if (HEX32.test(String(id || ""))) delete st.invitedIds[String(id)];
@@ -1626,6 +1634,8 @@ function createChannel(opts) {
         const why = r.refused || refusalOf(r);
         /* A key removed earlier holds an invitation's session that may not list. Its one request still goes. */
         if (session && session.by === "invite" && why.reason === "removed") return { ok: true };
+        /* The list is refused once that upload has landed. The retry still goes, and token-spent there counts as sent. */
+        if (session && session.by === "invite" && why.reason === "not-enrolled" && prog.replyLost(session.inv)) return { ok: true };
         return why;
       }
       told(r.lapse); /* plant:lapse-since-told */
@@ -1706,8 +1716,8 @@ function createChannel(opts) {
     return key ? { epoch: e, key } : null;
   }
 
-  /* One file owed, sealed, held to the limits and put: {ok}; {lim} where a limit held it; {r, why} where the relay did not
-     take it. */
+  /* One file owed, sealed, held to the limits and put: {ok}; {lim} where a limit held it; {r, why, blob} where the relay
+     did not take it. The blob stays, so a retry the relay already holds can be recorded as sent. */
   async function upload(op, who, sealing) {
     const blob = prog.sealOut(op, who, sealing);
     const lim = prog.allowUpload(blob, who.keyId);
@@ -1717,7 +1727,7 @@ function createChannel(opts) {
     if (sealing.byInvite) meta.pub = who.public;
     const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
     if (r.status === 200) { prog.sentOut(op, blob); return { ok: true }; }
-    return { r, why: r.refused || refusalOf(r) };
+    return { r, why: r.refused || refusalOf(r), blob };
   }
 
   /* A file written again after its deletion, refused as superseded: true where the relay says of that deletion's own id that
@@ -1751,7 +1761,16 @@ function createChannel(opts) {
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
       if (u.ok) continue;
       if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
-      if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) return u.why;
+      if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
+        /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
+        if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId);
+        return u.why;
+      }
+      /* The invitation's one upload whose reply was lost: the relay already has it, and token-spent on the retry is that
+         upload. It counts as sent, the wrap is forgotten, and the next cycle reads the answer. */
+      let spentSent = false;
+      spentSent = !!(op.byInvite && u.why && u.why.reason === "token-spent" && u.blob && prog.replyLost(op.inviteId)); /* plant:spent-sent */
+      if (spentSent) { prog.sentOut(op, u.blob); forgetWrap(); continue; }
       /* true: the relay answered. That refusal waits; it is not kept by content hash. */
       if (prog.refusedOut(op, u.why, true) && HALTS.indexOf(u.why.reason) >= 0) return { ok: true };
     }

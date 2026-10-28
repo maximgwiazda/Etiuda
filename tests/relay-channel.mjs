@@ -23,7 +23,8 @@
  * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched in the
  * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
  * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
- * blob has raised the counter (970o). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
+ * blob has raised the counter (970o). An invitation upload whose reply was lost is counted as sent when the retry is
+ * refused token-spent (966f). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
  * copy removed; a team inside its grant shows nothing, and no step removes anything from the desk (978). Throwaway keys and
  * invented words only;
@@ -50,7 +51,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 277;
+const EXPECTED = 279;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5562,6 +5563,67 @@ try {
     + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
+}
+
+/* An invitation's one upload whose reply never came back. The next cycle is told the token is spent, which is that upload
+   already held: it counts as sent, the wrap is forgotten, and the cycle after reads the answer. */
+async function lostReply(mod, label) {
+  const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), inv = hex(16), token = hex(32);
+  const mirror = path.join(LAB, label), stateFile = path.join(LAB, label + ".json");
+  const n = { put: 0, since: 0, answer: 0, gone: 0 };
+  const request = async (method, url, headers, body) => {
+    const u = String(url);
+    const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+    if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+    if (method === "POST" && u.endsWith("/session")) {
+      const asked = JSON.parse(Buffer.from(body).toString("utf8"));
+      if (asked.invite) return json({ session: hex(32) });
+      return json({ session: hex(32), invite: true });
+    }
+    if (method === "GET" && u.indexOf("/since/") >= 0) {
+      n.since += 1;
+      if (n.put >= 1) return json({ error: "not-enrolled" }, 403);
+      return json([]);
+    }
+    if (method === "PUT") {
+      n.put += 1;
+      if (n.put === 1) return { status: 0, header: () => null, bytes: Buffer.alloc(0) };
+      return json({ error: "token-spent" }, 403);
+    }
+    if (method === "GET" && u.endsWith("/b/" + inv)) { n.answer += 1; return json({ error: "missing" }, 404); }
+    return json({ error: "missing" }, 404);
+  };
+  put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+  const ch = mod.createChannel({ rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9,
+    pin: () => ({ teamId: "t-lost-reply", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: hex(32) }),
+    invite: () => ({ inv, token, seal }),
+    onWrapGone: () => { n.gone += 1; },
+    keyFor: () => null, sealEpoch: () => null, request, connect: null });
+  ch.start();
+  await ch.idle();
+  ch.kick();
+  await ch.idle();
+  const sinceAtSent = n.since;
+  ch.kick();
+  await ch.idle();
+  const marked = ch.program.state().invited === true && ch.program.inviteSent(inv) === true;
+  await ch.stop();
+  return { put: n.put, sinceAfter: n.since - sinceAtSent, answer: n.answer, gone: n.gone, marked };
+}
+try {
+  const lost = await lostReply(C, "lost-reply");
+  check(lost.put === 2 && lost.sinceAfter === 0 && lost.answer === 1 && lost.marked && lost.gone === 1,
+    "966f an upload refused token-spent on the invitation's own session, after a send whose reply was lost, is counted as sent: the wrap is forgotten, the request is marked and the answer is read: uploads "
+    + lost.put + ", since after it was marked " + lost.sinceAfter + ", answer reads " + lost.answer + ", wrap forgotten " + lost.gone + ", marked " + lost.marked);
+  const spentPlant = await liftChannel("plant:spent-sent", async mod => {
+    const x = await lostReply(mod, "lost-reply-plant");
+    return !x.marked && x.answer === 0 && x.gone === 0;
+  });
+  check(spentPlant.turned && spentPlant.back, "966g lifting plant:spent-sent leaves that refusal a halt, so the request is not marked, the wrap is kept and the answer is not read, and the product file is never written: "
+    + spentPlant.detail + ", sha " + (spentPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 966f): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a page whose fetch fails part way is applied only where it can be judged whole (C3, board 923). The lead names a
