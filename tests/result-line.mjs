@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 77;
+const EXPECTED = 78;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1255,6 +1255,17 @@ async function main() {
   const closedPlan = await gr.planAreaRun(ROOT, ["package.json"], closedPkg);
   const closedMissing = (gr.FLOOR || []).filter(f => !(closedPlan.steps || []).some(s => s.cmd === f.cmd
     || (s.file === f.file && !(s.args || []).length))).map(f => f.cmd);
+  /* The release profile, nightly included, runs every FLOOR entry too (the test architect's E2, 2026-10-28), and every FLOOR
+     file exists, since withFloor passes over a missing one in silence (his C1). */
+  const relSteps = typeof gr.profileSteps === "function" ? gr.profileSteps(ROOT, closedPkg) : [];
+  const relMissing = (gr.FLOOR || []).filter(f => !relSteps.some(s => s.cmd === f.cmd
+    || (s.file === f.file && !(s.args || []).length))).map(f => f.cmd);
+  const floorAbsent = (gr.FLOOR || []).filter(f => !fs.existsSync(path.join(ROOT, f.file))).map(f => f.file);
+  check(relSteps.length > 0 && relMissing.length === 0 && floorAbsent.length === 0,
+    "16n the release profile runs every FLOOR entry and every FLOOR file exists: "
+    + (relMissing.length ? "release misses " + relMissing.join("; ") : (gr.FLOOR || []).length + " entries among " + relSteps.length + " release steps")
+    + (floorAbsent.length ? "; absent " + floorAbsent.join(", ") : "; all present"));
+
   /* And not by luck: a chain holding no floor file at all gets every entry from withFloor, before plant-compare. */
   const bare = typeof gr.withFloor === "function" ? gr.withFloor(ROOT, [{ cmd: "node tests/plant-compare.mjs", file: "tests/plant-compare.mjs", args: [] }]) : [];
   const bareMissing = (gr.FLOOR || []).filter(f => !bare.some(s => s.cmd === f.cmd)).map(f => f.cmd);

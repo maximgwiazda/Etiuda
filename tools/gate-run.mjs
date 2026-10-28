@@ -240,6 +240,14 @@ export function withFloor(root, steps) {
   return out;
 }
 
+/* The release profile's steps, nightly's alike: the whole chain with every FLOOR entry it does not already run (the test
+   architect's E2, 2026-10-28), then the nightly-only legs. */
+export function profileSteps(root, pkg) {
+  const testSteps = parseStepsFromScript(pkg, "test");
+  const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
+  return [...withFloor(root, baseSteps), ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(root, n.file)))];
+}
+
 export async function planAreaRun(root, changed, pkg) {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
@@ -614,16 +622,12 @@ async function main() {
     isHeavy = true;
     gateLabel = "release";
     customEnv.ETIUDA_PROFILE = "release";
-    const testSteps = parseStepsFromScript(pkg, "test");
-    const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
-    steps = [...baseSteps, ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(ROOT, n.file)))];
+    steps = profileSteps(ROOT, pkg);
   } else if (mode === "nightly") {
     isHeavy = true;
     gateLabel = "nightly";
     customEnv.ETIUDA_PROFILE = "nightly";
-    const testSteps = parseStepsFromScript(pkg, "test");
-    const baseSteps = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
-    steps = [...baseSteps, ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(ROOT, n.file)))];
+    steps = profileSteps(ROOT, pkg);
   } else {
     const scriptNames = asked.filter(a => !a.startsWith("--"));
     for (const name of scriptNames) {
