@@ -172,14 +172,22 @@ export function countChildren(source) {
 export function addedTestFiles(base, cwd) {
   const target = base || "main";
   const root = cwd || process.cwd();
+  const cmd = cwd
+    ? `git -C ${root} diff --name-only --diff-filter=A ${target}...HEAD`
+    : `git diff --name-only --diff-filter=A ${target}...HEAD`;
   let stdout = "";
   try {
     stdout = execFileSync("git", ["diff", "--name-only", "--diff-filter=A", `${target}...HEAD`], {
       cwd: root,
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (err) {
-    return [];
+    const errText = (err.stderr ? String(err.stderr) : "") ||
+      (err.message ? String(err.message) : String(err));
+    const firstLine = errText.split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || "unknown error";
+    console.error(`${cmd}: ${firstLine}`);
+    process.exit(78);
   }
   return stdout
     .split(/\r?\n/)

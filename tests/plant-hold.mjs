@@ -346,19 +346,40 @@ export function countPlantMarkers(text) {
   return counts;
 }
 
+function gitRefuse(cmd, res) {
+  const errText = (res.stderr ? String(res.stderr) : "") ||
+    (res.error ? String(res.error.message) : "") ||
+    ("exit " + res.status);
+  const firstLine = errText.split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || "unknown error";
+  console.error(`${cmd}: ${firstLine}`);
+  process.exit(78);
+}
+
 export function checkPlantMarkers(root) {
-  if (!fs.existsSync(path.join(root, ".git"))) return [];
+  /* A folder that is not a git tree (a history-less export, where a review runs npm test) has no HEAD to compare against:
+     it passes, and says so. Inside a git tree, any git failure refuses with 78 (the test architect's C1 and C2). */
+  if (!fs.existsSync(path.join(root, ".git"))) {
+    process.stdout.write("plant-guard: markers not checked: " + root + " is not a git tree\n"); /* plant:guard-no-git */
+    return [];
+  }
+  const headCmd = `git -C ${root} rev-parse --verify HEAD`;
   const headCheck = spawnSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
     windowsHide: true,
     encoding: "utf8",
   });
-  if (headCheck.status !== 0) return [];
+  if (headCheck.status !== 0) {
+    gitRefuse(headCmd, headCheck);
+  }
 
+  const grepCmd = `git -C ${root} -c core.quotePath=false grep -lz plant: HEAD --`;
   const grepRes = spawnSync("git", ["-C", root, "-c", "core.quotePath=false", "grep", "-lz", "plant:", "HEAD", "--"], {
     windowsHide: true,
     maxBuffer: 32 << 20,
   });
-  if (grepRes.status !== 0) return [];
+  if (grepRes.status === 1) return [];
+  if (grepRes.status !== 0) {
+    gitRefuse(grepCmd, grepRes);
+  }
 
   const filesAtHead = [];
   for (const raw of splitZero(grepRes.stdout)) {
@@ -371,6 +392,7 @@ export function checkPlantMarkers(root) {
 
   if (filesAtHead.length === 0) return [];
 
+  const catCmd = `git -C ${root} cat-file --batch`;
   const catInput = filesAtHead.map(f => "HEAD:" + f).join("\n") + "\n";
   const catRes = spawnSync("git", ["-C", root, "cat-file", "--batch"], {
     input: catInput,
@@ -378,7 +400,9 @@ export function checkPlantMarkers(root) {
     maxBuffer: 64 << 20,
   });
 
-  if (catRes.status !== 0) return [];
+  if (catRes.status !== 0) {
+    gitRefuse(catCmd, catRes);
+  }
 
   const buf = catRes.stdout;
   let offset = 0;
@@ -559,6 +583,37 @@ export function runSelftest() {
     check(recCount === 1, "recordTree records 1 tracked file in lab repo");
     const cmpClean = compareTree(lab);
     check(cmpClean.ok === true, "compareTree on unchanged tree reports ok");
+
+    // Check 10: a root that is not a git tree passes, and says the markers were not checked
+    const plainDir = fs.mkdtempSync(path.join(os.tmpdir(), "plant-guard-notgit-"));
+    try {
+      fs.writeFileSync(path.join(plainDir, "sample.js"), "// plant:test-marker\n");
+      const cliNotGit = spawnSync(process.execPath, [selfScript, "--guard", "--root", plainDir], {
+        windowsHide: true,
+        encoding: "utf8",
+      });
+      const notGitOut = (cliNotGit.stderr || "") + (cliNotGit.stdout || "");
+      check(cliNotGit.status === 0 && /markers not checked: .* is not a git tree/.test(notGitOut),
+        "a root that is not a git tree passes and says the markers were not checked: exit " + cliNotGit.status);
+    } finally {
+      fs.rmSync(plainDir, { recursive: true, force: true });
+    }
+
+    // Check 11: a git repository with no commit refuses with 78, naming the git command
+    const noCommit = fs.mkdtempSync(path.join(os.tmpdir(), "plant-guard-nocommit-"));
+    try {
+      spawnSync("git", ["init", "-q", "-b", "main"], { cwd: noCommit, windowsHide: true });
+      fs.writeFileSync(path.join(noCommit, "sample.js"), "// plant:test-marker\n");
+      const cliNoCommit = spawnSync(process.execPath, [selfScript, "--guard", "--root", noCommit], {
+        windowsHide: true,
+        encoding: "utf8",
+      });
+      const noCommitOut = (cliNoCommit.stderr || "") + (cliNoCommit.stdout || "");
+      check(cliNoCommit.status === 78 && noCommitOut.includes("rev-parse"),
+        "a git repository with no commit refuses with 78 naming the git command: exit " + cliNoCommit.status);
+    } finally {
+      fs.rmSync(noCommit, { recursive: true, force: true });
+    }
 
   } finally {
     fs.rmSync(lab, { recursive: true, force: true });

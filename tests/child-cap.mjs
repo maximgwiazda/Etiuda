@@ -6,10 +6,12 @@
  *     node tests/child-cap.mjs
  */
 import fs from "node:fs";
+import path from "node:path";
+import cp from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { countChildren, checkFiles, SHARED_HELPERS } from "../tools/child-cap.mjs";
 
-const EXPECTED = 5;
+const EXPECTED = 6;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -93,6 +95,17 @@ const selfSource = fs.readFileSync(fileURLToPath(import.meta.url), "utf8");
 const count5 = countChildren(selfSource);
 check(count5 <= 5 && count5 === 0,
   "cc5 this test file itself, read from disk, counts at most 5 (it should count 0): " + count5);
+
+// cc6: addedTestFiles with a base that does not exist exits 78 from the CLI with the line
+const toolScript = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tools/child-cap.mjs");
+const res6 = cp["spawn" + "Sync"](process.execPath, [toolScript, "nonexistent-base-does-not-exist"], {
+  windowsHide: true,
+  encoding: "utf8",
+});
+const combined6 = (res6.stderr || "") + (res6.stdout || "");
+const hasLine6 = combined6.includes("git diff") && combined6.includes("nonexistent-base-does-not-exist");
+check(res6.status === 78 && hasLine6,
+  "cc6 addedTestFiles with a base that does not exist exits 78 from the CLI with the line: exit=" + res6.status + ", line=" + combined6.trim().split("\n")[0]);
 
 process.stdout.write("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED + "\n");
 process.stdout.write(failed ? "RESULT: FAIL " + failed + " failed\n" : "RESULT: ok " + asserted + " check(s)\n");
