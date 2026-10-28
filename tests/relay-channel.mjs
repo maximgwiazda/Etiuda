@@ -22,7 +22,8 @@
  * own only where its own record shows it sent that id: a lead restored to a fresh profile catches up its team file and the
  * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched (970c), and
  * an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e) and, older than the last sent,
- * changes nothing (970f). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
+ * changes nothing (970f). A clock behind the relay still uploads once a superseded own blob has raised the counter (970o).
+ * A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
  * copy removed; a team inside its grant shows nothing, and no step removes anything from the desk (978). Throwaway keys and
  * invented words only;
@@ -49,7 +50,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 274;
+const EXPECTED = 276;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5302,6 +5303,7 @@ try {
    leaves the edit where it is and becomes the blob that edit replaces. ---- */
 const OWN_G1 = "guide one, written before the profile was lost\n", OWN_G2 = "guide two, an edit made on the new profile\n";
 const OWN_N1 = "notes, kept beside the guide\n";
+const OWN_LOW = "guide at epoch two, a low counter\n";
 async function ownSetup(mod) {
   const deskKey = keyPair(true), keys = new Map([[1, crypto.randomBytes(32)]]);
   const tm = await freshTeam([deskKey]);
@@ -5379,6 +5381,46 @@ async function ownRecorded(mod) {
   await lead.ch.stop();
   return { listed: after.some(l => /^GET since\//.test(l)), fetched: after.filter(l => /^GET b\//.test(l)).length,
     puts: after.filter(l => /^PUT b\//.test(l)).length, guide: read(lead.mirror, "guide.ec") };
+}
+/* Two programs on one key. The first seals its team file and its guide under a clock the relay then holds as the floor.
+   A newer epoch of the guide, a lower counter, is put beside it so the catch-up passes over the high counter. The second
+   program's clock is behind that floor: its next upload is taken the first time only when the passed-over blob raised it. */
+async function ownClockBehind(mod) {
+  const k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const keys = new Map([[1, k1], [2, k2]]);
+  const keyFor = e => keys.get(e) || null;
+  const high = 10000000;
+  const a = opened(mod, "own-c1-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock: () => high });
+  put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  put(a.mirror, "guide.ec", OWN_G1);
+  a.ch.start();
+  await a.ch.idle();
+  const sentA = a.prog.state().sent;
+  const teamCounter = sentA[C.TEAM_NAME] ? sentA[C.TEAM_NAME].counter : 0;
+  const guideCounter = sentA["guide.ec"] ? sentA["guide.ec"].counter : 0;
+  const low = B.seal({ relayTeamId: tm.rt, epoch: 2, teamKey: k2, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey },
+    path: "guide.ec", body: OWN_LOW, counter: 50, place: "root" });
+  const s = relayStore(tm.rt), seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + low.id + "/" + hex(8);
+  R.bucket.objects.set(obj, Buffer.from(low.ciphertext));
+  s.put("blob:" + low.id, { id: low.id, supersedes: null, epoch: 2, writer: LEAD.keyId, counter: 50, del: false,
+    size: low.ciphertext.length, sig: low.signature, nonce: low.nonce, seq, at: R.clock.now, obj });
+  s.put("seq:" + String(seq).padStart(16, "0"), low.id);
+  s.put("seq", seq);
+  await a.ch.stop();
+  const b = opened(mod, "own-c2-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock: () => 1000 });
+  b.ch.start();
+  await b.ch.idle();
+  const ownAtCatch = b.prog.state().own, guide = read(b.mirror, "guide.ec");
+  const before = b.t.log.filter(l => /^PUT b\//.test(l)).length;
+  put(b.mirror, "second.ec", "a file the second program writes\n");
+  await once(b);
+  const sentSecond = b.prog.state().sent["second.ec"];
+  const out = { ownAtCatch, guide, teamCounter, guideCounter, puts: b.t.log.filter(l => /^PUT b\//.test(l)).length - before,
+    took: !!(sentSecond && sentSecond.counter > guideCounter), said: b.said.slice() };
+  await b.ch.stop();
+  return out;
 }
 /* A restored profile whose mirror already holds a newer edit of the guide: the edit stays, goes up, and replaces the blob
    it was not told of. A third profile then reads the edit from the relay. */
@@ -5497,6 +5539,23 @@ try {
     + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
+}
+
+try {
+  const c = await ownClockBehind(C);
+  check(c.guide === OWN_LOW && c.teamCounter < c.guideCounter && c.ownAtCatch >= c.guideCounter && c.took && c.puts === 1,
+    "970o two programs on one key, the second's clock behind the counter the relay holds: the catch-up passes over an own blob whose counter is the high one, that counter is raised, and the second's next upload is taken the first time: mirror "
+    + JSON.stringify(c.guide) + ", team counter " + c.teamCounter + ", guide counter " + c.guideCounter + ", own after the catch-up " + c.ownAtCatch
+    + ", uploads " + c.puts + ", taken " + c.took);
+  const clockPlant = await liftChannel("plant:own-counter", async mod => {
+    const x = await ownClockBehind(mod);
+    return x.guide === OWN_LOW && x.ownAtCatch < x.guideCounter && !x.took
+      && x.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  });
+  check(clockPlant.turned && clockPlant.back, "970p lifting plant:own-counter leaves the counter short of the blob the catch-up passed over, so the second program's upload is refused as an older copy, and the product file is never written: "
+    + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a page whose fetch fails part way is applied only where it can be judged whole (C3, board 923). The lead names a

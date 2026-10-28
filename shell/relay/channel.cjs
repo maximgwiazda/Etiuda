@@ -649,6 +649,12 @@ function createProgram(opts) {
     return null;
   }
 
+  /* A counter this key already used, whether the blob landed or a newer one of its path passed over it. The next upload
+     has to clear it, or the relay refuses the file as an older copy. */
+  function noteOwn(r) {
+    if (isCount(r && r.counter)) st.own = Math.max(st.own, r.counter); /* plant:own-counter */
+  }
+
   /* This program's record taken to show it sent this blob, as sentOut does for an upload: the path's last upload, the bytes
      the team holds of it, and a counter the next upload will pass. */
   function sentFrom(r, key) {
@@ -658,7 +664,7 @@ function createProgram(opts) {
     st.sent[key] = rec;
     st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
     delete st.refused[key];
-    st.own = Math.max(st.own, r.counter);
+    noteOwn(r);
   }
 
   /* The blob ids this program's record shows it sent: the last upload of each path and of each invitation's or desk's copy. */
@@ -957,7 +963,11 @@ function createProgram(opts) {
       if (!had || later(x.r, had.r)) best.set(k, x);
     }
     for (const x of list) {
-      if (best.get(keyOf(x)) !== x) { unpend(x.r.id); continue; }
+      if (best.get(keyOf(x)) !== x) {
+        /* Passed over, and still this key's: its counter is one the relay will not take again. */
+        if (ownOf(ctx, x.r)) noteOwn(x.r);
+        unpend(x.r.id); continue;
+      }
       unpend(x.r.id);
       const landed = land(x.r, ownOf(ctx, x.r));
       if (landed.ok && !landed.stale) out.applied.push(x.r.path);
@@ -988,6 +998,8 @@ function createProgram(opts) {
       for (const x of teams) unpend(x.r.id);
       if (!teams.length) return;
       const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
+      /* A team file passed over for a newer one still used this key's counter. */
+      for (const x of teams) if (x !== top && ownOf(ctx, x.r)) noteOwn(x.r);
       if (topTeam && !later(top.r, topTeam.r)) return;
       topTeam = top;
       const landed = landTeam(top.r, ctx); /* plant:team-first */
