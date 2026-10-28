@@ -377,6 +377,9 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   const releaseOnlySet = new Set(RELEASE_ONLY_LEGS);
   for (const g of gateFiles) {
     if (g === "tests/plant-hold.mjs" || g === "tests/plant-compare.mjs") continue;
+    /* The runner is never its own leg: gates-for names it as a gate because npm run gates runs it, and called bare it
+       refuses with 78. Its own legs are its tests (16p). */
+    if (g === "tools/gate-run.mjs") continue; /* plant:runner-self */
     if (releaseOnlySet.has(g)) {
       if (g === "tests/engine-selftest.js" && changed.includes("tools/pre-commit")) {
         // keep
