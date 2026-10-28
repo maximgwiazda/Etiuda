@@ -16,7 +16,6 @@ const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
-const CHALLENGES_MAX = 256;
 /* The shortest ciphertext a padded seal can be, and the most live blobs one team may hold. */
 const BLOB_MIN = B.PAD_FLOOR + B.TAG_BYTES;
 const BLOBS_MAX = 4096;
@@ -360,7 +359,9 @@ function createCore(deps) {
     /* `made` stamps this copy of the team: kept by a repeat create, new once a sweep has emptied the store, and told at each session. */
     const made = team && typeof team.made === "string" ? team.made : random(8);
     store.atomic(() => {
-      store.put("team", Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made }, paidApart));
+      const row = Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made }, paidApart);
+      if (typeof row.secret !== "string") row.secret = team && typeof team.secret === "string" ? team.secret : random(32);
+      store.put("team", row);
       store.del("swept");
       remember(b.grant);
     });
@@ -577,18 +578,35 @@ function createCore(deps) {
     return { ok: true, dropped: [...drop], used };
   }
 
+  /* 32 bytes, hex. A team from before this secret was kept is given one the first time it is asked. */
+  function secretOf(team) {
+    if (typeof team.secret === "string" && /^[0-9a-f]{64}$/.test(team.secret)) return team.secret;
+    const secret = random(32);
+    store.put("team", Object.assign({}, team, { secret }));
+    return secret;
+  }
+  function macOf(secret, rt, tBuf, r) {
+    return crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(Buffer.concat([Buffer.from(rt, "utf8"), tBuf, r])).digest().subarray(0, 8);
+  }
+  /* Four bytes, the clock in seconds, big-endian. A clock behind the epoch is the same bits as a uint32 past 2038, and the
+     window takes the reading, signed or unsigned, that falls inside it. The two readings are 136 years apart, so at most one does. */
+  function timeBuf(now) {
+    const buf = Buffer.alloc(4);
+    buf.writeUInt32BE(Math.floor(now / 1000) >>> 0);
+    return buf;
+  }
+  function timeAt(buf, now) {
+    const unsigned = buf.readUInt32BE(0) * 1000, signed = buf.readInt32BE(0) * 1000;
+    const near = ms => now - ms <= CHALLENGE_MS && ms - now <= CHALLENGE_MS;
+    return near(signed) && !near(unsigned) ? signed : unsigned;
+  }
   function challenge(rt) {
-    if (!teamOf(rt)) return no("not-enrolled"); /* plant:challenge-team */
+    const team = teamOf(rt);
+    if (!team) return no("not-enrolled"); /* plant:challenge-team */
     const blocked = grantRefused();
     if (blocked) return blocked;
-    const now = clock(), nonce = random(16), n = (store.get("chn") || 0) + 1;
-    store.atomic(() => {
-      const held = store.list("ch:").sort((a, b) => a[1].n - b[1].n);
-      const live = held.filter(([k, c]) => (now - c.at > CHALLENGE_MS ? (store.del(k), false) : true));
-      for (const [k] of live.slice(0, Math.max(0, live.length - CHALLENGES_MAX + 1))) store.del(k); /* plant:challenge-cap */
-      store.put("chn", n);
-      store.put("ch:" + nonce, { at: now, n });
-    });
+    const now = clock(), tBuf = timeBuf(now), r = crypto.randomBytes(4);
+    const nonce = Buffer.concat([tBuf, r, macOf(secretOf(team), rt, tBuf, r)]).toString("hex");
     return { ok: true, challenge: nonce, until: now + CHALLENGE_MS };
   }
 
@@ -600,9 +618,14 @@ function createCore(deps) {
     const blocked = grantRefused();
     if (blocked) return blocked;
     const b = bodyOf(body);
-    const ch = is(HEX32, b.challenge) ? store.get("ch:" + b.challenge) : undefined;
-    if (ch === undefined) return no("hello-replay"); /* plant:challenge-once */
-    if (clock() - ch.at > CHALLENGE_MS) return no("nonce-stale"); /* plant:challenge-life */
+    const raw = is(HEX32, b.challenge) ? Buffer.from(b.challenge, "hex") : null;
+    const secret = typeof team.secret === "string" ? team.secret : "";
+    const tBuf = raw ? raw.subarray(0, 4) : null, r = raw ? raw.subarray(4, 8) : null, mac = raw ? raw.subarray(8, 16) : null;
+    const expect = raw && /^[0-9a-f]{64}$/.test(secret) ? macOf(secret, rt, tBuf, r) : null;
+    if (!expect || !crypto.timingSafeEqual(expect, mac)) return no("hello-replay"); /* plant:challenge-mac */
+    const at = timeAt(tBuf, clock());
+    if (clock() - at > CHALLENGE_MS || at - clock() > CHALLENGE_MS) return no("nonce-stale"); /* plant:challenge-window */
+    if (store.get("chu:" + b.challenge) !== undefined) return no("hello-replay"); /* plant:challenge-used */
     return b.invite !== undefined ? byToken(rt, b) : byKey(team, rt, b);
   }
 
@@ -713,7 +736,7 @@ function createCore(deps) {
     const token = random(32), now = clock(), until = now + SESSION_MS;
     store.atomic(() => {
       also && also();
-      store.del("ch:" + nonce); /* plant:challenge-spend */
+      store.put("chu:" + nonce, now); /* plant:challenge-use */
       const held = store.list("ses:").filter(([k, s]) => (s.until < now ? (store.del(k), false) : true)).sort((a, b) => a[1].until - b[1].until);
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
@@ -1072,6 +1095,8 @@ function createCore(deps) {
         store.put(k, SPENT); /* plant:spent-kept */
       }
       for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
+      for (const [k] of store.list("ch:")) store.del(k); /* plant:challenge-drop */
+      for (const [k, atSpent] of store.list("chu:")) if (typeof atSpent !== "number" || now - atSpent > CHALLENGE_MS) store.del(k);
       store.put("blobs", store.list("blob:").length); /* plant:blob-recount */
     });
     return drop;
@@ -1143,7 +1168,7 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX, BLOB_MIN, BLOBS_MAX,
+  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

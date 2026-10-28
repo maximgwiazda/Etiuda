@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 367;
+const EXPECTED = 373;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -270,8 +270,8 @@ async function main() {
     const text = dumpText(w);
     const team = w.R.stores.get(w.rt).get("team");
     check(!!team && team.rt === w.rt && team.lead.keyId === w.lead.keyId && team.lead.pub === w.lead.pub
-      && Object.keys(team).sort().join() === "epoch,lead,made,paid,rt,until" && /^[0-9a-f]{16}$/.test(team.made),
-      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor, the grant's until and paid and the copy's stamp only");
+      && Object.keys(team).sort().join() === "epoch,lead,made,paid,rt,secret,until" && /^[0-9a-f]{16}$/.test(team.made),
+      "2a a lead makes its team, and the object keeps its id, the lead's key, the epoch floor, the grant's until and paid, the copy's stamp and the team's secret");
     const v = { R: relayEnv(), rt: hex(16), lead: keyPair(false) };
     const marker = "TeamName" + hex(4);
     const named = await create(v, v.lead, 0, { name: marker, teamId: marker });
@@ -397,18 +397,35 @@ async function main() {
   {
     const w = await world();
     w.R.clock.now = 1000;
+    const bare = w.R.stores.get(w.rt).get("team");
+    delete bare.secret;
+    w.R.stores.get(w.rt).put("team", bare);
     const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} });
+    const secret = (w.R.stores.get(w.rt).get("team") || {}).secret;
+    const second = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} });
     check(r.status === 200 && /^[0-9a-f]{32}$/.test(r.json.challenge) && r.json.until === 1000 + 5 * MIN
-      && Object.keys(r.json).sort().join() === "challenge,until", "5a a challenge is 16 random bytes in hex, living 5 minutes");
+      && Object.keys(r.json).sort().join() === "challenge,until" && w.R.stores.get(w.rt).list("ch:").length === 0
+      && /^[0-9a-f]{64}$/.test(secret) && (w.R.stores.get(w.rt).get("team") || {}).secret === secret && second.status === 200,
+      "5a a challenge is 32 hex characters, living 5 minutes, not kept as a ch: row, and a team with no secret is given one once");
     const nobody = hex(16);
     const none = await call(w.R, "POST", "/relay/v1/t/" + nobody + "/hello", { json: {} });
     const keptNothing = !w.R.stores.get(nobody) || w.R.stores.get(nobody).dump().length === 0;
     check(refused(none, "not-enrolled") && keptNothing, "5b a challenge for a team never made is refused, and nothing is kept for it");
     const firstNonce = await challenge(w);
-    for (let i = 0; i < 256; i++) await challenge(w);
-    const live = w.R.stores.get(w.rt).list("ch:").length;
-    const oldest = await helloAs(w, w.desk, { nonce: firstNonce });
-    check(live === 256 && refused(oldest, "hello-replay"), "5c past 256 live challenges the oldest is let go: " + live + " kept");
+    for (let i = 0; i < 1000; i++) await challenge(w);
+    const opened = await helloAs(w, w.desk, { nonce: firstNonce });
+    const box = w.R.stores.get(w.rt);
+    box.put("ch:" + "ab".repeat(16), { at: 1, n: 1 });
+    await since(w, opened.json && opened.json.session);
+    check(opened.status === 200 && box.list("ch:").length === 0,
+      "5c the stored challenge cap is gone: a stranger's thousand challenge requests leave the first challenge able to open a session, and a left-over ch: row is dropped at the next prune: "
+      + opened.status + " " + (opened.json && opened.json.error));
+    const n = await challenge(w);
+    const flipped = n.slice(0, -1) + (n.endsWith("0") ? "1" : "0");
+    const forged = await helloAs(w, w.desk, { nonce: flipped });
+    const honest = await helloAs(w, w.desk, { nonce: n });
+    check(refused(forged, "hello-replay") && honest.status === 200,
+      "5d a challenge whose mac does not hold is refused, and the challenge itself still opens: " + (forged.json && forged.json.error));
   }
 
   /* ---- 6: a session by key ---- */
@@ -1102,6 +1119,56 @@ async function main() {
   /* A text swapped in place of the one place `from` stands, for a guard that is part of a line; and the line carrying a plant tag lifted. */
   const swapCore = (from, to, fn) => plantCore(swapped(from, to), fn, "swap text absent");
   const liftCore = (tag, fn) => plantCore(lineLifted(tag), fn, "plant line absent");
+  /* The stored challenge cap is rewritten: a mac, a window, a spent mark and a drop of leftover ch: rows. Each plant is its own leg. */
+  {
+    const macLift = await liftCore("plant:challenge-mac", async () => {
+      const p = await world();
+      const issued = await challenge(p);
+      const bad = issued.slice(0, -1) + (issued.endsWith("0") ? "1" : "0");
+      const got = await helloAs(p, p.desk, { nonce: bad });
+      return got.status === 200;
+    });
+    check(macLift.turned && macLift.back, "5e lifting plant:challenge-mac lets a challenge with a bad mac open a session, and the product file is never written: "
+      + macLift.detail + ", sha " + (macLift.back ? "restored" : "differs"));
+    const useLift = await liftCore("plant:challenge-use", async () => {
+      const p = await world();
+      const issued = await challenge(p);
+      const a = await helloAs(p, p.desk, { nonce: issued });
+      const b = await helloAs(p, p.desk, { nonce: issued });
+      return a.status === 200 && b.status === 200;
+    });
+    check(useLift.turned && useLift.back, "5f lifting plant:challenge-use lets one challenge open two sessions, and the product file is never written: "
+      + useLift.detail + ", sha " + (useLift.back ? "restored" : "differs"));
+    const windowLift = await liftCore("plant:challenge-window", async () => {
+      const p = await world();
+      p.R.clock.now = 10000;
+      const issued = await challenge(p);
+      p.R.clock.now += 5 * MIN + 1;
+      const got = await helloAs(p, p.desk, { nonce: issued });
+      return got.status === 200;
+    });
+    check(windowLift.turned && windowLift.back, "5g lifting plant:challenge-window lets a challenge older than 5 minutes open a session, and the product file is never written: "
+      + windowLift.detail + ", sha " + (windowLift.back ? "restored" : "differs"));
+    const usedLift = await liftCore("plant:challenge-used", async () => {
+      const p = await world();
+      const issued = await challenge(p);
+      const a = await helloAs(p, p.desk, { nonce: issued });
+      const b = await helloAs(p, p.desk, { nonce: issued });
+      return a.status === 200 && b.status === 200;
+    });
+    check(usedLift.turned && usedLift.back, "5h lifting plant:challenge-used lets a spent challenge open a second session, and the product file is never written: "
+      + usedLift.detail + ", sha " + (usedLift.back ? "restored" : "differs"));
+    const dropLift = await liftCore("plant:challenge-drop", async () => {
+      const p = await world();
+      const opened = await helloAs(p, p.desk);
+      const box = p.R.stores.get(p.rt);
+      box.put("ch:" + "cd".repeat(16), { at: 1, n: 1 });
+      await since(p, opened.json && opened.json.session);
+      return box.list("ch:").length === 1;
+    });
+    check(dropLift.turned && dropLift.back, "5i lifting plant:challenge-drop leaves a ch: row after the next prune, and the product file is never written: "
+      + dropLift.detail + ", sha " + (dropLift.back ? "restored" : "differs"));
+  }
   /* A re-enrol deletes the session marked removed. Lifting that line leaves the old bearer removed, and the row standing. */
   {
     const readd = await liftCore("plant:readd-session", async () => {
@@ -2588,7 +2655,7 @@ async function main() {
       const leaks = [grant.sig.value, grant.kind].concat(grant.via ? [grant.via.sig.value] : []).filter(s => dump.indexOf(s) > -1).length;
       return { w, kept, grant, ctx, leaks };
     };
-    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,until"
+    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,secret,until"
       && x.kept.until === x.grant.until && x.kept.paid === x.grant.paid && x.kept.lead.keyId === x.ctx.lead.keyId && x.leaks === 0;
     const byRoot = await madeUnder(gf({ paid: true })), byDelegate = await madeUnder(ctx => K.delegatedGrantFor(ctx.lead.pub, ctx.now, { fields: { paid: false } }));
     check(keptFor(byRoot) && byRoot.kept.paid === true,
@@ -3533,7 +3600,7 @@ async function main() {
       const cBadRt = hex(16);
       const cBad = await countedCall(W, cR, "POST", "/relay/v1/teams", { json: createBody(cBadRt, keyPair(false), T0S, { grant: null }) });
       const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 1 && !!cTeam && cTeam.epoch === 0
-        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,made,paid,rt,until"
+        && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,made,paid,rt,secret,until"
         && /^[0-9a-f]{16}$/.test(cTeam.made)
         && refused(cBad.r, "bad-grant") && cBad.gets === 0 && (cR.stores.get(cBadRt) ? cR.stores.get(cBadRt).dump().length : 0) === 0;
       const line = "980c an id never made is judged as today: a valid grant is taken and keeps no mark, and a create with no grant is bad-grant with no object woken: "
