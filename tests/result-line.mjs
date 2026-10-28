@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 73;
+const EXPECTED = 74;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1185,6 +1185,29 @@ async function main() {
   check(areaRunFloor.out.indexOf("tests/pick.mjs") >= 0 && areaRunFloor.out.indexOf("tests/links.js") >= 0,
     "16h floor legs run at every merge whatever gates-for names: "
     + areaRunFloor.out.trim().split(/\r?\n/).filter(l => /pick|links/i.test(l)).join(" | "));
+
+  /* Rule 1 as amended 2026-10-28: a diff confined to the gate tools selects their own legs and the floor from gates-for itself;
+     one that mixes a gate tool with any other file still fails closed. */
+  /* The legs above leave edits in the lab; they are committed first, so the diff is the gate tool's alone. */
+  spawnSync("git", ["add", "."], { cwd: areaLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "before 16j"], { cwd: areaLab.lab });
+  const labTool = path.join(areaLab.lab, "tools", "gate-run.mjs");
+  const labToolBytes = fs.readFileSync(labTool, "utf8");
+  fs.appendFileSync(labTool, "// touched by leg 16j\n");
+  fs.writeFileSync(path.join(areaLab.lab, "tests/result-line.mjs"), "console.log('  ok   own');\nprocess.exit(0);\n");
+  const areaToolsOnly = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  fs.writeFileSync(path.join(areaLab.lab, "src", "mixed.mjs"), "export const mixed = 1;\n");
+  const areaToolsMixed = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  fs.unlinkSync(path.join(areaLab.lab, "src", "mixed.mjs"));
+  fs.unlinkSync(path.join(areaLab.lab, "tests/result-line.mjs"));
+  fs.writeFileSync(labTool, labToolBytes);
+  check(areaToolsOnly.out.indexOf("fail-closed") < 0 && areaToolsOnly.out.indexOf("confined to the gate tools") >= 0
+    && areaToolsOnly.out.indexOf("node tests/result-line.mjs") >= 0 && areaToolsOnly.out.indexOf("tests/pick.mjs") >= 0
+    && areaToolsOnly.out.indexOf("tests/g1.mjs") < 0
+    && areaToolsMixed.out.indexOf("fail-closed to whole chain: change in shared code tools/gate-run.mjs") >= 0,
+    "16j a diff confined to the gate tools runs their own legs and the floor, and one mixing them with another file fails closed: "
+    + areaToolsOnly.out.trim().split(/\r?\n/).filter(l => /fail-closed|confined|own legs|gate\(s\) to run/i.test(l)).join(" | ")
+    + " || mixed: " + areaToolsMixed.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";

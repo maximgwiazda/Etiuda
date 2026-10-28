@@ -234,7 +234,11 @@ export async function planAreaRun(root, changed, pkg) {
   const testGates = testSteps.filter(s => s.file !== "tests/plant-hold.mjs" && s.file !== "tests/plant-compare.mjs");
   const totalGates = testGates.length;
 
-  for (const f of changed) {
+  /* A diff confined to the gate tools runs their own legs and the floor (rule 1, as amended 2026-10-28), not the whole run. */
+  const toolsOnly = !!(gf && typeof gf.isGateToolsOnly === "function" && gf.isGateToolsOnly(changed));
+  if (toolsOnly) console.log("gate-run area: the diff is confined to the gate tools, so their own legs and the floor run (rule 1)");
+
+  for (const f of toolsOnly ? [] : changed) {
     if (isSharedCode(f)) {
       return {
         failClosed: true,
@@ -244,7 +248,7 @@ export async function planAreaRun(root, changed, pkg) {
     }
   }
 
-  for (const f of changed) {
+  for (const f of toolsOnly ? [] : changed) {
     let forFile = [];
     try { forFile = gatesFor(root, [f]); } catch { forFile = []; }
     if (totalGates > 0 && forFile.length > totalGates / 2) {
@@ -257,7 +261,7 @@ export async function planAreaRun(root, changed, pkg) {
   }
 
   let rows = [];
-  try { rows = gatesFor(root, changed); } catch { rows = []; }
+  if (!toolsOnly) { try { rows = gatesFor(root, changed); } catch { rows = []; } }
 
   const gateFiles = new Set(rows.map(r => r.gate));
   const steps = [];
@@ -270,6 +274,15 @@ export async function planAreaRun(root, changed, pkg) {
   if (fs.existsSync(path.join(root, "tests", "plant-hold.mjs"))) {
     steps.push(plantHold);
     addedFiles.add("tests/plant-hold.mjs");
+  }
+
+  if (toolsOnly) {
+    for (const g of gf.GATE_TOOLS.filter(t => t.startsWith("tests/"))) {
+      if (fs.existsSync(path.join(root, g)) && !addedFiles.has(g)) {
+        steps.push({ script: "area", cmd: "node " + g, file: g, args: [], note: "the gate tools' own legs" });
+        addedFiles.add(g);
+      }
+    }
   }
 
   let addedProductCore = false;

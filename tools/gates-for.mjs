@@ -103,6 +103,16 @@ export const SHARED = [
   "tools/engine-pin",
 ];
 
+/* THE GATE TOOLS (rule 1 as Claude alpha amended it, office 199feb2f, 2026-10-28): a diff confined to these runs their own legs
+   and the floor at merge, and the next nightly is its whole run. A diff that mixes one of them with any other file fails closed
+   as before. */
+export const GATE_TOOLS = ["tools/gate-run.mjs", "tools/gates-for.mjs", "tests/result-line.mjs", "tests/gates-for.mjs"];
+
+export function isGateToolsOnly(files) {
+  const list = (files || []).map(f => String(f).replace(/\\/g, "/"));
+  return list.length > 0 && list.every(f => GATE_TOOLS.includes(f));
+}
+
 export function isSharedCode(file) {
   const f = file.replace(/\\/g, "/");
   if (SHARED.includes(f)) return true;
