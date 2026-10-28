@@ -311,6 +311,7 @@ try {
     [["tools/gate-run.mjs", "src/leaf.mjs"], false],
     [["tools/gate-run.mjs", "package.json"], false],
     [["tools/machine-lock.mjs"], false],
+    [["tools/child-cap.mjs", "tests/child-cap.mjs"], true],
     [[], false],
   ];
   const toolMisses = toolCases.filter(([files, want]) => toolsOnlyFn(files) !== want);

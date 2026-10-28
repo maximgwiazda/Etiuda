@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 78;
+const EXPECTED = 79;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1274,6 +1274,26 @@ async function main() {
     "16m a fail-closed plan runs every FLOOR entry: " + (closedPlan.failClosed ? "fail-closed, " : "NOT fail-closed, ")
     + (closedMissing.length ? "missing " + closedMissing.join("; ") : (gr.FLOOR || []).length + " entries among " + (closedPlan.steps || []).length + " steps")
     + (bareMissing.length ? "; a bare chain misses " + bareMissing.join("; ") : "; a bare chain gets all " + (gr.FLOOR || []).length));
+
+  /* A test file new against the merge's base that starts more than five child processes turns the area run red, its count
+     stated (regimen rule 11; tools/child-cap.mjs counts statically). Planted: a six-child file, in a lab of its own. */
+  const capLab = makeLab("cap", { g1: prints(1, 0, "process.exit(0);") }, { git: true, gatesFor: true });
+  const capSrc = path.join(ROOT, "tools", "child-cap.mjs");
+  if (fs.existsSync(capSrc)) fs.copyFileSync(capSrc, path.join(capLab.lab, "tools", "child-cap.mjs"));
+  spawnSync("git", ["add", "."], { cwd: capLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "initial"], { cwd: capLab.lab });
+  const six = Array.from({ length: 6 }, (_, i) => '  cp.' + 'spawn' + 'Sync("node", ["-v"]); // ' + i).join("\n");
+  fs.writeFileSync(path.join(capLab.lab, "tests", "six.mjs"), 'import * as cp from "node:child_process";\nfunction never() {\n'
+    + six + '\n}\nconsole.log("  ok   six");\n');
+  spawnSync("git", ["add", "."], { cwd: capLab.lab });
+  spawnSync("git", ["commit", "-q", "-m", "a six-child test file"], { cwd: capLab.lab });
+  const capRun = run(capLab, ["area", "HEAD~1"], null, { ETIUDA_LOCK_PATH: path.join(capLab.root, "machine.lock") });
+  const capStep = typeof gr.childCapStep === "function" ? gr.childCapStep(ROOT, "origin/main...HEAD") : null;
+  check(capRun.exit !== 0 && /FAIL child-cap tests\/six\.mjs starts 6 child processes/.test(capRun.out)
+    && !!capStep && capStep.cmd === "node tools/child-cap.mjs origin/main",
+    "16o a test file new against the base that starts six child processes turns the area run red, its count stated: exit "
+    + capRun.exit + " | " + capRun.out.trim().split(/\r?\n/).filter(l => /child-cap/.test(l)).join(" | ")
+    + " | step " + (capStep ? capStep.cmd : "none"));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";

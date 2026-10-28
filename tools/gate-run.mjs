@@ -240,6 +240,14 @@ export function withFloor(root, steps) {
   return out;
 }
 
+/* A test file new against the merge's base may start at most five child processes, a headless browser counting as one
+   (regimen rule 11): tools/child-cap.mjs counts them statically, at every merge, before the legs. */
+export function childCapStep(root, base) {
+  if (!fs.existsSync(path.join(root, "tools", "child-cap.mjs"))) return null;
+  const ref = String(base || "main").split("...")[0] || "main";
+  return { script: "area", cmd: "node tools/child-cap.mjs " + ref, file: "tools/child-cap.mjs", args: [ref], note: "rule 11: new test files' child processes" };
+}
+
 /* The release profile's steps, nightly's alike: the whole chain with every FLOOR entry it does not already run (the test
    architect's E2, 2026-10-28), then the nightly-only legs. */
 export function profileSteps(root, pkg) {
@@ -615,6 +623,8 @@ async function main() {
       isHeavy = true;
     }
     steps = plan.steps;
+    const capStep = childCapStep(ROOT, base);
+    if (capStep) steps.splice(steps.length && steps[0].file === "tests/plant-hold.mjs" ? 1 : 0, 0, capStep);
     walled = plan.walled || [];
     customEnv.ETIUDA_PLANTS = "off";
     gateLabel = "area";
