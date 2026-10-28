@@ -356,6 +356,12 @@ function gitRefuse(cmd, res) {
 }
 
 export function checkPlantMarkers(root) {
+  /* A folder that is not a git tree (a history-less export, where a review runs npm test) has no HEAD to compare against:
+     it passes, and says so. Inside a git tree, any git failure refuses with 78 (the test architect's C1 and C2). */
+  if (!fs.existsSync(path.join(root, ".git"))) {
+    process.stdout.write("plant-guard: markers not checked: " + root + " is not a git tree\n"); /* plant:guard-no-git */
+    return [];
+  }
   const headCmd = `git -C ${root} rev-parse --verify HEAD`;
   const headCheck = spawnSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
     windowsHide: true,
@@ -578,7 +584,7 @@ export function runSelftest() {
     const cmpClean = compareTree(lab);
     check(cmpClean.ok === true, "compareTree on unchanged tree reports ok");
 
-    // Check 10: a root that is not a git repository gives 78 naming git command and error
+    // Check 10: a root that is not a git tree passes, and says the markers were not checked
     const plainDir = fs.mkdtempSync(path.join(os.tmpdir(), "plant-guard-notgit-"));
     try {
       fs.writeFileSync(path.join(plainDir, "sample.js"), "// plant:test-marker\n");
@@ -587,10 +593,26 @@ export function runSelftest() {
         encoding: "utf8",
       });
       const notGitOut = (cliNotGit.stderr || "") + (cliNotGit.stdout || "");
-      check(cliNotGit.status === 78 && notGitOut.includes("git") && (notGitOut.includes("not a git repository") || notGitOut.includes("rev-parse")),
-        "root that is not a git repository gives 78 naming git command and error: exit " + cliNotGit.status);
+      check(cliNotGit.status === 0 && /markers not checked: .* is not a git tree/.test(notGitOut),
+        "a root that is not a git tree passes and says the markers were not checked: exit " + cliNotGit.status);
     } finally {
       fs.rmSync(plainDir, { recursive: true, force: true });
+    }
+
+    // Check 11: a git repository with no commit refuses with 78, naming the git command
+    const noCommit = fs.mkdtempSync(path.join(os.tmpdir(), "plant-guard-nocommit-"));
+    try {
+      spawnSync("git", ["init", "-q", "-b", "main"], { cwd: noCommit, windowsHide: true });
+      fs.writeFileSync(path.join(noCommit, "sample.js"), "// plant:test-marker\n");
+      const cliNoCommit = spawnSync(process.execPath, [selfScript, "--guard", "--root", noCommit], {
+        windowsHide: true,
+        encoding: "utf8",
+      });
+      const noCommitOut = (cliNoCommit.stderr || "") + (cliNoCommit.stdout || "");
+      check(cliNoCommit.status === 78 && noCommitOut.includes("rev-parse"),
+        "a git repository with no commit refuses with 78 naming the git command: exit " + cliNoCommit.status);
+    } finally {
+      fs.rmSync(noCommit, { recursive: true, force: true });
     }
 
   } finally {
