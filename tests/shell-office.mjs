@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 106;
+const EXPECTED = 113;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,13 +39,14 @@ const APP = path.join(LAB, "app");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
-  "SAMPLE_EDITIONS", "catalogChanged", "sendListing", "spellingFromPackage", "chromiumDesktop", "keyringSwitch"];
+  "SAMPLE_EDITIONS", "catalogChanged", "sendListing", "spellingFromPackage", "chromiumDesktop", "keyringSwitch",
+  "RENAME_RETRIES", "RENAME_WAIT_MS", "uniqueTempPath"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
    with its name, which is how a folder that does not answer is planted: a call into it throws
    and is counted, where on a desk it would have waited out the network's timeout. */
-const HOOKED = ["renameSync", "readdirSync", "statSync", "readFileSync", "existsSync", "mkdirSync", "writeFileSync", "watch"];
+const HOOKED = ["renameSync", "readdirSync", "statSync", "readFileSync", "existsSync", "mkdirSync", "writeFileSync", "watch", "fsyncSync"];
 function wrapFs(ctl) {
   const f = Object.create(realFs);
   HOOKED.forEach(n => { f[n] = (...a) => {
@@ -209,10 +210,10 @@ try {
     const ok3 = S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeC: "3" })));
     const waited = Date.now() - t0;
     const kept = keysOn(S.deskFile);
-    check(ok3 === false && renames === 10 && waited < 2000 && kept && kept.eOfficeB === "2" && !("eOfficeC" in kept)
-      && !realFs.existsSync(S.deskFile + ".tmp"),
+    check(ok3 === false && renames === (S.api.RENAME_RETRIES || 60) && waited < 5000 && kept && kept.eOfficeB === "2" && !("eOfficeC" in kept)
+      && realFs.readdirSync(path.dirname(S.deskFile)).filter(n => n.endsWith(".tmp")).length === 0,
       "1c a file held past the shell's patience: " + renames + " asks in " + waited + " ms, answered " + ok3
-      + ", the desk on the disk as it was, " + (realFs.existsSync(S.deskFile + ".tmp") ? "a" : "no") + " temp file left");
+      + ", the desk on the disk as it was, no temp file left");
 
     renames = 0;
     S.ctl.renameSync = (real, a, b) => { renames++; throw busy("ENOSPC"); };
@@ -234,6 +235,174 @@ try {
     const direct = SRC.split("\n").filter(l => /\bfs\.renameSync\(/.test(l) && !/^\s*(\/\/|\*)/.test(l)).length;
     check(direct === 2,
       "1f fs.renameSync is called at two lines of shell/main.js, renamePatiently's and rotateDesk's: " + direct);
+
+    // 1g: two writers to one target at once leave one whole file and no stray temporary
+    const target1g = path.join(S.DOCS, "concurrent-note.ec");
+    realFs.writeFileSync(target1g, "seed\n", "utf8");
+    let writer2Ran = false;
+    let writer1Tmp = "";
+    S.ctl.writeFileSync = (real, file, data, ...rest) => {
+      const res = real(file, data, ...rest);
+      if (typeof file === "string" && file.endsWith(".tmp") && !writer2Ran) {
+        writer1Tmp = file;
+        writer2Ran = true;
+        // Writer 2 writes to the same target concurrently while Writer 1 has written its temp file
+        S.api.writeReplacing(target1g, "writer-2-content\n");
+      }
+      return res;
+    };
+    let w1Ok = true;
+    try {
+      S.api.writeReplacing(target1g, "writer-1-content\n");
+    } catch {
+      w1Ok = false;
+    }
+    S.ctl.writeFileSync = null;
+    const finalContent1g = realFs.readFileSync(target1g, "utf8");
+    const strayTmps1g = realFs.readdirSync(S.DOCS).filter(n => n.endsWith(".tmp"));
+    const whole1g = finalContent1g === "writer-1-content\n" || finalContent1g === "writer-2-content\n";
+    check(w1Ok && whole1g && strayTmps1g.length === 0 && writer2Ran && writer1Tmp !== "",
+      "1g two writers to one target at once leave one whole file and no stray temporary: whole "
+      + whole1g + " (" + finalContent1g.trim() + "), strays " + strayTmps1g.length + ", w1Ok " + w1Ok);
+
+    // 1h: a target held open is replaced once released inside the window
+    const target1h = path.join(S.DOCS, "held-inside.ec");
+    realFs.writeFileSync(target1h, "original-inside\n", "utf8");
+    let holdRetries1h = 0;
+    S.ctl.renameSync = (real, a, b) => {
+      if (b === target1h) {
+        holdRetries1h++;
+        if (holdRetries1h <= 5) throw busy("EBUSY");
+      }
+      return real(a, b);
+    };
+    S.api.writeReplacing(target1h, "replaced-inside\n");
+    S.ctl.renameSync = null;
+    const content1h = realFs.readFileSync(target1h, "utf8");
+    const tmps1h = realFs.readdirSync(S.DOCS).filter(n => n.endsWith(".tmp"));
+    check(content1h === "replaced-inside\n" && holdRetries1h === 6 && tmps1h.length === 0,
+      "1h a target held open is replaced once released inside the window: " + holdRetries1h + " asks, content " + content1h.trim() + ", strays " + tmps1h.length);
+
+    // 1i: a target held open past the window is refused cleanly with cause named, old bytes intact
+    const target1i = path.join(S.DOCS, "held-past.ec");
+    realFs.writeFileSync(target1i, "original-past\n", "utf8");
+    let holdRetries1i = 0;
+    let failedCode1i = "";
+    S.ctl.renameSync = (real, a, b) => {
+      if (b === target1i) {
+        holdRetries1i++;
+        throw busy("EBUSY");
+      }
+      return real(a, b);
+    };
+    try {
+      S.api.writeReplacing(target1i, "replaced-past\n");
+    } catch (e) {
+      failedCode1i = e.code;
+    }
+    S.ctl.renameSync = null;
+    const content1i = realFs.readFileSync(target1i, "utf8");
+    const tmps1i = realFs.readdirSync(S.DOCS).filter(n => n.endsWith(".tmp"));
+    check(failedCode1i === "EBUSY" && holdRetries1i === (S.api.RENAME_RETRIES || 60) && content1i === "original-past\n" && tmps1i.length === 0,
+      "1i a target held open past the window is refused cleanly with cause named: code " + failedCode1i
+      + ", " + holdRetries1i + " asks, old bytes intact: " + (content1i === "original-past\n") + ", strays " + tmps1i.length);
+
+    // 1j: desk writes fsync the temporary file before the rename
+    let fsyncedFds = 0;
+    let renameHadFsync = false;
+    S.ctl.fsyncSync = (real, fd) => { fsyncedFds++; return real(fd); };
+    S.ctl.renameSync = (real, a, b) => {
+      if (fsyncedFds > 0) renameHadFsync = true;
+      return real(a, b);
+    };
+    const target1j = path.join(S.DOCS, "fsynced.ec");
+    S.api.writeReplacing(target1j, "fsync-content\n");
+    S.ctl.fsyncSync = null;
+    S.ctl.renameSync = null;
+    check(fsyncedFds >= 1 && renameHadFsync === true && realFs.readFileSync(target1j, "utf8") === "fsync-content\n",
+      "1j desk writes fsync the temporary file before the rename: fsyncs " + fsyncedFds + ", fsync before rename " + renameHadFsync);
+
+    // 1k: lifting plant:unique-temp causes concurrent writes to clash on .tmp (ENOENT)
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const beforeBytes = realFs.readFileSync(mainPath);
+    const beforeSrc = beforeBytes.toString("utf8");
+    {
+      const lines = beforeSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:unique-temp") >= 0);
+      let turned = false;
+      if (at >= 0) {
+        lines[at] = '  return file + ".tmp"; /* plant:unique-temp lifted */';
+        const Splant = loadShell({ src: lines.join("\n") });
+        const targetP = path.join(Splant.DOCS, "plant-conc.ec");
+        realFs.writeFileSync(targetP, "seed\n", "utf8");
+        let ran = false, crashed = false;
+        Splant.ctl.writeFileSync = (real, file, data, ...rest) => {
+          const res = real(file, data, ...rest);
+          if (typeof file === "string" && file.endsWith(".tmp") && !ran) {
+            ran = true;
+            try { Splant.api.writeReplacing(targetP, "p2\n"); } catch {}
+          }
+          return res;
+        };
+        try {
+          Splant.api.writeReplacing(targetP, "p1\n");
+        } catch (e) {
+          crashed = (e.code === "ENOENT");
+        }
+        turned = crashed;
+      }
+      const same = realFs.readFileSync(mainPath).equals(beforeBytes);
+      check(turned && same, "1k lifting plant:unique-temp causes concurrent writes to clash on .tmp (ENOENT): turned "
+        + turned + ", sha " + (same ? "restored" : "differs"));
+    }
+
+    // 1l: lifting plant:write-fsync skips fsync on temporary file before rename
+    {
+      const lines = beforeSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:write-fsync") >= 0);
+      let turned = false;
+      if (at >= 0) {
+        lines[at] = '      /* plant:write-fsync lifted */';
+        const Splant = loadShell({ src: lines.join("\n") });
+        let fsyncs = 0;
+        Splant.ctl.fsyncSync = (real, fd) => { fsyncs++; return real(fd); };
+        const targetP = path.join(Splant.DOCS, "plant-fsync.ec");
+        Splant.api.writeReplacing(targetP, "data\n");
+        turned = (fsyncs === 0);
+      }
+      const same = realFs.readFileSync(mainPath).equals(beforeBytes);
+      check(turned && same, "1l lifting plant:write-fsync skips fsync on temporary file before rename: turned "
+        + turned + ", sha " + (same ? "restored" : "differs"));
+    }
+
+    // 1m: lifting plant:rename-retries limits renames to 10 and fails on 15 retries
+    {
+      const lines = beforeSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:rename-retries") >= 0);
+      let turned = false;
+      if (at >= 0) {
+        lines[at] = '      if (i >= 10 || RENAME_BUSY.indexOf(e.code) < 0) throw e; /* plant:rename-retries lifted */';
+        const Splant = loadShell({ src: lines.join("\n") });
+        let asks = 0;
+        Splant.ctl.renameSync = (real, a, b) => {
+          asks++;
+          if (asks <= 15) throw busy("EBUSY");
+          return real(a, b);
+        };
+        const targetP = path.join(Splant.DOCS, "plant-retries.ec");
+        realFs.writeFileSync(targetP, "old\n", "utf8");
+        let failed = false;
+        try {
+          Splant.api.writeReplacing(targetP, "new\n");
+        } catch {
+          failed = true;
+        }
+        turned = (failed && asks === 10);
+      }
+      const same = realFs.readFileSync(mainPath).equals(beforeBytes);
+      check(turned && same, "1m lifting plant:rename-retries limits renames to 10 and fails on 15 retries: turned "
+        + turned + ", sha " + (same ? "restored" : "differs"));
+    }
   }
 
   /* ---- 2. a catalog the shell's check passes and the engine's refuses ------------------------
