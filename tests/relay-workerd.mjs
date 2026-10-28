@@ -41,7 +41,7 @@ if ((workerArg == null) !== (teamArg == null)) {
   process.exit(78);
 }
 const planted = workerArg == null;
-const EXPECTED = planted ? 6 : 5;
+const EXPECTED = planted ? 8 : 6;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -299,6 +299,30 @@ async function post(mf, urlPath, jsonText) {
   return { status: res.status, json };
 }
 
+/* One ping on the session's socket. The scratch team closes from its message handler with reason woke, so a pong
+   with the socket still open is the runtime's auto response and a close of woke is the handler having run. */
+async function pingOnce(mf, urlPath, token) {
+  const res = await mf.dispatchFetch("https://relay.invalid" + urlPath, {
+    headers: { Upgrade: "websocket", Authorization: "Bearer " + token },
+  });
+  const ws = res.webSocket;
+  if (!ws) return { status: res.status, got: [], closed: null, error: "no-socket" };
+  ws.accept();
+  const got = [];
+  let closed = null;
+  const done = new Promise(resolve => {
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; resolve(); } };
+    ws.addEventListener("message", ev => { got.push(String(ev.data)); finish(); });
+    ws.addEventListener("close", ev => { closed = { code: ev.code, reason: String(ev.reason || "") }; finish(); });
+    setTimeout(finish, 500);
+  });
+  ws.send('{"type":"ping"}');
+  await done;
+  try { ws.close(1000, ""); } catch { /* already closed */ }
+  return { status: res.status, got, closed };
+}
+
 function isRefusal(r, reason) {
   return !!r && r.status === 403 && !!r.json && r.json.error === reason && r.json.said === B.REASONS[reason]
     && Object.keys(r.json).sort().join() === "error,said";
@@ -316,13 +340,18 @@ async function scene(mf, prefix, r2Name) {
   let session = null;
   if (hello.json && typeof hello.json.challenge === "string") {
     const sig = signHex(lead, core.helloBytes(rt, hello.json.challenge, lead.keyId));
-    session = await post(mf, prefix + "t/" + rt + "/session", JSON.stringify({ challenge: hello.json.challenge, key: lead.keyId, sig }));
+    session = await post(mf, prefix + "t/" + rt + "/session", JSON.stringify({
+      challenge: hello.json.challenge, key: lead.keyId, pub: lead.pub, sig }));
+  }
+  let ping = null;
+  if (session && session.json && typeof session.json.session === "string") {
+    ping = await pingOnce(mf, prefix + "t/" + rt + "/socket", session.json.session);
   }
   const other = keyPair();
   const rt2 = crypto.randomBytes(16).toString("hex");
   const delegated = await post(mf, prefix + "teams", JSON.stringify(kit.createBody(rt2, other, now, bytes => signHex(other, bytes),
     { grant: kit.delegatedGrantFor(other.pub, now) })));
-  return { listed, empty, created, hello, session, delegated, rt };
+  return { listed, empty, created, hello, session, delegated, rt, ping };
 }
 
 async function boot(scratch, scriptPath, cfg, bindings) {
@@ -363,7 +392,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "relay-workerd-mf-"));
 console.log("# scratch " + scratch);
 console.log("# mode " + (planted ? "product" : "worker"));
 
-let sceneResult = null, sceneError = "", plantResult = null, plantNote = "", booted = false;
+let sceneResult = null, sceneError = "", plantResult = null, plantNote = "", plantPing = null, plantPingNote = "", booted = false;
 let dateRan = "", flagsNote = "", prefixNote = "", classNote = "", bindingNote = "", r2Note = "";
 
 try {
@@ -402,6 +431,12 @@ try {
     fs.copyFileSync(path.join(ROOT, "shell", "relay", "blob.cjs"), path.join(scratch, "shell", "relay", "blob.cjs"));
     coreFile = path.join(scratch, "relay", "core.cjs");
     workerFile = path.join(scratch, "relay", "worker.mjs");
+    const teamScratch = path.join(scratch, "relay", "team.cjs");
+    const wokeFrom = "function webSocketMessage(ws, message) {\n    headerSet = false;";
+    const wokeTo = "function webSocketMessage(ws, message) {\n    try { ws.close(4400, \"woke\"); } catch (err) { /* the handler ran */ }\n    return;\n    headerSet = false;";
+    const teamSrc = fs.readFileSync(teamScratch, "utf8");
+    if (teamSrc.indexOf(wokeFrom) < 0) throw new Error("message handler absent");
+    fs.writeFileSync(teamScratch, teamSrc.replace(wokeFrom, wokeTo));
   }
   const canBoot = dateOk && flagsOk && namesOk && stringVars && !cfg.vars.REVOKED;
   console.log("# file date " + dateRan + " supported " + supportedCompatibilityDate + " boot " + canBoot);
@@ -420,6 +455,22 @@ try {
       if (mf) await mf.dispose();
     }
     if (planted) {
+      const autoLine = "    if (typeof ctx.setWebSocketAutoResponse === \"function\" && typeof WebSocketRequestResponsePair === \"function\") ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{\"type\":\"ping\"}', '{\"type\":\"pong\"}')); /* plant:ping-auto */\n";
+      const withAuto = fs.readFileSync(path.join(scratch, "relay", "team.cjs"), "utf8");
+      if (withAuto.indexOf(autoLine) < 0) plantPingNote = "auto line absent";
+      else {
+        fs.writeFileSync(path.join(scratch, "relay", "team.cjs"), withAuto.replace(autoLine, ""));
+        let mfPing = null;
+        try {
+          mfPing = await boot(scratch, entryPath, cfg, bindings);
+          const again = await scene(mfPing, prefix, r2Name);
+          plantPing = again && again.ping;
+        } catch (e) {
+          plantPingNote = e && e.message ? e.message : String(e);
+        } finally {
+          if (mfPing) await mfPing.dispose();
+        }
+      }
       const plantedPath = path.join(scratch, "plant-worker.mjs");
       const rewritten = plantText(fs.readFileSync(path.join(ROOT, "relay", "worker.mjs"), "utf8"),
         relImport(scratch, path.join(scratch, "relay", "team.cjs")), relImport(scratch, coreFile));
@@ -458,6 +509,14 @@ try {
     "984c a hello and the lead's session answer 200: hello " + brief(hello) + " session " + brief(session));
   check(isRefusal(delegated, "revoked"),
     "984d a grant from a revoked service key is refused: " + brief(delegated));
+  const ping = sceneResult && sceneResult.ping;
+  const pong = !!ping && Array.isArray(ping.got) && ping.got.length === 1 && ping.got[0] === '{"type":"pong"}' && ping.closed === null;
+  check(pong, "984g a ping is answered pong and the message handler does not run: handler 0, " + JSON.stringify(ping));
+  if (planted) {
+    const woke = !!plantPing && plantPing.closed && plantPing.closed.reason === "woke" && Array.isArray(plantPing.got) && plantPing.got.length === 0;
+    check(woke, "984h without the auto response the message handler runs and closes the socket: handler "
+      + (woke ? "1" : "0") + ", " + (plantPingNote || JSON.stringify(plantPing)));
+  }
   if (planted) {
     const fault = !!plantResult && plantResult.status === 500 && !!plantResult.json && plantResult.json.error === "fault" && plantResult.json.said === FAULT_SAID;
     check(fault, "984e a planted stub call answers 500 fault: " + (plantNote || brief(plantResult)));

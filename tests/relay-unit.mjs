@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 390;
+const EXPECTED = 400;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -413,6 +413,64 @@ async function main() {
     check(shapes.every(r => refused(r, "bad-signature")), "4h an invitation or a drop out of shape is refused");
   }
 
+  /* ---- 934 sockets, a paged prune and spent markers kept out of the scans ---- */
+  {
+    const w = await world();
+    const deskS = await sessionOf(w, w.desk);
+    const first = await socket(w, deskS);
+    const ws1 = wsOf(w, first.socket);
+    const second = await socket(w, deskS);
+    const ws2 = wsOf(w, second.socket);
+    check(!!ws1 && !!ws1.closed && ws1.closed.code === 4400 && ws1.closed.reason === "replaced" && !!ws2 && !ws2.closed,
+      "934l a second socket on one session closes the first, reason replaced: "
+      + (ws1 && ws1.closed ? ws1.closed.code + " " + ws1.closed.reason : "open"));
+    const live = await socket(w, await sessionOf(w, w.other));
+    const big = wsOf(w, live.socket);
+    await w.R.object(w.rt).webSocketMessage(big, "x".repeat(257));
+    check(!!big && !!big.closed && big.closed.code === 4400 && big.sent.length === 0,
+      "934m a frame of 257 bytes closes the socket before it is parsed: " + (big && big.closed && big.closed.code) + ", sent " + (big && big.sent.length));
+    const who = await sessionOf(w, w.lead);
+    const sub = await socket(w, who);
+    const heldWs = wsOf(w, sub.socket);
+    w.R.clock.now = C.SESSION_MS + 1;
+    const rang = await w.R.ring(w.rt);
+    check(rang === true && !!heldWs && !!heldWs.closed && heldWs.closed.code === 4401,
+      "934n the alarm closes a socket whose session has ended: rang " + rang + ", code " + (heldWs && heldWs.closed && heldWs.closed.code));
+    const box = w.R.stores.get(w.rt);
+    const future = String(10 * DAY).padStart(16, "0");
+    for (let i = 0; i < 10000; i++) box.put("kx:" + future + ":" + i.toString(16).padStart(32, "0"), "tomb");
+    let kxRows = 0;
+    const realList = box.list.bind(box);
+    box.list = (prefix, opts) => {
+      const rows = realList(prefix, opts);
+      if (prefix === "kx:") kxRows += rows.length;
+      return rows;
+    };
+    await since(w, await sessionOf(w, w.lead));
+    check(kxRows === 256, "934o prune over 10000 future kx rows reads one page: " + kxRows);
+    const m = await world();
+    const mb = m.R.stores.get(m.rt);
+    for (let i = 0; i < 1000; i++) mb.put("inv:" + i.toString(16).padStart(32, "0"), { spent: true });
+    await since(m, await sessionOf(m, m.lead));
+    let markerRows = 0;
+    const bare = v => !!(v && v.spent === true && v.spentAt === undefined && v.hash === undefined);
+    const real2 = mb.list.bind(mb), realGet = mb.get.bind(mb);
+    mb.list = (prefix, opts) => {
+      const rows = real2(prefix, opts);
+      if (prefix === "inv:" || prefix === "sp:") markerRows += rows.filter(([, v]) => bare(v)).length;
+      return rows;
+    };
+    mb.get = k => {
+      const v = realGet(k);
+      if (typeof k === "string" && k.indexOf("sp:") === 0 && bare(v)) markerRows += 1;
+      return v;
+    };
+    await invites(m, [{ id: hex(16), hash: sha(hex(32)) }], []);
+    await call(m.R, "GET", "/relay/v1/t/" + m.rt + "/states", { token: await sessionOf(m, m.lead) });
+    await helloAs(m, keyPair(true));
+    check(markerRows === 0, "934q invites, states and a key hello read none of a thousand spent markers: " + markerRows);
+  }
+
   /* ---- 5: challenges ---- */
   {
     const w = await world();
@@ -591,9 +649,9 @@ async function main() {
     w.R.clock.now += 1000;
     const revive = await invites(w, [{ id: id5, hash: sha(t5) }], []);
     const after = await tokenHello(w, id5, t5);
-    const kept = w.R.stores.get(w.rt).get("inv:" + id5);
+    const kept = w.R.stores.get(w.rt).get("sp:" + id5);
     check(pruned.status === 200 && refused(late, "token-spent") && revive.status === 200 && refused(after, "token-spent")
-      && JSON.stringify(kept) === "{\"spent\":true}",
+      && w.R.stores.get(w.rt).get("inv:" + id5) === undefined && JSON.stringify(kept) === "{\"spent\":true}",
       "7e f9: past the 30-day keep, its prune run, a spent invitation's token is still refused as spent, the lead sending its id again makes"
       + " it live in no way, and the relay keeps of it only that it was spent: " + (late.json && late.json.error) + ", then "
       + (after.json && after.json.error || "a session") + ", kept " + JSON.stringify(kept));
@@ -606,7 +664,7 @@ async function main() {
     const back = await invites(w, [{ id: id6, hash: sha(t6) }, { id: id7, hash: sha(t7) }], []);
     const spent6 = await tokenHello(w, id6, t6), fresh7 = await tokenHello(w, id7, t7);
     check(used6.status === 200 && back.status === 200 && refused(spent6, "token-spent") && fresh7.status === 200
-      && JSON.stringify(w.R.stores.get(w.rt).get("inv:" + id6)) === "{\"spent\":true}",
+      && w.R.stores.get(w.rt).get("inv:" + id6) === undefined && JSON.stringify(w.R.stores.get(w.rt).get("sp:" + id6)) === "{\"spent\":true}",
       "7f a spent invitation the lead drops and then sends again stays spent, kept as only that it was spent, while one dropped unused may"
       + " be sent again and opens: " + (spent6.json && spent6.json.error || "a session") + ", the unused " + fresh7.status);
   }
@@ -918,11 +976,11 @@ async function main() {
     const s = inside.json && inside.json.session;
     const unpruned = await put(w, s, ask(1), { extra: { pub: early.pub } });
     const listed = await since(w, await sessionOf(w, w.lead));
-    const kept = w.R.stores.get(w.rt).get("inv:" + a.id);
+    const kept = w.R.stores.get(w.rt).get("sp:" + a.id);
     const pruned = await put(w, s, ask(2), { extra: { pub: early.pub } });
     const said = r => (r.json && r.json.error) || String(r.status);
     check(a.ok && b.ok && inside.status === 200 && inside.json.invite === true && refused(past, "not-enrolled")
-      && refused(unpruned, "token-spent") && listed.status === 200 && JSON.stringify(kept) === "{\"spent\":true}"
+      && refused(unpruned, "token-spent") && listed.status === 200 && w.R.stores.get(w.rt).get("inv:" + a.id) === undefined && JSON.stringify(kept) === "{\"spent\":true}"
       && refused(pruned, "token-spent"),
       "10j a bound key's resume ends when the invitation's 30-day keep does, a list between or not: a minute inside the keep "
       + said(inside) + ", a minute past it with no list between " + said(past) + "; the session opened inside the keep uploads past"
@@ -1300,6 +1358,35 @@ async function main() {
     });
     check(invFreshLift.turned && invFreshLift.back, "934k lifting plant:invites-fresh checks that garbage signature, and the product file is never written: "
       + invFreshLift.detail + ", sha " + (invFreshLift.back ? "restored" : "differs"));
+    const pageLift = await liftCore("plant:kx-page", async () => {
+      const p = await world();
+      const pb = p.R.stores.get(p.rt);
+      const future = String(10 * DAY).padStart(16, "0");
+      for (let i = 0; i < 10000; i++) pb.put("kx:" + future + ":" + i.toString(16).padStart(32, "0"), "tomb");
+      let n = 0;
+      const real = pb.list.bind(pb);
+      pb.list = (prefix, opts) => {
+        const rows = real(prefix, opts);
+        if (prefix === "kx:") n += rows.length;
+        return rows;
+      };
+      await since(p, await sessionOf(p, p.lead));
+      return n === 10000;
+    });
+    check(pageLift.turned && pageLift.back, "934p lifting plant:kx-page reads every future kx row, and the product file is never written: "
+      + pageLift.detail + ", sha " + (pageLift.back ? "restored" : "differs"));
+    const markLift = await liftCore("plant:spent-mark", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      await tokenHello(p, id, token);
+      p.R.clock.now += C.KEEP_MS + 1;
+      await since(p, await sessionOf(p, p.lead));
+      const late = await tokenHello(p, id, token);
+      return !refused(late, "token-spent");
+    });
+    check(markLift.turned && markLift.back, "934r lifting plant:spent-mark lets a pruned token hello answer as anything but spent, and the product file is never written: "
+      + markLift.detail + ", sha " + (markLift.back ? "restored" : "differs"));
   }
   /* A re-enrol deletes the session marked removed. Lifting that line leaves the old bearer removed, and the row standing. */
   {
@@ -1929,7 +2016,7 @@ async function main() {
     }
     const WANT_TRACE = {
       added: [200, 200, 200], states: ["1:unused", "2:used", "3:unused", "4:used", "5:unused"], usedAt: ["number", "number"],
-      dropped: [200, ["1", "2"], ["2"]], wraps: ["no-hello", "missing"], states2: ["2:used", "3:unused", "4:used", "5:unused"],
+      dropped: [200, ["1", "2"], ["2"]], wraps: ["no-hello", "missing"], states2: ["3:unused", "4:used", "5:unused"],
       desk: [200, 200, "removed"], since: [[1, 2, 3], [2, 3], []],
     };
     async function pruneProbe(w, store, at) {
@@ -1945,7 +2032,7 @@ async function main() {
       const lead = await sessionOf(w, w.lead);
       const r = await since(w, lead, 0);
       return { status: r.status, kx: store.list("kx:").map(([k]) => k.slice(20)), tombs: [A, B, Cc].map(id => store.get("tomb:" + id) !== undefined),
-        spentOld: store.get("inv:" + D), spentNew: (store.get("inv:" + E) || {}).hash === sha(E), orphan: store.get("orphan:objects/x") === undefined,
+        spentOld: store.get("sp:" + D), spentNew: (store.get("inv:" + E) || {}).hash === sha(E), orphan: store.get("orphan:objects/x") === undefined,
         team: store.get("team") !== undefined };
     }
     const wantPrune = { status: 200, kx: [idN(0xc)], tombs: [false, false, true], spentOld: { spent: true }, spentNew: true, orphan: true, team: true };
@@ -2333,6 +2420,7 @@ async function main() {
     const statesOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", { token });
     const wrapOf = (w, token) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/wrap", { token });
     const rowOf = (w, id) => w.R.stores.get(w.rt).get("inv:" + id);
+    const markOf = (w, id) => w.R.stores.get(w.rt).get("sp:" + id);
     const heldCount = w => w.R.stores.get(w.rt).list("inv:").length;
     /* An invitation added with a wrap and opened by a desk's key that it binds: its session is the bound one. */
     async function opened(w, wrap, extra) {
@@ -2436,7 +2524,7 @@ async function main() {
       const c = await opened(w, goodWrap());
       w.R.clock.now += C.KEEP_MS + 1;
       await since(w, await sessionOf(w, w.lead));
-      const prunedAtFirst = JSON.stringify(rowOf(w, c.id));
+      const prunedAtFirst = JSON.stringify(markOf(w, c.id));
       const a = await opened(w, goodWrap()), b = await opened(w, goodWrap());
       const joined = await put(w, b.session, sealJoin(w, b.who, 1, "desk:k-" + hex(8)), { extra: { pub: b.who.pub } });
       const d = await opened(w, goodWrap());
@@ -2447,11 +2535,11 @@ async function main() {
         { id: d.id, wrap: later }, { id: e, wrap: later }]);
       const rowA = rowOf(w, a.id), rowB = rowOf(w, b.id), served = await wrapOf(w, a.session);
       check(prunedAtFirst === "{\"spent\":true}" && a.ok && b.ok && d.ok && joined.status === 200 && re.status === 200 && eq(rowA.wrap, fresh) && !("oldWrap" in rowA)
-        && rowB.uploaded === true && rowB.wrap === undefined && JSON.stringify(rowOf(w, c.id)) === "{\"spent\":true}" && rowOf(w, unknown) === undefined
-        && JSON.stringify(rowOf(w, d.id)) === "{\"spent\":true}" && rowOf(w, e) === undefined && served.status === 200 && eq(served.json.wrap, fresh),
+        && rowB.uploaded === true && rowB.wrap === undefined && rowOf(w, c.id) === undefined && JSON.stringify(markOf(w, c.id)) === "{\"spent\":true}" && rowOf(w, unknown) === undefined
+        && rowOf(w, d.id) === undefined && JSON.stringify(markOf(w, d.id)) === "{\"spent\":true}" && rowOf(w, e) === undefined && served.status === 200 && eq(served.json.wrap, fresh),
       "970f a re-seal replaces the wrap of an invitation opened and not yet admitted, and serves it to the key it bound, and leaves as it was an admitted invitation (no wrap),"
         + " one kept only as spent, an id the relay does not hold, and ids dropped in the same call: " + re.status + ", opened " + JSON.stringify(rowA && rowA.wrap)
-        + ", admitted " + JSON.stringify(rowB && rowB.wrap) + ", spent " + JSON.stringify(rowOf(w, c.id)));
+        + ", admitted " + JSON.stringify(rowB && rowB.wrap) + ", spent " + JSON.stringify(markOf(w, c.id)));
       const big = { epoch: 1, ct: "ab".repeat(600) };
       const refusedBig = await invitesW(w, [], [], [{ id: a.id, wrap: big }]);
       const refusedShape = await invitesW(w, [], [], [{ id: a.id, wrap: { epoch: 0, ct: "aa" } }]);
@@ -2506,11 +2594,11 @@ async function main() {
       const outs = [bare, await statesOf(w, hex(32)), await statesOf(w, "short")];
       const nonLead = [await statesOf(w, await sessionOf(w, w.desk)), await statesOf(w, o.session)];
       check(refused(noTeam, "not-enrolled") && outs.every(r => refused(r, "no-hello")) && nonLead.every(r => refused(r, "not-enrolled"))
-        && states.status === 200 && Array.isArray(states.json.states) && states.json.states.length === 4 && asked.status === 200 && p.ok
-        && eq(byId(p.id), { id: p.id, state: "used", usedAt: null }) && eq(byId(u), { id: u, state: "unused", usedAt: null })
+        && states.status === 200 && Array.isArray(states.json.states) && states.json.states.length === 3 && asked.status === 200 && p.ok
+        && byId(p.id) === undefined && eq(byId(u), { id: u, state: "unused", usedAt: null })
         && eq(byId(o.id), { id: o.id, state: "used", usedAt: openedAt }) && eq(byId(q.id), { id: q.id, state: "asked", usedAt: q0 }),
       "970i the states are told to the lead alone (a team never made, no session, a session never issued and a desk's or an invitation's are each refused) and give each"
-        + " invitation as unused, used with the time of its hello, used with no time where only that it was spent is kept, or asked with the time of the hello kept after the upload: "
+        + " invitation as unused, used with the time of its hello, or asked with the time of the hello kept after the upload, and a pruned spent id is not in the list: "
         + JSON.stringify(states.json && states.json.states));
     }
 
@@ -3274,7 +3362,7 @@ async function main() {
       return {
         a: sameJ(working, wantRoutes(told(w.until, true, "working"), true)),
         b: sameJ(reading, wantRoutes(ro, false)),
-        c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, false])
+        c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, true])
           && sameJ(gone, { rang: true, bucket: 0, store: 1, mark: true, alarm: false, hello: "not-enrolled", socket: [4400, true] }),
         detail: JSON.stringify({ working, reading, late, gone, armed: w.armedAtCreate === w.until + READ }),
       };
@@ -3303,7 +3391,10 @@ async function main() {
       at(w, -2 * MIN);
       const L = await sessionOf(w, w.lead), D = await sessionOf(w, w.desk);
       const J = (await tokenHello(w, w.inv.id, w.inv.token, null, keyPair(true))).json.session;
-      const ws1 = wsOf(w, (await socket(w, D)).socket), ws2 = wsOf(w, (await socket(w, D)).socket);
+      const openedDesk = await socket(w, D);
+      const ws1 = wsOf(w, openedDesk.socket);
+      const openedLead = await socket(w, L);
+      const ws2 = wsOf(w, openedLead.socket);
       const out = { before: [tail(await since(w, D)), tail(await wrapOf(w, J)), tail(await statesOf(w, L))] };
       at(w, 0);
       out.hello = await helloKeys(w);
@@ -3514,7 +3605,7 @@ async function main() {
       + " upload, devices, invites and an invitation's token hello are answered: " + (paid.detail || paid.failed));
     check(paid.b === true, "977b at the end and 31 days it is read-only: hello, sessions told read-only, since, fetch, socket and states are answered, and an upload,"
       + " devices, invites and a token hello are refused team-lapsed, the token left unspent");
-    check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only and the alarm has not rung; at 91 days it rings,"
+    check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only, and the alarm a socket brought forward rings without sweeping; at 91 days it rings,"
       + " deletes every object of the team, keeps the lead's public key and nothing else, clears the alarm and closes its sockets, and hello is answered not-enrolled");
     const restored = await held(() => restoreScene());
     check(restored.ok === true, "977d a renewal while read-only, a later grant for the team's lead, is answered with the team working under the new until, and an upload,"
@@ -3657,6 +3748,31 @@ async function main() {
     const sameKey = await swapCore("held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk", "true", async () => red(await held(() => withdrawScene()), "ok"));
     check(base["977q"] && sameKey.turned && sameKey.back, label() + " judging a removal by key ids alone lets a read-only team's call move a kept key to another desk,"
       + " which turns 977q red, and the product file is never written: " + how2(sameKey));
+    const oneLift = await editTeam(lineLifted("plant:socket-one"), async T => {
+      const p = await world({ team: T });
+      const s = await sessionOf(p, p.desk);
+      const a = await socket(p, s), b = await socket(p, s);
+      const first = wsOf(p, a.socket);
+      return !!first && !first.closed && !!wsOf(p, b.socket);
+    });
+    check(oneLift.turned && oneLift.back, "934s lifting plant:socket-one leaves both sockets of one session open, and the product file is never written: " + how2(oneLift));
+    const frameLift = await editTeam(lineLifted("plant:frame-cap"), async T => {
+      const p = await world({ team: T });
+      const opened = await socket(p, await sessionOf(p, p.desk));
+      const ws = wsOf(p, opened.socket);
+      await p.R.object(p.rt).webSocketMessage(ws, "x".repeat(257));
+      return !!ws && !ws.closed;
+    });
+    check(frameLift.turned && frameLift.back, "934t lifting plant:frame-cap leaves a 257-byte frame's socket open, and the product file is never written: " + how2(frameLift));
+    const endLift = await editTeam(lineLifted("plant:socket-ended"), async T => {
+      const p = await world({ team: T });
+      const opened = await socket(p, await sessionOf(p, p.desk));
+      const ws = wsOf(p, opened.socket);
+      p.R.clock.now = C.SESSION_MS + 1;
+      await p.R.ring(p.rt);
+      return !!ws && !ws.closed;
+    });
+    check(endLift.turned && endLift.back, "934u lifting plant:socket-ended leaves a socket open after its session has ended, and the product file is never written: " + how2(endLift));
   }
 
   /* ---- 980: a swept id is kept for its own lead, and a revoked service key's grant is refused ---- */

@@ -540,7 +540,8 @@ function createCore(deps) {
     if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
-    const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id)).map(a => [a.id, a]));
+    const revived = new Set(prepared.filter(a => store.get("sp:" + a.id)).map(a => a.id));
+    const added = new Map(prepared.filter(a => !held.has(a.id) && !drop.has(a.id) && !revived.has(a.id)).map(a => [a.id, a]));
     const live = [...held].filter(([id, v]) => !v.spent && !drop.has(id)).length + added.size;
     if (live > INVITES_MAX) return no("team-size"); /* plant:invites-cap */
     const now = clock();
@@ -556,7 +557,7 @@ function createCore(deps) {
         let nameUsed = false;
         nameUsed = !!(was && was.spent); /* plant:S3-cancel */
         if (nameUsed) used.push(id);
-        if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
+        if (was && was.spent) store.put("sp:" + id, SPENT); /* plant:spent-drop */
         for (const [t] of store.list("tf:" + id + ":")) store.del(t);
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
@@ -652,6 +653,12 @@ function createCore(deps) {
     if (prev && clock() > (prev.spentAt || 0)) take = true; /* plant:e5-newest */
     if (take) store.put("bk:" + key, id);
   }
+  /* A pruned or dropped spent invitation is kept under sp:, out of every inv: scan. */
+  function spentMarker(id) {
+    let marked = false;
+    marked = is(HEX32, id) && store.get("sp:" + id) !== undefined; /* plant:spent-mark */
+    return marked;
+  }
   function byToken(rt, b) {
     /* The binding is judged before the token, so a hello that does not bind answers the same whether or not the invitation is known. */
     const binds = isId(b.key) && is(HEX128, b.sig) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
@@ -659,6 +666,7 @@ function createCore(deps) {
     allowUnbound = false; /* plant:S3-unbound */
     if (!binds && !allowUnbound) return no("bad-signature");
     const inv = is(HEX32, b.inv) ? store.get("inv:" + b.inv) : undefined;
+    if (!inv && spentMarker(b.inv)) return no("token-spent");
     if (!inv) return no("not-enrolled");
     if (inv.spent) return no("token-spent"); /* plant:token-spent */
     const tries = store.get(tryRow(b.inv, b.key));
@@ -940,6 +948,7 @@ function createCore(deps) {
      no upload after it, a list between or not (C2 of the read of cf90c15). */
   function admitInvite(team, s, m) {
     const inv = store.get("inv:" + s.inv);
+    if (!inv && spentMarker(s.inv)) return no("token-spent");
     if (!inv) return no("no-hello");
     if (inv.uploaded && m.del === true) return admitWithdraw(team, s, m, inv);
     if (inv.uploaded) return no("token-spent"); /* plant:invite-once */
@@ -1094,13 +1103,23 @@ function createCore(deps) {
   function prune() {
     const now = clock(), drop = [];
     store.atomic(() => {
-      for (const [k, kind] of store.list("kx:")) {
-        if (Number(k.slice(3, 19)) >= now) break;
-        const id = k.slice(20);
-        store.del(k);
-        if (kind === "tomb") { store.del("tomb:" + id); continue; }
-        const m = store.get("blob:" + id);
-        if (m && expired(m, now)) bury(m, "expired", now, drop);
+      let kxAfter = "kx:";
+      for (;;) {
+        let pageLimit = 0;
+        pageLimit = 256; /* plant:kx-page */
+        const page = store.list("kx:", pageLimit ? { after: kxAfter, limit: pageLimit } : { after: kxAfter });
+        if (!page.length) break;
+        let rest = false;
+        for (const [k, kind] of page) {
+          if (Number(k.slice(3, 19)) >= now) { rest = true; break; }
+          const id = k.slice(20);
+          store.del(k);
+          if (kind === "tomb") { store.del("tomb:" + id); continue; }
+          const m = store.get("blob:" + id);
+          if (m && expired(m, now)) bury(m, "expired", now, drop);
+        }
+        if (rest || page.length < 256) break;
+        kxAfter = page[page.length - 1][0];
       }
       /* A binding already indexed stays: the newest one was chosen when it was written. A binding from before the index
          is written once, and where one key bound more than one invitation the later spentAt is the one kept. */
@@ -1113,11 +1132,13 @@ function createCore(deps) {
       }
       for (const [key, row] of pending) store.put("bk:" + key, row.id);
       for (const [k, v] of store.list("inv:")) {
-        if (!v.spent || v.spentAt === undefined || now - v.spentAt <= KEEP_MS) continue;
+        if (!v || v.spent !== true) continue;
         const id = k.slice(4);
+        const bare = v.spentAt === undefined;
+        if (!bare && now - v.spentAt <= KEEP_MS) continue;
         for (const [t] of store.list("tf:" + id + ":")) store.del(t);
         store.del(k);
-        store.put(k, SPENT); /* plant:spent-kept */
+        store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
       for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
       for (const [k] of store.list("ch:")) store.del(k); /* plant:challenge-drop */
@@ -1184,12 +1205,22 @@ function createCore(deps) {
     return from !== null && from > clock() ? from : l.swept;
   }
   const lapseState = () => lapseOf(store.get("team"), clock()).state;
+  /* The next instant the lapse changes while sockets are open: working to read-only, read-only to gone, or a trial's end. */
+  function nextLapse() {
+    const team = store.get("team");
+    if (!team) return null;
+    const now = clock(), l = lapseOf(team, now), times = [];
+    if (l.readOnly !== null && l.readOnly > now) times.push(l.readOnly);
+    if (l.swept !== null && l.swept > now) times.push(l.swept);
+    if (paidEnd(team) === null && l.until !== null && l.until > now) times.push(l.until);
+    return times.length ? Math.min.apply(null, times) : null;
+  }
 
   /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
   const hasTeam = rt => teamOf(rt) !== null;
 
   return { create, renew, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
-    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
+    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
 module.exports = {

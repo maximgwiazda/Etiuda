@@ -257,10 +257,18 @@ function teamObject(deps) {
     }
   }
 
-  /* The alarm set to the team's next instant: a trial's until while it works, else its sweep. */
+  /* The alarm set to the team's next instant. With sockets open, no later than the earlier of a session's end and the next lapse change. */
   async function arm() {
     if (!alarm) return;
-    const at = c.alarmAt();
+    let at = c.alarmAt();
+    if (sockets.all().length) {
+      const lapseAt = c.nextLapse();
+      if (lapseAt !== null && (at === null || lapseAt < at)) at = lapseAt;
+      for (const ws of sockets.all()) {
+        const s = c.sessionByHash(attachmentOf(ws).ses);
+        if (s.ok && (at === null || s.until < at)) at = s.until; /* plant:socket-alarm */
+      }
+    }
     if (at !== null) await alarm.set(at);
   }
 
@@ -286,20 +294,31 @@ function teamObject(deps) {
   }
 
   /* The alarm: the sweep where it is due; otherwise a trial's sockets closed at its until, and the alarm set to the next instant. */
+  function closeEnded() {
+    for (const ws of sockets.all()) {
+      const s = c.sessionByHash(attachmentOf(ws).ses);
+      if (!s.ok) shut(ws, s.reason); /* plant:socket-ended */
+    }
+  }
+
   async function onAlarm() {
     if (await sweepIfDue()) return;
+    closeEnded();
     if (c.lapseState() === "lapsed") closeWhere(() => true, "team-lapsed"); /* plant:lapse-close */
     await arm();
   }
 
-  function openSocket(request, token) {
+  async function openSocket(request, token) {
     const s = c.sessionOf(token);
     if (!s.ok) return refused(s);
     if (s.quiet) return refusedFor("removed");
     const blocked = c.readGate(token);
     if (blocked) return refused(blocked);
     if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") return missing();
-    return sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
+    for (const ws of sockets.all()) if (attachmentOf(ws).ses === s.hash) ws.close(4400, "replaced"); /* plant:socket-one */
+    const accepted = sockets.accept({ ses: s.hash, key: s.key, inv: s.inv });
+    await arm();
+    return accepted;
   }
 
   function announce(done) {
@@ -323,6 +342,7 @@ function teamObject(deps) {
     if (!s.ok) return shut(ws, s.reason);
     const lapsed = c.lapseGate(false);
     if (lapsed) return shut(ws, lapsed.reason); /* plant:lapse-ping */
+    if (Buffer.byteLength(String(message)) > 256) return ws.close(4400, ""); /* plant:frame-cap */
     let msg = null;
     try { msg = JSON.parse(String(message)); } catch { msg = null; }
     if (msg && msg.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
@@ -390,6 +410,7 @@ function alarmOf(storage) {
 
 class RelayTeam {
   constructor(ctx, env) {
+    if (typeof ctx.setWebSocketAutoResponse === "function" && typeof WebSocketRequestResponsePair === "function") ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}')); /* plant:ping-auto */
     const store = sqlStore(ctx.storage);
     this.listStore = store;
     const self = this;
