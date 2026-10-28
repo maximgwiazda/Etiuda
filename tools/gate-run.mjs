@@ -284,6 +284,7 @@ export async function planAreaRun(root, changed, pkg) {
     }
   }
 
+  /* sellable is not here: it guards a floor property and stays at every merge it reaches (the test architect's guard, 2026-10-27 23:03). */
   const GENERIC_SCANNERS = new Set([
     "tests/chain-split.mjs",
     "tests/engine-selftest.js",
@@ -292,7 +293,6 @@ export async function planAreaRun(root, changed, pkg) {
     "tests/log-hygiene-selftest.js",
     "tests/result-line.mjs",
     "tests/sbom.mjs",
-    "tests/sellable.mjs",
     "tests/text-scan-selftest.js",
   ]);
 
