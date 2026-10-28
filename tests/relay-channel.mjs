@@ -20,9 +20,12 @@
  * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
  * other team's head is dropped and said. A folder team shows nothing new. A catch-up passes over a blob as the program's
  * own only where its own record shows it sent that id: a lead restored to a fresh profile catches up its team file and the
- * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched (970c), and
- * an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e) and, older than the last sent,
- * changes nothing (970f). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
+ * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched in the
+ * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
+ * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
+ * blob has raised the counter (970o). An invitation upload whose reply was lost is counted as sent when the retry is
+ * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
+ * is admitted (966h). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
  * copy removed; a team inside its grant shows nothing, and no step removes anything from the desk (978). Throwaway keys and
  * invented words only;
@@ -49,7 +52,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 276;
+const EXPECTED = 283;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5302,6 +5305,7 @@ try {
    leaves the edit where it is and becomes the blob that edit replaces. ---- */
 const OWN_G1 = "guide one, written before the profile was lost\n", OWN_G2 = "guide two, an edit made on the new profile\n";
 const OWN_N1 = "notes, kept beside the guide\n";
+const OWN_LOW = "guide at epoch two, a low counter\n";
 async function ownSetup(mod) {
   const deskKey = keyPair(true), keys = new Map([[1, crypto.randomBytes(32)]]);
   const tm = await freshTeam([deskKey]);
@@ -5364,7 +5368,8 @@ async function ownTwo(mod) {
   await a.ch.stop(); await b.ch.stop();
   return out;
 }
-/* A program's own upload, in its record, is not fetched again. */
+/* A program's own upload, in its record, is not fetched in the cycle that lists it. The cycle after that one lists
+   nothing new, so a count taken there stays at zero even when the record-based skip is gone. */
 async function ownRecorded(mod) {
   const { mk, teamText } = await ownSetup(mod);
   const lead = mk("own-s1");
@@ -5372,13 +5377,52 @@ async function ownRecorded(mod) {
   put(lead.mirror, "guide.ec", OWN_G1);
   lead.ch.start();
   await lead.ch.idle();
-  await once(lead);
   const since = lead.t.log.length;
   await once(lead);
   const after = lead.t.log.slice(since);
   await lead.ch.stop();
   return { listed: after.some(l => /^GET since\//.test(l)), fetched: after.filter(l => /^GET b\//.test(l)).length,
     puts: after.filter(l => /^PUT b\//.test(l)).length, guide: read(lead.mirror, "guide.ec") };
+}
+/* Two programs on one key. The first seals its team file and its guide under a clock the relay then holds as the floor.
+   A newer epoch of the guide, a lower counter, is put beside it so the catch-up passes over the high counter. The second
+   program's clock is behind that floor: its next upload is taken the first time only when the passed-over blob raised it. */
+async function ownClockBehind(mod) {
+  const k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const keys = new Map([[1, k1], [2, k2]]);
+  const keyFor = e => keys.get(e) || null;
+  const high = 10000000;
+  const a = opened(mod, "own-c1-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock: () => high });
+  put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  put(a.mirror, "guide.ec", OWN_G1);
+  a.ch.start();
+  await a.ch.idle();
+  const sentA = a.prog.state().sent;
+  const teamCounter = sentA[C.TEAM_NAME] ? sentA[C.TEAM_NAME].counter : 0;
+  const guideCounter = sentA["guide.ec"] ? sentA["guide.ec"].counter : 0;
+  const low = B.seal({ relayTeamId: tm.rt, epoch: 2, teamKey: k2, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey },
+    path: "guide.ec", body: OWN_LOW, counter: 50, place: "root" });
+  const s = relayStore(tm.rt), seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + low.id + "/" + hex(8);
+  R.bucket.objects.set(obj, Buffer.from(low.ciphertext));
+  s.put("blob:" + low.id, { id: low.id, supersedes: null, epoch: 2, writer: LEAD.keyId, counter: 50, del: false,
+    size: low.ciphertext.length, sig: low.signature, nonce: low.nonce, seq, at: R.clock.now, obj });
+  s.put("seq:" + String(seq).padStart(16, "0"), low.id);
+  s.put("seq", seq);
+  await a.ch.stop();
+  const b = opened(mod, "own-c2-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock: () => 1000 });
+  b.ch.start();
+  await b.ch.idle();
+  const ownAtCatch = b.prog.state().own, guide = read(b.mirror, "guide.ec");
+  const before = b.t.log.filter(l => /^PUT b\//.test(l)).length;
+  put(b.mirror, "second.ec", "a file the second program writes\n");
+  await once(b);
+  const sentSecond = b.prog.state().sent["second.ec"];
+  const out = { ownAtCatch, guide, teamCounter, guideCounter, puts: b.t.log.filter(l => /^PUT b\//.test(l)).length - before,
+    took: !!(sentSecond && sentSecond.counter > guideCounter), said: b.said.slice() };
+  await b.ch.stop();
+  return out;
 }
 /* A restored profile whose mirror already holds a newer edit of the guide: the edit stays, goes up, and replaces the blob
    it was not told of. A third profile then reads the edit from the relay. */
@@ -5467,7 +5511,13 @@ try {
     + ", edit " + t.edited + ", back " + t.back + ", live blobs " + t.chain);
   const k = await ownRecorded(C);
   check(k.listed && k.fetched === 0 && k.puts === 0 && k.guide === OWN_G1,
-    "970c a program's own upload, in its record, is listed on the next catch-up and not fetched, and nothing is sent or changed: listed " + k.listed + ", fetched " + k.fetched + ", uploads " + k.puts);
+    "970c a program's own upload, in its record, is listed in the next cycle and not fetched in that cycle, and nothing is sent or changed: listed " + k.listed + ", fetched " + k.fetched + ", uploads " + k.puts);
+  const skipPlant = await liftChannel("plant:own-skip", async mod => {
+    const x = await ownRecorded(mod);
+    return x.listed && x.fetched > 0;
+  });
+  check(skipPlant.turned && skipPlant.back, "970q lifting plant:own-skip fetches the program's own upload in the cycle that lists it, and the product file is never written: "
+    + skipPlant.detail + ", sha " + (skipPlant.back ? "restored" : "differs"));
   const e = await ownKeptRestore(C);
   check(e.mirror === OWN_G2 && e.team && e.puts === 1 && e.chain === 2 && e.relayHolds === OWN_G2,
     "970d an own blob fetched on a restored profile does not overwrite a newer edit already in its mirror: the edit stays, goes up once as the replacement of that blob, and a third profile reads it from the relay: mirror "
@@ -5497,6 +5547,145 @@ try {
     + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
+}
+
+try {
+  const c = await ownClockBehind(C);
+  check(c.guide === OWN_LOW && c.teamCounter < c.guideCounter && c.ownAtCatch >= c.guideCounter && c.took && c.puts === 1,
+    "970o two programs on one key, the second's clock behind the counter the relay holds: the catch-up passes over an own blob whose counter is the high one, that counter is raised, and the second's next upload is taken the first time: mirror "
+    + JSON.stringify(c.guide) + ", team counter " + c.teamCounter + ", guide counter " + c.guideCounter + ", own after the catch-up " + c.ownAtCatch
+    + ", uploads " + c.puts + ", taken " + c.took);
+  const clockPlant = await liftChannel("plant:own-counter", async mod => {
+    const x = await ownClockBehind(mod);
+    return x.guide === OWN_LOW && x.ownAtCatch < x.guideCounter && !x.took
+      && x.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  });
+  check(clockPlant.turned && clockPlant.back, "970p lifting plant:own-counter leaves the counter short of the blob the catch-up passed over, so the second program's upload is refused as an older copy, and the product file is never written: "
+    + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
+}
+
+/* An invitation's one upload whose reply never came back. The next cycle is told the token is spent, which is that upload
+   already held: it counts as sent, the wrap is forgotten, and the cycle after reads the answer. */
+async function lostReply(mod, label) {
+  const rt = hex(16), who = keyPair(true), seal = crypto.randomBytes(32), inv = hex(16), token = hex(32);
+  const mirror = path.join(LAB, label), stateFile = path.join(LAB, label + ".json");
+  const n = { put: 0, since: 0, answer: 0, gone: 0 };
+  const request = async (method, url, headers, body) => {
+    const u = String(url);
+    const json = (obj, status) => ({ status: status || 200, header: () => null, bytes: Buffer.from(JSON.stringify(obj)) });
+    if (method === "POST" && u.endsWith("/hello")) return json({ challenge: hex(16) });
+    if (method === "POST" && u.endsWith("/session")) {
+      const asked = JSON.parse(Buffer.from(body).toString("utf8"));
+      if (asked.invite) return json({ session: hex(32) });
+      return json({ session: hex(32), invite: true });
+    }
+    if (method === "GET" && u.indexOf("/since/") >= 0) {
+      n.since += 1;
+      if (n.put >= 1) return json({ error: "not-enrolled" }, 403);
+      return json([]);
+    }
+    if (method === "PUT") {
+      n.put += 1;
+      if (n.put === 1) return { status: 0, header: () => null, bytes: Buffer.alloc(0) };
+      return json({ error: "token-spent" }, 403);
+    }
+    if (method === "GET" && u.endsWith("/b/" + inv)) { n.answer += 1; return json({ error: "missing" }, 404); }
+    return json({ error: "missing" }, 404);
+  };
+  put(mirror, "desks/" + who.keyId + "/join.json", "{\"kind\":\"etiuda-join-request\"}\n");
+  const ch = mod.createChannel({ rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9,
+    pin: () => ({ teamId: "t-lost-reply", rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: hex(32) }),
+    invite: () => ({ inv, token, seal }),
+    onWrapGone: () => { n.gone += 1; },
+    keyFor: () => null, sealEpoch: () => null, request, connect: null });
+  ch.start();
+  await ch.idle();
+  ch.kick();
+  await ch.idle();
+  const sinceAtSent = n.since;
+  ch.kick();
+  await ch.idle();
+  const marked = ch.program.state().invited === true && ch.program.inviteSent(inv) === true;
+  await ch.stop();
+  return { put: n.put, sinceAfter: n.since - sinceAtSent, answer: n.answer, gone: n.gone, marked };
+}
+try {
+  const lost = await lostReply(C, "lost-reply");
+  check(lost.put === 2 && lost.sinceAfter === 0 && lost.answer === 1 && lost.marked && lost.gone === 1,
+    "966f an upload refused token-spent on the invitation's own session, after a send whose reply was lost, is counted as sent: the wrap is forgotten, the request is marked and the answer is read: uploads "
+    + lost.put + ", since after it was marked " + lost.sinceAfter + ", answer reads " + lost.answer + ", wrap forgotten " + lost.gone + ", marked " + lost.marked);
+  const spentPlant = await liftChannel("plant:spent-sent", async mod => {
+    const x = await lostReply(mod, "lost-reply-plant");
+    return !x.marked && x.answer === 0 && x.gone === 0;
+  });
+  check(spentPlant.turned && spentPlant.back, "966g lifting plant:spent-sent leaves that refusal a halt, so the request is not marked, the wrap is kept and the answer is not read, and the product file is never written: "
+    + spentPlant.detail + ", sha " + (spentPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 966f): " + (e && e.stack ? e.stack : e));
+}
+
+/* The same lost reply, driven through the relay's own core. The first upload lands and its reply is dropped, and so is
+   each further reply up to `losses`; the next answer is token-spent and is counted as sent. Cancel then removes the
+   request, and the withdrawal is admitted only where the id recorded as sent is the one the relay holds as asked. */
+async function lostWithdraw(mod, label, losses) {
+  const rt = hex(16), who = keyPair(true), secret = hex(16), inv = hex(16), token = hex(32);
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+  if (made.status !== 200) throw new Error("a team was not made: " + JSON.stringify(made.json));
+  const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }], at = R.clock.now;
+  const reg = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: at,
+    sig: signHex(LEAD, core.invitesBytes(rt, at, add, [])) });
+  if (reg.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(reg.json));
+  const rel = "desks/" + who.keyId + "/join.json";
+  const mirror = path.join(LAB, label);
+  const t = transport(label);
+  let dropped = 0;
+  const request = async (method, url, headers, body) => {
+    const res = await t.request(method, url, headers, body);
+    if (method === "PUT" && dropped < losses) { dropped += 1; return { status: 0, header: () => null, bytes: Buffer.alloc(0) }; }
+    return res;
+  };
+  put(mirror, rel, "{\"kind\":\"etiuda-join-request\"}\n");
+  const ch = mod.createChannel({
+    rt, url: URLV1, mirror, stateFile: path.join(LAB, label + ".json"), watch: false, pollMs: 1e9,
+    pin: () => ({ teamId: "t-" + rt.slice(0, 8), rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+    invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+    keyFor: () => null, sealEpoch: () => null, request, connect: null,
+  });
+  try {
+    ch.start();
+    await ch.idle();
+    for (let i = 0; i < losses; i++) { ch.kick(); await ch.idle(); }
+    const sent = ch.program.state().sent[rel];
+    const asked = (R.stores.get(rt).get("inv:" + inv) || {}).asked || null;
+    const recorded = sent ? sent.id : null;
+    fs.unlinkSync(path.join(mirror, "desks", who.keyId, "join.json"));
+    ch.kick();
+    await ch.idle();
+    const row = R.stores.get(rt).get("inv:" + inv) || {};
+    return { recorded, asked, same: !!(recorded && recorded === asked), withdrawn: row.withdrawn === true && row.asked === recorded };
+  } finally {
+    await ch.stop();
+  }
+}
+try {
+  const one = await lostWithdraw(C, "lost-withdraw-1", 1);
+  const two = await lostWithdraw(C, "lost-withdraw-2", 2);
+  check(one.same && one.withdrawn && two.same && two.withdrawn,
+    "966h an invitation upload whose reply was lost, and a retry refused token-spent, is recorded under the id the relay holds as asked, however many replies were lost, and Cancel's withdrawal is admitted: one lost reply, recorded "
+    + one.recorded + ", asked " + one.asked + ", withdrawn " + one.withdrawn + "; two lost replies, recorded "
+    + two.recorded + ", asked " + two.asked + ", withdrawn " + two.withdrawn);
+  const lostPlant = await liftChannel("plant:lost-id", async mod => {
+    const x = await lostWithdraw(mod, "lost-withdraw-plant", 1);
+    return !!(x.recorded && x.asked && x.recorded !== x.asked && x.withdrawn === false);
+  });
+  check(lostPlant.turned && lostPlant.back, "966i lifting plant:lost-id seals the retry under a fresh id, so the relay refuses the withdrawal, and the product file is never written: "
+    + lostPlant.detail + ", sha " + (lostPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 966h): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a page whose fetch fails part way is applied only where it can be judged whole (C3, board 923). The lead names a
