@@ -16,6 +16,8 @@ const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 /* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
 const TRY_KEYS_MAX = 64;
+/* Spent challenges held at once. 256 is the cap the stored challenges had. A live row is never dropped, because dropping it would let that challenge be used again. Past the cap the hello is refused rate. */
+const CHALLENGES_MAX = 256;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
 /* The shortest ciphertext a padded seal can be, and the most live blobs one team may hold. */
@@ -642,8 +644,22 @@ function createCore(deps) {
     if (store.list("tf:" + inv + ":").length >= TRY_KEYS_MAX) return; /* plant:try-cap */
     store.put(row, 1);
   }
+  /* Expired spent-challenge rows go on the write, so a caller who never lists cannot keep them. A live row stays. */
+  function dropExpiredChallenges(now) {
+    for (const [k, atSpent] of store.list("chu:")) {
+      if (typeof atSpent !== "number" || now - atSpent > CHALLENGE_MS) store.del(k);
+    }
+  }
+  function roomForChallenge(now) {
+    dropExpiredChallenges(now);
+    if (store.list("chu:").length >= CHALLENGES_MAX) return false; /* plant:challenge-cap */
+    return true;
+  }
   function spendChallenge(nonce) {
-    store.put("chu:" + nonce, clock()); /* plant:try-spend */
+    const now = clock();
+    if (!roomForChallenge(now)) return false;
+    store.put("chu:" + nonce, now); /* plant:try-spend */
+    return true;
   }
   /* The newest binding wins. Lifting the comparison keeps the binding already indexed. */
   function indexBinding(key, id) {
@@ -670,10 +686,10 @@ function createCore(deps) {
     if (!inv) return no("not-enrolled");
     if (inv.spent) return no("token-spent"); /* plant:token-spent */
     const tries = store.get(tryRow(b.inv, b.key));
-    if (typeof tries === "number" && tries >= TOKEN_TRIES) { spendChallenge(b.challenge); return no("token-tries"); } /* plant:token-key */
+    if (typeof tries === "number" && tries >= TOKEN_TRIES) { if (!spendChallenge(b.challenge)) return no("rate"); return no("token-tries"); } /* plant:token-key */
     const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX && is(HEX64, inv.hash)
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
-    if (!right) { noteTry(b.inv, b.key); spendChallenge(b.challenge); return no("not-enrolled"); } /* plant:token-match */
+    if (!right) { if (!spendChallenge(b.challenge)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
     /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
        still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
     let ended = false;
@@ -756,6 +772,7 @@ function createCore(deps) {
     const lapsedSession = lapseGate(false);
     if (lapsedSession) return lapsedSession; /* plant:lapse-session */
     const token = random(32), now = clock(), until = now + SESSION_MS;
+    if (!roomForChallenge(now)) return no("rate");
     store.atomic(() => {
       also && also();
       store.put("chu:" + nonce, now); /* plant:challenge-use */
@@ -1142,7 +1159,7 @@ function createCore(deps) {
       }
       for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
       for (const [k] of store.list("ch:")) store.del(k); /* plant:challenge-drop */
-      for (const [k, atSpent] of store.list("chu:")) if (typeof atSpent !== "number" || now - atSpent > CHALLENGE_MS) store.del(k);
+      dropExpiredChallenges(now);
       store.put("blobs", store.list("blob:").length); /* plant:blob-recount */
     });
     return drop;

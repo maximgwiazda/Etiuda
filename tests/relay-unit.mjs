@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 410;
+const EXPECTED = 412;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -547,7 +547,12 @@ async function main() {
       "6i a removed key's hello unsigned, forged, zeroed or under a named key is a bad signature, and only a genuine one says removed");
     const v = await world();
     const firstS = await sessionOf(v, v.other);
-    for (let i = 0; i < 1024; i++) { v.R.clock.now += 1; await sessionOf(v, v.other); }
+    for (let i = 0; i < 1024; i++) {
+      /* Spent challenges are capped at 256 while they are inside their five minutes. Step past that life every 256 hellos so those rows drop, and every session, which lasts 30 minutes, stays. */
+      if (i % 256 === 255) v.R.clock.now += C.CHALLENGE_MS + 1;
+      else v.R.clock.now += 1;
+      await sessionOf(v, v.other);
+    }
     const liveS = v.R.stores.get(v.rt).list("ses:").length;
     const evicted = await since(v, firstS);
     check(liveS === 1024 && refused(evicted, "no-hello"), "6j past 1024 live sessions the one nearest its end is let go: " + liveS + " kept");
@@ -613,6 +618,27 @@ async function main() {
     check(manyRows === 64 && sixtySixth.status === 200 && droppedMany.status === 200 && leftMany === 0,
       "7h sixty-five keys' wrong tries leave 64 rows, the sixty-sixth key's right token still binds, and dropping the invitation leaves no try row: "
       + manyRows + " rows, bind " + sixtySixth.status + ", left " + leftMany);
+    const capW = await world();
+    const tCap = hex(32), idCap = hex(16);
+    await invites(capW, [{ id: idCap, hash: sha(tCap) }], []);
+    const nonceCap = await challenge(capW);
+    let lastCap = await tokenHello(capW, idCap, "nope-0", nonceCap);
+    for (let i = 1; i < 256; i++) lastCap = await tokenHello(capW, idCap, "nope-" + i);
+    const boxCap = capW.R.stores.get(capW.rt);
+    const atCap = boxCap.list("chu:").length;
+    const overCap = await tokenHello(capW, idCap, "nope-256");
+    const heldCap = boxCap.list("chu:").length;
+    const stillCap = await tokenHello(capW, idCap, "nope-0", nonceCap);
+    const keptCap = boxCap.get("chu:" + nonceCap) !== undefined;
+    capW.R.clock.now += C.CHALLENGE_MS + 1;
+    const laterCap = await tokenHello(capW, idCap, "nope-later");
+    const laterRows = boxCap.list("chu:").length;
+    check(refused(lastCap, "not-enrolled") && atCap === 256 && refused(overCap, "rate") && heldCap === 256
+      && refused(stillCap, "hello-replay") && keptCap
+      && refused(laterCap, "not-enrolled") && laterRows === 1,
+      "936a 257 wrong tries, and no list, keep spent challenges at 256, the next hello is rate, and the first spent challenge is still held; past five minutes the next wrong try is the only row: "
+      + atCap + " then " + heldCap + ", last " + (lastCap.json && lastCap.json.error) + ", over " + (overCap.json && overCap.json.error)
+      + ", replay " + (stillCap.json && stillCap.json.error) + ", later " + laterRows + " " + (laterCap.json && laterCap.json.error));
     const scan = await world();
     const scanBox = scan.R.stores.get(scan.rt);
     for (let i = 0; i < 1000; i++) scanBox.put("inv:" + hex(16), { spent: true, spentAt: 1, key: hex(32), pub: hex(32), hash: hex(32) });
@@ -1342,6 +1368,16 @@ async function main() {
     });
     check(spendTry.turned && spendTry.back, "7l lifting plant:try-spend lets a wrong token's challenge bind on the retry, and the product file is never written: "
       + spendTry.detail + ", sha " + (spendTry.back ? "restored" : "differs"));
+    const challengeCap = await liftCore("plant:challenge-cap", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      let last = null;
+      for (let i = 0; i < 257; i++) last = await tokenHello(p, id, "nope-" + i);
+      return p.R.stores.get(p.rt).list("chu:").length > 256 || !refused(last, "rate");
+    });
+    check(challengeCap.turned && challengeCap.back, "936b lifting plant:challenge-cap lets a 257th wrong try keep another spent challenge, and the product file is never written: "
+      + challengeCap.detail + ", sha " + (challengeCap.back ? "restored" : "differs"));
     const devFreshLift = await liftCore("plant:devices-fresh", async () => {
       const w = await world();
       const got = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
