@@ -109,6 +109,91 @@ export const SHARED = [
 export const GATE_TOOLS = ["tools/gate-run.mjs", "tools/gates-for.mjs", "tools/child-cap.mjs", "tests/result-line.mjs",
   "tests/gates-for.mjs", "tests/child-cap.mjs"];
 
+const globCache = new Map();
+
+function expandBraces(glob) {
+  const m = /\{([^{}]+)\}/.exec(glob);
+  if (!m) return [glob];
+  const out = [];
+  for (const p of m[1].split(",")) out.push(...expandBraces(glob.slice(0, m.index) + p + glob.slice(m.index + m[0].length)));
+  return out;
+}
+
+function globOne(glob, file) {
+  let re = globCache.get(glob);
+  if (!re) {
+    let src = "^";
+    let i = 0;
+    while (i < glob.length) {
+      if (glob.startsWith("**/", i)) { src += "(?:.*/)?"; i += 3; continue; }
+      if (glob.startsWith("**", i)) { src += ".*"; i += 2; continue; }
+      const c = glob[i];
+      if (c === "*") { src += "[^/]*"; i++; continue; }
+      if (c === "?") { src += "[^/]"; i++; continue; }
+      src += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      i++;
+    }
+    re = new RegExp(src + "$");
+    globCache.set(glob, re);
+  }
+  return re.test(file);
+}
+
+/* One relative glob. ** crosses directories, * stays in one, {a,b} is either. */
+export function globMatches(glob, rel) {
+  const file = String(rel || "").replace(/\\/g, "/");
+  if (!file || file.endsWith("/")) return false;
+  if (glob === "**" || glob === "**/*") return true;
+  return expandBraces(String(glob)).some(g => globOne(g, file));
+}
+
+/* Legs that judge a tree file's bytes. A diff touching a glob selects the leg. A leg's own source is not listed. */
+export const SCANS = {
+  "tests/chain-split.mjs": ["tests/**/*.{js,mjs,cjs}", "package.json"],
+  "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js"],
+  "tests/pl-diacritics.js": ["src/**/*.{js,mjs,css,html}", "shell/**/*.{js,mjs,css,html}"],
+  "tests/css-layers.js": ["src/template.html"],
+  "tests/css-order.js": ["src/template.html"],
+  "tests/motion-tokens.js": ["src/template.html", "src/modules/*.js", "src/main.js", "src/modules/motion.js"],
+  "tests/kin-contrast.mjs": ["src/template.html", "shell/*.js"],
+  "tests/modal-select.mjs": ["src/template.html", "engine/etiuda.html"],
+  "tests/theme-switch.mjs": ["src/template.html"],
+  "tools/split-guard/boot-order.mjs": ["src/main.js", "tools/split-guard/boot-order.list"],
+  "tools/split-guard/hooks-guard.mjs": ["src/modules/hooks.js", "src/main.js", "src/modules/*.js"],
+  "tools/split-guard/bridge.mjs": ["src/main.js", "src/modules/*.js"],
+  "tools/split-guard/guard.mjs": ["src/main.js", "src/modules/**/*.js"],
+  "tools/split-guard/cycles.mjs": ["src/main.js"],
+  "tools/split-guard/cycle-bounds.mjs": ["src/main.js", "src/modules/**/*.js"],
+  "tests/token-canary.mjs": ["src/template.html", "src/modules/*.js", "src/main.js"],
+  "tests/mark-layout.mjs": ["src/template.html", "src/modules/fifth.js"],
+  "tests/mark-path.mjs": ["**"],
+  "tools/motion-frame-harness.mjs": ["tests/motion.js"],
+  "tests/about.mjs": ["engine/etiuda.html", "shell/license_en.txt", "shell/license_pl.txt"],
+  "tests/linux-package.mjs": ["shell/etiuda.ico", "shell/main.js", "shell/dictionaries-notice.txt"],
+  "tests/hpke.mjs": ["shell/main.js"],
+  "tests/catalog-sig.js": ["src/template.html", "src/modules/*.js", "src/main.js", "shell/main.js"],
+  "tests/variables.mjs": ["src/modules/variables.js", "src/modules/catalog-v2.js"],
+  "tests/install-plan-selftest.js": ["tests/update-install.js", "tests/reinstall.js"],
+  "tests/sellable.mjs": ["shell/license_en.txt", "shell/license_pl.txt", "src/modules/env.js"],
+  "tests/sbom.mjs": ["package.json", "package-lock.json", "src/modules/env.js"],
+  "tests/build-fresh.mjs": ["engine/etiuda.html", "engine/etiuda.csp.json", "engine/bubble.css"],
+  "tests/test.js": ["src/template.html", "src/modules/*.js", "src/main.js", "engine/etiuda.html", "shell/etiuda.ico", "shell/license_en.txt", "shell/license_pl.txt", "electron-builder.js", "shell/installer.nsh"],
+  "tests/join-policy.mjs": ["shell/policy/**"],
+  "tests/catalog-shared.mjs": ["src/modules/catalog-file.js", "src/modules/catalog-offer.js", "src/modules/ui-lang.js"],
+  "tests/catalog-in-use.mjs": ["src/modules/catalog-offer.js", "src/modules/catalog-file.js", "src/modules/catalog-history.js", "src/modules/settings.js", "src/modules/ui-lang.js", "src/modules/local-memory.js", "shell/preload.js"],
+  "tests/desk-ipc.mjs": ["src/template.html", "src/modules/hooks.js"],
+  "tests/stats-live.mjs": ["src/modules/host.js", "shell/preload.js", "src/modules/settings.js", "src/modules/ui-lang.js"],
+  "tests/tab-focus.mjs": ["src/template.html", "src/modules/list-pointer.js", "src/modules/run-shortcut.js", "src/modules/tabs.js", "shell/main.js", "shell/preload.js", "src/modules/host.js"],
+  "tests/shell-office.mjs": ["shell/*.ec"],
+  "tests/pick.mjs": ["shell/*.js", "src/modules/*.js", "src/main.js", "shell/caret.cs", "electron-builder.js", "src/modules/tour.js", "src/modules/pick.js"],
+  "tests/module-calls.mjs": ["src/template.html", "src/modules/deck.js"],
+  "tests/team-join.mjs": ["src/template.html", "src/modules/ui-lang.js", "shell/main.js", "src/modules/catalog-trust.js"],
+  "tests/relay-blob.mjs": ["relay/test/target-contract.md", "shell/main.js"],
+  "tests/relay-workerd.mjs": ["relay/wrangler.toml", "relay/worker.mjs", "relay/team.cjs"],
+  "tests/relay-unit.mjs": ["relay/wrangler.toml", "relay/core.cjs", "relay/team.cjs", "relay/worker.mjs", "relay/test/grant-vector.json"],
+  "tests/relay-channel.mjs": ["shell/relay/channel.cjs"],
+};
+
 /* A diff that adds, removes or renames a file under tests/ changes what the chains must list, so it selects chain-split,
    whatever else the diff selects (the test architect's edge, 2026-10-28). A file counts as added or removed where its
    presence at the base and on disk differ; a base that cannot be read selects it for any test file. */

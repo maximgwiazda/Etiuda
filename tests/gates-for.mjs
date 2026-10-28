@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 18;
+const EXPECTED = 19;
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -349,6 +349,19 @@ try {
   check(listCases.length === 6 && listMisses.length === 0,
     "gf18 a test file added, removed or renamed against the base selects chain-split, a test file only changed does not: "
     + (listMisses.length ? "wrong on " + JSON.stringify(listMisses) : listCases.length + " cases right"));
+
+  const scanMiss = [];
+  if (!gfTool.SCANS || typeof gfTool.globMatches !== "function") scanMiss.push("SCANS missing");
+  else {
+    const tracked = git(["ls-files", "-z"], ROOT).split("\0").filter(Boolean);
+    for (const [leg, globs] of Object.entries(gfTool.SCANS)) {
+      if (!Array.isArray(globs) || !globs.length) { scanMiss.push(leg + " empty"); continue; }
+      for (const g of globs) if (!tracked.some(f => gfTool.globMatches(g, f))) scanMiss.push(leg + " " + g);
+    }
+  }
+  check(scanMiss.length === 0,
+    "gf19 every scan glob matches a tracked file: "
+    + (scanMiss.length ? scanMiss.join("; ") : Object.keys(gfTool.SCANS).length + " legs"));
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {

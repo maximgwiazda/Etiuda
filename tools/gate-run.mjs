@@ -462,6 +462,41 @@ export function scriptChainEdit(baseText, headText) {
   return { confined: true, added, removed };
 }
 
+function appendTextScans(steps, addedFiles, windowGates, root, changed, gf) {
+  const scans = gf && gf.SCANS;
+  const match = gf && gf.globMatches;
+  if (!scans || typeof match !== "function") return;
+  const files = changed.map(normRel);
+  for (const leg of Object.keys(scans)) {
+    const globs = scans[leg];
+    if (!Array.isArray(globs) || !globs.length) continue;
+    if (!files.some(f => globs.some(g => match(g, f)))) continue;
+    const abs = path.join(root, leg);
+    if (!fs.existsSync(abs)) continue;
+    let kind = "node";
+    try { if (typeof gf.windowKind === "function") kind = gf.windowKind(abs); } catch (e) { kind = "node"; }
+    if (kind === "window") {
+      if (!windowGates.includes(leg)) {
+        windowGates.push(leg);
+        console.log("gate-run area: window gate " + leg + " left out, walled: argued separately");
+      }
+      continue;
+    }
+    if (!addedFiles.has(leg)) {
+      steps.push({ script: "area", cmd: "node " + leg, file: leg, args: [], note: "reads a changed file as text" }); /* plant:text-scan */
+      addedFiles.add(leg);
+    }
+  }
+}
+
+function closePlan(root, wholeChain, changed, gf, reason, extra) {
+  const steps = withFloor(root, wholeChain.slice());
+  const added = new Set(steps.map(s => normRel(s.file)));
+  const walled = [];
+  appendTextScans(steps, added, walled, root, changed, gf);
+  return Object.assign({ failClosed: true, reason, steps, walled }, extra || {});
+}
+
 export async function planAreaRun(root, changed, pkg, base = "main") {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
@@ -500,11 +535,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   for (const f of toolsOnly ? [] : changed) {
     if (isSharedCode(f)) {
       if (normRel(f) === "package.json" && acceptedScript) continue; /* plant:script-chain */
-      return {
-        failClosed: true,
-        reason: "fail-closed to whole chain: change in shared code " + f,
-        steps: withFloor(root, wholeChain),
-      };
+      return closePlan(root, wholeChain, changed, gf, "fail-closed to whole chain: change in shared code " + f);
     }
   }
 
@@ -513,11 +544,8 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
     let forFile = [];
     try { forFile = gatesFor(root, [f]); } catch { forFile = []; }
     if (totalGates > 0 && forFile.length > totalGates / 2) {
-      return {
-        failClosed: true,
-        reason: "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")",
-        steps: withFloor(root, wholeChain),
-      };
+      return closePlan(root, wholeChain, changed, gf,
+        "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")");
     }
   }
 
@@ -696,6 +724,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
 
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
+  appendTextScans(steps, addedFiles, windowGates, root, changed, gf);
   return { failClosed: false, reason: "", steps, gaps, walled: windowGates };
 }
 
