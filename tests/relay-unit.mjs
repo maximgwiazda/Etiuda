@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 400;
+const EXPECTED = 410;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1891,7 +1891,7 @@ async function main() {
     /* The Worker's env with each team's object a RelayTeam over a ctx of its own, as the namespace makes them. */
     function sqlRelay(T) {
       const env = { BLOBS: S.memoryBucket(), NOW: () => Date.now() }, teams = new Map(), clock = { now: Date.now() };
-      /* The kept list, off to the side of any team's table, so a fetch count stays the fetches of the team itself. */
+      /* The kept list, off to the side of any team's table, so it is not a fetch. A create's count is the lead object and then the team. */
       const revokedStore = S.memoryStore();
       const scoped = {
         idFromName(name) { return { name: String(name) }; },
@@ -2232,10 +2232,10 @@ async function main() {
       const again = await countedCall(W, R, "POST", p + "/hello", { json: {} });
       return { before, made: [made.r.status, made.gets], after, again: again.r.status };
     };
-    const WANT_CREATED = { before: [[], []], made: [200, 1], after: [["kv"], ["team"]], again: 200 };
+    const WANT_CREATED = { before: [[], []], made: [200, 2], after: [["kv"], ["team"]], again: 200 };
     const cr = await created(T0);
     check(same(cr, WANT_CREATED),
-      "968b a read before the create leaves no table, the create makes the kv table and the team row through one object fetch, and the team then answers: " + JSON.stringify(cr));
+      "968b a read before the create leaves no table, the create makes the kv table and the team row through two object fetches, the lead's and the team's, and the team then answers: " + JSON.stringify(cr));
 
     /* The store itself: a table that is not there reads as empty and is not made by a read or a delete; the first write makes it. */
     const lazyStore = T => {
@@ -2397,7 +2397,7 @@ async function main() {
     });
     check(baseFirst && back(pFirst),
       "968o lifting the object's team check before it reads turns 968f red, and the product file is never written: " + how(pFirst));
-    const pRoots = await swapTeam("clock: () => Date.now(), sockets: hibernating(ctx) }", "clock: () => Date.now(), sockets: hibernating(ctx), roots: [\"" + K.ROOT.pub + "\"] }", async T => !same(await safe(() => bareRefused(T)), { status: 403, error: "bad-grant", tables: [] }));
+    const pRoots = await swapTeam("clock: () => Date.now(), sockets: hibernating(ctx), teams: env && env.TEAMS ? env.TEAMS : null }", "clock: () => Date.now(), sockets: hibernating(ctx), teams: env && env.TEAMS ? env.TEAMS : null, roots: [\"" + K.ROOT.pub + "\"] }", async T => !same(await safe(() => bareRefused(T)), { status: 403, error: "bad-grant", tables: [] }));
     check(baseBare && back(pRoots),
       "968p handing RelayTeam's object the test root turns 968g red, and the product file is never written: " + how(pRoots));
   }
@@ -2824,7 +2824,7 @@ async function main() {
       for (const make of row.good || []) {
         const ctx = ctxOf(), grant = make(ctx), R = fresh();
         const w = await viaWorker(worker, R, bodyFor(ctx, { grant })), kept = teamOf(R, ctx.rt);
-        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.until !== grant.until || kept.paid !== grant.paid) return false;
+        if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.until !== grant.until || kept.paid !== grant.paid) return false;
       }
       return true;
     }
@@ -2888,11 +2888,11 @@ async function main() {
       const leaks = [grant.sig.value, grant.kind].concat(grant.via ? [grant.via.sig.value] : []).filter(s => dump.indexOf(s) > -1).length;
       return { w, kept, grant, ctx, leaks };
     };
-    const keptFor = x => x.w.r.status === 200 && x.w.gets === 1 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,secret,until"
+    const keptFor = x => x.w.r.status === 200 && x.w.gets === 2 && !!x.kept && Object.keys(x.kept).sort().join() === "epoch,lead,made,paid,rt,secret,until"
       && x.kept.until === x.grant.until && x.kept.paid === x.grant.paid && x.kept.lead.keyId === x.ctx.lead.keyId && x.leaks === 0;
     const byRoot = await madeUnder(gf({ paid: true })), byDelegate = await madeUnder(ctx => K.delegatedGrantFor(ctx.lead.pub, ctx.now, { fields: { paid: false } }));
     check(keptFor(byRoot) && byRoot.kept.paid === true,
-      "964e a create under a grant signed by the root makes the team through the Worker with one object fetch, and the team keeps the grant's until and paid and nothing else of it");
+      "964e a create under a grant signed by the root makes the team through the Worker with two object fetches, the lead's and the team's, and the team keeps the grant's until and paid and nothing else of it");
     check(keptFor(byDelegate) && byDelegate.kept.paid === false,
       "964f a create under a grant signed by a delegated key, with the root's delegation inside it, makes the team the same way, keeping that grant's paid: false");
     /* The same lead creating again keeps the later until, and the paid of the grant that gave it. */
@@ -2916,7 +2916,7 @@ async function main() {
       sceneOk[i] = await scene(ROWS[i], W);
       check(sceneOk[i],
         "965" + letter(i) + " " + ROWS[i].say + " is refused by the Worker with no object fetched and nothing stored, and by the object with nothing kept"
-        + (ROWS[i].edge ? "; " + ROWS[i].edge + " is made, reaching the object once and keeping the grant's until and paid" : ""));
+        + (ROWS[i].edge ? "; " + ROWS[i].edge + " is made, reaching the lead's object and the team's, and keeping the grant's until and paid" : ""));
     }
     /* ---- 966: the line each one guards, lifted in turn, lets the same probes through, and the product file is never written ---- */
     for (let i = 0; i < ROWS.length; i++) {
@@ -2964,9 +2964,9 @@ async function main() {
     const baseI = await endedVia(W);
     const workerPlant = await editWorker(lineLifted("plant:worker-grant"), async mod => {
       const w = await endedVia(mod.routeWith(K.ROOTS, env => env.NOW()));
-      return w.gets === 1 && w.refusedBad && w.kept === undefined;
+      return w.gets === 3 && w.refusedBad && w.kept === undefined;
     });
-    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create wake its object once, which refuses it itself, and the product file is never written: "
+    check(baseI.gets === 0 && baseI.refusedBad && baseI.kept === undefined && workerPlant.turned && workerPlant.back, "967i lifting plant:worker-grant makes a refused create reserve a place, wake its team object and release the place, and the product file is never written: "
       + workerPlant.detail + ", sha " + (workerPlant.back ? "unchanged" : "CHANGED"));
 
     /* ---- 971: a team's lead is a key under an id that comes from it, and no desk is that key (the test architect's K1, board 935) ---- */
@@ -2999,12 +2999,12 @@ async function main() {
       for (const form of ["pub", "branch"]) {
         const lead = asForm(keyPair(false), form), ctx = { rt: hex(16), lead, now: T0 }, R = fresh();
         const w = await viaWorker(W, R, bodyFor(ctx, {})), kept = teamOf(R, ctx.rt);
-        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+        if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
       }
       return true;
     };
     const idB = await bothForms();
-    check(idB, "971b a create whose lead key id is the lead's public key, or its branch id, is made, reaching the object once and keeping that id");
+    check(idB, "971b a create whose lead key id is the lead's public key, or its branch id, is made, reaching the lead's object and the team's, and keeping that id");
 
     /* The shared vector's create names its lead's key by an id that comes from it, and the relay judges that create whole. */
     const vectorKeyId = vec => {
@@ -3082,7 +3082,7 @@ async function main() {
       const kp = keyPair(false), lead = { keyId: studioOf(kp.pub), pub: kp.pub, privateKey: kp.privateKey };
       const ctx = { rt: hex(16), lead, now: T0 }, body = bodyFor(ctx, {});
       const R = fresh(), w = await viaWorker(W, R, body), kept = teamOf(R, ctx.rt);
-      if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
+      if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.lead.keyId !== lead.keyId || kept.lead.pub !== lead.pub) return false;
       const R2 = fresh(), o = await viaObject(R2, ctx.rt, body), kept2 = teamOf(R2, ctx.rt);
       if (o.status !== 200 || !kept2 || kept2.lead.keyId !== lead.keyId) return false;
       const liar = { keyId: studioOf(keyPair(false).pub), pub: kp.pub, privateKey: kp.privateKey }, ctx2 = { rt: hex(16), lead: liar, now: T0 }, bad = bodyFor(ctx2, {});
@@ -3092,7 +3092,7 @@ async function main() {
       return refused(o4, "bad-signature") && teamOf(R4, ctx2.rt) === undefined;
     }
     const idS = await studioScene();
-    check(idS, "972e a create whose lead key id is \"studio-\" and 16 hex of the sha256 of its pub is made through the Worker with one object fetch and by the object, keeping that id; one whose studio id is of another pub is refused bad-signature, with no object fetched and nothing kept");
+    check(idS, "972e a create whose lead key id is \"studio-\" and 16 hex of the sha256 of its pub is made through the Worker with two object fetches, the lead's and the team's, and by the object, keeping that id; one whose studio id is of another pub is refused bad-signature, with no object fetched and nothing kept");
     const pStudio = await liftCore("plant:lead-studio-id", async () => !(await studioScene()));
     check(idS && pStudio.turned && pStudio.back, "972f lifting plant:lead-studio-id refuses the studio form of the lead's own pub, and the product file is never written: "
       + pStudio.detail + ", sha " + (pStudio.back ? "unchanged" : "CHANGED"));
@@ -3115,7 +3115,7 @@ async function main() {
     async function wakesObject(worker, ts) {
       for (const t of ts) {
         const ctx = ctxOf(), R = fresh(), w = await viaWorker(worker, R, bodyAt(ctx, t));
-        if (w.gets !== 1 || !refused(w.r, "nonce-stale") || teamOf(R, ctx.rt) !== undefined) return false;
+        if (w.gets !== 3 || !refused(w.r, "nonce-stale") || teamOf(R, ctx.rt) !== undefined) return false;
       }
       return true;
     }
@@ -3129,18 +3129,18 @@ async function main() {
     const edgeScene = async () => {
       for (const t of [T0 - SKEW, T0, T0 + SKEW]) {
         const ctx = ctxOf(), R = fresh(), w = await viaWorker(W, R, bodyAt(ctx, t)), kept = teamOf(R, ctx.rt);
-        if (w.r.status !== 200 || w.gets !== 1 || !kept || kept.lead.keyId !== ctx.lead.keyId) return false;
+        if (w.r.status !== 200 || w.gets !== 2 || !kept || kept.lead.keyId !== ctx.lead.keyId) return false;
       }
       return true;
     };
     const staleC = await edgeScene();
     check(staleC,
-      "973c a create whose t is exactly the skew behind, at, or exactly the skew ahead of the relay's clock is made through the Worker with one object fetch");
+      "973c a create whose t is exactly the skew behind, at, or exactly the skew ahead of the relay's clock is made through the Worker with two object fetches, the lead's and the team's");
     const wFresh = await editWorker(lineLifted("plant:worker-fresh"), async mod => {
       const w = mod.routeWith(K.ROOTS, env => env.NOW());
       return (await wakesObject(w, lateTs)) && (await wakesObject(w, aheadTs));
     });
-    check(staleA && staleB && staleC && wFresh.turned && wFresh.back, "973d lifting plant:worker-fresh makes a stale or far-ahead create wake its object once, which refuses it itself, and the product file is never written: "
+    check(staleA && staleB && staleC && wFresh.turned && wFresh.back, "973d lifting plant:worker-fresh makes a stale or far-ahead create reserve a place, wake its team object and release the place, and the product file is never written: "
       + wFresh.detail + ", sha " + (wFresh.back ? "unchanged" : "CHANGED"));
 
     /* ---- 974: a repeat create whose grant ends as the team's does keeps the paid of either (the test architect's F3, board 935) ---- */
@@ -3187,7 +3187,7 @@ async function main() {
     const overNo = () => { const ctx = ctxOf(), g = overGrant(ctx); return !C.grantOk(g, ctx.lead.pub, T0, K.ROOTS) && C.grantWhy(g, ctx.lead.pub, T0, K.ROOTS) === "via-span"; };
     const spanB = C.DELEGATION_MAX_MS === YEAR_MS && yearOk() && (await scene(yearRow, W));
     check(spanB, "975a the delegation's longest span is DELEGATION_MAX_MS of 366 days in milliseconds, exported, and a grant via a delegation of exactly 366 days is taken by grantOk"
-      + " and made through the Worker with one object fetch, keeping the grant's until and paid");
+      + " and made through the Worker with two object fetches, the lead's and the team's, keeping the grant's until and paid");
     const spanC = overNo() && (await scene(overRows[0], W)) && (await scene(overRows[1], W));
     check(spanC, "975b a grant via a delegation of 366 days and a millisecond, or of two years, is refused by grantOk as via-span, by the Worker with no object fetched and nothing stored,"
       + " and by the object with nothing kept");
@@ -3845,7 +3845,7 @@ async function main() {
       const other = keyPair(false);
       const hit = await countedCall(W, row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, other, row.R.clock.now) });
       const bad = await countedCall(W, row.R, "POST", "/relay/v1/teams", { json: createBody(row.rt, other, row.R.clock.now, { grant: null }) });
-      const ok = refused(hit.r, "swept-other-lead") && hit.r.json.said === SWEPT_SAID && hit.gets === 1 && markOnly(row.st, row.lead.pub)
+      const ok = refused(hit.r, "swept-other-lead") && hit.r.json.said === SWEPT_SAID && hit.gets === 3 && markOnly(row.st, row.lead.pub)
         && refused(bad.r, "bad-grant") && bad.gets === 0;
       const line = "980b a swept team re-created by another key with a valid grant is refused swept-other-lead, and a grant that does not hold is still bad-grant: "
         + hit.r.status + " " + (hit.r.json && hit.r.json.error) + " gets " + hit.gets + ", mark " + (markOnly(row.st, row.lead.pub) ? "kept" : "lost")
@@ -3860,7 +3860,7 @@ async function main() {
       const cSt = cR.stores.get(cRt), cTeam = cSt && cSt.get("team");
       const cBadRt = hex(16);
       const cBad = await countedCall(W, cR, "POST", "/relay/v1/teams", { json: createBody(cBadRt, keyPair(false), T0S, { grant: null }) });
-      const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 1 && !!cTeam && cTeam.epoch === 0
+      const ok = cR.stores.has(cRt) === true && cMade.r.status === 200 && cMade.gets === 2 && !!cTeam && cTeam.epoch === 0
         && cSt.get("swept") === undefined && Object.keys(cTeam).sort().join() === "epoch,lead,made,paid,rt,secret,until"
         && /^[0-9a-f]{16}$/.test(cTeam.made)
         && refused(cBad.r, "bad-grant") && cBad.gets === 0 && (cR.stores.get(cBadRt) ? cR.stores.get(cBadRt).dump().length : 0) === 0;
@@ -3921,7 +3921,7 @@ async function main() {
       const created = await countedCall(W, accepted, "POST", "/relay/v1/teams", { json: createBody(same, eLead, T0S, { grant: eGrant }) });
       const hello = created.r.status === 200 ? await call(accepted, "POST", "/relay/v1/t/" + same + "/hello", { json: {} }) : { status: 0, json: null };
       const renewal = await countedCall(W, accepted, "POST", "/relay/v1/t/" + same + "/grant", { json: { grant: K.delegatedGrantFor(eLead.pub, T0S, { fields: { until: T0S + 20 * DAY } }) } });
-      const ok = accepted.env.REVOKED === undefined && created.r.status === 200 && created.gets === 1 && hello.status === 200 && !!hello.json && !!hello.json.challenge
+      const ok = accepted.env.REVOKED === undefined && created.r.status === 200 && created.gets === 2 && hello.status === 200 && !!hello.json && !!hello.json.challenge
         && renewal.r.status === 200 && renewal.gets === 1;
       const line = "980f the same delegated grant with no list set is accepted at create, hello and renewal: create " + created.r.status + " gets " + created.gets
         + ", hello " + hello.status + ", renew " + renewal.r.status + " " + (renewal.r.json && renewal.r.json.error) + " gets " + renewal.gets;
@@ -3953,7 +3953,7 @@ async function main() {
       const hHello = hMade.r.status === 200 ? await call(hR, "POST", "/relay/v1/t/" + hRt + "/hello", { json: {} }) : { status: 0, json: null };
       const hOther = hex(16), hLead2 = keyPair(false);
       const hDel = await countedCall(W, hR, "POST", "/relay/v1/teams", { json: createBody(hOther, hLead2, T0S, { grant: K.delegatedGrantFor(hLead2.pub, T0S) }) });
-      const ok = hMade.r.status === 200 && hMade.gets === 1 && hSt && hSt.get("grantKey") === undefined && hHello.status === 200
+      const ok = hMade.r.status === 200 && hMade.gets === 2 && hSt && hSt.get("grantKey") === undefined && hHello.status === 200
         && refused(hDel.r, "revoked") && hDel.gets === 0;
       const line = "980h a root-signed grant is accepted while the list is set, and a delegated grant beside it is refused: create " + hMade.r.status
         + " gets " + hMade.gets + ", grantKey " + JSON.stringify(hSt && hSt.get("grantKey")) + ", hello " + hHello.status
@@ -4677,6 +4677,184 @@ async function main() {
     });
     check(noteLift.turned && noteLift.back, "934g lifting plant:blob-note leaves the live count behind the rows when prune has not run, and the product file is never written: "
       + noteLift.detail + ", sha " + (noteLift.back ? "restored" : "differs"));
+  }
+
+  /* ---- 935: one lead key holds at most 25 live teams (board 935 (7)). The count is this run's, recorded as Claudius's. ---- */
+  {
+    const CAP = 25;
+    const SAID = "This signing key already holds as many teams as the relay allows.";
+    const T0L = 1800000000000;
+    const teamSrc = require(path.join(ROOT, "relay", "team.cjs"));
+    function envAt(teamMod) {
+      const R = relayEnv(teamMod ? { team: teamMod } : {});
+      R.clock.now = T0L;
+      return R;
+    }
+    function leadList(R, lead) {
+      const st = R.stores.get("lead:" + lead.keyId);
+      if (!st) return null;
+      const row = st.get("lead");
+      return row && Array.isArray(row.rts) ? row.rts.slice() : null;
+    }
+    async function namesCall(worker, R, body) {
+      const names = [];
+      const env = Object.assign({}, R.env, { TEAMS: { jurisdiction(j) {
+        const s = R.env.TEAMS.jurisdiction(j);
+        if (!s) return s;
+        const out = {
+          idFromName: n => s.idFromName(n),
+          get: id => { names.push(String(id && id.name)); return s.get(id); },
+        };
+        if (typeof s.acceptRevocations === "function") out.acceptRevocations = text => s.acceptRevocations(text);
+        return out;
+      } } });
+      const r = await call(R, "POST", "/relay/v1/teams", { json: body, worker: worker || W, env });
+      return { r, names };
+    }
+    async function fill(R, lead, n, now, opts) {
+      const rts = [];
+      for (let i = 0; i < n; i++) {
+        const rt = hex(16);
+        const r = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now, opts) });
+        if (r.status !== 200) return { ok: false, rts, status: r.status, error: r.json && r.json.error };
+        rts.push(rt);
+      }
+      return { ok: true, rts };
+    }
+    async function capScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      const rt = hex(16);
+      const over = await namesCall(W, R, createBody(rt, lead, now));
+      const names = over.names;
+      return {
+        madeOk: made.ok, status: over.r.status, refused: refused(over.r, "team-count"),
+        said: over.r.json && over.r.json.said, names,
+        teamFetches: names.filter(n => n === rt).length,
+        leadOnly: names.length === 1 && names[0] === "lead:" + lead.keyId,
+        stored: R.stores.has(rt),
+      };
+    }
+    async function repeatScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { madeOk: false, status: 0, copies: -1, length: -1, again: { status: 0, json: null } };
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(made.rts[0], lead, now) });
+      const list = leadList(R, lead);
+      const copies = list ? list.filter(x => x === made.rts[0]).length : -1;
+      return { madeOk: true, status: again.status, copies, length: list ? list.length : -1, again };
+    }
+    async function sweepScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now, until = now + DAY;
+      const made = await fill(R, lead, CAP, now, { grantOpts: { fields: { paid: false, until } } });
+      if (!made.ok) return { madeOk: false, rang: false, gone: false, length: -1, again: 0 };
+      R.clock.now = until + 30 * DAY;
+      const swept = made.rts[0];
+      const rang = await R.ring(swept);
+      const afterSweep = leadList(R, lead);
+      const gone = !!(afterSweep && afterSweep.indexOf(swept) < 0);
+      const freshRt = hex(16);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(freshRt, lead, R.clock.now) });
+      return { madeOk: true, rang, gone, length: afterSweep ? afterSweep.length : -1, again: again.status };
+    }
+    async function freedScene(worker, teamMod) {
+      const R = envAt(teamMod), owner = keyPair(false), now = R.clock.now, until = now + DAY;
+      const sweptRt = hex(16);
+      const owned = await call(R, "POST", "/relay/v1/teams", { json: createBody(sweptRt, owner, now, { grantOpts: { fields: { paid: false, until } } }) });
+      R.clock.now = until + 30 * DAY;
+      const rang = await R.ring(sweptRt);
+      const lead = keyPair(false);
+      const made = await fill(R, lead, CAP - 1, R.clock.now);
+      const hit = await countedCall(worker || W, R, "POST", "/relay/v1/teams", { json: createBody(sweptRt, lead, R.clock.now) });
+      const list = leadList(R, lead);
+      const listed = list ? list.indexOf(sweptRt) >= 0 : null;
+      const freshRt = hex(16);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(freshRt, lead, R.clock.now) });
+      const st = R.stores.get(sweptRt);
+      const marked = !!(st && st.get("team") === undefined && st.get("swept") === owner.pub);
+      return {
+        owned: owned.status, rang, madeOk: made.ok, hit, listed, marked,
+        length: list ? list.length : -1, again: again.status,
+      };
+    }
+    async function reapScene(teamMod) {
+      const R = envAt(teamMod), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { madeOk: false, beforeHas: false, status: 0, deadGone: false, added: false, again: { status: 0, json: null } };
+      const dead = made.rts[0];
+      R.stores.get(dead).del("team");
+      const before = leadList(R, lead);
+      const rt = hex(16);
+      const again = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now) });
+      const after = leadList(R, lead);
+      return {
+        madeOk: true, beforeHas: !!(before && before.indexOf(dead) >= 0 && before.length === CAP),
+        status: again.status, deadGone: !!(after && after.indexOf(dead) < 0),
+        added: !!(after && after.indexOf(rt) >= 0), again,
+      };
+    }
+    async function editTeam(edit, fn) {
+      const digest = sha(fs.readFileSync(PRODUCT.team));
+      let turned = false, detail = "plant line absent";
+      try {
+        const edited = edit(fs.readFileSync(PRODUCT.team, "utf8"));
+        if (edited !== null) {
+          const dir = copyOf({ "relay/team.cjs": edited, "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+    }
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const cap = await capScene();
+    check(teamSrc.TEAMS_PER_LEAD === CAP && B.REASONS["team-count"] === SAID && cap.madeOk && cap.status === 403 && cap.refused
+      && cap.leadOnly && cap.teamFetches === 0 && cap.stored === false,
+      "935a the 26th distinct team of one lead is refused team-count, 403, and the new team object is not fetched (the one get is the lead object): "
+      + JSON.stringify({ status: cap.status, said: cap.said, names: cap.names, stored: cap.stored, made: cap.madeOk }));
+    const rep = await repeatScene();
+    check(rep.madeOk && rep.status === 200 && rep.copies === 1 && rep.length === CAP,
+      "935b a repeat create of a team the lead already holds is taken at the bound, and the lead's list keeps that id once: "
+      + JSON.stringify({ status: rep.status, copies: rep.copies, length: rep.length }));
+    const sw = await sweepScene();
+    check(sw.madeOk && sw.rang === true && sw.gone === true && sw.length === CAP - 1 && sw.again === 200,
+      "935c a swept team leaves the lead's list before the next create, and that create is taken: "
+      + JSON.stringify({ rang: sw.rang, gone: sw.gone, length: sw.length, again: sw.again }));
+    const freed = await freedScene();
+    check(freed.owned === 200 && freed.rang === true && freed.madeOk && refused(freed.hit.r, "swept-other-lead") && freed.hit.gets === 3
+      && freed.listed === false && freed.length === CAP - 1 && freed.marked && freed.again === 200,
+      "935d a create the team object then refuses, at the bound, is dropped from the lead's list before the next create, which is taken: "
+      + JSON.stringify({ hit: freed.hit.r.status, error: freed.hit.r.json && freed.hit.r.json.error, gets: freed.hit.gets,
+        listed: freed.listed, length: freed.length, again: freed.again, marked: freed.marked }));
+    const reap = await reapScene();
+    check(reap.madeOk && reap.beforeHas && reap.status === 200 && reap.deadGone && reap.added,
+      "935e a lead row of 25 that still names a team the object no longer holds is reclaimed by the next new create: "
+      + JSON.stringify({ before: reap.beforeHas, status: reap.status, deadGone: reap.deadGone, added: reap.added }));
+    const capLift = await editTeam(lineLifted("plant:team-count"), async T => {
+      const r = await capScene(T);
+      return r.status === 200 && r.stored === true;
+    });
+    check(cap.status === 403 && capLift.turned && capLift.back, "935f lifting plant:team-count lets the 26th team be made, and the product file is never written: " + how(capLift));
+    const repLift = await editTeam(lineLifted("plant:lead-repeat"), async T => {
+      const r = await repeatScene(T);
+      return refused(r.again, "team-count");
+    });
+    check(rep.status === 200 && repLift.turned && repLift.back, "935g lifting plant:lead-repeat refuses a repeat create at the bound as team-count, and the product file is never written: " + how(repLift));
+    const reapLift = await editTeam(lineLifted("plant:lead-reap"), async T => {
+      const r = await reapScene(T);
+      return refused(r.again, "team-count") && r.deadGone === false;
+    });
+    check(reap.status === 200 && reapLift.turned && reapLift.back, "935h lifting plant:lead-reap leaves a dead team in the count and refuses the next new create, and the product file is never written: " + how(reapLift));
+    const freeLift = await editWorker(lineLifted("plant:lead-free"), async mod => {
+      const r = await freedScene(mod.routeWith(K.ROOTS, env => env.NOW()));
+      return r.listed === true;
+    });
+    check(freed.listed === false && freeLift.turned && freeLift.back, "935i lifting plant:lead-free leaves a refused create's id on the lead's list, and the product file is never written: " + how(freeLift));
+    const dropLift = await editTeam(lineLifted("plant:lead-drop"), async T => {
+      const r = await sweepScene(T);
+      return r.rang === true && r.gone === false && r.length === CAP;
+    });
+    check(sw.gone === true && dropLift.turned && dropLift.back, "935j lifting plant:lead-drop leaves a swept team on the lead's list, and the product file is never written: " + how(dropLift));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
