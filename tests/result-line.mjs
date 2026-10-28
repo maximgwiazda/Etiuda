@@ -1219,10 +1219,17 @@ async function main() {
   spawnSync("git", ["commit", "-q", "-m", "a window gate"], { cwd: areaLab.lab });
   fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 2;\n");
   const areaWindow = run(areaLab, ["area", "HEAD", "--dry-run"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock") });
+  const winChains = path.join(areaLab.runs, "chains-16k.jsonl");
+  const areaWindowRun = run(areaLab, ["area", "HEAD"], null, { ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"), ETIUDA_CHAINS_PATH: winChains });
+  let winLine = null;
+  try { winLine = JSON.parse(fs.readFileSync(winChains, "utf8").trim().split(/\r?\n/).pop()); } catch (e) {}
   fs.writeFileSync(path.join(areaLab.lab, "src", "winread.mjs"), "export const w = 1;\n");
-  check(areaWindow.out.indexOf("window gate tests/win.mjs left out") >= 0 && areaWindow.out.indexOf("  node tests/win.mjs") < 0,
-    "16k a window gate gates-for names for the diff is left out of the area run and named, not run whole: "
-    + areaWindow.out.trim().split(/\r?\n/).filter(l => /win|gate\(s\) to run/i.test(l)).join(" | "));
+  check(areaWindow.out.indexOf("window gate tests/win.mjs left out") >= 0 && areaWindow.out.indexOf("  node tests/win.mjs") < 0
+    && !!winLine && Array.isArray(winLine.walled) && winLine.walled.length === 1 && winLine.walled[0] === "tests/win.mjs"
+    && areaWindowRun.out.indexOf("REFUSED") < 0,
+    "16k a window gate gates-for names for the diff is left out of the area run, named, and recorded as walled in its chains line: "
+    + areaWindow.out.trim().split(/\r?\n/).filter(l => /win|gate\(s\) to run/i.test(l)).join(" | ")
+    + " || walled " + JSON.stringify(winLine && winLine.walled));
 
   /* No FLOOR entry is one the window wall refuses: a file gates-for classes window is named by a node arm, and that arm,
      run here with ETIUDA_WINDOWS unset, exits 0 without the wall's marker (the test architect's leg, 2026-10-28). */

@@ -164,6 +164,8 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
     staleTakenOver: record.staleTakenOver || false,
     /* Which gates ate the run: one entry per gate run, in order, each with its wall-clock and its verdict. */
     gates: (record.gates || []).map(g => ({ gate: g.gate, wallMs: g.wallMs, exit: g.exit })),
+    /* The window gates this run's diff reached and left out: a merge that needs an argued window run, counted by the week review. */
+    walled: record.walled || [],
   };
   fs.appendFileSync(chainsPath, JSON.stringify(line) + "\n", "utf8");
   return line;
@@ -375,7 +377,7 @@ export async function planAreaRun(root, changed, pkg) {
 
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
-  return { failClosed: false, reason: "", steps, gaps };
+  return { failClosed: false, reason: "", steps, gaps, walled: windowGates };
 }
 
 function git(args) {
@@ -576,6 +578,7 @@ async function main() {
   let isHeavy = process.env.ETIUDA_HEAVY === "1";
   let customEnv = {};
   let gateLabel = asked.join(" ");
+  let walled = [];
 
   if (mode === "area") {
     const base = asked[1] || "main...HEAD";
@@ -588,6 +591,7 @@ async function main() {
       isHeavy = true;
     }
     steps = plan.steps;
+    walled = plan.walled || [];
     customEnv.ETIUDA_PLANTS = "off";
     gateLabel = "area";
   } else if (mode === "release") {
@@ -770,6 +774,7 @@ async function main() {
     reds: redsList,
     staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
     gates: gatesList,
+    walled,
   }, CHAINS_PATH);
 
   if (isHeavy) releaseLock();
