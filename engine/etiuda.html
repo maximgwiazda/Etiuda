@@ -7607,13 +7607,13 @@ What you type stays in this browser only.`;
     "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
     "Dropbox keeps this folder in sync.": "Ten folder jest synchronizowany przez Dropbox.",
     "Google Drive keeps this folder in sync.": "Ten folder jest synchronizowany przez Dysk Google.",
-    "This computer has no {KIND} folder in place, so the path below is the one the invitation was written with.": "Na tym komputerze nie ma folderu {KIND}, więc ścieżka poniżej jest tą, z którą zapisano zaproszenie.",
+    "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.": "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć.",
     "OneDrive": "OneDrive",
     "OneDrive for Business": "OneDrive dla firm",
     "Dropbox": "Dropbox",
-    "Google Drive": "Dysku Google",
-    "mapped drive": "zmapowanego dysku",
-    "shared folder": "współdzielonego",
+    "Google Drive": "Dysk Google",
+    "a mapped network drive": "zmapowany dysk sieciowy",
+    "a shared network folder": "udostępniony folder sieciowy",
     "Ask the team's lead for this invitation's check code, and type its five digits here.": "Proszę zapytać lidera zespołu o kod kontrolny tego zaproszenia i wpisać tu jego pięć cyfr.",
     "Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.": "Taki kod daje tylko prawdziwe zaproszenie, więc potwierdza, że pochodzi ono od lidera tego zespołu.",
     "Check": "Kod kontrolny",
@@ -15322,7 +15322,7 @@ What you type stays in this browser only.`;
     return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
   }
   function joinKindWord(kind) {
-    return kind === "onedrive" ? t("OneDrive") : kind === "onedrive-business" ? t("OneDrive for Business") : kind === "dropbox" ? t("Dropbox") : kind === "gdrive" ? t("Google Drive") : kind === "mapped" ? t("mapped drive") : t("shared folder");
+    return kind === "onedrive" ? t("OneDrive") : kind === "onedrive-business" ? t("OneDrive for Business") : kind === "dropbox" ? t("Dropbox") : kind === "gdrive" ? t("Google Drive") : kind === "mapped" ? t("a mapped network drive") : t("a shared network folder");
   }
   function joinWhere(o) {
     if (!o) return "";
@@ -15351,7 +15351,7 @@ What you type stays in this browser only.`;
           acts: [["invite", t("Join this team"), false], ["back", t("Cancel")]]
         };
       }
-      const absentSentence = t("This computer has no {KIND} folder in place, so the path below is the one the invitation was written with.").split("{KIND}").join(joinKindWord(o.kind));
+      const absentSentence = t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.").split("{KIND}").join(joinKindWord(o.kind));
       const absent = o.why === "absent" ? '<div class="e-join-meta">' + esc(absentSentence) + "</div>" : "";
       return {
         title,

@@ -330,8 +330,8 @@ function joinKindWord(kind){
     :kind==="onedrive-business"?t("OneDrive for Business")
     :kind==="dropbox"?t("Dropbox")
     :kind==="gdrive"?t("Google Drive")
-    :kind==="mapped"?t("mapped drive")
-    :t("shared folder");
+    :kind==="mapped"?t("a mapped network drive")
+    :t("a shared network folder");
 }
 function joinWhere(o){
   if(!o) return "";
@@ -364,8 +364,8 @@ function joinInviteParts(){
           +disc,
         acts:[["invite",t("Join this team"),false],["back",t("Cancel")]]};
     }
-    /* draft words: copywriter */
-    const absentSentence=t("This computer has no {KIND} folder in place, so the path below is the one the invitation was written with.").split("{KIND}").join(joinKindWord(o.kind));
+    /* Claudette's words, 2026-10-28 */
+    const absentSentence=t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.").split("{KIND}").join(joinKindWord(o.kind));
     const absent=o.why==="absent"?'<div class="e-join-meta">'+esc(absentSentence)+'</div>':"";
     return {title:title, line:joinWhere(o),
       body:absent+'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'

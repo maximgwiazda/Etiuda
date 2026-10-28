@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 28;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -564,14 +564,87 @@ if (M && J) {
 
   const uiSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
   const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
-  const absentEn = "This computer has no {KIND} folder in place, so the path below is the one the invitation was written with.";
-  const absentPl = "Na tym komputerze nie ma folderu {KIND}, więc ścieżka poniżej jest tą, z którą zapisano zaproszenie.";
-  check(pageSrc.indexOf(absentEn) >= 0 && pageSrc.indexOf("draft words: copywriter") >= 0
+  const absentEn = "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.";
+  const absentPl = "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć.";
+  const thirdEn = "Once this computer has it too, opening the invitation again finds the folder.";
+  const thirdPl = "Gdy to miejsce pojawi się także na tym komputerze, po ponownym otwarciu zaproszenia folder się odnajdzie.";
+  check(pageSrc.indexOf(absentEn) >= 0 && pageSrc.indexOf("/* Claudette's words, 2026-10-28 */") >= 0
+      && pageSrc.indexOf("draft words") < 0 && pageSrc.indexOf(thirdEn) < 0 && pageSrc.indexOf(thirdPl) < 0
       && pageSrc.indexOf("o.why") >= 0 && pageSrc.indexOf("o.how") >= 0 && pageSrc.indexOf("o.kind") >= 0
       && uiSrc.indexOf(absentEn) >= 0 && uiSrc.indexOf(absentPl) >= 0
-      && uiSrc.indexOf("OneDrive dla firm") >= 0 && uiSrc.indexOf("Dysku Google") >= 0 && uiSrc.indexOf("zmapowanego dysku") >= 0,
-    "17b the confirm says when this computer has no folder of that kind, in English and in Polish: "
+      && uiSrc.indexOf(thirdEn) < 0 && uiSrc.indexOf(thirdPl) < 0
+      && uiSrc.indexOf("\"OneDrive\":\"OneDrive\"") >= 0
+      && uiSrc.indexOf("\"OneDrive for Business\":\"OneDrive dla firm\"") >= 0
+      && uiSrc.indexOf("\"Dropbox\":\"Dropbox\"") >= 0
+      && uiSrc.indexOf("\"Google Drive\":\"Dysk Google\"") >= 0
+      && uiSrc.indexOf("\"a mapped network drive\":\"zmapowany dysk sieciowy\"") >= 0
+      && uiSrc.indexOf("\"a shared network folder\":\"udostępniony folder sieciowy\"") >= 0
+      && uiSrc.indexOf("Dysku Google") < 0 && uiSrc.indexOf("zmapowanego dysku") < 0
+      && uiSrc.indexOf("\"mapped drive\"") < 0 && uiSrc.indexOf("\"shared folder\"") < 0,
+    "17b the confirm names the place this computer does not have, in Claudette's words, and does not promise a later open will find it: "
     + (pageSrc.indexOf(absentEn) >= 0 ? "page" : "page missing") + ", " + (uiSrc.indexOf(absentPl) >= 0 ? "Polish" : "Polish missing"));
+
+  /* The third sentence would be true only if a second open read the records again. liveSyncIo keeps its first
+     read on the function, and invitePlacePlan always asks that read, so the folder stays the one from the first open. */
+  const reopenCalls = [];
+  let reopenPhase = "empty";
+  const REG = "C:\\Windows\\System32\\reg.exe";
+  const reopenWant = [
+    ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
+    ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+    ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+    ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
+  ];
+  const reopenSpy = function (file, args, opts) {
+    reopenCalls.push({ file: String(file), args: args, timeout: opts && opts.timeout, hide: opts && opts.windowsHide });
+    if (reopenPhase === "empty") throw new Error("absent");
+    if (String(file).toLowerCase().indexOf("powershell") >= 0) {
+      return JSON.stringify({
+        values: { "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts\\Personal|UserFolder": "D:\\Users\\ben\\OneDrive" },
+        sub: { "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts": ["Personal"] }
+      });
+    }
+    const name = String(args && args[4] || "");
+    if (name !== "UserFolder") return Buffer.from("", "utf8");
+    return Buffer.from([
+      "HKEY_CURRENT_USER\\Software\\Microsoft\\OneDrive\\Accounts\\Personal",
+      "    UserFolder    REG_SZ    D:\\Users\\ben\\OneDrive",
+      ""
+    ].join("\r\n"), "utf8");
+  };
+  let firstPlan = null, secondPlan = null, reopenErr = "", stayed = false;
+  try {
+    const OPEN_DECLS = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =",
+      "function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+      "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
+      "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
+      "function liveSyncIo(", "function invitePlacePlan("];
+    const body = OPEN_DECLS.map(m => sliceDecl(SRC, m)).join("\n");
+    const opened = new Function("crypto", "Buffer", "require", "process", body + "\nreturn { invitePlacePlan };")(
+      crypto, Buffer, function (name) {
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: reopenSpy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
+        throw new Error("require " + name);
+      }, { platform: "win32", env: {} });
+    const parsed = { folder: annaFolder, place: { kind: "onedrive", rel: "Etiuda", root: "OneDrive" } };
+    firstPlan = opened.invitePlacePlan(parsed);
+    const grew = reopenCalls.length;
+    reopenPhase = "present";
+    secondPlan = opened.invitePlacePlan(parsed);
+    stayed = reopenCalls.length === grew;
+  } catch (e) { reopenErr = e && e.message ? e.message : "reopen failed"; }
+  const regOk = reopenCalls.length === reopenWant.length && reopenCalls.every(function (c, i) {
+    return c.file === REG && JSON.stringify(c.args) === JSON.stringify(reopenWant[i])
+      && typeof c.timeout === "number" && c.timeout >= 1 && c.timeout <= 5000 && c.hide === true;
+  });
+  check(!reopenErr && stayed && regOk
+      && firstPlan && firstPlan.why === "absent" && firstPlan.how === "absolute" && firstPlan.path === annaFolder
+      && secondPlan && secondPlan.why === "absent" && secondPlan.how === "absolute" && secondPlan.path === annaFolder
+      && pageSrc.indexOf(thirdEn) < 0 && uiSrc.indexOf(thirdPl) < 0,
+    "17c an invitation opened where the root is absent stays absent when the root appears and the invitation is opened again: "
+    + (reopenErr || (firstPlan ? firstPlan.why + " " + firstPlan.path : "no first"))
+    + " then " + (secondPlan ? secondPlan.why + " " + secondPlan.path : "no second")
+    + ", calls " + reopenCalls.length + (stayed ? " stayed" : " grew") + (regOk ? "" : " not reg"));
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

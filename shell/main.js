@@ -3437,38 +3437,79 @@ function readSyncRecords(io) {
   }
   return out;
 }
-/* One read of the records, kept on the function itself. Off Windows the environment is the whole record: PowerShell is not
-   started. The script's braces are balanced so a slice that counts braces still ends on this function. */
+/* One read of the records, kept on the function itself. The one program is reg.exe at REG_TOOL, through the shell's
+   one child_process handle, and the four queries share the five seconds the policy read is allowed. A root already
+   named in the environment is still asked of the registry, because a second account may live only there. Off Windows
+   the environment is the whole record. Brackets in this function stay balanced so a slice ends on it. */
 function liveSyncIo() {
   if (liveSyncIo.cached) return liveSyncIo.cached;
-  const fsMod = require("node:fs");
-  const child = require("node:child_process");
   const env = process.env || {};
   const values = {};
   const sub = {};
+  const seenChild = {};
+  function regText(buf) {
+    const b = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf == null ? "" : buf));
+    let text;
+    if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) text = b.slice(2).toString("utf16le");
+    else if (b.length >= 4 && b[1] === 0 && b[3] === 0) text = b.toString("utf16le");
+    else text = b.toString("utf8");
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    return text;
+  }
+  function hive(line) {
+    const cu = "HKEY_CURRENT_USER\\", lm = "HKEY_LOCAL_MACHINE\\", hkcu = "HKCU\\", hklm = "HKLM\\";
+    let s = String(line || "").trim();
+    if (s.indexOf(cu) === 0) s = "HKCU:\\" + s.slice(cu.length);
+    else if (s.indexOf(lm) === 0) s = "HKLM:\\" + s.slice(lm.length);
+    else if (s.indexOf(hkcu) === 0) s = "HKCU:\\" + s.slice(hkcu.length);
+    else if (s.indexOf(hklm) === 0) s = "HKLM:\\" + s.slice(hklm.length);
+    return s;
+  }
+  function addChild(parent, name) {
+    if (!parent || !name) return;
+    const childKey = parent + "\n" + name;
+    if (seenChild[childKey]) return;
+    seenChild[childKey] = 1;
+    if (!sub[parent]) sub[parent] = [];
+    sub[parent].push(name);
+  }
+  function absorb(buf) {
+    const lines = regText(buf).replace(/\r/g, "").split("\n");
+    let key = "";
+    const valueLine = /^[ \t]+(\S+)[ \t]+REG_\w+[ \t]+(.*?)[ \t]*$/;
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (!raw.trim()) continue;
+      if (raw.indexOf("ERROR:") === 0) continue;
+      if (raw.indexOf("End of search") === 0) continue;
+      const found = valueLine.exec(raw);
+      if (found && key) {
+        values[key + "|" + found[1]] = found[2];
+        continue;
+      }
+      const mapped = hive(raw);
+      if (mapped.indexOf("HKCU:") === 0 || mapped.indexOf("HKLM:") === 0) {
+        key = mapped;
+        const cut = mapped.lastIndexOf("\\");
+        if (cut > 0) addChild(mapped.slice(0, cut), mapped.slice(cut + 1));
+      }
+    }
+  }
   if (process.platform === "win32") {
-    const script = "$ErrorActionPreference='SilentlyContinue';"
-      + "$vals=@{};$subs=@{};"
-      + "function Add-Val([string]$k,[string]$n){try{$p=Get-ItemProperty -LiteralPath $k -Name $n -ErrorAction Stop;if($null -ne $p.$n){$vals[$k+'|'+$n]=[string]$p.$n}}catch{}};"
-      + "function Add-Sub([string]$k){$names=@();try{$c=@(Get-ChildItem -LiteralPath $k -ErrorAction Stop);foreach($item in $c){$names+=[string]$item.PSChildName}}catch{};$subs[$k]=@($names);return @($names)};"
-      + "$acc='HKCU:\\Software\\Microsoft\\OneDrive\\Accounts';"
-      + "$names=Add-Sub $acc;foreach($n in @($names)){Add-Val ($acc+'\\'+$n) 'UserFolder'};"
-      + "Add-Val 'HKCU:\\Software\\Google\\DriveFS' 'DefaultMountPoint';"
-      + "Add-Val 'HKLM:\\SOFTWARE\\Policies\\Google\\DriveFS' 'DefaultMountPoint';"
-      + "$net='HKCU:\\Network';$letters=Add-Sub $net;foreach($n in @($letters)){Add-Val ($net+'\\'+$n) 'RemotePath'};"
-      + "@{values=$vals;sub=$subs}|ConvertTo-Json -Compress -Depth 6";
-    try {
-      const out = child.execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script],
-        { windowsHide: true, encoding: "utf8", timeout: 20000 });
-      const doc = JSON.parse(String(out || "").replace(/^\ufeff/, "").trim());
-      const rawVals = doc && doc.values && typeof doc.values === "object" ? doc.values : {};
-      const rawSub = doc && doc.sub && typeof doc.sub === "object" ? doc.sub : {};
-      Object.keys(rawVals).forEach(function (k) { values[k] = String(rawVals[k] == null ? "" : rawVals[k]); });
-      Object.keys(rawSub).forEach(function (k) {
-        const v = rawSub[k];
-        sub[k] = Array.isArray(v) ? v.map(function (s) { return String(s); }) : (typeof v === "string" && v ? [v] : []);
-      });
-    } catch (e) { /* no client record; the absolute path remains the fallback */ }
+    const deadline = Date.now() + 5000;
+    const queries = [
+      ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
+      ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+      ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+      ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
+    ];
+    for (let i = 0; i < queries.length; i++) {
+      const left = deadline - Date.now();
+      if (left < 1) break;
+      try {
+        absorb(execFileSync(REG_TOOL, queries[i], { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 }));
+      } catch (e) { /* a missing key is an empty record */ }
+    }
   }
   const io = {
     env: {
@@ -3477,7 +3518,7 @@ function liveSyncIo() {
     },
     reg: function (key, name) { return values[String(key) + "|" + String(name)] || ""; },
     subkeys: function (key) { return sub[String(key)] ? sub[String(key)].slice() : []; },
-    readFile: function (p) { try { return fsMod.readFileSync(p, "utf8"); } catch (e) { return ""; } }
+    readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
   };
   liveSyncIo.cached = io;
   return io;
