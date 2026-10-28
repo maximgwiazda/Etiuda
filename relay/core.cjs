@@ -432,8 +432,8 @@ function createCore(deps) {
     }
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
+    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */
     if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
-    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */
     /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved.
        The lapse is asked after the signature: a key that signed nothing is not told the team has lapsed. */
     const lapsedDevices = lapseGate(true);
@@ -534,9 +534,9 @@ function createCore(deps) {
     let covered = undefined;
     covered = b.wraps; /* plant:S3-wrap-signed */
     const bytes = invitesBytes(rt, b.t, b.add, b.drop, covered);
+    if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */ /* plant:invites-unsigned */
     const seen = "seen:" + sha256(bytes);
     if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
-    if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */
     /* The lapse is asked after the signature, as on the devices route. */
     const lapsedInvites = lapseGate(true);
     if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
@@ -638,6 +638,7 @@ function createCore(deps) {
   }
 
   function tryRow(inv, key) { return "tf:" + inv + ":" + key; }
+  /* Past 64 keys noteTry counts nothing. The try is still refused, and the missing count is harmless only with the 256-bit token. */
   function noteTry(inv, key) {
     const row = tryRow(inv, key), held = store.get(row);
     if (typeof held === "number") { store.put(row, held + 1); return; }
@@ -1154,6 +1155,7 @@ function createCore(deps) {
         const bare = v.spentAt === undefined;
         if (!bare && now - v.spentAt <= KEEP_MS) continue;
         for (const [t] of store.list("tf:" + id + ":")) store.del(t);
+        if (isId(v.key) && store.get("bk:" + v.key) === id) store.del("bk:" + v.key); /* plant:binding-drop */
         store.del(k);
         store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }

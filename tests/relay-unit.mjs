@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 412;
+const EXPECTED = 418;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -340,6 +340,11 @@ async function main() {
     check(refused(devStale.r, "nonce-stale") && devStale.n === 0,
       "934h a devices call more than 5 minutes old, signed with garbage, is refused nonce-stale and the signature is not checked: "
       + (devStale.r.json && devStale.r.json.error) + ", verify " + devStale.n);
+    const unsignedRev = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+      keys: w.devs, rev: w.rev, t: w.R.clock.now, sig: "ab".repeat(64) } });
+    check(refused(unsignedRev, "bad-signature"),
+      "936c a devices call at the stored rev, signed with garbage, is a bad signature: "
+      + (unsignedRev.json && unsignedRev.json.error));
 
     const lead = await sessionOf(w, w.lead), deskS = a.json.session, otherS = b.json.session;
     const up = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
@@ -383,6 +388,15 @@ async function main() {
     check(refused(invStale.r, "nonce-stale") && invStale.n === 0,
       "934i an invitations call more than 5 minutes old, signed with garbage, is refused nonce-stale and the signature is not checked: "
       + (invStale.r.json && invStale.r.json.error) + ", verify " + invStale.n);
+    const unsignedW = await world();
+    const addUnsigned = [{ id: hex(16), hash: sha(hex(32)) }];
+    const tUnsigned = unsignedW.R.clock.now;
+    const storedUnsigned = await invites(unsignedW, addUnsigned, [], { t: tUnsigned });
+    const replayUnsigned = await call(unsignedW.R, "POST", "/relay/v1/t/" + unsignedW.rt + "/invites", { json: {
+      add: addUnsigned, drop: [], t: tUnsigned, sig: "ab".repeat(64) } });
+    check(storedUnsigned.status === 200 && refused(replayUnsigned, "bad-signature"),
+      "936e an invitations call already stored, sent again with a garbage signature, is a bad signature: "
+      + (replayUnsigned.json && replayUnsigned.json.error));
     const add2 = [{ id: hex(16), hash: sha(hex(32)) }];
     const first = await invites(w, add2, []);
     const replayed = await invites(w, add2, []);
@@ -658,6 +672,26 @@ async function main() {
     check(refused(indexedBefore, "not-enrolled") && indexedAfter.status === 200 && indexedAfter.json && indexedAfter.json.invite === true,
       "7p a binding kept before the index existed is not resumed until the next prune, and then it is: "
       + (indexedBefore.json && indexedBefore.json.error) + ", after " + indexedAfter.status);
+    const boundW = await world();
+    const whoOld = keyPair(true), whoNew = keyPair(true);
+    const tokenOld = hex(32), idOld = hex(16), tokenKeep = hex(32), idKeep = hex(16), tokenNew = hex(32), idNew = hex(16);
+    await invites(boundW, [{ id: idOld, hash: sha(tokenOld) }, { id: idKeep, hash: sha(tokenKeep) }], []);
+    const helloOld = await tokenHello(boundW, idOld, tokenOld, null, whoOld);
+    const helloKeep = await tokenHello(boundW, idKeep, tokenKeep, null, whoNew);
+    const boxBound = boundW.R.stores.get(boundW.rt);
+    const spentOld = (boxBound.get("inv:" + idOld) || {}).spentAt;
+    boundW.R.clock.now = spentOld + C.KEEP_MS;
+    await invites(boundW, [{ id: idNew, hash: sha(tokenNew) }], []);
+    const helloNew = await tokenHello(boundW, idNew, tokenNew, null, whoNew);
+    boundW.R.clock.now += 1;
+    const prunedBound = await since(boundW, await sessionOf(boundW, boundW.lead));
+    const oldBk = boxBound.get("bk:" + whoOld.keyId), newBk = boxBound.get("bk:" + whoNew.keyId);
+    check(helloOld.status === 200 && helloKeep.status === 200 && helloNew.status === 200 && prunedBound.status === 200
+      && boxBound.get("inv:" + idOld) === undefined && JSON.stringify(boxBound.get("sp:" + idOld)) === "{\"spent\":true}"
+      && oldBk === undefined && boxBound.get("inv:" + idKeep) === undefined
+      && boxBound.get("inv:" + idNew) !== undefined && newBk === idNew,
+      "936g a pruned invitation takes its bk row with it, and a newer binding of a key whose older invitation is pruned in the same pass stays: "
+      + "old " + (oldBk === undefined ? "gone" : oldBk) + ", newer " + newBk);
 
     /* F9 of the slice 1 review: a spent invitation stays spent past the 30-day keep, whether the lead sends its id again or
        not, and the relay keeps of it only that it was spent. The test architect's f9 reproduction is 7e, its control 7E. */
@@ -1394,6 +1428,37 @@ async function main() {
     });
     check(invFreshLift.turned && invFreshLift.back, "934k lifting plant:invites-fresh checks that garbage signature, and the product file is never written: "
       + invFreshLift.detail + ", sha " + (invFreshLift.back ? "restored" : "differs"));
+    const devUnsigned = await liftCore("plant:devices-unsigned", async () => {
+      const w = await world();
+      const got = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
+        keys: w.devs, rev: w.rev, t: w.R.clock.now, sig: "ab".repeat(64) } });
+      return !refused(got, "bad-signature");
+    });
+    check(devUnsigned.turned && devUnsigned.back, "936d lifting plant:devices-unsigned tells an unsigned devices call the stored rev, and the product file is never written: "
+      + devUnsigned.detail + ", sha " + (devUnsigned.back ? "restored" : "differs"));
+    const invUnsigned = await liftCore("plant:invites-unsigned", async () => {
+      const w = await world();
+      const add = [{ id: hex(16), hash: sha(hex(32)) }];
+      const t = w.R.clock.now;
+      const first = await invites(w, add, [], { t });
+      const again = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+        add, drop: [], t, sig: "ab".repeat(64) } });
+      return first.status === 200 && !refused(again, "bad-signature");
+    });
+    check(invUnsigned.turned && invUnsigned.back, "936f lifting plant:invites-unsigned tells an unsigned repeat that the body was stored, and the product file is never written: "
+      + invUnsigned.detail + ", sha " + (invUnsigned.back ? "restored" : "differs"));
+    const bindingDrop = await liftCore("plant:binding-drop", async () => {
+      const p = await world();
+      const who = keyPair(true);
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      const hello = await tokenHello(p, id, token, null, who);
+      p.R.clock.now += C.KEEP_MS + 1;
+      await since(p, await sessionOf(p, p.lead));
+      return hello.status === 200 && p.R.stores.get(p.rt).get("bk:" + who.keyId) !== undefined;
+    });
+    check(bindingDrop.turned && bindingDrop.back, "936h lifting plant:binding-drop leaves a bk row after its invitation is pruned, and the product file is never written: "
+      + bindingDrop.detail + ", sha " + (bindingDrop.back ? "restored" : "differs"));
     const pageLift = await liftCore("plant:kx-page", async () => {
       const p = await world();
       const pb = p.R.stores.get(p.rt);
@@ -3763,7 +3828,7 @@ async function main() {
     });
     check(renewal.zero === true && workerRenew.turned && workerRenew.back, label() + " lifting plant:worker-renew makes a renewal whose grant does not hold wake"
       + " its object once, which refuses it itself, and the product file is never written: " + how2(workerRenew));
-    const devicesSig = 'if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */';
+    const devicesSig = 'if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */';
     const earlyGate = await swapCore(devicesSig, "if (lapseGate(true)) return lapseGate(true); " + devicesSig, async () => {
       const r = await held(() => silentScene());
       return r.ok === false && typeof r.detail === "string" && r.detail.indexOf("team-lapsed") > -1;
