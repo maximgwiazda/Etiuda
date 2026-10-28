@@ -1,6 +1,7 @@
 /* A share's catalog watch drops events and never says so. Where the folder is not this computer's
  * own disk, a stat on an interval is what notices a change, and an unchanged file is not a reload.
- * A folder on this computer's own disk keeps the watch alone.
+ * A folder on this computer's own disk keeps the watch alone. A read that does not return is one
+ * look: the ask's limit does not start another, and the share is marked not answering.
  *
  *     node tests/catalog-share-stat.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -21,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 5;
+const EXPECTED = 7;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -71,7 +72,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const tail = src.includes("function shareStatTick(")
-    ? "return { watchCatalog, shareStatTick, catalogChanged, SHARE_STAT_MS, get shareStatPrime() { return shareStatPrime; } };"
+    ? "return { watchCatalog, shareStatTick, catalogChanged, SHARE_STAT_MS, get shareStatPrime() { return shareStatPrime; }, get folderDown() { return folderDown; }, liftDown() { folderDown = \"\"; folderSaidDown = \"\"; } };"
     : "return { watchCatalog, catalogChanged };";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", src + "\n" + tail)(
     n => (n === "electron" ? electron : nodeRequire(n)),
@@ -92,6 +93,12 @@ function newDesk(folder) {
 }
 const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
 const pause = ms => new Promise(r => setTimeout(r, ms));
+/* The ask's timer is unref'd, and a stand-in read never settles, so the wait has to keep the loop. */
+const until = p => {
+  let timer = null;
+  const cap = new Promise(r => { timer = setTimeout(() => r("cap"), 8000); });
+  return Promise.race([p, cap]).finally(() => clearTimeout(timer));
+};
 const offers = D => D.sent.filter(a => a[0] === "etiuda:catalog-file").length;
 function silence(from) {
   armed.slice(from).forEach(a => { try { clearInterval(a.id); } catch { /* already cleared */ } });
@@ -236,6 +243,73 @@ try {
         return offers(box.D) === 0;
       });
     check(g.ok, "f2d removing the unchanged guard offers a file that did not change, and restoring it stays quiet"
+      + (g.why ? ": " + g.why.split("\n")[0] : "") + (g.red === false ? " (plant did not fail)" : ""));
+  }
+
+  /* A stand-in readdir that never settles. Three ticks, each waited out, start one read on a held
+     look and three on a look that drops its hold at the ask's limit. */
+  const realReaddir = fsMod.promises.readdir.bind(fsMod.promises);
+  async function hungScene(tag) {
+    const pending = [];
+    let reads = 0;
+    let stubbed = false;
+    let from = 0;
+    try {
+      const box = await watchOf("f2f-" + tag, true);
+      from = box.from;
+      fsMod.promises.readdir = (dir, opts) => {
+        reads++;
+        return new Promise((resolve, reject) => pending.push({ dir: dir, opts: opts, resolve: resolve, reject: reject }));
+      };
+      stubbed = true;
+      const first = await until(box.D.api.shareStatTick(box.D.win));
+      const downLines = box.D.said.filter(s => s.indexOf("did not answer, so it is read as empty until it does") >= 0).length;
+      const marked = box.D.api.folderDown === box.dir && downLines === 1;
+      /* The down flag would hide a flight that had already been dropped, so the later ticks run with it lifted. */
+      box.D.api.liftDown();
+      const second = await until(box.D.api.shareStatTick(box.D.win));
+      const third = await until(box.D.api.shareStatTick(box.D.win));
+      if (first === "cap" || second === "cap" || third === "cap") throw new Error("a tick did not settle");
+      box.D.api.watchCatalog(box.D.win);
+      const mid = reads;
+      const held = pending.splice(0, pending.length);
+      await Promise.all(held.map(p => (p.opts === undefined ? realReaddir(p.dir) : realReaddir(p.dir, p.opts)).then(p.resolve, p.reject)));
+      let again = false;
+      for (let i = 0; i < 50 && !again; i++) {
+        const before = reads;
+        box.D.api.shareStatTick(box.D.win);
+        again = reads === before + 1;
+        if (!again) await pause(20);
+      }
+      const opened = again && box.D.api.folderDown === "";
+      return { one: mid === 1, marked: marked, opened: opened, again: again && reads === mid + 1, mid: mid, reads: reads, downLines: downLines };
+    } finally {
+      if (stubbed) fsMod.promises.readdir = realReaddir;
+      pending.splice(0).forEach(p => { try { p.reject(new Error("dropped")); } catch { /* already settled */ } });
+      silence(from);
+    }
+  }
+
+  /* ---- f2f: three ticks, one read; a timeout marks the share not answering; a settled read may look - */
+  try {
+    const r = await hungScene("live");
+    check(r.one && r.marked && r.opened && r.again,
+      "f2f three ticks and a re-arm start one read while it is still out, the down flag lifted included, a timed-out look marks the share not answering, and once that read returns the next tick may look"
+      + " (mid " + r.mid + ", reads " + r.reads + ", down " + r.marked + "/" + r.downLines + ", open " + r.opened + ", again " + r.again + ")");
+  } catch (e) {
+    check(false, "f2f the leg did not finish: " + (e && e.message || e));
+  }
+
+  /* ---- f2g: removing the hold lets the ask's limit start another read -------------------------------- */
+  {
+    const g = await prove("f2g",
+      "if (shareStatBusy || shareStatOut) return Promise.resolve(false); /* plant:f2-share-hung */",
+      "/* plant:f2-share-hung */",
+      async () => {
+        const r = await hungScene("plant");
+        return r.one && r.marked && r.opened && r.again;
+      });
+    check(g.ok, "f2g removing the hold at the ask's limit starts a read per tick, and restoring it keeps the one read"
       + (g.why ? ": " + g.why.split("\n")[0] : "") + (g.red === false ? " (plant did not fail)" : ""));
   }
 
