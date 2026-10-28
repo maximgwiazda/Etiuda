@@ -5,7 +5,7 @@
  *   node tools/gate-run.mjs area [base]             area run with plant-hold bracket
  *   node tools/gate-run.mjs nightly                 nightly profile outside %TEMP%
  *   node tools/gate-run.mjs wait-lock               wait for machine lock
- *   node tools/gate-run.mjs mark-cause <rec> <c>    mark failure cause
+ *   node tools/gate-run.mjs mark-cause <rec> <cause> <escaped|not-escaped>   mark one red of one run (rule 10)
  *   ETIUDA_RUNS=<folder> node tools/gate-run.mjs …  somewhere else to write them
  *
  * A step whose file carries the alone marker in its first 15 lines runs after every step that
@@ -162,33 +162,51 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
       cause: r.cause || "unread",
     })),
     staleTakenOver: record.staleTakenOver || false,
+    /* Which gates ate the run: one entry per gate run, in order, each with its wall-clock and its verdict. */
+    gates: (record.gates || []).map(g => ({ gate: g.gate, wallMs: g.wallMs, exit: g.exit })),
   };
   fs.appendFileSync(chainsPath, JSON.stringify(line) + "\n", "utf8");
   return line;
 }
 
-function updateCauseInChains(gateName, newCause, chainsPath = CHAINS_PATH) {
-  if (!fs.existsSync(chainsPath)) return;
-  try {
-    const lines = fs.readFileSync(chainsPath, "utf8").split(/\r?\n/).filter(Boolean);
-    const updated = [];
-    for (const raw of lines) {
-      try {
-        const obj = JSON.parse(raw);
-        if (Array.isArray(obj.reds)) {
-          for (const red of obj.reds) {
-            if (red.gate === gateName || (red.cmd && red.cmd.includes(gateName))) {
-              red.cause = newCause;
-            }
-          }
-        }
-        updated.push(JSON.stringify(obj));
-      } catch {
-        updated.push(raw);
-      }
-    }
-    fs.writeFileSync(chainsPath, updated.join("\n") + "\n", "utf8");
-  } catch {}
+/* THE YIELD LEDGER'S MARKS (rule 10). A mark names one red of one run and changes nothing else: it is appended to marks.jsonl
+   beside chains.jsonl, keyed by the run's head, start and gate and the red gate's name, and neither chains.jsonl nor a gate's
+   record is ever rewritten, so no run's line can be lost to a mark made while another run appends. A later mark of the same
+   red supersedes an earlier one; the earlier stays in the file. Asked by the test architect, 2026-10-28 09:38. */
+export const MARK_CAUSES = ["product-catch", "blind-leg", "test-fault", "machine"];
+export const MARK_ESCAPES = ["escaped", "not-escaped"];
+
+export function readMarks(marksPath = MARKS_PATH) {
+  let raw = "";
+  try { raw = fs.readFileSync(marksPath, "utf8"); } catch (e) { return []; }
+  const out = [];
+  for (const l of raw.split(/\r?\n/)) { if (!l) continue; try { out.push(JSON.parse(l)); } catch (e) { /* a torn line is skipped */ } }
+  return out;
+}
+
+/** The latest mark of one red of one chains line ({cause, escaped, marked, ...}), or null while it is unread. */
+export function markOf(chainLine, redGate, marks) {
+  let found = null;
+  for (const m of marks) {
+    if (m.run && m.run.head === chainLine.head && m.run.start === chainLine.start && m.run.gate === chainLine.gate
+      && m.gate === redGate) found = m;
+  }
+  return found;
+}
+
+/** The one chains line a gate's record belongs to: by the run's start where the record carries it, otherwise by its commit and
+    its time inside the run; either way exactly one line, and one that holds this red. */
+export function chainLineOfRecord(rec, chainsPath = CHAINS_PATH) {
+  let raw = "";
+  try { raw = fs.readFileSync(chainsPath, "utf8"); } catch (e) { return { line: null, why: "no chains.jsonl at " + chainsPath }; }
+  const lines = [];
+  for (const l of raw.split(/\r?\n/)) { if (!l) continue; try { lines.push(JSON.parse(l)); } catch (e) { /* a torn line is skipped */ } }
+  const t = Date.parse(rec.time || "");
+  const hits = lines.filter(c => c.head === (rec.commit || "no commit")
+    && (rec.run ? c.start === rec.run : (Number.isFinite(t) && Date.parse(c.start) <= t && t <= Date.parse(c.end)))
+    && Array.isArray(c.reds) && c.reds.some(r => r.gate === rec.gate));
+  if (hits.length === 1) return { line: hits[0], why: "" };
+  return { line: null, why: hits.length ? hits.length + " runs in chains.jsonl could hold this red" : "no run in chains.jsonl holds this red" };
 }
 
 function parseStepsFromScript(pkg, scriptName) {
@@ -508,16 +526,23 @@ async function main() {
   }
 
   if (mode === "mark-cause") {
-    const fileOrId = asked[1];
-    const cause = asked[2] || "unread";
-    if (!fileOrId) refuse("no record file or gate was named", "node tools/gate-run.mjs mark-cause <record.json> <test|product>");
+    const usage = "node tools/gate-run.mjs mark-cause <record.json> <" + MARK_CAUSES.join("|") + "> <" + MARK_ESCAPES.join("|") + ">";
+    const [fileOrId, cause, escape] = asked.slice(1);
+    if (!fileOrId) refuse("no gate record was named", usage);
+    if (!MARK_CAUSES.includes(cause)) refuse("the cause must be one of rule 10's: " + MARK_CAUSES.join(", ") + "; given " + JSON.stringify(cause), usage);
+    if (!MARK_ESCAPES.includes(escape)) refuse("say whether the red escaped: " + MARK_ESCAPES.join(" or ") + "; given " + JSON.stringify(escape), usage);
     const targetFile = fs.existsSync(fileOrId) ? fileOrId : path.join(RUNS, fileOrId);
     if (!fs.existsSync(targetFile)) refuse("record file not found: " + targetFile);
     const rec = JSON.parse(fs.readFileSync(targetFile, "utf8"));
-    rec.cause = cause;
-    fs.writeFileSync(targetFile, JSON.stringify(rec, null, 2) + "\n", "utf8");
-    updateCauseInChains(rec.gate, cause, CHAINS_PATH);
-    console.log("gate-run: marked cause=" + cause + " in " + path.basename(targetFile));
+    if (rec.exit === 0) refuse("the record " + path.basename(targetFile) + " is green; a mark names a red");
+    const { line, why } = chainLineOfRecord(rec, CHAINS_PATH);
+    if (!line) refuse("cannot tell which run this red belongs to: " + why, "name a record of a run that chains.jsonl holds");
+    const mark = { run: { head: line.head, start: line.start, gate: line.gate }, gate: rec.gate, cmd: rec.cmd || "",
+      cause, escaped: escape === "escaped", record: path.basename(targetFile), marked: new Date().toISOString() };
+    try { fs.mkdirSync(path.dirname(MARKS_PATH), { recursive: true }); } catch (e) { /* the append below says so */ }
+    fs.appendFileSync(MARKS_PATH, JSON.stringify(mark) + "\n", "utf8");
+    console.log("gate-run: marked " + rec.gate + " in the " + line.gate + " run of " + line.head + " at " + line.start + " as " + cause
+      + ", " + escape + ", in " + MARKS_PATH);
     process.exit(0);
   }
 
@@ -630,6 +655,7 @@ async function main() {
 
   const totalCounts = { ok: 0, fail: 0, lines: 0 };
   const redsList = [];
+  const gatesList = [];
 
   for (const step of ordered) {
     const now = new Date();
@@ -679,8 +705,10 @@ async function main() {
       commit: COMMIT,
       dirty: DIRTY,
       time: now.toISOString(),
+      run: runStart,
       cause: isRed ? "unread" : undefined,
     };
+    gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit });
 
     const file = path.join(RUNS, line.gate + "-" + stamp(now) + ".json");
     fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
@@ -724,6 +752,7 @@ async function main() {
     counts: totalCounts,
     reds: redsList,
     staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
+    gates: gatesList,
   }, CHAINS_PATH);
 
   if (isHeavy) releaseLock();
@@ -746,6 +775,8 @@ const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..",
    lab. A lab that wrote into the office's file left trees there that the area run's equal-tree rule then reused (the test
    architect's E1, 2026-10-28). */
 export const CHAINS_PATH = path.resolve(process.env.ETIUDA_CHAINS_PATH || path.join(RUNS, "chains.jsonl"));
+/* The yield ledger's marks sit beside the chains they mark, so a lab's marks stay in its lab. */
+export const MARKS_PATH = path.resolve(process.env.ETIUDA_MARKS_PATH || path.join(path.dirname(CHAINS_PATH), "marks.jsonl"));
 if (inside(ROOT, RUNS)) refuse("the runs folder is inside the repository: " + RUNS,
   "these files are a record of runs, not of the tree; put them beside it, not in it");
 fs.mkdirSync(RUNS, { recursive: true });

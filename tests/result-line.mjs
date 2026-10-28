@@ -42,7 +42,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 70;
+const EXPECTED = 73;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -176,8 +176,8 @@ async function main() {
     && typeof dBase.wallMs === "number" && typeof dBase.time === "string"
     && "commit" in dBase && "dirty" in dBase && dBase.refused === ""
     && Object.keys(dBase).sort().join(",")
-       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,gitTree,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
-    "1d the line's shape is the nineteen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
+       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,gitTree,refused,run,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
+    "1d the line's shape is the twenty keys the record reads (`run` the start of the run it belongs to), `refused` empty on a gate that refused nothing, gate named from the step's path: "
     + Object.keys(dBase).sort().join(","));
 
   /* ---- 2. THE DECLARED CHANNEL ------------------------------------------------------------ */
@@ -987,6 +987,11 @@ async function main() {
     "14b a red run records its failing gates in chains.jsonl with cause unread: "
     + JSON.stringify(redEntry));
 
+  const timed = chainLines.map(c => c.gates);
+  check(timed.length === 2 && timed.every(g => Array.isArray(g) && g.length === 1 && Number.isFinite(g[0].wallMs) && g[0].wallMs >= 0)
+    && timed[0][0].exit === 0 && timed[1][0].exit !== 0 && !!redEntry && timed[1][0].gate === redEntry.gate,
+    "14c each chains line says which gates ate its run, one {gate, wallMs, exit} per gate run: " + JSON.stringify(timed));
+
   /* ---- 15. THE NIGHTLY PROFILE (rule 3) --------------------------------------------------- */
   const nightlyLab = makeLab("nightly", {
     failgate: prints(1, 1, "process.exit(1);"),
@@ -1011,14 +1016,53 @@ async function main() {
   const failFile = allowedNightly.files.find(f => {
     try { return JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, f), "utf8")).exit !== 0; } catch (e) { return false; }
   });
-  const markRun = run(nightlyLab, ["mark-cause", path.join(nightlyLab.runs, failFile || "none"), "product"], null, {
+  /* A second run red on the same gate, so a mark of the first has another run's row to leave alone (rule 10, the test
+     architect's criterion of 2026-10-28 09:38: a mark names one red of one run and changes nothing else). */
+  const secondNightly = run(nightlyLab, ["nightly"], null, {
+    ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+    ETIUDA_CHAINS_PATH: chainsNightlyPath,
+    ETIUDA_LOCK_PATH: path.join(nightlyLab.root, "machine.lock"),
+  });
+  const marksPath = path.join(path.dirname(chainsNightlyPath), "marks.jsonl");
+  const bytesOf = (f) => { try { return fs.readFileSync(f, "utf8"); } catch (e) { return null; } };
+  const failPath = path.join(nightlyLab.runs, failFile || "none");
+  const chainsBefore = bytesOf(chainsNightlyPath), recordBefore = bytesOf(failPath);
+  const markRun = run(nightlyLab, ["mark-cause", failPath, "product-catch", "not-escaped"], null, {
     ETIUDA_CHAINS_PATH: chainsNightlyPath,
   });
-  let markedRec = null;
-  try { markedRec = JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, failFile || "none"), "utf8")); } catch (e) {}
-  check(markRun.exit === 0 && !!markedRec && markedRec.cause === "product",
-    "15c mark-cause updates the cause field in the gate record and in chains.jsonl: "
-    + JSON.stringify(markedRec && { gate: markedRec.gate, cause: markedRec.cause }));
+  const marks = (gr.readMarks ? gr.readMarks(marksPath) : []);
+  let nightlyLines = [];
+  try { nightlyLines = fs.readFileSync(chainsNightlyPath, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) {}
+  const failGate = failRecord && failRecord.gate;
+  check(markRun.exit === 0 && marks.length === 1 && marks[0].cause === "product-catch" && marks[0].escaped === false
+    && marks[0].gate === failGate && !!nightlyLines[0] && marks[0].run.start === nightlyLines[0].start
+    && bytesOf(chainsNightlyPath) === chainsBefore && bytesOf(failPath) === recordBefore,
+    "15c mark-cause appends one mark keyed to its run to marks.jsonl and rewrites neither chains.jsonl nor the record: exit "
+    + markRun.exit + ", marks " + JSON.stringify(marks.map(m => ({ gate: m.gate, cause: m.cause, escaped: m.escaped, start: m.run && m.run.start })))
+    + ", chains " + (bytesOf(chainsNightlyPath) === chainsBefore ? "unchanged" : "REWRITTEN")
+    + ", record " + (bytesOf(failPath) === recordBefore ? "unchanged" : "REWRITTEN"));
+
+  const firstMark = nightlyLines[0] ? (gr.markOf ? gr.markOf(nightlyLines[0], failGate, marks) : null) : null;
+  const secondMark = nightlyLines[1] ? (gr.markOf ? gr.markOf(nightlyLines[1], failGate, marks) : "no markOf") : "no second run";
+  check(secondNightly.exit !== 0 && nightlyLines.length === 2 && nightlyLines[0].start !== nightlyLines[1].start
+    && !!firstMark && secondMark === null && nightlyLines[1].reds.every(r => r.cause === "unread"),
+    "15e marking one run's red leaves another run's red of the same gate unread: first "
+    + (firstMark ? firstMark.cause : "unmarked") + ", second " + (secondMark === null ? "unread" : JSON.stringify(secondMark))
+    + ", runs " + nightlyLines.length);
+
+  const marksBefore = bytesOf(marksPath);
+  const leafRun = run(nightlyLab, ["leaf"], null, { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  const greenFile = leafRun.files.find(f => {
+    try { return JSON.parse(fs.readFileSync(path.join(nightlyLab.runs, f), "utf8")).exit === 0; } catch (e) { return false; }
+  });
+  const badCause = run(nightlyLab, ["mark-cause", failPath, "product", "not-escaped"], null, { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  const noEscape = run(nightlyLab, ["mark-cause", failPath, "machine"], null, { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  const green = run(nightlyLab, ["mark-cause", path.join(nightlyLab.runs, greenFile || "none"), "machine", "escaped"], null,
+    { ETIUDA_CHAINS_PATH: chainsNightlyPath });
+  check(badCause.exit === 78 && noEscape.exit === 78 && green.exit === 78 && !!greenFile && bytesOf(marksPath) === marksBefore,
+    "15f a cause outside rule 10's four, a mark that does not say whether the red escaped, and a green record are each refused"
+    + " and write nothing: exits " + [badCause.exit, noEscape.exit, green.exit].join(", ")
+    + ", marks " + (bytesOf(marksPath) === marksBefore ? "unchanged" : "CHANGED"));
 
   const profileLab = makeLab("profile", {
     showprof: 'console.log("PROFILE=" + process.env.ETIUDA_PROFILE);\nprocess.exit(0);\n',
