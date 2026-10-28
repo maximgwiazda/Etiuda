@@ -1,8 +1,9 @@
 /* The relay Worker and its RelayTeam object, booted in workerd through miniflare, from the staging
  * block of relay/wrangler.toml: the same bindings, prefix, compatibility date and flags, with storage
  * and R2 held in memory. An empty create is refused, a create and a hello under the test root succeed,
- * and a revoked service key is refused. A planted stub call is the empty create again. --worker and
- * --team run the same requests against those two files.
+ * a revoked service key is refused, and workerd's scheduler sweeps an unpaid trial team while
+ * preserving a paid team. Planted runs prove stub faults, DROP TABLE removal, sweep wipe omission,
+ * and early paid sweep. --worker and --team run the same requests against those two files.
  *
  *     node tests/relay-workerd.mjs
  *     node tests/relay-workerd.mjs --worker <worker.mjs> --team <team.cjs>
@@ -41,7 +42,7 @@ if ((workerArg == null) !== (teamArg == null)) {
   process.exit(78);
 }
 const planted = workerArg == null;
-const EXPECTED = planted ? 6 : 5;
+const EXPECTED = planted ? 10 : 6;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -64,6 +65,13 @@ function keyPair() {
   return { keyId: pub, pub, privateKey: p.privateKey };
 }
 const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
+
+function metaOf(blob) {
+  return {
+    v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId,
+    counter: blob.counter, del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place,
+  };
+}
 
 /* The revocation document the Worker accepts, signed by the test root over the delegated key. */
 function revokedText() {
@@ -245,7 +253,9 @@ function relImport(fromDir, absTarget) {
 }
 
 /* The leg entry. The test root is lent where production passes none, the same seam as the in-process legs.
-   This workerd binary has no jurisdiction, so the leg answers that call as the stand-in does. */
+   This workerd binary has no jurisdiction, so the leg answers that call as the stand-in does.
+   SubRelayTeam re-exports RelayTeam with test routes /__test/age and /__test/state to inspect SQLite state
+   and trigger workerd's scheduler alarm without modifying deployed files. */
 function entrySource(coreImport, workerImport, pub, bindingName, jurisdiction) {
   return [
     "import core from " + JSON.stringify(coreImport) + ";",
@@ -260,17 +270,59 @@ function entrySource(coreImport, workerImport, pub, bindingName, jurisdiction) {
     "const worker = routeWith(roots);",
     "const bindingName = " + JSON.stringify(bindingName) + ";",
     "const jurisdiction = " + JSON.stringify(jurisdiction) + ";",
+    "",
+    "export class SubRelayTeam extends RelayTeam {",
+    "  constructor(ctx, env) {",
+    "    super(ctx, env);",
+    "    this.storage = ctx.storage;",
+    "  }",
+    "  async fetch(request) {",
+    "    const url = new URL(request.url);",
+    "    if (request.method === 'POST' && url.pathname === '/__test/age') {",
+    "      const body = await request.json();",
+    "      const row = this.storage.sql.exec(\"SELECT v FROM kv WHERE k = 'team'\").toArray()[0];",
+    "      if (row) {",
+    "        const team = JSON.parse(row.v);",
+    "        Object.assign(team, body);",
+    "        if (body.paid === false) {",
+    "          team.paid = false;",
+    "          delete team.paidUntil;",
+    "        }",
+    "        this.storage.sql.exec(\"UPDATE kv SET v = ? WHERE k = 'team'\", JSON.stringify(team));",
+    "      }",
+    "      await this.storage.setAlarm(Date.now());",
+    "      return new Response(JSON.stringify({ ok: true, armed: await this.storage.getAlarm() }));",
+    "    }",
+    "    if (request.method === 'GET' && url.pathname === '/__test/state') {",
+    "      const tables = this.storage.sql.exec(\"SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'kv'\").toArray();",
+    "      const hasTable = tables.length > 0;",
+    "      const rows = hasTable ? this.storage.sql.exec('SELECT k FROM kv').toArray().map(r => r.k) : [];",
+    "      const swept = rows.length === 1 && rows[0] === 'swept';",
+    "      const hasTeam = rows.indexOf('team') > -1;",
+    "      return new Response(JSON.stringify({",
+    "        kv: hasTable && !swept,",
+    "        master: hasTable,",
+    "        swept,",
+    "        team: hasTeam,",
+    "        rows,",
+    "        alarm: await this.storage.getAlarm(),",
+    "      }));",
+    "    }",
+    "    return super.fetch(request);",
+    "  }",
+    "}",
+    "",
     "function teamsOf(real) {",
     "  return { jurisdiction(j) { return j === jurisdiction ? real : null; } };",
     "}",
-    "export { RelayTeam };",
+    "export { SubRelayTeam as RelayTeam };",
     "export default {",
     "  async fetch(request, env) {",
     "    const next = new Proxy(env, {",
     "      get(target, prop) {",
     "        if (prop === bindingName) return teamsOf(target[prop]);",
     "        const value = target[prop];",
-    "        return typeof value === \"function\" ? value.bind(target) : value;",
+    "        return typeof value === 'function' ? value.bind(target) : value;",
     "      },",
     "    });",
     "    return worker.fetch(request, next);",
@@ -325,6 +377,129 @@ async function scene(mf, prefix, r2Name) {
   return { listed, empty, created, hello, session, delegated, rt };
 }
 
+async function sweepScene(mf, prefix, r2Name, bindingName) {
+  const bucket = await mf.getR2Bucket(r2Name);
+  const now = Date.now();
+
+  // 1. Team T: unpaid trial
+  const leadT = keyPair();
+  const rtT = crypto.randomBytes(16).toString("hex");
+  const createBodyT = kit.createBody(rtT, leadT, now, bytes => signHex(leadT, bytes), {
+    grantOpts: { fields: { paid: false, until: now + 14 * 24 * 60 * 60 * 1000 } },
+  });
+  const resCreateT = await post(mf, prefix + "teams", JSON.stringify(createBodyT));
+
+  const helloT = await post(mf, prefix + "t/" + rtT + "/hello", "{}");
+  let sessionT = null;
+  if (helloT.json && typeof helloT.json.challenge === "string") {
+    const sigT = signHex(leadT, core.helloBytes(rtT, helloT.json.challenge, leadT.keyId));
+    sessionT = await post(mf, prefix + "t/" + rtT + "/session", JSON.stringify({ challenge: helloT.json.challenge, key: leadT.keyId, sig: sigT }));
+  }
+
+  const blobT = B.seal({
+    relayTeamId: rtT, epoch: 1, teamKey: crypto.randomBytes(32),
+    writer: { keyId: leadT.keyId, privateKey: leadT.privateKey },
+    path: "doc-t.txt", body: "trial blob", counter: 1, place: "root", kind: "file",
+  });
+  const putResT = await mf.dispatchFetch("https://relay.invalid" + prefix + "t/" + rtT + "/b/" + blobT.id, {
+    method: "PUT",
+    headers: {
+      authorization: "Bearer " + (sessionT && sessionT.json ? sessionT.json.session : ""),
+      "etiuda-blob": Buffer.from(JSON.stringify(metaOf(blobT))).toString("base64url"),
+    },
+    body: blobT.ciphertext, duplex: "half",
+  });
+
+  // 2. Team P: paid
+  const leadP = keyPair();
+  const rtP = crypto.randomBytes(16).toString("hex");
+  const createBodyP = kit.createBody(rtP, leadP, now, bytes => signHex(leadP, bytes), {
+    grantOpts: { fields: { paid: true, until: now + 30 * 24 * 60 * 60 * 1000 } },
+  });
+  const resCreateP = await post(mf, prefix + "teams", JSON.stringify(createBodyP));
+
+  const helloP = await post(mf, prefix + "t/" + rtP + "/hello", "{}");
+  let sessionP = null;
+  if (helloP.json && typeof helloP.json.challenge === "string") {
+    const sigP = signHex(leadP, core.helloBytes(rtP, helloP.json.challenge, leadP.keyId));
+    sessionP = await post(mf, prefix + "t/" + rtP + "/session", JSON.stringify({ challenge: helloP.json.challenge, key: leadP.keyId, sig: sigP }));
+  }
+
+  const blobP = B.seal({
+    relayTeamId: rtP, epoch: 1, teamKey: crypto.randomBytes(32),
+    writer: { keyId: leadP.keyId, privateKey: leadP.privateKey },
+    path: "doc-p.txt", body: "paid blob", counter: 1, place: "root", kind: "file",
+  });
+  const putResP = await mf.dispatchFetch("https://relay.invalid" + prefix + "t/" + rtP + "/b/" + blobP.id, {
+    method: "PUT",
+    headers: {
+      authorization: "Bearer " + (sessionP && sessionP.json ? sessionP.json.session : ""),
+      "etiuda-blob": Buffer.from(JSON.stringify(metaOf(blobP))).toString("base64url"),
+    },
+    body: blobP.ciphertext, duplex: "half",
+  });
+
+  const listBefore = await bucket.list();
+  const r2TBefore = listBefore.objects.filter(o => o.key.startsWith(rtT + "/"));
+  const r2PBefore = listBefore.objects.filter(o => o.key.startsWith(rtP + "/"));
+
+  // Stubs for aging and state inspection
+  const ns = await mf.getDurableObjectNamespace(bindingName);
+  const stubT = ns.get(ns.idFromName(rtT));
+  const stubP = ns.get(ns.idFromName(rtP));
+
+  // Age T beyond until + TRIAL_KEEP_MS (31 days ago)
+  await stubT.fetch("https://do/__test/age", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ until: now - 31 * 24 * 60 * 60 * 1000, paid: false }),
+  });
+
+  // Age P into first 30 days after end (5 days ago)
+  await stubP.fetch("https://do/__test/age", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ until: now - 5 * 24 * 60 * 60 * 1000, paid: true }),
+  });
+
+  // Wait for workerd scheduler to fire T's alarm (poll up to 10s)
+  let stateT = null;
+  const startPoll = Date.now();
+  while (Date.now() - startPoll < 10000) {
+    await new Promise(r => setTimeout(r, 50));
+    const res = await stubT.fetch("https://do/__test/state");
+    stateT = await res.json();
+    if (stateT.swept) break;
+  }
+
+  // Poll P state: wait until P's alarm has rung or swept
+  let stateP = null;
+  const startPollP = Date.now();
+  while (Date.now() - startPollP < 5000) {
+    await new Promise(r => setTimeout(r, 50));
+    stateP = await (await stubP.fetch("https://do/__test/state")).json();
+    if (stateP.swept || (stateP.alarm && stateP.alarm > Date.now() + 1000000)) break;
+  }
+
+  const listAfter = await bucket.list();
+  const r2TAfter = listAfter.objects.filter(o => o.key.startsWith(rtT + "/"));
+  const r2PAfter = listAfter.objects.filter(o => o.key.startsWith(rtP + "/"));
+
+  // Check session on P still opens
+  const helloP2 = await post(mf, prefix + "t/" + rtP + "/hello", "{}");
+  let sessionP2 = null;
+  if (helloP2.json && typeof helloP2.json.challenge === "string") {
+    const sigP2 = signHex(leadP, core.helloBytes(rtP, helloP2.json.challenge, leadP.keyId));
+    sessionP2 = await post(mf, prefix + "t/" + rtP + "/session", JSON.stringify({ challenge: helloP2.json.challenge, key: leadP.keyId, sig: sigP2 }));
+  }
+
+  return {
+    putT: putResT.status, r2TBefore: r2TBefore.length,
+    putP: putResP.status, r2PBefore: r2PBefore.length,
+    stateT, r2TAfter: r2TAfter.length,
+    stateP, r2PAfter: r2PAfter.length,
+    sessionP2: sessionP2 && sessionP2.status === 200,
+  };
+}
+
 async function boot(scratch, scriptPath, cfg, bindings) {
   const durableObjects = {};
   for (const row of cfg.bindings) {
@@ -363,7 +538,11 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "relay-workerd-mf-"));
 console.log("# scratch " + scratch);
 console.log("# mode " + (planted ? "product" : "worker"));
 
-let sceneResult = null, sceneError = "", plantResult = null, plantNote = "", booted = false;
+let sceneResult = null, sceneError = "", sweepResult = null;
+let plantResult = null, plantNote = "", booted = false;
+let sweepPlant1Result = null, sweepPlant1Restored = false, plant1Turned = false;
+let sweepPlant2Result = null, sweepPlant2Restored = false, plant2Turned = false;
+let sweepPlant3Result = null, sweepPlant3Restored = false, plant3Turned = false;
 let dateRan = "", flagsNote = "", prefixNote = "", classNote = "", bindingNote = "", r2Note = "";
 
 try {
@@ -413,6 +592,7 @@ try {
     try {
       mf = await boot(scratch, entryPath, cfg, bindings);
       sceneResult = await scene(mf, prefix, r2Name);
+      sweepResult = await sweepScene(mf, prefix, r2Name, bindingName);
       booted = true;
     } catch (e) {
       sceneError = e && e.stack ? e.stack : String(e);
@@ -437,6 +617,66 @@ try {
         } finally {
           if (mf2) await mf2.dispose();
         }
+      }
+
+      // Sweep Plant 1 (Plant 977n): DROP TABLE kv removed
+      const scratchTeam = path.join(scratch, "relay", "team.cjs");
+      const origTeamText = fs.readFileSync(scratchTeam, "utf8");
+      const origTeamSha = shaOf(scratchTeam);
+      const dropLine = 'if (has()) sql.exec("DROP TABLE kv");';
+      if (origTeamText.indexOf(dropLine) >= 0) {
+        fs.writeFileSync(scratchTeam, origTeamText.replace(dropLine, 'if (has()) { /* removed */ }'));
+        let mfPlant1 = null;
+        try {
+          mfPlant1 = await boot(scratch, entryPath, cfg, bindings);
+          sweepPlant1Result = await sweepScene(mfPlant1, prefix, r2Name, bindingName);
+        } catch (e) {
+          sweepPlant1Result = { error: String(e) };
+        } finally {
+          if (mfPlant1) await mfPlant1.dispose();
+        }
+        plant1Turned = !!sweepPlant1Result && !!sweepPlant1Result.stateT && sweepPlant1Result.stateT.kv === true && sweepPlant1Result.stateT.swept === false;
+        fs.writeFileSync(scratchTeam, origTeamText);
+        sweepPlant1Restored = shaOf(scratchTeam) === origTeamSha;
+      }
+
+      // Sweep Plant 2: c.wipe(left) lifted
+      const wipeLine = 'c.wipe(left); /* plant:sweep-wipe */';
+      if (origTeamText.indexOf(wipeLine) >= 0) {
+        fs.writeFileSync(scratchTeam, origTeamText.replace(wipeLine, '/* c.wipe lifted */'));
+        let mfPlant2 = null;
+        try {
+          mfPlant2 = await boot(scratch, entryPath, cfg, bindings);
+          sweepPlant2Result = await sweepScene(mfPlant2, prefix, r2Name, bindingName);
+        } catch (e) {
+          sweepPlant2Result = { error: String(e) };
+        } finally {
+          if (mfPlant2) await mfPlant2.dispose();
+        }
+        plant2Turned = !!sweepPlant2Result && !!sweepPlant2Result.stateT && sweepPlant2Result.stateT.kv === true && sweepPlant2Result.stateT.swept === false;
+        fs.writeFileSync(scratchTeam, origTeamText);
+        sweepPlant2Restored = shaOf(scratchTeam) === origTeamSha;
+      }
+
+      // Sweep Plant 3: lapseOf sweeps paid team early
+      const scratchCore = path.join(scratch, "relay", "core.cjs");
+      const origCoreText = fs.readFileSync(scratchCore, "utf8");
+      const origCoreSha = shaOf(scratchCore);
+      const plantSite = "p = paidEnd(team); /* plant:lapse-trial */";
+      if (origCoreText.indexOf(plantSite) >= 0) {
+        fs.writeFileSync(scratchCore, origCoreText.replace(plantSite, plantSite + '\n  if (p !== null) return { state: "gone", until: u, readOnly: null, swept: now };'));
+        let mfPlant3 = null;
+        try {
+          mfPlant3 = await boot(scratch, entryPath, cfg, bindings);
+          sweepPlant3Result = await sweepScene(mfPlant3, prefix, r2Name, bindingName);
+        } catch (e) {
+          sweepPlant3Result = { error: String(e) };
+        } finally {
+          if (mfPlant3) await mfPlant3.dispose();
+        }
+        plant3Turned = !!sweepPlant3Result && sweepPlant3Result.r2PAfter === 0 && !!sweepPlant3Result.stateP && sweepPlant3Result.stateP.kv === false;
+        fs.writeFileSync(scratchCore, origCoreText);
+        sweepPlant3Restored = shaOf(scratchCore) === origCoreSha;
       }
     }
   }
@@ -468,9 +708,39 @@ try {
     "984f ran on the staging compatibility date " + dateRan + " supported " + supportedCompatibilityDate
     + " flags " + flagsNote + " prefix " + prefixNote + " class " + classNote + " binding " + bindingNote
     + " r2 " + r2Note + " bytes " + (bytesSame() ? "same" : "CHANGED") + " imports " + imports.length + " climbing " + JSON.stringify(climbs));
+
+  const okT = !!sweepResult && !!sweepResult.stateT && !sweepResult.stateT.kv && sweepResult.stateT.swept
+    && sweepResult.r2TBefore === 1 && sweepResult.r2TAfter === 0 && sweepResult.putT === 200;
+  const okP = !!sweepResult && !!sweepResult.stateP && sweepResult.stateP.kv && sweepResult.stateP.rows.length > 0
+    && sweepResult.r2PBefore === 1 && sweepResult.r2PAfter === 1 && sweepResult.putP === 200 && sweepResult.sessionP2;
+  check(okT && okP,
+    "984g workerd scheduler sweeps trial team T and preserves paid team P: T(kv="
+    + (sweepResult && sweepResult.stateT ? sweepResult.stateT.kv : "none") + ", r2="
+    + (sweepResult ? sweepResult.r2TAfter : "none") + ") P(kv="
+    + (sweepResult && sweepResult.stateP ? sweepResult.stateP.kv : "none") + ", r2="
+    + (sweepResult ? sweepResult.r2PAfter : "none") + ", session="
+    + (sweepResult ? sweepResult.sessionP2 : "none") + ")");
+
+  if (planted) {
+    check(plant1Turned && sweepPlant1Restored,
+      "984h plant 977n: removing DROP TABLE kv leaves team in sqlite and fails the sweep check: red="
+      + plant1Turned + " restored=" + sweepPlant1Restored);
+    check(plant2Turned && sweepPlant2Restored,
+      "984i plant sweep-wipe: lifting c.wipe leaves sqlite rows untouched and fails the sweep check: red="
+      + plant2Turned + " restored=" + sweepPlant2Restored);
+    check(plant3Turned && sweepPlant3Restored,
+      "984j plant paid-early: sweeping a paid team early wipes its sqlite table and empties R2: red="
+      + plant3Turned + " restored=" + sweepPlant3Restored);
+  }
 } catch (e) {
   console.log("SUITE DID NOT COMPLETE: " + (e && e.stack ? e.stack : e));
   process.exit(78);
+} finally {
+  try {
+    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (e) {
+    console.log("# scratch cleanup: " + (e && e.message ? e.message : e));
+  }
 }
 
 console.log("# elapsed ms " + (Date.now() - started));
