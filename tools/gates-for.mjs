@@ -109,6 +109,19 @@ export const SHARED = [
 export const GATE_TOOLS = ["tools/gate-run.mjs", "tools/gates-for.mjs", "tools/child-cap.mjs", "tests/result-line.mjs",
   "tests/gates-for.mjs", "tests/child-cap.mjs"];
 
+/* A diff that adds, removes or renames a file under tests/ changes what the chains must list, so it selects chain-split,
+   whatever else the diff selects (the test architect's edge, 2026-10-28). A file counts as added or removed where its
+   presence at the base and on disk differ; a base that cannot be read selects it for any test file. */
+export function testsListChanged(root, files, base = "main") {
+  const list = (files || []).map(f => String(f).replace(/\\/g, "/")).filter(f => f.startsWith("tests/"));
+  if (!list.length) return false;
+  const ref = String(base || "main").split("...")[0] || "main";
+  let atBase;
+  try { atBase = new Set(git(root, ["ls-tree", "-r", "--name-only", "-z", ref, "--", "tests"]).split("\0").filter(Boolean)); }
+  catch (e) { return true; }
+  return list.some(f => atBase.has(f) !== fs.existsSync(path.join(root, f)));
+}
+
 export function isGateToolsOnly(files) {
   const list = (files || []).map(f => String(f).replace(/\\/g, "/"));
   return list.length > 0 && list.every(f => GATE_TOOLS.includes(f));
