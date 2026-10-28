@@ -459,8 +459,11 @@ function joinParts(){
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
-  if(j && j.state==="refused") return {title:t("The lead turned the request down"),
-    line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
+  if(j && j.state==="refused"){
+    if(j.invite && j.invite.relay) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]}; /* plant:relay-refused-card */
+    return {title:t("The lead turned the request down"),
+      line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
+  }
   if(j) return {title:t("Waiting for the lead to open the request"),
     line:t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};

@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 125;
+const EXPECTED = 127;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -2235,6 +2235,75 @@ try {
     const same = fs.readFileSync(mainPath).equals(before);
     check(turned && same, "15dr lifting plant:invite-spent-kept leaves the request not withdrawn when no channel is live (FAIL 15dq spent token in mirror withdraws request): "
       + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+
+  // 15ds: the refused desk's card offers Cancel the request and says no Ask again on a relay join
+  const REFUSED_RELAY_EN = "To join, a new invitation from the team's lead is needed.";
+  const REFUSED_RELAY_PL = "Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
+  const REFUSED_FOLDER_EN = "Asking again sends a new request.";
+  const REFUSED_FOLDER_PL = "Ponowna prośba trafi do lidera jako nowa.";
+  const REFUSED_TITLE_EN = "The lead turned the request down";
+  const REFUSED_TITLE_PL = "Lider zespołu odrzucił prośbę";
+  const refusedRelayDesk = await relayDesk("h35-refused-card", {}, {
+    teamJoin: {
+      team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      refused: true,
+      invite: {
+        id: relayHex.id, proof: relayHex.h64,
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", inv: relayHex.h32, token: sealText("token"), seal: sealText(seal32) }
+      }
+    }
+  });
+  const refusedRelayHtml = await bothLang(refusedRelayDesk);
+  const relayRefusedSaid = cardSaid(refusedRelayHtml, REFUSED_RELAY_EN, REFUSED_RELAY_PL)
+    && refusedRelayHtml.en.indexOf(REFUSED_TITLE_EN) >= 0 && refusedRelayHtml.pl.indexOf(REFUSED_TITLE_PL) >= 0
+    && refusedRelayHtml.en.indexOf('data-join="cancel"') >= 0 && refusedRelayHtml.en.indexOf('data-join="load"') >= 0
+    && refusedRelayHtml.en.indexOf('data-join="ask"') < 0 && refusedRelayHtml.en.indexOf(escPage(REFUSED_FOLDER_EN)) < 0;
+
+  const folderRefusedDesk = await deskWith("h35-folder-refused", folder("folder-refused-own"), {
+    teamJoin: { team: TEAM, file: "lamps.ec", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia", refused: true }
+  });
+  const folderRefusedHtml = await bothLang(folderRefusedDesk);
+  const folderRefusedSaid = cardSaid(folderRefusedHtml, REFUSED_FOLDER_EN, REFUSED_FOLDER_PL)
+    && folderRefusedHtml.en.indexOf(REFUSED_TITLE_EN) >= 0 && folderRefusedHtml.pl.indexOf(REFUSED_TITLE_PL) >= 0
+    && folderRefusedHtml.en.indexOf('data-join="ask"') >= 0 && folderRefusedHtml.en.indexOf('data-join="load"') >= 0
+    && folderRefusedHtml.en.indexOf('data-join="cancel"') < 0 && folderRefusedHtml.en.indexOf(escPage(REFUSED_RELAY_EN)) < 0;
+
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(relayRefusedSaid && folderRefusedSaid,
+    "15ds the refused desk's card offers Cancel the request and says no Ask again on a relay join, while a folder join stays unchanged: relay "
+    + (relayRefusedSaid ? "said" : "not said") + ", folder " + (folderRefusedSaid ? "held" : "changed"));
+
+  // 15dt: lifting plant:relay-refused-card offers Ask again and says no Cancel on a relay join
+  {
+    if (PLANTS_OFF) {
+      skip("15dt lifting plant:relay-refused-card offers Ask again and says no Cancel on a relay join");
+    } else {
+      const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+      const before = fs.readFileSync(joinPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:relay-refused-card") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const dir = fs.mkdtempSync(path.join(LAB, "relay-refused-plant-"));
+        const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+        fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+        const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+        window.E_HOST = hostOver(refusedRelayDesk);
+        planted.wireTeamJoin();
+        await new Promise(r => setTimeout(r, 30));
+        ST.lsSet("eUiLang", "en");
+        const html = planted.teamJoinEmptyHtml();
+        turned = html.indexOf(escPage(REFUSED_RELAY_EN)) < 0 && html.indexOf('data-join="cancel"') < 0 && html.indexOf('data-join="ask"') >= 0;
+        detail = turned ? "relay refused fell through to Ask again" : "relay refused card still active";
+      }
+      const same = fs.readFileSync(joinPath).equals(before);
+      if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+      check(turned && same, "15dt lifting plant:relay-refused-card offers Ask again and says no Cancel on a relay join (FAIL 15ds: relay refused card not said): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
   }
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
