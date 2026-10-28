@@ -17,6 +17,9 @@ const TOKEN_TRIES = 20;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const CHALLENGES_MAX = 256;
+/* The shortest ciphertext a padded seal can be, and the most live blobs one team may hold. */
+const BLOB_MIN = B.PAD_FLOOR + B.TAG_BYTES;
+const BLOBS_MAX = 4096;
 const SESSIONS_MAX = 1024;
 const KEYS_MAX = 1000;
 const SINCE_MAX = 1000;
@@ -946,6 +949,13 @@ function createCore(deps) {
     const a = admit(rt, token, m, pathId);
     if (!a.ok) return a;
     if (ct.length > a.max) return no("blob-size"); /* plant:put-size */
+    /* An empty withdrawal is the one ciphertext the floor does not bind. The product's withdrawal is a padded deletion, so it is not empty. */
+    if (!(a.withdraw && ct.length === 0) && ct.length < BLOB_MIN) return no("blob-size"); /* plant:blob-min */
+    const prior = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
+    const adding = prior ? 0 : 1;
+    const heldCount = store.get("blobs");
+    const liveCount = typeof heldCount === "number" ? heldCount : store.list("blob:").length;
+    if (liveCount + adding > BLOBS_MAX) return no("team-size"); /* plant:blob-cap */
     const aad = B.aadOf({ relayTeamId: rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter });
     if (!aad || !B.verifyUpload(a.pub, aad, ct, m.sig)) return no("bad-signature"); /* plant:put-sig */
     if (!B.counterFresh(store.get("counters") || {}, m.writer, m.epoch, m.counter).ok) return no("replay-counter"); /* plant:put-counter */
@@ -1003,6 +1013,7 @@ function createCore(deps) {
       if (j.a.invite) rec.pub = j.a.pub;
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
+      noteBlobs(1);
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
@@ -1011,10 +1022,18 @@ function createCore(deps) {
       uploadedInv: j.a.invite && !j.a.withdraw ? j.a.invite : null };
   }
 
+  /* Where the count row is missing, the blob rows after this change are the count. */
+  function noteBlobs(delta) {
+    const held = store.get("blobs");
+    if (typeof held !== "number") store.put("blobs", store.list("blob:").length);
+    else store.put("blobs", held + delta); /* plant:blob-note */
+  }
+
   /* A blob no longer served: its bytes given back, its object for the caller to delete (its orphan row standing until the delete
      is made), and its id kept 30 days as a tombstone, so a fetch says why and a later upload cannot reuse it. */
   function bury(m, why, now, drop) {
     store.del("blob:" + m.id);
+    noteBlobs(-1);
     store.del("seq:" + pad(m.seq));
     if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
@@ -1027,6 +1046,7 @@ function createCore(deps) {
   /* A blob no longer served and kept as no tombstone, so its id may be written again: the lead's answer to a request withdrawn. */
   function unserve(m, drop) {
     store.del("blob:" + m.id);
+    noteBlobs(-1);
     store.del("seq:" + pad(m.seq));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("orphan:" + m.obj, 1);
@@ -1052,6 +1072,7 @@ function createCore(deps) {
         store.put(k, SPENT); /* plant:spent-kept */
       }
       for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
+      store.put("blobs", store.list("blob:").length); /* plant:blob-recount */
     });
     return drop;
   }
@@ -1122,7 +1143,7 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX,
+  CHALLENGE_MS, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, CHALLENGES_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

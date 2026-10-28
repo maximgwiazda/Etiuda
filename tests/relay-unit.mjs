@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 360;
+const EXPECTED = 367;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -4191,6 +4191,164 @@ async function main() {
     check(renewMade.ok && renewLift.turned && renewLift.back,
       "983l lifting plant:renew-made leaves a team with no made property unstamped on renew, which turns 983k red, and the product file is never written: "
       + renewLiftLine + "; " + renewLift.detail);
+  }
+
+  /* ---- 934: the smallest ciphertext and the live-blob cap (board 934 (7)) ---- */
+  {
+    const BLOB_MIN = B.PAD_FLOOR + B.TAG_BYTES;
+    function census(w) {
+      const st = w.R.stores.get(w.rt);
+      const rows = st.list("blob:").length;
+      return { rows, n: st.get("blobs"), ok: st.get("blobs") === rows };
+    }
+    /* A ciphertext of `len` bytes signed over its own associated data, so the signature would hold and only the size can refuse it. */
+    function signedCt(w, writer, len, extra) {
+      const o = extra || {};
+      const id = o.id || hex(16);
+      const counter = o.counter;
+      const supersedes = o.supersedes == null ? null : o.supersedes;
+      const epoch = o.epoch || 1;
+      const place = o.place || (writer === w.lead ? "root" : "desk:" + w.deskId);
+      const fields = { relayTeamId: w.rt, epoch, id, supersedes, writerKeyId: writer.keyId, counter };
+      const ciphertext = Buffer.alloc(len, 9);
+      const signature = B.signUpload(writer.privateKey, B.aadOf(fields), ciphertext);
+      return { id, epoch, supersedes, writerKeyId: writer.keyId, counter, deletion: false, signature, nonce: hex(12), ciphertext, place };
+    }
+    function seedBlobs(w, n, writer) {
+      const st = w.R.stores.get(w.rt);
+      const ids = [];
+      for (let i = 0; i < n; i++) {
+        const id = hex(16);
+        ids.push(id);
+        st.put("blob:" + id, { id, supersedes: null, epoch: 1, writer: writer.keyId, counter: 1, del: false,
+          size: 0, sig: hex(64), nonce: hex(12), seq: 1, at: w.R.clock.now, obj: w.rt + "/" + id + "/seed" });
+      }
+      return ids;
+    }
+    const w = await world();
+    const lead = await sessionOf(w, w.lead);
+    const short = await put(w, lead, signedCt(w, w.lead, BLOB_MIN - 1, { counter: 1 }));
+    const exact = sealAs(w, w.lead, "floor.ec", 1);
+    const taken = await put(w, lead, exact);
+    const said = r => (r.json && r.json.error) || String(r.status);
+    check(BLOB_MIN === 4112 && C.BLOB_MIN === 4112 && C.BLOBS_MAX === 4096 && refused(short, "blob-size") && short.status === 413
+      && taken.status === 200 && exact.ciphertext.length >= 4112 && census(w).ok && census(w).rows === 1,
+      "934a a ciphertext of 4111 bytes is refused blob-size before it can be kept, and one of 4112 is taken: "
+      + said(short) + " " + short.status + ", taken " + taken.status + " len " + exact.ciphertext.length
+      + ", rows " + census(w).rows + " count " + census(w).n);
+
+    const cap = await world();
+    const desk = await sessionOf(cap, cap.desk);
+    const ids = seedBlobs(cap, 4096, cap.desk);
+    const before = census(cap);
+    const extra = await put(cap, desk, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/over.ec", 1));
+    const unwritten = census(cap);
+    await since(cap, desk);
+    const migrated = census(cap);
+    const over = await put(cap, desk, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/next.ec", 2, { supersedes: ids[0] }));
+    const held = census(cap);
+    const del = await put(cap, desk, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/gone.ec", 3, { supersedes: ids[1], kind: "delete" }));
+    const afterDel = census(cap);
+    cap.R.clock.now += C.KEEP_MS + 1;
+    const later = await sessionOf(cap, cap.desk);
+    await since(cap, later);
+    const freed = census(cap);
+    const again = await put(cap, later, sealAs(cap, cap.desk, "desks/" + cap.deskId + "/room.ec", 4));
+    const filled = census(cap);
+    check(before.n === undefined && before.rows === 4096 && refused(extra, "team-size") && unwritten.n === undefined && unwritten.rows === 4096
+      && migrated.ok && migrated.rows === 4096 && over.status === 200 && held.ok && held.rows === 4096
+      && del.status === 200 && afterDel.ok && afterDel.rows === 4096
+      && freed.ok && freed.rows === 4095 && again.status === 200 && filled.ok && filled.rows === 4096,
+      "934b the 4097th live blob is refused team-size, a supersede at the cap is taken, and the expiry of a deletion record frees one: "
+      + "extra " + said(extra) + ", supersede " + over.status + ", deletion " + del.status
+      + ", after expiry " + freed.rows + ", next " + again.status + " " + said(again) + ", rows " + filled.rows);
+
+    const life = await world();
+    const ls = await sessionOf(life, life.lead);
+    const steps = [];
+    const note = (name, ok) => { if (!ok) steps.push(name); };
+    const first = sealAs(life, life.lead, "a.ec", 1);
+    const up = await put(life, ls, first);
+    note("upload", up.status === 200 && census(life).ok && census(life).rows === 1);
+    const next = sealAs(life, life.lead, "a.ec", 2, { supersedes: first.id });
+    const sup = await put(life, ls, next);
+    note("supersede", sup.status === 200 && census(life).ok && census(life).rows === 1);
+    const gone = await put(life, ls, sealAs(life, life.lead, "a.ec", 3, { supersedes: next.id, kind: "delete" }));
+    note("deletion", gone.status === 200 && census(life).ok && census(life).rows === 1);
+    life.R.clock.now += C.KEEP_MS + 1;
+    const ls2 = await sessionOf(life, life.lead);
+    await since(life, ls2);
+    note("expiry", census(life).ok && census(life).rows === 0);
+    const token = hex(32), inv = hex(16), who = keyPair(true), place = "desk:k-" + hex(8);
+    life.R.clock.now += 1;
+    const added = await invites(life, [{ id: inv, hash: sha(token) }], []);
+    const hello = await boundHello(life, who, inv, token);
+    const ask = sealJoin(life, who, 1, place);
+    const asked = await put(life, hello.json && hello.json.session, ask, { extra: { pub: who.pub } });
+    const answer = B.seal({ relayTeamId: life.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: life.lead.keyId, privateKey: life.lead.privateKey }, path: "join-answer.json", body: "{}", counter: 4, kind: "file", id: inv });
+    answer.place = "answer:" + inv;
+    const posted = await put(life, ls2, answer);
+    const beforeWithdraw = census(life);
+    await devices(life, life.devs.slice(1));
+    const removed = census(life);
+    note("removal", removed.ok && removed.rows === beforeWithdraw.rows && removed.rows === 2 && asked.status === 200 && posted.status === 200);
+    const withdrawal = B.seal({ relayTeamId: life.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + place.slice(5) + "/join.json", body: "",
+      counter: 2, place, kind: "delete", supersedes: ask.id });
+    const withdrew = await put(life, hello.json && hello.json.session, withdrawal);
+    const afterWithdraw = census(life);
+    note("withdrawal", withdrew.status === 200 && afterWithdraw.ok && afterWithdraw.rows === beforeWithdraw.rows - 1);
+    life.R.clock.now += 100 * DAY;
+    const rang = await life.R.ring(life.rt);
+    const left = life.R.stores.get(life.rt);
+    const sweptRows = left.list("blob:").length;
+    note("sweep", rang === true && sweptRows === 0 && left.get("blobs") === undefined && added.status === 200 && hello.status === 200);
+    check(steps.length === 0, "934c the live count equals the blob rows after an upload, a supersede, a deletion, its expiry, a removal, a withdrawal and a sweep: "
+      + (steps.length ? steps.join(", ") : "each held") + "; withdrawal " + withdrew.status + " " + said(withdrew));
+
+    const minLift = await liftCore("plant:blob-min", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      const r = await put(p, s, signedCt(p, p.lead, BLOB_MIN - 1, { counter: 1 }));
+      return r.status === 200;
+    });
+    check(minLift.turned && minLift.back, "934d lifting plant:blob-min keeps a signed ciphertext of 4111 bytes, and the product file is never written: "
+      + minLift.detail + ", sha " + (minLift.back ? "restored" : "differs"));
+    const capLift = await liftCore("plant:blob-cap", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.desk);
+      seedBlobs(p, 4096, p.desk);
+      const r = await put(p, s, sealAs(p, p.desk, "desks/" + p.deskId + "/over.ec", 1));
+      return r.status === 200;
+    });
+    check(capLift.turned && capLift.back, "934e lifting plant:blob-cap keeps a 4097th live blob, and the product file is never written: "
+      + capLift.detail + ", sha " + (capLift.back ? "restored" : "differs"));
+    const recountLift = await liftCore("plant:blob-recount", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      await put(p, s, sealAs(p, p.lead, "a.ec", 1));
+      const st = p.R.stores.get(p.rt);
+      st.put("blobs", 7);
+      await since(p, s);
+      return st.get("blobs") !== st.list("blob:").length;
+    });
+    check(recountLift.turned && recountLift.back, "934f lifting plant:blob-recount leaves a drifted live count after prune, and the product file is never written: "
+      + recountLift.detail + ", sha " + (recountLift.back ? "restored" : "differs"));
+    const noteLift = await liftCore("plant:blob-note", async () => {
+      const p = await world();
+      const s = await sessionOf(p, p.lead);
+      const st = p.R.stores.get(p.rt);
+      const core = C.createCore({ store: st, clock: () => p.R.clock.now, roots: K.ROOTS });
+      const one = sealAs(p, p.lead, "a.ec", 1);
+      const two = sealAs(p, p.lead, "b.ec", 2);
+      core.commit(p.rt, s, metaOf(one), one.id, one.ciphertext, "obj-1");
+      core.commit(p.rt, s, metaOf(two), two.id, two.ciphertext, "obj-2");
+      const rows = st.list("blob:").length;
+      return rows === 2 && st.get("blobs") !== rows;
+    });
+    check(noteLift.turned && noteLift.back, "934g lifting plant:blob-note leaves the live count behind the rows when prune has not run, and the product file is never written: "
+      + noteLift.detail + ", sha " + (noteLift.back ? "restored" : "differs"));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
