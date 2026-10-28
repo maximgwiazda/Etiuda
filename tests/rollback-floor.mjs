@@ -1653,8 +1653,7 @@ try {
         const at = lines.findIndex(l => l.indexOf("plant:epoch-rev") >= 0);
         if (at >= 0) {
           lines.splice(at, 1);
-          fs.writeFileSync(src, lines.join("\n"));
-          const text = fs.readFileSync(src, "utf8");
+          const text = lines.join("\n");
           const start = text.indexOf("function teamRevRefused");
           const end = text.indexOf("function rosterIdsOf");
           const fn = new Function(text.slice(start, end) + "\nreturn teamRevRefused;")();
@@ -1665,8 +1664,6 @@ try {
         }
       } catch (e) {
         detail = e && e.message ? e.message : String(e);
-      } finally {
-        fs.writeFileSync(src, before);
       }
       const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
       check(turned && restored,
@@ -1748,16 +1745,13 @@ try {
         const at = lines.findIndex(l => l.indexOf("plant:floor-raise") >= 0);
         if (at >= 0) {
           lines.splice(at, 1);
-          fs.writeFileSync(src, lines.join("\n"));
-          const lifted = fs.readFileSync(src, "utf8");
+          const lifted = lines.join("\n");
           const R = risen("floor-raise-lifted", ud => loadDesk(ud, lifted));
           turned = R.raised === "null" && !R.saidBack;
           detail = "floor " + R.raised + ", epoch 1 file put back gives roster " + R.back + ", said below " + R.saidBack;
         }
       } catch (e) {
         detail = e && e.message ? e.message : String(e);
-      } finally {
-        fs.writeFileSync(src, before);
       }
       const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
       check(turned && restored,

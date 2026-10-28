@@ -2,9 +2,12 @@
    changed byte, and removed only once that file's sha256 is the one the mark names. The test
    chain runs this file first, and the pre-commit hook refuses on the same mark.
    The same run records the sha256 of every tracked file under .plant-hold, which is gitignored.
-   The chain's last step compares that record and names any file whose sha256 changed. */
+   The chain's last step compares that record and names any file whose sha256 changed.
+   Also guards tracked files: with no hold mark, a tracked file holding fewer plant:<tag> markers
+   than its blob at HEAD is refused (--guard). */
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -331,14 +334,263 @@ export function compareTree(root) {
   return { ok: true, lines: ["ok plant-record: " + loaded.files.length + " tracked files unchanged"] };
 }
 
+export function countPlantMarkers(text) {
+  const counts = new Map();
+  if (typeof text !== "string") return counts;
+  const re = /plant:([a-zA-Z0-9_-]+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const tag = m[1];
+    counts.set(tag, (counts.get(tag) || 0) + 1);
+  }
+  return counts;
+}
+
+export function checkPlantMarkers(root) {
+  if (!fs.existsSync(path.join(root, ".git"))) return [];
+  const headCheck = spawnSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
+    windowsHide: true,
+    encoding: "utf8",
+  });
+  if (headCheck.status !== 0) return [];
+
+  const grepRes = spawnSync("git", ["-C", root, "-c", "core.quotePath=false", "grep", "-lz", "plant:", "HEAD", "--"], {
+    windowsHide: true,
+    maxBuffer: 32 << 20,
+  });
+  if (grepRes.status !== 0) return [];
+
+  const filesAtHead = [];
+  for (const raw of splitZero(grepRes.stdout)) {
+    if (!raw) continue;
+    let rel = raw;
+    if (rel.startsWith("HEAD:")) rel = rel.slice(5);
+    const norm = normalRel(rel);
+    if (relOk(norm)) filesAtHead.push(norm);
+  }
+
+  if (filesAtHead.length === 0) return [];
+
+  const catInput = filesAtHead.map(f => "HEAD:" + f).join("\n") + "\n";
+  const catRes = spawnSync("git", ["-C", root, "cat-file", "--batch"], {
+    input: catInput,
+    windowsHide: true,
+    maxBuffer: 64 << 20,
+  });
+
+  if (catRes.status !== 0) return [];
+
+  const buf = catRes.stdout;
+  let offset = 0;
+  const violations = [];
+
+  for (const rel of filesAtHead) {
+    const newlineIdx = buf.indexOf(10, offset);
+    if (newlineIdx === -1) break;
+    const header = buf.subarray(offset, newlineIdx).toString("utf8");
+    if (header.endsWith("missing")) {
+      offset = newlineIdx + 1;
+      continue;
+    }
+    const parts = header.split(" ");
+    const size = parseInt(parts[2], 10);
+    const contentStart = newlineIdx + 1;
+    const contentEnd = contentStart + size;
+    const headText = buf.subarray(contentStart, contentEnd).toString("utf8");
+    offset = contentEnd + 1;
+
+    const headCounts = countPlantMarkers(headText);
+
+    let diskText = "";
+    try {
+      diskText = fs.readFileSync(path.join(root, rel), "utf8");
+    } catch (e) {
+      diskText = "";
+    }
+    const diskCounts = countPlantMarkers(diskText);
+
+    const missing = [];
+    for (const [tag, count] of headCounts) {
+      const onDisk = diskCounts.get(tag) || 0;
+      if (onDisk < count) {
+        missing.push("plant:" + tag);
+      }
+    }
+    if (missing.length > 0) {
+      violations.push({ file: rel, missing });
+    }
+  }
+
+  return violations;
+}
+
+export function plantMarkerReport(violations) {
+  const lines = ["etiuda plant-guard: a tracked file holds fewer plant markers than HEAD; refused."];
+  for (const v of violations) {
+    lines.push("  file: " + v.file);
+    lines.push("  missing tags: " + v.missing.join(", "));
+    lines.push("  restore: git checkout -- " + v.file);
+  }
+  return lines.join("\n");
+}
+
+function parseRootArg() {
+  const i = process.argv.indexOf("--root");
+  if (i >= 0 && process.argv[i + 1]) return path.resolve(process.argv[i + 1]);
+  return ROOT;
+}
+
+function modeOf() {
+  if (process.argv.indexOf("--guard") >= 0) return "guard";
+  if (process.argv.indexOf("--self") >= 0 || process.argv.indexOf("--selftest") >= 0) return "self";
+  return "default";
+}
+
+export function runSelftest() {
+  let asserted = 0, failed = 0;
+  function check(cond, line) {
+    asserted++;
+    if (cond) process.stdout.write("  ok   " + line + "\n");
+    else {
+      failed++;
+      process.stderr.write("  FAIL " + line + "\n");
+    }
+  }
+
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "plant-guard-selftest-"));
+  const selfScript = fileURLToPath(import.meta.url);
+  try {
+    spawnSync("git", ["init", "-b", "main"], { cwd: lab, windowsHide: true });
+    spawnSync("git", ["config", "user.name", "Test"], { cwd: lab, windowsHide: true });
+    spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: lab, windowsHide: true });
+
+    const sampleRel = "sample.js";
+    const sampleAbs = path.join(lab, sampleRel);
+    const originalContent = "// plant:test-marker\nconst x = 1;\n";
+    fs.writeFileSync(sampleAbs, originalContent);
+    spawnSync("git", ["add", sampleRel], { cwd: lab, windowsHide: true });
+    spawnSync("git", ["commit", "-m", "init"], { cwd: lab, windowsHide: true });
+
+    // Check 1: clean HEAD has no violations
+    const v1 = checkPlantMarkers(lab);
+    check(v1.length === 0, "clean repository has no missing plant markers");
+
+    // Check 2: lifted line with no hold mark is refused
+    fs.writeFileSync(sampleAbs, "const x = 1;\n");
+    const v2 = checkPlantMarkers(lab);
+    check(v2.length === 1 && v2[0].file === sampleRel && v2[0].missing.includes("plant:test-marker"),
+      "lifted plant marker with no mark is refused with file and missing tag");
+
+    const report = plantMarkerReport(v2);
+    check(report.includes(sampleRel) && report.includes("plant:test-marker") && report.includes("git checkout -- " + sampleRel),
+      "refusal report names the file, missing tag, and git checkout restore command");
+
+    // Check 3: line restored via git checkout goes green
+    spawnSync("git", ["checkout", "--", sampleRel], { cwd: lab, windowsHide: true });
+    const v3 = checkPlantMarkers(lab);
+    check(v3.length === 0, "restoring marker via git checkout makes check clean again");
+
+    // Check 4: countPlantMarkers handles multiple tags
+    const multi = countPlantMarkers("// plant:alpha\n// plant:beta\n// plant:alpha\n");
+    check(multi.get("alpha") === 2 && multi.get("beta") === 1,
+      "countPlantMarkers correctly tallies counts for multiple tags");
+
+    // Check 5: committing a removed plant does not trip the check
+    fs.writeFileSync(sampleAbs, "const x = 2;\n");
+    spawnSync("git", ["add", sampleRel], { cwd: lab, windowsHide: true });
+    spawnSync("git", ["commit", "-m", "remove plant deliberately"], { cwd: lab, windowsHide: true });
+    const v5 = checkPlantMarkers(lab);
+    check(v5.length === 0, "deliberately removed and committed plant does not trip check");
+
+    // Check 6: restore initial commit with plant marker to test CLI invocation
+    spawnSync("git", ["reset", "--hard", "HEAD~1"], { cwd: lab, windowsHide: true });
+
+    // CLI test: --guard clean exits 0
+    const cliClean = spawnSync(process.execPath, [selfScript, "--guard", "--root", lab], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
+    check(cliClean.status === 0, "CLI --guard on clean repository exits 0");
+
+    // CLI test: --guard with lifted line exits 1, prints refusal naming file and tag
+    fs.writeFileSync(sampleAbs, "const x = 1;\n");
+    const cliRefused = spawnSync(process.execPath, [selfScript, "--guard", "--root", lab], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
+    check(cliRefused.status === 1 &&
+      cliRefused.stderr.includes(sampleRel) &&
+      cliRefused.stderr.includes("plant:test-marker") &&
+      cliRefused.stderr.includes("git checkout -- " + sampleRel),
+      "CLI --guard with lifted marker exits 1, naming file, missing tag, and git checkout");
+
+    // CLI test: restoring marker makes CLI --guard exit 0
+    spawnSync("git", ["checkout", "--", sampleRel], { cwd: lab, windowsHide: true });
+    const cliRestored = spawnSync(process.execPath, [selfScript, "--guard", "--root", lab], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
+    check(cliRestored.status === 0, "CLI --guard with marker restored exits 0");
+
+    // Check 7: holdPlant behavior and hold mark refusal under --guard
+    const hold = holdPlant(lab, sampleAbs);
+    const holds = listHolds(lab);
+    check(holds.length === 1 && holds[0].file === sampleRel, "holdPlant leaves mark listed in listHolds");
+
+    const cliHeld = spawnSync(process.execPath, [selfScript, "--guard", "--root", lab], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
+    check(cliHeld.status === 1 && cliHeld.stderr.includes("a plant is held, so this is refused"),
+      "CLI --guard with hold mark present exits 1 with hold report");
+
+    // Check 8: release restores clean state
+    const released = hold.release();
+    check(released === true && listHolds(lab).length === 0, "hold.release() removes mark when content matches");
+
+    const cliAfterRelease = spawnSync(process.execPath, [selfScript, "--guard", "--root", lab], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
+    check(cliAfterRelease.status === 0, "CLI --guard after hold mark release exits 0");
+
+    // Check 9: recordTree and compareTree lifecycle in lab
+    const recCount = recordTree(lab);
+    check(recCount === 1, "recordTree records 1 tracked file in lab repo");
+    const cmpClean = compareTree(lab);
+    check(cmpClean.ok === true, "compareTree on unchanged tree reports ok");
+
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+
+  process.stdout.write("#counts checks=" + asserted + " failed=" + failed + "\n");
+  return failed === 0;
+}
+
 function main() {
-  const holds = listHolds(ROOT);
+  const mode = modeOf();
+  if (mode === "self") {
+    const ok = runSelftest();
+    process.exit(ok ? 0 : 1);
+  }
+
+  const root = parseRootArg() || ROOT;
+  const holds = listHolds(root);
   if (holds.length) {
     console.error(holdReport(holds));
     process.exit(1);
   }
+  const violations = checkPlantMarkers(root);
+  if (violations.length) {
+    console.error(plantMarkerReport(violations));
+    process.exit(1);
+  }
+  if (mode === "guard") {
+    process.exit(0);
+  }
   try {
-    const n = recordTree(ROOT);
+    const n = recordTree(root);
     process.stdout.write("ok plant-record: recorded " + n + " tracked files\n");
   } catch (e) {
     console.error((e && e.message) || e);
