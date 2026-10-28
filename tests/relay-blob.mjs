@@ -6,6 +6,7 @@
  *     node tests/relay-blob.mjs        exit code is the number of failed checks, capped at 63; 78 where it did not complete
  */
 import fs from "node:fs";
+import os from "node:os";
 import crypto from "node:crypto";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -17,6 +18,15 @@ if (process.env.ETIUDA_PLANTS_COPY !== "1") {
   process.exit(await runInPlantsCopy(ROOT, fileURLToPath(import.meta.url), "relay-blob"));
 }
 const require = createRequire(import.meta.url);
+const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-blob-"));
+let plantCopies = 0;
+function loadPlantedBlob(code) {
+  const dir = path.join(LAB, "p" + (++plantCopies));
+  fs.mkdirSync(dir, { recursive: true });
+  const copyFile = path.join(dir, "blob.cjs");
+  fs.writeFileSync(copyFile, code, "utf8");
+  return require(copyFile);
+}
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 63;
 
@@ -48,17 +58,12 @@ function liftBlob(tag, fn) {
     const at = lines.findIndex(l => l.indexOf(tag) >= 0);
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(src, lines.join("\n"));
-      const resolved = require.resolve(src);
-      delete require.cache[resolved];
-      turned = fn(require(src));
+      const mod = loadPlantedBlob(lines.join("\n"));
+      turned = fn(mod);
       detail = turned ? "the check lifted" : "the check still held";
     }
   } catch (e) {
     detail = e && e.stack ? e.stack : String(e);
-  } finally {
-    fs.writeFileSync(src, beforeBytes);
-    try { delete require.cache[require.resolve(src)]; require(src); } catch { /* the copy this suite holds is untouched */ }
   }
   return { turned, back: crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest, detail };
 }
@@ -353,10 +358,7 @@ function main() {
       const at = lines.findIndex(l => l.indexOf("plant:epoch-above") >= 0);
       if (at >= 0) {
         lines.splice(at, 1);
-        fs.writeFileSync(src, lines.join("\n"));
-        const resolved = require.resolve(src);
-        delete require.cache[resolved];
-        const lifted = require(src);
+        const lifted = loadPlantedBlob(lines.join("\n"));
         const base = { teamId: "t-" + hex(8), leadKeyId: lead.keyId };
         const first = lifted.revLoad({}, Object.assign({ epoch: 2, rev: 1 }, base));
         const back = first.ok ? lifted.revLoad(first.revs, Object.assign({ epoch: 1, rev: 4 }, base)) : first;
@@ -367,13 +369,6 @@ function main() {
       }
     } catch (e) {
       detail = e && e.message ? e.message : String(e);
-    } finally {
-      fs.writeFileSync(src, before);
-      try {
-        const resolved = require.resolve(src);
-        delete require.cache[resolved];
-        require(src);
-      } catch { /* the copy this suite holds is untouched */ }
     }
     const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
     check(turned && restored,
@@ -588,5 +583,6 @@ if (asserted < EXPECTED) {
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
+try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the lab directory */ }
 /* CAPPED AT 63, as every driver here: an exit code is read modulo 256. */
 process.exit(Math.min(failed, 63));
