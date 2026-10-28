@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 373;
+const EXPECTED = 386;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -138,7 +138,7 @@ async function helloAs(w, key, o) {
   const nonce = opts.nonce || await challenge(w, rt);
   const sig = opts.sig !== undefined ? opts.sig : signHex(opts.signer || key, C.helloBytes(opts.signedRt || rt, nonce, key.keyId));
   const body = { challenge: nonce, key: key.keyId, sig };
-  if (opts.pub) body.pub = opts.pub;
+  if (!opts.omitPub) body.pub = opts.pub || key.pub;
   return call(w.R, "POST", "/relay/v1/t/" + rt + "/session", { json: body });
 }
 async function tokenHello(w, inv, token, nonce, key) {
@@ -473,6 +473,23 @@ async function main() {
     const liveS = v.R.stores.get(v.rt).list("ses:").length;
     const evicted = await since(v, firstS);
     check(liveS === 1024 && refused(evicted, "no-hello"), "6j past 1024 live sessions the one nearest its end is let go: " + liveS + " kept");
+    const knownBad = await helloAs(w, w.desk, { sig: "ab".repeat(64) });
+    const unknownKey = keyPair(true);
+    const unknownBad = await helloAs(w, unknownKey, { sig: "ab".repeat(64) });
+    check(refused(knownBad, "bad-signature") && refused(unknownBad, "bad-signature") && knownBad.json.said === unknownBad.json.said,
+      "6k a known key and an unknown key, each with a signature that does not hold, are answered alike: "
+      + (knownBad.json && knownBad.json.error) + ", " + (unknownBad.json && unknownBad.json.error));
+    const otherPub = keyPair(false);
+    const mismatched = await helloAs(w, w.desk, { pub: otherPub.pub });
+    const bare = await helloAs(w, w.desk, { omitPub: true });
+    check(refused(mismatched, "bad-signature") && refused(bare, "bad-signature"),
+      "6l a public half that is not the key's, and a hello with no public half, are each a bad signature: "
+      + (mismatched.json && mismatched.json.error) + ", " + (bare.json && bare.json.error));
+    const own = await helloAs(w, unknownKey);
+    check(refused(own, "not-enrolled"), "6m an unknown key whose signature holds is not enrolled: " + (own.json && own.json.error));
+    await devices(w, w.devs.slice(1));
+    const goneOk = await helloAs(w, w.desk);
+    check(refused(goneOk, "removed"), "6n a removed key whose signature holds is removed: " + (goneOk.json && goneOk.json.error));
   }
 
   /* ---- 7: a session by invitation ---- */
@@ -490,13 +507,53 @@ async function main() {
       "7b a wrong token, or the stored hash presented as the token, is refused, and the right token still opens");
     const t3 = hex(32), id3 = hex(16);
     await invites(w, [{ id: id3, hash: sha(t3) }], []);
+    const attacker = keyPair(true);
     let twentieth = null;
-    for (let i = 1; i <= 20; i++) twentieth = await tokenHello(w, id3, "wrong-" + i);
-    const locked = await tokenHello(w, id3, t3);
-    check(refused(twentieth, "not-enrolled") && refused(locked, "token-tries"),
-      "7c after 20 wrong tokens the right one is refused as tried too many times, and the twentieth was still a wrong token");
+    for (let i = 1; i <= 20; i++) twentieth = await tokenHello(w, id3, "wrong-" + i, null, attacker);
+    const locked = await tokenHello(w, id3, "wrong-21", null, attacker);
+    const otherKey = await tokenHello(w, id3, t3);
+    check(refused(twentieth, "not-enrolled") && refused(locked, "token-tries") && otherKey.status === 200,
+      "7c twenty wrong tokens from one key are still a wrong token, the twenty-first locks that key only, and another key's right token still binds: "
+      + (twentieth.json && twentieth.json.error) + ", " + (locked.json && locked.json.error) + ", other " + otherKey.status);
     const stray = await tokenHello(w, hex(16), t3);
     check(refused(stray, "not-enrolled"), "7d an invitation the relay does not hold opens nothing");
+    const tTry = hex(32), idTry = hex(16), whoTry = keyPair(true);
+    await invites(w, [{ id: idTry, hash: sha(tTry) }], []);
+    const nonceTry = await challenge(w);
+    const wrongTry = await tokenHello(w, idTry, "nope", nonceTry, whoTry);
+    const reused = await tokenHello(w, idTry, tTry, nonceTry, whoTry);
+    check(refused(wrongTry, "not-enrolled") && refused(reused, "hello-replay"),
+      "7g a wrong token spends its challenge, so the same challenge cannot then bind: "
+      + (wrongTry.json && wrongTry.json.error) + ", " + (reused.json && reused.json.error));
+    const tMany = hex(32), idMany = hex(16);
+    await invites(w, [{ id: idMany, hash: sha(tMany) }], []);
+    for (let i = 0; i < 65; i++) await tokenHello(w, idMany, "nope-" + i);
+    const manyRows = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
+    const sixtySixth = await tokenHello(w, idMany, tMany);
+    const droppedMany = await invites(w, [], [idMany]);
+    const leftMany = w.R.stores.get(w.rt).list("tf:" + idMany + ":").length;
+    check(manyRows === 64 && sixtySixth.status === 200 && droppedMany.status === 200 && leftMany === 0,
+      "7h sixty-five keys' wrong tries leave 64 rows, the sixty-sixth key's right token still binds, and dropping the invitation leaves no try row: "
+      + manyRows + " rows, bind " + sixtySixth.status + ", left " + leftMany);
+    const scan = await world();
+    const scanBox = scan.R.stores.get(scan.rt);
+    for (let i = 0; i < 1000; i++) scanBox.put("inv:" + hex(16), { spent: true, spentAt: 1, key: hex(32), pub: hex(32), hash: hex(32) });
+    let scanLists = 0;
+    const scanList = scanBox.list.bind(scanBox);
+    scanBox.list = (prefix, opts) => { if (prefix === "inv:") scanLists++; return scanList(prefix, opts); };
+    const scanHello = await helloAs(scan, keyPair(true));
+    check(refused(scanHello, "not-enrolled") && scanLists === 0,
+      "7i a key hello beside a thousand invitations reads none of them: lists " + scanLists + ", " + (scanHello.json && scanHello.json.error));
+    const indexed = await world();
+    const indexedWho = keyPair(true), indexedId = hex(16);
+    indexed.R.stores.get(indexed.rt).put("inv:" + indexedId, { hash: hex(32), fails: 0, spent: true, uploaded: false, at: 1,
+      spentAt: indexed.R.clock.now, ord: 5, key: indexedWho.keyId, pub: indexedWho.pub });
+    const indexedBefore = await helloAs(indexed, indexedWho);
+    await since(indexed, await sessionOf(indexed, indexed.lead));
+    const indexedAfter = await helloAs(indexed, indexedWho);
+    check(refused(indexedBefore, "not-enrolled") && indexedAfter.status === 200 && indexedAfter.json && indexedAfter.json.invite === true,
+      "7p a binding kept before the index existed is not resumed until the next prune, and then it is: "
+      + (indexedBefore.json && indexedBefore.json.error) + ", after " + indexedAfter.status);
 
     /* F9 of the slice 1 review: a spent invitation stays spent past the 30-day keep, whether the lead sends its id again or
        not, and the relay keeps of it only that it was spent. The test architect's f9 reproduction is 7e, its control 7E. */
@@ -808,8 +865,8 @@ async function main() {
     const forged = await helloAs(w, binder, { signer: keyPair(true) });
     const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: await challenge(w), key: binder.keyId } });
     const stillLists = await since(w, own.json && own.json.session);
-    check(bind5.status === 200 && own.status === 200 && own.json.invite === true && refused(forged, "not-enrolled")
-      && refused(bare, "not-enrolled") && stillLists.status === 200,
+    check(bind5.status === 200 && own.status === 200 && own.json.invite === true && refused(forged, "bad-signature")
+      && refused(bare, "bad-signature") && stillLists.status === 200,
       "10i a hello naming a bound key, signed by another key or by none, opens nothing and lets no session go: the forged one "
       + (forged.json && forged.json.error || "OPENED A SESSION") + ", the unsigned one " + (bare.json && bare.json.error || "OPENED A SESSION")
       + ", the desk's resumed session then listing " + stillLists.status);
@@ -1168,6 +1225,45 @@ async function main() {
     });
     check(dropLift.turned && dropLift.back, "5i lifting plant:challenge-drop leaves a ch: row after the next prune, and the product file is never written: "
       + dropLift.detail + ", sha " + (dropLift.back ? "restored" : "differs"));
+  }
+  {
+    const shapeLift = await liftCore("plant:hello-shape", async () => {
+      const p = await world();
+      const got = await helloAs(p, p.desk, { sig: "ab".repeat(64) });
+      return got.status === 200;
+    });
+    check(shapeLift.turned && shapeLift.back, "6o lifting plant:hello-shape lets a hello with a bad signature open a session, and the product file is never written: "
+      + shapeLift.detail + ", sha " + (shapeLift.back ? "restored" : "differs"));
+    const keyLift = await liftCore("plant:token-key", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16), who = keyPair(true);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      for (let i = 1; i <= 20; i++) await tokenHello(p, id, "wrong-" + i, null, who);
+      const right = await tokenHello(p, id, token, null, who);
+      return right.status === 200;
+    });
+    check(keyLift.turned && keyLift.back, "7j lifting plant:token-key lets a key past its twenty wrong tokens bind with the right one, and the product file is never written: "
+      + keyLift.detail + ", sha " + (keyLift.back ? "restored" : "differs"));
+    const capLift = await liftCore("plant:try-cap", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      for (let i = 0; i < 65; i++) await tokenHello(p, id, "nope-" + i);
+      return p.R.stores.get(p.rt).list("tf:" + id + ":").length === 65;
+    });
+    check(capLift.turned && capLift.back, "7k lifting plant:try-cap keeps a sixty-fifth key's wrong try, and the product file is never written: "
+      + capLift.detail + ", sha " + (capLift.back ? "restored" : "differs"));
+    const spendTry = await liftCore("plant:try-spend", async () => {
+      const p = await world();
+      const token = hex(32), id = hex(16), who = keyPair(true);
+      await invites(p, [{ id, hash: sha(token) }], []);
+      const nonce = await challenge(p);
+      await tokenHello(p, id, "nope", nonce, who);
+      const again = await tokenHello(p, id, token, nonce, who);
+      return again.status === 200;
+    });
+    check(spendTry.turned && spendTry.back, "7l lifting plant:try-spend lets a wrong token's challenge bind on the retry, and the product file is never written: "
+      + spendTry.detail + ", sha " + (spendTry.back ? "restored" : "differs"));
   }
   /* A re-enrol deletes the session marked removed. Lifting that line leaves the old bearer removed, and the row standing. */
   {
@@ -1874,7 +1970,7 @@ async function main() {
       const rt = hex(16), lead = keyPair(false), t = Date.now(), base = "/relay/v1/t/" + rt;
       const made = await ask(team, "POST", "/relay/v1/teams", { json: createBody(rt, lead, t) });
       const n = (await ask(team, "POST", base + "/hello", { json: {} })).json.challenge;
-      const ses = await ask(team, "POST", base + "/session", { json: { challenge: n, key: lead.keyId, sig: signHex(lead, C.helloBytes(rt, n, lead.keyId)) } });
+      const ses = await ask(team, "POST", base + "/session", { json: { challenge: n, key: lead.keyId, pub: lead.pub, sig: signHex(lead, C.helloBytes(rt, n, lead.keyId)) } });
       const token = ses.json.session;
       const none = await ask(team, "GET", base + "/since/0"), list = await ask(team, "GET", base + "/since/0", { token });
       const woken = raise(T, ctx, env).team;
@@ -2405,9 +2501,22 @@ async function main() {
       await put(w, lead, b1);
       await put(w, lead, b2);
       const tomb = await getBlob(w, only.token, b1.id), standing = await getBlob(w, only.token, b2.id), unknown = await getBlob(w, only.token, hex(16));
-      check(only.ok && refused(tomb, "superseded") && refused(standing, "not-enrolled") && refused(unknown, "missing"),
-      "970k an uploaded invitation's session is told a superseded id is superseded, a blob that stands not-enrolled and an id the relay never held missing: "
+      check(only.ok && refused(tomb, "not-enrolled") && refused(standing, "not-enrolled") && refused(unknown, "not-enrolled"),
+      "970k an uploaded invitation's session is told the same refusal for a superseded id, a blob that stands and an id the relay never held: "
         + [tomb, standing, unknown].map(r => r.json && r.json.error).join(","));
+      const sameLift = await liftCore("plant:answer-same", async () => {
+        const y = await world();
+        const yOnly = await answerOnly(y);
+        const yLead = await sessionOf(y, y.lead);
+        const y1 = sealAs(y, y.lead, "a.ec", 1), y2 = sealAs(y, y.lead, "b.ec", 2, { supersedes: y1.id });
+        await put(y, yLead, y1);
+        await put(y, yLead, y2);
+        const a = await getBlob(y, yOnly.token, y1.id), b = await getBlob(y, yOnly.token, y2.id), c = await getBlob(y, yOnly.token, hex(16));
+        const errs = [a, b, c].map(r => r.json && r.json.error);
+        return errs[0] !== "not-enrolled" || errs[1] !== "not-enrolled" || errs[2] !== "not-enrolled";
+      });
+      check(sameLift.turned && sameLift.back, "970l lifting plant:answer-same lets that session tell those three ids apart, and the product file is never written: "
+        + sameLift.detail + ", sha " + (sameLift.back ? "restored" : "differs"));
     }
 
     /* The lead's answer is served to the session of the invitation it answers once that invitation's upload is made, and to no other session:

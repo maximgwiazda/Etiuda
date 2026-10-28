@@ -14,6 +14,8 @@ const CALL_SKEW_MS = 5 * 60 * 1000;
 const DELEGATION_MAX_MS = 366 * 86400000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
+/* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
+const TRY_KEYS_MAX = 64;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
 /* The shortest ciphertext a padded seal can be, and the most live blobs one team may hold. */
@@ -553,6 +555,7 @@ function createCore(deps) {
         nameUsed = !!(was && was.spent); /* plant:S3-cancel */
         if (nameUsed) used.push(id);
         if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
+        for (const [t] of store.list("tf:" + id + ":")) store.del(t);
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
       for (const [id, row] of added) {
@@ -629,14 +632,38 @@ function createCore(deps) {
     return b.invite !== undefined ? byToken(rt, b) : byKey(team, rt, b);
   }
 
+  function tryRow(inv, key) { return "tf:" + inv + ":" + key; }
+  function noteTry(inv, key) {
+    const row = tryRow(inv, key), held = store.get(row);
+    if (typeof held === "number") { store.put(row, held + 1); return; }
+    if (store.list("tf:" + inv + ":").length >= TRY_KEYS_MAX) return; /* plant:try-cap */
+    store.put(row, 1);
+  }
+  function spendChallenge(nonce) {
+    store.put("chu:" + nonce, clock()); /* plant:try-spend */
+  }
+  /* The newest binding wins. Lifting the comparison keeps the binding already indexed. */
+  function indexBinding(key, id) {
+    const cur = store.get("bk:" + key);
+    const prev = is(HEX32, cur) ? store.get("inv:" + cur) : null;
+    let take = !prev;
+    if (prev && clock() > (prev.spentAt || 0)) take = true; /* plant:e5-newest */
+    if (take) store.put("bk:" + key, id);
+  }
   function byToken(rt, b) {
+    /* The binding is judged before the token, so a hello that does not bind answers the same whether or not the invitation is known. */
+    const binds = isId(b.key) && is(HEX128, b.sig) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
+    let allowUnbound = true;
+    allowUnbound = false; /* plant:S3-unbound */
+    if (!binds && !allowUnbound) return no("bad-signature");
     const inv = is(HEX32, b.inv) ? store.get("inv:" + b.inv) : undefined;
     if (!inv) return no("not-enrolled");
-    if (inv.fails >= TOKEN_TRIES) return no("token-tries"); /* plant:token-tries */
     if (inv.spent) return no("token-spent"); /* plant:token-spent */
-    const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX
+    const tries = store.get(tryRow(b.inv, b.key));
+    if (typeof tries === "number" && tries >= TOKEN_TRIES) { spendChallenge(b.challenge); return no("token-tries"); } /* plant:token-key */
+    const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX && is(HEX64, inv.hash)
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
-    if (!right) return failedTry(b.inv, inv); /* plant:token-match */
+    if (!right) { noteTry(b.inv, b.key); spendChallenge(b.challenge); return no("not-enrolled"); } /* plant:token-match */
     /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
        still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
     let ended = false;
@@ -651,12 +678,6 @@ function createCore(deps) {
       });
       return no("invite-ended");
     }
-    /* The first use is this hello, and only where it binds the desk's own key. A right token that binds no key is refused
-       and spends nothing: the token stays unspent, the failure is not one of the 20 tries, and the challenge is kept. */
-    const binds = isId(b.key) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
-    let allowUnbound = true;
-    allowUnbound = false; /* plant:S3-unbound */
-    if (!binds && !allowUnbound) return no("bad-signature");
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
     if (binds) {
       const gone = store.get("gone:" + b.key);
@@ -671,6 +692,7 @@ function createCore(deps) {
       const next = Object.assign({}, inv, { spent: true, spentAt: clock() }); /* plant:token-spend */
       if (binds) { next.key = b.key; next.pub = b.pub; }
       store.put("inv:" + b.inv, next);
+      if (binds) indexBinding(b.key, b.inv);
     });
   }
 
@@ -678,39 +700,29 @@ function createCore(deps) {
      time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). After the one upload the
      same key still opens a session, until it is enrolled, the invitation is dropped or the keep ends. */
   function boundInvite(key) {
-    const now = clock();
-    const skipUploaded = false;
-    let best = null;
-    for (const [k, v] of store.list("inv:")) {
-      if (!v.spent || v.key !== key || !is(HEX64, v.pub)) continue;
-      if (skipUploaded && v.uploaded) continue;
-      if (now - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
-      /* A key bound to more than one invitation resumes the one it spent last, whose request the lead answers. */
-      const row = { id: k.slice(4), inv: v };
-      if (!best) best = row;
-      else if (v.spentAt > best.inv.spentAt) best = row; /* plant:e5-newest */
-    }
-    return best;
-  }
-
-  function failedTry(id, inv) {
-    store.atomic(() => store.put("inv:" + id, Object.assign({}, inv, { fails: inv.fails + 1 })));
-    return no("not-enrolled");
+    const id = store.get("bk:" + key);
+    if (!is(HEX32, id)) return null;
+    const v = store.get("inv:" + id);
+    if (!v || !v.spent || v.key !== key || !is(HEX64, v.pub)) return null;
+    if (clock() - v.spentAt > KEEP_MS) return null; /* plant:bound-keep */
+    return { id, inv: v };
   }
 
   function byKey(team, rt, b) {
-    if (!isId(b.key)) return no("not-enrolled");
     const msg = helloBytes(rt, b.challenge, b.key);
+    const matches = b.key === team.lead.keyId ? leadKeyMatches(b.key, b.pub) : keyMatches(b.key, b.pub);
+    /* Shape, the public half and the signature, before any question of whether the key is known. A Studio lead's id is the studio- form. */
+    if (!isId(b.key) || !is(HEX128, b.sig) || !matches || !verified(b.pub, msg, b.sig)) return no("bad-signature"); /* plant:hello-shape */
     if (b.key === team.lead.keyId) {
-      if (!verified(team.lead.pub, msg, b.sig)) return no("bad-signature"); /* plant:lead-sig */
+      if (team.lead.pub !== b.pub) return no("bad-signature"); /* plant:lead-sig */
       return issue(b.challenge, { key: b.key, inv: null });
     }
     const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
-    if (!dev && gone && !verified(gone.pub, msg, b.sig)) return no("bad-signature"); /* plant:removed-sig */
     if (!dev && gone) {
+      if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
       const held = boundInvite(b.key);
-      if (held && registeredAfter(held.inv, gone) && verified(held.inv.pub, msg, b.sig))
+      if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
@@ -719,13 +731,13 @@ function createCore(deps) {
     if (!dev) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
-      if (held && verified(held.inv.pub, msg, b.sig)) /* plant:invite-resume */
+      if (held && held.inv.pub === b.pub) /* plant:invite-resume */
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("not-enrolled"); /* plant:key-enrolled */
     }
-    if (!verified(dev.pub, msg, b.sig)) return no("bad-signature"); /* plant:key-sig */
+    if (dev.pub !== b.pub) return no("bad-signature"); /* plant:key-sig */
     return issue(b.challenge, { key: b.key, inv: null });
   }
 
@@ -886,10 +898,9 @@ function createCore(deps) {
     if (ownAnswer) return { ok: true, meta: served(m), obj: m.obj };
     if (s.quiet) return no("removed");
     if (answerOnly(s)) {
-      if (m) return no("not-enrolled");
-      const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
-      if (tomb && now <= tomb.until) return no(tomb.why);
-      return no("missing");
+      /* The answer itself, not written yet, is missing. Every other id is the same refusal. */
+      if (!m && is(HEX32, id) && id === s.inv) return no("missing");
+      return no("not-enrolled"); /* plant:answer-same */
     }
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
@@ -1089,8 +1100,20 @@ function createCore(deps) {
         const m = store.get("blob:" + id);
         if (m && expired(m, now)) bury(m, "expired", now, drop);
       }
+      /* A binding already indexed stays: the newest one was chosen when it was written. A binding from before the index
+         is written once, and where one key bound more than one invitation the later spentAt is the one kept. */
+      const pending = new Map();
+      for (const [k, v] of store.list("inv:")) {
+        if (!v || !v.spent || !isId(v.key) || !is(HEX64, v.pub)) continue;
+        if (is(HEX32, store.get("bk:" + v.key))) continue;
+        const at = v.spentAt || 0, held = pending.get(v.key);
+        if (!held || at > held.at) pending.set(v.key, { id: k.slice(4), at });
+      }
+      for (const [key, row] of pending) store.put("bk:" + key, row.id);
       for (const [k, v] of store.list("inv:")) {
         if (!v.spent || v.spentAt === undefined || now - v.spentAt <= KEEP_MS) continue;
+        const id = k.slice(4);
+        for (const [t] of store.list("tf:" + id + ":")) store.del(t);
         store.del(k);
         store.put(k, SPENT); /* plant:spent-kept */
       }

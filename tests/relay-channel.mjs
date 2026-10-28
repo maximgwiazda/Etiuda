@@ -411,7 +411,7 @@ try {
     const ch = JSON.parse(s.bytes.toString()).challenge;
     const who = prog === other ? OTHER : STRAY;
     const ses = await prog.t.request("POST", URLV1 + "/t/" + RT + "/session", { "content-type": "application/json" },
-      Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
+      Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
     const token = JSON.parse(ses.bytes.toString()).session;
     const r = await prog.t.request("PUT", URLV1 + "/t/" + RT + "/b/" + b.id,
       { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(metaOf(b))).toString("base64url") }, b.ciphertext);
