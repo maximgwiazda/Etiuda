@@ -49,7 +49,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 274;
+const EXPECTED = 276;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -6215,6 +6215,120 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 962b): " + (e && e.stack ? e.stack : e));
+}
+
+/* Two names the path key joins are one file: the batch lands the newest only, and applied
+   names that one. An exact path as the key of the batch names both, while the mirror
+   still holds the newest. */
+try {
+  const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+  const K2 = crypto.randomBytes(32);
+  const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+  const seal = (p, body, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+    path: p, body, counter, place: "root" });
+  const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+    epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+    supersedes: blob.supersedes, del: !!blob.deletion } });
+  const batches = [
+    ["Guide.ec", "old", "guide.ec", "new"],
+    ["Guide.ec", "new", "guide.ec", "old"],
+    ["CAF\u00c9.ec", "old", "caf\u00e9.ec", "new"],
+    ["\u1f88x.ec", "new", "\u1f80x.ec", "old"],
+  ];
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-land-"));
+  const rows = [];
+  try {
+    for (const [n1, b1, n2, b2] of batches) {
+      const dir = path.join(root, "b" + rows.length);
+      fs.mkdirSync(dir);
+      const prog = C.createProgram({ io: C.diskIO(dir, C.writeWhole), pin: PIN, clock: () => 1700000000000, save() {} });
+      const newer = b1 === "new" ? n1 : n2;
+      const first = seal(n1, b1, b1 === "new" ? 2 : 1, 1, b1 === "new" ? K2 : K1);
+      const second = seal(n2, b2, b2 === "new" ? 2 : 1, 1, b2 === "new" ? K2 : K1);
+      const batch = prog.applyBatch([item(first, 1), item(second, 2)], ctx);
+      const names = fs.readdirSync(dir).map(n => ({ n, body: fs.readFileSync(path.join(dir, n), "utf8") }));
+      const one = names.length === 1 && names[0].n === newer && names[0].body === "new"
+        && batch.applied.length === 1 && batch.applied[0] === newer;
+      rows.push({ newer, one, applied: batch.applied, names });
+    }
+    check(rows.length === batches.length && rows.every(r => r.one),
+      "925a two names the path key joins land as one file, the newest, and applied names only that one: "
+      + rows.map(r => JSON.stringify(r.newer) + " applied " + JSON.stringify(r.applied)
+        + " disk " + JSON.stringify(r.names)).join("; "));
+  } finally {
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* this leg's folder, already gone */ }
+  }
+} catch (e) {
+  check(false, "harness (the leg 925a): " + (e && e.stack ? e.stack : e));
+}
+
+/* The path key's joined classes, and pairs it keeps apart, checked against this volume.
+   The volume is the oracle. On Windows the files are created and removed here; on another
+   system this leg does not run. */
+if (process.platform !== "win32") {
+  check(true, "925b not on this system: this leg did not run, the volume's uppercase table is read on Windows alone");
+} else {
+  let dir = null;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-upcase-"));
+    const nameOf = u => "a" + String.fromCharCode(u) + "z.t";
+    const keyOfUnit = u => {
+      const p = B.checkPath(nameOf(u));
+      if (!p.ok || p.segments.length !== 1) return null;
+      return p.folded[0];
+    };
+    const byKey = new Map();
+    for (let u = 0; u < 65536; u++) {
+      if (u >= 0xD800 && u <= 0xDFFF) continue;
+      const k = keyOfUnit(u);
+      if (k == null) continue;
+      let g = byKey.get(k);
+      if (!g) { g = []; byKey.set(k, g); }
+      g.push(u);
+    }
+    const joins = [];
+    for (const g of byKey.values()) if (g.length >= 2) joins.push(g);
+    /* Kept apart by the path key, so the volume must keep each pair as two files. */
+    const hazards = [
+      [0x212a, 0x6b], [0x131, 0x69], [0xa7ce, 0xa7cf], [0xa7d2, 0xa7d3],
+      [0xa7d4, 0xa7d5], [0x3c2, 0x3c3], [0xdf, 0x73], [0x61, 0x62],
+    ];
+    const apart = [];
+    for (const [a, b] of hazards) {
+      const ka = keyOfUnit(a), kb = keyOfUnit(b);
+      if (ka && kb && ka !== kb) apart.push([a, b]);
+    }
+    const units = new Set();
+    for (const g of joins) for (const u of g) units.add(u);
+    for (const [a, b] of apart) { units.add(a); units.add(b); }
+    const idOf = new Map();
+    for (const u of units) {
+      const abs = path.join(dir, nameOf(u));
+      fs.writeFileSync(abs, "x");
+      const st = fs.statSync(abs, { bigint: true });
+      idOf.set(u, st.dev.toString() + ":" + st.ino.toString());
+    }
+    if ([...idOf.values()].every(id => id.endsWith(":0"))) throw new Error("the file index was 0");
+    const badJoins = [];
+    for (const g of joins) {
+      const ids = new Set(g.map(u => idOf.get(u)));
+      if (ids.size !== 1) badJoins.push(g.map(u => u.toString(16)).join("+"));
+    }
+    const badApart = [];
+    for (const [a, b] of apart) {
+      if (idOf.get(a) === idOf.get(b)) badApart.push(a.toString(16) + "+" + b.toString(16));
+    }
+    check(joins.length > 0 && apart.length > 0 && badJoins.length === 0 && badApart.length === 0,
+      "925b the volume agrees with the path key: " + joins.length + " joined classes, " + apart.length
+      + " pairs kept apart, " + badJoins.length + " joined classes the volume held as more than one file"
+      + (badJoins.length ? " (" + badJoins.slice(0, 4).join(", ") + ")" : "")
+      + ", " + badApart.length + " apart pairs the volume held as one file"
+      + (badApart.length ? " (" + badApart.slice(0, 4).join(", ") + ")" : ""));
+  } catch (e) {
+    check(false, "harness (the leg 925b): " + (e && e.stack ? e.stack : e));
+  } finally {
+    if (dir) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* this leg's folder, already gone */ } }
+  }
 }
 
 /* A second invitation for the same team, after the first was used and withdrawn. The old id stays spent. */
