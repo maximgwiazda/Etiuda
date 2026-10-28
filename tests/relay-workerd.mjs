@@ -300,6 +300,7 @@ function entrySource(coreImport, workerImport, pub, bindingName, jurisdiction) {
     "      const swept = rows.length === 1 && rows[0] === 'swept';",
     "      const hasTeam = rows.indexOf('team') > -1;",
     "      return new Response(JSON.stringify({",
+    "        /* kv is true where the kv table holds the team's data: the sweep's wipe drops the table, then finish() writes \"swept\", which makes it again holding that one mark, so a swept team reads kv false, master true, swept true */",
     "        kv: hasTable && !swept,",
     "        master: hasTable,",
     "        swept,",
