@@ -24,7 +24,8 @@
  * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
  * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
  * blob has raised the counter (970o). An invitation upload whose reply was lost is counted as sent when the retry is
- * refused token-spent (966f). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
+ * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
+ * is admitted (966h). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
  * copy removed; a team inside its grant shows nothing, and no step removes anything from the desk (978). Throwaway keys and
  * invented words only;
@@ -51,7 +52,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 279;
+const EXPECTED = 281;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5624,6 +5625,67 @@ try {
     + spentPlant.detail + ", sha " + (spentPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 966f): " + (e && e.stack ? e.stack : e));
+}
+
+/* The same lost reply, driven through the relay's own core. The first upload lands and its reply is dropped, and so is
+   each further reply up to `losses`; the next answer is token-spent and is counted as sent. Cancel then removes the
+   request, and the withdrawal is admitted only where the id recorded as sent is the one the relay holds as asked. */
+async function lostWithdraw(mod, label, losses) {
+  const rt = hex(16), who = keyPair(true), secret = hex(16), inv = hex(16), token = hex(32);
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+  if (made.status !== 200) throw new Error("a team was not made: " + JSON.stringify(made.json));
+  const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }], at = R.clock.now;
+  const reg = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: at,
+    sig: signHex(LEAD, core.invitesBytes(rt, at, add, [])) });
+  if (reg.status !== 200) throw new Error("an invitation was not registered: " + JSON.stringify(reg.json));
+  const rel = "desks/" + who.keyId + "/join.json";
+  const mirror = path.join(LAB, label);
+  const t = transport(label);
+  let dropped = 0;
+  const request = async (method, url, headers, body) => {
+    const res = await t.request(method, url, headers, body);
+    if (method === "PUT" && dropped < losses) { dropped += 1; return { status: 0, header: () => null, bytes: Buffer.alloc(0) }; }
+    return res;
+  };
+  put(mirror, rel, "{\"kind\":\"etiuda-join-request\"}\n");
+  const ch = mod.createChannel({
+    rt, url: URLV1, mirror, stateFile: path.join(LAB, label + ".json"), watch: false, pollMs: 1e9,
+    pin: () => ({ teamId: "t-" + rt.slice(0, 8), rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+    invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+    keyFor: () => null, sealEpoch: () => null, request, connect: null,
+  });
+  try {
+    ch.start();
+    await ch.idle();
+    for (let i = 0; i < losses; i++) { ch.kick(); await ch.idle(); }
+    const sent = ch.program.state().sent[rel];
+    const asked = (R.stores.get(rt).get("inv:" + inv) || {}).asked || null;
+    const recorded = sent ? sent.id : null;
+    fs.unlinkSync(path.join(mirror, "desks", who.keyId, "join.json"));
+    ch.kick();
+    await ch.idle();
+    const row = R.stores.get(rt).get("inv:" + inv) || {};
+    return { recorded, asked, same: !!(recorded && recorded === asked), withdrawn: row.withdrawn === true && row.asked === recorded };
+  } finally {
+    await ch.stop();
+  }
+}
+try {
+  const one = await lostWithdraw(C, "lost-withdraw-1", 1);
+  const two = await lostWithdraw(C, "lost-withdraw-2", 2);
+  check(one.same && one.withdrawn && two.same && two.withdrawn,
+    "966h an invitation upload whose reply was lost, and a retry refused token-spent, is recorded under the id the relay holds as asked, however many replies were lost, and Cancel's withdrawal is admitted: one lost reply, recorded "
+    + one.recorded + ", asked " + one.asked + ", withdrawn " + one.withdrawn + "; two lost replies, recorded "
+    + two.recorded + ", asked " + two.asked + ", withdrawn " + two.withdrawn);
+  const lostPlant = await liftChannel("plant:lost-id", async mod => {
+    const x = await lostWithdraw(mod, "lost-withdraw-plant", 1);
+    return !!(x.recorded && x.asked && x.recorded !== x.asked && x.withdrawn === false);
+  });
+  check(lostPlant.turned && lostPlant.back, "966i lifting plant:lost-id seals the retry under a fresh id, so the relay refuses the withdrawal, and the product file is never written: "
+    + lostPlant.detail + ", sha " + (lostPlant.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 966h): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a page whose fetch fails part way is applied only where it can be judged whole (C3, board 923). The lead names a

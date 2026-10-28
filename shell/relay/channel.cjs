@@ -348,7 +348,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -375,6 +375,7 @@ function stateOf(x) {
   s.tokenUsedIds = idSet(x.tokenUsedIds);
   s.invitedIds = idSet(x.invitedIds);
   s.replyLostIds = idSet(x.replyLostIds);
+  if (table(x.lostBlobs)) for (const k of Object.keys(x.lostBlobs)) if (HEX32.test(k) && HEX32.test(String(x.lostBlobs[k] || ""))) s.lostBlobs[k] = String(x.lostBlobs[k]);
   s.unkeptIds = idSet(x.unkeptIds);
   for (const [name, prefix] of [["counters", "c\n"], ["revs", "r\n"]]) {
     if (table(x[name])) for (const k of Object.keys(x[name])) if (k.startsWith(prefix) && count(x[name][k])) s[name][k] = x[name][k];
@@ -1109,12 +1110,22 @@ function createProgram(opts) {
     return has(st.sent, k) ? st.sent[k] : null;
   }
 
-  /* A file owed, sealed and signed: the next counter, the blob it replaces named so the relay keeps one per chain. */
+  function lostBlob(id) {
+    const key = String(id || "");
+    const blob = st.lostBlobs[key];
+    if (HEX32.test(key) && st.replyLostIds[key] === true && HEX32.test(String(blob || ""))) return String(blob);
+    return null;
+  }
+
+  /* A file owed, sealed and signed: the next counter, the blob it replaces named so the relay keeps one per chain.
+     An invitation upload retried after a lost reply is sealed under that upload's id. */
   function sealOut(op, me, sealing) {
     const was = lastSent(op);
+    let held = null;
+    held = op.byInvite ? lostBlob(op.inviteId) : null; /* plant:lost-id */
     const blob = B.seal({ relayTeamId: pin.rt, epoch: sealing.epoch, teamKey: sealing.key, writer: { keyId: me.keyId, privateKey: me.privateKey },
       path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind, supersedes: was ? was.id : null,
-      id: op.id || null });
+      id: op.id || held || null });
     if (op.place) blob.place = op.place;
     return blob;
   }
@@ -1136,6 +1147,7 @@ function createProgram(opts) {
       st.invited = true;
       if (HEX32.test(String(op.inviteId || ""))) st.invitedIds[String(op.inviteId)] = true; /* plant:invite-id-sent */
       if (HEX32.test(String(op.inviteId || ""))) delete st.replyLostIds[String(op.inviteId)];
+      if (HEX32.test(String(op.inviteId || ""))) delete st.lostBlobs[String(op.inviteId)];
     }
     persist();
   }
@@ -1259,9 +1271,14 @@ function createProgram(opts) {
     },
     tokenSpent(id) { return HEX32.test(String(id || "")) && st.tokenUsedIds[String(id)] === true; },
     inviteSent(id) { return HEX32.test(String(id || "")) && st.invitedIds[String(id)] === true; },
-    /* The invitation's one upload went out and no reply came back. A later token-spent on that same upload counts as sent. */
-    markReplyLost(id) {
-      if (HEX32.test(String(id || ""))) st.replyLostIds[String(id)] = true;
+    /* The invitation's one upload went out and no reply came back. A later token-spent on that same upload counts as sent.
+       The blob id kept is the first lost reply's, the one the relay holds. */
+    markReplyLost(id, blobId) {
+      if (HEX32.test(String(id || ""))) {
+        const key = String(id);
+        st.replyLostIds[key] = true;
+        if (!HEX32.test(String(st.lostBlobs[key] || "")) && HEX32.test(String(blobId || ""))) st.lostBlobs[key] = String(blobId);
+      }
       persist();
     },
     replyLost(id) { return HEX32.test(String(id || "")) && st.replyLostIds[String(id)] === true; },
@@ -1763,7 +1780,7 @@ function createChannel(opts) {
       if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
-        if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId);
+        if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId, u.blob && u.blob.id);
         return u.why;
       }
       /* The invitation's one upload whose reply was lost: the relay already has it, and token-spent on the retry is that
