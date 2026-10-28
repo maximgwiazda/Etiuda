@@ -423,7 +423,8 @@ async function sweepScene(mf, prefix, r2Name, bindingName) {
   let sessionT = null;
   if (helloT.json && typeof helloT.json.challenge === "string") {
     const sigT = signHex(leadT, core.helloBytes(rtT, helloT.json.challenge, leadT.keyId));
-    sessionT = await post(mf, prefix + "t/" + rtT + "/session", JSON.stringify({ challenge: helloT.json.challenge, key: leadT.keyId, sig: sigT }));
+    sessionT = await post(mf, prefix + "t/" + rtT + "/session", JSON.stringify({
+      challenge: helloT.json.challenge, key: leadT.keyId, pub: leadT.pub, sig: sigT }));
   }
 
   const blobT = B.seal({
@@ -452,7 +453,8 @@ async function sweepScene(mf, prefix, r2Name, bindingName) {
   let sessionP = null;
   if (helloP.json && typeof helloP.json.challenge === "string") {
     const sigP = signHex(leadP, core.helloBytes(rtP, helloP.json.challenge, leadP.keyId));
-    sessionP = await post(mf, prefix + "t/" + rtP + "/session", JSON.stringify({ challenge: helloP.json.challenge, key: leadP.keyId, sig: sigP }));
+    sessionP = await post(mf, prefix + "t/" + rtP + "/session", JSON.stringify({
+      challenge: helloP.json.challenge, key: leadP.keyId, pub: leadP.pub, sig: sigP }));
   }
 
   const blobP = B.seal({
@@ -518,7 +520,8 @@ async function sweepScene(mf, prefix, r2Name, bindingName) {
   let sessionP2 = null;
   if (helloP2.json && typeof helloP2.json.challenge === "string") {
     const sigP2 = signHex(leadP, core.helloBytes(rtP, helloP2.json.challenge, leadP.keyId));
-    sessionP2 = await post(mf, prefix + "t/" + rtP + "/session", JSON.stringify({ challenge: helloP2.json.challenge, key: leadP.keyId, sig: sigP2 }));
+    sessionP2 = await post(mf, prefix + "t/" + rtP + "/session", JSON.stringify({
+      challenge: helloP2.json.challenge, key: leadP.keyId, pub: leadP.pub, sig: sigP2 }));
   }
 
   return {
