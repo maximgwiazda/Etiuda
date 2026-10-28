@@ -224,6 +224,22 @@ function parseStepsFromScript(pkg, scriptName) {
   return out;
 }
 
+/* Every merge runs every FLOOR entry, a fail-closed one included (the test architect's E1, office 6a3c8b52): the whole chain
+   is package.json's test script, which need not hold a floor file, so each entry it does not already run, by the same
+   command or by its file run whole, goes in before plant-compare. */
+export function withFloor(root, steps) {
+  const out = steps.slice();
+  const at = out.length && out[out.length - 1].file === "tests/plant-compare.mjs" ? out.length - 1 : out.length;
+  const extra = [];
+  for (const f of FLOOR) {
+    if (!fs.existsSync(path.join(root, f.file))) continue;
+    if (out.concat(extra).some(s => s.cmd === f.cmd || (s.file === f.file && !(s.args || []).length))) continue;
+    extra.push({ script: "area", cmd: f.cmd, file: f.file, args: f.args || [] });
+  }
+  out.splice(at, 0, ...extra);
+  return out;
+}
+
 export async function planAreaRun(root, changed, pkg) {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
@@ -245,7 +261,7 @@ export async function planAreaRun(root, changed, pkg) {
       return {
         failClosed: true,
         reason: "fail-closed to whole chain: change in shared code " + f,
-        steps: wholeChain,
+        steps: withFloor(root, wholeChain),
       };
     }
   }
@@ -257,7 +273,7 @@ export async function planAreaRun(root, changed, pkg) {
       return {
         failClosed: true,
         reason: "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")",
-        steps: wholeChain,
+        steps: withFloor(root, wholeChain),
       };
     }
   }
