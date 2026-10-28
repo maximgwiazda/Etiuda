@@ -1215,13 +1215,13 @@ function renamePatiently(from, to) {
     }
   }
 }
-let workerThreadId = 0;
-try { workerThreadId = require("node:worker_threads").threadId || 0; } catch { /* main */ }
+/* A temporary name no other writer can have: this process, a count of its own writes, and random bytes. The shell loads
+   no module it did not have (pick 5c), so no thread id: the count and the random part already set two writers apart. */
+let tempCount = 0;
 function uniqueTempPath(file) {
-  let thread = workerThreadId;
-  try { thread = require("node:worker_threads").threadId || 0; } catch {}
-  const rand = crypto.randomBytes(4).toString("hex");
-  return file + "." + process.pid + "." + thread + "." + rand + ".tmp"; /* plant:unique-temp */
+  tempCount = (tempCount + 1) % 1e9;
+  const rand = crypto.randomBytes(6).toString("hex");
+  return file + "." + process.pid + "." + tempCount + "." + rand + ".tmp"; /* plant:unique-temp */
 }
 /* Temp file then rename, so a failed write never leaves half a file under the name, and a
    refused one leaves no temp file behind it. The temp name is unique per write to prevent collisions

@@ -291,10 +291,12 @@ function renamePatiently(from, to) {
 }
 /* Temp file then rename, as the shell writes a share. The shell passes its own writeReplacing in; this is the same act for
    a host that has none. The temp name is unique per write, fsynced before rename, and unlinked on failure. */
+let tempCount = 0;
 function writeWhole(file, text) {
-  let thread = 0;
-  try { thread = require("node:worker_threads").threadId || 0; } catch {}
-  const tmp = file + "." + process.pid + "." + thread + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
+  /* This process, a count of its own writes and random bytes: no thread id, since the shell loads no module it did not
+     have (pick 5c). */
+  tempCount = (tempCount + 1) % 1e9;
+  const tmp = file + "." + process.pid + "." + tempCount + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
   try {
     fs.writeFileSync(tmp, text, "utf8");
     const fd = fs.openSync(tmp, "r+");
