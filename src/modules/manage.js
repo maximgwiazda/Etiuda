@@ -33,7 +33,7 @@ import { paintCatalogList } from "./catalog-offer.js";
 import { eHasHistory, openHistory } from "./catalog-history.js";
 import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
-import { joinDoorButton, openJoinPaste } from "./team-join.js";
+import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
 
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
@@ -574,7 +574,7 @@ function mgIntentRow(i,catOf,linked){
       '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
     '</span></div>';
 }
-function openManage(){
+function openManage(justHtml){
   applyCatsToGlobal();
 
   /* Full intentOrder, minus deleted ones - hidden stay in place, greyed, with a closed eye.
@@ -612,6 +612,22 @@ function openManage(){
      against a need that almost never arises. */
   const hiddenCardCount=(cards||[]).filter(m=>m&&m._hidden).length;
   const hiddenIntentCount=mgIntentIdxs.filter(i=>isIntentHiddenIdx(i)).length;
+
+  let relayLead=null;
+  relayLead=teamLeads().filter(l=>l&&l.relay&&!l.removed)[0]||null; /* plant:library-relay-host */
+  const dataTail=relayLead
+    ? '<span class="ec-where"><small>'+esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay))+'</small></span>'
+    : eCatalogFolder()
+    ? '<span class="ec-where">'
+      +'<code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0"'
+        +' title="'+esc(eCatalogFolder())+'"'
+        +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
+        +esc(eCatalogFolderShort())+'</code>'
+      +'<button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="'
+        +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
+        +ICON_EDIT+'</button>'
+      +'</span>'
+    : '';
 
   const mgBody=''+
     mgSec("catmac","Categories & cards",
@@ -653,19 +669,9 @@ function openManage(){
          line. The PATH IS THE CONTROL - clicking it opens the folder - and the pencil beside it
          changes which folder that is; a click inside a summary would toggle the fold, so both
          stop the event in wireManage. */
-      eCatalogFolder()
-        ? '<span class="ec-where">'
-          +'<code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0"'
-            +' title="'+esc(eCatalogFolder())+'"'
-            +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
-            +esc(eCatalogFolderShort())+'</code>'
-          +'<button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="'
-            +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
-            +ICON_EDIT+'</button>'
-          +'</span>'
-        : ''
-      )+
-    '';
+      dataTail
+    );
+  if(justHtml) return mgBody;
   openDialog({
     title: "Library",
     /* Every section here is about one catalog, and the only place that says WHICH is inside
@@ -836,6 +842,8 @@ function openManage(){
   }
 }
 
+function libraryBodyHtml(){ return openManage(true); }
+
 /* Join sits beside Load. It does not replace the catalog this desk has open. */
 function libraryActionsHtml(){
   return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local memory"))+'</button>'+
@@ -854,6 +862,7 @@ export {
   mgCardRow,
   mgCardsIn,
   mgUsesTip,
+  libraryBodyHtml,
   openManage,
   wireManageDrag,
   libraryActionsHtml

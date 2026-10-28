@@ -28121,6 +28121,7 @@ What you type stays in this browser only.`;
   var manage_exports = {};
   __export(manage_exports, {
     libraryActionsHtml: () => libraryActionsHtml,
+    libraryBodyHtml: () => libraryBodyHtml,
     mgCardRow: () => mgCardRow,
     mgCardsIn: () => mgCardsIn,
     mgUsesTip: () => mgUsesTip,
@@ -30045,7 +30046,7 @@ What you type stays in this browser only.`;
     const trash = '<button type="button" class="danger mg-trash" data-remove-intent="' + esc(iid) + '" title="Delete this intent" aria-label="Delete this intent">' + ICON_TRASH + "</button>";
     return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '">' + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n">' + (linked.get(iid) || 0) + '</span><span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
-  function openManage() {
+  function openManage(justHtml) {
     applyCatsToGlobal();
     const mgGoneIntents = new Set(pack.intentRemoved || []);
     const mgIntentIdxs = intentOrder.filter((i) => !mgGoneIntents.has(intentIdAt(i))).map((i, n) => ({ i, n })).sort((a, b) => {
@@ -30060,6 +30061,9 @@ What you type stays in this browser only.`;
     const catCount = Object.keys(CATS).length;
     const hiddenCardCount = (cards || []).filter((m) => m && m._hidden).length;
     const hiddenIntentCount = mgIntentIdxs.filter((i) => isIntentHiddenIdx(i)).length;
+    let relayLead = null;
+    relayLead = teamLeads().filter((l) => l && l.relay && !l.removed)[0] || null;
+    const dataTail = relayLead ? '<span class="ec-where"><small>' + esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay)) + "</small></span>" : eCatalogFolder() ? '<span class="ec-where"><code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>" : "";
     const mgBody = "" + mgSec(
       "catmac",
       "Categories & cards",
@@ -30101,8 +30105,9 @@ What you type stays in this browser only.`;
          line. The PATH IS THE CONTROL - clicking it opens the folder - and the pencil beside it
          changes which folder that is; a click inside a summary would toggle the fold, so both
          stop the event in wireManage. */
-      eCatalogFolder() ? '<span class="ec-where"><code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>" : ""
+      dataTail
     );
+    if (justHtml) return mgBody;
     openDialog({
       title: "Library",
       /* Every section here is about one catalog, and the only place that says WHICH is inside
@@ -30264,6 +30269,9 @@ What you type stays in this browser only.`;
         };
       });
     }
+  }
+  function libraryBodyHtml() {
+    return openManage(true);
   }
   function libraryActionsHtml() {
     return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + joinDoorButton("mgJoinTeam") + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Earlier versions…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>";

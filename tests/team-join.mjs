@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 127;
+const EXPECTED = 129;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -617,7 +617,9 @@ try {
   const calls = [];
   let failOp = "", slowRead = false;
   /* The page over one desk's shell, every call it makes kept; a call named by failOp is refused, and a read can be slowed. */
-  const hostOver = D => ({ onTeamJoin: noop, teamJoin: (op, file, name, four) => {
+  const hostOver = D => ({ onTeamJoin: noop,
+    catalogFolder: (D && typeof D.envelope === "function" && D.envelope().keys && D.envelope().keys.eCatalogFolder) || "",
+    teamJoin: (op, file, name, four) => {
     calls.push([op, file, name, four]);
     if (op === failOp) return Promise.reject(new Error("the channel closed"));
     if (op === "read" && slowRead) return new Promise(r => setTimeout(() => r(D.join(op, file, name, four)), 40));
@@ -2602,6 +2604,15 @@ try {
     try { return (await import(MOD("settings.js"))).settingsBodyHtml(); }
     finally { ST.lsSet("eUiLang", "en"); }
   };
+  const libraryAt = async (D, lang) => {
+    await pageOn(D);
+    ST.lsSet("eUiLang", lang || "en");
+    try {
+      const MG = await import(MOD("manage.js"));
+      return typeof MG.libraryBodyHtml === "function" ? MG.libraryBodyHtml() : "";
+    }
+    finally { ST.lsSet("eUiLang", "en"); }
+  };
   const bodyWas = document.body, langBefore = ST.lsGet("eUiLang");
   ST.lsSet("eUiLang", "en");
   document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
@@ -2678,13 +2689,14 @@ try {
       + " this lead, in English and in Polish: " + JSON.stringify(f));
   });
 
+  const relaySettingsDesk = await deskWith("h35-relay-settings", folder("relay-settings-own"), {
+    teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+    teamChannel: { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } },
+    teamShown: { [relayTeam]: { lead: "Lamp lead", relay: "relay.test" } }
+  });
+  await relaySettingsDesk.join("state");
+
   await legTry("15dp", async () => {
-    const relaySettingsDesk = await deskWith("h35-relay-settings", folder("relay-settings-own"), {
-      teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
-      teamChannel: { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } },
-      teamShown: { [relayTeam]: { lead: "Lamp lead", relay: "relay.test" } }
-    });
-    await relaySettingsDesk.join("state");
     const relaySetEn = await settingsAt(relaySettingsDesk, "en");
     const relaySetPl = await settingsAt(relaySettingsDesk, "pl");
     const relayHasHost = relaySetEn.indexOf("Relay: relay.test") >= 0 && relaySetPl.indexOf("Przekaźnik: relay.test") >= 0;
@@ -2693,6 +2705,48 @@ try {
       "15dp Settings shows a relay team's row with Relay: {HOST}, in English and in Polish, never the mirror's folder: host "
       + relayHasHost + ", no mirror " + relayNoMirror);
   });
+
+  await legTry("15du", async () => {
+    const relayLibEn = await libraryAt(relaySettingsDesk, "en");
+    const relayLibPl = await libraryAt(relaySettingsDesk, "pl");
+    const relayHasHost = relayLibEn.indexOf("Relay: relay.test") >= 0 && relayLibPl.indexOf("Przekaźnik: relay.test") >= 0;
+    const relayNoChange = relayLibEn.indexOf('id="mgCatFolder"') < 0 && relayLibEn.indexOf("Change folder") < 0;
+    const relayNoMirror = relayLibEn.indexOf(relayHex.h32) < 0 && relayLibEn.indexOf("open-folder") < 0;
+    const folderLibEn = await libraryAt(Dl, "en");
+    const folderLibUnchanged = folderLibEn.indexOf('id="mgCatFolder"') >= 0 && folderLibEn.indexOf("open-folder") >= 0 && folderLibEn.indexOf("Relay:") < 0;
+    check(relayHasHost && relayNoChange && relayNoMirror && folderLibUnchanged,
+      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, while a folder team stays unchanged: host "
+      + relayHasHost + ", no change " + relayNoChange + ", no mirror " + relayNoMirror + ", folder " + folderLibUnchanged);
+  });
+
+  // 15dv: lifting plant:library-relay-host shows mirror folder and Change folder on a relay team's Library
+  {
+    if (PLANTS_OFF) {
+      skip("15dv lifting plant:library-relay-host shows mirror folder and Change folder on a relay team's Library");
+    } else {
+      const managePath = path.join(ROOT, "src", "modules", "manage.js");
+      const before = fs.readFileSync(managePath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:library-relay-host") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const dir = fs.mkdtempSync(path.join(LAB, "manage-plant-"));
+        const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+        fs.writeFileSync(path.join(dir, "manage.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+        const planted = await import(pathToFileURL(path.join(dir, "manage.js")).href);
+        await pageOn(relaySettingsDesk);
+        ST.lsSet("eUiLang", "en");
+        const html = typeof planted.libraryBodyHtml === "function" ? planted.libraryBodyHtml() : "";
+        turned = html.indexOf("Relay: relay.test") < 0 && html.indexOf('id="mgCatFolder"') >= 0;
+        detail = turned ? "mirror folder and Change folder offered" : "relay host still shown";
+      }
+      const same = fs.readFileSync(managePath).equals(before);
+      if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+      check(turned && same, "15dv lifting plant:library-relay-host shows mirror folder and Change folder on a relay team's Library (FAIL 15du: Library relay not shown): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
 
   /* The offer's wait, read from the page rather than copied here, so a change of that wait is the same change here. */
   const UNDO_WAIT = +((/const UNDO_MS=(\d+)/.exec(fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8")) || [])[1] || 0);
