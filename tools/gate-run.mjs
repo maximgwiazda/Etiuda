@@ -513,13 +513,6 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   const toolsOnly = !!(gf && typeof gf.isGateToolsOnly === "function" && gf.isGateToolsOnly(changed));
   if (toolsOnly) console.log("gate-run area: the diff is confined to the gate tools, so their own legs and the floor run (rule 1)");
 
-  /* A diff of chain files only may schedule the chain, the bracket and the floor. The runner is not dropped here:
-     its own guard is what keeps it out, and removing that guard must schedule it again. */
-  const chainSet = new Set(testSteps.map(s => normRel(s.file)));
-  const holdAllow = new Set([...chainSet, "tests/plant-hold.mjs", "tests/plant-compare.mjs", "tools/child-cap.mjs",
-    ...FLOOR.map(f => f.file)]);
-  const chainOnly = changed.length > 0 && changed.every(f => chainSet.has(normRel(f)));
-
   /* An unchanged package.json, or one whose edit is not a whole script entry, still fails closed. */
   let scriptEdit = null;
   if (changed.some(f => normRel(f) === "package.json")) {
@@ -572,7 +565,6 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
 
   if (toolsOnly) {
     for (const g of gf.GATE_TOOLS.filter(t => t.startsWith("tests/"))) {
-      if (chainOnly && g !== "tools/gate-run.mjs" && !holdAllow.has(g)) continue; /* plant:chain-hold */
       if (fs.existsSync(path.join(root, g)) && !addedFiles.has(g)) {
         steps.push({ script: "area", cmd: "node " + g, file: g, args: [], note: "the gate tools' own legs" });
         addedFiles.add(g);
@@ -682,7 +674,6 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
     /* The runner is never its own leg: gates-for names it as a gate because npm run gates runs it, and called bare it
        refuses with 78. Its own legs are its tests (16p). */
     if (g === "tools/gate-run.mjs") continue; /* plant:runner-self */
-    if (chainOnly && g !== "tools/gate-run.mjs" && !holdAllow.has(g)) continue; /* plant:chain-hold */
     if (releaseOnlySet.has(g)) {
       if (g === "tests/engine-selftest.js" && changed.includes("tools/pre-commit")) {
         // keep

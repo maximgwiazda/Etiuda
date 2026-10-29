@@ -1303,20 +1303,42 @@ async function main() {
     "16p an area run never schedules the gate runner itself: for tests/relay-workerd.mjs it runs "
     + selfPlan.steps.map(s => s.file).join(", "));
 
-  /* For every file the npm test chain names, that file alone schedules only the chain, the bracket and the floor.
+  /* For every file the npm test chain names, that file alone schedules steps in any script chain the run uses
+     (test, split-guard), GATE_TOOLS, NIGHTLY_LEGS, the bracket and the floor, and refuses tools/gate-run.mjs and any
+     window-classed file (the test architect's E1, 2026-10-29).
      Static: planAreaRun starts nothing. Removing the runner's guard names tools/gate-run.mjs. */
   const chainFiles = String(selfPkg.scripts && selfPkg.scripts.test || "").split("&&").map(s => {
     const m = /^\s*node\s+(\S+)/.exec(s.trim());
     return m ? m[1].replace(/\\/g, "/") : "";
   }).filter(Boolean);
-  const chainAllow = new Set([...chainFiles, "tests/plant-hold.mjs", "tests/plant-compare.mjs", "tools/child-cap.mjs",
-    ...(gr.FLOOR || []).map(f => f.file)]);
+  const usedChains = ["test", "split-guard"].filter(name => selfPkg.scripts && selfPkg.scripts[name]);
+  const chainScriptFiles = [];
+  for (const name of usedChains) {
+    const parts = String(selfPkg.scripts[name] || "").split("&&");
+    for (const p of parts) {
+      const m = /^\s*node\s+(\S+)/.exec(p.trim());
+      if (m) chainScriptFiles.push(m[1].replace(/\\/g, "/"));
+    }
+  }
+  const floorCmds = new Set((gr.FLOOR || []).map(f => f.cmd));
+  const chainAllow = new Set([
+    ...chainScriptFiles,
+    ...(gfFloor.GATE_TOOLS || []).map(f => f.replace(/\\/g, "/")),
+    ...(gr.NIGHTLY_LEGS || []).map(n => String(n.file || "").replace(/\\/g, "/")),
+    "tests/plant-hold.mjs", "tests/plant-compare.mjs", "tools/child-cap.mjs",
+    ...(gr.FLOOR || []).map(f => String(f.file || "").replace(/\\/g, "/")),
+  ]);
+  chainAllow.delete("tools/gate-run.mjs");
   const chainOutside = [];
   for (const file of chainFiles) {
     const one = await gr.planAreaRun(ROOT, [file], selfPkg);
     for (const s of one.steps || []) {
       const rel = String(s.file || "").replace(/\\/g, "/");
-      if (!chainAllow.has(rel)) chainOutside.push(file + " -> " + rel);
+      const isFloor = floorCmds.has(s.cmd);
+      const isWin = typeof gfFloor.windowKind === "function" && gfFloor.windowKind(path.join(ROOT, rel)) === "window" && !isFloor;
+      if (rel === "tools/gate-run.mjs" || isWin || !chainAllow.has(rel)) {
+        chainOutside.push(file + " -> " + rel + (isWin ? " (window)" : ""));
+      }
     }
   }
   check(chainFiles.length > 0 && chainOutside.length === 0,

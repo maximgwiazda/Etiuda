@@ -150,6 +150,7 @@ export function globMatches(glob, rel) {
 /* Legs that judge a tree file's bytes. A diff touching a glob selects the leg. A leg's own source is not listed. */
 export const SCANS = {
   "tests/chain-split.mjs": ["tests/**/*.{js,mjs,cjs}", "package.json"],
+  "tests/leg-ids.js": ["tests/**/*.{js,mjs}"],
   "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js"],
   "tests/pl-diacritics.js": ["src/**/*.{js,mjs,css,html}", "shell/**/*.{js,mjs,css,html}"],
   "tests/css-layers.js": ["src/template.html"],
