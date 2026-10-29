@@ -24,7 +24,7 @@ const nodeRequire = createRequire(import.meta.url);
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 16;
+const EXPECTED = 18;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -203,9 +203,10 @@ try {
     check(tie.length === 1 && tie[0].name === "tie.ec",
       "f3f equal revs offer one row, the name that is not a conflict copy (" + (tie[0] && tie[0].name) + ")");
     const pred = A.test.conflictSiblingName;
-    check(typeof pred === "function" && pred("guide.ec", "guide (1).ec") && pred("guide.ec", "guide-v2.ec")
+    check(typeof pred === "function" && pred("guide.ec", "guide (1).ec") && pred("guide.ec", "guide-LAPTOP.ec")
+      && !pred("guide.ec", "guide-v2.ec") && !pred("guide.ec", "guide-EN.ec")
       && !pred("guide.ec", "desk-copy.ec") && !pred("guide.ec", "guide.ec"),
-      "f3g a conflict tail is a sibling, including the OneDrive hyphen, and a chosen other name is not");
+      "f3g a conflict tail is a sibling, including the OneDrive hyphen, and an ordinary name is not");
   }
 
   /* ---- a desk's own files, one row per id ---------------------------------------------------- */
@@ -318,6 +319,17 @@ try {
       + ", held " + (held && held.rev) + ")");
   }
 
+  {
+    const { ud, folder } = fresh();
+    put(folder, "lamp-1.ec", catalog("lamp-shop", 1));
+    put(folder, "lamp-2.ec", catalog("lamp-shop", 2));
+    const A = boot(ud);
+    const rows = await A.ask("etiuda:catalog-files");
+    const lamps = rowsOf(rows, "lamp-shop");
+    check(lamps.length === 2 && lamps.some(r => r.name === "lamp-1.ec") && lamps.some(r => r.name === "lamp-2.ec"),
+      "f3p ordinary editions with different names stay uncollapsed (2 rows)");
+  }
+
   /* ---- plants: the guarding line, removed only in a scratch copy ----------------------------- */
   {
     const one = scratchSource("f3-one-row");
@@ -349,9 +361,23 @@ try {
     check(sib.found && sib.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === sib.digest,
       "f3o removing plant:f3-team-sibling in a scratch copy heeds the canonical rev, and the checkout is unchanged");
   }
+  {
+    const conf = scratchSource("f3-conflict-only");
+    let red = false;
+    if (conf.found) {
+      const { ud, folder } = fresh();
+      put(folder, "lamp-1.ec", catalog("lamp-shop", 1));
+      put(folder, "lamp-2.ec", catalog("lamp-shop", 2));
+      const A = boot(ud, fs.readFileSync(conf.scratch, "utf8"));
+      const lamp = rowsOf(await A.ask("etiuda:catalog-files"), "lamp-shop");
+      red = lamp.length === 1;
+    }
+    check(conf.found && conf.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === conf.digest,
+      "f3q removing plant:f3-conflict-only in a scratch copy collapses non-conflict editions, and the checkout is unchanged");
+  }
 
   /* homeSrc is read so a later edit of the checkout is visible against the plant digest. */
-  check(homeSrc.length > 0, "f3p the checkout's shell was the one this file booted");
+  check(homeSrc.length > 0, "f3r the checkout's shell was the one this file booted");
 } catch (e) {
   failed++;
   asserted++;

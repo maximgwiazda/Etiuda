@@ -395,9 +395,8 @@ const SPAN_NAME = "stats-span.json";
 const TEAM_NAME = "etiuda-team.json";
 /* A sync client's copy of one file: the same extension, and the stem is the canonical stem plus
    one conflict tail. The tails here are ` (1)`, ` (conflicted copy ...)`, OneDrive's `-COMPUTER`
-   and Syncthing's `.sync-conflict-`. A hyphen tail also matches a chosen name such as guide-v2.
-   That name is a sibling for this test only: two catalogs whose ids differ each keep a row, and
-   a team file that is not genuine is not heeded. Nothing here renames or deletes the copy. */
+   and Syncthing's `.sync-conflict-`. A hyphen tail matches a computer name (3+ upper chars),
+   not an ordinary name like guide-v2 or guide-EN. Nothing here renames or deletes the copy. */
 function conflictSiblingName(canonical, name) {
   const c = path.basename(String(canonical || ""));
   const n = path.basename(String(name || ""));
@@ -410,7 +409,7 @@ function conflictSiblingName(canonical, name) {
   const tail = nStem.slice(cStem.length);
   if (/^( \(\d+\))+$/.test(tail)) return true;
   if (/^ \(.*conflicted copy.*\)$/i.test(tail)) return true;
-  if (/^-(?:[A-Z0-9][A-Z0-9-]{1,62}|v\d+)$/.test(tail)) return true;
+  if (/^-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(tail)) return true;
   if (/^\.sync-conflict-/.test(tail)) return true;
   return false;
 }
@@ -5842,7 +5841,7 @@ function isConflictName(name) {
   if (/ \(\d+\)$/.test(stem)) return true;
   if (/ \(.*conflicted copy.*\)$/i.test(stem)) return true;
   if (/\.sync-conflict-/.test(n)) return true;
-  if (/-(?:[A-Z0-9][A-Z0-9-]{1,62}|v\d+)$/.test(stem)) return true;
+  if (/-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(stem)) return true;
   return false;
 }
 function conflictNamedAmong(name, names) {
