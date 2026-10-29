@@ -6644,14 +6644,18 @@ try {
   const had = read(desk.mirror, "guide.ec") === ONE;
   const socketUp = await until(() => desk.ch.socketOpen(), 5000);
   if (handle) handle.close();
-  const seenClosed = await until(() => !desk.ch.socketOpen(), 3000);
+  /* The close is waited for as long as the edition is: the leg's subject is the poll after it, and a loaded machine was
+     seen to take over 3 s to notice (the release profile and a whole run, 2026-10-29). A desk that never notices still fails. */
+  const closeAt = Date.now();
+  const seenClosed = await until(() => !desk.ch.socketOpen(), 10000);
+  const closeMs = Date.now() - closeAt;
   put(lead.mirror, "guide.ec", TWO);
   await settle(lead);
   const caught = await until(() => read(desk.mirror, "guide.ec") === TWO, 10000);
   check(had && socketUp && seenClosed && caught,
     "960a a desk whose relay socket closes still receives the lead's next edition by the poll: first edition "
     + (had ? "in the mirror" : "missing") + ", socket opened " + socketUp + ", seen closed " + seenClosed
-    + ", the next edition arrived " + caught);
+    + " in " + closeMs + " ms, the next edition arrived " + caught);
   await desk.ch.stop();
   await lead.ch.stop();
 } catch (e) {
