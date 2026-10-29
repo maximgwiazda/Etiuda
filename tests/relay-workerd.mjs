@@ -755,10 +755,10 @@ try {
     "984d a grant from a revoked service key is refused: " + brief(delegated));
   const ping = sceneResult && sceneResult.ping;
   const pong = !!ping && Array.isArray(ping.got) && ping.got.length === 1 && ping.got[0] === '{"type":"pong"}' && ping.closed === null;
-  check(pong, "984g a ping is answered pong and the message handler does not run: handler 0, " + JSON.stringify(ping));
+  check(pong, "984k a ping is answered pong and the message handler does not run: handler 0, " + JSON.stringify(ping));
   if (planted) {
     const woke = !!plantPing && plantPing.closed && plantPing.closed.reason === "woke" && Array.isArray(plantPing.got) && plantPing.got.length === 0;
-    check(woke, "984h without the auto response the message handler runs and closes the socket: handler "
+    check(woke, "984l without the auto response the message handler runs and closes the socket: handler "
       + (woke ? "1" : "0") + ", " + (plantPingNote || JSON.stringify(plantPing)));
   }
   if (planted) {
