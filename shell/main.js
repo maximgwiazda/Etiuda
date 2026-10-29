@@ -3906,8 +3906,8 @@ function refusedWithdrawEnds(j) {
    `leads` is leadsView's. */
 function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const view = { sealed: null, join: null, joined: null, leads: leadsView() };
   const root = catalogFolder();
+  const view = { sealed: null, join: null, joined: null, leads: leadsView() };
   if (!folderAnswers(root)) return view;
   heedTeam();
   finishJoin();
@@ -4398,7 +4398,7 @@ function lapseSeen(team, step) {
   return joinView();
 }
 function leadsView() {
-  const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t));
+  const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
