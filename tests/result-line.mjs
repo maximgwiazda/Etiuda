@@ -1305,14 +1305,14 @@ async function main() {
     + selfPlan.steps.map(s => s.file).join(", "));
 
   /* For every file the npm test chain names, that file alone schedules steps in any script chain the run uses
-     (test, split-guard), GATE_TOOLS, NIGHTLY_LEGS, the bracket and the floor, and refuses tools/gate-run.mjs and any
+     (test, split-guard, hook-coverage), GATE_TOOLS, NIGHTLY_LEGS, the bracket and the floor, and refuses tools/gate-run.mjs and any
      window-classed file (the test architect's E1, 2026-10-29).
      Static: planAreaRun starts nothing. Removing the runner's guard names tools/gate-run.mjs. */
   const chainFiles = String(selfPkg.scripts && selfPkg.scripts.test || "").split("&&").map(s => {
     const m = /^\s*node\s+(\S+)/.exec(s.trim());
     return m ? m[1].replace(/\\/g, "/") : "";
   }).filter(Boolean);
-  const usedChains = ["test", "split-guard"].filter(name => selfPkg.scripts && selfPkg.scripts[name]);
+  const usedChains = ["test", "split-guard", "hook-coverage"].filter(name => selfPkg.scripts && selfPkg.scripts[name]);
   const chainScriptFiles = [];
   for (const name of usedChains) {
     const parts = String(selfPkg.scripts[name] || "").split("&&");
