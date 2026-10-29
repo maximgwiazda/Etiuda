@@ -365,7 +365,7 @@ function joinInviteParts(){
         acts:[["invite",t("Join this team"),false],["back",t("Cancel")]]};
     }
     /* Claudette's words, 2026-10-28 */
-    const absentSentence=t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.").split("{KIND}").join(joinKindWord(o.kind));
+    const absentSentence=t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.").split("{KIND}").join(joinKindWord(o.kind));
     const absent=o.why==="absent"?'<div class="e-join-meta">'+esc(absentSentence)+'</div>':"";
     return {title:title, line:joinWhere(o),
       body:absent+'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'

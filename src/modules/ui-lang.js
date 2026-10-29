@@ -1047,7 +1047,7 @@ UI_STRINGS.pl={
   "This folder is a SharePoint library that OneDrive keeps in sync.":"Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
   "Dropbox keeps this folder in sync.":"Ten folder jest synchronizowany przez Dropbox.",
   "Google Drive keeps this folder in sync.":"Ten folder jest synchronizowany przez Dysk Google.",
-  "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.":"Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć.",
+  "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.":"Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć. Gdy to miejsce pojawi się także na tym komputerze, po ponownym uruchomieniu Etiudy i otwarciu zaproszenia folder się odnajdzie.",
   "OneDrive":"OneDrive",
   "OneDrive for Business":"OneDrive dla firm",
   "Dropbox":"Dropbox",

@@ -564,8 +564,8 @@ if (M && J) {
 
   const uiSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
   const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
-  const absentEn = "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here.";
-  const absentPl = "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć.";
+  const absentEn = "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.";
+  const absentPl = "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć. Gdy to miejsce pojawi się także na tym komputerze, po ponownym uruchomieniu Etiudy i otwarciu zaproszenia folder się odnajdzie.";
   const thirdEn = "Once this computer has it too, opening the invitation again finds the folder.";
   const thirdPl = "Gdy to miejsce pojawi się także na tym komputerze, po ponownym otwarciu zaproszenia folder się odnajdzie.";
   check(pageSrc.indexOf(absentEn) >= 0 && pageSrc.indexOf("/* Claudette's words, 2026-10-28 */") >= 0
