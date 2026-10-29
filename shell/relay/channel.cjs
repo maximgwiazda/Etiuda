@@ -360,7 +360,8 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
+    pin: null, chain: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -379,6 +380,12 @@ function stateOf(x) {
   s.suspect = x.suspect === true; /* plant:remade-ask-kept */
   s.tokenUsed = x.tokenUsed === true;
   s.invited = x.invited === true;
+  const p = pinOf(x.pin);
+  if (p) s.pin = p;
+  if (Array.isArray(x.chain)) {
+    s.chain = x.chain.filter(c => table(c) && B.isId(c.keyId) && HEX64.test(String(c.public)))
+      .map(c => ({ keyId: c.keyId, public: c.public }));
+  }
   const idSet = m => {
     const out = {};
     if (table(m)) for (const k of Object.keys(m)) if (HEX32.test(k) && m[k] === true) out[k] = true;
@@ -471,16 +478,42 @@ function createProgram(opts) {
   const save = typeof o.save === "function" ? o.save : () => {};
   const teamMax = Number.isSafeInteger(o.teamMax) ? o.teamMax : B.TEAM_MAX;
   let st = stateOf(typeof o.load === "function" ? o.load() : null);
-  let pin = pinOf(o.pin);
+  let pin = pinOf((st && st.pin) || o.pin);
   const rates = new Map();
   /* What waits on a refusal that lifts, by path or copy, with the reason last said for it, so a wait is said once. */
   const waiting = new Map();
   /* A case variant left beside the one file its folded path sends, so that variant is said once. */
   const stayed = new Set();
 
+  function chainLeads() {
+    const out = [];
+    const seen = new Set();
+    const add = k => {
+      if (k && B.isId(k.keyId) && HEX64.test(String(k.public)) && !seen.has(k.keyId)) {
+        seen.add(k.keyId);
+        out.push({ keyId: k.keyId, public: k.public });
+      }
+    };
+    if (pin && pin.lead) add(pin.lead);
+    if (Array.isArray(st.chain)) for (const k of st.chain) add(k);
+    return out;
+  }
+  function isLeadKey(keyId) {
+    return chainLeads().some(l => l.keyId === keyId);
+  }
+  function leadSigned(bytes, sigValue, prefix) {
+    for (const l of chainLeads()) {
+      if (B.verifySigned(l.public, prefix, bytes, sigValue)) return true;
+    }
+    return false;
+  }
   const persist = () => { try { save(st); } catch (e) { say("the relay's record could not be kept - " + (e && e.message)); } };
   const revKey = t => ({ teamId: pin.teamId, leadKeyId: pin.lead.keyId, epoch: t.epoch, rev: t.rev });
-  const leadTrust = desks => ({ lead: { keyId: pin.lead.keyId, public: pin.lead.public }, desks: desks || [] });
+  function leadTrust(desks) {
+    const t = { lead: { keyId: pin.lead.keyId, public: pin.lead.public }, desks: desks || [] };
+    t.leads = chainLeads(); /* plant:chain-trust */
+    return t;
+  }
   const dropSaid = (what, r) => { say(what + ": " + r.said); return r; };
 
   function setPin(p) {
@@ -488,17 +521,31 @@ function createProgram(opts) {
     return pin ? { ok: true } : R("not-enrolled");
   }
 
-  /* A team file judged under the pin alone: signed by the pinned lead's key, never one the file names; this team and this
-     relay; an epoch and a rev. */
+  function followHandover(t) {
+    if (!t) return;
+    if (t.chain) st.chain = t.chain;
+    if (t.handed) {
+      pin = { teamId: pin.teamId, rt: pin.rt, lead: { keyId: t.doc.lead.keyId, public: t.doc.lead.public } }; /* plant:team-pin-move */
+      st.pin = pin; /* plant:team-pin-save */
+    }
+  }
+
+  /* A team file judged under the pin or a genuine handover: signed by the pinned lead's key or a new lead the handover
+     proves; this team and this relay; an epoch and a rev. */
   function teamJudged(doc) {
     if (!pin) return R("wrong-team");
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!B.verifySigned(pin.lead.public, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
+    const lead = doc.lead;
+    const leadDiffers = !lead || typeof lead !== "object" || lead.keyId !== pin.lead.keyId || lead.public !== pin.lead.public;
+    if (leadDiffers && !B.handedTo(doc, pin.lead)) return R("bad-signature"); /* plant:team-handover */
+    const signerPub = leadDiffers ? (lead && lead.public) : pin.lead.public;
+    if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
+    const chain = B.genuineChain(doc, pin.lead) || (st && st.chain) || [{ keyId: pin.lead.keyId, public: pin.lead.public }];
     if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || relayOf(doc) !== pin.rt) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || !isCount(doc.rev)) return R("replay-rev");
-    return { ok: true, doc, epoch: doc.epoch, rev: doc.rev };
+    return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
 
   /* The head the lead's Studio writes. The pinned lead's signature over the head prefix, and this team's name.
@@ -510,7 +557,7 @@ function createProgram(opts) {
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
+    if (!leadSigned(bytes, doc.sig.value, HEAD_PREFIX)) return R("bad-signature"); /* plant:head-sig */
     if (doc.v !== 1) return R("bad-signature");
     if (doc.team !== pin.teamId) return R("wrong-team");
     if (!isCount(doc.epoch) || !isCount(doc.rev) || !Number.isFinite(doc.t)) return R("bad-signature");
@@ -534,6 +581,7 @@ function createProgram(opts) {
   function loadTeamFile(doc) {
     const t = teamJudged(doc);
     if (!t.ok) return t;
+    followHandover(t);
     const r = B.revLoad(st.revs, revKey(t));
     if (!r.ok) return r; /* plant:rev-load */
     st.revs = r.revs;
@@ -569,7 +617,7 @@ function createProgram(opts) {
      under the old team file is refused. At the newer epoch the same key is removed where an older loaded roster named
      it, and a later rev of one epoch removes a key an earlier rev of that epoch named. A stranger stays not-roster. */
   function removedAfterMove(writerKeyId, epoch, opened) {
-    if (!pin || writerKeyId === pin.lead.keyId || !isCount(epoch)) return null;
+    if (!pin || isLeadKey(writerKeyId) || !isCount(epoch)) return null;
     const top = newestRoster();
     if (!top || epoch > top.epoch) return null;
     if (top.desks.some(d => d.keyId === writerKeyId)) return null;
@@ -739,6 +787,7 @@ function createProgram(opts) {
     try { doc = JSON.parse(r.body.replace(/^\uFEFF/, "")); } catch { doc = null; }
     const t = teamJudged(doc);
     if (!t.ok) return t;
+    followHandover(t);
     const sha = sha256(Buffer.from(r.body, "utf8"));
     const prev = has(st.applied, TEAM_NAME) ? st.applied[TEAM_NAME] : null;
     if (prev && !prev.del && prev.sha === sha) {
@@ -768,7 +817,7 @@ function createProgram(opts) {
      side its own file, on a desk's the one landTeam wrote. A rev below one already kept for its epoch changes nothing. */
   function trustFromMirror() {
     const t = heldTeam();
-    if (t) keepTrust(t);
+    if (t) { followHandover(t); keepTrust(t); }
     return t;
   }
 
@@ -851,11 +900,12 @@ function createProgram(opts) {
   }
   const unpend = id => { st.pending = st.pending.filter(p => p.id !== id); };
 
-  /* The public key of a writer this program trusts: the pinned lead, or a desk one roster it already holds names, and
+  /* The public key of a writer this program trusts: the pinned lead, any key on its handover chain, or a desk one roster it already holds names, and
      only where that key id is a single public key. A public key the blob itself carries is not trust. */
   function trustedPub(writer) {
     if (!pin || !B.isId(writer)) return null;
-    if (writer === pin.lead.keyId) return pin.lead.public;
+    const lead = chainLeads().find(l => l.keyId === writer);
+    if (lead) return lead.public;
     const pubs = [];
     for (const e of Object.keys(st.trust)) {
       for (const d of st.trust[e].desks) {
@@ -884,7 +934,7 @@ function createProgram(opts) {
     const out = [];
     const key = ctx && typeof ctx.keyFor === "function" ? ctx.keyFor(m.epoch) : null;
     const known = has(st.trust, String(m.epoch));
-    const lead = m.writer === pin.lead.keyId;
+    const lead = isLeadKey(m.writer);
     const rostered = known && st.trust[m.epoch].desks.some(d => d.keyId === m.writer);
     /* A key the roster already names, by a yes the relay refused, still asks or withdraws under the invitation's key. */
     let asking = !rostered;
@@ -903,7 +953,7 @@ function createProgram(opts) {
   function mayPark(it) {
     const m = it && it.meta;
     if (!pin || !m || !isCount(m.epoch) || m.epoch > st.leadEpoch) return false;
-    if (m.writer === pin.lead.keyId) return true;
+    if (isLeadKey(m.writer)) return true;
     const top = newestRoster();
     return !!top && top.desks.some(d => d.keyId === m.writer);
   }
@@ -917,7 +967,7 @@ function createProgram(opts) {
     if (typeof m.place === "string" && m.place.startsWith("invite:")) return openInvited(it, blob, floors, ctx);
     /* A request a desk joining by invitation sent, its key carried beside it (the relay marks only an invitation's upload so):
        the lead's to open; any other program passes over it and says nothing, as it passes over an invitation's place. */
-    if (typeof m.pub === "string" && m.writer !== pin.lead.keyId && !(ctx && Array.isArray(ctx.inviteKeys))
+    if (typeof m.pub === "string" && !isLeadKey(m.writer) && !(ctx && Array.isArray(ctx.inviteKeys))
       && !(has(st.trust, String(m.epoch)) && st.trust[m.epoch].desks.some(d => d.keyId === m.writer))) { unpend(m.id); return null; } /* plant:request-pass */
     const t = triesFor(m, ctx);
     let last = null;
@@ -940,7 +990,7 @@ function createProgram(opts) {
     return null;
   }
 
-  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3's wrap in small), AND A DESK'S OWN COPY: what the lead sealed
+  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3'wrap in small), AND A DESK'S OWN COPY: what the lead sealed
      under one invitation's key alone, or under one desk's copy key alone, the team file for the desk that holds that key to
      read before it holds the team key of the file's epoch. The relay can tell the two apart, an invitation's place being
      an id on its own list of invitations, but not whose a desk's copy is (the header's EPOCH MOVE). A program that holds
@@ -951,7 +1001,7 @@ function createProgram(opts) {
     const m = it.meta;
     const seal = sealOf(m.place.slice(7), ctx);
     if (!seal || m.del === true) return null; /* plant:invite-pass */
-    if (m.writer !== pin.lead.keyId) { dropSaid(seal.what, R("not-roster")); return null; }
+    if (!isLeadKey(m.writer)) { dropSaid(seal.what, R("not-roster")); return null; }
     const r = judge(blob, leadTrust([]), m.epoch, seal.key, floors);
     if (!r.ok) { dropSaid(seal.what, r); return null; } /* plant:invite-judge */
     if (r.kind !== "file" || r.path !== TEAM_NAME) { dropSaid(seal.what, R("outside-place")); return null; }
@@ -1002,8 +1052,8 @@ function createProgram(opts) {
     const lead = [], rest = [];
     for (const it of items || []) {
       if (!it || !table(it.meta)) continue;
-      if (it.meta.writer === pin.lead.keyId && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
-      (it.meta.writer === pin.lead.keyId ? lead : rest).push(it);
+      if (isLeadKey(it.meta.writer) && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
+      (isLeadKey(it.meta.writer) ? lead : rest).push(it);
     }
     const isTeam = x => x.r.kind === "file" && x.r.path === TEAM_NAME;
     let topTeam = null;
@@ -1242,16 +1292,17 @@ function createProgram(opts) {
       edition: h.edition, published: h.published };
   }
 
-  /* The head shown by its signed time, never as a block: only one the pinned lead signed for this relay. */
+  /* The head shown by its signed time, never as a block: only one the pinned lead or genuine predecessor signed for this relay. */
   function showFreshness(input) {
     const i = input || {};
     const none = { shown: false, blocked: false, time: null, epoch: null, rev: null, ageMs: null };
     const head = i.head;
     if (!pin || !table(head) || !table(head.sig)) return none;
-    if (head.keyId !== pin.lead.keyId || head.relay !== pin.rt) return none;
+    const lead = chainLeads().find(l => l.keyId === head.keyId);
+    if (!lead || head.relay !== pin.rt) return none;
     let bytes;
     try { bytes = signedBytes(head); } catch { return none; }
-    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
+    if (!B.verifySigned(lead.public, HEAD_PREFIX, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
     const now = Number.isFinite(i.now) ? i.now : clock();
     return { shown: true, blocked: false, time: head.time, epoch: head.epoch, rev: head.rev, ageMs: now - head.time };
   }
@@ -1272,7 +1323,7 @@ function createProgram(opts) {
   }
 
   const api = {
-    setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
+    setPin, pinned: () => pin, leads: () => chainLeads(), loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
     sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },

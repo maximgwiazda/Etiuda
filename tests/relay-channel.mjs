@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 292;
+const EXPECTED = 302;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -7885,6 +7885,188 @@ const retryPlant = await liftChannel("plant:h35-enrol-retry", async mod => {
 check(retryPlant.turned && retryPlant.back,
   "993i lifting plant:h35-enrol-retry does not ask again (FAIL 993h a join the relay has not enrolled yet is asked again until the lead's team is there, and is not said as unenrolled while it waits: hello 1, again false, online false, said unenrolled): "
   + retryPlant.detail + ", sha " + (retryPlant.back ? "restored" : "differs"));
+
+/* ---- 932 a lead's key handed over, the desk's relay channel follows it (design section 2, K1, K2) ---- */
+{
+  function makeHandoverStep(teamId, fromLead, toLead) {
+    const s = {
+      format: 1,
+      kind: "etiuda-team-handover",
+      team: teamId,
+      from: { keyId: fromLead.keyId, public: fromLead.pub },
+      to: { keyId: toLead.keyId, public: toLead.pub },
+      sig: { alg: "Ed25519", keyId: fromLead.keyId },
+    };
+    s.sig.value = signHex(fromLead, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(s)]));
+    return s;
+  }
+  function teamDocWith(tm, rt, lead, epoch, rev, roster, handover) {
+    const doc = {
+      format: 1,
+      kind: "etiuda-team",
+      id: tm,
+      catalogs: ["pebble-board"],
+      lead: { keyId: lead.keyId, public: lead.pub, box: "ab".repeat(32) },
+      sealed: true,
+      exportsSealed: false,
+      epoch,
+      rev,
+      channel: { kind: "relay", rt, url: URLV1 },
+      roster: roster || [],
+    };
+    if (handover) doc.handover = handover;
+    doc.sig = { alg: "Ed25519", keyId: lead.keyId };
+    doc.sig.value = signHex(lead, C.signedBytes(doc));
+    return doc;
+  }
+
+  const tm = "t-" + hex(8), rt = hex(16);
+  const lead1 = keyPair(false), lead2 = keyPair(false);
+  const pin = { teamId: tm, rt, lead: { keyId: lead1.keyId, public: lead1.pub } };
+  const dir = path.join(LAB, "ho-932a-" + hex(4));
+  fs.mkdirSync(dir, { recursive: true });
+  const prog = C.createProgram({ io: C.diskIO(dir, C.writeWhole), pin, save() {}, say() {} });
+
+  const doc1 = teamDocWith(tm, rt, lead1, 1, 1, []);
+  prog.loadTeamFile(doc1);
+
+  const step1 = makeHandoverStep(tm, lead1, lead2);
+  const doc2 = teamDocWith(tm, rt, lead2, 1, 2, [], [step1]);
+  const l2 = prog.loadTeamFile(doc2);
+
+  const K1 = crypto.randomBytes(32);
+  const head2 = signHead({ v: 1, team: tm, epoch: 1, rev: 2, editions: [{ catalog: "pebble-board", rev: 1, edition: "Second edition", published: "10 March 2026" }], t: Date.now() }, lead2);
+  const h2 = prog.acceptBlob({
+    blob: B.seal({ relayTeamId: rt, epoch: 1, teamKey: K1, writer: { keyId: lead2.keyId, privateKey: lead2.privateKey }, path: HEAD_FILE, body: head2, counter: 1, place: "root", kind: "file" }),
+    teamDoc: doc2,
+    teamKey: K1,
+  });
+  const news = prog.headNews(Date.now());
+  check(l2.ok === true && prog.pinned().lead.keyId === lead2.keyId && h2.ok === true && news.edition === "Second edition",
+    "932a a handover file lands and the next head, signed by the new key, is taken: landed " + l2.ok + ", pinned " + (prog.pinned() && prog.pinned().lead.keyId === lead2.keyId) + ", head " + h2.ok + ", edition " + news.edition);
+
+  const lead3 = keyPair(false), stranger = keyPair(false);
+  const noStep = teamDocWith(tm, rt, lead3, 1, 3, []);
+  const rNoStep = prog.loadTeamFile(noStep);
+
+  const badSignerStep = makeHandoverStep(tm, stranger, lead3);
+  const badStepDoc = teamDocWith(tm, rt, lead3, 1, 3, [], [badSignerStep]);
+  const rBadStep = prog.loadTeamFile(badStepDoc);
+
+  const keys9 = [lead2];
+  for (let i = 0; i < 9; i++) keys9.push(keyPair(false));
+  const chain9 = [];
+  for (let i = 0; i < 9; i++) chain9.push(makeHandoverStep(tm, keys9[i], keys9[i + 1]));
+  const docChain9 = teamDocWith(tm, rt, keys9[9], 1, 3, [], chain9);
+  const rChain9 = prog.loadTeamFile(docChain9);
+
+  check(rNoStep.reason === "bad-signature" && rBadStep.reason === "bad-signature" && rChain9.reason === "bad-signature" && prog.pinned().lead.keyId === lead2.keyId,
+    "932b a file naming a new lead with no step, a step signed by a third key, or a chain of 9 is refused, and the pin does not move: nostep " + rNoStep.reason + ", badstep " + rBadStep.reason + ", chain9 " + rChain9.reason + ", pinned " + (prog.pinned().lead.keyId === lead2.keyId));
+
+  const dirC = path.join(LAB, "ho-932c-" + hex(4));
+  fs.mkdirSync(dirC, { recursive: true });
+  let stateC = null;
+  const saveC = st => { stateC = JSON.parse(JSON.stringify(st)); };
+  const loadC = () => stateC;
+  const progBefore = C.createProgram({ io: C.diskIO(dirC, C.writeWhole), pin: { teamId: tm, rt, lead: { keyId: lead1.keyId, public: lead1.pub } }, save: saveC, load: loadC });
+  progBefore.loadTeamFile(doc2);
+  const beforePin = progBefore.pinned();
+  const progAfter = C.createProgram({ io: C.diskIO(dirC, C.writeWhole), pin: { teamId: tm, rt, lead: { keyId: lead1.keyId, public: lead1.pub } }, save: saveC, load: loadC });
+  const afterPin = progAfter.pinned();
+  check(beforePin && beforePin.lead.keyId === lead2.keyId && afterPin && afterPin.lead.keyId === lead2.keyId && afterPin.lead.public === lead2.pub,
+    "932c a desk restarted after landing keeps the moved pin: before " + (beforePin && beforePin.lead.keyId) + ", after " + (afterPin && afterPin.lead.keyId));
+
+  const tmD = "t-" + hex(8), rtD = hex(16);
+  const lA = keyPair(false), lB = keyPair(false), lC = keyPair(false);
+  const pinD = { teamId: tmD, rt: rtD, lead: { keyId: lA.keyId, public: lA.pub } };
+  const dirD = path.join(LAB, "ho-932d-" + hex(4));
+  fs.mkdirSync(dirD, { recursive: true });
+  const progD = C.createProgram({ io: C.diskIO(dirD, C.writeWhole), pin: pinD, save() {}, say() {} });
+  const stepAB = makeHandoverStep(tmD, lA, lB);
+  const stepBC = makeHandoverStep(tmD, lB, lC);
+  const docTwoSteps = teamDocWith(tmD, rtD, lC, 1, 3, [], [stepAB, stepBC]);
+  const resD = progD.loadTeamFile(docTwoSteps);
+  const pinnedD = progD.pinned();
+  check(resD.ok === true && pinnedD && pinnedD.lead.keyId === lC.keyId && pinnedD.lead.public === lC.pub,
+    "932d a desk two handovers behind follows both steps at once: loaded " + resD.ok + ", pinned " + (pinnedD && pinnedD.lead.keyId));
+
+  const tmE = "t-" + hex(8), rtE = hex(16);
+  const oldLead = keyPair(false), newLead = keyPair(false), strangerLead = keyPair(false);
+  const dirE = path.join(LAB, "ho-932e-" + hex(4));
+  fs.mkdirSync(dirE, { recursive: true });
+  const KE = crypto.randomBytes(32);
+  const guideBlob = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: "guide.ec", body: "guide published by old lead\n", counter: 1, place: "root", kind: "file" });
+  const oldHead = signHead({ v: 1, team: tmE, epoch: 1, rev: 1, editions: [{ catalog: "quay-board", rev: 1, edition: "First edition", published: "1 March 2026" }], t: 1000000 }, oldLead);
+  const oldHeadBlob = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: HEAD_FILE, body: oldHead, counter: 2, place: "root", kind: "file" });
+  const strangerBlob = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: strangerLead.keyId, privateKey: strangerLead.privateKey }, path: "stranger.ec", body: "stranger\n", counter: 3, place: "root", kind: "file" });
+  const stepE = makeHandoverStep(tmE, oldLead, newLead);
+  const docE = teamDocWith(tmE, rtE, newLead, 1, 2, [], [stepE]);
+  const pinE = { teamId: tmE, rt: rtE, lead: { keyId: newLead.keyId, public: newLead.pub } };
+  const progE = C.createProgram({ io: C.diskIO(dirE, C.writeWhole), pin: pinE, save() {}, say() {} });
+  progE.loadTeamFile(docE);
+  const rGuide = progE.acceptBlob({ blob: guideBlob, teamDoc: docE, teamKey: KE });
+  const rHead = progE.acceptBlob({ blob: oldHeadBlob, teamDoc: docE, teamKey: KE });
+  const rStranger = progE.acceptBlob({ blob: strangerBlob, teamDoc: docE, teamKey: KE });
+  const guideRead = progE.readMirror("guide.ec");
+  const headNewsE = progE.headNews(2000000);
+  check(rGuide.ok === true && guideRead === "guide published by old lead\n" && rHead.ok === true && headNewsE.edition === "First edition" && rStranger.ok === false && rStranger.reason === "not-roster",
+    "932e a desk joining after the move reads a catalog and a head the old lead published before it; a blob by a key on no chain is still refused: guide " + (guideRead === "guide published by old lead\n") + ", head " + headNewsE.edition + ", stranger " + rStranger.reason);
+
+  const tmF = "t-" + hex(8), rtF = hex(16);
+  const oldF = keyPair(false), newF = keyPair(false);
+  const pinF = { teamId: tmF, rt: rtF, lead: { keyId: oldF.keyId, public: oldF.pub } };
+  const dirF = path.join(LAB, "ho-932f-" + hex(4));
+  fs.mkdirSync(dirF, { recursive: true });
+  const progF = C.createProgram({ io: C.diskIO(dirF, C.writeWhole), pin: pinF, save() {}, say() {} });
+  const stepF = makeHandoverStep(tmF, oldF, newF);
+  const docF = teamDocWith(tmF, rtF, newF, 1, 2, [], [stepF]);
+  const resF = progF.loadTeamFile(docF);
+  const pinAfterF = progF.pinned();
+  check(resF.ok === true && pinAfterF && pinAfterF.lead.keyId === newF.keyId && pinAfterF.lead.public === newF.pub,
+    "932f an invitation made before the move pins the old lead, and the joiner follows the chain at its first team file: admitted " + resF.ok + ", followed " + (pinAfterF && pinAfterF.lead.keyId === newF.keyId));
+
+  const pHandover = await liftChannel("plant:team-handover", async mod => {
+    const dirP = path.join(LAB, "plant-ho-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save() {}, say() {} });
+    p.loadTeamFile(doc1);
+    const bad = p.loadTeamFile(badStepDoc);
+    return bad.ok === true;
+  });
+  check(pHandover.turned && pHandover.back, "932g lifting plant:team-handover accepts an unhanded lead change, and the product file is never written: "
+    + pHandover.detail + ", sha " + (pHandover.back ? "restored" : "differs"));
+
+  const pPinMove = await liftChannel("plant:team-pin-move", async mod => {
+    const dirP = path.join(LAB, "plant-pm-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save() {}, say() {} });
+    p.loadTeamFile(doc1);
+    p.loadTeamFile(doc2);
+    return p.pinned() && p.pinned().lead.keyId === lead1.keyId;
+  });
+  check(pPinMove.turned && pPinMove.back, "932h lifting plant:team-pin-move leaves the pin at the old lead, and the product file is never written: "
+    + pPinMove.detail + ", sha " + (pPinMove.back ? "restored" : "differs"));
+
+  const pPinSave = await liftChannel("plant:team-pin-save", async mod => {
+    const dirP = path.join(LAB, "plant-ps-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    let s = null;
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save: st => { s = JSON.parse(JSON.stringify(st)); }, load: () => s });
+    p.loadTeamFile(doc1);
+    p.loadTeamFile(doc2);
+    const p2 = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save: st => { s = JSON.parse(JSON.stringify(st)); }, load: () => s });
+    return p2.pinned() && p2.pinned().lead.keyId === lead1.keyId;
+  });
+  check(pPinSave.turned && pPinSave.back, "932i lifting plant:team-pin-save does not persist the moved pin across restart, and the product file is never written: "
+    + pPinSave.detail + ", sha " + (pPinSave.back ? "restored" : "differs"));
+
+  const pChainTrust = await liftChannel("plant:chain-trust", async mod => {
+    const dirP = path.join(LAB, "plant-ct-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pinE, save() {}, say() {} });
+    p.loadTeamFile(docE);
+    const r = p.acceptBlob({ blob: guideBlob, teamDoc: docE, teamKey: KE });
+    return r.ok === false;
+  });
+  check(pChainTrust.turned && pChainTrust.back, "932j lifting plant:chain-trust refuses blobs signed by the old lead after the move, and the product file is never written: "
+    + pChainTrust.detail + ", sha " + (pChainTrust.back ? "restored" : "differs"));
+}
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
 {
