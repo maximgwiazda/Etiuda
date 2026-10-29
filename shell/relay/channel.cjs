@@ -266,6 +266,8 @@ function pinOf(p) {
   const lead = table(p.lead) ? p.lead : (table(p) && p.keyId && p.public ? { keyId: p.keyId, public: p.public } : {});
   if (typeof p.teamId !== "string" || !p.teamId || !B.isId(lead.keyId)
     || typeof lead.public !== "string" || !HEX64.test(lead.public)) return null;
+  /* A present rt must be a non-empty string. An absent rt is a folder pin. */
+  if (Object.prototype.hasOwnProperty.call(p, "rt") && (typeof p.rt !== "string" || !p.rt)) return null;
   const rt = typeof p.rt === "string" && p.rt ? p.rt : null;
   return { teamId: p.teamId, rt: rt, lead: { keyId: lead.keyId, public: lead.public } };
 }
@@ -532,7 +534,7 @@ function createProgram(opts) {
   }
 
   /* A team file judged under the pin or a genuine handover: signed by the pinned lead's key or a new lead the handover
-     proves; this team and this relay; an epoch and a rev. */
+     proves; this team. A relay pin requires its own relay and a rev. A folder pin refuses a file that names a relay. */
   function teamJudged(doc) {
     if (!pin) return R("wrong-team");
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
@@ -544,9 +546,9 @@ function createProgram(opts) {
     const signerPub = leadDiffers ? (lead && lead.public) : pin.lead.public;
     if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
     const chain = B.genuineChain(doc, pin.lead) || (st && st.chain) || [{ keyId: pin.lead.keyId, public: pin.lead.public }];
-    const isRelay = table(doc.channel) && doc.channel.kind === "relay";
-    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (isRelay ? relayOf(doc) !== pin.rt : relayOf(doc) !== null)) return R("wrong-team"); /* plant:team-own */
-    if (!isCount(doc.epoch) || (isRelay ? !isCount(doc.rev) : (doc.rev !== undefined && (!Number.isSafeInteger(doc.rev) || doc.rev < 0)))) return R("replay-rev");
+    const folder = !pin.rt;
+    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (folder ? relayOf(doc) !== null : relayOf(doc) !== pin.rt)) return R("wrong-team"); /* plant:team-own */
+    if (!isCount(doc.epoch) || (folder ? (doc.rev !== undefined && (!Number.isSafeInteger(doc.rev) || doc.rev < 0)) : !isCount(doc.rev))) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
 

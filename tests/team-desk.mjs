@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 65;
+const EXPECTED = 66;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -143,7 +143,7 @@ try {
     wrap: D1.api.wrapTeamKey(key, who.box, team || TEAM, epoch, who.id) });
   const teamFile = (o) => sign(Object.assign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
     lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: o.exportsSealed === true,
-    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}, o.ring ? { ring: o.ring } : {}, o.rev !== undefined ? { rev: o.rev } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
+    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}, o.ring ? { ring: o.ring } : {}, o.rev !== undefined ? { rev: o.rev } : {}, o.channel ? { channel: o.channel } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
   const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), t, "utf8");
   const epochs = (D, team) => Object.keys(((D.envelope().teamKeys || {})[team || TEAM]) || {}).sort().join();
   const read = async (D, name) => ((await D.ask("etiuda:catalog-read", name)) || {}).text;
@@ -965,6 +965,22 @@ try {
     && chNone.source === "none" && chNone.ring === null,
     "14bh channel.cjs readRing accepts embedded ring in folder teamDoc and falls back to looseRing without one: "
     + chWithRing.source + " / " + chLoose.source + " / " + chNone.source);
+
+  // 14bi: a relay pin still ignores a folder file's ring and never reads the loose file
+  const relayRt = crypto.randomBytes(16).toString("hex");
+  const relayProg = Ch.createProgram({ pin: { teamId: T6, rt: relayRt, lead: { keyId: LEAD.keyId, public: LEAD.public } } });
+  const relayDoc = teamFile({ team: T6, epoch: 1, rev: 1, roster: [], ring: embeddedRing, channel: { kind: "relay", rt: relayRt } });
+  const bareRelayDoc = teamFile({ team: T6, epoch: 1, rev: 1, roster: [], channel: { kind: "relay", rt: relayRt } });
+  const folderOnRelay = relayProg.readRing({ teamDoc: folderDocWithRing, looseRing: looseRing });
+  const ownOnRelay = relayProg.readRing({ teamDoc: relayDoc, looseRing: looseRing });
+  const bareOnRelay = relayProg.readRing({ teamDoc: bareRelayDoc, looseRing: looseRing });
+  const loadedFolder = relayProg.loadTeamFile(folderDocWithRing);
+  check(folderOnRelay.source === "loose" && JSON.stringify(folderOnRelay.ring) === JSON.stringify(looseRing)
+    && ownOnRelay.source === "team" && JSON.stringify(ownOnRelay.ring) === JSON.stringify(embeddedRing)
+    && bareOnRelay.source === "none" && bareOnRelay.ring === null
+    && loadedFolder.ok === false && loadedFolder.reason === "wrong-team",
+    "14bi a relay pin keeps the relay ring rule: a folder file is the wrong team, the relay file's own ring is read, and a loose ring is not: "
+    + folderOnRelay.source + " / " + ownOnRelay.source + " / " + bareOnRelay.source + " / " + (loadedFolder.ok ? "loaded" : loadedFolder.reason));
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }

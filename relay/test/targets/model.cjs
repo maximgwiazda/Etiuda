@@ -1430,8 +1430,8 @@ function createTarget(limits) {
     if (teamSignedByPin(teamDoc) && teamDoc.ring) {
       return { source: "team", ring: teamDoc.ring };
     }
-    let useLoose = !relayMode;
-    useLoose = relayMode ? false : true; /* plant:E4 */
+    let useLoose = true;
+    useLoose = !relayMode; /* plant:E4 */
     if (useLoose && looseRing) return { source: "loose", ring: looseRing };
     return { source: "none", ring: null };
   }
