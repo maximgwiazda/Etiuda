@@ -42,7 +42,7 @@ if ((workerArg == null) !== (teamArg == null)) {
   process.exit(78);
 }
 const planted = workerArg == null;
-const EXPECTED = planted ? 12 : 7;
+const EXPECTED = planted ? 13 : 8;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -404,7 +404,31 @@ async function scene(mf, prefix, r2Name) {
   const rt2 = crypto.randomBytes(16).toString("hex");
   const delegated = await post(mf, prefix + "teams", JSON.stringify(kit.createBody(rt2, other, now, bytes => signHex(other, bytes),
     { grant: kit.delegatedGrantFor(other.pub, now) })));
-  return { listed, empty, created, hello, session, delegated, rt, ping };
+  const newLead = keyPair();
+  const leadMoveBytes = core.leadBytes ? core.leadBytes(rt, newLead.keyId, newLead.pub, now)
+    : Buffer.from("etiuda-relay-lead\n" + rt + "\n" + newLead.keyId + "\n" + newLead.pub + "\n" + now, "utf8");
+  const leadMoveSig = signHex(lead, leadMoveBytes);
+  const leadMoveGrant = kit.grantFor(newLead.pub, now);
+  const moveRes = await post(mf, prefix + "t/" + rt + "/lead", JSON.stringify({
+    to: { keyId: newLead.keyId, pub: newLead.pub }, t: now, sig: leadMoveSig, grant: leadMoveGrant,
+  }));
+  const oldHello = await post(mf, prefix + "t/" + rt + "/hello", "{}");
+  let oldSessionAfter = null;
+  if (oldHello.json && typeof oldHello.json.challenge === "string") {
+    const sigOld = signHex(lead, core.helloBytes(rt, oldHello.json.challenge, lead.keyId));
+    oldSessionAfter = await post(mf, prefix + "t/" + rt + "/session", JSON.stringify({
+      challenge: oldHello.json.challenge, key: lead.keyId, pub: lead.pub, sig: sigOld,
+    }));
+  }
+  const newHello = await post(mf, prefix + "t/" + rt + "/hello", "{}");
+  let newSession = null;
+  if (newHello.json && typeof newHello.json.challenge === "string") {
+    const sigNew = signHex(newLead, core.helloBytes(rt, newHello.json.challenge, newLead.keyId));
+    newSession = await post(mf, prefix + "t/" + rt + "/session", JSON.stringify({
+      challenge: newHello.json.challenge, key: newLead.keyId, pub: newLead.pub, sig: sigNew,
+    }));
+  }
+  return { listed, empty, created, hello, session, delegated, rt, ping, moveRes, oldSessionAfter, newSession, newLead };
 }
 
 async function sweepScene(mf, prefix, r2Name, bindingName) {
@@ -753,6 +777,15 @@ try {
     "984c a hello and the lead's session answer 200: hello " + brief(hello) + " session " + brief(session));
   check(isRefusal(delegated, "revoked"),
     "984d a grant from a revoked service key is refused: " + brief(delegated));
+  const moveRes = sceneResult && sceneResult.moveRes;
+  const newSession = sceneResult && sceneResult.newSession;
+  const oldSessionAfter = sceneResult && sceneResult.oldSessionAfter;
+  const newLead = sceneResult && sceneResult.newLead;
+  const moveOk = !!moveRes && moveRes.status === 200 && !!moveRes.json && moveRes.json.ok === true
+    && moveRes.json.lead === (newLead && newLead.keyId) && !!newSession && newSession.status === 200
+    && isRefusal(oldSessionAfter, "not-enrolled");
+  check(moveOk, "984m key handover route moves the team to a new lead under workerd: move "
+    + brief(moveRes) + ", new session " + brief(newSession) + ", old session " + brief(oldSessionAfter));
   const ping = sceneResult && sceneResult.ping;
   const pong = !!ping && Array.isArray(ping.got) && ping.got.length === 1 && ping.got[0] === '{"type":"pong"}' && ping.closed === null;
   check(pong, "984k a ping is answered pong and the message handler does not run: handler 0, " + JSON.stringify(ping));
