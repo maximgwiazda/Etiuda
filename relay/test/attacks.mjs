@@ -2407,6 +2407,28 @@ function attacks() {
       if (!got || got.ok !== true || !sameBytes(got.ciphertext, catalogBlob.ciphertext)) return false;
       return refused(t.list({ relayTeamId: w.relayTeamId, session: hello.session }), "no-hello");
     }, true],
+    ["leak-floor", "a session whose key isn't the writer gets no floor field", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const deskId = "k-" + wire.randomId().slice(0, 16);
+      const joiner = wire.generateKey();
+      const firstEnrol = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      if (!firstEnrol || firstEnrol.ok === false) return false;
+      const firstBlob = seal(w, joiner, "desks/" + deskId + "/in-use.ec", 5, { place: "desk:" + deskId });
+      const firstUp = upload(w, firstBlob);
+      if (!firstUp || firstUp.ok !== true) return false;
+      const removed = t.removeDesk({ relayTeamId: w.relayTeamId, deskId: deskId });
+      if (!removed || removed.ok === false) return false;
+      const invitationId = wire.randomId();
+      const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
+      if (!inv || !inv.token) return false;
+      const hello = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!hello.ok) return false;
+      const replayBlob = sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "rejoin" });
+      const res = t.upload({ relayTeamId: w.relayTeamId, blob: relayBlob(replayBlob), session: hello.session });
+      return refused(res, "replay-counter") && res.floor === undefined;
+    }, true],
   ];
 }
 

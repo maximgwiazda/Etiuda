@@ -56,7 +56,7 @@ function routeOf(method, pathname, prefix) {
 }
 
 const reply = (status, value) => new Response(JSON.stringify(value), { status, headers: HEADERS });
-const refused = r => reply(STATUS[r.reason] || 400, { error: r.reason, said: r.said });
+const refused = r => reply(STATUS[r.reason] || 400, Object.assign({ error: r.reason, said: r.said }, typeof r.floor === "number" ? { floor: r.floor } : {}));
 const refusedFor = reason => refused(B.refusal(reason));
 const missing = () => refusedFor("missing");
 const fault = () => reply(500, { error: "fault", said: "The relay could not answer that." });

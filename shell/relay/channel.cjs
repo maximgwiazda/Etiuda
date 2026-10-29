@@ -113,6 +113,7 @@ const TAKEN_MAX = 4096;
 const SESSION_KEEP_MS = 25 * 60 * 1000;
 const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
+const COUNTER_RETRY_MS = 60 * 1000;
 const PING_MS = 30 * 1000;
 const RETRY_MIN_MS = 2000, RETRY_MAX_MS = 60 * 1000;
 const TMP_RE = /\.tmp$/i;
@@ -1375,6 +1376,12 @@ function createProgram(opts) {
     },
     suspect: () => st.suspect === true,
     settled() { if (st.suspect) { st.suspect = false; persist(); } },
+    raiseOwn(counter) {
+      if (Number.isSafeInteger(counter)) {
+        st.own = Math.max(st.own, counter);
+        persist();
+      }
+    },
   };
   return api;
 }
@@ -1406,14 +1413,30 @@ function createChannel(opts) {
   const prog = createProgram({ io, clock, say, load: () => readState(stateFile), save: stateFile ? saveState : null, pin: o.pin && o.pin() });
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
-  let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null;
+  let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null, answerDue = null;
   /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
   const ENROL_WAIT_MS = 5 * 60 * 1000;
   let enrolWaitFrom = 0, removedTold = false;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
-  let watchers = [], settle = null, retryTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
+  let watchers = [], settle = null, retryTimer = null, counterTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
+  let counterOwed = false;
+  /* A floor is taken only if it leaves room: at most 100 years of ms past this program's clock. */
+  const COUNTER_AHEAD_MAX_MS = 100 * 365.25 * 24 * 60 * 60 * 1000;
+  let floorlessFile = null, floorlessTries = 0;
+
+  function takeFloor(floor) {
+    if (floor === undefined) return false;
+    let past = false;
+    past = !Number.isSafeInteger(floor) || floor < 1 || floor > clock() + COUNTER_AHEAD_MAX_MS; /* plant:floor-bound */
+    if (past) {
+      sayOnce("the relay named a counter floor past the bound, so that was not taken"); /* draft words: copywriter */
+      return false;
+    }
+    prog.raiseOwn(floor); /* plant:take-floor */
+    return true;
+  }
   const said = new Set();
   const sayOnce = line => { if (!said.has(line)) { said.add(line); say(line); } };
 
@@ -1444,7 +1467,10 @@ function createChannel(opts) {
   function refusalOf(r) {
     const j = r && r.json;
     const reason = j && typeof j.error === "string" && has(B.REASONS, j.error) ? j.error : null;
-    return reason ? R(reason) : { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
+    if (!reason) return { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
+    const out = R(reason);
+    if (j && j.floor !== undefined) out.floor = j.floor;
+    return out;
   }
 
   /* THE LAPSE, kept with the program's record so a restart still knows it, and handed on through onLapse(view) whenever
@@ -1771,10 +1797,27 @@ function createChannel(opts) {
     return (why.reason === "expired" || why.reason === "missing") && prog.unchain(op, id);
   }
 
+  /* A replay-counter refusal has already kept its counter, so one timer tries that upload again inside a minute.
+     A further refusal starts the same wait. A success, a stop or a halt clears it. */
+  function scheduleCounterRetry() {
+    if (!running) return;
+    clearTimeout(counterTimer);
+    let stopRetries = false;
+    stopRetries = floorlessTries >= 3; /* plant:counter-backoff */
+    if (stopRetries) return;
+    counterTimer = setTimeout(() => { counterTimer = null; kick(); }, COUNTER_RETRY_MS);
+    if (counterTimer.unref) counterTimer.unref();
+  }
+  function clearCounterRetry() {
+    clearTimeout(counterTimer);
+    counterTimer = null;
+  }
+
   async function flush() {
     const who = me();
     if (!who || !who.privateKey) return { ok: true };
     const floor = prog.teamEpoch();
+    let sawReplay = false;
     for (const op of prog.owed(who, ctx())) {
       const sealing = sealingFor(op, who, floor);
       if (!sealing) {
@@ -1787,11 +1830,12 @@ function createChannel(opts) {
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
-      if (u.ok) continue;
-      if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
+      if (u.ok) { floorlessFile = null; floorlessTries = 0; continue; }
+      if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
         if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId, u.blob && u.blob.id);
+        if (sawReplay) scheduleCounterRetry();
         return u.why;
       }
       /* The invitation's one upload whose reply was lost: the relay already has it, and token-spent on the retry is that
@@ -1800,8 +1844,24 @@ function createChannel(opts) {
       spentSent = !!(op.byInvite && u.why && u.why.reason === "token-spent" && u.blob && prog.replyLost(op.inviteId)); /* plant:spent-sent */
       if (spentSent) { prog.sentOut(op, u.blob); forgetWrap(); continue; }
       /* true: the relay answered. That refusal waits; it is not kept by content hash. */
-      if (prog.refusedOut(op, u.why, true) && HALTS.indexOf(u.why.reason) >= 0) return { ok: true };
+      const waits = prog.refusedOut(op, u.why, true);
+      if (u.why && u.why.reason === "replay-counter") {
+        sawReplay = true; /* plant:counter-retry */
+        const fileKey = op.invite ? "invite:" + op.invite.id : pathKey(op.rel);
+        const taken = takeFloor(u.why.floor);
+        if (taken) {
+          floorlessFile = null;
+          floorlessTries = 0;
+        } else {
+          if (floorlessFile === fileKey) floorlessTries += 1;
+          else { floorlessFile = fileKey; floorlessTries = 1; }
+        }
+      }
+      if (waits && HALTS.indexOf(u.why.reason) >= 0) { floorlessFile = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return { ok: true }; }
     }
+    counterOwed = sawReplay;
+    if (sawReplay || answerDue) scheduleCounterRetry();
+    else clearCounterRetry();
     return { ok: true };
   }
 
@@ -1940,8 +2000,23 @@ function createChannel(opts) {
     const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
       del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
     const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
-    if (r.status === 200) return { ok: true };
-    return r.refused || refusalOf(r);
+    if (r.status === 200) { answerDue = null; floorlessFile = null; floorlessTries = 0; if (!counterOwed) clearCounterRetry(); return { ok: true }; }
+    const why = r.refused || refusalOf(r);
+    if (why && why.reason === "replay-counter") {
+      answerDue = { answer: s.answer, inv: String(s.inv), deskId: s.deskId, deskBox: s.deskBox, leadBox: s.leadBox }; /* plant:answer-retry */
+      const taken = takeFloor(why.floor);
+      if (taken) {
+        floorlessFile = null;
+        floorlessTries = 0;
+      } else {
+        const fileKey = "answer:" + s.inv;
+        if (floorlessFile === fileKey) floorlessTries += 1;
+        else { floorlessFile = fileKey; floorlessTries = 1; }
+      }
+    }
+    if (why && HALTS.indexOf(why.reason) >= 0) { answerDue = null; floorlessFile = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return why; }
+    if (answerDue) scheduleCounterRetry();
+    return why;
   }
 
   /* The request withdrawn: where this desk's own request is owed as a deletion after its one upload, that deletion goes on
@@ -2000,6 +2075,7 @@ function createChannel(opts) {
     await openHeldWrap();
     await retryPending();
     const f = await flush();
+    if (answerDue) await writeAnswer(answerDue);
     ensureSocket();
     return f;
   }
@@ -2128,8 +2204,10 @@ function createChannel(opts) {
 
   async function stop() {
     running = false;
-    clearTimeout(settle); clearTimeout(retryTimer); clearInterval(pollTimer); clearInterval(pingTimer);
+    clearTimeout(settle); clearTimeout(retryTimer); clearCounterRetry(); clearInterval(pollTimer); clearInterval(pingTimer);
     closeWatchers();
+    floorlessFile = null;
+    floorlessTries = 0;
     if (sock) { try { sock.close(); } catch { /* gone */ } sock = null; }
     session = null;
     if (busy) await busy;

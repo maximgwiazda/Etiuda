@@ -23,7 +23,10 @@
  * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched in the
  * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
  * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
- * blob has raised the counter (970o). An invitation upload whose reply was lost is counted as sent when the retry is
+ * blob has raised the counter (970o). An answer the list does not serve can raise the same floor, and a second program
+ * whose clock never reaches that counter stays refused: the known limit until the relay names the floor (970r).
+ * A replay-counter refusal is tried again within a minute, an outbox file (970s) and an invitation's answer (970u). An invitation
+ * upload whose reply was lost is counted as sent when the retry is
  * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
  * is admitted (966h). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
@@ -52,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 283;
+const EXPECTED = 292;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5570,6 +5573,297 @@ try {
     + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
+}
+
+/* The lead's answer is not on the list (relay/core.cjs since drops an answer place). Its counter still raises the
+   writer's floor. A second program on the same key, its clock behind that counter, learns only the counters the list
+   serves. 970o is taken on the first upload because the high counter is on a blob the catch-up opens. Here the clock
+   stays below that floor, so a retry cannot take the upload. That is the known limit until the relay names the floor. */
+async function answerFloor(mod) {
+  const low = 1000, high = 10000000;
+  let clock = low;
+  const teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const box = boxPair();
+  const a = opened(mod, "ans-a-" + tag, tm, LEAD, "root", {
+    clock: () => clock, agree: () => Buffer.alloc(32, 7), keyFor: () => teamKey, sealEpoch: () => 1,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: box.pub }),
+  });
+  let b = null;
+  const out = { ans: null, teamCounter: 0, floor: 0, ownAtCatch: 0, tookFirst: false, tookSecond: false, said: [] };
+  try {
+    put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+    a.ch.start();
+    await a.ch.idle();
+    await once(a);
+    const sentTeam = a.prog.state().sent[C.TEAM_NAME];
+    out.teamCounter = sentTeam ? sentTeam.counter : 0;
+    clock = high;
+    out.ans = await a.ch.writeAnswer({ inv: hex(16), deskId: "k-" + "ab".repeat(8), deskBox: "cd".repeat(32),
+      leadBox: box.pub, answer: "joined" });
+    const counters = relayStore(tm.rt).get("counters") || {};
+    out.floor = Number(counters["c\n" + LEAD.keyId + "\n1"]) || 0;
+    await a.ch.stop();
+    b = opened(mod, "ans-b-" + tag, tm, LEAD, "root", {
+      clock: () => low, keyFor: () => teamKey, sealEpoch: () => 1,
+    });
+    b.ch.start();
+    await b.ch.idle();
+    out.ownAtCatch = b.prog.state().own;
+    put(b.mirror, "second.ec", "a file the second program writes\n");
+    await once(b);
+    const first = b.prog.state().sent["second.ec"];
+    out.tookFirst = !!(first && first.counter > out.floor);
+    await once(b);
+    const second = b.prog.state().sent["second.ec"];
+    out.tookSecond = !!(second && second.counter > out.floor);
+    out.said = b.said.slice();
+  } finally {
+    try { await a.ch.stop(); } catch { /* already stopped */ }
+    if (b) try { await b.ch.stop(); } catch { /* already stopped */ }
+  }
+  return out;
+}
+try {
+  const c = await answerFloor(C);
+  const replay = c.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  check(c.ans && c.ans.ok === true && c.floor > c.teamCounter && c.ownAtCatch >= c.teamCounter && c.ownAtCatch < c.floor && !c.tookFirst && c.tookSecond,
+    "970r the relay names the floor: an answer the list does not serve raises it, the first upload cycle takes the floor from the refusal, and the next cycle clears the retry: answer "
+    + (c.ans && c.ans.ok ? "written" : (c.ans && c.ans.reason) || "none")
+    + ", team counter " + c.teamCounter + ", floor " + c.floor + ", own after the catch-up " + c.ownAtCatch
+    + ", first cycle " + (c.tookFirst ? "taken" : "refused") + ", next cycle " + (c.tookSecond ? "taken" : "refused")
+    + (replay ? ", said replay-counter" : ""));
+} catch (e) {
+  check(false, "harness (the leg 970r): " + (e && e.stack ? e.stack : e));
+}
+
+/* A replay-counter refusal whose next seal clears the floor. The clock stays put, as 970o does, so the seal climbs by one.
+   The mirror is not edited again and no socket note arrives. The channel's own timer, one per channel and inside a minute,
+   is run when it is armed, so the wait is not spent on the wall. */
+const COUNTER_MINUTE_MS = 60 * 1000;
+function mirrorSnap(dir) {
+  return filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/") + " " + sha(fs.readFileSync(f))).sort().join("\n");
+}
+function putFloor(rt, writer, value) {
+  const s = relayStore(rt), cur = s.get("counters") || {}, next = {};
+  for (const k of Object.keys(cur)) next[k] = cur[k];
+  next["c\n" + writer + "\n1"] = value;
+  s.put("counters", next);
+}
+async function withMinute(run) {
+  const realSet = globalThis.setTimeout, realClear = globalThis.clearTimeout, bag = [];
+  globalThis.setTimeout = (fn, ms, ...rest) => {
+    const id = realSet(fn, ms, ...rest);
+    bag.push({ id: id, fn: fn, ms: ms, dead: false });
+    return id;
+  };
+  globalThis.clearTimeout = id => {
+    bag.forEach(t => { if (t.id === id) t.dead = true; });
+    return realClear(id);
+  };
+  const pending = from => bag.filter((t, i) => i >= from && !t.dead && t.ms > 0 && t.ms <= COUNTER_MINUTE_MS);
+  const fire = t => { t.dead = true; realClear(t.id); t.fn(); };
+  try { return await run({ pending, fire, mark: () => bag.length }); }
+  finally { globalThis.setTimeout = realSet; globalThis.clearTimeout = realClear; }
+}
+async function counterRetry(mod, kind) {
+  const clock = 1000, teamKey = crypto.randomBytes(32), box = boxPair();
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), inv = hex(16), name = "cr-" + kind + "-" + tag;
+  const t = transport(name);
+  let notes = 0;
+  const connect = (url, headers, on) => t.connect(url, headers, {
+    message(text) {
+      let m = null;
+      try { m = JSON.parse(String(text)); } catch { m = null; }
+      if (m && m.type === "new") notes += 1;
+      on.message(text);
+    },
+    close() { on.close(); },
+  });
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1, agree: () => Buffer.alloc(32, 7),
+    request: t.request, connect,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: box.pub }),
+  });
+  const out = { refused: false, took: false, delay: [], notes: 0, mirrorSame: false, open: false, floor: 0, own: 0, counter: null, still: -1 };
+  try {
+    return await withMinute(async ({ pending, fire, mark }) => {
+      put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+      desk.ch.start();
+      await desk.ch.idle();
+      await until(() => desk.ch.socketOpen(), 5000);
+      const raised = desk.prog.state().own + 1;
+      putFloor(tm.rt, LEAD.keyId, raised);
+      out.floor = raised;
+      if (kind === "file") put(desk.mirror, "owed.ec", "a file the desk still owes\n");
+      /* Timers armed by the refusal itself, not the waits that opened the socket. */
+      const marked = mark();
+      if (kind === "answer") {
+        const first = await desk.ch.writeAnswer({ inv, deskId: "k-" + "ab".repeat(8), deskBox: "cd".repeat(32),
+          leadBox: box.pub, answer: "joined" });
+        out.refused = !!(first && first.ok !== true && first.reason === "replay-counter");
+      } else {
+        desk.ch.kick();
+        await desk.ch.idle();
+        const sent = desk.prog.state().sent["owed.ec"];
+        out.refused = !sent && desk.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+      }
+      out.own = desk.prog.state().own;
+      out.open = desk.ch.socketOpen() === true;
+      const armed = pending(marked);
+      out.delay = armed.map(row => row.ms);
+      const snap = mirrorSnap(desk.mirror);
+      if (armed.length === 1) { fire(armed[0]); await desk.ch.idle(); }
+      out.mirrorSame = mirrorSnap(desk.mirror) === snap;
+      out.notes = notes;
+      out.still = pending(marked).length;
+      if (kind === "answer") {
+        const rec = relayStore(tm.rt).get("blob:" + inv);
+        out.counter = rec ? rec.counter : null;
+      } else {
+        const sent = desk.prog.state().sent["owed.ec"];
+        out.counter = sent ? sent.counter : null;
+      }
+      out.took = typeof out.counter === "number" && out.counter > out.floor;
+      return out;
+    });
+  } catch (e) {
+    out.threw = e && e.stack ? e.stack : String(e);
+    return out;
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+}
+function counterTold(x) {
+  if (x && x.threw) return "threw " + String(x.threw).split("\n")[0];
+  return "refused " + !!(x && x.refused) + ", delay " + JSON.stringify(x && x.delay) + ", mirror " + (x && x.mirrorSame ? "unchanged" : "changed")
+    + ", socket " + (x && x.open ? "open" : "shut") + ", notes " + (x && x.notes) + ", still " + (x && x.still)
+    + ", floor " + (x && x.floor) + ", own " + (x && x.own) + ", counter " + (x && x.counter) + ", taken " + !!(x && x.took);
+}
+try {
+  const x = await counterRetry(C, "file");
+  check(!x.threw && x.refused && x.own === x.floor && x.took && x.mirrorSame && x.notes === 0 && x.open
+    && x.delay.length === 1 && x.delay[0] > 0 && x.delay[0] <= COUNTER_MINUTE_MS && x.still === 0,
+    "970s a refused upload whose next seal clears the counter is sent within a minute, with the mirror unchanged and no socket note: " + counterTold(x));
+  const planted = await liftChannel("plant:counter-retry", async mod => {
+    const y = await counterRetry(mod, "file");
+    return !y.threw && y.refused && y.notes === 0 && y.mirrorSame && !y.took;
+  });
+  check(planted.turned && planted.back, "970t lifting plant:counter-retry leaves that upload refused, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970s): " + (e && e.stack ? e.stack : e));
+}
+try {
+  const x = await counterRetry(C, "answer");
+  check(!x.threw && x.refused && x.own === x.floor && x.took && x.mirrorSame && x.notes === 0 && x.open
+    && x.delay.length === 1 && x.delay[0] > 0 && x.delay[0] <= COUNTER_MINUTE_MS && x.still === 0,
+    "970u an invitation's answer refused replay-counter is sent again within a minute, with the mirror unchanged and no socket note: " + counterTold(x));
+  const planted = await liftChannel("plant:answer-retry", async mod => {
+    const y = await counterRetry(mod, "answer");
+    return !y.threw && y.refused && y.notes === 0 && y.mirrorSame && !y.took;
+  });
+  check(planted.turned && planted.back, "970v lifting plant:answer-retry leaves that answer refused, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970u): " + (e && e.stack ? e.stack : e));
+}
+async function floorPastBound(mod) {
+  const clock = 1000, teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), name = "fpb-" + tag;
+  const t = transport(name);
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1,
+    request: t.request,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+  });
+  const out = { refused: false, ownBefore: 0, ownAfter: 0, saidBound: false };
+  try {
+    put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+    desk.ch.start();
+    await desk.ch.idle();
+    out.ownBefore = desk.prog.state().own;
+    putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER - 10);
+    put(desk.mirror, "owed.ec", "a file\n");
+    desk.ch.kick();
+    await desk.ch.idle();
+    out.ownAfter = desk.prog.state().own;
+    out.saidBound = desk.said.some(l => l.indexOf("the relay named a counter floor past the bound, so that was not taken") >= 0);
+    out.refused = !desk.prog.state().sent["owed.ec"] && desk.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+  return out;
+}
+try {
+  const x = await floorPastBound(C);
+  check(x.refused && x.ownAfter === x.ownBefore + 1 && x.ownAfter < Number.MAX_SAFE_INTEGER - 10 && x.saidBound,
+    "970w a floor past the bound leaves the counter unchanged by the refusal, and is refused and said: before "
+    + x.ownBefore + ", after " + x.ownAfter + ", said " + x.saidBound);
+  const planted = await liftChannel("plant:floor-bound", async mod => {
+    const y = await floorPastBound(mod);
+    return y.ownAfter === Number.MAX_SAFE_INTEGER - 10;
+  });
+  check(planted.turned && planted.back, "970x lifting plant:floor-bound takes the floor past the bound into the counter, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970w): " + (e && e.stack ? e.stack : e));
+}
+async function floorlessBackoff(mod) {
+  const clock = 1000, teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), name = "flb-" + tag;
+  const t = transport(name);
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1,
+    request: t.request,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+  });
+  const out = { delays: [], pendingAfterThird: -1 };
+  try {
+    return await withMinute(async ({ pending, fire, mark }) => {
+      put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+      desk.ch.start();
+      await desk.ch.idle();
+      putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER - 10);
+      put(desk.mirror, "owed.ec", "a file\n");
+      let marked = mark();
+      desk.ch.kick();
+      await desk.ch.idle();
+      for (let i = 0; i < 3; i++) {
+        const armed = pending(marked);
+        if (armed.length === 1) {
+          out.delays.push(armed[0].ms);
+          if (i < 2) {
+            marked = mark();
+            fire(armed[0]);
+            await desk.ch.idle();
+          }
+        }
+      }
+      out.pendingAfterThird = pending(marked).length;
+      return out;
+    });
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+}
+try {
+  const x = await floorlessBackoff(C);
+  check(x.delays.length === 2 && x.delays[0] === COUNTER_MINUTE_MS && x.delays[1] === COUNTER_MINUTE_MS && x.pendingAfterThird === 0,
+    "970y three floorless replay-counter refusals set no timer after three tries, so the desk stops until the next kick: delays "
+    + JSON.stringify(x.delays) + ", pending after third " + x.pendingAfterThird);
+  const planted = await liftChannel("plant:counter-backoff", async mod => {
+    const y = await floorlessBackoff(mod);
+    return y.pendingAfterThird === 1;
+  });
+  check(planted.turned && planted.back, "970z lifting plant:counter-backoff leaves a counter timer pending after three tries, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970y): " + (e && e.stack ? e.stack : e));
 }
 
 /* An invitation's one upload whose reply never came back. The next cycle is told the token is spent, which is that upload
