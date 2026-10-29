@@ -2750,6 +2750,7 @@ let teamRevSeen = {};                          // team id -> {lead public -> {ep
 let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
 let teamPinFrom = {};                          // team id -> "invite", "policy" or "answer": what pinned its lead; none is the file's own vouching
 let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
+let teamHeadT = {};                            // team id -> highest t seen in a genuine head; this run only
 let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
@@ -3104,10 +3105,10 @@ function readRingFile(root) {
   } catch { /* a missing ring vouches for nothing */ }
   return null;
 }
-/* The ring believed at `root` where its team is on the relay: the one inside the signed team file heeded there, or null.
-   Undefined on the folder channel. Before this run has heeded a file there, a pinned team kept as on the relay is no ring. */
+/* The ring believed at `root` where its team is on the relay or carries its own ring: the one inside the signed team file heeded there, or null.
+   Undefined on a folder channel with no ring inside the team file. Before this run has heeded a file there, a pinned team kept as on the relay is no ring. */
 function relayRingAt(root) {
-  if (teamRingAt && teamRingAt.root === root) return teamRingAt.relay ? teamRingAt.ring : undefined;
+  if (teamRingAt && teamRingAt.root === root) return teamRingAt.relay ? teamRingAt.ring : (teamRingAt.ring || undefined); /* plant:team-ring-at */
   return Object.keys(teamChannel).some(t => !!teamPins[t] && ((teamChannel[t] && teamChannel[t].rt && relayMirrorOf(teamChannel[t].rt) === root) || (teamShown[t] || {}).folder === root)) ? null : undefined;
 }
 /* The ring a catalog's signature is read against. */
@@ -3234,7 +3235,7 @@ function heedTeam() {
     const was = JSON.stringify(teamChannel[r.team] || null);
     if (channel.kind === "relay") teamChannel[r.team] = channel; else delete teamChannel[r.team];
     if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
-    teamRingAt = { root: root, relay: channel.kind === "relay", ring: channel.kind === "relay" ? teamRingIn(doc) : null };
+    teamRingAt = { root: root, relay: channel.kind === "relay", ring: (channel.kind === "relay" || doc.ring) ? teamRingIn(doc) : null };
   }
   // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
   // that epoch at rev 0, since deleting it would let the older epoch back (board 931); with no floor kept, a floor of 0
@@ -4074,8 +4075,8 @@ function refusedWithdrawEnds(j) {
    `leads` is leadsView's. */
 function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const view = { sealed: null, join: null, joined: null, leads: leadsView() };
   const root = catalogFolder();
+  const view = { sealed: null, join: null, joined: null, leads: leadsView() };
   if (!folderAnswers(root)) return view;
   heedTeam();
   finishJoin();
@@ -4458,18 +4459,85 @@ function leadPrint(publicHex) {
 /* Every lead this desk trusts, for the agent to compare once after admission and to leave at any time: the team by its lead's
    name and folder where known; `removed` where the roster of the epoch accepted leaves out this desk, which once held a key;
    `policy` where machine policy names this lead, which pins it again after any leave. */
-/* The head of the relay this desk follows, for the team row. Only that team, and only a head the channel is showing.
-   A folder team, and a relay whose head is missing or bad, gets no field at all. */
+/* The newest rev this desk has of `catalogId`, among the active catalog, recorded revs and the folder's catalogs. */
+function deskEditionRev(catalogId, folder, leadPublic) {
+  let maxRev = -1;
+  if (leadPublic && catalogRevs[catalogId] && Number.isInteger(catalogRevs[catalogId][leadPublic])) {
+    const slotRev = catalogRevs[catalogId][leadPublic];
+    if (slotRev > maxRev) maxRev = slotRev;
+  }
+  if (catalogJson) {
+    const doc = catalogDocIn(catalogJson);
+    if (doc && doc.id === catalogId) {
+      const r = editionRev(doc);
+      if (r > maxRev) maxRev = r;
+    }
+  }
+  if (folder && folderAnswers(folder)) {
+    for (const f of ecFilesIn(folder)) {
+      try {
+        const facts = ecFacts(f, "");
+        if (facts && facts.id === catalogId && facts.rev > maxRev) maxRev = facts.rev;
+      } catch { /* skip */ }
+    }
+  }
+  return maxRev;
+}
+/* The head of a folder team from its signed etiuda-head.json. Only a genuine head signed by the pinned lead under
+   HEAD_PREFIX, and never an older rev than the desk has or an older t than one already seen. */
+function folderHeadShown(team) {
+  const pin = teamPins[team];
+  if (!pin || !pin.public || typeof pin.public !== "string") return null;
+  const folder = (teamShown[team] && teamShown[team].folder) || catalogFolder();
+  if (!folder || !folderAnswers(folder)) return null;
+  const file = path.join(folder, "etiuda-head.json");
+  let text = "";
+  try {
+    if (fs.statSync(file).size > 65536) return null;
+    text = fs.readFileSync(file, "utf8");
+  } catch { return null; }
+  let doc = null;
+  try { doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return null; }
+  if (!doc || typeof doc !== "object" || !doc.sig || typeof doc.sig !== "object") return null;
+  if (doc.v !== 1 || doc.team !== team) return null;
+  if (!Number.isInteger(doc.epoch) || doc.epoch < 1 || !Number.isInteger(doc.rev) || doc.rev < 0 || !Number.isFinite(doc.t)) return null;
+  const sig = doc.sig;
+  if (sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return null;
+  let bytes;
+  try { bytes = signedBytesOf(doc); } catch { return null; }
+  let genuine = false;
+  try {
+    const pubKey = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pin.public, "hex")]), format: "der", type: "spki" });
+    genuine = crypto.verify(null, Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), bytes]), pubKey, Buffer.from(sig.value, "hex"));
+  } catch { genuine = false; }
+  if (!genuine) return null; /* plant:folder-head-sig */
+  const RCh = RelayChannel();
+  const edition = typeof RCh.newestEdition === "function" ? RCh.newestEdition(doc.editions) : null;
+  if (!edition) return null;
+  const deskRev = deskEditionRev(edition.catalog, folder, pin.public);
+  if (deskRev >= 0 && edition.rev < deskRev) return null; /* plant:folder-head-older */
+  if (Number.isFinite(teamHeadT[team]) && doc.t < teamHeadT[team]) return null;
+  teamHeadT[team] = doc.t;
+  const ed = typeof edition.edition === "string" ? edition.edition : "";
+  const pub = typeof edition.published === "string" ? edition.published : "";
+  if (ed.length < 1 || ed.length > 120 || pub.length < 1 || pub.length > 80 || !Number.isFinite(doc.t) || /[\u0000-\u001f\u007f]/.test(ed + pub)) return null;
+  return { edition: ed, published: pub, t: doc.t };
+}
+/* The head of the team this desk follows, for the team row: either from the relay mirror, or from the folder's
+   etiuda-head.json. A missing, bad, forged, foreign-key or older head gets no field at all. */
 function headShown(team) {
-  const here = relayHere();
-  if (!here || here.team !== team || !relayChannel || !relayChannel.program || typeof relayChannel.program.headNews !== "function") return null;
-  let n = null;
-  try { n = relayChannel.program.headNews(Date.now()); } catch (e) { return null; }
-  if (!n || n.shown !== true) return null;
-  const edition = typeof n.edition === "string" ? n.edition : "", published = typeof n.published === "string" ? n.published : "";
-  if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80
-    || !Number.isFinite(n.time) || /[\u0000-\u001f\u007f]/.test(edition + published)) return null;
-  return { edition: edition, published: published, t: n.time };
+  if (teamChannel[team] && teamChannel[team].kind === "relay") {
+    const here = relayHere();
+    if (!here || here.team !== team || !relayChannel || !relayChannel.program || typeof relayChannel.program.headNews !== "function") return null;
+    let n = null;
+    try { n = relayChannel.program.headNews(Date.now()); } catch (e) { return null; }
+    if (!n || n.shown !== true) return null;
+    const edition = typeof n.edition === "string" ? n.edition : "", published = typeof n.published === "string" ? n.published : "";
+    if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80
+      || !Number.isFinite(n.time) || /[\u0000-\u001f\u007f]/.test(edition + published)) return null;
+    return { edition: edition, published: published, t: n.time };
+  }
+  return folderHeadShown(team);
 }
 /* Where the relay team this desk follows stands past its grant, for the team row, as the channel judges it by the relay's
    clock; `seen` once the agent has dismissed this step's notice. Nothing for a team inside its grant or a folder team. */
@@ -4490,7 +4558,7 @@ function lapseSeen(team, step) {
   return joinView();
 }
 function leadsView() {
-  const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t));
+  const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
@@ -4548,6 +4616,7 @@ function forgetLead(team, left) {
   teamSeen.delete(team);
   delete teamLapseSeen[team];
   delete teamRelayGone[team];
+  delete teamHeadT[team];
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
   // A request already withdrawn waits nowhere, so it goes with the keys; a waiting relay request is withdrawn.
