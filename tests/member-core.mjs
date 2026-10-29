@@ -386,13 +386,8 @@ if (M && J) {
   const annaFolder = "C:\\Users\\anna\\OneDrive\\Etiuda";
   const benFolder = "D:\\Users\\ben\\OneDrive\\Etiuda";
   if (!P) {
-    check(false, "16t an invitation written under one user's OneDrive resolves under another's: " + placeErr);
-    check(false, "16u a UNC path resolves as itself: " + placeErr);
-    check(false, "16v an old invitation, with no place, still reads and resolves as its absolute path: " + placeErr);
-    check(false, "16w a root that is absent falls back to the absolute path and says so: " + placeErr);
-    check(false, "16x a mapped folder resolves to the reader's own letter for that share, and a cloud root is a recorded root: " + placeErr);
-    check(false, "16y a place is kept on the invitation when it is one, and dropped when it is not, and a missing folder says missing: " + placeErr);
-    check(false, "16z the record reader asks the client's own records, not a path-name guess: " + placeErr);
+    /* One line per leg the place module would have run, each id written once in the file (leg-ids). */
+    for (const id of ["16t", "16u", "16v", "16w", "16x", "16y", "16z"]) check(false, id + " the place module did not load: " + placeErr);
   } else {
     const anna = P.syncRootsFrom({ onedrive: ["C:\\Users\\anna\\OneDrive"] });
     const ben = P.syncRootsFrom({ onedrive: ["D:\\Users\\ben\\OneDrive"] });
