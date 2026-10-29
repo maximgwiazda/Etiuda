@@ -3311,6 +3311,346 @@ function inviteFolder(folder, posix) {
   const parts = s.slice(2).replace(/\\$/, "").split("\\");
   return parts.length >= 2 && parts.every(kept) ? "\\\\" + parts.join("\\") : "";
 }
+/* A FOLDER TEAM'S PLACE, beside the absolute path the writer saw (board 945, item 4). The kind and the path
+   relative to a sync root come from the records Windows and the client keep, never from a folder's name: a
+   directory that is merely called OneDrive is not a root. The reader resolves the kind against its own root.
+   Where it has none, or the folder is not there, the absolute path stands, and the answer says which.
+   liveSyncIo is the only one of these that asks the machine; the rest are pure and take the records they are given. */
+function placeKindOk(kind) {
+  return kind === "onedrive" || kind === "onedrive-business" || kind === "dropbox" || kind === "gdrive" || kind === "mapped" || kind === "unc";
+}
+function placeSlash(p) {
+  return String(p == null ? "" : p).replace(/\//g, "\\").replace(/\\+$/, "");
+}
+function placeLeaf(root) {
+  const r = placeSlash(root);
+  const cut = r.lastIndexOf("\\");
+  return cut < 0 ? r : r.slice(cut + 1);
+}
+function placeJoin(root, rel) {
+  const r = placeSlash(root);
+  const rest = String(rel == null ? "" : rel).replace(/\//g, "\\").replace(/^\\+/, "").replace(/\\+$/, "");
+  if (!rest) return /:$/.test(r) ? r + "\\" : r;
+  return (/:$/.test(r) ? r + "\\" : r + "\\") + rest;
+}
+function placeUnder(folder, root) {
+  const f = placeSlash(folder), r = placeSlash(root);
+  if (!f || !r) return false;
+  const fl = f.toLowerCase(), rl = r.toLowerCase();
+  if (fl === rl) return true;
+  return fl.indexOf((/:$/.test(rl) ? rl + "\\" : rl + "\\")) === 0;
+}
+function placeRest(folder, root) {
+  const f = placeSlash(folder), r = placeSlash(root);
+  if (!f || !r || f.toLowerCase() === r.toLowerCase()) return "";
+  return f.slice(r.length + 1);
+}
+function syncRootsFrom(records) {
+  const rec = records && typeof records === "object" ? records : {};
+  const out = [];
+  const pushCloud = function (kind, list) {
+    const arr = Array.isArray(list) ? list : [];
+    for (let i = 0; i < arr.length; i++) {
+      const root = placeSlash(arr[i]);
+      if (root) out.push({ kind: kind, root: root });
+    }
+  };
+  pushCloud("onedrive", rec.onedrive);
+  pushCloud("onedrive-business", rec.onedriveBusiness);
+  pushCloud("dropbox", rec.dropbox);
+  pushCloud("gdrive", rec.gdrive);
+  const mapped = Array.isArray(rec.mapped) ? rec.mapped : [];
+  for (let i = 0; i < mapped.length; i++) {
+    const m = mapped[i];
+    if (!m || typeof m !== "object") continue;
+    const remote = placeSlash(m.remote || m.root || "");
+    const letter = placeSlash(m.letter || "");
+    if (remote.slice(0, 2) === "\\\\" && /^[A-Za-z]:$/.test(letter)) out.push({ kind: "mapped", root: remote, letter: letter });
+  }
+  return out;
+}
+function placeOf(folder, roots) {
+  const f = placeSlash(folder);
+  if (!f) return null;
+  if (f.slice(0, 2) === "\\\\") {
+    const parts = f.slice(2).split("\\");
+    if (parts.length < 2 || !parts[0] || !parts[1]) return null;
+    return placeKept({ kind: "unc", root: "\\\\" + parts[0] + "\\" + parts[1], rel: parts.slice(2).join("\\") });
+  }
+  const list = Array.isArray(roots) ? roots : [];
+  let best = null, bestLen = -1;
+  for (let i = 0; i < list.length; i++) {
+    const rec = list[i];
+    if (!rec || typeof rec.kind !== "string" || rec.kind === "unc" || typeof rec.root !== "string") continue;
+    let covered = "", raw = null;
+    if (rec.kind === "mapped") {
+      const letter = placeSlash(rec.letter || "");
+      if (!/^[A-Za-z]:$/.test(letter) || !placeUnder(f, letter)) continue;
+      covered = letter;
+      raw = { kind: "mapped", root: placeSlash(rec.root), rel: placeRest(f, letter) };
+    } else {
+      const root = placeSlash(rec.root);
+      if (!root || !placeUnder(f, root)) continue;
+      covered = root;
+      raw = { kind: rec.kind, rel: placeRest(f, root) };
+      const leaf = placeLeaf(root);
+      if (leaf && leaf.indexOf(":") < 0) raw.root = leaf;
+    }
+    const place = placeKept(raw);
+    if (place && covered.length > bestLen) { best = place; bestLen = covered.length; }
+  }
+  return best;
+}
+function placeCandidates(folder, place, roots) {
+  const kept = placeKept(place);
+  if (!kept || kept.kind === "unc") return [];
+  const list = Array.isArray(roots) ? roots : [];
+  const same = [];
+  for (let i = 0; i < list.length; i++) if (list[i] && list[i].kind === kept.kind) same.push(list[i]);
+  if (kept.kind === "mapped") {
+    const remote = kept.root.toLowerCase();
+    const out = [];
+    for (let i = 0; i < same.length; i++) {
+      if (placeSlash(same[i].root).toLowerCase() !== remote) continue;
+      const letter = placeSlash(same[i].letter || "");
+      if (/^[A-Za-z]:$/.test(letter)) out.push(placeJoin(letter, kept.rel));
+    }
+    out.push(placeJoin(kept.root, kept.rel));
+    return out;
+  }
+  const leaf = kept.root ? kept.root.toLowerCase() : "";
+  const matched = [], other = [];
+  for (let i = 0; i < same.length; i++) {
+    const built = placeJoin(same[i].root, kept.rel);
+    if (leaf && placeLeaf(same[i].root).toLowerCase() === leaf) matched.push(built);
+    else other.push(built);
+  }
+  return matched.concat(other);
+}
+function placeResolve(folder, place, roots, present) {
+  const there = typeof present === "function" ? present : function () { return true; };
+  const abs = placeSlash(folder);
+  const kept = placeKept(place);
+  if (!kept) {
+    if (abs && there(abs)) return { path: abs, how: "absolute", why: "plain" };
+    return { path: abs, how: "ask", why: "plain" };
+  }
+  if (kept.kind === "unc") return { path: placeJoin(kept.root, kept.rel), how: "root", why: "" };
+  const candidates = placeCandidates(abs, kept, roots);
+  if (!candidates.length) {
+    if (abs && there(abs)) return { path: abs, how: "absolute", why: "absent" };
+    return { path: abs, how: "ask", why: "absent" };
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    if (there(candidates[i])) return { path: candidates[i], how: "root", why: "" }; /* plant:f4-place */
+  }
+  if (abs && there(abs)) return { path: abs, how: "absolute", why: "missing" };
+  return { path: abs, how: "ask", why: "missing" };
+}
+function placeKept(p) {
+  if (!p || typeof p !== "object" || Array.isArray(p)) return null;
+  const kind = typeof p.kind === "string" ? p.kind : "";
+  if (!placeKindOk(kind) || typeof p.rel !== "string") return null;
+  const hidden = /[\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/;
+  const rel = p.rel.replace(/\//g, "\\").replace(/^\\+/, "").replace(/\\+$/, "");
+  if (rel.length > 1024 || rel.indexOf(":") >= 0 || hidden.test(rel) || /[\u0000-\u001f\u007f]/.test(rel)) return null;
+  if (rel !== "") {
+    const parts = rel.split("\\");
+    for (let i = 0; i < parts.length; i++) {
+      const seg = parts[i];
+      if (!seg || seg === "." || seg === ".." || /[<>:"|?*]/.test(seg) || /[. ]$/.test(seg)) return null;
+    }
+  }
+  const out = { kind: kind, rel: rel };
+  if (kind === "unc" || kind === "mapped") {
+    const root = placeSlash(typeof p.root === "string" ? p.root : "");
+    if (root.slice(0, 2) !== "\\\\" || hidden.test(root) || /[\u0000-\u001f\u007f]/.test(root)) return null;
+    const segs = root.slice(2).split("\\");
+    if (segs.length < 2) return null;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (!seg || seg === "." || seg === ".." || /[<>:"|?*]/.test(seg) || /[. ]$/.test(seg)) return null;
+    }
+    out.root = root;
+    return out;
+  }
+  if (p.root !== undefined) {
+    const leaf = typeof p.root === "string" ? p.root : "";
+    if (!leaf || leaf.length > 200 || /[\\/:]/.test(leaf) || leaf === "." || leaf === ".." || /[. ]$/.test(leaf)) return null;
+    if (hidden.test(leaf) || /[\u0000-\u001f\u007f]/.test(leaf)) return null;
+    out.root = leaf;
+  }
+  return out;
+}
+/* The records a client keeps, asked through `io` ({reg, subkeys, readFile, env}) so a test never touches this machine.
+   With no io, liveSyncIo reads them once. A OneDrive account list that comes back empty is still asked at Personal and
+   Business1, which is where a client with one of each writes them. A mapped drive's RemotePath is asked only for a
+   letter the Network key actually has. */
+function readSyncRecords(io) {
+  const ask = io || liveSyncIo();
+  const env = ask && ask.env && typeof ask.env === "object" ? ask.env : {};
+  const reg = function (key, name) {
+    try { return String((ask && ask.reg ? ask.reg(key, name) : "") || ""); }
+    catch (e) { return ""; }
+  };
+  const subkeys = function (key) {
+    try {
+      const got = ask && ask.subkeys ? ask.subkeys(key) : [];
+      return Array.isArray(got) ? got.map(function (s) { return String(s); }) : [];
+    } catch (e) { return []; }
+  };
+  const readFile = function (p) {
+    try { return ask && ask.readFile ? String(ask.readFile(p) || "") : ""; }
+    catch (e) { return ""; }
+  };
+  const out = { onedrive: [], onedriveBusiness: [], dropbox: [], gdrive: [], mapped: [] };
+  const pushUnique = function (list, p) {
+    const s = placeSlash(p);
+    if (!s) return;
+    for (let i = 0; i < list.length; i++) if (list[i].toLowerCase() === s.toLowerCase()) return;
+    list.push(s);
+  };
+  const accounts = "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts";
+  let names = subkeys(accounts);
+  if (names.length === 0) names = ["Personal", "Business1"];
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    const folder = reg(accounts + "\\" + name, "UserFolder");
+    if (/^personal$/i.test(name)) pushUnique(out.onedrive, folder);
+    else if (/^business/i.test(name)) pushUnique(out.onedriveBusiness, folder);
+  }
+  pushUnique(out.onedrive, env.OneDriveConsumer);
+  pushUnique(out.onedrive, env.OneDrive);
+  pushUnique(out.onedriveBusiness, env.OneDriveCommercial);
+  out.onedrive = out.onedrive.filter(function (p) {
+    for (let i = 0; i < out.onedriveBusiness.length; i++) if (out.onedriveBusiness[i].toLowerCase() === p.toLowerCase()) return false;
+    return true;
+  });
+  pushUnique(out.gdrive, reg("HKCU:\\Software\\Google\\DriveFS", "DefaultMountPoint"));
+  pushUnique(out.gdrive, reg("HKLM:\\SOFTWARE\\Policies\\Google\\DriveFS", "DefaultMountPoint"));
+  const absorb = function (text) {
+    const raw = String(text || "").replace(/^\ufeff/, "");
+    if (!raw) return;
+    if (raw.trim().charAt(0) === String.fromCharCode(123)) {
+      try {
+        const doc = JSON.parse(raw);
+        if (doc && doc.personal) pushUnique(out.dropbox, doc.personal.path);
+        if (doc && doc.business) pushUnique(out.dropbox, doc.business.path);
+      } catch (e) { /* not a Dropbox info.json */ }
+      return;
+    }
+    const lines = raw.split(/\r?\n/);
+    const line = String(lines.length >= 2 ? lines[1] : "").trim();
+    if (/^[A-Za-z0-9+/=]+$/.test(line) && line.length >= 4) pushUnique(out.dropbox, Buffer.from(line, "base64").toString("utf8"));
+  };
+  const app = typeof env.APPDATA === "string" ? env.APPDATA.replace(/[\\/]+$/, "") : "";
+  const local = typeof env.LOCALAPPDATA === "string" ? env.LOCALAPPDATA.replace(/[\\/]+$/, "") : "";
+  if (app) {
+    absorb(readFile(app + "\\Dropbox\\info.json"));
+    absorb(readFile(app + "\\Dropbox\\host.db"));
+  }
+  if (local) {
+    absorb(readFile(local + "\\Dropbox\\info.json"));
+    absorb(readFile(local + "\\Dropbox\\host.db"));
+  }
+  const net = "HKCU:\\Network";
+  const letters = subkeys(net);
+  for (let i = 0; i < letters.length; i++) {
+    const name = String(letters[i] || "");
+    if (!name) continue;
+    const remote = reg(net + "\\" + name, "RemotePath");
+    const letter = name.length === 1 ? name + ":" : placeSlash(name);
+    const root = placeSlash(remote);
+    if (root.slice(0, 2) === "\\\\" && /^[A-Za-z]:$/.test(letter)) out.mapped.push({ letter: letter, remote: root });
+  }
+  return out;
+}
+/* One read of the records, kept on the function itself. The one program is reg.exe at REG_TOOL, through the shell's
+   one child_process handle, and the four queries share the five seconds the policy read is allowed. A root already
+   named in the environment is still asked of the registry, because a second account may live only there. Off Windows
+   the environment is the whole record. Brackets in this function stay balanced so a slice ends on it. */
+function liveSyncIo() {
+  if (liveSyncIo.cached) return liveSyncIo.cached;
+  const env = process.env || {};
+  const values = {};
+  const sub = {};
+  const seenChild = {};
+  function regText(buf) {
+    const b = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf == null ? "" : buf));
+    let text;
+    if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) text = b.slice(2).toString("utf16le");
+    else if (b.length >= 4 && b[1] === 0 && b[3] === 0) text = b.toString("utf16le");
+    else text = b.toString("utf8");
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    return text;
+  }
+  function hive(line) {
+    const cu = "HKEY_CURRENT_USER\\", lm = "HKEY_LOCAL_MACHINE\\", hkcu = "HKCU\\", hklm = "HKLM\\";
+    let s = String(line || "").trim();
+    if (s.indexOf(cu) === 0) s = "HKCU:\\" + s.slice(cu.length);
+    else if (s.indexOf(lm) === 0) s = "HKLM:\\" + s.slice(lm.length);
+    else if (s.indexOf(hkcu) === 0) s = "HKCU:\\" + s.slice(hkcu.length);
+    else if (s.indexOf(hklm) === 0) s = "HKLM:\\" + s.slice(hklm.length);
+    return s;
+  }
+  function addChild(parent, name) {
+    if (!parent || !name) return;
+    const childKey = parent + "\n" + name;
+    if (seenChild[childKey]) return;
+    seenChild[childKey] = 1;
+    if (!sub[parent]) sub[parent] = [];
+    sub[parent].push(name);
+  }
+  function absorb(buf) {
+    const lines = regText(buf).replace(/\r/g, "").split("\n");
+    let key = "";
+    const valueLine = /^[ \t]+(\S+)[ \t]+REG_\w+[ \t]+(.*?)[ \t]*$/;
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (!raw.trim()) continue;
+      if (raw.indexOf("ERROR:") === 0) continue;
+      if (raw.indexOf("End of search") === 0) continue;
+      const found = valueLine.exec(raw);
+      if (found && key) {
+        values[key + "|" + found[1]] = found[2];
+        continue;
+      }
+      const mapped = hive(raw);
+      if (mapped.indexOf("HKCU:") === 0 || mapped.indexOf("HKLM:") === 0) {
+        key = mapped;
+        const cut = mapped.lastIndexOf("\\");
+        if (cut > 0) addChild(mapped.slice(0, cut), mapped.slice(cut + 1));
+      }
+    }
+  }
+  if (process.platform === "win32") {
+    const deadline = Date.now() + 5000;
+    const queries = [
+      ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
+      ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+      ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+      ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
+    ];
+    for (let i = 0; i < queries.length; i++) {
+      const left = deadline - Date.now();
+      if (left < 1) break;
+      try {
+        absorb(execFileSync(REG_TOOL, queries[i], { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 }));
+      } catch (e) { /* a missing key is an empty record */ }
+    }
+  }
+  const io = {
+    env: {
+      APPDATA: env.APPDATA, LOCALAPPDATA: env.LOCALAPPDATA,
+      OneDrive: env.OneDrive, OneDriveConsumer: env.OneDriveConsumer, OneDriveCommercial: env.OneDriveCommercial
+    },
+    reg: function (key, name) { return values[String(key) + "|" + String(name)] || ""; },
+    subkeys: function (key) { return sub[String(key)] ? sub[String(key)].slice() : []; },
+    readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
+  };
+  liveSyncIo.cached = io;
+  return io;
+}
 /* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the folder, the lead and a
    128-bit secret, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as
    the same invitation. Null where it is not that shape, and the folder as inviteFolder reaches it. Nothing is read from
@@ -3349,6 +3689,10 @@ function inviteRead(text, posix) {
   const out = { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
   if (box) out.lead.box = box; /* plant:f6-box-read */
   if (relay) out.relay = relay;
+  else {
+    const keptPlace = placeKept(doc.place);
+    if (keptPlace) out.place = keptPlace;
+  }
   return out;
 }
 /* An invitation's relay as {rt, url, token, inv}, or null where any field is not that shape: the address as a team file's
@@ -3736,11 +4080,60 @@ function readInvite(text) {
     if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
     return Object.assign({}, view, { offer: offer }); /* plant:relay-offer */
   }
-  const where = folderHost(parsed.folder, process.env);
-  const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
+  /* A place is planned, not stated: a path on another computer answers a stat by connecting. how, why and kind are
+     set only where the invitation carries a place, so an old invitation's offer stays as it was. */
+  let shownFolder = parsed.folder;
+  let carried = null;
+  try { carried = parsed.place ? placeKept(parsed.place) : null; } catch (e) { carried = null; }
+  if (carried) {
+    const plan = invitePlacePlan(parsed);
+    if (plan && typeof plan.path === "string" && plan.path) shownFolder = plan.path;
+    carried = { how: plan && plan.how ? plan.how : "", why: plan && plan.why ? plan.why : "", kind: carried.kind };
+  }
+  const where = folderHost(shownFolder, process.env);
+  const offer = { folder: shownFolder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
     host: where.host, cloud: where.cloud, local: where.local };
+  if (carried) { offer.how = carried.how; offer.why = carried.why; offer.kind = carried.kind; }
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
   return Object.assign({}, view, { offer: offer });
+}
+/* Where the invitation's place would land on this computer, with every candidate treated as there: the confirm shows
+   the plan and does not stat, because a path on another computer answers a stat by connecting. A record that cannot
+   be read leaves the absolute path. */
+function invitePlacePlan(parsed) {
+  if (!parsed || !parsed.place) return { path: parsed && parsed.folder ? parsed.folder : "", how: "absolute", why: "plain" };
+  let roots = [];
+  try { roots = syncRootsFrom(readSyncRecords(null)); }
+  catch (e) { roots = []; }
+  try { return placeResolve(parsed.folder, parsed.place, roots, function () { return true; }); }
+  catch (e) { return { path: parsed.folder, how: "absolute", why: "plain" }; }
+}
+/* The folder yes will write into. A root candidate is asked first, then the absolute path the invitation carried, and
+   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before. */
+async function chooseInviteFolder(parsed) {
+  let kept = null;
+  try { kept = placeKept(parsed && parsed.place); }
+  catch (e) { kept = null; }
+  if (!kept) {
+    if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+    return { ask: true };
+  }
+  let roots = [];
+  try { roots = syncRootsFrom(readSyncRecords(null)); }
+  catch (e) { roots = []; }
+  if (kept.kind === "unc") {
+    const built = placeJoin(kept.root, kept.rel);
+    if (built && await askFolder(built)) return { path: built, ask: false };
+    return { ask: true };
+  }
+  let candidates = [];
+  try { candidates = placeCandidates(parsed.folder, kept, roots); }
+  catch (e) { candidates = []; }
+  for (let i = 0; i < candidates.length; i++) {
+    if (candidates[i] && await askFolder(candidates[i])) return { path: candidates[i], ask: false };
+  }
+  if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+  return { ask: true };
 }
 /* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
    whatever either came by. The folder is asked before anything is written, and one that
@@ -3768,10 +4161,9 @@ async function takeInvite(text, name, check) {
   const earlier = keptJoin && keptJoin.invite ? keptJoin.invite : null;
   const ownBefore = typeof deskKeys[CATALOG_FOLDER_KEY] === "string" ? deskKeys[CATALOG_FOLDER_KEY] : "";
   const was = earlier && typeof earlier.was === "string" && ownBefore === earlier.folder ? earlier.was : ownBefore;
-  if (previous !== parsed.folder) deskSetOwn(CATALOG_FOLDER_KEY, parsed.folder);
-  const answers = await askFolder(parsed.folder);
+  const found = await chooseInviteFolder(parsed);
   let chosen = "";
-  if (!answers) {
+  if (found.ask) {
     const picked = await dialog.showOpenDialog({
       properties: ["openDirectory"],
       defaultPath: previous || defaultCatalogFolder(),
@@ -3789,6 +4181,9 @@ async function takeInvite(text, name, check) {
     }
     parsed.folder = chosen;
     deskSetOwn(CATALOG_FOLDER_KEY, chosen);
+  } else {
+    parsed.folder = found.path;
+    if (previous !== parsed.folder) deskSetOwn(CATALOG_FOLDER_KEY, parsed.folder);
   }
   settleFolder(parsed.folder, true);
   const late = (chosen ? "" : inviteFolderTeam(parsed)) || inviteSettled(parsed.team, parsed.lead);
