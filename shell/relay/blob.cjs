@@ -59,6 +59,7 @@ function refusal(reason) {
   return { ok: false, reason: reason, said: REASONS[reason], served: false };
 }
 
+const HEX16 = /^[0-9a-f]{16}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 const HEX24 = /^[0-9a-f]{24}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -906,6 +907,9 @@ function opened(input) {
    hex, then the 16-byte tag. The relay keeps that ciphertext and cannot open it. A wrap whose epoch is not the
    team file's is refused before it is decrypted, and said with the epoch reason. */
 const INVITE_WRAP_INFO = "etiuda-invite-wrap";
+const INVITE_FOLDER_WRAP_INFO = "etiuda-folder-invite-wrap";
+const REFUSED_PREFIX = "etiuda-invite-refused\n";
+const REFUSED_KIND = "etiuda-invite-refused";
 
 function inviteWrapKey(secretHex) {
   if (typeof secretHex !== "string" || !HEX32.test(secretHex)) return null;
@@ -915,7 +919,12 @@ function inviteWrapKey(secretHex) {
 function inviteWrapAad(fields) {
   if (!fields || typeof fields !== "object") return null;
   const rt = fields.relayTeamId, team = fields.teamId, inv = fields.invitationId, epoch = fields.epoch;
-  if (typeof rt !== "string" || !HEX32.test(rt) || !isId(team) || typeof inv !== "string" || !HEX32.test(inv) || !isCount(epoch)) return null;
+  const isFolder = fields.folder === true || rt === "folder";
+  if (!isId(team) || typeof inv !== "string" || (!HEX16.test(inv) && !HEX32.test(inv)) || !isCount(epoch)) return null;
+  if (isFolder) {
+    return Buffer.from([INVITE_FOLDER_WRAP_INFO, "folder", team, inv, String(epoch)].join("\n") + "\n", "utf8"); /* plant:folder-wrap-aad */
+  }
+  if (typeof rt !== "string" || !HEX32.test(rt)) return null;
   return Buffer.from([INVITE_WRAP_INFO, rt, team, inv, String(epoch)].join("\n") + "\n", "utf8");
 }
 
@@ -924,8 +933,12 @@ function inviteWrapAad(fields) {
 function inviteTeamDoc(doc, teamId, relayTeamId) {
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
   if (doc.kind !== "etiuda-team" || doc.id !== teamId) return null;
+  if (relayTeamId === "folder") {
+    if (doc.channel !== undefined && (typeof doc.channel !== "object" || Array.isArray(doc.channel) || doc.channel.kind !== "folder")) return null; /* plant:folder-team-doc */
+    return isCount(doc.epoch) ? doc : null;
+  }
   const c = doc.channel;
-  if (!c || typeof c !== "object" || Array.isArray(c) || c.kind !== "relay") return null;
+  if (!c || typeof c !== "object" || Array.isArray(doc.channel) || c.kind !== "relay") return null;
   if (c.rt !== undefined && c.relay !== undefined && c.rt !== c.relay) return null;
   const rt = c.rt !== undefined ? c.rt : c.relay;
   if (rt !== relayTeamId || !isCount(doc.epoch)) return null;
@@ -938,7 +951,9 @@ function sealInviteWrap(opts) {
   const keyBytes = bytesOf(o.key) || (typeof o.key === "string" && HEX64.test(o.key) ? Buffer.from(o.key, "hex") : null);
   const given = bytesOf(o.wrapKey);
   const wrapKey = given && given.length === KEY_BYTES ? given : inviteWrapKey(o.secret);
-  const aad = inviteWrapAad({ relayTeamId: o.relayTeamId, teamId: o.teamId, invitationId: o.invitationId, epoch: epoch });
+  const isFolder = o.folder === true || o.relayTeamId === "folder";
+  const rt = isFolder ? "folder" : o.relayTeamId;
+  const aad = inviteWrapAad({ relayTeamId: rt, folder: isFolder, teamId: o.teamId, invitationId: o.invitationId, epoch: epoch });
   const nonce = o.nonce == null ? crypto.randomBytes(NONCE_BYTES) : bytesOf(o.nonce);
   if (!aad || !wrapKey || wrapKey.length !== KEY_BYTES || !keyBytes || keyBytes.length !== KEY_BYTES || !nonce || nonce.length !== NONCE_BYTES)
     throw new TypeError("relay blob: an invitation wrap takes a 32-byte team key, a 32-byte wrap key and fields the associated data can carry");
@@ -953,12 +968,14 @@ function openInviteWrap(wrapKey, input) {
   const o = input || {};
   const key = bytesOf(wrapKey);
   const wrap = o.wrap;
-  const doc = inviteTeamDoc(o.teamDoc, o.teamId, o.relayTeamId);
+  const isFolder = o.folder === true || o.relayTeamId === "folder";
+  const rt = isFolder ? "folder" : o.relayTeamId;
+  const doc = inviteTeamDoc(o.teamDoc, o.teamId, rt);
   if (!key || key.length !== KEY_BYTES || !wrap || typeof wrap !== "object" || Array.isArray(wrap) || !doc) return refusal("bad-signature");
   if (!isCount(wrap.epoch) || typeof wrap.ct !== "string" || !/^[0-9a-f]+$/.test(wrap.ct) || wrap.ct.length % 2 !== 0 || wrap.ct.length < (NONCE_BYTES + TAG_BYTES) * 2)
     return refusal("bad-signature");
   if (wrap.epoch !== doc.epoch) return refusal("epoch"); /* plant:wrap-epoch */
-  const aad = inviteWrapAad({ relayTeamId: o.relayTeamId, teamId: o.teamId, invitationId: o.invitationId, epoch: wrap.epoch });
+  const aad = inviteWrapAad({ relayTeamId: rt, folder: isFolder, teamId: o.teamId, invitationId: o.invitationId, epoch: wrap.epoch });
   if (!aad) return refusal("bad-signature");
   const raw = Buffer.from(wrap.ct, "hex");
   let plain;
@@ -984,10 +1001,32 @@ function openWrap(input) {
   return openInviteWrap(key, i);
 }
 
+function inviteRefusedSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(REFUSED_PREFIX, "utf8"), signedBytes(doc)]);
+}
+
+function inviteRefusedGenuine(doc, lead) {
+  if (!doc || typeof doc !== "object" || Array.isArray(doc) || !lead) return false;
+  if (+doc.format !== 1 || doc.kind !== REFUSED_KIND) return false;
+  if (!isId(doc.team) || typeof doc.invitation !== "string" || (!HEX16.test(doc.invitation) && !HEX32.test(doc.invitation))) return false;
+  if (!Number.isFinite(doc.t)) return false;
+  const sig = doc.sig;
+  if (!sig || typeof sig !== "object" || sig.alg !== "Ed25519" || String(sig.keyId || "") !== String(lead.keyId || "")) return false;
+  if (typeof sig.value !== "string" || !/^[0-9a-f]{128}$/.test(sig.value)) return false;
+  const pubHex = String(lead.public || "");
+  if (!/^[0-9a-f]{64}$/.test(pubHex)) return false;
+  try {
+    const pub = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pubHex, "hex")]), format: "der", type: "spki" });
+    const bytes = inviteRefusedSignedBytes(doc);
+    return crypto.verify(null, bytes, pub, Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
+
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, PAD_FLOOR, NONCE_BYTES, TAG_BYTES, KEY_BYTES, AAD_LABEL, UPLOAD_PREFIX,
   REASONS, refusal, isId, isDeskId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySigned, seal, openBlob,
-  inviteWrapKey, inviteWrapAad, sealInviteWrap, openInviteWrap, openWrap,
+  INVITE_WRAP_INFO, INVITE_FOLDER_WRAP_INFO, REFUSED_PREFIX, REFUSED_KIND,
+  inviteWrapKey, inviteWrapAad, sealInviteWrap, openInviteWrap, openWrap, inviteRefusedSignedBytes, inviteRefusedGenuine,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
   HANDOVER_PREFIX, HANDOVER_KIND, HANDOVER_STEPS, canon, signedBytes, handoverSignedBytes, handoverGenuine, handedTo, genuineChain,
 };

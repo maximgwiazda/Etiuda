@@ -3139,7 +3139,8 @@ function heedTeam() {
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
   const stamp = [file, fileStamp(file), teamChoiceStamp(root), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
-    teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : "", teamJoin ? teamJoin.commit : ""].join("|");
+    teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : "", teamJoin ? teamJoin.commit : "",
+    teamJoin && teamJoin.invite ? fileStamp(path.join(root, "invites", teamJoin.invite.id + ".wrap.json")) + ":" + fileStamp(path.join(root, "invites", teamJoin.invite.id + ".refused.json")) : ""].join("|");
   if (stamp === teamStamp) return;
   /* The stamp is a verdict on the text, so a read that fails or a key that is not kept leaves it unset and the next
      call reads again. A conflict sibling is part of the stamp, so a newer genuine copy is noticed. */
@@ -3261,6 +3262,31 @@ function heedTeam() {
       changed = true;
     } catch (e) { teamStamp = ""; teamSay("the team key for " + r.team + " could not be kept - " + e.message); }
   }
+  const j = teamJoin;
+  if (j && j.team === r.team && j.invite && !j.refused && j.invite.wrap && !j.invite.relay && doc && Number.isInteger(doc.epoch) && doc.epoch >= 1) {
+    const wrapPath = path.join(root, "invites", j.invite.id + ".wrap.json");
+    let wrapDoc = null;
+    try {
+      if (fs.statSync(wrapPath).size <= 65536) wrapDoc = JSON.parse(fs.readFileSync(wrapPath, "utf8"));
+    } catch {}
+    if (wrapDoc && wrapDoc.epoch === doc.epoch && branchSealable()) {
+      try {
+        const wrapKey = Buffer.from(safeStorage.decryptString(Buffer.from(j.invite.wrap, "base64")), "base64");
+        const opened = RelayChannel().openInviteWrap(wrapKey, { wrap: wrapDoc, teamDoc: doc, teamId: j.team, relayTeamId: "folder", invitationId: j.invite.id });
+        if (opened.ok) {
+          const kept = teamKeys[j.team] || {}, had = !!kept[opened.epoch];
+          kept[opened.epoch] = safeStorage.encryptString(opened.key.toString("base64")).toString("base64");
+          teamKeys[j.team] = kept;
+          if (!had) j.invite.wrapped = (j.invite.wrapped || []).concat(opened.epoch);
+          ecFactsRead.clear();
+          changed = true;
+        }
+      } catch {}
+    }
+  }
+  if (j && j.invite && !j.refused) {
+    if (checkInviteRefusal()) changed = true;
+  }
   if (changed) persistDeskEnvelope();
   /* A file above every one heeded before, naming this desk with a wrap it opened: never a roster read before the request. */
   const admitted = raised && r.key ? r.team : ""; /* plant:c6-fresh */
@@ -3302,10 +3328,10 @@ function finishJoin(admitted) {
   if (!named && !(newestEpoch(j.team) > j.held)) return false;
   /* A key opened from the invitation's wrap lets this desk read before it is admitted. The request stays until the
      roster of the epoch accepted names this desk, which is still what lets the request go. */
-  if (j.invite && j.invite.relay && !mine) return false;
+  if (j.invite && !mine) return false;
   /* A request withdrawn, or on its way to being withdrawn, is not admitted by a roster that names this desk, unless the relay
      has enrolled its key. */
-  const takenBack = !!(j.invite && j.invite.relay && (j.invite.relay.withdrawn === true || j.invite.relay.withdrawing === true));
+  const takenBack = !!(j.invite && ((j.invite.relay && (j.invite.relay.withdrawn === true || j.invite.relay.withdrawing === true)) || j.refused === true));
   if (takenBack && !(relayChannel && relayChannel.enrolled && relayChannel.enrolled())) return false; /* plant:e4-not-joined */
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
@@ -4008,7 +4034,7 @@ function cancelJoin() {
      had, with its pin and its key (921e). A key this invitation's own wrap opened before the lead admitted the desk (marked in
      the join as `wrapped`) was not there before and does not hold the restore back: it is forgotten with the rest (921u). A
      newer key from elsewhere, one the roster's wrap gave, means the desk is admitted, and Cancel leaves what it set (921n). */
-  const b = j && j.invite && j.invite.before, wrapped = (j && j.invite && j.invite.relay && j.invite.relay.wrapped) || [];
+  const b = j && j.invite && j.invite.before, wrapped = (j && j.invite && ((j.invite.relay && j.invite.relay.wrapped) || j.invite.wrapped)) || [];
   if (b && newestEpoch(j.team, wrapped) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
@@ -4028,7 +4054,7 @@ function inviteBeforeFor(team, keptJoin) {
 /* The keys this invitation's wrap gave the desk, which it did not hold before the invitation: forgotten, as the wrap's own key was.
    A key the desk held before, at an epoch the wrap opened again, was never marked and stays. */
 function forgetWrapped(team, inv) {
-  const wrapped = inv && inv.relay && inv.relay.wrapped, kept = teamKeys[team];
+  const wrapped = (inv && inv.relay && inv.relay.wrapped) || (inv && inv.wrapped), kept = teamKeys[team];
   if (!Array.isArray(wrapped) || !kept) return;
   wrapped.forEach(n => { delete kept[n]; });
   if (!Object.keys(kept).length) delete teamKeys[team];
@@ -4055,7 +4081,7 @@ function undoInvite(team, b, inv) {
    refuses it for good. A waiting request is left as it was, so Ask again still has what the invitation gave. */
 function endRefusedRelay(j) {
   if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already */ } }
-  const team = j.team, inv = j.invite, b = inv && inv.before, wrapped = (inv && inv.relay && inv.relay.wrapped) || [];
+  const team = j.team, inv = j.invite, b = inv && inv.before, wrapped = (inv && ((inv.relay && inv.relay.wrapped) || inv.wrapped)) || [];
   const putBack = !!(b && newestEpoch(team, wrapped) === (b.epoch || 0));
   teamJoin = null;
   joinTold = false;
@@ -4069,6 +4095,31 @@ function refusedWithdrawEnds(j) {
   endRefusedRelay(j); /* plant:refused-cancel-ends */
   return true;
 }
+function checkInviteRefusal() {
+  const j = teamJoin;
+  if (!j || !j.invite || (j.invite.relay && !j.invite.folder) || j.refused) return false;
+  const root = j.invite.folder || catalogFolder();
+  if (!folderAnswers(root)) return false;
+  const invId = j.invite.id;
+  if (!invId) return false;
+  const refFile = path.join(root, "invites", invId + ".refused.json");
+  let text = "";
+  try {
+    if (fs.statSync(refFile).size > 65536) return false;
+    text = fs.readFileSync(refFile, "utf8");
+  } catch { return false; }
+  let doc = null;
+  try { doc = JSON.parse(String(text).replace(/^\uFEFF/, "")); } catch { return false; }
+  if (!doc || doc.team !== j.team || doc.invitation !== invId) return false;
+  const lead = teamPins[j.team] || (j.invite && j.invite.lead);
+  if (!lead) return false;
+  const ok = RelayChannel().inviteRefusedGenuine(doc, lead);
+  if (!ok) return false;
+  forgetWrapped(j.team, j.invite); /* plant:refuse-forget */
+  j.refused = true;
+  persistDeskEnvelope();
+  return true;
+}
 /* Moves the request on and says where it stands: admitted once this desk keeps a newer key for the team than when it
    asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so.
    `leads` is leadsView's. */
@@ -4078,6 +4129,7 @@ function joinView() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return view;
   heedTeam();
+  checkInviteRefusal();
   finishJoin();
   const j = teamJoin, me = branchIdentity(false);
   if (joinDone) {
@@ -4105,7 +4157,7 @@ function joinView() {
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
                   state: j.refused ? "refused" : j.opened ? "code" : relayEnd,
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
-    if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
+    if (j.invite) view.join.invite = Object.assign({ lead: String(j.invite.lead && j.invite.lead.name || "") }, (j.invite.wrapped && j.invite.wrapped.length) ? { wrapped: true } : {});
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
     const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
@@ -4367,6 +4419,33 @@ async function takeInvite(text, name, check) {
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
       folder: parsed.folder, was: was, pinned: pinned, before: before } };
+  const gave = keptJoin && keptJoin.team === parsed.team && keptJoin.invite && (keptJoin.invite.wrapped || (keptJoin.invite.relay && keptJoin.invite.relay.wrapped));
+  if (gave && gave.length) j.invite.wrapped = gave.slice();
+  let wrapKey = null;
+  if (branchSealable()) {
+    try {
+      wrapKey = RelayChannel().inviteWrapKey(parsed.secret);
+      if (wrapKey) j.invite.wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
+    } catch {}
+  }
+  const wrapPath = path.join(parsed.folder, "invites", incomingId + ".wrap.json");
+  let wrapDoc = null;
+  try {
+    if (fs.statSync(wrapPath).size <= 65536) wrapDoc = JSON.parse(fs.readFileSync(wrapPath, "utf8"));
+  } catch { wrapDoc = null; }
+  if (wrapDoc && wrapKey && branchSealable()) {
+    const wrapTeamDoc = teamTextChosen(parsed.folder).doc;
+    if (wrapTeamDoc && teamWhole(wrapTeamDoc) && wrapTeamDoc.id === parsed.team && wrapTeamDoc.lead && wrapTeamDoc.lead.keyId === parsed.lead.keyId && wrapTeamDoc.lead.public === parsed.lead.public) {
+      const opened = RelayChannel().openInviteWrap(wrapKey, { wrap: wrapDoc, teamDoc: wrapTeamDoc, teamId: parsed.team, relayTeamId: "folder", invitationId: incomingId });
+      if (opened.ok) {
+        const kept = teamKeys[parsed.team] || {}, had = !!kept[opened.epoch];
+        kept[opened.epoch] = safeStorage.encryptString(opened.key.toString("base64")).toString("base64");
+        teamKeys[parsed.team] = kept;
+        if (!had) j.invite.wrapped = (j.invite.wrapped || []).concat(opened.epoch);
+        ecFactsRead.clear();
+      }
+    }
+  }
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);

@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 131;
+const EXPECTED = 137;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -3365,6 +3365,216 @@ try {
     check(pinsBoth === 2 && !!Dq.api.catalogLeadOk(byB) && !Dq.api.catalogLeadOk(byHigh) && revOf(both) === 1,
       "15cg with both leads pinned, team B's folder chooses the catalog B's lead signed and not A's higher rev: pins "
       + pinsBoth + ", rev " + revOf(both) + ", B " + !!Dq.api.catalogLeadOk(byB) + ", A " + !!Dq.api.catalogLeadOk(byHigh));
+  }
+
+  /* ---- Board 945 item 5: folder invitation wrap and signed refusal ----------------------------- */
+  const B_blob = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
+  const safeSealWrap = opts => {
+    try { return B_blob.sealInviteWrap(opts); } catch { return { epoch: opts.epoch, ct: "00".repeat(44) }; }
+  };
+  const safeRefusedBytes = doc => {
+    if (typeof B_blob.inviteRefusedSignedBytes === "function") return B_blob.inviteRefusedSignedBytes(doc);
+    return Buffer.from("etiuda-invite-refused\n" + JSON.stringify(doc), "utf8");
+  };
+
+  const wrapYard = folder("folder-wrap-yard");
+  const KW1 = crypto.randomBytes(32);
+  const meW2 = { id: "k-" + crypto.randomBytes(8).toString("hex"), key: crypto.randomBytes(32).toString("hex"), box: crypto.randomBytes(32).toString("hex") };
+  put(wrapYard, "etiuda-team.json", teamAt(1, [entry(meW2, KW1, 1)]));
+  put(wrapYard, "lamps.ec", P.sealCatalog(KW1, TEAM, 1, A1));
+  const secretW = crypto.randomBytes(16).toString("hex");
+  SECRETS.push(secretW);
+  const invIdW = P.inviteIdOf(secretW);
+  const wrapW = safeSealWrap({ secret: secretW, folder: true, teamId: TEAM, invitationId: invIdW, epoch: 1, key: KW1 });
+  fs.mkdirSync(path.join(wrapYard, "invites"), { recursive: true });
+  put(wrapYard, path.join("invites", invIdW + ".wrap.json"), JSON.stringify(wrapW));
+
+  const Dwrap = newDesk("desk-wrap", wrapYard);
+  const blobW = inviteBlob({ team: TEAM, folder: wrapYard, lead: lampLead, secret: secretW });
+  const tookW = await Dwrap.join("invite", blobW, "Nia", codeFor(blobW));
+  const wrapCatalog = Dwrap.api.readCatalog("lamps.ec");
+  const wrapState = await Dwrap.join("state");
+  const wrapEnv = Dwrap.envelope();
+  const heldKey = wrapEnv.teamKeys && wrapEnv.teamKeys[TEAM] && wrapEnv.teamKeys[TEAM][1];
+  const waitingNotAdmitted = wrapState.join && wrapState.join.state === "waiting" && wrapState.joined === null;
+  check(tookW && !tookW.refused && waitingNotAdmitted && heldKey && wrapCatalog === A1.trim(),
+    "15dy a folder invitation's wrap opens at yes, and the desk opens the sealed edition before admission while the request waits: catalog "
+    + (wrapCatalog === A1.trim() ? "opened" : "shut") + ", state " + (wrapState.join && wrapState.join.state));
+
+  const badYard = folder("folder-wrap-bad");
+  put(badYard, "etiuda-team.json", teamAt(1, [entry(meW2, KW1, 1)]));
+  put(badYard, "lamps.ec", P.sealCatalog(KW1, TEAM, 1, A1));
+  fs.mkdirSync(path.join(badYard, "invites"), { recursive: true });
+
+  // 1. Wrap for another epoch (epoch 2 on an epoch 1 team file)
+  const secEpoch = crypto.randomBytes(16).toString("hex"); SECRETS.push(secEpoch);
+  const idEpoch = P.inviteIdOf(secEpoch);
+  put(badYard, path.join("invites", idEpoch + ".wrap.json"), JSON.stringify(safeSealWrap({ secret: secEpoch, folder: true, teamId: TEAM, invitationId: idEpoch, epoch: 2, key: crypto.randomBytes(32) })));
+  const D_epoch = newDesk("desk-epoch", badYard);
+  await D_epoch.join("invite", inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secEpoch }), "Ola", codeFor(inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secEpoch })));
+  const epochRead = D_epoch.api.readCatalog("lamps.ec");
+
+  // 2. Wrap for another team
+  const secTeam = crypto.randomBytes(16).toString("hex"); SECRETS.push(secTeam);
+  const idTeam = P.inviteIdOf(secTeam);
+  put(badYard, path.join("invites", idTeam + ".wrap.json"), JSON.stringify(safeSealWrap({ secret: secTeam, folder: true, teamId: "t-otherteam123456", invitationId: idTeam, epoch: 1, key: KW1 })));
+  const D_team = newDesk("desk-team", badYard);
+  await D_team.join("invite", inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secTeam }), "Ola", codeFor(inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secTeam })));
+  const teamRead = D_team.api.readCatalog("lamps.ec");
+
+  // 3. Tampered wrap
+  const secTamp = crypto.randomBytes(16).toString("hex"); SECRETS.push(secTamp);
+  const idTamp = P.inviteIdOf(secTamp);
+  const tampWrap = safeSealWrap({ secret: secTamp, folder: true, teamId: TEAM, invitationId: idTamp, epoch: 1, key: KW1 });
+  tampWrap.ct = tampWrap.ct.slice(0, -4) + (tampWrap.ct.slice(-4) === "0000" ? "ffff" : "0000");
+  put(badYard, path.join("invites", idTamp + ".wrap.json"), JSON.stringify(tampWrap));
+  const D_tamp = newDesk("desk-tamp", badYard);
+  await D_tamp.join("invite", inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secTamp }), "Ola", codeFor(inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secTamp })));
+  const tampRead = D_tamp.api.readCatalog("lamps.ec");
+
+  // 4. Relay wrap moved into the folder
+  const secRelay = crypto.randomBytes(16).toString("hex"); SECRETS.push(secRelay);
+  const idRelay = P.inviteIdOf(secRelay);
+  const relayWrap = safeSealWrap({ secret: secRelay, relayTeamId: crypto.randomBytes(16).toString("hex"), teamId: TEAM, invitationId: idRelay.padEnd(32, "0"), epoch: 1, key: KW1 });
+  put(badYard, path.join("invites", idRelay + ".wrap.json"), JSON.stringify(relayWrap));
+  const D_relay = newDesk("desk-relay-wrap", badYard);
+  await D_relay.join("invite", inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secRelay }), "Ola", codeFor(inviteBlob({ team: TEAM, folder: badYard, lead: lampLead, secret: secRelay })));
+  const relayRead = D_relay.api.readCatalog("lamps.ec");
+
+  check(epochRead !== A1.trim() && teamRead !== A1.trim() && tampRead !== A1.trim() && relayRead !== A1.trim(),
+    "15dz a wrap for another epoch or team, a tampered one, or a relay wrap moved into the folder, opens nothing: epoch "
+    + (epochRead === A1.trim() ? "opened" : "shut") + ", team " + (teamRead === A1.trim() ? "opened" : "shut")
+    + ", tampered " + (tampRead === A1.trim() ? "opened" : "shut") + ", relay " + (relayRead === A1.trim() ? "opened" : "shut"));
+
+  // Open invitation receives new wrap at epoch 2
+  const KW2 = crypto.randomBytes(32);
+  const wrapW2 = safeSealWrap({ secret: secretW, folder: true, teamId: TEAM, invitationId: invIdW, epoch: 2, key: KW2 });
+  put(wrapYard, path.join("invites", invIdW + ".wrap.json"), JSON.stringify(wrapW2));
+  put(wrapYard, "etiuda-team.json", teamAt(2, [entry(meW2, KW2, 2)]));
+  put(wrapYard, "lamps.ec", P.sealCatalog(KW2, TEAM, 2, A1));
+  Dwrap.api.catalogChanged();
+  const wrapCatalog2 = Dwrap.api.readCatalog("lamps.ec");
+  const wrapEnv2 = Dwrap.envelope();
+  const heldKey2 = wrapEnv2.teamKeys && wrapEnv2.teamKeys[TEAM] && wrapEnv2.teamKeys[TEAM][2];
+  check(heldKey2 && wrapCatalog2 === A1.trim(),
+    "15ea after a key change the open invitation's wrap is at the new epoch and opens the new edition: key kept "
+    + !!heldKey2 + ", catalog " + (wrapCatalog2 === A1.trim() ? "opened" : "shut"));
+
+  const refuseYard = folder("folder-wrap-refuse");
+  const KR1 = crypto.randomBytes(32);
+  put(refuseYard, "etiuda-team.json", teamAt(1, [entry(meW2, KR1, 1)]));
+  put(refuseYard, "lamps.ec", P.sealCatalog(KR1, TEAM, 1, A1));
+  const secRef = crypto.randomBytes(16).toString("hex"); SECRETS.push(secRef);
+  const idRef = P.inviteIdOf(secRef);
+  fs.mkdirSync(path.join(refuseYard, "invites"), { recursive: true });
+  put(refuseYard, path.join("invites", idRef + ".wrap.json"), JSON.stringify(safeSealWrap({ secret: secRef, folder: true, teamId: TEAM, invitationId: idRef, epoch: 1, key: KR1 })));
+
+  const Drf = newDesk("desk-refuse", refuseYard);
+  await Drf.join("invite", inviteBlob({ team: TEAM, folder: refuseYard, lead: lampLead, secret: secRef }), "Ola", codeFor(inviteBlob({ team: TEAM, folder: refuseYard, lead: lampLead, secret: secRef })));
+  const initialOpen = Drf.api.readCatalog("lamps.ec") === A1.trim();
+
+  // 1. Forged refusal
+  const otherKey = crypto.generateKeyPairSync("ed25519");
+  const forgedRef = { format: 1, kind: "etiuda-invite-refused", team: TEAM, invitation: idRef, t: Date.now(), sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+  forgedRef.sig.value = crypto.sign(null, safeRefusedBytes(forgedRef), otherKey.privateKey).toString("hex");
+  put(refuseYard, path.join("invites", idRef + ".refused.json"), JSON.stringify(forgedRef));
+  await Drf.join("state");
+  const forgedIgnored = Drf.envelope().teamKeys && Drf.envelope().teamKeys[TEAM] && Drf.envelope().teamKeys[TEAM][1];
+
+  // 2. Refusal for another team
+  const otherTeamRef = { format: 1, kind: "etiuda-invite-refused", team: "t-differentteam99", invitation: idRef, t: Date.now(), sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+  otherTeamRef.sig.value = crypto.sign(null, safeRefusedBytes(otherTeamRef), lead.privateKey).toString("hex");
+  put(refuseYard, path.join("invites", idRef + ".refused.json"), JSON.stringify(otherTeamRef));
+  await Drf.join("state");
+  const otherTeamIgnored = Drf.envelope().teamKeys && Drf.envelope().teamKeys[TEAM] && Drf.envelope().teamKeys[TEAM][1];
+
+  // 3. Refusal for another invitation
+  const otherInvRef = { format: 1, kind: "etiuda-invite-refused", team: TEAM, invitation: "0123456789abcdef", t: Date.now(), sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+  otherInvRef.sig.value = crypto.sign(null, safeRefusedBytes(otherInvRef), lead.privateKey).toString("hex");
+  put(refuseYard, path.join("invites", idRef + ".refused.json"), JSON.stringify(otherInvRef));
+  await Drf.join("state");
+  const otherInvIgnored = Drf.envelope().teamKeys && Drf.envelope().teamKeys[TEAM] && Drf.envelope().teamKeys[TEAM][1];
+
+  const beforeRefusalSeed = fs.readFileSync(path.join(Drf.ud, "desk.json"), "utf8");
+
+  // 4. Genuine refusal signed by the pinned lead
+  const genuineRef = { format: 1, kind: "etiuda-invite-refused", team: TEAM, invitation: idRef, t: Date.now(), sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+  genuineRef.sig.value = crypto.sign(null, safeRefusedBytes(genuineRef), lead.privateKey).toString("hex");
+  put(refuseYard, path.join("invites", idRef + ".refused.json"), JSON.stringify(genuineRef));
+  try { fs.unlinkSync(path.join(refuseYard, "invites", idRef + ".wrap.json")); } catch {}
+
+  const stateAfterRefuse = await Drf.join("state");
+  const envAfterRefuse = Drf.envelope();
+  const keyForgotten = !(envAfterRefuse.teamKeys && envAfterRefuse.teamKeys[TEAM] && envAfterRefuse.teamKeys[TEAM][1]);
+  const catalogShut = Drf.api.readCatalog("lamps.ec") !== A1.trim();
+  const saysRefused = stateAfterRefuse.join && stateAfterRefuse.join.state === "refused";
+
+  await pageOn(Drf);
+  ST.lsSet("eUiLang", "en");
+  const cardHtml = TJ.teamJoinEmptyHtml();
+  const saysWords = cardHtml.indexOf("The lead turned the request down") >= 0
+    && cardHtml.indexOf("To join, a new invitation from the team&#39;s lead is needed.") >= 0
+    && cardHtml.indexOf('data-join="cancel"') >= 0 && cardHtml.indexOf('data-join="ask"') < 0;
+
+  check(initialOpen && forgedIgnored && otherTeamIgnored && otherInvIgnored && keyForgotten && catalogShut && saysRefused && saysWords,
+    "15eb a genuine refusal makes a waiting desk forget the key and say so; forged, other-team and other-invitation refusals change nothing: forged ignored "
+    + !!forgedIgnored + ", key forgotten " + keyForgotten + ", state " + (stateAfterRefuse.join && stateAfterRefuse.join.state) + ", words " + saysWords);
+
+  // 15ec: lifting plant:folder-wrap-aad turns 15dy red
+  {
+    if (PLANTS_OFF) {
+      skip("15ec lifting plant:folder-wrap-aad turns 15dy red");
+    } else {
+      const blobPath = path.join(ROOT, "shell", "relay", "blob.cjs");
+      const before = fs.readFileSync(blobPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:folder-wrap-aad") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "    return null; /* plant:folder-wrap-aad */";
+        const dir = fs.mkdtempSync(path.join(LAB, "wrap-aad-plant-"));
+        fs.writeFileSync(path.join(dir, "blob.cjs"), lines.join("\n"), "utf8");
+        const plantedBlob = nodeRequire(path.join(dir, "blob.cjs"));
+        let plantedOpened = false;
+        try {
+          const res = plantedBlob.openInviteWrap(B_blob.inviteWrapKey(secretW), { wrap: wrapW, teamDoc: teamAt(1, [entry(meW2, KW1, 1)]), teamId: TEAM, relayTeamId: "folder", invitationId: invIdW });
+          plantedOpened = res && res.ok;
+        } catch { plantedOpened = false; }
+        turned = !plantedOpened;
+        detail = turned ? "folder wrap rejected with planted AAD" : "folder wrap still opened";
+      }
+      const same = fs.readFileSync(blobPath).equals(before);
+      check(turned && same, "15ec lifting plant:folder-wrap-aad turns folder wrap opening red (FAIL 15dy: wrap opens with bad AAD): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  // 15ed: lifting plant:refuse-forget turns 15eb red
+  {
+    if (PLANTS_OFF) {
+      skip("15ed lifting plant:refuse-forget turns 15eb red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:refuse-forget") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "  /* plant:refuse-forget */";
+        const ud = path.join(LAB, "refuse-plant");
+        fs.mkdirSync(ud, { recursive: true });
+        fs.writeFileSync(path.join(ud, "desk.json"), beforeRefusalSeed, "utf8");
+        const planted = loadDesk(ud, lines.join("\n"));
+        await planted.join("state");
+        const env = planted.envelope();
+        const stillHoldsKey = !!(env.teamKeys && env.teamKeys[TEAM] && env.teamKeys[TEAM][1]);
+        turned = stillHoldsKey;
+        detail = turned ? "planted desk retained key after refusal" : "desk still forgot key";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15ed lifting plant:refuse-forget retains key after refusal (FAIL 15eb: key forgotten without forgetWrapped): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
   }
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
