@@ -410,7 +410,7 @@ function conflictSiblingName(canonical, name) {
   const tail = nStem.slice(cStem.length);
   if (/^( \(\d+\))+$/.test(tail)) return true;
   if (/^ \(.*conflicted copy.*\)$/i.test(tail)) return true;
-  if (/^-[A-Za-z0-9][A-Za-z0-9-]{0,62}$/.test(tail)) return true;
+  if (/^-(?:[A-Z0-9][A-Z0-9-]{1,62}|v\d+)$/.test(tail)) return true;
   if (/^\.sync-conflict-/.test(tail)) return true;
   return false;
 }
@@ -5835,6 +5835,16 @@ function ecGrew(data) {
    agree, the higher rev wins, and an equal rev keeps the name that is not a conflict copy of
    another, else the earlier name. An id that did not parse keeps its own row. `genuine` is how
    the choice is made and is not a field of the row the page is sent. */
+function isConflictName(name) {
+  const n = path.basename(String(name || ""));
+  const ext = path.extname(n);
+  const stem = ext ? n.slice(0, -ext.length) : n;
+  if (/ \(\d+\)$/.test(stem)) return true;
+  if (/ \(.*conflicted copy.*\)$/i.test(stem)) return true;
+  if (/\.sync-conflict-/.test(n)) return true;
+  if (/-(?:[A-Z0-9][A-Z0-9-]{1,62}|v\d+)$/.test(stem)) return true;
+  return false;
+}
 function conflictNamedAmong(name, names) {
   for (let i = 0; i < names.length; i++) {
     if (names[i] !== name && conflictSiblingName(names[i], name)) return true;
@@ -5846,7 +5856,8 @@ function betterEdition(a, b, names) {
   if (ag !== bg) return ag;
   const ar = +a.rev || 0, br = +b.rev || 0;
   if (ar !== br) return ar > br;
-  const ac = conflictNamedAmong(a.name, names), bc = conflictNamedAmong(b.name, names);
+  const ac = conflictNamedAmong(a.name, names) || isConflictName(a.name);
+  const bc = conflictNamedAmong(b.name, names) || isConflictName(b.name);
   if (ac !== bc) return !ac;
   if (a.name !== b.name) return a.name < b.name;
   return false;
@@ -5856,13 +5867,17 @@ function collapseEditions(rows) {
   rows.forEach((row, i) => {
     const id = row && row.id != null ? String(row.id) : "";
     if (!id) return;
-    if (!byId.has(id)) byId.set(id, []);
-    byId.get(id).push(i);
+    const scope = (row.desk && row.desk.id) ? "d:" + row.desk.id : "r";
+    const key = scope + "|" + id;
+    if (!byId.has(key)) byId.set(key, []);
+    byId.get(key).push(i);
   });
   const drop = new Set();
   for (const idxs of byId.values()) {
     if (idxs.length < 2) continue;
     const names = idxs.map(i => rows[i].name);
+    const hasConflict = names.some(n => conflictNamedAmong(n, names) || isConflictName(n));
+    if (!hasConflict) continue; /* plant:f3-conflict-only */
     let keep = idxs[0];
     for (let n = 1; n < idxs.length; n++) {
       if (betterEdition(rows[idxs[n]], rows[keep], names)) keep = idxs[n];
