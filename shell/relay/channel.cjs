@@ -263,10 +263,13 @@ function rosterOf(doc) {
 
 function pinOf(p) {
   if (!table(p)) return null;
-  const lead = table(p.lead) ? p.lead : {};
-  if (typeof p.teamId !== "string" || !p.teamId || typeof p.rt !== "string" || !p.rt || !B.isId(lead.keyId)
+  const lead = table(p.lead) ? p.lead : (table(p) && p.keyId && p.public ? { keyId: p.keyId, public: p.public } : {});
+  if (typeof p.teamId !== "string" || !p.teamId || !B.isId(lead.keyId)
     || typeof lead.public !== "string" || !HEX64.test(lead.public)) return null;
-  return { teamId: p.teamId, rt: p.rt, lead: { keyId: lead.keyId, public: lead.public } };
+  /* A present rt must be a non-empty string. An absent rt is a folder pin. */
+  if (Object.prototype.hasOwnProperty.call(p, "rt") && (typeof p.rt !== "string" || !p.rt)) return null;
+  const rt = typeof p.rt === "string" && p.rt ? p.rt : null;
+  return { teamId: p.teamId, rt: rt, lead: { keyId: lead.keyId, public: lead.public } };
 }
 
 /* A writer's place as blob.cjs judges it: the lead's everything but desks/, a desk's desks/<its id>/ and below. */
@@ -465,7 +468,7 @@ function newestEdition(list) {
     let published = e.published;
     if (typeof published === "number" && Number.isFinite(published)) published = String(published);
     if (!headTextOk(e.edition, 120) || !headTextOk(published, 80)) return null;
-    if (!best || e.rev >= best.rev) best = { rev: e.rev, edition: e.edition, published: published };
+    if (!best || e.rev >= best.rev) best = { catalog: e.catalog, rev: e.rev, edition: e.edition, published: published };
   }
   return best;
 }
@@ -531,7 +534,7 @@ function createProgram(opts) {
   }
 
   /* A team file judged under the pin or a genuine handover: signed by the pinned lead's key or a new lead the handover
-     proves; this team and this relay; an epoch and a rev. */
+     proves; this team. A relay pin requires its own relay and a rev. A folder pin refuses a file that names a relay. */
   function teamJudged(doc) {
     if (!pin) return R("wrong-team");
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
@@ -543,8 +546,9 @@ function createProgram(opts) {
     const signerPub = leadDiffers ? (lead && lead.public) : pin.lead.public;
     if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
     const chain = B.genuineChain(doc, pin.lead) || (st && st.chain) || [{ keyId: pin.lead.keyId, public: pin.lead.public }];
-    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || relayOf(doc) !== pin.rt) return R("wrong-team"); /* plant:team-own */
-    if (!isCount(doc.epoch) || !isCount(doc.rev)) return R("replay-rev");
+    const folder = !pin.rt;
+    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (folder ? relayOf(doc) !== null : relayOf(doc) !== pin.rt)) return R("wrong-team"); /* plant:team-own */
+    if (!isCount(doc.epoch) || (folder ? (doc.rev !== undefined && (!Number.isSafeInteger(doc.rev) || doc.rev < 0)) : !isCount(doc.rev))) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
 
@@ -1311,10 +1315,13 @@ function createProgram(opts) {
   function readRing(input) {
     const i = input || {};
     const doc = i.teamDoc;
-    if (!(table(doc) && table(doc.channel) && doc.channel.kind === "relay"))
-      return { source: i.looseRing ? "loose" : "none", ring: i.looseRing || null };
-    const t = teamJudged(doc);
-    return t.ok && table(doc.ring) ? { source: "team", ring: doc.ring } : { source: "none", ring: null };
+    const isRelay = table(doc) && table(doc.channel) && doc.channel.kind === "relay";
+    if (table(doc)) {
+      const t = teamJudged(doc);
+      if (t.ok && table(doc.ring)) return { source: "team", ring: doc.ring };
+    }
+    if (isRelay) return { source: "none", ring: null };
+    return { source: i.looseRing ? "loose" : "none", ring: i.looseRing || null };
   }
 
   function readMirror(rel) {
@@ -2285,7 +2292,7 @@ module.exports = {
   canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
   inviteRefusedSignedBytes: B.inviteRefusedSignedBytes, inviteRefusedGenuine: B.inviteRefusedGenuine,
-  createProgram, createChannel,
+  createProgram, createChannel, newestEdition,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),
   verifyDeskSignature: (publicKey, body, signature) => {
