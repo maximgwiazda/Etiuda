@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 58;
+const EXPECTED = 61;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -873,6 +873,103 @@ try {
   check(retried.every(r => r.ok),
     "14ab a team key that could not be kept is tried again at the next read, the team file unchanged, whether safeStorage"
     + " could open nothing or seal nothing: " + retried.map(r => r.said).join("; "));
+
+  /* A folder key that has not arrived yet. The bound is the relay channel's pending retry ceiling, sixty seconds. */
+  const WAIT_MS = 60 * 1000;
+  const keyMiss = D => D.said.some(l => l.indexOf("holds no key") >= 0);
+  const joinNow = D => D.invoke["etiuda:team-join"](eventFor(), "state");
+  const quietWin = () => ({ isDestroyed: () => false, webContents: { send: () => {} } });
+
+  /* ---- an edition at the next epoch, before the team file that carries its key -------------------------------- */
+  {
+    const AHEAD = folder("ahead"), DA = newDesk("ahead", AHEAD), meA = await DA.ask("etiuda:branch-identity", true);
+    fs.writeFileSync(path.join(AHEAD, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+    const sentA = [];
+    const winA = { isDestroyed: () => false, webContents: { send: (...a) => sentA.push(a) } };
+    put(AHEAD, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meA, K1, 1)] })));
+    put(AHEAD, "lamps.ec", seal(K1, 1, A2));
+    DA.api.catalogChanged(winA);
+    const held = DA.api.readCatalog();
+    sentA.length = 0;
+    DA.said.length = 0;
+    put(AHEAD, "lamps.ec", seal(K2, 2, A3));
+    DA.api.catalogChanged(winA);
+    const quietRead = DA.api.readCatalog();
+    const quietJoin = joinNow(DA);
+    const quietOffers = sentA.filter(a => a[0] === "etiuda:catalog-file").length;
+    const quiet = quietRead === A2.trim() && !(quietJoin && quietJoin.sealed) && !keyMiss(DA) && quietOffers === 0;
+    put(AHEAD, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(meA, K2, 2)] })));
+    DA.api.catalogChanged(winA);
+    const openedNew = DA.api.readCatalog();
+    const offers = sentA.filter(a => a[0] === "etiuda:catalog-file");
+    check(quiet && held === A2.trim() && openedNew === A3.trim() && offers.some(a => a[1] === A3.trim() && a[2] === "lamps.ec")
+      && !keyMiss(DA),
+      "14be an edition sealed one epoch ahead of the team file keeps the edition in use and says nothing, and opens once"
+      + " the file lands: held " + (held === A2.trim() ? "yes" : "no") + ", quiet " + (quiet ? "yes" : "no")
+      + ", opened " + (openedNew === A3.trim() ? "yes" : "no") + ", offered "
+      + (offers.some(a => a[1] === A3.trim()) ? "yes" : "no"));
+  }
+
+  /* ---- the team file never comes: the wait ends in the words a sealed edition already gets -------------------- */
+  {
+    const LATE = folder("latekey"), DB = newDesk("latekey", LATE), meB = await DB.ask("etiuda:branch-identity", true);
+    fs.writeFileSync(path.join(LATE, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+    const winB = quietWin();
+    put(LATE, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meB, K1, 1)] })));
+    put(LATE, "lamps.ec", seal(K1, 1, A2));
+    const realNow = Date.now;
+    const t0 = realNow();
+    let earlyQuiet = false, midQuiet = false, lateSaid = false, lateFile = "";
+    Date.now = () => t0;
+    try {
+      DB.api.catalogChanged(winB);
+      DB.said.length = 0;
+      put(LATE, "lamps.ec", seal(K2, 2, A3));
+      DB.api.catalogChanged(winB);
+      const earlyJoin = joinNow(DB);
+      earlyQuiet = DB.api.readCatalog() === A2.trim() && !(earlyJoin && earlyJoin.sealed) && !keyMiss(DB);
+      Date.now = () => t0 + WAIT_MS - 1;
+      DB.api.catalogChanged(winB);
+      const midJoin = joinNow(DB);
+      midQuiet = DB.api.readCatalog() === A2.trim() && !(midJoin && midJoin.sealed) && !keyMiss(DB);
+      Date.now = () => t0 + WAIT_MS;
+      DB.api.catalogChanged(winB);
+      const lateJoin = joinNow(DB);
+      lateSaid = !!(lateJoin && lateJoin.sealed && lateJoin.sealed.team === TEAM) && keyMiss(DB);
+      lateFile = lateJoin && lateJoin.sealed ? lateJoin.sealed.file : "";
+    } finally { Date.now = realNow; }
+    check(earlyQuiet && midQuiet && lateSaid && lateFile === "lamps.ec",
+      "14bf a team file that never comes keeps the edition until the wait's last moment and then says this desk holds no"
+      + " key, naming the file: quiet before " + (earlyQuiet ? "yes" : "no") + ", at "
+      + (WAIT_MS - 1) + " ms " + (midQuiet ? "yes" : "no") + ", at " + WAIT_MS + " ms "
+      + (lateSaid ? "said" : "silent") + " for " + (lateFile || "nothing"));
+  }
+
+  /* ---- a desk the new epoch's team file has already left off is refused at once, as before -------------------- */
+  {
+    const GONE = folder("gone"), DG = newDesk("gone", GONE), meG = await DG.ask("etiuda:branch-identity", true);
+    fs.writeFileSync(path.join(GONE, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+    const winG = quietWin();
+    put(GONE, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meG, K1, 1)] })));
+    put(GONE, "old.ec", seal(K1, 1, A2));
+    put(GONE, "lamps.ec", seal(K1, 1, A2));
+    DG.api.catalogChanged(winG);
+    DG.said.length = 0;
+    put(GONE, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [] })));
+    put(GONE, "lamps.ec", seal(K2, 2, A3));
+    DG.api.catalogChanged(winG);
+    const view = joinNow(DG);
+    const oldOpens = await read(DG, "old.ec");
+    const neu = await read(DG, "lamps.ec");
+    let neuEpoch = 0, neuKind = "";
+    try { const d = JSON.parse(neu); neuKind = d.kind; neuEpoch = d.epoch; } catch { neuKind = "not json"; }
+    check(!!(view && view.sealed && view.sealed.file === "lamps.ec" && view.sealed.team === TEAM) && keyMiss(DG)
+      && oldOpens === A2.trim() && neuKind === "etiuda-sealed" && neuEpoch === 2,
+      "14bg a desk the team file has removed at the new epoch is told at once, and still opens what was sealed while it"
+      + " was on the roster: sealed " + (view && view.sealed ? view.sealed.file : "nothing")
+      + ", the words " + (keyMiss(DG) ? "said" : "absent") + ", the older edition "
+      + (oldOpens === A2.trim() ? "opens" : "shut") + ", the new one " + neuKind + " at epoch " + neuEpoch);
+  }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
