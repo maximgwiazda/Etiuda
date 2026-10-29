@@ -441,12 +441,13 @@ function isV2(data) {
   return !!data && typeof data === "object" && +data.format === 2 && data.kind === "etiuda-catalog";
 }
 /* catalogPayload with a sealed envelope opened first, so every route hands the page the catalog inside and the page
-   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. */
+   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. An epoch
+   the team file has not named yet, on a folder team this desk already holds a key for, is the same throw marked to wait. */
 function catalogRead(text) {
   const got = catalogPayload(text);
   if (!got.data || typeof got.data !== "object" || got.data.kind !== SEALED_KIND) return got;
   const inner = teamOpen(got.data);
-  if (inner === null) throw new Error("sealed for team " + String(got.data.team) + ", which this desk holds no key for");
+  if (inner === null) throw sealMiss(got.data);
   const opened = catalogPayload(inner);
   if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
   const id = opened.data && typeof opened.data.id === "string" ? opened.data.id : "";
@@ -494,7 +495,7 @@ function catalogPeek(text) {
   const got = catalogPayload(text);
   if (!got.data || typeof got.data !== "object" || got.data.kind !== SEALED_KIND) return got;
   const inner = teamOpen(got.data);
-  if (inner === null) throw new Error("sealed for team " + String(got.data.team) + ", which this desk holds no key for");
+  if (inner === null) throw sealMiss(got.data);
   const opened = catalogPayload(inner);
   if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
   return opened;
@@ -700,6 +701,8 @@ function readCatalog() {
       found.push({ file: file, text: text, data: peeked.data });
       seenOk = true;
     } catch (e) {
+      /* A key the team file has not brought is not a refusal, and it is not logged: the edition already open stays. */
+      if (e && e.sealWait) continue;
       if (seenOk) continue;
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
       refuseOpened(file, "parse");
@@ -707,6 +710,7 @@ function readCatalog() {
   }
   const chosen = pickEdition(found);
   if (!chosen) {
+    if (sealAnyWaiting()) return typeof catalogJson === "string" ? catalogJson : null;
     console.log(found.length ? "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for"
       : "etiuda: no catalog found, so Etiuda starts as a clean slate");
     catalogFrom = "";
@@ -715,6 +719,7 @@ function readCatalog() {
   let opened;
   try { opened = catalogRead(chosen.text); }
   catch (e) {
+    if (e && e.sealWait) return typeof catalogJson === "string" ? catalogJson : null;
     console.error("etiuda: " + chosen.file + " did not parse as a catalog - " + e.message);
     refuseOpened(chosen.file, "parse");
     catalogFrom = "";
@@ -967,6 +972,8 @@ function catalogFolderChanged() {
   if (!theWindow || theWindow.isDestroyed()) return;
   if (catalogFolder() === watchedFolder) return;
   const win = theWindow;
+  /* A different folder is a different team file. A wait begun for the one before must not hide a failure here. */
+  sealWaitStop();
   console.log("etiuda: catalog folder " + catalogFolder());
   // Somebody has just picked this folder, so it is read as answering while it is asked.
   folderDown = "";
@@ -984,6 +991,7 @@ function catalogFolderChanged() {
    rather than the moment it lands. Seeding happens before there is a window, so the case is a
    copy made by hand under an open Library. */
 function catalogChanged(win) {
+  sealWaitWin = win;
   releaseInUse();
   tryHeldUse();
   resealHeld(win);
@@ -3266,7 +3274,9 @@ function teamOpen(data) {
   if (!sealed) return null;
   let key = null;
   try { key = Buffer.from(safeStorage.decryptString(Buffer.from(sealed, "base64")), "base64"); } catch { return null; }
-  return openSealed(key, data);
+  const opened = openSealed(key, data);
+  if (typeof opened === "string") sealWaitDone(data);
+  return opened;
 }
 
 /* ---- this desk asking to join a team: one request at a time, made by the agent's press ---------------
@@ -3309,14 +3319,100 @@ function finishJoin(admitted) {
 function newestEpoch(team, skip) {
   return Object.keys(teamKeys[team] || {}).reduce((hi, n) => (skip && skip.indexOf(+n) >= 0 ? hi : Math.max(hi, +n || 0)), 0);
 }
-/* The newest envelope in the catalog folder whose epoch this desk keeps no key for, as {file, team}, or null. */
+/* An edition sealed above the epoch the team file names waits for that file, on a folder team this
+   desk already holds a key for. The wait matches the relay's pending retry, two seconds backing off
+   to sixty, and ends at sixty seconds in the words a sealed edition this desk cannot open already uses. */
+const SEAL_RETRY_MS = 2000;
+const SEAL_WAIT_MS = 60 * 1000;
+const sealWaitAt = new Map();                   // team id and epoch -> the millisecond the wait began
+let sealWaitWin = null;                         // the window a retry reads through
+let sealRetry = null;
+let sealRetryDelay = SEAL_RETRY_MS;
+function sealEpochAwait(epoch, named, held, folder, now, since) {
+  if (!folder || !held) return "say";
+  if (!Number.isInteger(epoch) || epoch < 1) return "say";
+  if (!Number.isInteger(named) || !(epoch > named)) return "say";
+  if (!Number.isFinite(now) || !Number.isFinite(since) || now - since >= SEAL_WAIT_MS) return "say";
+  return "wait"; /* plant:seal-wait */
+}
+function sealWaitKey(data) {
+  return String(data && data.team) + "\n" + String(data && data.epoch);
+}
+/* A stamp kept after the minute is a refusal that must not start again, so only a stamp still inside the minute is a wait. */
+function sealAnyWaiting() {
+  const now = Date.now();
+  for (const since of sealWaitAt.values()) {
+    if (Number.isFinite(since) && now - since < SEAL_WAIT_MS) return true;
+  }
+  return false;
+}
+function sealWaitIdle() {
+  clearTimeout(sealRetry);
+  sealRetry = null;
+  sealRetryDelay = SEAL_RETRY_MS;
+}
+function sealWaitDone(data) {
+  sealWaitAt.delete(sealWaitKey(data));
+  if (!sealAnyWaiting()) sealWaitIdle();
+}
+function sealWaitStop() {
+  sealWaitAt.clear();
+  sealWaitIdle();
+}
+function armSealRetry() {
+  if (sealRetry) return;
+  const delay = sealRetryDelay;
+  sealRetry = setTimeout(() => {
+    sealRetry = null;
+    sealRetryDelay = Math.min(SEAL_WAIT_MS, delay * 2);
+    const win = sealWaitWin;
+    if (win && typeof win.isDestroyed === "function" && !win.isDestroyed()) {
+      try { catalogChanged(win); } catch { /* read again at the next interval */ }
+    }
+    if (sealAnyWaiting()) armSealRetry();
+    else sealRetryDelay = SEAL_RETRY_MS;
+  }, delay);
+  if (typeof sealRetry.unref === "function") sealRetry.unref();
+}
+/* "wait" while that epoch is ahead of the team file and the minute has not run out, and "say" otherwise.
+   Once the minute has run out the start is kept, so a later read does not begin the minute again. */
+function sealVerdict(data) {
+  const team = String(data && data.team || "");
+  const epoch = data && data.epoch;
+  const held = !!(teamKeys[team] && Object.keys(teamKeys[team]).length);
+  const channel = teamChannel[team];
+  const folder = !(channel && channel.kind === "relay");
+  const named = teamEpochSeen[team] || 0;
+  const now = Date.now();
+  const key = sealWaitKey(data);
+  const seen = sealWaitAt.get(key);
+  const since = seen == null ? now : seen;
+  if (sealEpochAwait(epoch, named, held, folder, now, since) === "wait") {
+    if (seen == null) sealWaitAt.set(key, now);
+    armSealRetry();
+    return "wait";
+  }
+  const ahead = folder && held && Number.isInteger(epoch) && epoch >= 1 && Number.isInteger(named) && epoch > named;
+  if (!ahead) sealWaitAt.delete(key);
+  return "say";
+}
+function sealMiss(data) {
+  const err = new Error("sealed for team " + String(data.team) + ", which this desk holds no key for");
+  if (sealVerdict(data) === "wait") err.sealWait = true;
+  return err;
+}
+/* The newest envelope in the catalog folder whose epoch this desk keeps no key for, as {file, team}, or null.
+   One the team file has not reached, where this desk already holds a key, is waited on and not shown. */
 function sealedOutside() {
   heedTeam();
   for (const f of ecFilesIn(catalogFolder())) {
     let d = null;
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
     if (!d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || !Number.isInteger(d.epoch)) continue;
-    if (!(teamKeys[d.team] && teamKeys[d.team][d.epoch])) return { file: path.basename(f), team: String(d.team) };
+    if (!(teamKeys[d.team] && teamKeys[d.team][d.epoch])) {
+      if (sealVerdict(d) === "wait") continue;
+      return { file: path.basename(f), team: String(d.team) };
+    }
   }
   return null;
 }
@@ -5805,7 +5901,10 @@ function ecFacts(file, deskFolder) {
               deskOk: deskFileGenuine(data, deskFolder),
               genuine: !!(pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)) };
     }
-  } catch { /* not a catalog */ }
+  } catch (e) {
+    /* A key that has not arrived is not a verdict: the row already shown stays, and the next read tries the file again. */
+    if (e && e.sealWait) return had ? had[1] : null;
+  }
   ecFactsRead.set(file, [stamp, out]);
   return out;
 }
