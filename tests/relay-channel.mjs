@@ -23,7 +23,10 @@
  * rest (970a), two programs holding one key apply each other's uploads (970b), a recorded upload is not fetched in the
  * cycle that lists it (970c), and an own blob that is fetched does not overwrite an edit waiting to go up (970d, 970e)
  * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
- * blob has raised the counter (970o). An invitation upload whose reply was lost is counted as sent when the retry is
+ * blob has raised the counter (970o). An answer the list does not serve can raise the same floor, and a second program
+ * whose clock never reaches that counter stays refused: the known limit until the relay names the floor (970r).
+ * A replay-counter refusal is tried again within a minute, an outbox file (970s) and an invitation's answer (970u). An invitation
+ * upload whose reply was lost is counted as sent when the retry is
  * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
  * is admitted (966h). A desk on a relay team past its grant is told each step of the lapse once, with its dates, in a
  * notice and on the team's row in Settings: working past the grant's end, read-only, a trial's team stopped and the relay's
@@ -52,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 283;
+const EXPECTED = 302;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -160,11 +163,12 @@ function keyPair(branch, keyId) {
 }
 const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
 
-let C = null, B = null, S = null, W = null, core = null, K = null;
+let C = null, B = null, S = null, W = null, core = null, K = null, teamMod = null;
 try {
   C = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
   B = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
   core = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
+  teamMod = nodeRequire(path.join(ROOT, "relay", "team.cjs"));
   S = nodeRequire(path.join(ROOT, "relay", "test", "stand-ins.cjs"));
   K = nodeRequire(path.join(ROOT, "relay", "test", "grant-kit.cjs"));
   W = (await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href)).routeWith(K.ROOTS, env => env.NOW());
@@ -214,7 +218,12 @@ function transport(name) {
 async function admin(method, p, json) {
   const res = await relayFetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" },
     body: Buffer.from(JSON.stringify(json), "utf8") });
-  return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  const out = { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  /* This file makes far more than 25 teams with one lead key, and it never sweeps them. The product counts live teams
+     per key. Giving the place back leaves the team where it is. It only stops this file's own creates filling the list. */
+  if (teamMod && method === "POST" && p === "/relay/v1/teams" && out.status === 200 && json && json.lead && typeof json.rt === "string")
+    await R.object("lead:" + json.lead.keyId).fetch(teamMod.leadRequest({ op: "release", rt: json.rt }));
+  return out;
 }
 
 /* ---- the team: its lead, its desks, its key and its files ------------------------------------------------------- */
@@ -414,7 +423,7 @@ try {
     const ch = JSON.parse(s.bytes.toString()).challenge;
     const who = prog === other ? OTHER : STRAY;
     const ses = await prog.t.request("POST", URLV1 + "/t/" + RT + "/session", { "content-type": "application/json" },
-      Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
+      Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
     const token = JSON.parse(ses.bytes.toString()).session;
     const r = await prog.t.request("PUT", URLV1 + "/t/" + RT + "/b/" + b.id,
       { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(metaOf(b))).toString("base64url") }, b.ciphertext);
@@ -5566,6 +5575,297 @@ try {
   check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
 }
 
+/* The lead's answer is not on the list (relay/core.cjs since drops an answer place). Its counter still raises the
+   writer's floor. A second program on the same key, its clock behind that counter, learns only the counters the list
+   serves. 970o is taken on the first upload because the high counter is on a blob the catch-up opens. Here the clock
+   stays below that floor, so a retry cannot take the upload. That is the known limit until the relay names the floor. */
+async function answerFloor(mod) {
+  const low = 1000, high = 10000000;
+  let clock = low;
+  const teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const box = boxPair();
+  const a = opened(mod, "ans-a-" + tag, tm, LEAD, "root", {
+    clock: () => clock, agree: () => Buffer.alloc(32, 7), keyFor: () => teamKey, sealEpoch: () => 1,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: box.pub }),
+  });
+  let b = null;
+  const out = { ans: null, teamCounter: 0, floor: 0, ownAtCatch: 0, tookFirst: false, tookSecond: false, said: [] };
+  try {
+    put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+    a.ch.start();
+    await a.ch.idle();
+    await once(a);
+    const sentTeam = a.prog.state().sent[C.TEAM_NAME];
+    out.teamCounter = sentTeam ? sentTeam.counter : 0;
+    clock = high;
+    out.ans = await a.ch.writeAnswer({ inv: hex(16), deskId: "k-" + "ab".repeat(8), deskBox: "cd".repeat(32),
+      leadBox: box.pub, answer: "joined" });
+    const counters = relayStore(tm.rt).get("counters") || {};
+    out.floor = Number(counters["c\n" + LEAD.keyId + "\n1"]) || 0;
+    await a.ch.stop();
+    b = opened(mod, "ans-b-" + tag, tm, LEAD, "root", {
+      clock: () => low, keyFor: () => teamKey, sealEpoch: () => 1,
+    });
+    b.ch.start();
+    await b.ch.idle();
+    out.ownAtCatch = b.prog.state().own;
+    put(b.mirror, "second.ec", "a file the second program writes\n");
+    await once(b);
+    const first = b.prog.state().sent["second.ec"];
+    out.tookFirst = !!(first && first.counter > out.floor);
+    await once(b);
+    const second = b.prog.state().sent["second.ec"];
+    out.tookSecond = !!(second && second.counter > out.floor);
+    out.said = b.said.slice();
+  } finally {
+    try { await a.ch.stop(); } catch { /* already stopped */ }
+    if (b) try { await b.ch.stop(); } catch { /* already stopped */ }
+  }
+  return out;
+}
+try {
+  const c = await answerFloor(C);
+  const replay = c.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  check(c.ans && c.ans.ok === true && c.floor > c.teamCounter && c.ownAtCatch >= c.teamCounter && c.ownAtCatch < c.floor && !c.tookFirst && c.tookSecond,
+    "970r the relay names the floor: an answer the list does not serve raises it, the first upload cycle takes the floor from the refusal, and the next cycle clears the retry: answer "
+    + (c.ans && c.ans.ok ? "written" : (c.ans && c.ans.reason) || "none")
+    + ", team counter " + c.teamCounter + ", floor " + c.floor + ", own after the catch-up " + c.ownAtCatch
+    + ", first cycle " + (c.tookFirst ? "taken" : "refused") + ", next cycle " + (c.tookSecond ? "taken" : "refused")
+    + (replay ? ", said replay-counter" : ""));
+} catch (e) {
+  check(false, "harness (the leg 970r): " + (e && e.stack ? e.stack : e));
+}
+
+/* A replay-counter refusal whose next seal clears the floor. The clock stays put, as 970o does, so the seal climbs by one.
+   The mirror is not edited again and no socket note arrives. The channel's own timer, one per channel and inside a minute,
+   is run when it is armed, so the wait is not spent on the wall. */
+const COUNTER_MINUTE_MS = 60 * 1000;
+function mirrorSnap(dir) {
+  return filesUnder(dir).map(f => path.relative(dir, f).split(path.sep).join("/") + " " + sha(fs.readFileSync(f))).sort().join("\n");
+}
+function putFloor(rt, writer, value) {
+  const s = relayStore(rt), cur = s.get("counters") || {}, next = {};
+  for (const k of Object.keys(cur)) next[k] = cur[k];
+  next["c\n" + writer + "\n1"] = value;
+  s.put("counters", next);
+}
+async function withMinute(run) {
+  const realSet = globalThis.setTimeout, realClear = globalThis.clearTimeout, bag = [];
+  globalThis.setTimeout = (fn, ms, ...rest) => {
+    const id = realSet(fn, ms, ...rest);
+    bag.push({ id: id, fn: fn, ms: ms, dead: false });
+    return id;
+  };
+  globalThis.clearTimeout = id => {
+    bag.forEach(t => { if (t.id === id) t.dead = true; });
+    return realClear(id);
+  };
+  const pending = from => bag.filter((t, i) => i >= from && !t.dead && t.ms > 0 && t.ms <= COUNTER_MINUTE_MS);
+  const fire = t => { t.dead = true; realClear(t.id); t.fn(); };
+  try { return await run({ pending, fire, mark: () => bag.length }); }
+  finally { globalThis.setTimeout = realSet; globalThis.clearTimeout = realClear; }
+}
+async function counterRetry(mod, kind) {
+  const clock = 1000, teamKey = crypto.randomBytes(32), box = boxPair();
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), inv = hex(16), name = "cr-" + kind + "-" + tag;
+  const t = transport(name);
+  let notes = 0;
+  const connect = (url, headers, on) => t.connect(url, headers, {
+    message(text) {
+      let m = null;
+      try { m = JSON.parse(String(text)); } catch { m = null; }
+      if (m && m.type === "new") notes += 1;
+      on.message(text);
+    },
+    close() { on.close(); },
+  });
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1, agree: () => Buffer.alloc(32, 7),
+    request: t.request, connect,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: box.pub }),
+  });
+  const out = { refused: false, took: false, delay: [], notes: 0, mirrorSame: false, open: false, floor: 0, own: 0, counter: null, still: -1 };
+  try {
+    return await withMinute(async ({ pending, fire, mark }) => {
+      put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+      desk.ch.start();
+      await desk.ch.idle();
+      await until(() => desk.ch.socketOpen(), 5000);
+      const raised = desk.prog.state().own + 1;
+      putFloor(tm.rt, LEAD.keyId, raised);
+      out.floor = raised;
+      if (kind === "file") put(desk.mirror, "owed.ec", "a file the desk still owes\n");
+      /* Timers armed by the refusal itself, not the waits that opened the socket. */
+      const marked = mark();
+      if (kind === "answer") {
+        const first = await desk.ch.writeAnswer({ inv, deskId: "k-" + "ab".repeat(8), deskBox: "cd".repeat(32),
+          leadBox: box.pub, answer: "joined" });
+        out.refused = !!(first && first.ok !== true && first.reason === "replay-counter");
+      } else {
+        desk.ch.kick();
+        await desk.ch.idle();
+        const sent = desk.prog.state().sent["owed.ec"];
+        out.refused = !sent && desk.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+      }
+      out.own = desk.prog.state().own;
+      out.open = desk.ch.socketOpen() === true;
+      const armed = pending(marked);
+      out.delay = armed.map(row => row.ms);
+      const snap = mirrorSnap(desk.mirror);
+      if (armed.length === 1) { fire(armed[0]); await desk.ch.idle(); }
+      out.mirrorSame = mirrorSnap(desk.mirror) === snap;
+      out.notes = notes;
+      out.still = pending(marked).length;
+      if (kind === "answer") {
+        const rec = relayStore(tm.rt).get("blob:" + inv);
+        out.counter = rec ? rec.counter : null;
+      } else {
+        const sent = desk.prog.state().sent["owed.ec"];
+        out.counter = sent ? sent.counter : null;
+      }
+      out.took = typeof out.counter === "number" && out.counter > out.floor;
+      return out;
+    });
+  } catch (e) {
+    out.threw = e && e.stack ? e.stack : String(e);
+    return out;
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+}
+function counterTold(x) {
+  if (x && x.threw) return "threw " + String(x.threw).split("\n")[0];
+  return "refused " + !!(x && x.refused) + ", delay " + JSON.stringify(x && x.delay) + ", mirror " + (x && x.mirrorSame ? "unchanged" : "changed")
+    + ", socket " + (x && x.open ? "open" : "shut") + ", notes " + (x && x.notes) + ", still " + (x && x.still)
+    + ", floor " + (x && x.floor) + ", own " + (x && x.own) + ", counter " + (x && x.counter) + ", taken " + !!(x && x.took);
+}
+try {
+  const x = await counterRetry(C, "file");
+  check(!x.threw && x.refused && x.own === x.floor && x.took && x.mirrorSame && x.notes === 0 && x.open
+    && x.delay.length === 1 && x.delay[0] > 0 && x.delay[0] <= COUNTER_MINUTE_MS && x.still === 0,
+    "970s a refused upload whose next seal clears the counter is sent within a minute, with the mirror unchanged and no socket note: " + counterTold(x));
+  const planted = await liftChannel("plant:counter-retry", async mod => {
+    const y = await counterRetry(mod, "file");
+    return !y.threw && y.refused && y.notes === 0 && y.mirrorSame && !y.took;
+  });
+  check(planted.turned && planted.back, "970t lifting plant:counter-retry leaves that upload refused, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970s): " + (e && e.stack ? e.stack : e));
+}
+try {
+  const x = await counterRetry(C, "answer");
+  check(!x.threw && x.refused && x.own === x.floor && x.took && x.mirrorSame && x.notes === 0 && x.open
+    && x.delay.length === 1 && x.delay[0] > 0 && x.delay[0] <= COUNTER_MINUTE_MS && x.still === 0,
+    "970u an invitation's answer refused replay-counter is sent again within a minute, with the mirror unchanged and no socket note: " + counterTold(x));
+  const planted = await liftChannel("plant:answer-retry", async mod => {
+    const y = await counterRetry(mod, "answer");
+    return !y.threw && y.refused && y.notes === 0 && y.mirrorSame && !y.took;
+  });
+  check(planted.turned && planted.back, "970v lifting plant:answer-retry leaves that answer refused, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970u): " + (e && e.stack ? e.stack : e));
+}
+async function floorPastBound(mod) {
+  const clock = 1000, teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), name = "fpb-" + tag;
+  const t = transport(name);
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1,
+    request: t.request,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+  });
+  const out = { refused: false, ownBefore: 0, ownAfter: 0, saidBound: false };
+  try {
+    put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+    desk.ch.start();
+    await desk.ch.idle();
+    out.ownBefore = desk.prog.state().own;
+    putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER - 10);
+    put(desk.mirror, "owed.ec", "a file\n");
+    desk.ch.kick();
+    await desk.ch.idle();
+    out.ownAfter = desk.prog.state().own;
+    out.saidBound = desk.said.some(l => l.indexOf("the relay named a counter floor past the bound, so that was not taken") >= 0);
+    out.refused = !desk.prog.state().sent["owed.ec"] && desk.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+  return out;
+}
+try {
+  const x = await floorPastBound(C);
+  check(x.refused && x.ownAfter === x.ownBefore + 1 && x.ownAfter < Number.MAX_SAFE_INTEGER - 10 && x.saidBound,
+    "970w a floor past the bound leaves the counter unchanged by the refusal, and is refused and said: before "
+    + x.ownBefore + ", after " + x.ownAfter + ", said " + x.saidBound);
+  const planted = await liftChannel("plant:floor-bound", async mod => {
+    const y = await floorPastBound(mod);
+    return y.ownAfter === Number.MAX_SAFE_INTEGER - 10;
+  });
+  check(planted.turned && planted.back, "970x lifting plant:floor-bound takes the floor past the bound into the counter, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970w): " + (e && e.stack ? e.stack : e));
+}
+async function floorlessBackoff(mod) {
+  const clock = 1000, teamKey = crypto.randomBytes(32);
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8), name = "flb-" + tag;
+  const t = transport(name);
+  const desk = opened(mod, name, tm, LEAD, "root", {
+    clock: () => clock, keyFor: () => teamKey, sealEpoch: () => 1,
+    request: t.request,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+  });
+  const out = { delays: [], pendingAfterThird: -1 };
+  try {
+    return await withMinute(async ({ pending, fire, mark }) => {
+      put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
+      desk.ch.start();
+      await desk.ch.idle();
+      putFloor(tm.rt, LEAD.keyId, Number.MAX_SAFE_INTEGER - 10);
+      put(desk.mirror, "owed.ec", "a file\n");
+      let marked = mark();
+      desk.ch.kick();
+      await desk.ch.idle();
+      for (let i = 0; i < 3; i++) {
+        const armed = pending(marked);
+        if (armed.length === 1) {
+          out.delays.push(armed[0].ms);
+          if (i < 2) {
+            marked = mark();
+            fire(armed[0]);
+            await desk.ch.idle();
+          }
+        }
+      }
+      out.pendingAfterThird = pending(marked).length;
+      return out;
+    });
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+  }
+}
+try {
+  const x = await floorlessBackoff(C);
+  check(x.delays.length === 2 && x.delays[0] === COUNTER_MINUTE_MS && x.delays[1] === COUNTER_MINUTE_MS && x.pendingAfterThird === 0,
+    "970y three floorless replay-counter refusals set no timer after three tries, so the desk stops until the next kick: delays "
+    + JSON.stringify(x.delays) + ", pending after third " + x.pendingAfterThird);
+  const planted = await liftChannel("plant:counter-backoff", async mod => {
+    const y = await floorlessBackoff(mod);
+    return y.pendingAfterThird === 1;
+  });
+  check(planted.turned && planted.back, "970z lifting plant:counter-backoff leaves a counter timer pending after three tries, and the product file is never written: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "harness (the leg 970y): " + (e && e.stack ? e.stack : e));
+}
+
 /* An invitation's one upload whose reply never came back. The next cycle is told the token is spent, which is that upload
    already held: it counts as sent, the wrap is forgotten, and the cycle after reads the answer. */
 async function lostReply(mod, label) {
@@ -6344,14 +6644,18 @@ try {
   const had = read(desk.mirror, "guide.ec") === ONE;
   const socketUp = await until(() => desk.ch.socketOpen(), 5000);
   if (handle) handle.close();
-  const seenClosed = await until(() => !desk.ch.socketOpen(), 3000);
+  /* The close is waited for as long as the edition is: the leg's subject is the poll after it, and a loaded machine was
+     seen to take over 3 s to notice (the release profile and a whole run, 2026-10-29). A desk that never notices still fails. */
+  const closeAt = Date.now();
+  const seenClosed = await until(() => !desk.ch.socketOpen(), 10000);
+  const closeMs = Date.now() - closeAt;
   put(lead.mirror, "guide.ec", TWO);
   await settle(lead);
   const caught = await until(() => read(desk.mirror, "guide.ec") === TWO, 10000);
   check(had && socketUp && seenClosed && caught,
     "960a a desk whose relay socket closes still receives the lead's next edition by the poll: first edition "
     + (had ? "in the mirror" : "missing") + ", socket opened " + socketUp + ", seen closed " + seenClosed
-    + ", the next edition arrived " + caught);
+    + " in " + closeMs + " ms, the next edition arrived " + caught);
   await desk.ch.stop();
   await lead.ch.stop();
 } catch (e) {
@@ -7581,6 +7885,188 @@ const retryPlant = await liftChannel("plant:h35-enrol-retry", async mod => {
 check(retryPlant.turned && retryPlant.back,
   "993i lifting plant:h35-enrol-retry does not ask again (FAIL 993h a join the relay has not enrolled yet is asked again until the lead's team is there, and is not said as unenrolled while it waits: hello 1, again false, online false, said unenrolled): "
   + retryPlant.detail + ", sha " + (retryPlant.back ? "restored" : "differs"));
+
+/* ---- 932 a lead's key handed over, the desk's relay channel follows it (design section 2, K1, K2) ---- */
+{
+  function makeHandoverStep(teamId, fromLead, toLead) {
+    const s = {
+      format: 1,
+      kind: "etiuda-team-handover",
+      team: teamId,
+      from: { keyId: fromLead.keyId, public: fromLead.pub },
+      to: { keyId: toLead.keyId, public: toLead.pub },
+      sig: { alg: "Ed25519", keyId: fromLead.keyId },
+    };
+    s.sig.value = signHex(fromLead, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(s)]));
+    return s;
+  }
+  function teamDocWith(tm, rt, lead, epoch, rev, roster, handover) {
+    const doc = {
+      format: 1,
+      kind: "etiuda-team",
+      id: tm,
+      catalogs: ["pebble-board"],
+      lead: { keyId: lead.keyId, public: lead.pub, box: "ab".repeat(32) },
+      sealed: true,
+      exportsSealed: false,
+      epoch,
+      rev,
+      channel: { kind: "relay", rt, url: URLV1 },
+      roster: roster || [],
+    };
+    if (handover) doc.handover = handover;
+    doc.sig = { alg: "Ed25519", keyId: lead.keyId };
+    doc.sig.value = signHex(lead, C.signedBytes(doc));
+    return doc;
+  }
+
+  const tm = "t-" + hex(8), rt = hex(16);
+  const lead1 = keyPair(false), lead2 = keyPair(false);
+  const pin = { teamId: tm, rt, lead: { keyId: lead1.keyId, public: lead1.pub } };
+  const dir = path.join(LAB, "ho-932a-" + hex(4));
+  fs.mkdirSync(dir, { recursive: true });
+  const prog = C.createProgram({ io: C.diskIO(dir, C.writeWhole), pin, save() {}, say() {} });
+
+  const doc1 = teamDocWith(tm, rt, lead1, 1, 1, []);
+  prog.loadTeamFile(doc1);
+
+  const step1 = makeHandoverStep(tm, lead1, lead2);
+  const doc2 = teamDocWith(tm, rt, lead2, 1, 2, [], [step1]);
+  const l2 = prog.loadTeamFile(doc2);
+
+  const K1 = crypto.randomBytes(32);
+  const head2 = signHead({ v: 1, team: tm, epoch: 1, rev: 2, editions: [{ catalog: "pebble-board", rev: 1, edition: "Second edition", published: "10 March 2026" }], t: Date.now() }, lead2);
+  const h2 = prog.acceptBlob({
+    blob: B.seal({ relayTeamId: rt, epoch: 1, teamKey: K1, writer: { keyId: lead2.keyId, privateKey: lead2.privateKey }, path: HEAD_FILE, body: head2, counter: 1, place: "root", kind: "file" }),
+    teamDoc: doc2,
+    teamKey: K1,
+  });
+  const news = prog.headNews(Date.now());
+  check(l2.ok === true && prog.pinned().lead.keyId === lead2.keyId && h2.ok === true && news.edition === "Second edition",
+    "932a a handover file lands and the next head, signed by the new key, is taken: landed " + l2.ok + ", pinned " + (prog.pinned() && prog.pinned().lead.keyId === lead2.keyId) + ", head " + h2.ok + ", edition " + news.edition);
+
+  const lead3 = keyPair(false), stranger = keyPair(false);
+  const noStep = teamDocWith(tm, rt, lead3, 1, 3, []);
+  const rNoStep = prog.loadTeamFile(noStep);
+
+  const badSignerStep = makeHandoverStep(tm, stranger, lead3);
+  const badStepDoc = teamDocWith(tm, rt, lead3, 1, 3, [], [badSignerStep]);
+  const rBadStep = prog.loadTeamFile(badStepDoc);
+
+  const keys9 = [lead2];
+  for (let i = 0; i < 9; i++) keys9.push(keyPair(false));
+  const chain9 = [];
+  for (let i = 0; i < 9; i++) chain9.push(makeHandoverStep(tm, keys9[i], keys9[i + 1]));
+  const docChain9 = teamDocWith(tm, rt, keys9[9], 1, 3, [], chain9);
+  const rChain9 = prog.loadTeamFile(docChain9);
+
+  check(rNoStep.reason === "bad-signature" && rBadStep.reason === "bad-signature" && rChain9.reason === "bad-signature" && prog.pinned().lead.keyId === lead2.keyId,
+    "932b a file naming a new lead with no step, a step signed by a third key, or a chain of 9 is refused, and the pin does not move: nostep " + rNoStep.reason + ", badstep " + rBadStep.reason + ", chain9 " + rChain9.reason + ", pinned " + (prog.pinned().lead.keyId === lead2.keyId));
+
+  const dirC = path.join(LAB, "ho-932c-" + hex(4));
+  fs.mkdirSync(dirC, { recursive: true });
+  let stateC = null;
+  const saveC = st => { stateC = JSON.parse(JSON.stringify(st)); };
+  const loadC = () => stateC;
+  const progBefore = C.createProgram({ io: C.diskIO(dirC, C.writeWhole), pin: { teamId: tm, rt, lead: { keyId: lead1.keyId, public: lead1.pub } }, save: saveC, load: loadC });
+  progBefore.loadTeamFile(doc2);
+  const beforePin = progBefore.pinned();
+  const progAfter = C.createProgram({ io: C.diskIO(dirC, C.writeWhole), pin: { teamId: tm, rt, lead: { keyId: lead1.keyId, public: lead1.pub } }, save: saveC, load: loadC });
+  const afterPin = progAfter.pinned();
+  check(beforePin && beforePin.lead.keyId === lead2.keyId && afterPin && afterPin.lead.keyId === lead2.keyId && afterPin.lead.public === lead2.pub,
+    "932c a desk restarted after landing keeps the moved pin: before " + (beforePin && beforePin.lead.keyId) + ", after " + (afterPin && afterPin.lead.keyId));
+
+  const tmD = "t-" + hex(8), rtD = hex(16);
+  const lA = keyPair(false), lB = keyPair(false), lC = keyPair(false);
+  const pinD = { teamId: tmD, rt: rtD, lead: { keyId: lA.keyId, public: lA.pub } };
+  const dirD = path.join(LAB, "ho-932d-" + hex(4));
+  fs.mkdirSync(dirD, { recursive: true });
+  const progD = C.createProgram({ io: C.diskIO(dirD, C.writeWhole), pin: pinD, save() {}, say() {} });
+  const stepAB = makeHandoverStep(tmD, lA, lB);
+  const stepBC = makeHandoverStep(tmD, lB, lC);
+  const docTwoSteps = teamDocWith(tmD, rtD, lC, 1, 3, [], [stepAB, stepBC]);
+  const resD = progD.loadTeamFile(docTwoSteps);
+  const pinnedD = progD.pinned();
+  check(resD.ok === true && pinnedD && pinnedD.lead.keyId === lC.keyId && pinnedD.lead.public === lC.pub,
+    "932d a desk two handovers behind follows both steps at once: loaded " + resD.ok + ", pinned " + (pinnedD && pinnedD.lead.keyId));
+
+  const tmE = "t-" + hex(8), rtE = hex(16);
+  const oldLead = keyPair(false), newLead = keyPair(false), strangerLead = keyPair(false);
+  const dirE = path.join(LAB, "ho-932e-" + hex(4));
+  fs.mkdirSync(dirE, { recursive: true });
+  const KE = crypto.randomBytes(32);
+  const guideBlob = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: "guide.ec", body: "guide published by old lead\n", counter: 1, place: "root", kind: "file" });
+  const oldHead = signHead({ v: 1, team: tmE, epoch: 1, rev: 1, editions: [{ catalog: "quay-board", rev: 1, edition: "First edition", published: "1 March 2026" }], t: 1000000 }, oldLead);
+  const oldHeadBlob = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: HEAD_FILE, body: oldHead, counter: 2, place: "root", kind: "file" });
+  const strangerBlob = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: strangerLead.keyId, privateKey: strangerLead.privateKey }, path: "stranger.ec", body: "stranger\n", counter: 3, place: "root", kind: "file" });
+  const stepE = makeHandoverStep(tmE, oldLead, newLead);
+  const docE = teamDocWith(tmE, rtE, newLead, 1, 2, [], [stepE]);
+  const pinE = { teamId: tmE, rt: rtE, lead: { keyId: newLead.keyId, public: newLead.pub } };
+  const progE = C.createProgram({ io: C.diskIO(dirE, C.writeWhole), pin: pinE, save() {}, say() {} });
+  progE.loadTeamFile(docE);
+  const rGuide = progE.acceptBlob({ blob: guideBlob, teamDoc: docE, teamKey: KE });
+  const rHead = progE.acceptBlob({ blob: oldHeadBlob, teamDoc: docE, teamKey: KE });
+  const rStranger = progE.acceptBlob({ blob: strangerBlob, teamDoc: docE, teamKey: KE });
+  const guideRead = progE.readMirror("guide.ec");
+  const headNewsE = progE.headNews(2000000);
+  check(rGuide.ok === true && guideRead === "guide published by old lead\n" && rHead.ok === true && headNewsE.edition === "First edition" && rStranger.ok === false && rStranger.reason === "not-roster",
+    "932e a desk joining after the move reads a catalog and a head the old lead published before it; a blob by a key on no chain is still refused: guide " + (guideRead === "guide published by old lead\n") + ", head " + headNewsE.edition + ", stranger " + rStranger.reason);
+
+  const tmF = "t-" + hex(8), rtF = hex(16);
+  const oldF = keyPair(false), newF = keyPair(false);
+  const pinF = { teamId: tmF, rt: rtF, lead: { keyId: oldF.keyId, public: oldF.pub } };
+  const dirF = path.join(LAB, "ho-932f-" + hex(4));
+  fs.mkdirSync(dirF, { recursive: true });
+  const progF = C.createProgram({ io: C.diskIO(dirF, C.writeWhole), pin: pinF, save() {}, say() {} });
+  const stepF = makeHandoverStep(tmF, oldF, newF);
+  const docF = teamDocWith(tmF, rtF, newF, 1, 2, [], [stepF]);
+  const resF = progF.loadTeamFile(docF);
+  const pinAfterF = progF.pinned();
+  check(resF.ok === true && pinAfterF && pinAfterF.lead.keyId === newF.keyId && pinAfterF.lead.public === newF.pub,
+    "932f an invitation made before the move pins the old lead, and the joiner follows the chain at its first team file: admitted " + resF.ok + ", followed " + (pinAfterF && pinAfterF.lead.keyId === newF.keyId));
+
+  const pHandover = await liftChannel("plant:team-handover", async mod => {
+    const dirP = path.join(LAB, "plant-ho-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save() {}, say() {} });
+    p.loadTeamFile(doc1);
+    const bad = p.loadTeamFile(badStepDoc);
+    return bad.ok === true;
+  });
+  check(pHandover.turned && pHandover.back, "932g lifting plant:team-handover accepts an unhanded lead change, and the product file is never written: "
+    + pHandover.detail + ", sha " + (pHandover.back ? "restored" : "differs"));
+
+  const pPinMove = await liftChannel("plant:team-pin-move", async mod => {
+    const dirP = path.join(LAB, "plant-pm-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save() {}, say() {} });
+    p.loadTeamFile(doc1);
+    p.loadTeamFile(doc2);
+    return p.pinned() && p.pinned().lead.keyId === lead1.keyId;
+  });
+  check(pPinMove.turned && pPinMove.back, "932h lifting plant:team-pin-move leaves the pin at the old lead, and the product file is never written: "
+    + pPinMove.detail + ", sha " + (pPinMove.back ? "restored" : "differs"));
+
+  const pPinSave = await liftChannel("plant:team-pin-save", async mod => {
+    const dirP = path.join(LAB, "plant-ps-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    let s = null;
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save: st => { s = JSON.parse(JSON.stringify(st)); }, load: () => s });
+    p.loadTeamFile(doc1);
+    p.loadTeamFile(doc2);
+    const p2 = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pin, save: st => { s = JSON.parse(JSON.stringify(st)); }, load: () => s });
+    return p2.pinned() && p2.pinned().lead.keyId === lead1.keyId;
+  });
+  check(pPinSave.turned && pPinSave.back, "932i lifting plant:team-pin-save does not persist the moved pin across restart, and the product file is never written: "
+    + pPinSave.detail + ", sha " + (pPinSave.back ? "restored" : "differs"));
+
+  const pChainTrust = await liftChannel("plant:chain-trust", async mod => {
+    const dirP = path.join(LAB, "plant-ct-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pinE, save() {}, say() {} });
+    p.loadTeamFile(docE);
+    const r = p.acceptBlob({ blob: guideBlob, teamDoc: docE, teamKey: KE });
+    return r.ok === false;
+  });
+  check(pChainTrust.turned && pChainTrust.back, "932j lifting plant:chain-trust refuses blobs signed by the old lead after the move, and the product file is never written: "
+    + pChainTrust.detail + ", sha " + (pChainTrust.back ? "restored" : "differs"));
+}
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
 {

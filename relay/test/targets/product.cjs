@@ -130,8 +130,10 @@ function createTarget(limits) {
 
   function refusalOf(r) {
     const j = r.json || {};
-    return { ok: false, reason: typeof j.error === "string" ? j.error : "missing", said: typeof j.said === "string" ? j.said : "",
+    const out = { ok: false, reason: typeof j.error === "string" ? j.error : "missing", said: typeof j.said === "string" ? j.said : "",
       served: false };
+    if (j.floor !== undefined) out.floor = j.floor;
+    return out;
   }
 
   const teamPath = (rt, rest) => "/relay/v1/t/" + rt + "/" + rest;
@@ -224,7 +226,7 @@ function createTarget(limits) {
     if (!privateKey) return { ok: true, token: null, held: false };
     const ch = challenge({ relayTeamId: rt });
     if (!ch.nonce) return ch;
-    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: keyId,
+    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: keyId, pub: keyId,
       sig: sign(privateKey, C.helloBytes(rt, ch.nonce, keyId)) } });
     if (r.status !== 200) return refusalOf(r);
     sessions.set(rt + ":" + keyId, { token: r.json.session, until: r.json.until });
@@ -360,9 +362,9 @@ function createTarget(limits) {
       subs.set(r.socket, events);
       return { ok: true, served: true, events };
     },
-    upload({ relayTeamId, blob }) {
-      const r = withSession(relayTeamId, blob.writerKeyId, token =>
-        http("PUT", teamPath(relayTeamId, "b/" + blob.id), { token, meta: metaOf(blob), bytes: blob.ciphertext }));
+    upload({ relayTeamId, blob, session }) {
+      const call = token => http("PUT", teamPath(relayTeamId, "b/" + blob.id), { token, meta: metaOf(blob), bytes: blob.ciphertext });
+      const r = session ? call(session) : withSession(relayTeamId, blob.writerKeyId, call);
       if (r.ok === false) return r;
       return r.status === 200 ? { ok: true, seq: r.json.seq, id: r.json.id } : refusalOf(r);
     },

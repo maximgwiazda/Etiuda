@@ -5,7 +5,9 @@
    carries no valid grant under the vendor's root is refused here, before any object is asked, so a stranger's create costs one
    Worker request and wakes nothing. The object judges it again. A create whose t is stale or far ahead of the Worker's clock,
    by the rule the object applies, is refused here the same way, so a replayed create wakes no object either. A renewal whose
-   grant does not hold for the lead it names is refused here too, and so is a grant a revoked service key signed. */
+   grant does not hold for the lead it names is refused here too, and so is a grant a revoked service key signed. A create
+   that passes is reserved on that lead's object before the team's object is woken, and a team the object then refuses
+   gives the place back. */
 import team from "./team.cjs";
 import core from "./core.cjs";
 
@@ -78,6 +80,8 @@ export function routeWith(roots, clockOf) {
   function carry(request, keys, body) {
     const headers = new Headers(request.headers);
     headers.delete(team.REVOKED_MARK);
+    headers.delete(team.LEAD_MARK);
+    headers.delete(team.HELD_MARK);
     headers.set("etiuda-kept", JSON.stringify(Array.isArray(keys) ? keys : [])); /* plant:kept-every-route */
     const init = { method: request.method, headers };
     if (body !== undefined) { init.body = body; init.duplex = "half"; }
@@ -120,7 +124,33 @@ export function routeWith(roots, clockOf) {
       const now = nowOf(env), judged = core.judgeCreate(rt, body, now, roots, keys);
       if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-grant */
       if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-fresh */
+      const leadId = body.lead.keyId;
+      const reserved = await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "reserve", rt, lead: leadId }));
+      if (reserved.status !== 200) return reserved;
       const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
+      if (res.status !== 200) await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free */
+      return noted(res, decided, body.grant);
+    }
+    if (hit.what === "lead") {
+      const bytes = await team.readCapped(request, team.JSON_MAX);
+      if (!bytes) return team.refusedFor("blob-size");
+      const body = bodyOf(bytes), rt = hit.rt;
+      const now = nowOf(env), judged = core.judgeLead(rt, body, now, roots, keys);
+      if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-lead-grant */
+      if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-lead-fresh */
+      const newLeadId = body.to.keyId;
+      let reserved = { status: 200 };
+      reserved = await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "reserve", rt, lead: newLeadId })); /* plant:worker-lead-bound */
+      if (reserved.status !== 200) return reserved;
+      const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
+      if (res.status !== 200) {
+        await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free-on-fail */
+        return res;
+      }
+      const oldLeadId = res.headers.get("etiuda-old-lead");
+      if (oldLeadId) {
+        try { await teams.get(teams.idFromName("lead:" + oldLeadId)).fetch(team.leadRequest({ op: "release", rt })); } catch { /* K3 */ } /* plant:old-lead-released */
+      }
       return noted(res, decided, body.grant);
     }
     let grant = null, forward = null;

@@ -1724,11 +1724,12 @@ Module.prototype._compile = function (content, filename) {
  * whenever somebody remembered to type its name. A script entry is a door, not a run.
  *
  * HOW REACH IS COUNTED, since a count without its method is an impression. The chains are the
- * two package.json scripts the gate runner and the workflow run, `test` and `split-guard`, and
+ * two package.json scripts the gate runner and the workflow run, `test` and `split-guard`,
  * every script tools/release.mjs calls: `npm('<name>')` or `run('npm', ['run', '<name>'` in its
- * code, read with its comments dropped, since a comment that says a gate's name is not a call.
- * A file is reached when `tests/<file>` appears in the command of one of those scripts. Every
- * .js and .mjs directly in tests/ must be reached or be named below with its reason, and a name
+ * code, read with its comments dropped, since a comment that says a gate's name is not a call,
+ * and tools/gate-run.mjs's nightly-only list (NIGHTLY_LEGS), read from its export or the tool's source.
+ * A file is reached when `tests/<file>` appears in the command of one of those scripts or in that list.
+ * Every .js and .mjs directly in tests/ must be reached or be named below with its reason, and a name
  * below that a chain has since reached is stale, so the list cannot rot in either direction. */
 {
   const NOT_GATES = {
@@ -1749,7 +1750,7 @@ Module.prototype._compile = function (content, filename) {
     "plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate; its use is held by tests/plant-hold.mjs and tests/plant-compare.mjs",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard", "nightly"];
-  function reachOf(scripts, releaseSrc) {
+  function reachOf(scripts, releaseSrc, nightlyLegs) {
     const code = releaseSrc.replace(/\/\*[\s\S]*?\*\//g, "").split(/\r?\n/)
       .map(l => l.replace(/(^|\s)\/\/.*$/, "")).join("\n");
     const called = new Set(CHAIN_SCRIPTS);
@@ -1764,35 +1765,63 @@ Module.prototype._compile = function (content, filename) {
       const re = /\btests\/([A-Za-z0-9_.-]+\.m?js)\b/g;
       while ((m = re.exec(cmd))) files.add(m[1]);
     }
+    if (Array.isArray(nightlyLegs)) {
+      for (const entry of nightlyLegs) {
+        const cmd = typeof entry === "string" ? entry : ((entry && (entry.file || entry.cmd)) || "");
+        const re = /(?:\btests\/)?([A-Za-z0-9_.-]+\.m?js)\b/g;
+        while ((m = re.exec(cmd))) files.add(m[1]);
+      }
+    }
     return { called: [...called].sort(), files };
   }
   const pkg = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
   const releaseSrc = fs.readFileSync(path.join(E.ROOT, "tools", "release.mjs"), "utf8");
+  let nightlyList = [];
+  try {
+    const gr = require(path.join(E.ROOT, "tools", "gate-run.mjs"));
+    if (Array.isArray(gr.NIGHTLY_LEGS)) nightlyList = gr.NIGHTLY_LEGS;
+  } catch (_) {}
+  if (!nightlyList.length) {
+    const grSrc = fs.readFileSync(path.join(E.ROOT, "tools", "gate-run.mjs"), "utf8");
+    const m = /export\s+const\s+NIGHTLY_LEGS\s*=\s*\[([\s\S]*?)\];/.exec(grSrc);
+    if (m) {
+      const itemRe = /\bfile:\s*["']([^"']+)["']/g;
+      let item;
+      while ((item = itemRe.exec(m[1]))) nightlyList.push({ file: item[1] });
+    }
+  }
   const on = fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.m?js$/.test(f)).sort();
-  const got = reachOf(pkg.scripts, releaseSrc);
+  const got = reachOf(pkg.scripts, releaseSrc, nightlyList);
   const unreached = on.filter(f => !got.files.has(f) && !(f in NOT_GATES));
   const stale = Object.keys(NOT_GATES).filter(f => got.files.has(f) || on.indexOf(f) < 0);
   ok(unreached.length === 0 && stale.length === 0 && got.files.size >= 20,
      "31a every gate in tests/ runs in a chain: " + got.files.size + " of " + on.length + " file(s)"
-     + " reached from the scripts " + got.called.join(", ") + ", " + Object.keys(NOT_GATES).length
-     + " named as not gates"
+     + " reached from the scripts " + got.called.join(", ")
+     + " and gate-run's nightly-only list (" + nightlyList.length + " leg(s)), "
+     + Object.keys(NOT_GATES).length + " named as not gates"
      + (unreached.length ? "; RUN BY NO CHAIN: " + unreached.join(", ") : "")
      + (stale.length ? "; named as not gates but reached or gone: " + stale.join(", ") : ""));
 
   /* THE CONTROL, a planted tree in miniature: a gate with a script of its own that nothing calls,
-     one whose name the release mentions only in a comment, and one it calls. The first two must
-     be unreached and the third reached, or 31a's silence would mean a reader that reaches all. */
+     one whose name the release mentions only in a comment, an unlisted gate, a gate the release calls,
+     and a reached nightly-only gate. The first three must be unreached and the last two reached,
+     or 31a's silence would mean a reader that reaches all. */
   const plantScripts = { test: "node tests/a.js", orphan: "node tests/orphan.js",
-                         quoted: "node tests/quoted.js", called: "node tests/called.js" };
+                         quoted: "node tests/quoted.js", called: "node tests/called.js",
+                         unlisted: "node tests/unlisted.js" };
   const plantRelease = [
     "/* the release calls npm('quoted') in prose only */",
     "gate('x', () => npm('called') ? true : 'no'); // npm('quoted') again, in a line comment",
   ].join("\n");
-  const pr = reachOf(plantScripts, plantRelease);
-  const want = ["a.js", "called.js"];
+  const plantNightly = [
+    { script: "nightly", file: "tests/nightly.js", args: [], cmd: "node tests/nightly.js" },
+  ];
+  const pr = reachOf(plantScripts, plantRelease, plantNightly);
+  const want = ["a.js", "called.js", "nightly.js"];
   ok(JSON.stringify([...pr.files].sort()) === JSON.stringify(want),
-     "31b control: a gate whose script nothing calls, and one the release names only in comments,"
-     + " are not reached; the one it calls is: " + JSON.stringify([...pr.files].sort()));
+     "31b control: a gate whose script nothing calls, one the release names only in comments,"
+     + " and an unlisted gate are not reached; the one it calls and the reached nightly-only gate are: "
+     + JSON.stringify([...pr.files].sort()));
 }
 
 /* 32. THE SAMPLE A GATE IS HANDED IS THE SAMPLE THIS TREE SHIPS (2026-09-25). On that day the

@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 19;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -57,6 +57,9 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
   "function memberStateCopy(", "function memberProof(", "function inviteCode(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
+  "function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+  "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
+  "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
   "function inviteRead(", "function folderHost(",
   "function memberRequestDoc(", "function memberHeed("];
 const BUILD_DECLS = ["function hpkeSeal(", "function wrapTeamKey(", "function branchIdOf("];
@@ -368,6 +371,275 @@ if (M && J) {
     "16s the check code is HMAC-SHA256 keyed by the secret's bytes over the lead's raw public key, five digits from the first six"
     + " bytes, zeros kept in front, and another secret or another lead gives another: vectors " + JSON.stringify(vectorsHeld)
     + ", " + (M.inviteCode(secret, lead.public) === wantInvite ? "this invitation's code" : "another code"));
+
+  /* A place beside the absolute path (board 945, item 4). The functions are sliced on their own, with crypto and Buffer
+     alone, as the member core is: a free name fails here. liveSyncIo is not on this list; the record reader is given a
+     stand-in and never starts PowerShell. */
+  const PLACE_DECLS = ["function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+    "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
+    "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords("];
+  let P = null, placeErr = "";
+  try {
+    P = load(SRC, PLACE_DECLS, ["placeOf", "placeResolve", "syncRootsFrom", "readSyncRecords", "placeKept", "placeJoin", "placeCandidates"]);
+  } catch (e) { placeErr = e && e.message ? e.message : "place slice failed"; }
+
+  const annaFolder = "C:\\Users\\anna\\OneDrive\\Etiuda";
+  const benFolder = "D:\\Users\\ben\\OneDrive\\Etiuda";
+  if (!P) {
+    /* One line per leg the place module would have run, each id written once in the file (leg-ids). */
+    for (const id of ["16t", "16u", "16v", "16w", "16x", "16y", "16z"]) check(false, id + " the place module did not load: " + placeErr);
+  } else {
+    const anna = P.syncRootsFrom({ onedrive: ["C:\\Users\\anna\\OneDrive"] });
+    const ben = P.syncRootsFrom({ onedrive: ["D:\\Users\\ben\\OneDrive"] });
+    const place = P.placeOf(annaFolder, anna);
+    const across = P.placeResolve(annaFolder, place, ben);
+    const both = P.syncRootsFrom({
+      onedrive: ["C:\\Users\\anna\\OneDrive"],
+      onedriveBusiness: ["C:\\Users\\anna\\OneDrive - Northwind"] });
+    const bizPlace = P.placeOf("C:\\Users\\anna\\OneDrive - Northwind\\Etiuda", both);
+    const homePlace = P.placeOf(annaFolder, both);
+    const benBiz = P.syncRootsFrom({ onedriveBusiness: ["D:\\Cloud\\OneDrive - Contoso", "D:\\Cloud\\OneDrive - Northwind"] });
+    const bizAcross = P.placeResolve("C:\\Users\\anna\\OneDrive - Northwind\\Etiuda", bizPlace, benBiz);
+    check(!!place && place.kind === "onedrive" && place.rel === "Etiuda" && place.root === "OneDrive"
+        && !!across && across.path === benFolder && across.how === "root" && across.why === ""
+        && !!homePlace && homePlace.kind === "onedrive" && homePlace.rel === "Etiuda"
+        && !!bizPlace && bizPlace.kind === "onedrive-business" && bizPlace.rel === "Etiuda" && bizPlace.root === "OneDrive - Northwind"
+        && !!bizAcross && bizAcross.path === "D:\\Cloud\\OneDrive - Northwind\\Etiuda" && bizAcross.how === "root",
+      "16t an invitation written under one user's OneDrive resolves under another's, and a business root is told from a personal one by its leaf: "
+      + (across ? across.path + " " + across.how : "no resolution")
+      + (bizAcross ? ", business " + bizAcross.path : ", business unresolved"));
+
+    const unc = "\\\\files\\dept\\Etiuda";
+    const uncPlace = P.placeOf(unc, P.syncRootsFrom({ mapped: [{ letter: "Z:", remote: "\\\\files\\dept" }] }));
+    const uncBack = P.placeResolve(unc, uncPlace, ben, function () { return false; });
+    check(!!uncPlace && uncPlace.kind === "unc" && uncPlace.root === "\\\\files\\dept" && uncPlace.rel === "Etiuda"
+        && !!uncBack && uncBack.path === unc && uncBack.how === "root" && uncBack.why === "",
+      "16u a UNC path resolves as itself, and is not rewritten onto a mapped letter: "
+      + (uncPlace ? uncPlace.kind + " " + (uncBack ? uncBack.path : "") : "no place"));
+
+    const old = M.inviteRead(blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret }));
+    const oldBack = P.placeResolve("C:\\quay\\catalogs", null, ben);
+    const oldMiss = P.placeResolve("C:\\quay\\catalogs", undefined, ben, function () { return false; });
+    check(!!old && old.place === undefined && old.folder === "C:\\quay\\catalogs" && old.team === TEAM
+        && !!oldBack && oldBack.path === "C:\\quay\\catalogs" && oldBack.how === "absolute" && oldBack.why === "plain"
+        && !!oldMiss && oldMiss.how === "ask" && oldMiss.why === "plain" && oldMiss.path === "C:\\quay\\catalogs",
+      "16v an old invitation, with no place, still reads, and resolves as its absolute path: "
+      + (old ? "read" : "refused") + ", " + (oldBack ? oldBack.how + "/" + oldBack.why : "no resolution"));
+
+    const absent = P.placeResolve(annaFolder, place, [], function () { return true; });
+    const absentGone = P.placeResolve(annaFolder, place, [], function () { return false; });
+    const otherKind = P.placeResolve(annaFolder, place, benBiz, function () { return true; });
+    check(!!absent && absent.path === annaFolder && absent.how === "absolute" && absent.why === "absent"
+        && !!absentGone && absentGone.path === annaFolder && absentGone.how === "ask" && absentGone.why === "absent"
+        && !!otherKind && otherKind.why === "absent" && otherKind.path === annaFolder,
+      "16w a root that is absent falls back to the absolute path and says so, and asks when that path is not there either: "
+      + (absent ? absent.how + "/" + absent.why : "no fallback")
+      + (absentGone ? ", gone " + absentGone.how : ""));
+
+    const writerMap = P.syncRootsFrom({ mapped: [{ letter: "Z:", remote: "\\\\files\\dept" }] });
+    const readerMap = P.syncRootsFrom({ mapped: [{ letter: "Y:", remote: "\\\\files\\dept" }] });
+    const mappedPlace = P.placeOf("Z:\\Etiuda", writerMap);
+    const mappedBack = P.placeResolve("Z:\\Etiuda", mappedPlace, readerMap);
+    const mappedUnc = P.placeResolve("Z:\\Etiuda", mappedPlace, readerMap, function (p) { return String(p).slice(0, 2) === "\\\\"; });
+    const gRoots = P.syncRootsFrom({ gdrive: ["G:\\"] });
+    const gPlace = P.placeOf("G:\\My Drive\\Team", gRoots);
+    const gBack = P.placeResolve("G:\\My Drive\\Team", gPlace, P.syncRootsFrom({ gdrive: ["H:\\"] }));
+    const namedOnly = P.placeOf("C:\\Work\\OneDrive\\Etiuda", anna);
+    check(!!mappedPlace && mappedPlace.kind === "mapped" && mappedPlace.root === "\\\\files\\dept" && mappedPlace.rel === "Etiuda"
+        && !!mappedBack && mappedBack.path === "Y:\\Etiuda" && mappedBack.how === "root" && mappedBack.why === ""
+        && !!mappedUnc && mappedUnc.path === "\\\\files\\dept\\Etiuda" && mappedUnc.how === "root"
+        && !!gPlace && gPlace.kind === "gdrive" && gPlace.rel === "My Drive\\Team" && gPlace.root === undefined
+        && !!gBack && gBack.path === "H:\\My Drive\\Team" && gBack.how === "root"
+        && namedOnly === null && P.placeJoin("G:", "My Drive\\Team") === "G:\\My Drive\\Team"
+        && P.placeJoin("C:\\Users\\anna\\OneDrive", "Etiuda") === annaFolder,
+      "16x a mapped folder resolves to the reader's own letter for that share, a drive mount joins as a drive, and a folder merely named OneDrive is not a root: "
+      + (mappedBack ? mappedBack.path : "no map") + (gBack ? ", drive " + gBack.path : ""));
+
+    const carried = M.inviteRead(blobOf({ team: TEAM, folder: annaFolder, lead: leadBlob, secret: secret, place: place }));
+    const badPlace = M.inviteRead(blobOf({ team: TEAM, folder: annaFolder, lead: leadBlob, secret: secret, place: { kind: "onedrive", rel: ".." } }));
+    const miss = P.placeResolve(annaFolder, place, ben, function (p) { return p === annaFolder; });
+    const neither = P.placeResolve(annaFolder, place, ben, function () { return false; });
+    const junk = P.placeResolve(annaFolder, { kind: "nope", rel: "Etiuda" }, ben);
+    check(!!carried && carried.folder === annaFolder && carried.team === TEAM && carried.secret === secret
+        && !!carried.place && carried.place.kind === "onedrive" && carried.place.rel === "Etiuda" && carried.place.root === "OneDrive"
+        && !!badPlace && badPlace.place === undefined && badPlace.folder === annaFolder && badPlace.team === TEAM
+        && !!miss && miss.path === annaFolder && miss.how === "absolute" && miss.why === "missing"
+        && !!neither && neither.path === annaFolder && neither.how === "ask" && neither.why === "missing"
+        && !!junk && junk.how === "absolute" && junk.why === "plain",
+      "16y a place is kept on the invitation when it is one, dropped when it is not, and a folder that is not there says missing: "
+      + (carried && carried.place ? carried.place.kind : "place not read")
+      + (miss ? ", missing " + miss.why : ""));
+
+    const asked = [];
+    const io = {
+      env: { APPDATA: "C:\\Users\\ann\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\ann\\AppData\\Local",
+        OneDriveConsumer: "C:\\Users\\ann\\OneDrive", OneDriveCommercial: "C:\\Users\\ann\\OneDrive - Northwind" },
+      reg: function (key, name) {
+        asked.push("reg " + key + " " + name);
+        if (name === "UserFolder" && /\\Personal$/.test(key)) return "C:\\Users\\ann\\OneDrive";
+        if (name === "UserFolder" && /\\Business1$/.test(key)) return "C:\\Users\\ann\\OneDrive - Northwind";
+        if (name === "DefaultMountPoint" && key.indexOf("HKCU:") === 0) return "G:\\";
+        if (name === "RemotePath") return "\\\\files\\dept";
+        return "";
+      },
+      subkeys: function (key) { asked.push("sub " + key); return key.indexOf("Network") >= 0 ? [] : []; },
+      readFile: function (p) {
+        asked.push("file " + p);
+        if (/Roaming\\Dropbox\\info\.json$/.test(p))
+          return JSON.stringify({ personal: { path: "C:\\Users\\ann\\Dropbox" }, business: { path: "C:\\Users\\ann\\DropboxBiz" } });
+        if (/host\.db$/.test(p)) return "ignored\n" + Buffer.from("C:\\Users\\ann\\LegacyDropbox", "utf8").toString("base64") + "\n";
+        return "";
+      }
+    };
+    const records = P.readSyncRecords(io);
+    const roots = P.syncRootsFrom(records);
+    const kinds = {};
+    roots.forEach(r => { (kinds[r.kind] || (kinds[r.kind] = [])).push(r.root); });
+    const askedText = asked.join("\n");
+    const needles = ["HKCU:\\\\Software\\\\Microsoft\\\\OneDrive\\\\Accounts", "UserFolder",
+      "HKCU:\\\\Software\\\\Google\\\\DriveFS", "DefaultMountPoint",
+      "HKLM:\\\\SOFTWARE\\\\Policies\\\\Google\\\\DriveFS", "HKCU:\\\\Network", "RemotePath",
+      "Dropbox\\\\info.json", "Dropbox\\\\host.db"];
+    const missingNeedle = needles.filter(n => SRC.indexOf(n) < 0);
+    const letterIo = { env: {}, reg: function (key, name) { asked.push("reg " + key + " " + name); return name === "RemotePath" ? "\\\\files\\dept" : ""; },
+      subkeys: function (key) { asked.push("sub " + key); return key.indexOf("Network") >= 0 ? ["Z"] : []; },
+      readFile: function () { return ""; } };
+    const beforeRemote = asked.length;
+    const withLetter = P.readSyncRecords(letterIo);
+    const remoteAsked = asked.slice(beforeRemote).some(line => line.indexOf("RemotePath") >= 0);
+    const noRemoteFirst = asked.slice(0, beforeRemote).every(line => line.indexOf("RemotePath") < 0);
+    check(askedText.indexOf("reg HKCU:\\Software\\Microsoft\\OneDrive\\Accounts\\Personal UserFolder") >= 0
+        && askedText.indexOf("reg HKCU:\\Software\\Microsoft\\OneDrive\\Accounts\\Business1 UserFolder") >= 0
+        && askedText.indexOf("reg HKCU:\\Software\\Google\\DriveFS DefaultMountPoint") >= 0
+        && askedText.indexOf("reg HKLM:\\SOFTWARE\\Policies\\Google\\DriveFS DefaultMountPoint") >= 0
+        && asked.some(line => /Roaming\\Dropbox\\info\.json$/.test(line))
+        && asked.some(line => /Local\\Dropbox\\info\.json$/.test(line))
+        && asked.some(line => /Dropbox\\host\.db$/.test(line))
+        && noRemoteFirst && remoteAsked
+        && kinds.onedrive && kinds.onedrive.join("|") === "C:\\Users\\ann\\OneDrive"
+        && kinds["onedrive-business"] && kinds["onedrive-business"].join("|") === "C:\\Users\\ann\\OneDrive - Northwind"
+        && kinds.dropbox && kinds.dropbox.indexOf("C:\\Users\\ann\\Dropbox") >= 0
+        && kinds.dropbox.indexOf("C:\\Users\\ann\\DropboxBiz") >= 0
+        && kinds.dropbox.indexOf("C:\\Users\\ann\\LegacyDropbox") >= 0
+        && kinds.gdrive && kinds.gdrive.join("|") === "G:"
+        && withLetter.mapped && withLetter.mapped.length === 1 && withLetter.mapped[0].letter === "Z:"
+        && withLetter.mapped[0].remote === "\\\\files\\dept"
+        && missingNeedle.length === 0,
+      "16z the record reader asks where Windows and the client record a root, and the shell names those records: "
+      + "missing " + JSON.stringify(missingNeedle)
+      + ", onedrive " + (kinds.onedrive || []).join("|")
+      + ", dropbox " + (kinds.dropbox || []).length
+      + ", remote " + remoteAsked);
+  }
+
+  const shellPath = path.join(ROOT, "shell", "main.js");
+  const beforeBytes = fs.readFileSync(shellPath);
+  const hashOf = buf => crypto.createHash("sha256").update(buf).digest("hex");
+  const beforeHash = hashOf(beforeBytes);
+  const shellLines = beforeBytes.toString("utf8").split("\n");
+  const plantAt = shellLines.findIndex(line => line.indexOf("plant:f4-place") >= 0);
+  let turned = false;
+  if (plantAt >= 0 && P) {
+    const copy = shellLines.slice();
+    copy.splice(plantAt, 1);
+    try {
+      const lifted = load(copy.join("\n"), PLACE_DECLS, ["placeOf", "placeResolve", "syncRootsFrom"]);
+      const anna = lifted.syncRootsFrom({ onedrive: ["C:\\Users\\anna\\OneDrive"] });
+      const ben = lifted.syncRootsFrom({ onedrive: ["D:\\Users\\ben\\OneDrive"] });
+      const got = lifted.placeOf(annaFolder, anna);
+      const back = lifted.placeResolve(annaFolder, got, ben);
+      turned = !!back && back.path === annaFolder && back.how === "absolute" && back.why === "missing";
+    } catch (e) { turned = false; }
+  }
+  const afterBytes = fs.readFileSync(shellPath);
+  const sameBytes = hashOf(afterBytes) === beforeHash && afterBytes.equals(beforeBytes);
+  check(plantAt >= 0 && turned && sameBytes,
+    "17a lifting plant:f4-place leaves the OneDrive folder on the writer's absolute path (why missing), and the checkout's bytes are unchanged: "
+    + "line " + plantAt + ", turned " + turned + ", same " + sameBytes);
+
+  const uiSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
+  const absentEn = "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.";
+  const absentPl = "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć. Gdy to miejsce pojawi się także na tym komputerze, po ponownym uruchomieniu Etiudy i otwarciu zaproszenia folder się odnajdzie.";
+  const thirdEn = "Once this computer has it too, opening the invitation again finds the folder.";
+  const thirdPl = "Gdy to miejsce pojawi się także na tym komputerze, po ponownym otwarciu zaproszenia folder się odnajdzie.";
+  check(pageSrc.indexOf(absentEn) >= 0 && pageSrc.indexOf("/* Claudette's words, 2026-10-28 */") >= 0
+      && pageSrc.indexOf("draft words") < 0 && pageSrc.indexOf(thirdEn) < 0 && pageSrc.indexOf(thirdPl) < 0
+      && pageSrc.indexOf("o.why") >= 0 && pageSrc.indexOf("o.how") >= 0 && pageSrc.indexOf("o.kind") >= 0
+      && uiSrc.indexOf(absentEn) >= 0 && uiSrc.indexOf(absentPl) >= 0
+      && uiSrc.indexOf(thirdEn) < 0 && uiSrc.indexOf(thirdPl) < 0
+      && uiSrc.indexOf("\"OneDrive\":\"OneDrive\"") >= 0
+      && uiSrc.indexOf("\"OneDrive for Business\":\"OneDrive dla firm\"") >= 0
+      && uiSrc.indexOf("\"Dropbox\":\"Dropbox\"") >= 0
+      && uiSrc.indexOf("\"Google Drive\":\"Dysk Google\"") >= 0
+      && uiSrc.indexOf("\"a mapped network drive\":\"zmapowany dysk sieciowy\"") >= 0
+      && uiSrc.indexOf("\"a shared network folder\":\"udostępniony folder sieciowy\"") >= 0
+      && uiSrc.indexOf("Dysku Google") < 0 && uiSrc.indexOf("zmapowanego dysku") < 0
+      && uiSrc.indexOf("\"mapped drive\"") < 0 && uiSrc.indexOf("\"shared folder\"") < 0,
+    "17b the confirm names the place this computer does not have, in Claudette's words, and does not promise a later open will find it: "
+    + (pageSrc.indexOf(absentEn) >= 0 ? "page" : "page missing") + ", " + (uiSrc.indexOf(absentPl) >= 0 ? "Polish" : "Polish missing"));
+
+  /* The third sentence would be true only if a second open read the records again. liveSyncIo keeps its first
+     read on the function, and invitePlacePlan always asks that read, so the folder stays the one from the first open. */
+  const reopenCalls = [];
+  let reopenPhase = "empty";
+  const REG = "C:\\Windows\\System32\\reg.exe";
+  const reopenWant = [
+    ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
+    ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+    ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+    ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
+  ];
+  const reopenSpy = function (file, args, opts) {
+    reopenCalls.push({ file: String(file), args: args, timeout: opts && opts.timeout, hide: opts && opts.windowsHide });
+    if (reopenPhase === "empty") throw new Error("absent");
+    if (String(file).toLowerCase().indexOf("powershell") >= 0) {
+      return JSON.stringify({
+        values: { "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts\\Personal|UserFolder": "D:\\Users\\ben\\OneDrive" },
+        sub: { "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts": ["Personal"] }
+      });
+    }
+    const name = String(args && args[4] || "");
+    if (name !== "UserFolder") return Buffer.from("", "utf8");
+    return Buffer.from([
+      "HKEY_CURRENT_USER\\Software\\Microsoft\\OneDrive\\Accounts\\Personal",
+      "    UserFolder    REG_SZ    D:\\Users\\ben\\OneDrive",
+      ""
+    ].join("\r\n"), "utf8");
+  };
+  let firstPlan = null, secondPlan = null, reopenErr = "", stayed = false;
+  try {
+    const OPEN_DECLS = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =",
+      "function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+      "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
+      "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
+      "function liveSyncIo(", "function invitePlacePlan("];
+    const body = OPEN_DECLS.map(m => sliceDecl(SRC, m)).join("\n");
+    const opened = new Function("crypto", "Buffer", "require", "process", body + "\nreturn { invitePlacePlan };")(
+      crypto, Buffer, function (name) {
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: reopenSpy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
+        throw new Error("require " + name);
+      }, { platform: "win32", env: {} });
+    const parsed = { folder: annaFolder, place: { kind: "onedrive", rel: "Etiuda", root: "OneDrive" } };
+    firstPlan = opened.invitePlacePlan(parsed);
+    const grew = reopenCalls.length;
+    reopenPhase = "present";
+    secondPlan = opened.invitePlacePlan(parsed);
+    stayed = reopenCalls.length === grew;
+  } catch (e) { reopenErr = e && e.message ? e.message : "reopen failed"; }
+  const regOk = reopenCalls.length === reopenWant.length && reopenCalls.every(function (c, i) {
+    return c.file === REG && JSON.stringify(c.args) === JSON.stringify(reopenWant[i])
+      && typeof c.timeout === "number" && c.timeout >= 1 && c.timeout <= 5000 && c.hide === true;
+  });
+  check(!reopenErr && stayed && regOk
+      && firstPlan && firstPlan.why === "absent" && firstPlan.how === "absolute" && firstPlan.path === annaFolder
+      && secondPlan && secondPlan.why === "absent" && secondPlan.how === "absolute" && secondPlan.path === annaFolder
+      && pageSrc.indexOf(thirdEn) < 0 && uiSrc.indexOf(thirdPl) < 0,
+    "17c an invitation opened where the root is absent stays absent when the root appears and the invitation is opened again: "
+    + (reopenErr || (firstPlan ? firstPlan.why + " " + firstPlan.path : "no first"))
+    + " then " + (secondPlan ? secondPlan.why + " " + secondPlan.path : "no second")
+    + ", calls " + reopenCalls.length + (stayed ? " stayed" : " grew") + (regOk ? "" : " not reg"));
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

@@ -958,7 +958,7 @@ function createTarget(limits) {
     return { ok: true, seq: rec.seq, id: rec.id };
   }
 
-  function upload({ relayTeamId, blob }) {
+  function upload({ relayTeamId, blob, session }) {
     const ct = blob && blob.ciphertext ? blob.ciphertext : Buffer.alloc(0);
     let tooBig = false;
     tooBig = ct.length > wire.BLOB_MAX; /* plant:E6-blob-relay */

@@ -113,6 +113,7 @@ const TAKEN_MAX = 4096;
 const SESSION_KEEP_MS = 25 * 60 * 1000;
 const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
+const COUNTER_RETRY_MS = 60 * 1000;
 const PING_MS = 30 * 1000;
 const RETRY_MIN_MS = 2000, RETRY_MAX_MS = 60 * 1000;
 const TMP_RE = /\.tmp$/i;
@@ -278,20 +279,31 @@ function inPlace(place, rel) {
 /* ---- the mirror on disk ---------------------------------------------------------------------------------------- */
 
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+const RENAME_RETRIES = 60;
+const RENAME_WAIT_MS = 50;
 function renamePatiently(from, to) {
   for (let i = 1; ; i++) {
     try { fs.renameSync(from, to); return; }
     catch (e) {
-      if (i >= 10 || RENAME_BUSY.indexOf(e.code) < 0) throw e;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      if (i >= RENAME_RETRIES || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RENAME_WAIT_MS);
     }
   }
 }
 /* Temp file then rename, as the shell writes a share. The shell passes its own writeReplacing in; this is the same act for
-   a host that has none. */
+   a host that has none. The temp name is unique per write, fsynced before rename, and unlinked on failure. */
+let tempCount = 0;
 function writeWhole(file, text) {
-  const tmp = file + ".tmp";
-  try { fs.writeFileSync(tmp, text, "utf8"); renamePatiently(tmp, file); }
+  /* This process, a count of its own writes and random bytes: no thread id, since the shell loads no module it did not
+     have (pick 5c). */
+  tempCount = (tempCount + 1) % 1e9;
+  const tmp = file + "." + process.pid + "." + tempCount + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  try {
+    fs.writeFileSync(tmp, text, "utf8");
+    const fd = fs.openSync(tmp, "r+");
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    renamePatiently(tmp, file);
+  }
   catch (e) { try { fs.unlinkSync(tmp); } catch { /* never made */ } throw e; }
 }
 
@@ -348,7 +360,8 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false };
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
+    pin: null, chain: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -367,6 +380,12 @@ function stateOf(x) {
   s.suspect = x.suspect === true; /* plant:remade-ask-kept */
   s.tokenUsed = x.tokenUsed === true;
   s.invited = x.invited === true;
+  const p = pinOf(x.pin);
+  if (p) s.pin = p;
+  if (Array.isArray(x.chain)) {
+    s.chain = x.chain.filter(c => table(c) && B.isId(c.keyId) && HEX64.test(String(c.public)))
+      .map(c => ({ keyId: c.keyId, public: c.public }));
+  }
   const idSet = m => {
     const out = {};
     if (table(m)) for (const k of Object.keys(m)) if (HEX32.test(k) && m[k] === true) out[k] = true;
@@ -459,16 +478,42 @@ function createProgram(opts) {
   const save = typeof o.save === "function" ? o.save : () => {};
   const teamMax = Number.isSafeInteger(o.teamMax) ? o.teamMax : B.TEAM_MAX;
   let st = stateOf(typeof o.load === "function" ? o.load() : null);
-  let pin = pinOf(o.pin);
+  let pin = pinOf((st && st.pin) || o.pin);
   const rates = new Map();
   /* What waits on a refusal that lifts, by path or copy, with the reason last said for it, so a wait is said once. */
   const waiting = new Map();
   /* A case variant left beside the one file its folded path sends, so that variant is said once. */
   const stayed = new Set();
 
+  function chainLeads() {
+    const out = [];
+    const seen = new Set();
+    const add = k => {
+      if (k && B.isId(k.keyId) && HEX64.test(String(k.public)) && !seen.has(k.keyId)) {
+        seen.add(k.keyId);
+        out.push({ keyId: k.keyId, public: k.public });
+      }
+    };
+    if (pin && pin.lead) add(pin.lead);
+    if (Array.isArray(st.chain)) for (const k of st.chain) add(k);
+    return out;
+  }
+  function isLeadKey(keyId) {
+    return chainLeads().some(l => l.keyId === keyId);
+  }
+  function leadSigned(bytes, sigValue, prefix) {
+    for (const l of chainLeads()) {
+      if (B.verifySigned(l.public, prefix, bytes, sigValue)) return true;
+    }
+    return false;
+  }
   const persist = () => { try { save(st); } catch (e) { say("the relay's record could not be kept - " + (e && e.message)); } };
   const revKey = t => ({ teamId: pin.teamId, leadKeyId: pin.lead.keyId, epoch: t.epoch, rev: t.rev });
-  const leadTrust = desks => ({ lead: { keyId: pin.lead.keyId, public: pin.lead.public }, desks: desks || [] });
+  function leadTrust(desks) {
+    const t = { lead: { keyId: pin.lead.keyId, public: pin.lead.public }, desks: desks || [] };
+    t.leads = chainLeads(); /* plant:chain-trust */
+    return t;
+  }
   const dropSaid = (what, r) => { say(what + ": " + r.said); return r; };
 
   function setPin(p) {
@@ -476,17 +521,31 @@ function createProgram(opts) {
     return pin ? { ok: true } : R("not-enrolled");
   }
 
-  /* A team file judged under the pin alone: signed by the pinned lead's key, never one the file names; this team and this
-     relay; an epoch and a rev. */
+  function followHandover(t) {
+    if (!t) return;
+    if (t.chain) st.chain = t.chain;
+    if (t.handed) {
+      pin = { teamId: pin.teamId, rt: pin.rt, lead: { keyId: t.doc.lead.keyId, public: t.doc.lead.public } }; /* plant:team-pin-move */
+      st.pin = pin; /* plant:team-pin-save */
+    }
+  }
+
+  /* A team file judged under the pin or a genuine handover: signed by the pinned lead's key or a new lead the handover
+     proves; this team and this relay; an epoch and a rev. */
   function teamJudged(doc) {
     if (!pin) return R("wrong-team");
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!B.verifySigned(pin.lead.public, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
+    const lead = doc.lead;
+    const leadDiffers = !lead || typeof lead !== "object" || lead.keyId !== pin.lead.keyId || lead.public !== pin.lead.public;
+    if (leadDiffers && !B.handedTo(doc, pin.lead)) return R("bad-signature"); /* plant:team-handover */
+    const signerPub = leadDiffers ? (lead && lead.public) : pin.lead.public;
+    if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
+    const chain = B.genuineChain(doc, pin.lead) || (st && st.chain) || [{ keyId: pin.lead.keyId, public: pin.lead.public }];
     if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || relayOf(doc) !== pin.rt) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || !isCount(doc.rev)) return R("replay-rev");
-    return { ok: true, doc, epoch: doc.epoch, rev: doc.rev };
+    return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
 
   /* The head the lead's Studio writes. The pinned lead's signature over the head prefix, and this team's name.
@@ -498,7 +557,7 @@ function createProgram(opts) {
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
+    if (!leadSigned(bytes, doc.sig.value, HEAD_PREFIX)) return R("bad-signature"); /* plant:head-sig */
     if (doc.v !== 1) return R("bad-signature");
     if (doc.team !== pin.teamId) return R("wrong-team");
     if (!isCount(doc.epoch) || !isCount(doc.rev) || !Number.isFinite(doc.t)) return R("bad-signature");
@@ -522,6 +581,7 @@ function createProgram(opts) {
   function loadTeamFile(doc) {
     const t = teamJudged(doc);
     if (!t.ok) return t;
+    followHandover(t);
     const r = B.revLoad(st.revs, revKey(t));
     if (!r.ok) return r; /* plant:rev-load */
     st.revs = r.revs;
@@ -557,7 +617,7 @@ function createProgram(opts) {
      under the old team file is refused. At the newer epoch the same key is removed where an older loaded roster named
      it, and a later rev of one epoch removes a key an earlier rev of that epoch named. A stranger stays not-roster. */
   function removedAfterMove(writerKeyId, epoch, opened) {
-    if (!pin || writerKeyId === pin.lead.keyId || !isCount(epoch)) return null;
+    if (!pin || isLeadKey(writerKeyId) || !isCount(epoch)) return null;
     const top = newestRoster();
     if (!top || epoch > top.epoch) return null;
     if (top.desks.some(d => d.keyId === writerKeyId)) return null;
@@ -727,6 +787,7 @@ function createProgram(opts) {
     try { doc = JSON.parse(r.body.replace(/^\uFEFF/, "")); } catch { doc = null; }
     const t = teamJudged(doc);
     if (!t.ok) return t;
+    followHandover(t);
     const sha = sha256(Buffer.from(r.body, "utf8"));
     const prev = has(st.applied, TEAM_NAME) ? st.applied[TEAM_NAME] : null;
     if (prev && !prev.del && prev.sha === sha) {
@@ -756,7 +817,7 @@ function createProgram(opts) {
      side its own file, on a desk's the one landTeam wrote. A rev below one already kept for its epoch changes nothing. */
   function trustFromMirror() {
     const t = heldTeam();
-    if (t) keepTrust(t);
+    if (t) { followHandover(t); keepTrust(t); }
     return t;
   }
 
@@ -839,11 +900,12 @@ function createProgram(opts) {
   }
   const unpend = id => { st.pending = st.pending.filter(p => p.id !== id); };
 
-  /* The public key of a writer this program trusts: the pinned lead, or a desk one roster it already holds names, and
+  /* The public key of a writer this program trusts: the pinned lead, any key on its handover chain, or a desk one roster it already holds names, and
      only where that key id is a single public key. A public key the blob itself carries is not trust. */
   function trustedPub(writer) {
     if (!pin || !B.isId(writer)) return null;
-    if (writer === pin.lead.keyId) return pin.lead.public;
+    const lead = chainLeads().find(l => l.keyId === writer);
+    if (lead) return lead.public;
     const pubs = [];
     for (const e of Object.keys(st.trust)) {
       for (const d of st.trust[e].desks) {
@@ -872,7 +934,7 @@ function createProgram(opts) {
     const out = [];
     const key = ctx && typeof ctx.keyFor === "function" ? ctx.keyFor(m.epoch) : null;
     const known = has(st.trust, String(m.epoch));
-    const lead = m.writer === pin.lead.keyId;
+    const lead = isLeadKey(m.writer);
     const rostered = known && st.trust[m.epoch].desks.some(d => d.keyId === m.writer);
     /* A key the roster already names, by a yes the relay refused, still asks or withdraws under the invitation's key. */
     let asking = !rostered;
@@ -891,7 +953,7 @@ function createProgram(opts) {
   function mayPark(it) {
     const m = it && it.meta;
     if (!pin || !m || !isCount(m.epoch) || m.epoch > st.leadEpoch) return false;
-    if (m.writer === pin.lead.keyId) return true;
+    if (isLeadKey(m.writer)) return true;
     const top = newestRoster();
     return !!top && top.desks.some(d => d.keyId === m.writer);
   }
@@ -905,7 +967,7 @@ function createProgram(opts) {
     if (typeof m.place === "string" && m.place.startsWith("invite:")) return openInvited(it, blob, floors, ctx);
     /* A request a desk joining by invitation sent, its key carried beside it (the relay marks only an invitation's upload so):
        the lead's to open; any other program passes over it and says nothing, as it passes over an invitation's place. */
-    if (typeof m.pub === "string" && m.writer !== pin.lead.keyId && !(ctx && Array.isArray(ctx.inviteKeys))
+    if (typeof m.pub === "string" && !isLeadKey(m.writer) && !(ctx && Array.isArray(ctx.inviteKeys))
       && !(has(st.trust, String(m.epoch)) && st.trust[m.epoch].desks.some(d => d.keyId === m.writer))) { unpend(m.id); return null; } /* plant:request-pass */
     const t = triesFor(m, ctx);
     let last = null;
@@ -928,7 +990,7 @@ function createProgram(opts) {
     return null;
   }
 
-  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3's wrap in small), AND A DESK'S OWN COPY: what the lead sealed
+  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3'wrap in small), AND A DESK'S OWN COPY: what the lead sealed
      under one invitation's key alone, or under one desk's copy key alone, the team file for the desk that holds that key to
      read before it holds the team key of the file's epoch. The relay can tell the two apart, an invitation's place being
      an id on its own list of invitations, but not whose a desk's copy is (the header's EPOCH MOVE). A program that holds
@@ -939,7 +1001,7 @@ function createProgram(opts) {
     const m = it.meta;
     const seal = sealOf(m.place.slice(7), ctx);
     if (!seal || m.del === true) return null; /* plant:invite-pass */
-    if (m.writer !== pin.lead.keyId) { dropSaid(seal.what, R("not-roster")); return null; }
+    if (!isLeadKey(m.writer)) { dropSaid(seal.what, R("not-roster")); return null; }
     const r = judge(blob, leadTrust([]), m.epoch, seal.key, floors);
     if (!r.ok) { dropSaid(seal.what, r); return null; } /* plant:invite-judge */
     if (r.kind !== "file" || r.path !== TEAM_NAME) { dropSaid(seal.what, R("outside-place")); return null; }
@@ -990,8 +1052,8 @@ function createProgram(opts) {
     const lead = [], rest = [];
     for (const it of items || []) {
       if (!it || !table(it.meta)) continue;
-      if (it.meta.writer === pin.lead.keyId && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
-      (it.meta.writer === pin.lead.keyId ? lead : rest).push(it);
+      if (isLeadKey(it.meta.writer) && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
+      (isLeadKey(it.meta.writer) ? lead : rest).push(it);
     }
     const isTeam = x => x.r.kind === "file" && x.r.path === TEAM_NAME;
     let topTeam = null;
@@ -1230,16 +1292,17 @@ function createProgram(opts) {
       edition: h.edition, published: h.published };
   }
 
-  /* The head shown by its signed time, never as a block: only one the pinned lead signed for this relay. */
+  /* The head shown by its signed time, never as a block: only one the pinned lead or genuine predecessor signed for this relay. */
   function showFreshness(input) {
     const i = input || {};
     const none = { shown: false, blocked: false, time: null, epoch: null, rev: null, ageMs: null };
     const head = i.head;
     if (!pin || !table(head) || !table(head.sig)) return none;
-    if (head.keyId !== pin.lead.keyId || head.relay !== pin.rt) return none;
+    const lead = chainLeads().find(l => l.keyId === head.keyId);
+    if (!lead || head.relay !== pin.rt) return none;
     let bytes;
     try { bytes = signedBytes(head); } catch { return none; }
-    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
+    if (!B.verifySigned(lead.public, HEAD_PREFIX, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
     const now = Number.isFinite(i.now) ? i.now : clock();
     return { shown: true, blocked: false, time: head.time, epoch: head.epoch, rev: head.rev, ageMs: now - head.time };
   }
@@ -1260,7 +1323,7 @@ function createProgram(opts) {
   }
 
   const api = {
-    setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
+    setPin, pinned: () => pin, leads: () => chainLeads(), loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
     sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
@@ -1364,6 +1427,12 @@ function createProgram(opts) {
     },
     suspect: () => st.suspect === true,
     settled() { if (st.suspect) { st.suspect = false; persist(); } },
+    raiseOwn(counter) {
+      if (Number.isSafeInteger(counter)) {
+        st.own = Math.max(st.own, counter);
+        persist();
+      }
+    },
   };
   return api;
 }
@@ -1395,14 +1464,30 @@ function createChannel(opts) {
   const prog = createProgram({ io, clock, say, load: () => readState(stateFile), save: stateFile ? saveState : null, pin: o.pin && o.pin() });
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
-  let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null;
+  let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null, answerDue = null;
   /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
   const ENROL_WAIT_MS = 5 * 60 * 1000;
   let enrolWaitFrom = 0, removedTold = false;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
-  let watchers = [], settle = null, retryTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
+  let watchers = [], settle = null, retryTimer = null, counterTimer = null, pollTimer = null, pingTimer = null, watchMode = "";
+  let counterOwed = false;
+  /* A floor is taken only if it leaves room: at most 100 years of ms past this program's clock. */
+  const COUNTER_AHEAD_MAX_MS = 100 * 365.25 * 24 * 60 * 60 * 1000;
+  let floorlessFile = null, floorlessTries = 0;
+
+  function takeFloor(floor) {
+    if (floor === undefined) return false;
+    let past = false;
+    past = !Number.isSafeInteger(floor) || floor < 1 || floor > clock() + COUNTER_AHEAD_MAX_MS; /* plant:floor-bound */
+    if (past) {
+      sayOnce("the relay named a counter floor past the bound, so that was not taken"); /* draft words: copywriter */
+      return false;
+    }
+    prog.raiseOwn(floor); /* plant:take-floor */
+    return true;
+  }
   const said = new Set();
   const sayOnce = line => { if (!said.has(line)) { said.add(line); say(line); } };
 
@@ -1433,7 +1518,10 @@ function createChannel(opts) {
   function refusalOf(r) {
     const j = r && r.json;
     const reason = j && typeof j.error === "string" && has(B.REASONS, j.error) ? j.error : null;
-    return reason ? R(reason) : { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
+    if (!reason) return { ok: false, reason: "status-" + (r ? r.status : 0), said: "The relay answered " + (r ? r.status : 0) + ".", served: false };
+    const out = R(reason);
+    if (j && j.floor !== undefined) out.floor = j.floor;
+    return out;
   }
 
   /* THE LAPSE, kept with the program's record so a restart still knows it, and handed on through onLapse(view) whenever
@@ -1521,7 +1609,7 @@ function createChannel(opts) {
     const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
     if (who && who.privateKey) {
       const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-      const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
+      const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
       /* An invitation's session for this key is an earlier invitation's where a fresh one waits unspent and this program
          has used one before: since slice 3 the relay answers a bound key with its invitation's session after the upload too
          (for the lead's answer alone), so taking it would hold the desk there and never spend the fresh token, and the fresh
@@ -1589,7 +1677,7 @@ function createChannel(opts) {
     const ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
     const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
+    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
     if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session))) return refusalOf(r);
     let device = false;
     device = r.json.invite !== true; /* plant:S3-device */
@@ -1760,10 +1848,27 @@ function createChannel(opts) {
     return (why.reason === "expired" || why.reason === "missing") && prog.unchain(op, id);
   }
 
+  /* A replay-counter refusal has already kept its counter, so one timer tries that upload again inside a minute.
+     A further refusal starts the same wait. A success, a stop or a halt clears it. */
+  function scheduleCounterRetry() {
+    if (!running) return;
+    clearTimeout(counterTimer);
+    let stopRetries = false;
+    stopRetries = floorlessTries >= 3; /* plant:counter-backoff */
+    if (stopRetries) return;
+    counterTimer = setTimeout(() => { counterTimer = null; kick(); }, COUNTER_RETRY_MS);
+    if (counterTimer.unref) counterTimer.unref();
+  }
+  function clearCounterRetry() {
+    clearTimeout(counterTimer);
+    counterTimer = null;
+  }
+
   async function flush() {
     const who = me();
     if (!who || !who.privateKey) return { ok: true };
     const floor = prog.teamEpoch();
+    let sawReplay = false;
     for (const op of prog.owed(who, ctx())) {
       const sealing = sealingFor(op, who, floor);
       if (!sealing) {
@@ -1776,11 +1881,12 @@ function createChannel(opts) {
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
-      if (u.ok) continue;
-      if (u.lim) { if (u.lim.reason === "rate") return u.lim; prog.refusedOut(op, u.lim); continue; }
+      if (u.ok) { floorlessFile = null; floorlessTries = 0; continue; }
+      if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
         if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId, u.blob && u.blob.id);
+        if (sawReplay) scheduleCounterRetry();
         return u.why;
       }
       /* The invitation's one upload whose reply was lost: the relay already has it, and token-spent on the retry is that
@@ -1789,8 +1895,24 @@ function createChannel(opts) {
       spentSent = !!(op.byInvite && u.why && u.why.reason === "token-spent" && u.blob && prog.replyLost(op.inviteId)); /* plant:spent-sent */
       if (spentSent) { prog.sentOut(op, u.blob); forgetWrap(); continue; }
       /* true: the relay answered. That refusal waits; it is not kept by content hash. */
-      if (prog.refusedOut(op, u.why, true) && HALTS.indexOf(u.why.reason) >= 0) return { ok: true };
+      const waits = prog.refusedOut(op, u.why, true);
+      if (u.why && u.why.reason === "replay-counter") {
+        sawReplay = true; /* plant:counter-retry */
+        const fileKey = op.invite ? "invite:" + op.invite.id : pathKey(op.rel);
+        const taken = takeFloor(u.why.floor);
+        if (taken) {
+          floorlessFile = null;
+          floorlessTries = 0;
+        } else {
+          if (floorlessFile === fileKey) floorlessTries += 1;
+          else { floorlessFile = fileKey; floorlessTries = 1; }
+        }
+      }
+      if (waits && HALTS.indexOf(u.why.reason) >= 0) { floorlessFile = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return { ok: true }; }
     }
+    counterOwed = sawReplay;
+    if (sawReplay || answerDue) scheduleCounterRetry();
+    else clearCounterRetry();
     return { ok: true };
   }
 
@@ -1929,8 +2051,23 @@ function createChannel(opts) {
     const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
       del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
     const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
-    if (r.status === 200) return { ok: true };
-    return r.refused || refusalOf(r);
+    if (r.status === 200) { answerDue = null; floorlessFile = null; floorlessTries = 0; if (!counterOwed) clearCounterRetry(); return { ok: true }; }
+    const why = r.refused || refusalOf(r);
+    if (why && why.reason === "replay-counter") {
+      answerDue = { answer: s.answer, inv: String(s.inv), deskId: s.deskId, deskBox: s.deskBox, leadBox: s.leadBox }; /* plant:answer-retry */
+      const taken = takeFloor(why.floor);
+      if (taken) {
+        floorlessFile = null;
+        floorlessTries = 0;
+      } else {
+        const fileKey = "answer:" + s.inv;
+        if (floorlessFile === fileKey) floorlessTries += 1;
+        else { floorlessFile = fileKey; floorlessTries = 1; }
+      }
+    }
+    if (why && HALTS.indexOf(why.reason) >= 0) { answerDue = null; floorlessFile = null; floorlessTries = 0; counterOwed = false; clearCounterRetry(); return why; }
+    if (answerDue) scheduleCounterRetry();
+    return why;
   }
 
   /* The request withdrawn: where this desk's own request is owed as a deletion after its one upload, that deletion goes on
@@ -1989,6 +2126,7 @@ function createChannel(opts) {
     await openHeldWrap();
     await retryPending();
     const f = await flush();
+    if (answerDue) await writeAnswer(answerDue);
     ensureSocket();
     return f;
   }
@@ -2117,8 +2255,10 @@ function createChannel(opts) {
 
   async function stop() {
     running = false;
-    clearTimeout(settle); clearTimeout(retryTimer); clearInterval(pollTimer); clearInterval(pingTimer);
+    clearTimeout(settle); clearTimeout(retryTimer); clearCounterRetry(); clearInterval(pollTimer); clearInterval(pingTimer);
     closeWatchers();
+    floorlessFile = null;
+    floorlessTries = 0;
     if (sock) { try { sock.close(); } catch { /* gone */ } sock = null; }
     session = null;
     if (busy) await busy;
