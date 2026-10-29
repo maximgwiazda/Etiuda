@@ -125,10 +125,32 @@ export function routeWith(roots, clockOf) {
       if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-grant */
       if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-fresh */
       const leadId = body.lead.keyId;
-      const reserved = await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "reserve", rt }));
+      const reserved = await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "reserve", rt, lead: leadId }));
       if (reserved.status !== 200) return reserved;
       const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
       if (res.status !== 200) await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free */
+      return noted(res, decided, body.grant);
+    }
+    if (hit.what === "lead") {
+      const bytes = await team.readCapped(request, team.JSON_MAX);
+      if (!bytes) return team.refusedFor("blob-size");
+      const body = bodyOf(bytes), rt = hit.rt;
+      const now = nowOf(env), judged = core.judgeLead(rt, body, now, roots, keys);
+      if (!judged.ok) return team.refusedFor(judged.reason); /* plant:worker-lead-grant */
+      if (!core.isFresh(body.t, now)) return team.refusedFor("nonce-stale"); /* plant:worker-lead-fresh */
+      const newLeadId = body.to.keyId;
+      let reserved = { status: 200 };
+      reserved = await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "reserve", rt, lead: newLeadId })); /* plant:worker-lead-bound */
+      if (reserved.status !== 200) return reserved;
+      const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
+      if (res.status !== 200) {
+        await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free-on-fail */
+        return res;
+      }
+      const oldLeadId = res.headers.get("etiuda-old-lead");
+      if (oldLeadId) {
+        try { await teams.get(teams.idFromName("lead:" + oldLeadId)).fetch(team.leadRequest({ op: "release", rt })); } catch { /* K3 */ } /* plant:old-lead-released */
+      }
       return noted(res, decided, body.grant);
     }
     let grant = null, forward = null;

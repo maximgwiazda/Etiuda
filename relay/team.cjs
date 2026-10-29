@@ -13,7 +13,7 @@ const STATUS = {
   "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "team-count": 403, "epoch": 409, "replay-counter": 409,
   "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "withdrawn": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
-const CLOSE = { "no-hello": 4401, "removed": 4403 };
+const CLOSE = { "no-hello": 4401, "removed": 4403, "handed-over": 4403 };
 const DEFAULT_PREFIX = "/relay/v1/";
 /* The list object's own path. It sits outside every prefix the route table can name, so a client request is not a route. */
 const REVOKED_PATH = "/etiuda/revoked";
@@ -28,11 +28,11 @@ const HELD_PATH = "/etiuda/held";
 const HELD_MARK = "etiuda-held";
 /* One leading slash, one segment, then /v1/ and a trailing slash. A ".." cannot occur in that shape. */
 const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
-const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|hello|session|grant|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
+const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|hello|session|grant|lead|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 /* The methods each route answers, in one table the Worker and the object both ask, so that a path or a method no route answers
    is missing before any object is woken to say so. `since` and `b` are the two routes whose names carry an argument. */
-const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], socket: ["GET"],
+const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], lead: ["POST"], socket: ["GET"],
   wrap: ["GET"], states: ["GET"], since: ["GET"], b: ["GET", "PUT"] };
 /* The one path this Worker answers under. API_PREFIX names it where set; with none, the path is /relay/v1/. A value of any
    other shape is not a prefix, and the Worker answers unavailable rather than /relay/v1/. */
@@ -55,7 +55,7 @@ function routeOf(method, pathname, prefix) {
   return METHODS[what].indexOf(method) > -1 ? { rt: m[1] || null, what } : null;
 }
 
-const reply = (status, value) => new Response(JSON.stringify(value), { status, headers: HEADERS });
+const reply = (status, value, extra) => new Response(JSON.stringify(value), { status, headers: extra ? Object.assign({}, HEADERS, extra) : HEADERS });
 const refused = r => reply(STATUS[r.reason] || 400, Object.assign({ error: r.reason, said: r.said }, typeof r.floor === "number" ? { floor: r.floor } : {}));
 const refusedFor = reason => refused(B.refusal(reason));
 const missing = () => refusedFor("missing");
@@ -124,10 +124,11 @@ function leadRequest(body) {
   headers.set(LEAD_MARK, "1");
   return new Request("https://relay.invalid" + LEAD_PATH, { method: "POST", headers, body: JSON.stringify(body), duplex: "half" });
 }
-function heldRequest() {
+function heldRequest(leadKey) {
   const headers = new Headers();
   headers.set(HELD_MARK, "1");
-  return new Request("https://relay.invalid" + HELD_PATH, { method: "POST", headers, body: "{}", duplex: "half" });
+  const body = leadKey ? JSON.stringify({ lead: leadKey }) : "{}";
+  return new Request("https://relay.invalid" + HELD_PATH, { method: "POST", headers, body, duplex: "half" });
 }
 
 function bearer(request) {
@@ -140,7 +141,7 @@ function attachmentOf(ws) {
 }
 
 function shut(ws, reason) {
-  try { ws.close(CLOSE[reason] || 4400, B.REASONS[reason] || ""); } catch { /* already closed */ }
+  try { ws.close(CLOSE[reason] || 4400, B.REASONS[reason] || reason || ""); } catch { /* already closed */ }
 }
 
 /* A sweep whose delete of some object failed rings again after this long, for those objects alone. */
@@ -181,8 +182,8 @@ function teamObject(deps) {
   }
 
   /* Whether the team object still holds a team. A throw is a blip: the caller keeps the id. */
-  async function asksHeld(ns, rt) {
-    const res = await ns.get(ns.idFromName(rt)).fetch(heldRequest());
+  async function asksHeld(ns, rt, leadKey) {
+    const res = await ns.get(ns.idFromName(rt)).fetch(heldRequest(leadKey));
     const raw = await res.arrayBuffer();
     let body = null;
     try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { body = null; }
@@ -202,15 +203,17 @@ function teamObject(deps) {
     try { body = bytes ? JSON.parse(bytes.toString("utf8")) : null; } catch { body = null; }
     const op = body && (body.op === "reserve" || body.op === "release") ? body.op : null;
     const rt = body && typeof body.rt === "string" && /^[0-9a-f]{32}$/.test(body.rt) ? body.rt : null;
+    const lead = body && typeof body.lead === "string" && B.isId(body.lead) ? body.lead : null;
     if (!op || !rt) return missing();
     if (op === "release") {
       const row = deps.store.get("lead");
       const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => x !== rt) : [];
-      deps.store.put("lead", { rts });
+      deps.store.put("lead", Object.assign({}, row, { rts }));
       return reply(200, { ok: true });
     }
     const row = deps.store.get("lead");
     let rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    const leadKey = lead || (row && row.leadKey) || null;
     if (rts.indexOf(rt) !== -1) return reply(200, { ok: true }); /* plant:lead-repeat */
     let full = rts.length >= TEAMS_PER_LEAD;
     if (full) {
@@ -219,17 +222,17 @@ function teamObject(deps) {
         const live = [];
         for (const id of rts) {
           let holds = true;
-          try { holds = await asksHeld(ns, id); } catch { holds = true; }
+          try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
           if (holds) live.push(id);
         }
         rts = live; /* plant:lead-reap */
-        deps.store.put("lead", { rts });
+        deps.store.put("lead", Object.assign({}, row, { rts, leadKey }));
         full = rts.length >= TEAMS_PER_LEAD;
       }
     }
     if (full) return refusedFor("team-count"); /* plant:team-count */
     rts.push(rt);
-    deps.store.put("lead", { rts });
+    deps.store.put("lead", Object.assign({}, row, { rts, leadKey }));
     return reply(200, { ok: true });
   }
 
@@ -245,8 +248,13 @@ function teamObject(deps) {
        Neither sweeps: a held question during a reserve must not call back into the lead object. */
     if (markedPath(request, LEAD_PATH, LEAD_MARK)) return leadAnswer(request);
     if (markedPath(request, HELD_PATH, HELD_MARK)) {
+      const bytes = await readCapped(request, JSON_MAX);
+      let body = null;
+      try { body = bytes ? JSON.parse(bytes.toString("utf8")) : null; } catch { body = null; }
       const row = deps.store.get("team");
-      return reply(200, { held: !!(row && typeof row.rt === "string") });
+      let held = !!(row && typeof row.rt === "string");
+      if (held && body && typeof body.lead === "string") held = !!(row.lead && row.lead.keyId === body.lead); /* plant:held-lead */
+      return reply(200, { held });
     }
     const url = new URL(request.url);
     if (prefix === null) return unavailable();
@@ -282,6 +290,15 @@ function teamObject(deps) {
       const renewed = c.renew(rt, body);
       if (renewed.ok) await arm(); /* plant:arm-renew */
       return answer(renewed, r => ({ ok: true, lapse: r.lapse }));
+    }
+    if (what === "lead") {
+      const moved = c.lead(rt, body);
+      if (moved.ok) {
+        closeWhere(a => a.key === moved.oldLead, "handed-over"); /* plant:lead-sockets-drop */
+        await arm();
+        return reply(200, { ok: true, lead: moved.lead, lapse: moved.lapse }, { "etiuda-old-lead": moved.oldLead });
+      }
+      return refused(moved);
     }
     if (what === "session") {
       const s = c.session(rt, body);

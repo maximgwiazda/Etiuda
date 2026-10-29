@@ -71,6 +71,8 @@ const devicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-devices\n" 
 const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
   + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
 const helloBytes = (rt, nonce, keyId) => Buffer.from("etiuda-relay-hello\n" + rt + "\n" + nonce + "\n" + keyId + "\n", "utf8");
+const LEAD_PREFIX = "etiuda-relay-lead\n";
+const leadBytes = (rt, toKeyId, toPub, t) => Buffer.from(LEAD_PREFIX + rt + "\n" + toKeyId + "\n" + toPub + "\n" + t, "utf8");
 
 /* blob.cjs verifies under the upload prefix alone, so the relay's own four signatures are verified here. */
 function verified(pubHex, bytes, sigHex) {
@@ -174,6 +176,18 @@ function judgeCreate(rt, body, now, roots, revoked) {
   if (why === "revoked") return no("revoked"); /* plant:create-revoked */
   if (why !== null) return no("bad-grant"); /* plant:create-grant */
   if (!verified(lead.pub, create2Bytes(rt, lead.keyId, b.t, b.grant), b.sig)) return no("bad-signature"); /* plant:create-sig */
+  return { ok: true };
+}
+
+/* A lead move's pre-judgement before the object wakes: its shape, its grant for the new lead, and the new lead's id shape.
+   The signature is verified under the old lead's key once the object wakes. */
+function judgeLead(rt, body, now, roots, revoked) {
+  const b = plain(body) ? body : {}, to = plain(b.to) ? b.to : {};
+  if (!is(HEX32, rt) || !isId(to.keyId) || !is(HEX64, to.pub) || !Number.isSafeInteger(b.t) || !is(HEX128, b.sig)) return no("bad-signature");
+  if (!leadKeyMatches(to.keyId, to.pub)) return no("bad-signature"); /* plant:lead-match */
+  const why = grantWhy(b.grant, to.pub, now, roots, revoked);
+  if (why === "revoked") return no("revoked"); /* plant:lead-revoked */
+  if (why !== null) return no("bad-grant"); /* plant:lead-grant */
   return { ok: true };
 }
 
@@ -396,6 +410,46 @@ function createCore(deps) {
       remember(b.grant);
     });
     return { ok: true, lapse: told() };
+  }
+
+  /* A key handover: the team's lead moves to a new key, signed by the current lead. The team keeps its epoch, its secret
+     and its lapse (until, paid and paidUntil), and the grant is applied by renew's rule. Every session held under the old
+     lead is dropped, so the old key cannot upload, invite or enrol desks. */
+  function lead(rt, body) {
+    const team = teamOf(rt);
+    if (!team || lapseState() === "gone") return no("not-enrolled"); /* plant:lead-team-live */
+    const b = bodyOf(body), to = plain(b.to) ? b.to : {};
+    if (!isId(to.keyId) || !is(HEX64, to.pub) || !Number.isSafeInteger(b.t) || !is(HEX128, b.sig)) return no("bad-signature");
+    if (!leadKeyMatches(to.keyId, to.pub)) return no("bad-signature");
+    if (!fresh(b.t)) return no("nonce-stale"); /* plant:lead-fresh */
+    /* The signature before anything that reads the team's rows, so a caller with the rt learns nothing of the handover
+       time or the desks (the test architect's C1 on e700ebb4). */
+    if (!verified(team.lead.pub, leadBytes(rt, to.keyId, to.pub, b.t), b.sig)) return no("bad-signature"); /* plant:lead-move-sig */
+    if (Number.isSafeInteger(team.handoverT) && b.t <= team.handoverT) return no("replay-rev"); /* plant:lead-handover-order */
+    if (to.pub === team.lead.pub) return no("bad-signature"); /* plant:lead-same-key */
+    if (store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
+    const why = grantWhy(b.grant, to.pub, clock(), roots, revokedNow());
+    if (why === "revoked") return no("revoked"); /* plant:lead-grant-revoked */
+    if (why !== null) return no("bad-grant"); /* plant:lead-grant-why */
+    const oldLead = team.lead;
+    const next = keptGrant(team, b.grant);
+    const needsMade = typeof team.made !== "string" || !team.made;
+    const made = needsMade ? random(8) : team.made;
+    store.atomic(() => {
+      const row = Object.assign({}, team, {
+        lead: { keyId: to.keyId, pub: to.pub },
+        handoverT: b.t,
+        until: next.until,
+        paid: next.paid,
+        made,
+      });
+      delete row.paidUntil;
+      if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
+      store.put("team", row);
+      for (const [k, s] of store.list("ses:")) if (s && s.key === oldLead.keyId) store.del(k); /* plant:lead-sessions-drop */
+      remember(b.grant);
+    });
+    return { ok: true, lead: to.keyId, oldLead: oldLead.keyId, lapse: told() };
   }
 
   /* Where the team stands, as a session's reply and since's header carry it. */
@@ -1262,13 +1316,14 @@ function createCore(deps) {
   /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
   const hasTeam = rt => teamOf(rt) !== null;
 
-  return { create, renew, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
+  return { create, renew, lead, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
     prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
 module.exports = {
   CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  LEAD_PREFIX, leadBytes, judgeLead,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };

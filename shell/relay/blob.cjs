@@ -141,7 +141,7 @@ function privateKeyOf(key) {
 
 /* The prefixes a document of this protocol is signed under. The team file's own scheme carries none. A prefix
    outside this list is refused, so nothing but these can be verified. */
-const SIGNED_PREFIXES = Object.freeze(["", "etiuda-relay-head\n", "etiuda-desk-branch\n"]);
+const SIGNED_PREFIXES = Object.freeze(["", "etiuda-relay-head\n", "etiuda-desk-branch\n", "etiuda-team-handover\n"]);
 
 /* A general Ed25519 verify of `bytes` under a public key as 64 hex, for a signature as 128 hex; false for anything else. */
 function verifySig(publicHex, bytes, signatureHex) {
@@ -639,14 +639,104 @@ function checkPath(path) {
   return { ok: true, path: segments.join("/"), segments: segments, folded: segments.map(fold) };
 }
 
-/* The one signer `trust` holds for that key id, or null. `trust` is { lead: { keyId, public }, desks: [{ deskId,
-   keyId, public }] }, from a team file the caller verified; a key id it holds twice is held by nobody. */
+const HANDOVER_PREFIX = "etiuda-team-handover\n";
+const HANDOVER_KIND = "etiuda-team-handover", HANDOVER_STEPS = 8;
+
+function canon(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
+  const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
+}
+
+function signedBytes(doc) {
+  const copy = {};
+  Object.keys(doc).forEach(k => {
+    if (k === "hash") return;
+    if (k !== "sig") { copy[k] = doc[k]; return; }
+    const s = doc.sig;
+    if (s && typeof s === "object") {
+      copy.sig = {};
+      if (s.alg !== undefined) copy.sig.alg = s.alg;
+      if (s.keyId !== undefined) copy.sig.keyId = s.keyId;
+    }
+  });
+  return Buffer.from(canon(copy), "utf8");
+}
+
+function handoverSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(HANDOVER_PREFIX, "utf8"), signedBytes(doc)]);
+}
+
+function handoverGenuine(s, teamId, from) {
+  const to = s && s.to, sig = s && s.sig;
+  try {
+    return !!s && typeof s === "object" && +s.format === 1 && s.kind === HANDOVER_KIND && s.team === teamId
+      && !!to && typeof to.keyId === "string" && HEX64.test(String(to.public)) && to.public !== from.public
+      && !!sig && sig.alg === "Ed25519" && HEX128.test(String(sig.value))
+      && crypto.verify(null, handoverSignedBytes(s), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(from.public, "hex")]),
+        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
+
+function genuineChain(doc, pin) {
+  if (!doc || !doc.lead || !pin || !pin.public) return null;
+  const list = Array.isArray(doc.handover) ? doc.handover : [];
+  if (pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) {
+    const chain = [{ keyId: pin.keyId, public: pin.public }];
+    let curr = pin;
+    for (let step = 0; step < HANDOVER_STEPS; step++) {
+      const s = list.find(x => x && x.to && x.to.keyId === curr.keyId && x.to.public === curr.public);
+      if (!s) break;
+      const from = s.from;
+      if (!from || !from.keyId || !from.public || !handoverGenuine(s, doc.id, from)) break;
+      if (chain.some(c => c.keyId === from.keyId)) break;
+      chain.unshift({ keyId: from.keyId, public: from.public });
+      curr = from;
+    }
+    return chain;
+  }
+  let at = pin;
+  const chain = [{ keyId: at.keyId, public: at.public }];
+  for (let step = 0; step < HANDOVER_STEPS; step++) {
+    const s = list.find(x => handoverGenuine(x, doc.id, at));
+    if (!s) return null;
+    at = { keyId: s.to.keyId, public: s.to.public };
+    chain.push(at);
+    if (at.keyId === doc.lead.keyId && at.public === doc.lead.public) return chain;
+  }
+  return null;
+}
+
+function handedTo(doc, pin) {
+  if (!doc || !doc.lead || !pin || !pin.public) return false;
+  const list = Array.isArray(doc.handover) ? doc.handover : [];
+  let at = pin;
+  for (let step = 0; step < HANDOVER_STEPS; step++) {
+    const s = list.find(x => handoverGenuine(x, doc.id, at));
+    if (!s) return false;
+    at = { keyId: s.to.keyId, public: s.to.public };
+    if (at.keyId === doc.lead.keyId && at.public === doc.lead.public) return true;
+  }
+  return false;
+}
+
+/* The one signer `trust` holds for that key id, or null. `trust` is { lead: { keyId, public }, leads: [{ keyId,
+   public }], desks: [{ deskId, keyId, public }] }, from a team file the caller verified; a key id it holds twice is held by nobody. */
 function writerOf(trust, keyId) {
   if (!isId(keyId) || !trust || typeof trust !== "object") return null;
   const hits = [];
-  const lead = trust.lead;
-  if (lead && typeof lead === "object" && lead.keyId === keyId && publicKeyOf(lead.public))
-    hits.push({ role: "lead", keyId: keyId, public: lead.public });
+  const leads = [];
+  if (trust.lead && typeof trust.lead === "object") leads.push(trust.lead);
+  if (Array.isArray(trust.leads)) {
+    for (const l of trust.leads) {
+      if (l && typeof l === "object" && !leads.some(x => x.keyId === l.keyId)) leads.push(l);
+    }
+  }
+  for (const l of leads) {
+    if (l.keyId === keyId && publicKeyOf(l.public))
+      hits.push({ role: "lead", keyId: keyId, public: l.public });
+  }
   for (const d of Array.isArray(trust.desks) ? trust.desks : []) {
     if (d && typeof d === "object" && d.keyId === keyId && isDeskId(d.deskId) && publicKeyOf(d.public))
       hits.push({ role: "desk", deskId: d.deskId, keyId: keyId, public: d.public });
@@ -899,4 +989,5 @@ module.exports = {
   REASONS, refusal, isId, isDeskId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySigned, seal, openBlob,
   inviteWrapKey, inviteWrapAad, sealInviteWrap, openInviteWrap, openWrap,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
+  HANDOVER_PREFIX, HANDOVER_KIND, HANDOVER_STEPS, canon, signedBytes, handoverSignedBytes, handoverGenuine, handedTo, genuineChain,
 };

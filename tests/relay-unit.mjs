@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 422;
+const EXPECTED = 437;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5037,6 +5037,282 @@ async function main() {
       return r.rang === true && r.gone === false && r.length === CAP;
     });
     check(sw.gone === true && dropLift.turned && dropLift.back, "935j lifting plant:lead-drop leaves a swept team on the lead's list, and the product file is never written: " + how(dropLift));
+  }
+
+  /* ---- 15b: key handover route POST /relay/v1/t/<rt>/lead (issue 931 (7)) ---- */
+  {
+    const T0L = 1800000000000;
+    const teamSrc = require(path.join(ROOT, "relay", "team.cjs"));
+    const CAP = teamSrc.TEAMS_PER_LEAD || 25;
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    async function editTeam(edit, fn) {
+      const digest = sha(fs.readFileSync(PRODUCT.team));
+      let turned = false, detail = "plant line absent";
+      try {
+        const edited = edit(fs.readFileSync(PRODUCT.team, "utf8"));
+        if (edited !== null) {
+          const dir = copyOf({ "relay/team.cjs": edited, "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+    }
+    function envAt(teamMod) {
+      const R = relayEnv(teamMod ? { team: teamMod } : {});
+      R.clock.now = T0L;
+      return R;
+    }
+    function leadList(R, lead) {
+      const st = R.stores.get("lead:" + lead.keyId);
+      if (!st) return null;
+      const row = st.get("lead");
+      return row && Array.isArray(row.rts) ? row.rts.slice() : null;
+    }
+    async function fill(R, lead, n, now, opts) {
+      const rts = [];
+      for (let i = 0; i < n; i++) {
+        const rt = hex(16);
+        const r = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now, opts) });
+        if (r.status !== 200) return { ok: false, rts, status: r.status, error: r.json && r.json.error };
+        rts.push(rt);
+      }
+      return { ok: true, rts };
+    }
+    function leadMoveBody(rt, oldLead, newLead, t, opts) {
+      const o = opts || {};
+      const to = o.to || { keyId: newLead.keyId, pub: newLead.pub };
+      const grant = o.grant !== undefined ? o.grant : K.grantFor(to.pub, t, o.grantOpts);
+      const time = o.t !== undefined ? o.t : t;
+      const signer = o.signer || oldLead;
+      const bytes = Buffer.from("etiuda-relay-lead\n" + rt + "\n" + to.keyId + "\n" + to.pub + "\n" + time, "utf8");
+      const sig = o.sig !== undefined ? o.sig : signHex(signer, bytes);
+      const body = { to, t: time, sig };
+      if (grant !== undefined) body.grant = grant;
+      return body;
+    }
+    const moveLead = (w, newLead, opts) => {
+      const now = (opts && opts.t) != null ? opts.t : w.R.clock.now;
+      return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: leadMoveBody(w.rt, w.lead, newLead, now, opts) });
+    };
+
+    // 933a: move signed by old lead is taken, new key hello opens lead session
+    const w = await world();
+    const newLead = keyPair(false);
+    const moved = await moveLead(w, newLead);
+    const newHello = await helloAs(w, newLead);
+    check(moved.status === 200 && moved.json && moved.json.ok === true && moved.json.lead === newLead.keyId
+      && moved.json.lapse && newHello.status === 200 && newHello.json && newHello.json.session,
+      "933a a move signed by the old lead is taken, and the new key's hello opens a lead session: "
+      + JSON.stringify({ status: moved.status, lead: moved.json && moved.json.lead, hello: newHello.status }));
+
+    // 933b: new lead's devices, invites and uploads are taken
+    const devDeskId = "k-" + hex(8);
+    const newDevs = [{ id: w.desk.keyId, pub: w.desk.pub, desk: devDeskId }];
+    const devRes = await devices(w, newDevs, { signer: newLead });
+    const invRes = await invites(w, [{ id: hex(16), hash: hex(32) }], [], { signer: newLead });
+    const newSes = newHello.json && newHello.json.session;
+    const blob1 = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: w.teamKey || (w.teamKey = crypto.randomBytes(32)),
+      writer: { keyId: newLead.keyId, privateKey: newLead.privateKey }, path: "lead-new.txt", body: "new lead blob", counter: 1, place: "root", kind: "file" });
+    const upRes = newSes ? await put(w, newSes, blob1, { extra: { pub: newLead.pub } }) : { status: 0 };
+    check(devRes.status === 200 && invRes.status === 200 && upRes.status === 200,
+      "933b the new lead's devices, invites and uploads are taken: devices " + devRes.status + ", invites " + invRes.status + ", upload " + upRes.status);
+
+    // 933c: old key's hello, devices, invites, uploads refused, old sessions deleted, sockets closed handed-over
+    const wOld = await world();
+    const oldSesRes = await helloAs(wOld, wOld.lead);
+    const oldSes = oldSesRes.json && oldSesRes.json.session;
+    const subOld = oldSes ? await socket(wOld, oldSes) : null;
+    const wsOld = subOld ? wsOf(wOld, subOld.socket) : null;
+    const newLead2 = keyPair(false);
+    const moved2 = await moveLead(wOld, newLead2);
+    const oldHello = await helloAs(wOld, wOld.lead);
+    const oldDevRes = await devices(wOld, wOld.devs, { signer: wOld.lead });
+    const oldInvRes = await invites(wOld, [{ id: hex(16), hash: hex(32) }], [], { signer: wOld.lead });
+    const oldBlob = B.seal({ relayTeamId: wOld.rt, epoch: 1, teamKey: wOld.teamKey || (wOld.teamKey = crypto.randomBytes(32)),
+      writer: { keyId: wOld.lead.keyId, privateKey: wOld.lead.privateKey }, path: "lead-old.txt", body: "old lead blob", counter: 1, place: "root", kind: "file" });
+    const oldUpRes = oldSes ? await put(wOld, oldSes, oldBlob, { extra: { pub: wOld.lead.pub } }) : { status: 0 };
+    const oldSesList = oldSes ? await since(wOld, oldSes) : { status: 0 };
+    const sockClosed = wsOld && wsOld.closed;
+    check(moved2.status === 200 && refused(oldHello, "not-enrolled") && refused(oldDevRes, "bad-signature")
+      && refused(oldInvRes, "bad-signature") && (refused(oldUpRes, "removed") || refused(oldUpRes, "no-hello"))
+      && refused(oldSesList, "no-hello") && !!sockClosed && sockClosed.code === 4403 && sockClosed.reason === "handed-over",
+      "933c the old key's hello, devices, invites, uploads are refused, sessions deleted and socket closed handed-over: hello "
+      + (oldHello.json && oldHello.json.error) + ", closed " + (sockClosed ? sockClosed.code + " " + sockClosed.reason : "open"));
+
+    // 933d: move signed by anyone else, replayed, stale, same key, enrolled/removed desk, bad grant or on a gone team is refused
+    const wBad = await world();
+    const stranger = keyPair(false);
+    const newKey = keyPair(false);
+    const badSig = await moveLead(wBad, newKey, { signer: stranger });
+    const staleT = await moveLead(wBad, newKey, { t: wBad.R.clock.now - 10 * MIN });
+    const sameKey = await moveLead(wBad, wBad.lead);
+    const enrolledDesk = await moveLead(wBad, wBad.desk);
+    // remove desk
+    wBad.rev++;
+    await devices(wBad, [{ id: wBad.other.keyId, pub: wBad.other.pub, desk: wBad.otherId }]);
+    const removedDesk = await moveLead(wBad, wBad.desk);
+    const noGrant = await moveLead(wBad, newKey, { grant: null });
+    const otherGrant = await moveLead(wBad, newKey, { grant: K.grantFor(stranger.pub, wBad.R.clock.now) });
+    // gone team
+    const wGone = await world();
+    wGone.R.clock.now = 120 * DAY;
+    await wGone.R.ring(wGone.rt);
+    const onGone = await moveLead(wGone, newKey);
+    // valid move then replayed
+    // 933o: an unsigned move learns nothing of the team's rows (the test architect's C1 on e700ebb4): one naming an enrolled
+    // desk, and one replaying an old t after a move, are both bad-signature, not not-enrolled or replay-rev.
+    const unsignedDesk = await moveLead(wBad, wBad.other, { signer: stranger });
+    const movedGood = await moveLead(wBad, newKey);
+    /* A replay is the current lead's own signature at a t no later than the last move: since C1 the old lead's is bad-signature. */
+    const replayed = await moveLead(wBad, stranger, { signer: newKey, t: wBad.R.clock.now });
+    const unsignedReplay = await moveLead(wBad, keyPair(false), { signer: stranger, t: wBad.R.clock.now - 1 });
+    check(refused(unsignedDesk, "bad-signature") && refused(unsignedReplay, "bad-signature"),
+      "933o an unsigned move naming an enrolled desk, and an unsigned replay at an old t, are both bad-signature: desk "
+      + unsignedDesk.status + " " + JSON.stringify(unsignedDesk.json || null) + ", replay " + unsignedReplay.status + " "
+      + JSON.stringify(unsignedReplay.json || null));
+    check(refused(badSig, "bad-signature") && refused(staleT, "nonce-stale") && refused(sameKey, "bad-signature")
+      && refused(enrolledDesk, "not-enrolled") && refused(removedDesk, "not-enrolled") && refused(noGrant, "bad-grant")
+      && refused(otherGrant, "bad-grant") && refused(onGone, "not-enrolled") && movedGood.status === 200
+      && (refused(replayed, "nonce-stale") || refused(replayed, "replay-rev") || refused(replayed, "replay-counter")),
+      "933d a move signed by anyone else, replayed, stale, same key, enrolled/removed desk, bad grant or on a gone team is refused: "
+      + JSON.stringify({ badSig: badSig.status, staleT: staleT.status, sameKey: sameKey.status, enrolledDesk: enrolledDesk.status,
+          removedDesk: removedDesk.status, noGrant: noGrant.status, otherGrant: otherGrant.status, onGone: onGone.status, replayed: replayed.status }));
+
+    // 933e: team's lapse dates are the same after the move
+    const wLapse = await world();
+    const stBefore = wLapse.R.stores.get(wLapse.rt);
+    const teamBefore = stBefore.get("team");
+    const lapseBefore = C.lapseOf(teamBefore, wLapse.R.clock.now);
+    const newL = keyPair(false);
+    const movedL = await moveLead(wLapse, newL);
+    const teamAfter = stBefore.get("team");
+    const lapseAfter = C.lapseOf(teamAfter, wLapse.R.clock.now);
+    check(movedL.status === 200 && lapseBefore.state === lapseAfter.state && lapseBefore.until === lapseAfter.until
+      && lapseBefore.readOnly === lapseAfter.readOnly && lapseBefore.swept === lapseAfter.swept,
+      "933e the team's lapse dates are the same after the move: before " + JSON.stringify(lapseBefore) + ", after " + JSON.stringify(lapseAfter));
+
+    // 933f: in worker, a refused move counts zero object requests
+    const RCount = relayEnv();
+    const rtCount = hex(16);
+    const leadCount = keyPair(false);
+    await call(RCount, "POST", "/relay/v1/teams", { json: createBody(rtCount, leadCount, RCount.clock.now) });
+    const newLeadC = keyPair(false);
+    const badMoveBody = leadMoveBody(rtCount, leadCount, newLeadC, RCount.clock.now - 10 * MIN);
+    const countedBad = await countedCall(W, RCount, "POST", "/relay/v1/t/" + rtCount + "/lead", { json: badMoveBody });
+    check(refused(countedBad.r, "nonce-stale") && countedBad.gets === 0,
+      "933f in worker, a refused move counts zero object requests: status " + countedBad.r.status + ", gets " + countedBad.gets);
+
+    // 933g: new key at its bound is refused team-count, and old key's place is freed only on success
+    const RBound = relayEnv();
+    const oldLeadB = keyPair(false);
+    const rtB = hex(16);
+    await call(RBound, "POST", "/relay/v1/teams", { json: createBody(rtB, oldLeadB, RBound.clock.now) });
+    const fullLead = keyPair(false);
+    const fillRes = await fill(RBound, fullLead, CAP, RBound.clock.now);
+    const moveFull = await call(RBound, "POST", "/relay/v1/t/" + rtB + "/lead", { json: leadMoveBody(rtB, oldLeadB, fullLead, RBound.clock.now) });
+    const oldListBefore = leadList(RBound, oldLeadB);
+    const fullListBefore = leadList(RBound, fullLead);
+    const availLead = keyPair(false);
+    await fill(RBound, availLead, CAP - 1, RBound.clock.now);
+    const moveAvail = await call(RBound, "POST", "/relay/v1/t/" + rtB + "/lead", { json: leadMoveBody(rtB, oldLeadB, availLead, RBound.clock.now) });
+    const oldListAfter = leadList(RBound, oldLeadB);
+    const availListAfter = leadList(RBound, availLead);
+    check(fillRes.ok && refused(moveFull, "team-count") && oldListBefore.indexOf(rtB) >= 0 && fullListBefore.indexOf(rtB) < 0
+      && moveAvail.status === 200 && oldListAfter.indexOf(rtB) < 0 && availListAfter.indexOf(rtB) >= 0,
+      "933g the new key at its bound is refused team-count, and the old key's place is freed only on success: full "
+      + moveFull.status + ", avail " + moveAvail.status);
+
+    // 933h: K1 leg: after the move, the relay refuses an upload or head signed by the old key
+    const wK1 = await world();
+    const oldKey = wK1.lead;
+    const newK1 = keyPair(false);
+    const mvK1 = await moveLead(wK1, newK1);
+    const oldH = await helloAs(wK1, oldKey);
+    const blobK1 = B.seal({ relayTeamId: wK1.rt, epoch: 1, teamKey: wK1.teamKey || (wK1.teamKey = crypto.randomBytes(32)),
+      writer: { keyId: oldKey.keyId, privateKey: oldKey.privateKey }, path: "lead-k1.txt", body: "old key blob", counter: 1, place: "root", kind: "file" });
+    const fakeSes = hex(32);
+    const upK1 = await put(wK1, fakeSes, blobK1, { extra: { pub: oldKey.pub } });
+    check(mvK1.status === 200 && refused(oldH, "not-enrolled") && (refused(upK1, "no-hello") || refused(upK1, "removed")),
+      "933h after the move, the relay refuses an upload or head signed by the old key: hello "
+      + (oldH.json && oldH.json.error) + ", upload " + (upK1.json && upK1.json.error));
+
+    // 933i: K3 leg: a release that fails after a move frees its place at the old lead's next bound check
+    const RK3 = relayEnv();
+    const oldK3 = keyPair(false);
+    const fillK3 = await fill(RK3, oldK3, CAP, RK3.clock.now);
+    const handedRt = fillK3.rts[0];
+    const newK3 = keyPair(false);
+    const mvK3 = await call(RK3, "POST", "/relay/v1/t/" + handedRt + "/lead", { json: leadMoveBody(handedRt, oldK3, newK3, RK3.clock.now) });
+    const oldRow = RK3.stores.get("lead:" + oldK3.keyId).get("lead");
+    if (oldRow && oldRow.rts.indexOf(handedRt) < 0) {
+      oldRow.rts.push(handedRt);
+      RK3.stores.get("lead:" + oldK3.keyId).put("lead", oldRow);
+    }
+    const newRtK3 = hex(16);
+    const nextCreate = await call(RK3, "POST", "/relay/v1/teams", { json: createBody(newRtK3, oldK3, RK3.clock.now) });
+    const oldListK3After = leadList(RK3, oldK3);
+    check(mvK3.status === 200 && nextCreate.status === 200 && oldListK3After.indexOf(handedRt) < 0 && oldListK3After.indexOf(newRtK3) >= 0,
+      "933i a release that fails after a move frees its place at the old lead's next bound check: move "
+      + mvK3.status + ", create " + nextCreate.status + ", dead team reaped " + (oldListK3After.indexOf(handedRt) < 0));
+
+    // 933j: plant:lead-move-sig
+    const sigLift = await liftCore("plant:lead-move-sig", async () => {
+      const wSig = await world();
+      const nL = keyPair(false);
+      const bad = await moveLead(wSig, nL, { signer: keyPair(false) });
+      return bad.status === 200;
+    });
+    check(sigLift.turned && sigLift.back, "933j lifting plant:lead-move-sig takes a move signed by another key: " + how(sigLift));
+
+    // 933k: plant:lead-desk-refusal
+    const deskLift = await liftCore("plant:lead-desk-refusal", async () => {
+      const wDsk = await world();
+      const deskMove = await moveLead(wDsk, wDsk.desk);
+      return deskMove.status === 200;
+    });
+    check(deskLift.turned && deskLift.back, "933k lifting plant:lead-desk-refusal takes an enrolled desk as the new lead: " + how(deskLift));
+
+    // 933l: plant:worker-lead-bound
+    const boundLift = await editWorker(lineLifted("plant:worker-lead-bound"), async mod => {
+      const RBnd = relayEnv();
+      const lead1 = keyPair(false);
+      const rt1 = hex(16);
+      await call(RBnd, "POST", "/relay/v1/teams", { json: createBody(rt1, lead1, RBnd.clock.now) });
+      const fullL = keyPair(false);
+      await fill(RBnd, fullL, CAP, RBnd.clock.now);
+      const mv = await countedCall(mod.routeWith(K.ROOTS, env => env.NOW()), RBnd, "POST", "/relay/v1/t/" + rt1 + "/lead",
+        { json: leadMoveBody(rt1, lead1, fullL, RBnd.clock.now) });
+      return mv.gets > 1 || mv.r.status === 200;
+    });
+    check(boundLift.turned && boundLift.back, "933l lifting plant:worker-lead-bound wakes the team object for a full lead: " + how(boundLift));
+
+    // 933m: plant:lead-sessions-drop
+    const sesDropLift = await liftCore("plant:lead-sessions-drop", async () => {
+      const wSes = await world();
+      const sRes = await helloAs(wSes, wSes.lead);
+      const sToken = sRes.json && sRes.json.session;
+      const nL = keyPair(false);
+      await moveLead(wSes, nL);
+      const still = await since(wSes, sToken);
+      return still.status === 200;
+    });
+    check(sesDropLift.turned && sesDropLift.back, "933m lifting plant:lead-sessions-drop leaves old lead sessions active: " + how(sesDropLift));
+
+    // 933n: plant:held-lead
+    const heldLift = await editTeam(lineLifted("plant:held-lead"), async T => {
+      const RHld = envAt(T);
+      const oldL = keyPair(false);
+      const f = await fill(RHld, oldL, CAP, RHld.clock.now);
+      const hRt = f.rts[0];
+      const nL = keyPair(false);
+      await call(RHld, "POST", "/relay/v1/t/" + hRt + "/lead", { json: leadMoveBody(hRt, oldL, nL, RHld.clock.now) });
+      const row = RHld.stores.get("lead:" + oldL.keyId).get("lead");
+      if (row && row.rts.indexOf(hRt) < 0) { row.rts.push(hRt); RHld.stores.get("lead:" + oldL.keyId).put("lead", row); }
+      const nextC = await call(RHld, "POST", "/relay/v1/teams", { json: createBody(hex(16), oldL, RHld.clock.now) });
+      return refused(nextC, "team-count");
+    });
+    check(heldLift.turned && heldLift.back, "933n lifting plant:held-lead prevents dead team reaping on lead bound: " + how(heldLift));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
