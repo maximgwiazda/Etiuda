@@ -422,10 +422,12 @@ function createCore(deps) {
     if (!isId(to.keyId) || !is(HEX64, to.pub) || !Number.isSafeInteger(b.t) || !is(HEX128, b.sig)) return no("bad-signature");
     if (!leadKeyMatches(to.keyId, to.pub)) return no("bad-signature");
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:lead-fresh */
+    /* The signature before anything that reads the team's rows, so a caller with the rt learns nothing of the handover
+       time or the desks (the test architect's C1 on e700ebb4). */
+    if (!verified(team.lead.pub, leadBytes(rt, to.keyId, to.pub, b.t), b.sig)) return no("bad-signature"); /* plant:lead-move-sig */
     if (Number.isSafeInteger(team.handoverT) && b.t <= team.handoverT) return no("replay-rev"); /* plant:lead-handover-order */
     if (to.pub === team.lead.pub) return no("bad-signature"); /* plant:lead-same-key */
     if (store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
-    if (!verified(team.lead.pub, leadBytes(rt, to.keyId, to.pub, b.t), b.sig)) return no("bad-signature"); /* plant:lead-move-sig */
     const why = grantWhy(b.grant, to.pub, clock(), roots, revokedNow());
     if (why === "revoked") return no("revoked"); /* plant:lead-grant-revoked */
     if (why !== null) return no("bad-grant"); /* plant:lead-grant-why */

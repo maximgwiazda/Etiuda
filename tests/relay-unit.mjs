@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 436;
+const EXPECTED = 437;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5160,8 +5160,17 @@ async function main() {
     await wGone.R.ring(wGone.rt);
     const onGone = await moveLead(wGone, newKey);
     // valid move then replayed
+    // 933o: an unsigned move learns nothing of the team's rows (the test architect's C1 on e700ebb4): one naming an enrolled
+    // desk, and one replaying an old t after a move, are both bad-signature, not not-enrolled or replay-rev.
+    const unsignedDesk = await moveLead(wBad, wBad.other, { signer: stranger });
     const movedGood = await moveLead(wBad, newKey);
-    const replayed = await moveLead(wBad, stranger, { t: wBad.R.clock.now });
+    /* A replay is the current lead's own signature at a t no later than the last move: since C1 the old lead's is bad-signature. */
+    const replayed = await moveLead(wBad, stranger, { signer: newKey, t: wBad.R.clock.now });
+    const unsignedReplay = await moveLead(wBad, keyPair(false), { signer: stranger, t: wBad.R.clock.now - 1 });
+    check(refused(unsignedDesk, "bad-signature") && refused(unsignedReplay, "bad-signature"),
+      "933o an unsigned move naming an enrolled desk, and an unsigned replay at an old t, are both bad-signature: desk "
+      + unsignedDesk.status + " " + JSON.stringify(unsignedDesk.json || null) + ", replay " + unsignedReplay.status + " "
+      + JSON.stringify(unsignedReplay.json || null));
     check(refused(badSig, "bad-signature") && refused(staleT, "nonce-stale") && refused(sameKey, "bad-signature")
       && refused(enrolledDesk, "not-enrolled") && refused(removedDesk, "not-enrolled") && refused(noGrant, "bad-grant")
       && refused(otherGrant, "bad-grant") && refused(onGone, "not-enrolled") && movedGood.status === 200
