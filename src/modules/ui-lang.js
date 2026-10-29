@@ -1067,6 +1067,7 @@ UI_STRINGS.pl={
   "Waiting for the lead to open the request":"Prośba czeka, aż lider ją otworzy",
   "The code to read to them appears here as soon as they do.":"Gdy to zrobi, pojawi się tu kod do podania.",
   "Joining {LEAD}'s team":"Dołączanie do zespołu osoby {LEAD}",
+  "The team's lead cannot let desks in for now.":"Lider zespołu nie może teraz wpuszczać stanowisk.", /* draft words: copywriter */
   "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.":"Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
   "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.":"Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.",
   "This invitation has already been used. Ask your lead for a new one.":"To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",

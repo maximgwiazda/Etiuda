@@ -141,6 +141,7 @@ function joinShown(j){
   if(j.keeps===false) row.keeps=false;
   if(j.left===true) row.left=true;
   if(j.doubted===true) row.doubted=true;
+  if(j.paused===true) row.paused=true;
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -451,7 +452,8 @@ function joinParts(){
       line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
       body:meta, acts:[]}; /* plant:g2-card */
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
+      line:j.paused?t("The team's lead cannot let desks in for now.") /* draft words: copywriter */
+        :j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
@@ -479,7 +481,8 @@ function joinParts(){
       line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
   }
   if(j) return {title:t("Waiting for the lead to open the request"),
-    line:t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
+    line:j.paused?t("The team's lead cannot let desks in for now.") /* draft words: copywriter */
+      :t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};
   const ask='<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure();
   const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]];
