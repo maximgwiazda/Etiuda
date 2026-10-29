@@ -1319,8 +1319,8 @@ try {
     + " parts " + [!!quietInvite, !!enInvite, !!armedDigits, !!namedLead, !!requestDoor, !!plInvite].join("/"));
 
   /* Board 945 item 9, Part A: etiuda-team-pause.json tells a waiting desk the lead cannot admit desks for now */
-  const LAPSE_EN = "The team's lead cannot let desks in for now.";
-  const LAPSE_PL = "Lider zespołu nie może teraz wpuszczać stanowisk.";
+  const LAPSE_EN = "The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.";
+  const LAPSE_PL = "Lider zespołu nie może na razie wpuszczać stanowisk, bo jego licencja jest wstrzymana. Tutaj nic nie trzeba robić: gdy licencja znów będzie aktywna, stanowisko zostanie wpuszczone samo.";
   const pausePath = path.join(waitYard, "etiuda-team-pause.json");
   const signPause = (doc, keyPair) => {
     const o = Object.assign({}, doc, { sig: { alg: "Ed25519", keyId: keyPair.keyId } });
@@ -1342,7 +1342,7 @@ try {
   let pPl = TJ.teamJoinEmptyHtml();
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   const pausedOk = !!(pState && pState.join && pState.join.paused === true)
-    && (pEn.indexOf(LAPSE_EN) >= 0 || pEn.indexOf("The team&#39;s lead cannot let desks in for now.") >= 0)
+    && (pEn.indexOf(LAPSE_EN) >= 0 || pEn.indexOf("The team&#39;s lead cannot let desks in for now, as the lead&#39;s licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") >= 0)
     && pEn.indexOf("Waiting for the team") < 0
     && pPl.indexOf(LAPSE_PL) >= 0 && pPl.indexOf("Stanowisko czeka, aż lider") < 0;
   check(pausedOk,

@@ -452,7 +452,7 @@ function joinParts(){
       line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
       body:meta, acts:[]}; /* plant:g2-card */
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:j.paused?t("The team's lead cannot let desks in for now.") /* draft words: copywriter */
+      line:j.paused?t("The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
         :j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
@@ -481,7 +481,7 @@ function joinParts(){
       line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
   }
   if(j) return {title:t("Waiting for the lead to open the request"),
-    line:j.paused?t("The team's lead cannot let desks in for now.") /* draft words: copywriter */
+    line:j.paused?t("The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
       :t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};
   const ask='<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure();
