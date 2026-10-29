@@ -393,9 +393,30 @@ function registerEtiudaLink() {
 const SPAN_NAME = "stats-span.json";
 // The engine's V2_TEAM_FILE. Watched with the catalogs, since an admission is what opens a sealed one.
 const TEAM_NAME = "etiuda-team.json";
+/* A sync client's copy of one file: the same extension, and the stem is the canonical stem plus
+   one conflict tail. The tails here are ` (1)`, ` (conflicted copy ...)`, OneDrive's `-COMPUTER`
+   and Syncthing's `.sync-conflict-`. A hyphen tail matches a computer name (3+ upper chars),
+   not an ordinary name like guide-v2 or guide-EN. Nothing here renames or deletes the copy. */
+function conflictSiblingName(canonical, name) {
+  const c = path.basename(String(canonical || ""));
+  const n = path.basename(String(name || ""));
+  if (!c || !n) return false;
+  const cExt = path.extname(c), nExt = path.extname(n);
+  if (!cExt || cExt.toLowerCase() !== nExt.toLowerCase()) return false;
+  const cStem = c.slice(0, -cExt.length), nStem = n.slice(0, -nExt.length);
+  if (!cStem || nStem.length <= cStem.length) return false;
+  if (nStem.slice(0, cStem.length).toLowerCase() !== cStem.toLowerCase()) return false;
+  const tail = nStem.slice(cStem.length);
+  if (/^( \(\d+\))+$/.test(tail)) return true;
+  if (/^ \(.*conflicted copy.*\)$/i.test(tail)) return true;
+  if (/^-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(tail)) return true;
+  if (/^\.sync-conflict-/.test(tail)) return true;
+  return false;
+}
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
-  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME;
+  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
+    || conflictSiblingName(TEAM_NAME, n);
 }
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the
@@ -516,17 +537,82 @@ function pinnedLeadPubs() {
   pinnedLeadKeys().forEach(k => { if (out.indexOf(k.public) < 0) out.push(k.public); });
   return out;
 }
-/* The team file in this folder where it is whole under the lead it names, else null. */
+/* Conflict copies of the team file in this folder, by name only. A backup that is not one of those
+   tails is not a candidate, and nothing here is renamed or deleted. */
+function teamSiblingFiles(root) {
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return []; }
+  return names.filter(n => conflictSiblingName(TEAM_NAME, n)).sort();
+}
+function teamChoiceStamp(root) {
+  return teamSiblingFiles(root).map(n => n + "=" + fileStamp(path.join(root, n))).join(",");
+}
+function teamParse(text) {
+  try { return JSON.parse(String(text).replace(/^\uFEFF/, "").trim()); } catch { return null; }
+}
+function teamRank(doc) {
+  if (!doc || typeof doc !== "object") return null;
+  const rev = teamRevOf(doc);
+  if (!Number.isInteger(doc.epoch) || rev === null) return null;
+  return { epoch: doc.epoch, rev: rev };
+}
+/* Strictly newer: a higher epoch, or the same epoch and a higher rev. Equal is not newer. */
+function teamAhead(doc, cur) {
+  if (!cur) return true;
+  const a = teamRank(doc), b = teamRank(cur);
+  if (!a) return false;
+  if (!b) return true;
+  if (a.epoch !== b.epoch) return a.epoch > b.epoch;
+  return a.rev > b.rev;
+}
+/* The sibling has to be the same team and the same lead where the canonical file parses as one. */
+function sameTeamLead(doc, cur) {
+  if (!cur || !doc) return true;
+  if (cur.id && doc.id !== cur.id) return false;
+  const cl = cur.lead, dl = doc.lead;
+  if (cl && typeof cl === "object" && cl.keyId && cl.public) {
+    if (!dl || dl.keyId !== cl.keyId || dl.public !== cl.public) return false;
+  }
+  return true;
+}
+/* The team file this folder is read as. The canonical file wins unless a conflict sibling is a
+   genuine team file at a higher epoch or rev, under the same team and lead where the canonical
+   file parses. A sibling that is not genuine, or lower, stays on disk and is not the one read.
+   `missing` is the canonical file being absent and no sibling taken, which is still "no team file". */
+function teamTextChosen(root) {
+  const file = path.join(root, TEAM_NAME);
+  let text = null, missing = false, unreadable = false;
+  try {
+    if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") missing = true;
+    else unreadable = true;
+  }
+  const canonDoc = text != null ? teamParse(text) : null;
+  let best = { file: file, text: text, doc: canonDoc };
+  for (const name of teamSiblingFiles(root)) {
+    const sib = path.join(root, name);
+    let sibText = null;
+    try {
+      if (fs.statSync(sib).size > TEAM_MAX) continue;
+      sibText = fs.readFileSync(sib, "utf8");
+    } catch { continue; }
+    const doc = teamParse(sibText);
+    if (!doc || !teamWhole(doc)) continue;
+    if (canonDoc && !sameTeamLead(doc, canonDoc)) continue;
+    if (teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:f3-team-sibling */
+  }
+  if (best.file !== file) missing = false;
+  return { file: best.file, text: best.text, doc: best.doc, missing: missing && best.file === file, unreadable: unreadable && best.file === file };
+}
+/* The team file in this folder where it is whole under the lead it names, else null.
+   A conflict sibling that is genuine and newer is that file. The one on disk is left where it is. */
 function folderTeamDoc() {
   heedTeam();
   const root = catalogFolder();
   if (!folderAnswers(root)) return null;
-  try {
-    const file = path.join(root, TEAM_NAME);
-    if (fs.statSync(file).size > TEAM_MAX) return null;
-    const doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
-    return teamWhole(doc) ? doc : null;
-  } catch { return null; }
+  const doc = teamTextChosen(root).doc;
+  return doc && teamWhole(doc) ? doc : null;
 }
 /* null: no pin, so the ring decides. []: a whole team file whose lead this desk has not pinned.
    Otherwise the publics that may sign a catalog chosen here. */
@@ -1389,12 +1475,7 @@ function pinnedLead() {
   heedTeam();
   const root = catalogFolder();
   if (!folderAnswers(root)) return null;
-  let doc = null;
-  try {
-    const file = path.join(root, TEAM_NAME);
-    if (fs.statSync(file).size > TEAM_MAX) return null;
-    doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
-  } catch { return null; }
+  const doc = teamTextChosen(root).doc;
   const pin = doc && teamPins[doc.id];
   if (!pin || !doc.lead || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return null;
   return { team: String(doc.id), keyId: pin.keyId, public: pin.public };
@@ -2085,12 +2166,8 @@ function ownFilesWithId(dir, id) {
 /* The team file at `root` where it is whole under the lead this desk pinned, and under the lead policy names where it
    names one, whatever pin was kept, and lists the catalog, else null. */
 function teamCovering(root, catalogId) {
-  let doc = null;
-  try {
-    const file = path.join(root, TEAM_NAME);
-    if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").trim());
-  } catch { return null; }
-  if (!teamWhole(doc)) return null;
+  const doc = teamTextChosen(root).doc;
+  if (!doc || !teamWhole(doc)) return null;
   const policy = sayJoinPolicy().lead;
   if (policy && doc.lead.public !== policy) return null;
   const pin = teamPins[doc.id];
@@ -2299,13 +2376,8 @@ function teamUse() {
   if (!me) return { member: false };
   const root = catalogFolder();
   if (!folderAnswers(root)) return { away: true };
-  let doc = null;
-  try {
-    const file = path.join(root, TEAM_NAME);
-    if (fs.statSync(file).size > TEAM_MAX) return { member: false };
-    doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
-  } catch { return { member: false }; }
-  if (!teamWhole(doc)) return { member: false };
+  const doc = teamTextChosen(root).doc;
+  if (!doc || !teamWhole(doc)) return { member: false };
   const policy = sayJoinPolicy().lead;
   if (policy && doc.lead.public !== policy) return { member: false };
   const pin = teamPins[doc.id];
@@ -3066,22 +3138,23 @@ function heedTeam() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
-  const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
+  const stamp = [file, fileStamp(file), teamChoiceStamp(root), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
     teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : "", teamJoin ? teamJoin.commit : ""].join("|");
   if (stamp === teamStamp) return;
   /* The stamp is a verdict on the text, so a read that fails or a key that is not kept leaves it unset and the next
-     call reads again. */
-  let text;
-  try { text = fs.statSync(file).size <= TEAM_MAX ? fs.readFileSync(file, "utf8") : null; }
-  catch (e) { if (e.code === "ENOENT") teamStamp = stamp; return; }
+     call reads again. A conflict sibling is part of the stamp, so a newer genuine copy is noticed. */
+  const chosen = teamTextChosen(root);
+  if (chosen.missing) { teamStamp = stamp; return; }
   teamStamp = stamp;
-  let doc = null;
-  try { if (text !== null) doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return; }
+  /* A canonical file that is not JSON, and no sibling taken in its place, is the same quiet return as before. */
+  if (chosen.text != null && chosen.doc == null && chosen.file === file) return;
+  const doc = chosen.doc;
+  const used = chosen.file;
   // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
   const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin, epochSeen: teamEpochSeen };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
   const policyLead = sayJoinPolicy().lead;
-  let seen = { file: file, member: member, ring: undefined };
+  let seen = { file: used, member: member, ring: undefined };
   let r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   if (r.needKey) {
     const sk = openPrivate(deskBranch.box.priv);
@@ -3099,7 +3172,7 @@ function heedTeam() {
      for its team and lead key, nor a lower rev at that epoch. */
   const rev = teamRevOf(doc), channel = teamChannelOf(doc);
   if (rev === null || channel === null) {
-    teamSay(file + " names a rev or a channel this desk does not read, so nothing in it is used");
+    teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
   }
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
@@ -3107,7 +3180,7 @@ function heedTeam() {
     const why = r.epoch < floor.epoch
       ? "key number " + r.epoch + ", below " + floor.epoch
       : "rev " + rev + ", below " + floor.rev + " at key number " + r.epoch;
-    teamSay(file + " is an older file of team " + r.team + " than one this desk has heeded (" + why + "), so nothing in it is used");
+    teamSay(used + " is an older file of team " + r.team + " than one this desk has heeded (" + why + "), so nothing in it is used");
     return;
   }
   /* What pinned the lead, for board 907: an invitation, machine policy or an answered request, each naming this very key;
@@ -4133,28 +4206,19 @@ function inviteSettled(team, lead) {
    lead and for the invited team. "unreadable" where its team file cannot be read, is larger than a team file, or is not
    JSON; "foreign" for any other. */
 function inviteFolderTeam(parsed) {
-  const file = path.join(parsed.folder, TEAM_NAME);
-  let text = null;
-  try { if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8"); }
-  catch (e) { return e.code === "ENOENT" ? "" : "unreadable"; }
-  if (text === null) return "unreadable";
-  let doc = null;
-  try { doc = JSON.parse(text.replace(/^\ufeff/, "")); } catch { return "unreadable"; }
-  return teamWhole(doc) && doc.id === parsed.team && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
+  const chosen = teamTextChosen(parsed.folder);
+  if (chosen.missing) return "";
+  const doc = chosen.doc;
+  if (!doc) return "unreadable";
+  return teamWhole(doc) && doc.id === parsed.team && doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
     ? "" : "foreign";
 }
 /* True only where `folder` holds this team's own team file, whole under the invited lead, under a lead handed over to
    from it, or vouched for by a ring in that folder. False for any other. */
 function inviteFolderBelongs(folder, parsed) {
   if (!folder || !parsed || !parsed.team || !parsed.lead) return false;
-  const file = path.join(folder, TEAM_NAME);
-  let text = null;
-  try { if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8"); }
-  catch { return false; }
-  if (text === null) return false;
-  let doc = null;
-  try { doc = JSON.parse(text.replace(/^\ufeff/, "")); } catch { return false; }
-  if (!teamWhole(doc) || doc.id !== parsed.team) return false;
+  const doc = teamTextChosen(folder).doc;
+  if (!doc || !teamWhole(doc) || doc.id !== parsed.team) return false;
   if (doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public) return true;
   if (handedTo(doc, parsed.lead)) return true;
   const ring = readRingFile(folder);
@@ -5088,12 +5152,8 @@ function sharedHolds(held) {
 /* The folder's team file, whole under the lead this desk pinned, says its catalogs stay sealed. */
 function shareMustSeal(root) {
   heedTeam();
-  let doc = null;
-  try {
-    const file = path.join(root, TEAM_NAME);
-    if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
-  } catch { return false; }
-  if (!teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
+  const doc = teamTextChosen(root).doc;
+  if (!doc || !teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
   const policy = sayJoinPolicy().lead;
   if (policy && doc.lead.public !== policy) return false;
   const pinned = teamPins[doc.id];
@@ -5838,7 +5898,8 @@ function ecFacts(file, deskFolder) {
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
               macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
               rev: +data.rev || 0, grew: ecGrew(data), sha: signedSha(data), deskName: d && typeof d.name === "string" ? d.name : "",
-              deskOk: deskFileGenuine(data, deskFolder) };
+              deskOk: deskFileGenuine(data, deskFolder),
+              genuine: !!(pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)) };
     }
   } catch (e) {
     /* A key that has not arrived is not a verdict: the row already shown stays, and the next read tries the file again. */
@@ -5852,7 +5913,7 @@ function deskRowOf(file, folder) {
   if (!x || !x.deskOk) return null;
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
            awaiting: x.awaiting, sample: false, id: x.id, builtIn: false, rev: x.rev, grew: x.grew, sha: x.sha,
-           desk: { id: folder, name: x.deskName } };
+           genuine: true, desk: { id: folder, name: x.deskName } };
 }
 function deskRows() {
   const root = catalogFolder();
@@ -5868,17 +5929,82 @@ function ecGrew(data) {
   const g = data && data.grew;
   return g && typeof g === "object" && typeof g.id === "string" ? { id: g.id, rev: +g.rev || 0, sha: String(g.sha || "") } : null;
 }
+/* One row per catalog id. A genuine edition beats one that does not verify. Among those that
+   agree, the higher rev wins, and an equal rev keeps the name that is not a conflict copy of
+   another, else the earlier name. An id that did not parse keeps its own row. `genuine` is how
+   the choice is made and is not a field of the row the page is sent. */
+function isConflictName(name) {
+  const n = path.basename(String(name || ""));
+  const ext = path.extname(n);
+  const stem = ext ? n.slice(0, -ext.length) : n;
+  if (/ \(\d+\)$/.test(stem)) return true;
+  if (/ \(.*conflicted copy.*\)$/i.test(stem)) return true;
+  if (/\.sync-conflict-/.test(n)) return true;
+  if (/-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(stem)) return true;
+  return false;
+}
+function conflictNamedAmong(name, names) {
+  for (let i = 0; i < names.length; i++) {
+    if (names[i] !== name && conflictSiblingName(names[i], name)) return true;
+  }
+  return false;
+}
+function betterEdition(a, b, names) {
+  const ag = !!a.genuine, bg = !!b.genuine;
+  if (ag !== bg) return ag;
+  const ar = +a.rev || 0, br = +b.rev || 0;
+  if (ar !== br) return ar > br;
+  const ac = conflictNamedAmong(a.name, names) || isConflictName(a.name);
+  const bc = conflictNamedAmong(b.name, names) || isConflictName(b.name);
+  if (ac !== bc) return !ac;
+  if (a.name !== b.name) return a.name < b.name;
+  return false;
+}
+function collapseEditions(rows) {
+  const byId = new Map();
+  rows.forEach((row, i) => {
+    const id = row && row.id != null ? String(row.id) : "";
+    if (!id) return;
+    const scope = (row.desk && row.desk.id) ? "d:" + row.desk.id : "r";
+    const key = scope + "|" + id;
+    if (!byId.has(key)) byId.set(key, []);
+    byId.get(key).push(i);
+  });
+  const drop = new Set();
+  for (const idxs of byId.values()) {
+    if (idxs.length < 2) continue;
+    const names = idxs.map(i => rows[i].name);
+    const hasConflict = names.some(n => conflictNamedAmong(n, names) || isConflictName(n));
+    if (!hasConflict) continue; /* plant:f3-conflict-only */
+    let keep = idxs[0];
+    for (let n = 1; n < idxs.length; n++) {
+      if (betterEdition(rows[idxs[n]], rows[keep], names)) keep = idxs[n];
+    }
+    idxs.forEach(i => { if (i !== keep) drop.add(i); });
+  }
+  return rows.filter((row, i) => !drop.has(i));
+}
+function stripGenuine(row) {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, "genuine")) return row;
+  const copy = Object.assign({}, row);
+  delete copy.genuine;
+  return copy;
+}
 function listingRows() {
-  return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
+  const folder = sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0;
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     const x = refusedByEngine(f) ? null : ecFacts(f, "");
     return { name: path.basename(f), mtime: mt, cards: x ? x.cards : -1, edition: x ? x.edition : "",
              macros: x ? x.macros : -1, intents: x ? x.intents : -1, cats: x ? x.cats : -1, awaiting: x ? x.awaiting : [],
              sample: isTheSample(f), id: x ? x.id : "", rev: x ? x.rev : 0, grew: x ? x.grew : null, sha: x ? x.sha : "",
+             genuine: !!(x && x.genuine),
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
-  }).concat(deskRows());
+  });
+  let rows = folder.concat(deskRows());
+  rows = collapseEditions(rows); /* plant:f3-one-row */
+  return rows.map(stripGenuine);
 }
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
 /* THE LISTING IS SENT, not only asked for: once at boot, and again whenever the set of files in it, by place, id,
