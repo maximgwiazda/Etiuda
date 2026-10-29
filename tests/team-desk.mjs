@@ -882,17 +882,17 @@ try {
   const embeddedRing = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
   const looseRing = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "tea-room", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
 
-  // 14ao: folder team with embedded ring in team file, no loose ring file
+  // 14bb: folder team with embedded ring in team file, no loose ring file
   put(F6, "etiuda-team.json", JSON.stringify(teamFile({ team: T6, epoch: 1, roster: [entry(meF6, K6, 1, T6)], ring: embeddedRing })));
   put(F6, "lamps.ec", seal(K6, 1, A2, T6));
   await read(DF6, "lamps.ec");
   const ringAsked = await DF6.ask("etiuda:catalog-ring");
   const ringRead = DF6.api.readRing();
   check(ringAsked === JSON.stringify(embeddedRing) && JSON.stringify(ringRead) === JSON.stringify(embeddedRing),
-    "14ao a folder team file with an embedded ring is read from the team file itself, with no loose etiuda-ring.json: "
+    "14bb a folder team file with an embedded ring is read from the team file itself, with no loose etiuda-ring.json: "
     + (ringAsked === JSON.stringify(embeddedRing) ? "embedded" : "missed"));
 
-  // 14ap: folder team file without embedded ring falls back to loose etiuda-ring.json
+  // 14bc: folder team file without embedded ring falls back to loose etiuda-ring.json
   const K6_2 = crypto.randomBytes(32);
   put(F6, "etiuda-ring.json", JSON.stringify(looseRing));
   put(F6, "etiuda-team.json", JSON.stringify(teamFile({ team: T6, epoch: 2, roster: [entry(meF6, K6_2, 2, T6)] })));
@@ -900,7 +900,7 @@ try {
   await read(DF6, "lamps.ec");
   const ringFallback = await DF6.ask("etiuda:catalog-ring");
   check(ringFallback === JSON.stringify(looseRing),
-    "14ap a folder team file without an embedded ring falls back to loose etiuda-ring.json: "
+    "14bc a folder team file without an embedded ring falls back to loose etiuda-ring.json: "
     + (ringFallback === JSON.stringify(looseRing) ? "loose" : "missed"));
 
   // Helper to make signed head
@@ -913,46 +913,46 @@ try {
     return doc;
   };
 
-  // 14aq: newer genuine head shown on folder team in leadsView()
+  // 14bd: newer genuine head shown on folder team in leadsView()
   const headNow = Date.now();
   const freshHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 3, edition: "Lamp Shop v3", published: "2026-02-03" }], headNow);
   put(F6, "etiuda-head.json", JSON.stringify(freshHead));
   const leads1 = await DF6.ask("etiuda:team-join", "leads");
   const row1 = ((leads1 && leads1.leads) || []).find(r => r.team === T6);
   check(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
-    "14aq a newer genuine etiuda-head.json on a folder team shows its edition and publish time in leadsView(): "
+    "14bd a newer genuine etiuda-head.json on a folder team shows its edition and publish time in leadsView(): "
     + (row1 && row1.head ? row1.head.edition + " / " + row1.head.published : "no head"));
 
-  // 14ar: forged head shows nothing in leadsView()
+  // 14be: forged head shows nothing in leadsView()
   const forgedHead = JSON.parse(JSON.stringify(freshHead));
   forgedHead.sig.value = (forgedHead.sig.value[0] === "a" ? "b" : "a") + forgedHead.sig.value.slice(1);
   put(F6, "etiuda-head.json", JSON.stringify(forgedHead));
   const leadsForged = await DF6.ask("etiuda:team-join", "leads");
   const rowForged = ((leadsForged && leadsForged.leads) || []).find(r => r.team === T6);
   check(!!rowForged && !rowForged.head,
-    "14ar a forged etiuda-head.json on a folder team shows nothing in leadsView(): "
+    "14be a forged etiuda-head.json on a folder team shows nothing in leadsView(): "
     + (rowForged && !rowForged.head ? "nothing shown" : "showed head"));
 
-  // 14as: foreign-key head shows nothing in leadsView()
+  // 14bf: foreign-key head shows nothing in leadsView()
   const foreignHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 3, edition: "Lamp Shop v3", published: "2026-02-03" }], headNow, forger.privateKey, "foreign-key");
   put(F6, "etiuda-head.json", JSON.stringify(foreignHead));
   const leadsForeign = await DF6.ask("etiuda:team-join", "leads");
   const rowForeign = ((leadsForeign && leadsForeign.leads) || []).find(r => r.team === T6);
   check(!!rowForeign && !rowForeign.head,
-    "14as a foreign-key etiuda-head.json on a folder team shows nothing in leadsView(): "
+    "14bf a foreign-key etiuda-head.json on a folder team shows nothing in leadsView(): "
     + (rowForeign && !rowForeign.head ? "nothing shown" : "showed head"));
 
-  // 14at: older head (rev below the edition the desk has) shows nothing in leadsView()
+  // 14bg: older head (rev below the edition the desk has) shows nothing in leadsView()
   // The desk in F6 has opened lamps.ec (A2, rev 2). A head with rev 1 is older.
   const olderHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 1, edition: "Lamp Shop v1", published: "2026-02-01" }], headNow + 1000);
   put(F6, "etiuda-head.json", JSON.stringify(olderHead));
   const leadsOlder = await DF6.ask("etiuda:team-join", "leads");
   const rowOlder = ((leadsOlder && leadsOlder.leads) || []).find(r => r.team === T6);
   check(!!rowOlder && !rowOlder.head,
-    "14at an older etiuda-head.json (rev 1 below the desk's rev 2) on a folder team shows nothing in leadsView(): "
+    "14bg an older etiuda-head.json (rev 1 below the desk's rev 2) on a folder team shows nothing in leadsView(): "
     + (rowOlder && !rowOlder.head ? "nothing shown" : "showed head"));
 
-  // 14au: channel.cjs readRing with folder doc
+  // 14bh: channel.cjs readRing with folder doc
   const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
   const chProg = Ch.createProgram({ pin: { teamId: T6, keyId: LEAD.keyId, public: LEAD.public } });
   const folderDocWithRing = teamFile({ team: T6, epoch: 1, roster: [], ring: embeddedRing });
@@ -963,7 +963,7 @@ try {
   check(chWithRing.source === "team" && JSON.stringify(chWithRing.ring) === JSON.stringify(embeddedRing)
     && chLoose.source === "loose" && JSON.stringify(chLoose.ring) === JSON.stringify(looseRing)
     && chNone.source === "none" && chNone.ring === null,
-    "14au channel.cjs readRing accepts embedded ring in folder teamDoc and falls back to looseRing without one: "
+    "14bh channel.cjs readRing accepts embedded ring in folder teamDoc and falls back to looseRing without one: "
     + chWithRing.source + " / " + chLoose.source + " / " + chNone.source);
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

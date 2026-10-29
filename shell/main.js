@@ -4302,8 +4302,8 @@ function leadPrint(publicHex) {
 /* The newest rev this desk has of `catalogId`, among the active catalog, recorded revs and the folder's catalogs. */
 function deskEditionRev(catalogId, folder, leadPublic) {
   let maxRev = -1;
-  if (leadPublic) {
-    const slotRev = catalogRevSlot(catalogId, leadPublic);
+  if (leadPublic && catalogRevs[catalogId] && Number.isInteger(catalogRevs[catalogId][leadPublic])) {
+    const slotRev = catalogRevs[catalogId][leadPublic];
     if (slotRev > maxRev) maxRev = slotRev;
   }
   if (catalogJson) {
