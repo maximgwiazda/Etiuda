@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 80;
+const EXPECTED = 85;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1303,6 +1303,131 @@ async function main() {
   check(!selfPlan.failClosed && selfPlan.steps.length > 0 && !selfPlan.steps.some(s => s.file === "tools/gate-run.mjs"),
     "16p an area run never schedules the gate runner itself: for tests/relay-workerd.mjs it runs "
     + selfPlan.steps.map(s => s.file).join(", "));
+
+  /* For every file the npm test chain names, that file alone schedules steps in any script chain the run uses
+     (test, split-guard, hook-coverage), GATE_TOOLS, NIGHTLY_LEGS, the bracket and the floor, and refuses tools/gate-run.mjs and any
+     window-classed file (the test architect's E1, 2026-10-29).
+     Static: planAreaRun starts nothing. Removing the runner's guard names tools/gate-run.mjs. */
+  const chainFiles = String(selfPkg.scripts && selfPkg.scripts.test || "").split("&&").map(s => {
+    const m = /^\s*node\s+(\S+)/.exec(s.trim());
+    return m ? m[1].replace(/\\/g, "/") : "";
+  }).filter(Boolean);
+  const usedChains = ["test", "split-guard", "hook-coverage"].filter(name => selfPkg.scripts && selfPkg.scripts[name]);
+  const chainScriptFiles = [];
+  for (const name of usedChains) {
+    const parts = String(selfPkg.scripts[name] || "").split("&&");
+    for (const p of parts) {
+      const m = /^\s*node\s+(\S+)/.exec(p.trim());
+      if (m) chainScriptFiles.push(m[1].replace(/\\/g, "/"));
+    }
+  }
+  const floorCmds = new Set((gr.FLOOR || []).map(f => f.cmd));
+  const chainAllow = new Set([
+    ...chainScriptFiles,
+    ...(gfFloor.GATE_TOOLS || []).map(f => f.replace(/\\/g, "/")),
+    ...(gr.NIGHTLY_LEGS || []).map(n => String(n.file || "").replace(/\\/g, "/")),
+    "tests/plant-hold.mjs", "tests/plant-compare.mjs", "tools/child-cap.mjs",
+    ...(gr.FLOOR || []).map(f => String(f.file || "").replace(/\\/g, "/")),
+  ]);
+  chainAllow.delete("tools/gate-run.mjs");
+  const chainOutside = [];
+  for (const file of chainFiles) {
+    const one = await gr.planAreaRun(ROOT, [file], selfPkg);
+    for (const s of one.steps || []) {
+      const rel = String(s.file || "").replace(/\\/g, "/");
+      const isFloor = floorCmds.has(s.cmd);
+      const isWin = typeof gfFloor.windowKind === "function" && gfFloor.windowKind(path.join(ROOT, rel)) === "window" && !isFloor;
+      if (rel === "tools/gate-run.mjs" || isWin || !chainAllow.has(rel)) {
+        chainOutside.push(file + " -> " + rel + (isWin ? " (window)" : ""));
+      }
+    }
+  }
+  check(chainFiles.length > 0 && chainOutside.length === 0,
+    "16q a chain file's plan holds only the chain, the bracket and the floor: "
+    + (chainOutside.length ? chainOutside.slice(0, 6).join("; ") : chainFiles.length + " files"));
+
+  /* A package.json edit confined to whole node entries selects those files and chain-split. Anything else fails closed. */
+  const pkgLab = makeLab("script-chain", {}, { git: true });
+  const readPkg = [
+    'import fs from "node:fs";',
+    'import path from "node:path";',
+    'import { fileURLToPath } from "node:url";',
+    'const HERE = path.dirname(fileURLToPath(import.meta.url));',
+    'const ROOT = path.resolve(HERE, "..");',
+    'fs.readFileSync(path.join(ROOT, "package.json"), "utf8");',
+    'console.log("  ok   read");',
+    "",
+  ].join("\n");
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "a.mjs"), readPkg);
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "chain-split.mjs"), readPkg);
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "keep.mjs"), readPkg);
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "x.mjs"), readPkg);
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "win.mjs"), readPkg + "function wall(){ windowWall(); }\n");
+  const basePkgObj = {
+    name: "lab", version: "0.0.1",
+    scripts: { test: "node tests/a.mjs && node tests/chain-split.mjs", windows: "node tests/keep.mjs" },
+  };
+  const writePkg = (obj) => fs.writeFileSync(path.join(pkgLab.lab, "package.json"), JSON.stringify(obj, null, 2) + "\n");
+  writePkg(basePkgObj);
+  for (const args of [
+    ["config", "user.email", "lab@example.invalid"],
+    ["config", "user.name", "lab"],
+    ["config", "commit.gpgsign", "false"],
+    ["add", "."],
+    ["commit", "-q", "-m", "base"],
+  ]) {
+    const r = spawnSync("git", args, { cwd: pkgLab.lab, encoding: "utf8" });
+    if (r.status !== 0) throw new Error("lab git " + args.join(" ") + ": " + (r.stderr || r.error));
+  }
+  const baseText = fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8");
+  const editOf = typeof gr.scriptChainEdit === "function" ? (a, b) => gr.scriptChainEdit(a, b) : () => null;
+  const addedObj = JSON.parse(baseText);
+  addedObj.scripts.test += " && node tests/x.mjs";
+  writePkg(addedObj);
+  const addedPlan = await gr.planAreaRun(pkgLab.lab, ["package.json"], JSON.parse(fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8")), "HEAD");
+  const addedSet = new Set((addedPlan.steps || []).map(s => s.file));
+  const removedEdit = editOf(fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8"), baseText);
+  check(addedPlan.failClosed === false && addedSet.has("tests/x.mjs") && addedSet.has("tests/chain-split.mjs")
+    && removedEdit && removedEdit.confined === true && removedEdit.removed.some(e => e.file === "tests/x.mjs") && removedEdit.added.length === 0,
+    "16r one entry added to test selects that file and chain-split: failClosed=" + addedPlan.failClosed
+    + " steps=" + [...addedSet].join(","));
+
+  const bumpObj = JSON.parse(baseText);
+  bumpObj.version = "0.0.2";
+  writePkg(bumpObj);
+  const bumpText = fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8");
+  const bumpPlan = await gr.planAreaRun(pkgLab.lab, ["package.json"], JSON.parse(bumpText), "HEAD");
+  const bumpEdit = editOf(baseText, bumpText);
+  const reordered = JSON.parse(baseText);
+  reordered.scripts = { windows: reordered.scripts.windows, test: reordered.scripts.test };
+  const reorderEdit = editOf(baseText, JSON.stringify(reordered, null, 2) + "\n");
+  const extra = JSON.parse(baseText);
+  extra.scripts = Object.assign({ lint: "node tests/a.mjs" }, extra.scripts);
+  const extraEdit = editOf(baseText, JSON.stringify(extra, null, 2) + "\n");
+  check(bumpPlan.failClosed === true && bumpEdit && bumpEdit.confined === false
+    && reorderEdit && reorderEdit.confined === false && extraEdit && extraEdit.confined === false,
+    "16s a version bump, a reordered script or a new script fails closed: plan=" + bumpPlan.failClosed
+    + " bump=" + (bumpEdit && bumpEdit.confined) + " reorder=" + (reorderEdit && reorderEdit.confined)
+    + " new=" + (extraEdit && extraEdit.confined) + " " + (bumpEdit && bumpEdit.reason));
+
+  const argObj = JSON.parse(baseText);
+  argObj.scripts.test = "node tests/a.mjs --compare && node tests/chain-split.mjs";
+  writePkg(argObj);
+  const argText = fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8");
+  const argPlan = await gr.planAreaRun(pkgLab.lab, ["package.json"], JSON.parse(argText), "HEAD");
+  const argEdit = editOf(baseText, argText);
+  check(argPlan.failClosed === true && argEdit && argEdit.confined === false,
+    "16t a changed argument fails closed: plan=" + argPlan.failClosed + " confined=" + (argEdit && argEdit.confined)
+    + " " + (argEdit && argEdit.reason));
+
+  const winObj = JSON.parse(baseText);
+  winObj.scripts.windows = "node tests/keep.mjs && node tests/win.mjs";
+  writePkg(winObj);
+  const winPlan = await gr.planAreaRun(pkgLab.lab, ["package.json"], JSON.parse(fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8")), "HEAD");
+  const winSet = new Set((winPlan.steps || []).map(s => s.file));
+  check(winPlan.failClosed === false && (winPlan.walled || []).includes("tests/win.mjs") && !winSet.has("tests/win.mjs"),
+    "16u an entry added to windows selects no window leg: failClosed=" + winPlan.failClosed
+    + " walled=" + (winPlan.walled || []).join(",") + " stepped=" + [...winSet].filter(f => f.indexOf("win") >= 0).join(","));
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";

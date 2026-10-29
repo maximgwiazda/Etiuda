@@ -256,6 +256,247 @@ export function profileSteps(root, pkg) {
   return [...withFloor(root, baseSteps), ...NIGHTLY_LEGS.filter(n => fs.existsSync(path.join(root, n.file)))];
 }
 
+function normRel(file) {
+  return String(file || "").replace(/\\/g, "/");
+}
+
+function showFile(root, base, file) {
+  const ref = String(base || "main").split("...")[0] || "main";
+  try {
+    return execFileSync("git", ["show", ref + ":" + file], {
+      cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, windowsHide: true,
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+/* The bytes outside every top-level scripts string. The interiors are cut, so only a real edit of the rest moves the skeleton. */
+function cutScriptValues(text) {
+  if (typeof text !== "string") return null;
+  const cuts = [];
+  const scripts = new Map();
+  let i = 0;
+  const n = text.length;
+  const skip = () => { while (i < n && /[\t\r\n ]/.test(text[i])) i++; };
+  function parseString(record) {
+    if (text[i] !== '"') return null;
+    const open = i;
+    i++;
+    let out = "";
+    while (i < n) {
+      const c = text[i];
+      if (c === '"') {
+        if (record) cuts.push([open + 1, i]);
+        i++;
+        return out;
+      }
+      if (c === "\\") {
+        i++;
+        if (i >= n) return null;
+        const e = text[i++];
+        if (e === "u") {
+          const h = text.slice(i, i + 4);
+          if (!/^[0-9a-fA-F]{4}$/.test(h)) return null;
+          out += String.fromCharCode(parseInt(h, 16));
+          i += 4;
+        } else if (e === "n") out += "\n";
+        else if (e === "r") out += "\r";
+        else if (e === "t") out += "\t";
+        else out += e;
+      } else { out += c; i++; }
+    }
+    return null;
+  }
+  function parseValue(depth) {
+    skip();
+    if (i >= n) return false;
+    const c = text[i];
+    if (c === '"') return parseString(false) !== null;
+    if (c === "{") {
+      i++;
+      skip();
+      if (text[i] === "}") { i++; return true; }
+      while (i < n) {
+        skip();
+        if (text[i] !== '"') return false;
+        const key = parseString(false);
+        if (key === null) return false;
+        skip();
+        if (text[i] !== ":") return false;
+        i++;
+        if (depth === 0 && key === "scripts") { if (!parseScripts()) return false; }
+        else if (!parseValue(depth + 1)) return false;
+        skip();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "}") { i++; return true; }
+        return false;
+      }
+      return false;
+    }
+    if (c === "[") {
+      i++;
+      skip();
+      if (text[i] === "]") { i++; return true; }
+      while (i < n) {
+        if (!parseValue(depth + 1)) return false;
+        skip();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "]") { i++; return true; }
+        return false;
+      }
+      return false;
+    }
+    const m = /^(?:true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/.exec(text.slice(i));
+    if (!m) return false;
+    i += m[0].length;
+    return true;
+  }
+  function parseScripts() {
+    skip();
+    if (text[i] !== "{") return false;
+    i++;
+    skip();
+    if (text[i] === "}") { i++; return true; }
+    while (i < n) {
+      skip();
+      if (text[i] !== '"') return false;
+      const key = parseString(false);
+      if (key === null) return false;
+      skip();
+      if (text[i] !== ":") return false;
+      i++;
+      skip();
+      if (text[i] !== '"') return false;
+      const val = parseString(true);
+      if (val === null) return false;
+      scripts.set(key, val);
+      skip();
+      if (text[i] === ",") { i++; continue; }
+      if (text[i] === "}") { i++; return true; }
+      return false;
+    }
+    return false;
+  }
+  skip();
+  if (!parseValue(0)) return null;
+  skip();
+  if (i !== n) return null;
+  let skeleton = "";
+  let at = 0;
+  for (const [a, b] of cuts.slice().sort((p, q) => p[0] - q[0])) {
+    skeleton += text.slice(at, a);
+    at = b;
+  }
+  skeleton += text.slice(at);
+  return { skeleton, scripts };
+}
+
+function scriptEntries(value) {
+  const entries = [];
+  for (const part of String(value).split("&&")) {
+    const raw = part.trim().replace(/\s+/g, " ");
+    if (!raw) continue;
+    const m = /^node\s+(\S+)(?:\s+(.*))?$/.exec(raw);
+    if (!m) entries.push({ kind: "other", raw, file: "", args: [] });
+    else {
+      const file = m[1].replace(/^\.\//, "").replace(/\\/g, "/");
+      const args = m[2] ? m[2].split(" ").filter(Boolean) : [];
+      entries.push({ kind: "node", raw, file, args });
+    }
+  }
+  return entries;
+}
+
+function alignNodeEntries(before, after) {
+  const count = (list) => {
+    const m = new Map();
+    for (const e of list) m.set(e.raw, (m.get(e.raw) || 0) + 1);
+    return m;
+  };
+  const inter = new Map();
+  const bc = count(before);
+  const ac = count(after);
+  for (const [raw, n] of bc) inter.set(raw, Math.min(n, ac.get(raw) || 0));
+  const take = (list) => {
+    const bag = new Map(inter);
+    const kept = [];
+    const rest = [];
+    for (const e of list) {
+      const n = bag.get(e.raw) || 0;
+      if (n > 0) { bag.set(e.raw, n - 1); kept.push(e.raw); }
+      else rest.push(e);
+    }
+    return { kept, rest };
+  };
+  const b = take(before);
+  const a = take(after);
+  if (b.kept.join("\0") !== a.kept.join("\0")) return null;
+  if (b.rest.some(e => e.kind !== "node") || a.rest.some(e => e.kind !== "node")) return null;
+  const removedFiles = new Set(b.rest.map(e => e.file));
+  if (a.rest.some(e => removedFiles.has(e.file))) return null;
+  return { added: a.rest, removed: b.rest };
+}
+
+/* A package.json edit is confined when only whole node entries were added or removed inside script values. */
+export function scriptChainEdit(baseText, headText) {
+  const base = cutScriptValues(baseText);
+  const head = cutScriptValues(headText);
+  if (!base || !head) return { confined: false, reason: "package.json does not parse", added: [], removed: [] };
+  if (base.skeleton !== head.skeleton) return { confined: false, reason: "bytes outside the script values differ", added: [], removed: [] };
+  const added = [];
+  const removed = [];
+  const names = new Set([...base.scripts.keys(), ...head.scripts.keys()]);
+  for (const name of names) {
+    if (!base.scripts.has(name) || !head.scripts.has(name)) {
+      return { confined: false, reason: "a script was added or removed", added: [], removed: [] };
+    }
+    const b = base.scripts.get(name);
+    const h = head.scripts.get(name);
+    if (b === h) continue;
+    const aligned = alignNodeEntries(scriptEntries(b), scriptEntries(h));
+    if (!aligned) return { confined: false, reason: "a script reorders or changes an entry", added: [], removed: [] };
+    added.push(...aligned.added);
+    removed.push(...aligned.removed);
+  }
+  return { confined: true, added, removed };
+}
+
+function appendTextScans(steps, addedFiles, windowGates, root, changed, gf) {
+  const scans = gf && gf.SCANS;
+  const match = gf && gf.globMatches;
+  if (!scans || typeof match !== "function") return;
+  const files = changed.map(normRel);
+  for (const leg of Object.keys(scans)) {
+    const globs = scans[leg];
+    if (!Array.isArray(globs) || !globs.length) continue;
+    if (!files.some(f => globs.some(g => match(g, f)))) continue;
+    const abs = path.join(root, leg);
+    if (!fs.existsSync(abs)) continue;
+    let kind = "node";
+    try { if (typeof gf.windowKind === "function") kind = gf.windowKind(abs); } catch (e) { kind = "node"; }
+    if (kind === "window") {
+      if (!windowGates.includes(leg)) {
+        windowGates.push(leg);
+        console.log("gate-run area: window gate " + leg + " left out, walled: argued separately");
+      }
+      continue;
+    }
+    if (!addedFiles.has(leg)) {
+      steps.push({ script: "area", cmd: "node " + leg, file: leg, args: [], note: "reads a changed file as text" }); /* plant:text-scan */
+      addedFiles.add(leg);
+    }
+  }
+}
+
+function closePlan(root, wholeChain, changed, gf, reason, extra) {
+  const steps = withFloor(root, wholeChain.slice());
+  const added = new Set(steps.map(s => normRel(s.file)));
+  const walled = [];
+  appendTextScans(steps, added, walled, root, changed, gf);
+  return Object.assign({ failClosed: true, reason, steps, walled }, extra || {});
+}
+
 export async function planAreaRun(root, changed, pkg, base = "main") {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
@@ -272,30 +513,38 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   const toolsOnly = !!(gf && typeof gf.isGateToolsOnly === "function" && gf.isGateToolsOnly(changed));
   if (toolsOnly) console.log("gate-run area: the diff is confined to the gate tools, so their own legs and the floor run (rule 1)");
 
+  /* An unchanged package.json, or one whose edit is not a whole script entry, still fails closed. */
+  let scriptEdit = null;
+  if (changed.some(f => normRel(f) === "package.json")) {
+    const baseText = showFile(root, base, "package.json");
+    let headText = null;
+    try { headText = fs.readFileSync(path.join(root, "package.json"), "utf8"); } catch (e) { headText = null; }
+    scriptEdit = (baseText == null || headText == null)
+      ? { confined: false, reason: "the base package.json cannot be read", added: [], removed: [] }
+      : scriptChainEdit(baseText, headText);
+  }
+  const acceptedScript = !!(scriptEdit && scriptEdit.confined && (scriptEdit.added.length || scriptEdit.removed.length));
+
   for (const f of toolsOnly ? [] : changed) {
     if (isSharedCode(f)) {
-      return {
-        failClosed: true,
-        reason: "fail-closed to whole chain: change in shared code " + f,
-        steps: withFloor(root, wholeChain),
-      };
+      if (normRel(f) === "package.json" && acceptedScript) continue; /* plant:script-chain */
+      return closePlan(root, wholeChain, changed, gf, "fail-closed to whole chain: change in shared code " + f);
     }
   }
 
   for (const f of toolsOnly ? [] : changed) {
+    if (normRel(f) === "package.json" && acceptedScript) continue; /* plant:script-chain */
     let forFile = [];
     try { forFile = gatesFor(root, [f]); } catch { forFile = []; }
     if (totalGates > 0 && forFile.length > totalGates / 2) {
-      return {
-        failClosed: true,
-        reason: "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")",
-        steps: withFloor(root, wholeChain),
-      };
+      return closePlan(root, wholeChain, changed, gf,
+        "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")");
     }
   }
 
+  const gatedChanged = changed.filter(f => !(acceptedScript && normRel(f) === "package.json"));
   let rows = [];
-  if (!toolsOnly) { try { rows = gatesFor(root, changed); } catch { rows = []; } }
+  if (!toolsOnly) { try { rows = gatesFor(root, gatedChanged); } catch { rows = []; } }
 
   /* A window gate is walled (rule 13's window wall): it runs only when argued, never picked up by a merge, as the whole run
      never runs one. The area run names it and leaves it out, so it stays a subset of the whole run plus the floor. */
@@ -332,8 +581,53 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
     addedFiles.add("tests/chain-split.mjs");
   }
 
+  /* A confined script edit selects each added file, the gates that read it, and chain-split. A removed entry selects chain-split only. */
+  if (acceptedScript && fs.existsSync(path.join(root, "tests", "chain-split.mjs")) && !addedFiles.has("tests/chain-split.mjs")) {
+    steps.push({ script: "area", cmd: "node tests/chain-split.mjs", file: "tests/chain-split.mjs", args: [],
+      note: "a script chain gained or lost an entry" });
+    addedFiles.add("tests/chain-split.mjs");
+  }
+  if (acceptedScript) {
+    for (const e of scriptEdit.added) {
+      const abs = path.join(root, e.file);
+      let kind = "node";
+      try {
+        if (gf && typeof gf.windowKind === "function" && fs.existsSync(abs)) kind = gf.windowKind(abs);
+      } catch (err) { kind = "node"; }
+      if (kind === "window") {
+        if (!windowGates.includes(e.file)) {
+          windowGates.push(e.file);
+          console.log("gate-run area: window gate " + e.file + " left out, walled: argued separately");
+        }
+        continue; /* plant:window-entry */
+      }
+      if (fs.existsSync(abs) && !addedFiles.has(e.file)) {
+        const tail = e.args.length ? " " + e.args.join(" ") : "";
+        steps.push({ script: "area", cmd: "node " + e.file + tail, file: e.file, args: e.args.slice() });
+        addedFiles.add(e.file);
+      }
+      let mapped = [];
+      try { mapped = gatesFor(root, [e.file]); } catch (err) { mapped = []; }
+      for (const row of mapped) {
+        if (row.kind === "window") {
+          if (!windowGates.includes(row.gate)) {
+            windowGates.push(row.gate);
+            console.log("gate-run area: window gate " + row.gate + " left out, walled: argued separately");
+          }
+          continue;
+        }
+        if (row.gate === "tools/gate-run.mjs") continue;
+        if (!addedFiles.has(row.gate) && fs.existsSync(path.join(root, row.gate))) {
+          steps.push({ script: "area", cmd: "node " + row.gate, file: row.gate, args: [] });
+          addedFiles.add(row.gate);
+        }
+      }
+    }
+  }
+
   let addedProductCore = false;
   for (const f of changed) {
+    if (acceptedScript && normRel(f) === "package.json") continue;
     if (isProductFile(f) && !isRelayCode(f)) {
       const hit = rows.some(r => r.chains && r.chains.some(c => c.file === f || c.file.endsWith(f)));
       if (!hit) {
@@ -421,6 +715,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
 
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
+  appendTextScans(steps, addedFiles, windowGates, root, changed, gf);
   return { failClosed: false, reason: "", steps, gaps, walled: windowGates };
 }
 
