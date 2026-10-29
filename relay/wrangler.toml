@@ -3,13 +3,15 @@
 # on etiuda.dev/relay-staging/v1/*. It holds no secret, only bindings.
 name = "etiuda-relay-staging"
 main = "worker.mjs"
-# When the live Worker is next deployed, it takes the date the leg runs on.
-compatibility_date = "2026-09-01"
+# The date the workerd leg (tests/relay-workerd.mjs) and relay-next run on, so the live Worker runs what was proved.
+compatibility_date = "2026-08-06"
 # shell/relay/blob.cjs and the relay's own signatures use node:crypto.
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 # The relay answers at the one address Studio and the desk call, and the site on etiuda.dev keeps every other path.
 routes = [{ pattern = "etiuda.dev/relay/v1/*", zone_name = "etiuda.dev" }]
+
+# The live route has no API_PREFIX: worker.mjs answers at /relay/v1/ by default.
 
 # The relay logs nothing per request.
 [observability]

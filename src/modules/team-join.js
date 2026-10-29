@@ -110,7 +110,8 @@ function readTook(v,n,sent){
   }else if(o && typeof o.folder==="string"){
     joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
       host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true,left:String(o.left||""),
-      relay:String(o.relay||""),team:String(o.team||"")};
+      relay:String(o.relay||""),team:String(o.team||""),
+      how:String(o.how||""),why:String(o.why||""),kind:String(o.kind||"")};
     joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm";
   }else refuseInvite(v);
   return true;
@@ -323,6 +324,15 @@ function joinDoorButton(id){
 function joinDisclosure(){
   return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."))+'</div>';
 }
+/* The name of a sync root's kind, as the absent-root sentence names it. */
+function joinKindWord(kind){
+  return kind==="onedrive"?t("OneDrive")
+    :kind==="onedrive-business"?t("OneDrive for Business")
+    :kind==="dropbox"?t("Dropbox")
+    :kind==="gdrive"?t("Google Drive")
+    :kind==="mapped"?t("a mapped network drive")
+    :t("a shared network folder");
+}
 function joinWhere(o){
   if(!o) return "";
   const host=o.host?t("This folder is on the computer {HOST}.").split("{HOST}").join(o.host):"";
@@ -354,8 +364,11 @@ function joinInviteParts(){
           +disc,
         acts:[["invite",t("Join this team"),false],["back",t("Cancel")]]};
     }
+    /* Claudette's words, 2026-10-28 */
+    const absentSentence=t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.").split("{KIND}").join(joinKindWord(o.kind));
+    const absent=o.why==="absent"?'<div class="e-join-meta">'+esc(absentSentence)+'</div>':"";
     return {title:title, line:joinWhere(o),
-      body:'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
+      body:absent+'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
         +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
         +'<div class="e-join-ask">'+esc(ask)+'</div>'
         +'<div class="e-join-why">'+esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead."))+'</div>'
@@ -460,8 +473,11 @@ function joinParts(){
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
-  if(j && j.state==="refused") return {title:t("The lead turned the request down"),
-    line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
+  if(j && j.state==="refused"){
+    if(j.invite && j.invite.relay) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]}; /* plant:relay-refused-card */
+    return {title:t("The lead turned the request down"),
+      line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
+  }
   if(j) return {title:t("Waiting for the lead to open the request"),
     line:t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};

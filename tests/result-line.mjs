@@ -30,6 +30,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { WINDOWS_VAR } from "./engine.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
@@ -1232,7 +1233,7 @@ async function main() {
     + " || walled " + JSON.stringify(winLine && winLine.walled));
 
   /* No FLOOR entry is one the window wall refuses: a file gates-for classes window is named by a node arm, and that arm,
-     run here with ETIUDA_WINDOWS unset, exits 0 without the wall's marker (the test architect's leg, 2026-10-28). */
+     run here with the window variable unset, exits 0 without the wall's marker (the test architect's leg, 2026-10-28). */
   const gfFloor = await import("../tools/gates-for.mjs");
   const floorBad = [];
   for (const f of gr.FLOOR || []) {
@@ -1240,7 +1241,7 @@ async function main() {
     if (kind === "node") continue;
     if (!f.args || !f.args.length) { floorBad.push(f.file + " (" + kind + ", whole file)"); continue; }
     const armEnv = Object.assign({}, process.env);
-    for (const k of Object.keys(armEnv)) if (k.toUpperCase() === "ETIUDA_WINDOWS") delete armEnv[k];
+    for (const k of Object.keys(armEnv)) if (k.toUpperCase() === WINDOWS_VAR) delete armEnv[k];
     const arm = spawnSync(process.execPath, [path.join(ROOT, f.file), ...f.args], { cwd: ROOT, encoding: "utf8", env: armEnv, timeout: 120000 });
     const said = String(arm.stdout || "") + String(arm.stderr || "");
     if (arm.status !== 0 || /#refused/.test(said)) floorBad.push(f.cmd + " (exit " + arm.status + (/#refused/.test(said) ? ", refused" : "") + ")");
@@ -1501,8 +1502,8 @@ async function main() {
   const tjOnChecks = tjOnM ? Number(tjOnM[1]) : -1;
   const tjOffChecks = tjOffM ? Number(tjOffM[1]) : -1;
   const tjOffSkipped = tjOffM ? Number(tjOffM[2]) : -1;
-  check(tjOn.status === 0 && tjOff.status === 0 && tjOffSkipped === 11 && tjOnChecks - tjOffChecks === 11,
-    "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly 11 plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
+  check(tjOn.status === 0 && tjOff.status === 0 && tjOffSkipped === 14 && tjOnChecks - tjOffChecks === 14,
+    "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly 14 plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
