@@ -323,6 +323,7 @@ function readChainLines(chainsPath) {
 
 /** Whether a chain line is a run that holds: a hold red (holds true), or a line that cannot say it holds nothing. */
 export function baseHolds(c) {
+  if (!c) return true;
   return c.holds === true || (c.holds !== false && !(Array.isArray(c.reds) && c.reds.length === 0))
     || !c.counts || c.counts.exitCode !== 0;
 }
