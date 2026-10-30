@@ -23,7 +23,7 @@ const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"
 const REAL_CORE = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
-const EXPECTED = 16;
+const EXPECTED = 19;
 
 const safeStorage = {
   isEncryptionAvailable: () => true,
@@ -670,6 +670,130 @@ async function main() {
     );
   }
 
+  /* Scenario 7b: In read-only, second folder-tagged root upload is refused (945f17) */
+  {
+    const st = memoryStore();
+    let now = 1000000;
+    const core = REAL_CORE.createCore({
+      store: st,
+      clock: () => now,
+      roots: [REAL_CORE.ROOT_PUB],
+    });
+
+    const leadK = keyPair();
+    const rt = crypto.randomBytes(16).toString("hex");
+    const until = now + 1000;
+    st.put("team", { rt, lead: { keyId: leadK.keyId, pub: leadK.public }, epoch: 1, until, paid: true, made: now, secret: "sec" });
+    now = until + REAL_CORE.WORK_AFTER_MS + 5 * 24 * 3600 * 1000;
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    st.put("ses:" + hash, { key: leadK.keyId, inv: null, until: now + 60000 });
+
+    const folderMeta = {
+      id: crypto.randomBytes(16).toString("hex"),
+      supersedes: null,
+      epoch: 1,
+      writer: leadK.keyId,
+      counter: 1,
+      del: false,
+      sig: "00".repeat(64),
+      nonce: "00".repeat(12),
+      place: "root",
+      pub: null,
+      channel: { kind: "folder" },
+    };
+
+    const editionFolderMeta = {
+      id: crypto.randomBytes(16).toString("hex"),
+      supersedes: null,
+      epoch: 1,
+      writer: leadK.keyId,
+      counter: 2,
+      del: false,
+      sig: "00".repeat(64),
+      nonce: "00".repeat(12),
+      place: "root",
+      pub: null,
+      channel: { kind: "folder" },
+    };
+
+    const admFirst = core.admit(rt, token, folderMeta, folderMeta.id);
+    const admSecond = core.admit(rt, token, editionFolderMeta, editionFolderMeta.id);
+
+    const secondRefused = admFirst.ok === true
+      && admSecond.ok === false && (admSecond.reason === "team-lapsed" || admSecond.error === "team-lapsed");
+
+    check(
+      secondRefused,
+      "945f17 in read-only, a second folder-tagged root upload, an edition, is refused: "
+      + JSON.stringify({ first: admFirst.ok, second: admSecond.reason || admSecond.error || admSecond.ok })
+    );
+  }
+
+  /* Scenario 7c: In read-only, first folder-tagged upload supersedes held team file id (945f18) */
+  {
+    const st = memoryStore();
+    let now = 1000000;
+    const core = REAL_CORE.createCore({
+      store: st,
+      clock: () => now,
+      roots: [REAL_CORE.ROOT_PUB],
+    });
+
+    const leadK = keyPair();
+    const rt = crypto.randomBytes(16).toString("hex");
+    const until = now + 1000;
+    const priorTeamFileId = crypto.randomBytes(16).toString("hex");
+    st.put("team", { rt, lead: { keyId: leadK.keyId, pub: leadK.public }, epoch: 1, until, paid: true, made: now, secret: "sec" });
+    st.put("teamFile", priorTeamFileId);
+    now = until + REAL_CORE.WORK_AFTER_MS + 5 * 24 * 3600 * 1000;
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    st.put("ses:" + hash, { key: leadK.keyId, inv: null, until: now + 60000 });
+
+    const unsupersededMeta = {
+      id: crypto.randomBytes(16).toString("hex"),
+      supersedes: null,
+      epoch: 1,
+      writer: leadK.keyId,
+      counter: 1,
+      del: false,
+      sig: "00".repeat(64),
+      nonce: "00".repeat(12),
+      place: "root",
+      pub: null,
+      channel: { kind: "folder" },
+    };
+
+    const supersededMeta = {
+      id: crypto.randomBytes(16).toString("hex"),
+      supersedes: priorTeamFileId,
+      epoch: 1,
+      writer: leadK.keyId,
+      counter: 2,
+      del: false,
+      sig: "00".repeat(64),
+      nonce: "00".repeat(12),
+      place: "root",
+      pub: null,
+      channel: { kind: "folder" },
+    };
+
+    const admUnsuperseded = core.admit(rt, token, unsupersededMeta, unsupersededMeta.id);
+    const admSuperseded = core.admit(rt, token, supersededMeta, supersededMeta.id);
+
+    const matchOk = admUnsuperseded.ok === false && (admUnsuperseded.reason === "team-lapsed" || admUnsuperseded.error === "team-lapsed")
+      && admSuperseded.ok === true;
+
+    check(
+      matchOk,
+      "945f18 in read-only, the first folder-tagged team file upload is admitted and supersedes the held team file id: "
+      + JSON.stringify({ unsuperseded: admUnsuperseded.reason || admUnsuperseded.error, superseded: admSuperseded.ok })
+    );
+  }
+
   /* Scenario 8: Plants verification in scratch copy (945f11 - 945f16) */
   const mainPath = path.join(ROOT, "shell", "main.js");
   const origMain = fs.readFileSync(mainPath, "utf8");
@@ -845,6 +969,73 @@ async function main() {
     check(
       turned && shaSame,
       "945f16 lifting plant:lapse-folder turns 945f10 red: turned=" + turned + ", shaSame=" + shaSame
+    );
+  }
+
+  // 945f19: lifting plant:lapse-folder-once turns 945f17 red
+  {
+    const corePath = path.join(ROOT, "relay", "core.cjs");
+    const origCore = fs.readFileSync(corePath, "utf8");
+    const lines = origCore.split(/\n/);
+    const at = lines.findIndex(l => l.includes("plant:lapse-folder-once"));
+    let turned = false;
+    if (at >= 0) {
+      lines[at] = "    /* plant:lapse-folder-once */";
+      const scratchCoreSrc = lines.join("\n");
+      const scratchPath = path.join(path.dirname(corePath), "scratch-core-" + crypto.randomBytes(4).toString("hex") + ".cjs");
+      fs.writeFileSync(scratchPath, scratchCoreSrc);
+      const scratchCore = nodeRequire(scratchPath);
+
+      const st = memoryStore();
+      const now = 2000000;
+      const core = scratchCore.createCore({
+        store: st,
+        clock: () => now,
+        roots: [scratchCore.ROOT_PUB],
+      });
+      const leadK = keyPair();
+      const rt = crypto.randomBytes(16).toString("hex");
+      const until = now - 35 * 24 * 3600 * 1000;
+      st.put("team", { rt, lead: { keyId: leadK.keyId, pub: leadK.public }, epoch: 1, until, paid: true, made: now, secret: "sec" });
+      const token = crypto.randomBytes(32).toString("hex");
+      const hash = crypto.createHash("sha256").update(token).digest("hex");
+      st.put("ses:" + hash, { key: leadK.keyId, inv: null, until: now + 60000 });
+
+      const folderMeta = {
+        id: crypto.randomBytes(16).toString("hex"),
+        supersedes: null,
+        epoch: 1,
+        writer: leadK.keyId,
+        counter: 1,
+        del: false,
+        sig: "00".repeat(64),
+        nonce: "00".repeat(12),
+        place: "root",
+        pub: null,
+        channel: { kind: "folder" },
+      };
+      const editionFolderMeta = {
+        id: crypto.randomBytes(16).toString("hex"),
+        supersedes: null,
+        epoch: 1,
+        writer: leadK.keyId,
+        counter: 2,
+        del: false,
+        sig: "00".repeat(64),
+        nonce: "00".repeat(12),
+        place: "root",
+        pub: null,
+        channel: { kind: "folder" },
+      };
+      const adm1 = core.admit(rt, token, folderMeta, folderMeta.id);
+      const adm2 = core.admit(rt, token, editionFolderMeta, editionFolderMeta.id);
+      turned = adm1.ok === true && adm2.ok === true;
+      try { fs.unlinkSync(scratchPath); } catch {}
+    }
+    const shaSame = fs.readFileSync(corePath, "utf8") === origCore;
+    check(
+      turned && shaSame,
+      "945f19 lifting plant:lapse-folder-once turns 945f17 red: turned=" + turned + ", shaSame=" + shaSame
     );
   }
 

@@ -386,6 +386,8 @@ function createCore(deps) {
       if (typeof row.secret !== "string") row.secret = team && typeof team.secret === "string" ? team.secret : random(32);
       store.put("team", row);
       store.del("swept");
+      store.del("moved");
+      store.del("teamFile");
       remember(b.grant);
     });
     return { ok: true, rt };
@@ -410,6 +412,7 @@ function createCore(deps) {
         if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
         store.put("team", row);
       }
+      store.del("moved");
       remember(b.grant);
     });
     return { ok: true, lapse: told() };
@@ -450,6 +453,7 @@ function createCore(deps) {
       if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
       store.put("team", row);
       for (const [k, s] of store.list("ses:")) if (s && s.key === oldLead.keyId) store.del(k); /* plant:lead-sessions-drop */
+      store.del("moved");
       remember(b.grant);
     });
     return { ok: true, lead: to.keyId, oldLead: oldLead.keyId, lapse: told() };
@@ -1019,6 +1023,13 @@ function createCore(deps) {
     const folderMove = !s.inv && m && m.writer === team.lead.keyId && m.place === "root" && !!(m.channel && m.channel.kind === "folder");
     const lapsedPut = lapseGate(true, folderMove ? m.channel : null);
     if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
+    const state = lapseOf(team, clock()).state;
+    if (state === "read-only" && folderMove) {
+      const moved = store.get("moved");
+      const teamFile = store.get("teamFile") || team.teamFile;
+      if ((moved && moved !== m.id) || (teamFile && m.supersedes !== teamFile)) return no("team-lapsed"); /* plant:lapse-folder-once */
+      if (m.id === pathId && s.key === m.writer) store.put("moved", m.id);
+    }
     if (!m || m.id !== pathId) return no("bad-signature");
     if (s.inv) return admitInvite(team, s, m);
     if (s.key !== m.writer) return no("no-hello"); /* plant:put-writer */
@@ -1159,6 +1170,7 @@ function createCore(deps) {
       if (j.a.invite) rec.pub = j.a.pub;
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
+      if (j.a.lead && m.place === "root" && m.channel) store.put("teamFile", m.id);
       noteBlobs(1);
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);
