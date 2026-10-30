@@ -28,7 +28,15 @@ const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 let relayLayer = null;
 function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
 let folderSyncerLayer = null;
-function FolderSyncer() { return folderSyncerLayer || (folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs"))); }
+function FolderSyncer() {
+  if (!folderSyncerLayer) {
+    folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs"));
+    if (typeof folderSyncerLayer.setDefaultChecks === "function") {
+      folderSyncerLayer.setDefaultChecks(deskTrustChecks());
+    }
+  }
+  return folderSyncerLayer;
+}
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
@@ -552,10 +560,18 @@ function catalogPeek(text) {
   return opened;
 }
 /* The ring entry's public, when the signature verifies for this catalog's own id. "" when it does not:
-   unsigned, a key the ring does not list, and a signature that fails are all "". A caller may test it as a yes or no. */
-function catalogSigValid(data) {
+   unsigned, a key the ring does not list, and a signature that fails are all "". A caller may test it as a yes or no.
+   When pinPublic is given, returns a boolean verifying the signature against that public key. */
+function catalogSigValid(data, pinPublic) {
   const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : "";
+  if (pinPublic !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(String(pinPublic || ""))) return false;
+    try {
+      const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pinPublic, "hex")]), format: "der", type: "spki" });
+      return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"));
+    } catch { return false; }
+  }
   const ring = readRing();
   const keys = ring && Array.isArray(ring.keys) ? ring.keys : [];
   const id = String(data.id || ""), kid = String(sig.keyId || "");
@@ -685,10 +701,7 @@ function catalogLeadOk(data) {
   const sig = data && data.sig;
   if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
   for (const pub of bound) {
-    try {
-      const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" });
-      if (crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"))) return pub;
-    } catch { /* not this lead's */ }
+    if (catalogSigValid(data, pub)) return pub;
   }
   return "";
 }
@@ -802,6 +815,16 @@ function readCatalog() {
 let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
 const watchSaid = new Map();                   // folder -> the refusal last logged for it
 let folderSyncer = null;
+function deskTrustChecks() {
+  return {
+    teamWhole,
+    openSealed,
+    catalogSigValid,
+    branchSignedBytes,
+    deskFileGenuine,
+    handedTo
+  };
+}
 function folderSyncerRun(win) {
   const ft = folderTeamHere();
   if (!ft) {
@@ -818,6 +841,7 @@ function folderSyncerRun(win) {
     mirror: mirror,
     pin: pin ? { keyId: pin.keyId, public: pin.public } : null,
     keyFor: (epoch) => teamKeyAt(ft.team, epoch),
+    checks: deskTrustChecks(), /* plant:syncer-checks */
     onStatus: (status) => {
       settleFolder(status.folder, status.answers);
     },

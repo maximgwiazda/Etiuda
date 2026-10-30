@@ -43,7 +43,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -177,6 +177,10 @@ async function run() {
    * ----------------------------------------------------------------------------------------------- */
   {
     const desk1 = newDesk("desk1", SHARE);
+    const deskChecks = typeof desk1.api.deskTrustChecks === "function" ? desk1.api.deskTrustChecks() : null;
+    if (syncerMod && typeof syncerMod.setDefaultChecks === "function" && deskChecks) {
+      syncerMod.setDefaultChecks(deskChecks);
+    }
     // Setup desk envelope with pinned team
     const envPath = path.join(desk1.ud, "desk.json");
     const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
@@ -1026,6 +1030,154 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
+   * Leg 18 (42i): E1 - parity leg: desk and syncer trust verdicts agree over corpus
+   * Corpus: genuine and forged team files, ring-vouched and handed-over leads, an in-use file,
+   * an answer, an unsigned shared catalog, a sealed edition at another epoch.
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const deskP = loadDesk(folder("parity-desk-ud"));
+    const checks = typeof deskP.api.deskTrustChecks === "function" ? deskP.api.deskTrustChecks() : {
+      teamWhole: deskP.api.teamWhole || (() => false),
+      openSealed: deskP.api.openSealed || (() => null),
+      catalogSigValid: deskP.api.catalogSigValid || (() => false),
+      branchSignedBytes: deskP.api.branchSignedBytes || (() => Buffer.alloc(0)),
+      deskFileGenuine: deskP.api.deskFileGenuine || (() => false),
+      handedTo: deskP.api.handedTo || (() => false)
+    };
+    const shareP = folder("share-parity");
+    const mirrorP = folder("mirror-parity");
+    const TEAM_P = "t-" + crypto.randomBytes(8).toString("hex");
+
+    // 1. Genuine team file
+    const genuineTeamDoc = teamFile({ team: TEAM_P, epoch: 1, rev: 1 });
+    const deskGenuineTeam = Boolean(checks.teamWhole(genuineTeamDoc) && genuineTeamDoc.lead && genuineTeamDoc.lead.public === LEAD.public);
+
+    // 2. Forged team file (signed by forger)
+    const forgedTeamDoc = teamFile({ team: TEAM_P, epoch: 1, rev: 1, signer: forger.privateKey, keyId: FORGER.keyId, public: FORGER.public });
+    const deskForgedTeam = Boolean(checks.teamWhole(forgedTeamDoc) && forgedTeamDoc.lead && forgedTeamDoc.lead.public === LEAD.public);
+
+    // 3. Ring-vouched lead
+    const vouchedKey = crypto.generateKeyPairSync("ed25519");
+    const VOUCHED = { keyId: "ring-vouched", public: pubHex(vouchedKey.publicKey) };
+    const ringDoc = { format: 1, kind: "etiuda-ring", keys: [{ alg: "Ed25519", catalog: "lamp-shop", keyId: VOUCHED.keyId, public: VOUCHED.public }] };
+    fs.writeFileSync(path.join(shareP, "etiuda-ring.json"), JSON.stringify(ringDoc), "utf8");
+    const ringCatDoc = sign({
+      format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1, name: "Vouched", date: "2026-02-01",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: []
+    }, vouchedKey.privateKey, VOUCHED.keyId);
+    const deskRingVouched = Boolean(checks.catalogSigValid(ringCatDoc, VOUCHED.public));
+
+    // 4. Handed-over lead
+    const lead2P = crypto.generateKeyPairSync("ed25519");
+    const LEAD2P = { keyId: "lead-p2", public: pubHex(lead2P.publicKey) };
+    const stepP = {
+      format: 1, kind: "etiuda-team-handover", team: TEAM_P,
+      to: { keyId: LEAD2P.keyId, public: LEAD2P.public },
+      sig: { alg: "Ed25519", keyId: LEAD.keyId }
+    };
+    const bStepP = Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), signedBytesOf(stepP)]);
+    stepP.sig.value = crypto.sign(null, bStepP, lead.privateKey).toString("hex");
+    const handedTeamDoc = sign({
+      format: 1, kind: "etiuda-team", id: TEAM_P, catalogs: ["lamp-shop"],
+      lead: { keyId: LEAD2P.keyId, public: LEAD2P.public },
+      sealed: false, epoch: 1, rev: 2, roster: [],
+      handover: [stepP]
+    }, lead2P.privateKey, LEAD2P.keyId);
+    const deskHandedOver = Boolean(checks.teamWhole(handedTeamDoc) && checks.handedTo(handedTeamDoc, LEAD));
+
+    // 5. In-use file
+    const deskKeyP = crypto.generateKeyPairSync("ed25519");
+    const deskPubP = pubHex(deskKeyP.publicKey);
+    const deskIdP = "k-" + crypto.createHash("sha256").update(Buffer.from(deskPubP, "hex")).digest("hex").slice(0, 16);
+    const inUseDocP = {
+      format: 1, kind: "etiuda-in-use",
+      desk: { id: deskIdP, key: deskPubP },
+      at: new Date().toISOString(),
+      catalog: { id: "lamp-shop", rev: 1, name: "Lamp Shop" },
+      sig: { alg: "Ed25519", keyId: deskIdP }
+    };
+    const bInUseP = Buffer.concat([Buffer.from("etiuda-desk-branch\n", "utf8"), signedBytesOf(inUseDocP)]);
+    inUseDocP.sig.value = crypto.sign(null, bInUseP, deskKeyP.privateKey).toString("hex");
+    const inUseSealedP = seal(K1, 1, JSON.stringify(inUseDocP), TEAM_P);
+    const inUseDecrypted = checks.openSealed(K1, JSON.parse(inUseSealedP));
+    const inUseParsed = inUseDecrypted ? JSON.parse(inUseDecrypted) : null;
+    const deskInUse = Boolean(inUseParsed && inUseParsed.kind === "etiuda-in-use" && checks.deskFileGenuine(inUseParsed, deskIdP));
+
+    // 6. An answer
+    const answerDocP = {
+      format: 1, kind: "etiuda-catalog-answer",
+      sha256: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      catalog: catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01")
+    };
+    const answerSealedP = seal(K1, 1, JSON.stringify(answerDocP), TEAM_P);
+    const answerDecrypted = checks.openSealed(K1, JSON.parse(answerSealedP));
+    const answerParsed = answerDecrypted ? JSON.parse(answerDecrypted) : null;
+    const deskAnswer = Boolean(answerParsed && +answerParsed.format === 1 && answerParsed.kind === "etiuda-catalog-answer" && answerParsed.catalog);
+
+    // 7. Unsigned shared catalog
+    const unsignedDocP = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1, name: "Lamp Shop", date: "2026-02-01",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: []
+    };
+    const deskUnsigned = Boolean(unsignedDocP && +unsignedDocP.format === 2 && unsignedDocP.kind === "etiuda-catalog" && !unsignedDocP.sig);
+
+    // 8. Sealed edition at another epoch
+    const editionDocP = catalog("lamp-shop", 2, "Second", "2026-02-02");
+    const sealedEpoch2 = seal(K2, 2, text(editionDocP), TEAM_P);
+    const deskEpoch2 = Boolean(checks.openSealed(K1, JSON.parse(sealedEpoch2)));
+
+    const deskVerdicts = [deskGenuineTeam, deskForgedTeam, deskRingVouched, deskHandedOver, deskInUse, deskAnswer, deskUnsigned, deskEpoch2];
+
+    // Syncer evaluations
+    fs.writeFileSync(path.join(shareP, "etiuda-team.json"), JSON.stringify(genuineTeamDoc), "utf8");
+    fs.writeFileSync(path.join(shareP, "vouched.ec"), text(ringCatDoc), "utf8");
+    const inUseDirP = path.join(shareP, "desks", deskIdP);
+    fs.mkdirSync(inUseDirP, { recursive: true });
+    fs.writeFileSync(path.join(inUseDirP, "in-use.ec"), inUseSealedP, "utf8");
+    fs.writeFileSync(path.join(inUseDirP, "catalog-answer.ec"), answerSealedP, "utf8");
+    fs.writeFileSync(path.join(shareP, "unsigned.ec"), JSON.stringify(unsignedDocP), "utf8");
+    fs.writeFileSync(path.join(shareP, "epoch2.ec"), sealedEpoch2, "utf8");
+
+    const progP = syncerMod.createFolderProgram({
+      team: TEAM_P, folder: shareP, mirror: mirrorP, pin: LEAD, checks,
+      keyFor: ep => (ep === 1 ? K1 : null)
+    });
+    await progP.syncOnce();
+
+    const syncerGenuineTeam = fs.existsSync(path.join(mirrorP, "etiuda-team.json"));
+    const syncerRingVouched = fs.existsSync(path.join(mirrorP, "vouched.ec"));
+    const syncerInUse = fs.existsSync(path.join(mirrorP, "desks", deskIdP, "in-use.ec"));
+    const syncerAnswer = fs.existsSync(path.join(mirrorP, "desks", deskIdP, "catalog-answer.ec"));
+    const syncerUnsigned = fs.existsSync(path.join(mirrorP, "unsigned.ec"));
+    const syncerEpoch2 = fs.existsSync(path.join(mirrorP, "epoch2.ec"));
+
+    const shareForged = folder("share-parity-forged");
+    const mirrorForged = folder("mirror-parity-forged");
+    fs.writeFileSync(path.join(shareForged, "etiuda-team.json"), JSON.stringify(forgedTeamDoc), "utf8");
+    const progForged = syncerMod.createFolderProgram({
+      team: TEAM_P, folder: shareForged, mirror: mirrorForged, pin: LEAD, checks, keyFor: ep => (ep === 1 ? K1 : null)
+    });
+    await progForged.syncOnce();
+    const syncerForgedTeam = fs.existsSync(path.join(mirrorForged, "etiuda-team.json"));
+
+    const shareHanded = folder("share-parity-handed");
+    const mirrorHanded = folder("mirror-parity-handed");
+    fs.writeFileSync(path.join(shareHanded, "etiuda-team.json"), JSON.stringify(handedTeamDoc), "utf8");
+    const progHanded = syncerMod.createFolderProgram({
+      team: TEAM_P, folder: shareHanded, mirror: mirrorHanded, pin: LEAD, checks, keyFor: ep => (ep === 1 ? K1 : null)
+    });
+    await progHanded.syncOnce();
+    const syncerHandedOver = fs.existsSync(path.join(mirrorHanded, "etiuda-team.json"));
+
+    const syncerVerdicts = [syncerGenuineTeam, syncerForgedTeam, syncerRingVouched, syncerHandedOver, syncerInUse, syncerAnswer, syncerUnsigned, syncerEpoch2];
+
+    const agree = deskVerdicts.every((v, i) => v === syncerVerdicts[i]);
+    check(agree && deskVerdicts[0] === true && deskVerdicts[1] === false && deskVerdicts[7] === false,
+      "42i parity: desk and syncer trust verdicts agree over corpus: "
+      + JSON.stringify({ desk: deskVerdicts, syncer: syncerVerdicts }));
+  }
+
+  /* -------------------------------------------------------------------------------------------------
    * Plants: Proved by removal in scratch copy, never in checkout, sha256 restored
    * ----------------------------------------------------------------------------------------------- */
   const syncerFile = path.join(ROOT, "shell", "folder", "syncer.cjs");
@@ -1339,6 +1491,37 @@ async function run() {
       return failedRead;
     });
     check(r.ok, "42h lifting plant:read-ask-mirror breaks readAskFile mirror lookup: " + JSON.stringify(r));
+  }
+
+  // 42j: plant:syncer-checks
+  {
+    const r = await testPlant("syncer-checks", mainFile, (scratchMain) => {
+      const ud = folder("plant-chk-desk");
+      const shareDir = folder("plant-chk-share");
+      const mirrorDir = path.join(ud, "folder-mirror", TEAM);
+      fs.mkdirSync(shareDir, { recursive: true });
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+      const savedDefault = typeof syncerMod.getDefaultChecks === "function" ? syncerMod.getDefaultChecks() : null;
+      if (typeof syncerMod.setDefaultChecks === "function") syncerMod.setDefaultChecks(null);
+      try {
+        const reloaded = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+        const s = reloaded.api.folderSyncerRun();
+        const ret = !fs.existsSync(path.join(mirrorDir, "etiuda-team.json"));
+        if (s && typeof s.stop === "function") s.stop();
+        if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") syncerMod.stopAllFolderSyncers();
+        return ret;
+      } finally {
+        if (typeof syncerMod.setDefaultChecks === "function") syncerMod.setDefaultChecks(savedDefault);
+        if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") syncerMod.stopAllFolderSyncers();
+      }
+    });
+    check(r.ok, "42j lifting plant:syncer-checks leaves the syncer without trust checks, refusing the team file: " + JSON.stringify(r));
+  }
+
+  if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
+    syncerMod.stopAllFolderSyncers();
   }
 
   console.log("#counts checks=" + asserted + " failures=" + failed);

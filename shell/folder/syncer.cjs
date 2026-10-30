@@ -66,16 +66,40 @@ function isTeamConflict(rel) {
   return norm.indexOf("/") < 0 && conflictSiblingName("etiuda-team.json", norm);
 }
 
-function teamWhole(doc) {
-  const lead = doc && doc.lead, sig = doc && doc.sig;
+let defaultChecks;
+function loadFallbackChecks() {
   try {
-    return +doc.format === 1 && doc.kind === "etiuda-team" && SEALED_TEAM_RE.test(String(doc.id)) && Number.isInteger(doc.epoch)
-      && doc.epoch >= 1 && Array.isArray(doc.roster) && !!lead && typeof lead === "object" && typeof lead.keyId === "string"
-      && /^[0-9a-f]{64}$/.test(String(lead.public)) && (lead.box === undefined || /^[0-9a-f]{64}$/.test(lead.box))
-      && !!sig && sig.keyId === lead.keyId && /^[0-9a-f]{128}$/.test(String(sig.value))
-      && crypto.verify(null, signedBytesOf(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
-        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
-  } catch { return false; }
+    const mainPath = path.join(__dirname, "..", "main.js");
+    if (!fs.existsSync(mainPath)) return null;
+    const src = fs.readFileSync(mainPath, "utf8");
+    const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+    const electron = {
+      app: inert, BrowserWindow: inert, Menu: inert, dialog: inert, ipcMain: inert, net: inert,
+      protocol: inert, session: inert, shell: inert, screen: inert, systemPreferences: inert,
+      nativeTheme: { themeSource: "system" }, safeStorage: inert
+    };
+    const req = (name) => (name === "electron" ? electron : require(name));
+    const fn = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+      src + "\nreturn typeof deskTrustChecks === 'function' ? deskTrustChecks() : null;");
+    return fn(req, path.dirname(mainPath), mainPath, { exports: {} }, {}, { log: () => {}, error: () => {}, warn: () => {} });
+  } catch (e) {
+    return null;
+  }
+}
+
+function setDefaultChecks(checks) {
+  defaultChecks = checks;
+  if (typeof globalThis !== "undefined") {
+    globalThis.__etiuda_default_checks = checks;
+  }
+}
+function getDefaultChecks() {
+  if (defaultChecks !== undefined) return defaultChecks;
+  if (typeof globalThis !== "undefined" && globalThis.__etiuda_default_checks !== undefined) {
+    return globalThis.__etiuda_default_checks;
+  }
+  defaultChecks = loadFallbackChecks();
+  return defaultChecks;
 }
 
 function teamRevOf(doc) {
@@ -93,81 +117,8 @@ function teamChannelOf(doc) {
   return { kind: "relay", rt: c.rt, url: c.url };
 }
 
-function sealedAad(team, epoch) {
-  return Buffer.from("etiuda-sealed\n" + team + "\n" + epoch, "utf8");
-}
-
-function openSealed(teamKey, doc) {
-  try {
-    if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) return null;
-    if (!doc || typeof doc !== "object" || +doc.format !== 2 || doc.kind !== "etiuda-sealed") return null;
-    if (!SEALED_TEAM_RE.test(String(doc.team)) || !Number.isInteger(doc.epoch) || doc.epoch < 1) return null;
-    const nonce = String(doc.nonce), hex = String(doc.ct);
-    if (!/^[0-9a-f]{24}$/.test(nonce) || !/^[0-9a-f]*$/.test(hex) || hex.length % 2 || hex.length < 32) return null;
-    const ct = Buffer.from(hex, "hex");
-    const d = crypto.createDecipheriv("aes-256-gcm", teamKey, Buffer.from(nonce, "hex"), { authTagLength: 16 });
-    d.setAAD(sealedAad(doc.team, doc.epoch));
-    d.setAuthTag(ct.subarray(ct.length - 16));
-    return Buffer.concat([d.update(ct.subarray(0, ct.length - 16)), d.final()]).toString("utf8");
-  } catch { return null; }
-}
-
-function catalogSigValid(data, pinPublic) {
-  const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return false;
-  if (!/^[0-9a-f]{64}$/.test(String(pinPublic || ""))) return false;
-  try {
-    const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pinPublic, "hex")]), format: "der", type: "spki" });
-    return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"));
-  } catch { return false; }
-}
-
-const BRANCH_PREFIX = "etiuda-desk-branch\n";
-
-function branchSignedBytes(doc) {
-  return Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), signedBytesOf(doc)]);
-}
-
 function branchIdOf(pub) {
   return "k-" + crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16);
-}
-
-function deskFileGenuine(data, folder) {
-  const d = data && data.desk, sig = data && data.sig;
-  try {
-    return !!folder && !!d && typeof d === "object" && d.id === folder && /^k-[0-9a-f]{16}$/.test(d.id)
-      && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
-      && !!sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
-      && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
-        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
-  } catch { return false; }
-}
-
-const HANDOVER_PREFIX = "etiuda-team-handover\n";
-const HANDOVER_KIND = "etiuda-team-handover", HANDOVER_STEPS = 8;
-function handoverSignedBytes(doc) { return Buffer.concat([Buffer.from(HANDOVER_PREFIX, "utf8"), signedBytesOf(doc)]); }
-
-function handoverGenuine(s, teamId, from) {
-  const to = s && s.to, sig = s && s.sig;
-  try {
-    return !!s && typeof s === "object" && +s.format === 1 && s.kind === HANDOVER_KIND && s.team === teamId
-      && !!to && typeof to.keyId === "string" && /^[0-9a-f]{64}$/.test(String(to.public)) && to.public !== from.public
-      && !!sig && sig.alg === "Ed25519" && /^[0-9a-f]{128}$/.test(String(sig.value))
-      && crypto.verify(null, handoverSignedBytes(s), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(from.public, "hex")]),
-        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
-  } catch { return false; }
-}
-
-function handedTo(doc, pin) {
-  const list = Array.isArray(doc.handover) ? doc.handover : [];
-  let at = pin;
-  for (let step = 0; step < HANDOVER_STEPS; step++) {
-    const s = list.find(x => handoverGenuine(x, doc.id, at));
-    if (!s) return false;
-    at = { keyId: s.to.keyId, public: s.to.public };
-    if (at.keyId === doc.lead.keyId && at.public === doc.lead.public) return true;
-  }
-  return false;
 }
 
 const JOIN_PREFIX = "etiuda-desk-join\n";
@@ -250,7 +201,7 @@ const defaultIO = {
   rename: (from, to) => fs.renameSync(from, to)
 };
 
-function mirrorHasCatalog(mirror, catalogId, io, keyFor) {
+function mirrorHasCatalog(mirror, catalogId, io, keyFor, openSealedFn) {
   if (io.exists(path.join(mirror, catalogId + ".ec"))) return true;
   try {
     const names = io.readdir(mirror);
@@ -264,7 +215,8 @@ function mirrorHasCatalog(mirror, catalogId, io, keyFor) {
           if (doc && doc.kind === "etiuda-sealed") {
             const key = typeof keyFor === "function" ? keyFor(doc.epoch) : null;
             if (key) {
-              const inner = openSealed(key, doc);
+              const openFn = typeof openSealedFn === "function" ? openSealedFn : (defaultChecks && defaultChecks.openSealed);
+              const inner = openFn ? openFn(key, doc) : null;
               if (inner && inner.indexOf('"' + catalogId + '"') >= 0) return true;
             }
           }
@@ -337,6 +289,14 @@ function createFolderProgram(opts) {
   const logger = typeof opts.logger === "function" ? opts.logger : (msg) => console.log(msg);
   const onStatus = typeof opts.onStatus === "function" ? opts.onStatus : () => {};
   const onChange = typeof opts.onChange === "function" ? opts.onChange : () => {};
+
+  const checks = opts.checks || (defaultChecks !== undefined ? defaultChecks : getDefaultChecks()) || {};
+  const teamWhole = typeof checks.teamWhole === "function" ? checks.teamWhole : () => false;
+  const openSealed = typeof checks.openSealed === "function" ? checks.openSealed : () => null;
+  const catalogSigValid = typeof checks.catalogSigValid === "function" ? checks.catalogSigValid : () => false;
+  const branchSignedBytes = typeof checks.branchSignedBytes === "function" ? checks.branchSignedBytes : () => Buffer.alloc(0);
+  const deskFileGenuine = typeof checks.deskFileGenuine === "function" ? checks.deskFileGenuine : () => false;
+  const handedTo = typeof checks.handedTo === "function" ? checks.handedTo : () => false;
 
   let mirrorEpoch = 0;
   let mirrorRev = -1;
@@ -634,7 +594,7 @@ function createFolderProgram(opts) {
           let allEditionsPresent = true;
           if (item.doc && Array.isArray(item.doc.editions)) {
             for (const ed of item.doc.editions) {
-              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor)) {
+              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor, openSealed)) {
                 allEditionsPresent = false;
                 break;
               }
@@ -817,7 +777,7 @@ function createFolderProgram(opts) {
           let waitEditions = false;
           if (doc.editions && Array.isArray(doc.editions)) {
             for (const ed of doc.editions) {
-              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor)) {
+              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor, openSealed)) {
                 waitEditions = true; /* plant:syncer-head-wait */
                 break;
               }
@@ -1028,6 +988,7 @@ class FolderSyncerController {
     this.mirror = opts.mirror;
     this.pin = opts.pin;
     this.keyFor = opts.keyFor;
+    this.checks = opts.checks || (defaultChecks !== undefined ? defaultChecks : getDefaultChecks());
     this.useWorker = opts.useWorker !== false;
     this.onStatus = opts.onStatus;
     this.onChange = opts.onChange;
@@ -1042,6 +1003,7 @@ class FolderSyncerController {
       mirror: this.mirror,
       pin: this.pin,
       keyFor: this.keyFor,
+      checks: this.checks,
       logger: opts.logger,
       onStatus: this.onStatus,
       onChange: this.onChange
@@ -1135,5 +1097,7 @@ module.exports = {
   FolderSyncerController,
   startFolderSyncer,
   stopAllFolderSyncers,
+  setDefaultChecks,
+  getDefaultChecks,
   folderMirrorOf
 };
