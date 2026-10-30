@@ -1507,8 +1507,10 @@ async function main() {
   const tjOnChecks = tjOnM ? Number(tjOnM[1]) : -1;
   const tjOffChecks = tjOffM ? Number(tjOffM[1]) : -1;
   const tjOffSkipped = tjOffM ? Number(tjOffM[2]) : -1;
-  check(tjOn.status === 0 && tjOff.status === 0 && tjOffSkipped === 14 && tjOnChecks - tjOffChecks === 14,
-    "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly 14 plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
+  /* The plants are counted from the file, so a new plant leg moves the count with it. */
+  const tjPlants = (fs.readFileSync(path.join(ROOT, "tests", "team-join.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
+  check(tjOn.status === 0 && tjOff.status === 0 && tjPlants > 0 && tjOffSkipped === tjPlants && tjOnChecks - tjOffChecks === tjPlants,
+    "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly its " + tjPlants + " plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
