@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 93;
+const EXPECTED = 96;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -247,7 +247,8 @@ function hygieneLegs() {
    four-leg chain (a, b, c, and pick, which is on the floor and so is added), b importing tests/helper.mjs, which imports tests/deep.mjs.
    18e one changed test; 18f a changed helper two imports down; 18g a changed file outside tests/ is the full profile, and the run
    after it inherits from it; 18h a base with a hold red is not inherited, against a green control and a planted copy of the tool
-   with the guard cut out, which does inherit it. Legs 18e to 18h sit beside 18a to 18d: the ids are the next four unused. */
+   with the guard cut out, which does inherit it. Legs 18e to 18h sit beside 18a to 18d: the ids are the next four unused. 18i to 18k close
+   the two gaps that were admitted: a fixture read as text and a test spawned by path, named in a string, with 18k the plant. */
 function inheritLegs() {
   const OK = prints(1, 0, "process.exit(0);");
   const RED = prints(0, 1, "process.exit(1);");
@@ -265,14 +266,14 @@ function inheritLegs() {
   /** A lab, committed, whose base run has not been made yet. `o.bRed` makes leg b red; `o.plant` is [from, to] for the lab's own
       copy of the tool, applied before the commit because a changed tool is itself a file outside tests/. */
   function inheritLab(kind, o) {
-    const l = makeLab(kind, { a: OK, b: B(o.bRed), c: OK, pick: OK }, {
+    const l = makeLab(kind, { a: o.a || OK, b: B(o.bRed), c: o.c || OK, pick: OK }, {
       git: true,
-      files: {
+      files: Object.assign({
         "tests/helper.mjs": 'import "./deep.mjs";\nexport const helper = 1;\n',
         "tests/deep.mjs": "export const deep = 1;\n",
         "src/leaf.mjs": "export const leaf = 1;\n",
         "package-lock.json": "{}\n",
-      },
+      }, o.files),
     });
     const pkgFile = path.join(l.lab, "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf8"));
@@ -385,6 +386,41 @@ function inheritLegs() {
     "18h a base with a hold red is not inherited, the full profile runs; the same fix on a green base inherits, and the tool with the guard cut out inherits the hold-red base: "
     + summary("held base", hBase) + " | " + summary("then", hRun) + " | " + summary("green control", hGreenRun)
     + " | planted " + hPlant.planted + " " + summary("then", hPlantRun));
+
+  /* (i to k) the two gaps the comment on the tool once admitted. Test a spawns tests/spawned.mjs by its path and test c reads
+     tests/fixture.txt as text, so neither has an import of the file it depends on. (i) a changed fixture reaches the test that
+     names it; (j) a changed test that another spawns by path reaches the spawner; each leaves the other tests, which do not
+     name either, inherited. (k) the tool with the by-name line cut out runs neither, which is the gap as it stood. */
+  const SPAWNER = 'import { spawnSync } from "node:child_process";\n'
+    + prints(1, 0, 'spawnSync(process.execPath, ["tests/spawned.mjs"]);\nprocess.exit(0);');
+  const READER = 'import fs from "node:fs";\n'
+    + prints(1, 0, 'fs.readFileSync(new URL("./fixture.txt", import.meta.url), "utf8");\nprocess.exit(0);');
+  const NAMES = { a: SPAWNER, c: READER, files: { "tests/spawned.mjs": "process.exit(0);\n", "tests/fixture.txt": "one\n" } };
+  const NAMED = "if (namesAnyOf(text, changed)) reaching.add(f); /* plant:inherit-named */";
+  const iLab = inheritLab("inherit-fixture", NAMES);
+  const iBase = iLab.release();
+  iLab.edit({ "tests/fixture.txt": "two\n" }, "change the fixture");
+  const iRun = iLab.release();
+  const jLab = inheritLab("inherit-spawned", NAMES);
+  const jBase = jLab.release();
+  jLab.edit({ "tests/spawned.mjs": "process.exit(0);\n// changed\n" }, "change the spawned test");
+  const jRun = jLab.release();
+  check(iBase.exit === 0 && gatesOf(iBase) === ALL && iRun.exit === 0 && !!iRun.line && !!iBase.line
+    && iRun.line.inherits === iBase.line.gitTree && gatesOf(iRun) === "tests-c,tests-pick" && ranOf(iRun) === "tests/c.mjs,tests/pick.mjs",
+    "18i a changed fixture that a test reads as text, naming it in a string, runs that test with the floor, and the tests that do not name it are inherited: "
+    + summary("base", iBase) + " | " + summary("then", iRun));
+  check(jBase.exit === 0 && gatesOf(jBase) === ALL && jRun.exit === 0 && !!jRun.line && !!jBase.line
+    && jRun.line.inherits === jBase.line.gitTree && gatesOf(jRun) === "tests-a,tests-pick" && ranOf(jRun) === "tests/a.mjs,tests/pick.mjs",
+    "18j a changed test that another spawns by its path runs the spawner with the floor, and the tests that do not name it are inherited: "
+    + summary("base", jBase) + " | " + summary("then", jRun));
+  const kLab = inheritLab("inherit-named-planted", Object.assign({ plant: [NAMED, ""] }, NAMES));
+  const kBase = kLab.release();
+  kLab.edit({ "tests/fixture.txt": "two\n" }, "change the fixture");
+  const kRun = kLab.release();
+  check(kLab.planted && kBase.exit === 0 && kRun.exit === 0 && !!kRun.line && !!kBase.line
+    && kRun.line.inherits === kBase.line.gitTree && gatesOf(kRun) === "tests-pick",
+    "18k the tool with the by-name line cut out inherits the test that reads the changed fixture, which is the gap: planted " + kLab.planted + " "
+    + summary("then", kRun));
 }
 
 async function main() {
