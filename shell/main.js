@@ -125,6 +125,8 @@ function catalogFolder() {
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
+  const need = Object.values(teamNeedsFolder)[0];
+  if (need && need.mirror) return need.mirror;
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -1403,6 +1405,7 @@ function deskEnvelopeBody(keysText) {
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
     + (inUseN > 0 ? ',"inUseN":' + inUseN : "")
     + (Object.keys(teamPauseSeen).length ? ',"teamPauseSeen":' + JSON.stringify(teamPauseSeen) : "")
+    + (Object.keys(teamNeedsFolder).length ? ',"teamNeedsFolder":' + JSON.stringify(teamNeedsFolder) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -2826,6 +2829,7 @@ let teamLeft = {};                             // of those, a team the agent lef
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamRelayGone = {};                        // team id -> true: the relay refused this desk as removed, so the desk stops asking and says so
 let teamPauseSeen = {};                        // team id -> {t: number, paused: boolean}
+let teamNeedsFolder = {};                        // team id -> {rev, lead, mirror}: moved to folder, waiting for folder
 let inUseN = 0;                                // monotonic counter for in-use.ec
 const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone|unknown):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
@@ -3302,8 +3306,18 @@ function heedTeam() {
       teamRoster[r.team] = { epoch: r.epoch, desks: ids };
       changed = true;
     }
+    const pinned = teamPins[r.team];
+    const isPinnedLead = !!(pinned && pinned.public === doc.lead.public && pinned.keyId === doc.lead.keyId);
+    const heldFloor = (teamRevSeen[r.team] || {})[doc.lead.public];
+    const heldRev = (heldFloor && heldFloor.epoch === r.epoch) ? (heldFloor.rev || 0) : 0;
+    const revAbove = rev > heldRev;
+    const currentCh = teamChannel[r.team];
+    const wasOnRelay = !!(currentCh && currentCh.kind === "relay" && currentCh.rt && relayFollowed(r.team) && root === relayMirrorOf(currentCh.rt));
+    const isFolderMove = wasOnRelay && channel.kind === "folder" && revAbove && isPinnedLead;
+
     const was = JSON.stringify(teamChannel[r.team] || null);
-    if (channel.kind === "relay") teamChannel[r.team] = channel; else delete teamChannel[r.team];
+    if (channel.kind === "relay") teamChannel[r.team] = channel;
+    else if (!isFolderMove) delete teamChannel[r.team];
     if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
     teamRingAt = { root: root, relay: channel.kind === "relay", ring: (channel.kind === "relay" || doc.ring) ? teamRingIn(doc) : null };
     if (channel.kind === "relay" && relayFollowed(r.team) && root !== relayMirrorOf(channel.rt)) {
@@ -3333,6 +3347,16 @@ function heedTeam() {
       }
       tryHeldBranches();
       catalogFolderChanged(); /* plant:follow-folder-changed */
+    }
+    if (isFolderMove) {
+      const mirrorDir = (currentCh && currentCh.rt) ? relayMirrorOf(currentCh.rt) : root;
+        stopRelayChannel(r.team); /* plant:folder-stop-relay */
+      const matchingFolder = findMatchingFolderInKnownRoots(r.team, doc.lead.public, rev, root, doc);
+      if (matchingFolder) {
+        switchToFolderTeam(matchingFolder, r.team, mirrorDir); /* plant:folder-known-root */
+      } else {
+        setTeamNeedsFolder(r.team, doc, mirrorDir); /* plant:folder-not-found-offer */
+      }
     }
   }
   // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
@@ -4811,6 +4835,11 @@ function leadsView() {
     if (head) row.head = head;
     const lapse = lapseShown(t);
     if (lapse) row.lapse = lapse;
+    if (teamNeedsFolder[t]) {
+      row.needsFolder = true;
+      row.openFolder = shellWords().openFolder;
+      row.meetsInFolder = shellWords().teamMeetsInFolder;
+    }
     return row;
   });
 }
@@ -4846,6 +4875,7 @@ function forgetLead(team, left) {
   delete teamShown[team];
   delete teamChannel[team];
   delete teamPinFrom[team];
+  delete teamNeedsFolder[team];
   teamRingAt = null;
   teamSeen.delete(team);
   delete teamLapseSeen[team];
@@ -4935,6 +4965,144 @@ function relayFlagged() {
   return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
 }
 function relayMirrorOf(rt) { return path.join(app.getPath("userData"), "relay", rt); }
+
+function stopRelayChannel(teamId) {
+  delete teamChannel[teamId];
+  if (relayChannel) {
+    const old = relayChannel;
+    relayChannel = null;
+    relayAt = "";
+    old.stop().catch(() => {});
+  }
+  persistDeskEnvelope();
+}
+
+function copyDeskFilesToFolder(mirrorDir, targetFolder) {
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
+  if (!me || !mirrorDir) return;
+  const srcDir = path.join(mirrorDir, "desks", me);
+  const dstDir = path.join(targetFolder, "desks", me);
+  try {
+    if (fs.existsSync(srcDir)) {
+      fs.mkdirSync(dstDir, { recursive: true });
+      for (const f of fs.readdirSync(srcDir)) {
+        if (/\.ec$/i.test(f)) {
+          fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f));
+        }
+      }
+    }
+  } catch (e) {
+    console.error("etiuda: failed to copy desk files to folder - " + e.message);
+  }
+}
+
+function checkMatchingFolder(dir, teamId, leadPub, minRev) {
+  if (!dir || typeof dir !== "string") {
+    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
+  }
+  const file = path.join(dir, TEAM_NAME);
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
+  }
+  let doc = null;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
+  }
+  if (!doc || typeof doc !== "object" || !teamWhole(doc)) {
+    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
+  }
+  if (doc.id !== teamId) {
+    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
+  }
+  if (!doc.lead || doc.lead.public !== leadPub) {
+    return { ok: false, error: "wrong-lead", said: shellWords().folderRefusedWrongLead };
+  }
+  const rev = teamRevOf(doc);
+  if (typeof minRev === "number" && (rev === null || rev < minRev)) {
+    return { ok: false, error: "lower-rev", said: shellWords().folderRefusedLowerRev };
+  }
+  return { ok: true, doc };
+}
+
+function findMatchingFolderInKnownRoots(teamId, leadPub, minRev, currentRoot, doc) {
+  const candidates = new Set();
+  if (deskKeys && typeof deskKeys[CATALOG_FOLDER_KEY] === "string" && deskKeys[CATALOG_FOLDER_KEY].trim()) {
+    candidates.add(deskKeys[CATALOG_FOLDER_KEY].trim());
+  }
+  const policyFolder = sayJoinPolicy().folder;
+  if (policyFolder) candidates.add(policyFolder);
+  if (teamJoin) {
+    if (teamJoin.invite && typeof teamJoin.invite.folder === "string") candidates.add(teamJoin.invite.folder);
+    if (typeof teamJoin.was === "string") candidates.add(teamJoin.was);
+    if (typeof teamJoin.folder === "string") candidates.add(teamJoin.folder);
+  }
+  if (doc) {
+    if (typeof doc.folder === "string" && doc.folder) candidates.add(doc.folder);
+    if (doc.place) {
+      let roots = [];
+      try { roots = syncRootsFrom(readSyncRecords(null)); } catch { roots = []; }
+      try {
+        const res = placeResolve(doc.folder || "", doc.place, roots, d => folderAnswers(d));
+        if (res && res.path) candidates.add(res.path);
+      } catch {}
+      try {
+        const pCands = placeCandidates(doc.folder || "", doc.place, roots);
+        for (const c of pCands) if (c) candidates.add(c);
+      } catch {}
+    }
+  }
+  for (const c of candidates) {
+    if (!c || (currentRoot && path.resolve(c) === path.resolve(currentRoot))) continue;
+    const match = checkMatchingFolder(c, teamId, leadPub, minRev);
+    if (match.ok) return c;
+  }
+  return null;
+}
+
+function switchToFolderTeam(targetFolder, teamId, mirrorDir) {
+  deskSetOwn(CATALOG_FOLDER_KEY, targetFolder);
+  persistDeskEnvelope();
+  copyDeskFilesToFolder(mirrorDir, targetFolder);
+  tryHeldBranches();
+  if (teamId) {
+    delete teamNeedsFolder[teamId];
+    teamShown[teamId] = Object.assign({}, teamShown[teamId], { folder: targetFolder });
+    delete teamShown[teamId].relay;
+  }
+  catalogFolderChanged();
+  sendJoin(theWindow);
+  teamStamp = "";
+  heedTeam();
+}
+
+function setTeamNeedsFolder(teamId, doc, mirrorDir) {
+  const had = teamNeedsFolder[teamId];
+  teamNeedsFolder[teamId] = {
+    rev: doc.rev,
+    lead: { keyId: doc.lead.keyId, public: doc.lead.public },
+    mirror: mirrorDir,
+  };
+  if (!had) {
+    teamSay(shellWords().teamMeetsInFolder);
+  }
+  sendJoin(theWindow);
+}
+
+function pickMovedFolder(teamId, pickedFolder) {
+  const need = teamNeedsFolder[teamId];
+  const pinned = teamPins[teamId];
+  const minRev = need ? need.rev : 0;
+  const leadPub = pinned ? pinned.public : (need && need.lead ? need.lead.public : "");
+  const check = checkMatchingFolder(pickedFolder, teamId, leadPub, minRev);
+  if (!check.ok) { teamSay(check.said); return { ok: false, error: check.error }; } /* plant:folder-picked-validate */
+  switchToFolderTeam(pickedFolder, teamId, need ? need.mirror : ""); /* plant:folder-picked-match */
+  return { ok: true };
+}
 function relayOpened(sealed) {
   try { return safeStorage.decryptString(Buffer.from(String(sealed), "base64")); } catch { return null; }
 }
@@ -5693,6 +5861,10 @@ function readDesk() {
     });
     if (doc && table(doc.teamRelayGone)) Object.keys(doc.teamRelayGone).forEach(t => {
       if (SEALED_TEAM_RE.test(t) && doc.teamRelayGone[t] === true) teamRelayGone[t] = true;
+    });
+    if (doc && table(doc.teamNeedsFolder)) Object.keys(doc.teamNeedsFolder).forEach(t => {
+      const v = doc.teamNeedsFolder[t];
+      if (SEALED_TEAM_RE.test(t) && table(v) && Number.isSafeInteger(v.rev)) teamNeedsFolder[t] = v;
     });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
@@ -6481,6 +6653,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
+  : op === "pick-moved-folder" ? pickMovedFolder(file, name)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
@@ -6784,12 +6957,21 @@ const SHELL_WORDS = {
   en: { lang: "en", undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
         addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
         restart: "Restart", close: "Close Etiuda", wait: "Wait",
-        pickTeamFolder: "Choose the shared folder for this team" },
+        teamMeetsInFolder: "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.",
+        openFolder: "Open a folder",
+        folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
+        folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
+        folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
+        pickTeamFolder: "Choose the team's shared folder" },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
-        /* The folder picker's title: a draft for the copywriter. */
-        pickTeamFolder: "Wybierz folder współdzielony tego zespołu" },
+        teamMeetsInFolder: "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
+        openFolder: "Otwórz folder",
+        folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
+        folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
+        folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
+        pickTeamFolder: "Wybierz wspólny folder zespołu" },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();

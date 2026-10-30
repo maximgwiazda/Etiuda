@@ -324,6 +324,9 @@ function parseMeta(header) {
   if (!m || typeof m !== "object" || Array.isArray(m) || m.v !== 1) return null;
   const out = { id: m.id, supersedes: m.supersedes === undefined ? null : m.supersedes, epoch: m.epoch, writer: m.writer,
     counter: m.counter, del: m.del, sig: m.sig, nonce: m.nonce, place: m.place, pub: m.pub === undefined ? null : m.pub };
+  if (m.channel && typeof m.channel === "object" && !Array.isArray(m.channel) && typeof m.channel.kind === "string") {
+    out.channel = { kind: m.channel.kind };
+  }
   const placed = out.place === "root" || INVITE_PLACE.test(String(out.place)) || ANSWER_PLACE.test(String(out.place))
     || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
   if (!is(HEX32, out.id) || (out.supersedes !== null && (!is(HEX32, out.supersedes) || out.supersedes === out.id))
@@ -383,6 +386,8 @@ function createCore(deps) {
       if (typeof row.secret !== "string") row.secret = team && typeof team.secret === "string" ? team.secret : random(32);
       store.put("team", row);
       store.del("swept");
+      store.del("moved");
+      store.del("teamFile");
       remember(b.grant);
     });
     return { ok: true, rt };
@@ -407,6 +412,7 @@ function createCore(deps) {
         if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
         store.put("team", row);
       }
+      store.del("moved");
       remember(b.grant);
     });
     return { ok: true, lapse: told() };
@@ -447,6 +453,7 @@ function createCore(deps) {
       if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
       store.put("team", row);
       for (const [k, s] of store.list("ses:")) if (s && s.key === oldLead.keyId) store.del(k); /* plant:lead-sessions-drop */
+      store.del("moved");
       remember(b.grant);
     });
     return { ok: true, lead: to.keyId, oldLead: oldLead.keyId, lapse: told() };
@@ -460,12 +467,13 @@ function createCore(deps) {
 
   /* null where the team may do this now, or the refusal. A read is answered while working and read-only, a write while working.
      Each route asks after its caller has shown who it is, so the lapse is told to no one who holds only the team's id. */
-  function lapseGate(write) {
+  function lapseGate(write, channel) {
     const team = store.get("team");
     if (!team) return null;
     const state = lapseOf(team, clock()).state;
     if (state === "working") return null; /* plant:lapse-working */
     if (state === "read-only" && !write) return null; /* plant:lapse-read */
+    if (state === "read-only" && channel && channel.kind === "folder") return null; /* plant:lapse-folder */
     return no("team-lapsed");
   }
 
@@ -1012,8 +1020,16 @@ function createCore(deps) {
     if (!team) return no("not-enrolled");
     const s = sessionOf(token);
     if (!s.ok) return s; /* plant:put-session */
-    const lapsedPut = lapseGate(true);
+    const folderMove = !s.inv && m && m.writer === team.lead.keyId && m.place === "root" && !!(m.channel && m.channel.kind === "folder");
+    const lapsedPut = lapseGate(true, folderMove ? m.channel : null);
     if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
+    const state = lapseOf(team, clock()).state;
+    if (state === "read-only" && folderMove) {
+      const moved = store.get("moved");
+      const teamFile = store.get("teamFile") || team.teamFile;
+      if ((moved && moved !== m.id) || (teamFile && m.supersedes !== teamFile)) return no("team-lapsed"); /* plant:lapse-folder-once */
+      if (m.id === pathId && s.key === m.writer) store.put("moved", m.id);
+    }
     if (!m || m.id !== pathId) return no("bad-signature");
     if (s.inv) return admitInvite(team, s, m);
     if (s.key !== m.writer) return no("no-hello"); /* plant:put-writer */
@@ -1154,6 +1170,7 @@ function createCore(deps) {
       if (j.a.invite) rec.pub = j.a.pub;
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
+      if (j.a.lead && m.place === "root" && m.channel) store.put("teamFile", m.id);
       noteBlobs(1);
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);
