@@ -145,7 +145,7 @@ function folderTeamHere() {
       return path.resolve(shown.folder) === path.resolve(rawFolder)
         || path.resolve(shown.folder) === path.resolve(folderMirrorOf(t));
     }
-    return true;
+    return false;
   }).sort();
   if (teams.length) {
     return { team: teams[0], folder: rawFolder, joining: false };
@@ -153,6 +153,8 @@ function folderTeamHere() {
   return null;
 }
 function sharedFolderForWrite() {
+  const named = sayJoinPolicy().folder;
+  if (named) return named;
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
   const ft = folderTeamHere();
@@ -161,14 +163,15 @@ function sharedFolderForWrite() {
 }
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
+  const named = sayJoinPolicy().folder;
+  if (named) return named;
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
   /* On a folder team the catalog folder is the local mirror the syncer keeps. */
   const ft = folderTeamHere();
-  if (ft) return folderMirrorOf(ft.team); /* plant:catalog-folder-mirror */
-  const named = sayJoinPolicy().folder;
-  if (named) return named;
+  if (ft && !ft.joining) return folderMirrorOf(ft.team); /* plant:catalog-folder-mirror */
+  if (ft && ft.joining) return ft.folder;
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -3394,14 +3397,17 @@ function heedTeam() {
       const mirror = relayMirrorOf(channel.rt);
       const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
       if (me) {
-        const srcDir = path.join(root, "desks", me);
+        const srcDirs = [path.join(rawCatalogFolder(), "desks", me)];
+        if (root !== rawCatalogFolder()) srcDirs.push(path.join(root, "desks", me));
         const dstDir = path.join(mirror, "desks", me);
         try {
-          if (fs.existsSync(srcDir)) {
-            fs.mkdirSync(dstDir, { recursive: true });
-            for (const f of fs.readdirSync(srcDir)) {
-              if (/\.ec$/i.test(f)) {
-                fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f)); /* plant:follow-copy */
+          fs.mkdirSync(dstDir, { recursive: true });
+          for (const srcDir of srcDirs) {
+            if (fs.existsSync(srcDir)) {
+              for (const f of fs.readdirSync(srcDir)) {
+                if (/\.ec$/i.test(f)) {
+                  fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f)); /* plant:follow-copy */
+                }
               }
             }
           }
