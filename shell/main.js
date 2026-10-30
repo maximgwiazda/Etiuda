@@ -730,6 +730,8 @@ function pickEdition(found) {
   });
   return found.filter((item, i) => !drop.has(i))[0] || null;
 }
+/* The mirror is a cache, not a trust anchor. The desk keeps every read-time check it does today
+   on what it reads from the mirror, as it does on the relay mirror. */
 function readCatalog() {
   heedTeam();
   if (openedWith && openedBaseline === null) rememberOpenedBaseline();
@@ -834,6 +836,7 @@ function watchCatalog(win) {
     if (!folderAnswers(dir)) { retryFolder(FOLDER_RETRY_MS); continue; }
     try {
       const w = fs.watch(dir, (ev, name) => {
+        if (folderSyncer) folderSyncer.kick();
         if (name && String(name) === "desks" && dir === watchedFolder && !desksWatcher) watchDesks(win);
         if (name && String(name) === ASK_DIR && dir === watchedFolder && !asksWatcher) watchAsks(win);
         if (name && !isCatalogName(path.basename(String(name)))) return;
@@ -1016,7 +1019,7 @@ function askFolder(dir) {
 function settleFolder(dir, ok) {
   const current = catalogFolder();
   const raw = rawCatalogFolder();
-  if (dir !== current && dir !== raw) return false;
+  if (path.resolve(dir) !== path.resolve(current) && path.resolve(dir) !== path.resolve(raw)) return false;
   if (!ok && folderSaidDown !== dir)
     console.error("etiuda: the catalog folder " + dir + " did not answer, so it is read as empty until it does");
   if (ok && folderSaidDown === dir) console.log("etiuda: the catalog folder " + dir + " answers again");
@@ -1026,6 +1029,14 @@ function settleFolder(dir, ok) {
 }
 function armFolder(win) {
   clearTimeout(folderRetry);
+  const ft = folderTeamHere();
+  if (ft) {
+    folderSyncerRun(win);
+    if (!win || win.isDestroyed()) return;
+    watchCatalog(win);
+    catalogChanged(win);
+    return;
+  }
   const dir = catalogFolder();
   return askFolder(dir).then(ok => {
     if (!settleFolder(dir, ok)) { if (dir === catalogFolder()) retryFolder(FOLDER_RETRY_MS); return; }
@@ -2400,7 +2411,7 @@ function writeBranch(stem, text) {
    folder changing and the page finishing a load both call this. */
 function tryHeldBranches() {
   tryHeldUse();
-  if (!heldBranch.size || !folderAnswers(catalogFolder())) return;
+  if (!heldBranch.size || !folderAnswers(sharedFolderForWrite())) return;
   for (const [stem, text] of Array.from(heldBranch)) {
     const r = writeBranch(stem, text);
     if (!r.ok && !r.held) heldBranch.delete(stem);
@@ -2504,7 +2515,7 @@ function writeClearedInUse() {
 }
 function clearInUseFile() {
   const dest = inUseFile();
-  if (!dest || !folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
+  if (!dest || !folderAnswers(sharedFolderForWrite())) { heldInUse = { remove: true }; return; }
   let written = false;
   try { written = writeClearedInUse(); } catch { written = false; }
   if (!written) {
@@ -2518,7 +2529,7 @@ function clearInUseFile() {
 }
 function releaseInUse() {
   if (!inUseKept) return;
-  if (!folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
+  if (!folderAnswers(sharedFolderForWrite())) { heldInUse = { remove: true }; return; }
   const use = teamUse();
   if (use.away) { heldInUse = { remove: true }; return; }
   if (use.member) { if (heldInUse && heldInUse.remove) heldInUse = null; return; }
@@ -2586,7 +2597,7 @@ function ejectLoadedCatalog() {
   loadedText = "";
   dropLoadedCatalog();
   const dest = inUseFile();
-  if (!dest || !folderAnswers(catalogFolder())) {
+  if (!dest || !folderAnswers(sharedFolderForWrite())) {
     if (dest) rememberEjectOwed();
     heldInUse = dest ? { eject: true } : null;
     inUseKept = null;
@@ -2640,7 +2651,7 @@ function writeInUse(pin, win) {
   /* A pin other than the one already recorded drops the kept file before the returns below,
      so a take the share has not recorded cannot leave the previous catalog to be reloaded. */
   if (!inUseKept || inUseKept.sha !== String(pin || "")) dropLoadedCatalog();
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   if (!folderAnswers(root)) { heldInUse = { text: got.text, source: got.source }; return; }
   let isDir = false;
   try { isDir = fs.statSync(root).isDirectory(); } catch { isDir = false; }
@@ -2712,7 +2723,7 @@ function askSignedBytes(doc) { return Buffer.concat([Buffer.from(ASK_PREFIX, "ut
 function readAskFile() {
   const me = branchIdentity(false);
   if (!me) return { away: true };
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return { away: true };
   const file = path.join(root, ASK_DIR, me.id + ".json");
   let text = "";
@@ -2746,7 +2757,7 @@ function askFresh(doc, me, lead) {
 }
 function removeAnswer() {
   const me = branchIdentity(false);
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   if (!me || !folderAnswers(root)) { heldAnswer = { remove: true }; return; }
   try { fs.unlinkSync(path.join(root, "desks", me.id, ANSWER_NAME)); }
   catch (e) { if (e.code !== "ENOENT") { heldAnswer = { remove: true }; return; } }
@@ -2755,7 +2766,7 @@ function removeAnswer() {
 function writeAnswer(seal, pin, catalogDoc) {
   const me = branchIdentity(true);
   if (!me || !seal) return false;
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return false;
   const inner = JSON.stringify({ format: 1, kind: ANSWER_KIND, sha256: pin, catalog: catalogDoc });
   const at = branchDest("catalog-answer");
@@ -2794,7 +2805,7 @@ function checkWithdrawnAsks(root, me, lead) {
 /* An ask is answered once, and the answer is taken away when the ask is gone, unsigned, or expired. */
 function tryCatalogAsk(win) {
   try {
-    if (!folderAnswers(catalogFolder())) return;
+    if (!folderAnswers(sharedFolderForWrite())) return;
     resealHeld(win);
     const got = readAskFile();
     if (got.away) return;
@@ -2823,7 +2834,7 @@ function tryCatalogAsk(win) {
 }
 function watchAsks(win) {
   if (asksWatcher) { try { asksWatcher.close(); } catch { /* already gone */ } asksWatcher = null; }
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return;
   try {
     const w = fs.watch(path.join(root, ASK_DIR), () => {

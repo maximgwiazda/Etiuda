@@ -1,7 +1,14 @@
 /* shell/folder/syncer.cjs - Background folder syncer for shared-folder teams.
  * Manages the background worker thread that watches and synchronizes a shared team folder
  * into the local mirror (<userData>/folder-mirror/<teamId>/).
+ *
  * Board 945 stage 3 (b), slice 1.
+ * D2: The worker only stages files into the mirror's .staging directory.
+ * The main thread runs existing check functions on local bytes and renames into place or drops them.
+ * No keys or pins are sent to the worker thread.
+ * D4: Worker lists the shared folder every FOLDER_SYNC_CADENCE_MS (3000ms by default).
+ * A folder watch event asks for a listing early via kick().
+ * Both the two-equal-listings rule and two-listing removal scale with this cadence.
  */
 "use strict";
 
@@ -10,6 +17,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { Worker } = require("node:worker_threads");
 
+const FOLDER_SYNC_CADENCE_MS = 3000;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 const SEALED_TEAM_RE = /^t-[0-9a-f]{16}$/;
 
@@ -81,18 +89,30 @@ function catalogSigValid(data, pinPublic) {
   } catch { return false; }
 }
 
-function writeReplacing(file, textOrBuf, io) {
-  const dir = path.dirname(file);
-  try { io.mkdir(dir); } catch {}
-  const rand = crypto.randomBytes(6).toString("hex");
-  const tmp = file + "." + process.pid + "." + Date.now() + "." + rand + ".tmp";
+const BRANCH_PREFIX = "etiuda-desk-branch\n";
+
+function branchSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), signedBytesOf(doc)]);
+}
+
+function branchIdOf(pub) {
+  return "k-" + crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16);
+}
+
+function deskFileGenuine(data, folder) {
+  const d = data && data.desk, sig = data && data.sig;
   try {
-    io.writeFile(tmp, textOrBuf);
-    io.rename(tmp, file);
-  } catch (e) {
-    try { io.unlink(tmp); } catch {}
-    throw e;
-  }
+    return !!folder && !!d && typeof d === "object" && d.id === folder && /^k-[0-9a-f]{16}$/.test(d.id)
+      && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
+        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
+
+function ensureDir(p, io) {
+  const dir = path.dirname(p);
+  try { io.mkdir(dir); } catch {}
 }
 
 const defaultIO = {
@@ -110,14 +130,14 @@ function createFolderProgram(opts) {
   const team = opts.team;
   const folder = opts.folder;
   const mirror = opts.mirror;
-  const pin = opts.pin;
+  let pin = opts.pin;
   const io = opts.io || defaultIO;
   const onStatus = typeof opts.onStatus === "function" ? opts.onStatus : () => {};
   const onChange = typeof opts.onChange === "function" ? opts.onChange : () => {};
 
   let mirrorEpoch = 0;
   let mirrorRev = -1;
-  let pending = []; // [{ relPath, epoch, text }]
+  let pending = []; // [{ relPath, epoch, tmpPath, text }]
   const missingCount = new Map(); // relPath -> number of consecutive answered listings missing
   const seenUnchecked = new Map(); // relPath -> { size, mtimeMs }
   const knownKeys = new Map(); // epoch -> Buffer
@@ -211,24 +231,22 @@ function createFolderProgram(opts) {
     return out;
   }
 
-  function syncOnce() {
-    const applied = [];
-    let foundFiles = null;
-    try {
-      foundFiles = walkFolder(folder);
-      // If folder cannot even be read or readdir threw:
-      if (!foundFiles) throw new Error("listing failed");
-      onStatus({ folder, answers: true });
-    } catch (e) {
+  function applyScan(scanData) {
+    if (!scanData || !scanData.answers) {
       onStatus({ folder, answers: false });
       return { answers: false, applied: [] };
     }
+    onStatus({ folder, answers: true });
+
+    const applied = [];
+    const listing = scanData.listing || [];
+    const staged = scanData.staged || [];
 
     // Step 1: Team file check
-    if (foundFiles.has("etiuda-team.json")) {
-      const fullPath = path.join(folder, "etiuda-team.json");
+    const teamStaged = staged.filter(s => s.relPath === "etiuda-team.json")[0];
+    if (teamStaged) {
       let text = null;
-      try { text = io.readFile(fullPath, "utf8"); } catch {}
+      try { text = io.readFile(teamStaged.tmpPath, "utf8"); } catch {}
       if (text) {
         let doc = null;
         try { doc = JSON.parse(text); } catch {}
@@ -244,19 +262,22 @@ function createFolderProgram(opts) {
             if (olderEpoch || olderRevAtEpoch) revOk = false; /* plant:syncer-team-rev */
             if (revOk) {
               const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
-              let needsWrite = true;
-              if (io.exists(mirrorTeamPath)) {
-                try { needsWrite = io.readFile(mirrorTeamPath, "utf8") !== text; } catch {}
-              }
-              if (needsWrite) {
-                writeReplacing(mirrorTeamPath, text, io); /* plant:syncer-team-atomic */
-                applied.push("etiuda-team.json");
-              }
+              ensureDir(mirrorTeamPath, io);
+              io.rename(teamStaged.tmpPath, mirrorTeamPath); /* plant:syncer-team-atomic */
+              applied.push("etiuda-team.json");
               mirrorEpoch = doc.epoch;
               mirrorRev = rev;
+            } else {
+              try { io.unlink(teamStaged.tmpPath); } catch {}
             }
+          } else {
+            try { io.unlink(teamStaged.tmpPath); } catch {}
           }
+        } else {
+          try { io.unlink(teamStaged.tmpPath); } catch {}
         }
+      } else {
+        try { io.unlink(teamStaged.tmpPath); } catch {}
       }
     }
 
@@ -268,21 +289,37 @@ function createFolderProgram(opts) {
         const key = knownKeys.get(item.epoch);
         if (key) {
           try {
-            const parsed = JSON.parse(item.text);
-            if (parsed.kind === "etiuda-sealed") {
-              const decrypted = openSealed(key, parsed);
-              if (decrypted) {
-                const cat = JSON.parse(decrypted);
-                if (cat && cat.kind === "etiuda-catalog" && catalogSigValid(cat, pin && pin.public)) {
-                  genuine = true;
+            const text = item.text || (item.tmpPath ? io.readFile(item.tmpPath, "utf8") : null);
+            if (text) {
+              const parsed = JSON.parse(text);
+              if (parsed.kind === "etiuda-sealed") {
+                const decrypted = openSealed(key, parsed);
+                if (decrypted) {
+                  const cat = JSON.parse(decrypted);
+                  if (cat && cat.kind === "etiuda-catalog") {
+                    const parts = item.relPath.replace(/\\/g, "/").split("/");
+                    if (parts[0] === "desks" && parts.length === 3) {
+                      if (deskFileGenuine(cat, parts[1])) genuine = true;
+                    } else if (catalogSigValid(cat, pin && pin.public)) {
+                      genuine = true;
+                    }
+                  }
                 }
               }
             }
           } catch {}
         }
         if (genuine) {
-          writeReplacing(path.join(mirror, item.relPath), item.text, io);
+          const target = path.join(mirror, item.relPath);
+          ensureDir(target, io);
+          if (item.tmpPath && io.exists(item.tmpPath)) {
+            io.rename(item.tmpPath, target);
+          } else if (item.text) {
+            io.writeFile(target, item.text);
+          }
           applied.push(item.relPath);
+        } else {
+          if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
         }
       } else {
         stillPending.push(item);
@@ -290,12 +327,16 @@ function createFolderProgram(opts) {
     }
     pending = stillPending;
 
-    // Step 3: Process remaining files from foundFiles
-    for (const [relPath, st] of foundFiles.entries()) {
+    // Step 3: Process remaining staged files
+    for (const item of staged) {
+      const relPath = item.relPath;
       if (relPath === "etiuda-team.json") continue;
-      const fullPath = path.join(folder, relPath);
+      const tmpPath = item.tmpPath;
       let text = null;
-      try { text = io.readFile(fullPath, "utf8"); } catch { continue; }
+      try { text = io.readFile(tmpPath, "utf8"); } catch {
+        try { io.unlink(tmpPath); } catch {}
+        continue;
+      }
 
       if (relPath.endsWith(".ec")) {
         let doc = null;
@@ -305,68 +346,84 @@ function createFolderProgram(opts) {
           if (doc.epoch > mirrorEpoch || !knownKeys.has(doc.epoch)) waitPending = true; /* plant:syncer-epoch-pending */
           if (waitPending) {
             if (!pending.some(p => p.relPath === relPath)) {
-              pending.push({ relPath, epoch: doc.epoch, text });
+              pending.push({ relPath, epoch: doc.epoch, tmpPath, text });
             }
           } else {
             const key = knownKeys.get(doc.epoch);
             const decrypted = openSealed(key, doc);
-            if (!decrypted) {
+            let genuine = false;
+            if (decrypted) {
+              let cat = null;
+              try { cat = JSON.parse(decrypted); } catch {}
+              if (cat && cat.kind === "etiuda-catalog") {
+                const parts = relPath.replace(/\\/g, "/").split("/");
+                if (parts[0] === "desks" && parts.length === 3) {
+                  if (deskFileGenuine(cat, parts[1])) genuine = true;
+                } else if (catalogSigValid(cat, pin && pin.public)) {
+                  genuine = true;
+                }
+              }
+            }
+            let sigOk = true;
+            if (!genuine) sigOk = false; /* plant:syncer-edition-sig */
+            if (!sigOk) {
+              try { io.unlink(tmpPath); } catch {}
               continue;
             }
-            let cat = null;
-            try { cat = JSON.parse(decrypted); } catch {}
-            if (!cat || cat.kind !== "etiuda-catalog" || !catalogSigValid(cat, pin && pin.public)) {
-              continue; /* plant:syncer-edition-sig */
-            }
             const target = path.join(mirror, relPath);
-            let needsWrite = true;
-            if (io.exists(target)) {
-              try { needsWrite = io.readFile(target, "utf8") !== text; } catch {}
-            }
-            if (needsWrite) {
-              writeReplacing(target, text, io);
-              applied.push(relPath);
-            }
+            ensureDir(target, io);
+            io.rename(tmpPath, target);
+            applied.push(relPath);
           }
         } else if (doc && doc.kind === "etiuda-catalog") {
-          if (!catalogSigValid(doc, pin && pin.public)) {
-            continue;
-          }
-          const target = path.join(mirror, relPath);
-          let needsWrite = true;
-          if (io.exists(target)) {
-            try { needsWrite = io.readFile(target, "utf8") !== text; } catch {}
-          }
-          if (needsWrite) {
-            writeReplacing(target, text, io);
+          const parts = relPath.replace(/\\/g, "/").split("/");
+          if (parts[0] === "desks" && parts.length === 3) {
+            const deskFolder = parts[1];
+            if (!deskFileGenuine(doc, deskFolder)) {
+              try { io.unlink(tmpPath); } catch {}
+              continue;
+            }
+            const target = path.join(mirror, relPath);
+            ensureDir(target, io);
+            io.rename(tmpPath, target);
+            applied.push(relPath);
+          } else {
+            if (!catalogSigValid(doc, pin && pin.public)) {
+              try { io.unlink(tmpPath); } catch {}
+              continue;
+            }
+            const target = path.join(mirror, relPath);
+            ensureDir(target, io);
+            io.rename(tmpPath, target);
             applied.push(relPath);
           }
+        } else {
+          // Invalid or corrupt .ec file: drop the copy
+          try { io.unlink(tmpPath); } catch {}
+          continue;
         }
       } else {
-        // Files with no crypto check (notes, unchecked kinds)
+        // Files with no crypto check (notes.txt, etc.): two-equal-listings rule
         const prev = seenUnchecked.get(relPath);
         let verifiedTwoListings = true;
-        if (!prev || prev.size !== st.size || prev.mtimeMs !== st.mtimeMs) verifiedTwoListings = false; /* plant:syncer-two-listings */
+        if (!prev || prev.size !== item.size || prev.mtimeMs !== item.mtimeMs) verifiedTwoListings = false; /* plant:syncer-two-listings */
         if (!verifiedTwoListings) {
-          seenUnchecked.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+          seenUnchecked.set(relPath, { size: item.size, mtimeMs: item.mtimeMs });
+          try { io.unlink(tmpPath); } catch {}
         } else {
           const target = path.join(mirror, relPath);
-          let needsWrite = true;
-          if (io.exists(target)) {
-            try { needsWrite = io.readFile(target, "utf8") !== text; } catch {}
-          }
-          if (needsWrite) {
-            writeReplacing(target, text, io);
-            applied.push(relPath);
-          }
+          ensureDir(target, io);
+          io.rename(tmpPath, target);
+          applied.push(relPath);
         }
       }
     }
 
     // Step 4: Removals (only after 2 answered listings absent)
     const currentMirrorFiles = walkMirror();
+    const listingMap = new Set(listing.map(entry => Array.isArray(entry) ? entry[0] : entry.relPath || entry));
     for (const relPath of currentMirrorFiles) {
-      if (foundFiles.has(relPath)) {
+      if (listingMap.has(relPath)) {
         missingCount.delete(relPath);
       } else {
         const count = (missingCount.get(relPath) || 0) + 1;
@@ -387,12 +444,60 @@ function createFolderProgram(opts) {
     return { answers: true, applied };
   }
 
+  function syncOnce() {
+    let foundFiles = null;
+    try {
+      foundFiles = walkFolder(folder);
+      if (!io.exists(folder)) throw new Error("listing failed");
+    } catch (e) {
+      return applyScan({ answers: false, listing: [], staged: [] });
+    }
+
+    const stagingDir = path.join(mirror, ".staging");
+    try { io.mkdir(stagingDir); } catch {}
+
+    const staged = [];
+    for (const [relPath, st] of foundFiles.entries()) {
+      const mirrorFile = path.join(mirror, relPath);
+      let alreadyInMirror = false;
+      try {
+        if (io.exists(mirrorFile)) {
+          const srcData = io.readFile(path.join(folder, relPath));
+          const dstData = io.readFile(mirrorFile);
+          if (Buffer.compare(Buffer.from(srcData), Buffer.from(dstData)) === 0) {
+            alreadyInMirror = true;
+          }
+        }
+      } catch {}
+
+      if (!alreadyInMirror) {
+        const srcFile = path.join(folder, relPath);
+        const rand = crypto.randomBytes(8).toString("hex");
+        const tmpFile = path.join(stagingDir, rand + ".tmp");
+        try {
+          const data = io.readFile(srcFile);
+          io.writeFile(tmpFile, data);
+          staged.push({ relPath, tmpPath: tmpFile, size: st.size, mtimeMs: st.mtimeMs });
+        } catch {
+          try { io.unlink(tmpFile); } catch {}
+        }
+      }
+    }
+
+    return applyScan({
+      answers: true,
+      listing: Array.from(foundFiles.entries()),
+      staged
+    });
+  }
+
   function updateKeys(keys) {
     importKeys(keys);
   }
 
   return {
     syncOnce,
+    applyScan,
     updateKeys,
     state: () => ({ mirrorEpoch, mirrorRev, pendingLength: pending.length, missingCount: new Map(missingCount) })
   };
@@ -408,9 +513,20 @@ class FolderSyncerController {
     this.useWorker = opts.useWorker !== false;
     this.onStatus = opts.onStatus;
     this.onChange = opts.onChange;
+    this.pollMs = opts.pollMs || FOLDER_SYNC_CADENCE_MS;
     this.worker = null;
-    this.program = null;
     this.stopped = false;
+
+    // The program runs on the main thread to perform verification and applying
+    this.program = createFolderProgram({
+      team: this.team,
+      folder: this.folder,
+      mirror: this.mirror,
+      pin: this.pin,
+      keys: this.keys,
+      onStatus: this.onStatus,
+      onChange: this.onChange
+    });
   }
 
   start() {
@@ -420,31 +536,20 @@ class FolderSyncerController {
       this.worker = new Worker(workerScript);
       this.worker.on("message", (msg) => {
         if (!msg) return;
-        if (msg.type === "status" && typeof this.onStatus === "function") {
-          this.onStatus(msg);
-        } else if (msg.type === "change" && typeof this.onChange === "function") {
-          this.onChange(msg);
+        if (msg.type === "status") {
+          if (typeof this.onStatus === "function") this.onStatus(msg);
+        } else if (msg.type === "scan") {
+          this.program.applyScan(msg);
         }
       });
+      // D2: only folder and mirror sent to worker; NO keys, NO pin
       this.worker.postMessage({
         type: "init",
         data: {
-          team: this.team,
           folder: this.folder,
           mirror: this.mirror,
-          pin: this.pin,
-          keys: this.keys
+          pollMs: this.pollMs
         }
-      });
-    } else {
-      this.program = createFolderProgram({
-        team: this.team,
-        folder: this.folder,
-        mirror: this.mirror,
-        pin: this.pin,
-        keys: this.keys,
-        onStatus: this.onStatus,
-        onChange: this.onChange
       });
     }
   }
@@ -467,6 +572,10 @@ class FolderSyncerController {
       } catch {}
       this.worker = null;
     }
+  }
+
+  updateKeys(keys) {
+    if (this.program) this.program.updateKeys(keys);
   }
 }
 
@@ -505,6 +614,7 @@ function folderMirrorOf(userData, teamId) {
 }
 
 module.exports = {
+  FOLDER_SYNC_CADENCE_MS,
   createFolderProgram,
   FolderSyncerController,
   startFolderSyncer,

@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 15;
+const EXPECTED = 19;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -43,7 +43,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -254,12 +254,20 @@ async function run() {
       await prog.syncOnce();
       const mirrorHasChangingPass3 = fs.existsSync(path.join(mirrorDir, "notes.txt"));
 
+      // D5: Team file rollback - team file in share with rev below mirror's is refused
+      const teamOlderRev = JSON.stringify(teamFile({ epoch: 1, rev: 0 }));
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), teamOlderRev, "utf8");
+      await prog.syncOnce();
+      const mirrorTeamDoc = JSON.parse(fs.readFileSync(path.join(mirrorDir, "etiuda-team.json"), "utf8"));
+      const rollbackRefused = mirrorTeamDoc.rev === 1;
+
       const ok = mirrorHasTeam && mirrorHasEdition && !mirrorHasCorrupt
-        && !mirrorHasChangingPass1 && !mirrorHasChangingPass2 && mirrorHasChangingPass3;
+        && !mirrorHasChangingPass1 && !mirrorHasChangingPass2 && mirrorHasChangingPass3 && rollbackRefused;
 
       check(ok,
-        "41b a genuine team file and edition reach the mirror; a forged team file, an edition that fails its check, and a file whose size changed between two listings do not, and are taken once whole and genuine: "
+        "41b a genuine team file and edition reach the mirror; a forged team file, an older rev rollback, an edition that fails its check, and a file whose size changed between two listings do not, and are taken once whole and genuine: "
         + "team " + mirrorHasTeam + ", edition " + mirrorHasEdition + ", corrupt " + mirrorHasCorrupt
+        + ", rollback refused " + rollbackRefused
         + ", changing p1 " + mirrorHasChangingPass1 + ", p2 " + mirrorHasChangingPass2 + ", p3 " + mirrorHasChangingPass3);
     }
   }
@@ -441,6 +449,185 @@ async function run() {
         "41f one syncer per team (starting twice runs one; a team change stops the old one): "
         + "same instance " + startingTwiceIsSame + ", old stopped " + oldStopped + ", new running " + newRunning);
     }
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 7 (41p): D1 leg 1 - Desk's own write lands in the folder and is never removed from or shadowed in mirror
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const deskP = newDesk("desk-41p", SHARE);
+    const envPath = path.join(deskP.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    env.teamPins = { [TEAM]: LEAD };
+    env.teamShown = { [TEAM]: { lead: "Lead", folder: SHARE } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const mirrorDir = path.join(deskP.ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirrorDir, { recursive: true });
+    fs.writeFileSync(path.join(mirrorDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(SHARE, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+
+    const d = loadDesk(deskP.ud);
+    const me = d.api.branchIdentity(true);
+    const stem = "cat-41p-12345678";
+    const branchDoc = {
+      format: 2, kind: "etiuda-catalog", id: me.id + "-12345678",
+      desk: { id: me.id, key: me.key, box: me.box },
+      rev: 0, cards: []
+    };
+
+    const wRes = d.api.writeBranch(stem, JSON.stringify(branchDoc));
+    const shareBranch = path.join(SHARE, "desks", me.id, stem + ".ec");
+    const mirrorBranch = path.join(mirrorDir, "desks", me.id, stem + ".ec");
+
+    const landsInShare = fs.existsSync(shareBranch);
+    const notDirectlyInMirror = !fs.existsSync(mirrorBranch);
+
+    // Now run syncer
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM, folder: SHARE, mirror: mirrorDir,
+      pin: LEAD, keys: { 1: K1 }
+    });
+    await prog.syncOnce();
+    const landsInMirrorAfterSync = fs.existsSync(mirrorBranch);
+
+    // Two more answered listings: remains in mirror
+    await prog.syncOnce();
+    await prog.syncOnce();
+    const remainsInMirrorAfterListings = fs.existsSync(mirrorBranch);
+
+    const ok = landsInShare && notDirectlyInMirror && landsInMirrorAfterSync && remainsInMirrorAfterListings;
+    check(ok,
+      "41p a desk's own write lands in the folder and is never removed from or shadowed in the mirror: "
+      + "lands in share " + landsInShare + ", not in mirror before sync " + notDirectlyInMirror
+      + ", in mirror after sync " + landsInMirrorAfterSync + ", retained after listings " + remainsInMirrorAfterListings);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 8 (41q): D1 leg 2 - With folder not answering, write is still held and row says kept
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const deskQ = newDesk("desk-41q", SHARE);
+    const envPath = path.join(deskQ.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    env.teamPins = { [TEAM]: LEAD };
+    env.teamShown = { [TEAM]: { lead: "Lead", folder: SHARE } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const mirrorDir = path.join(deskQ.ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirrorDir, { recursive: true });
+    fs.writeFileSync(path.join(mirrorDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+
+    const d = loadDesk(deskQ.ud);
+    const me = d.api.branchIdentity(true);
+    const stem = "cat-41q-12345678";
+    const branchDoc = {
+      format: 2, kind: "etiuda-catalog", id: me.id + "-12345678",
+      desk: { id: me.id, key: me.key, box: me.box },
+      rev: 0, cards: []
+    };
+
+    // First write when folder is answering
+    const r1 = d.api.writeBranch(stem, JSON.stringify(branchDoc));
+    const dest = d.api.branchDest(stem);
+    const deskMirrorDir = path.join(mirrorDir, "desks", me.id);
+    fs.mkdirSync(deskMirrorDir, { recursive: true });
+    fs.copyFileSync(dest.dest, path.join(deskMirrorDir, stem + ".ec"));
+
+    const initialRows = d.api.deskRows();
+    const initialRow = initialRows.filter(r => r.id === me.id + "-12345678")[0] || null;
+    const initialReached = initialRow ? initialRow.reached : null;
+
+    // Now mark shared folder as not answering
+    d.api.settleFolder(SHARE, false);
+
+    // Update branch while folder is down
+    branchDoc.rev = 1;
+    const wRes = d.api.writeBranch(stem, JSON.stringify(branchDoc));
+    const writeHeld = wRes && wRes.held === true;
+
+    const rows = d.api.deskRows();
+    const deskRow = rows.filter(r => r.id === me.id + "-12345678")[0] || null;
+    const rowReached = deskRow ? deskRow.reached : null;
+    const rowSaysKept = deskRow !== null && rowReached === false;
+
+    const ok = initialReached === true && writeHeld && rowSaysKept;
+    check(ok,
+      "41q with the folder not answering, a write is still held and the row says kept: "
+      + "held " + writeHeld + ", initial reached " + initialReached + ", held row reached " + rowReached);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 9 (41r): D3 - A forged file planted straight into the mirror is refused at read
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const deskR = newDesk("desk-41r", SHARE);
+    const envPath = path.join(deskR.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    env.teamPins = { [TEAM]: LEAD };
+    env.teamShown = { [TEAM]: { lead: "Lead", folder: SHARE } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const mirrorDir = path.join(deskR.ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirrorDir, { recursive: true });
+    fs.writeFileSync(path.join(mirrorDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+
+    // Plant forged file straight into mirror
+    const forgedDoc = sign({
+      format: 2, kind: "etiuda-catalog", id: "forged-cat", rev: 1, name: "Forged", date: "2026-02-01",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: []
+    }, forger.privateKey, FORGER.keyId);
+    fs.writeFileSync(path.join(mirrorDir, "forged-cat.ec"), JSON.stringify(forgedDoc, null, 1) + "\n", "utf8");
+
+    const d = loadDesk(deskR.ud);
+    const readResult = d.api.readCatalog();
+    const forgedRefused = readResult === null || !readResult.includes("forged-cat");
+
+    check(forgedRefused,
+      "41r a forged file planted straight into the mirror is refused at read: "
+      + "refused " + forgedRefused + ", read result " + (readResult ? "returned something" : "null"));
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 10 (41s): D5 - A first join with the folder never yet reached shows the not-reached sentence over an empty mirror
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const UNREACHABLE = path.join(LAB, "non-existent-share-" + crypto.randomBytes(4).toString("hex"));
+    const deskS = newDesk("desk-41s", UNREACHABLE);
+    const envPath = path.join(deskS.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    env.teamPins = { [TEAM]: LEAD };
+    env.teamShown = { [TEAM]: { lead: "Lead", folder: UNREACHABLE } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const mirrorDir = path.join(deskS.ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirrorDir, { recursive: true });
+
+    const d = loadDesk(deskS.ud);
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM, folder: UNREACHABLE, mirror: mirrorDir,
+      pin: LEAD, keys: { 1: K1 },
+      onStatus: (status) => {
+        if (!status.answers) {
+          d.api.settleFolder(status.folder, false);
+        }
+      }
+    });
+
+    await prog.syncOnce();
+
+    const mirrorFiles = fs.readdirSync(mirrorDir).filter(f => !f.startsWith("."));
+    const mirrorEmpty = mirrorFiles.length === 0;
+
+    const notReachedSentence = d.said.some(l => l.includes("did not answer, so it is read as empty until it does"));
+    const readOverEmpty = d.api.readCatalog();
+    const readEmpty = readOverEmpty === null || readOverEmpty === "";
+
+    const ok = mirrorEmpty && notReachedSentence && readEmpty;
+    check(ok,
+      "41s a first join with the folder never yet reached shows the not-reached sentence over an empty mirror: "
+      + "mirror empty " + mirrorEmpty + ", not-reached sentence said " + notReachedSentence + ", read empty " + readEmpty);
   }
 
   /* -------------------------------------------------------------------------------------------------

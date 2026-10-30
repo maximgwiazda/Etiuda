@@ -897,7 +897,9 @@ try {
   check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
     "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
+  /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
+    "node:worker_threads", "./folder/syncer.cjs",
     "./win-proxy.cjs", "./page-watch.cjs", "./relay/channel.cjs", "./blob.cjs"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
     .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
