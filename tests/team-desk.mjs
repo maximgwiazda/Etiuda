@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 61;
+const EXPECTED = 69;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -44,7 +44,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -143,7 +143,7 @@ try {
     wrap: D1.api.wrapTeamKey(key, who.box, team || TEAM, epoch, who.id) });
   const teamFile = (o) => sign(Object.assign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
     lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: o.exportsSealed === true,
-    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
+    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}, o.ring ? { ring: o.ring } : {}, o.rev !== undefined ? { rev: o.rev } : {}, o.channel ? { channel: o.channel } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
   const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), t, "utf8");
   const epochs = (D, team) => Object.keys(((D.envelope().teamKeys || {})[team || TEAM]) || {}).sort().join();
   const read = async (D, name) => ((await D.ask("etiuda:catalog-read", name)) || {}).text;
@@ -874,6 +874,113 @@ try {
     "14ab a team key that could not be kept is tried again at the next read, the team file unchanged, whether safeStorage"
     + " could open nothing or seal nothing: " + retried.map(r => r.said).join("; "));
 
+  /* ---- Board 945 item 6: the head and the ring in a folder team's file -------------------------------------- */
+  const F6 = folder("folder-f6"), DF6 = newDesk("desk-f6", F6);
+  const meF6 = await DF6.ask("etiuda:branch-identity", true);
+  const T6 = "t-" + crypto.randomBytes(8).toString("hex");
+  const K6 = crypto.randomBytes(32);
+  const embeddedRing = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
+  const looseRing = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "tea-room", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
+
+  // 14bb: folder team with embedded ring in team file, no loose ring file
+  put(F6, "etiuda-team.json", JSON.stringify(teamFile({ team: T6, epoch: 1, roster: [entry(meF6, K6, 1, T6)], ring: embeddedRing })));
+  put(F6, "lamps.ec", seal(K6, 1, A2, T6));
+  await read(DF6, "lamps.ec");
+  const ringAsked = await DF6.ask("etiuda:catalog-ring");
+  const ringRead = DF6.api.readRing();
+  check(ringAsked === JSON.stringify(embeddedRing) && JSON.stringify(ringRead) === JSON.stringify(embeddedRing),
+    "14bb a folder team file with an embedded ring is read from the team file itself, with no loose etiuda-ring.json: "
+    + (ringAsked === JSON.stringify(embeddedRing) ? "embedded" : "missed"));
+
+  // 14bc: folder team file without embedded ring falls back to loose etiuda-ring.json
+  const K6_2 = crypto.randomBytes(32);
+  put(F6, "etiuda-ring.json", JSON.stringify(looseRing));
+  put(F6, "etiuda-team.json", JSON.stringify(teamFile({ team: T6, epoch: 2, roster: [entry(meF6, K6_2, 2, T6)] })));
+  put(F6, "lamps.ec", seal(K6_2, 2, A2, T6));
+  await read(DF6, "lamps.ec");
+  const ringFallback = await DF6.ask("etiuda:catalog-ring");
+  check(ringFallback === JSON.stringify(looseRing),
+    "14bc a folder team file without an embedded ring falls back to loose etiuda-ring.json: "
+    + (ringFallback === JSON.stringify(looseRing) ? "loose" : "missed"));
+
+  // Helper to make signed head
+  const makeHead = (team, editions, t, key, keyId) => {
+    const doc = { v: 1, team: team, epoch: 1, rev: 1, editions: editions, t: t,
+      sig: { alg: "Ed25519", keyId: keyId || LEAD.keyId } };
+    const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+    const bytes = Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), Ch.signedBytes(doc)]);
+    doc.sig.value = crypto.sign(null, bytes, key || lead.privateKey).toString("hex");
+    return doc;
+  };
+
+  // 14bd: newer genuine head shown on folder team in leadsView()
+  const headNow = Date.now();
+  const freshHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 3, edition: "Lamp Shop v3", published: "2026-02-03" }], headNow);
+  put(F6, "etiuda-head.json", JSON.stringify(freshHead));
+  const leads1 = await DF6.ask("etiuda:team-join", "leads");
+  const row1 = ((leads1 && leads1.leads) || []).find(r => r.team === T6);
+  check(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
+    "14bd a newer genuine etiuda-head.json on a folder team shows its edition and publish time in leadsView(): "
+    + (row1 && row1.head ? row1.head.edition + " / " + row1.head.published : "no head"));
+
+  // 14bj: forged head shows nothing in leadsView()
+  const forgedHead = JSON.parse(JSON.stringify(freshHead));
+  forgedHead.sig.value = (forgedHead.sig.value[0] === "a" ? "b" : "a") + forgedHead.sig.value.slice(1);
+  put(F6, "etiuda-head.json", JSON.stringify(forgedHead));
+  const leadsForged = await DF6.ask("etiuda:team-join", "leads");
+  const rowForged = ((leadsForged && leadsForged.leads) || []).find(r => r.team === T6);
+  check(!!rowForged && !rowForged.head,
+    "14bj a forged etiuda-head.json on a folder team shows nothing in leadsView(): "
+    + (rowForged && !rowForged.head ? "nothing shown" : "showed head"));
+
+  // 14bk: foreign-key head shows nothing in leadsView()
+  const foreignHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 3, edition: "Lamp Shop v3", published: "2026-02-03" }], headNow, forger.privateKey, "foreign-key");
+  put(F6, "etiuda-head.json", JSON.stringify(foreignHead));
+  const leadsForeign = await DF6.ask("etiuda:team-join", "leads");
+  const rowForeign = ((leadsForeign && leadsForeign.leads) || []).find(r => r.team === T6);
+  check(!!rowForeign && !rowForeign.head,
+    "14bk a foreign-key etiuda-head.json on a folder team shows nothing in leadsView(): "
+    + (rowForeign && !rowForeign.head ? "nothing shown" : "showed head"));
+
+  // 14bl: older head (rev below the edition the desk has) shows nothing in leadsView()
+  // The desk in F6 has opened lamps.ec (A2, rev 2). A head with rev 1 is older.
+  const olderHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 1, edition: "Lamp Shop v1", published: "2026-02-01" }], headNow + 1000);
+  put(F6, "etiuda-head.json", JSON.stringify(olderHead));
+  const leadsOlder = await DF6.ask("etiuda:team-join", "leads");
+  const rowOlder = ((leadsOlder && leadsOlder.leads) || []).find(r => r.team === T6);
+  check(!!rowOlder && !rowOlder.head,
+    "14bl an older etiuda-head.json (rev 1 below the desk's rev 2) on a folder team shows nothing in leadsView(): "
+    + (rowOlder && !rowOlder.head ? "nothing shown" : "showed head"));
+
+  // 14bh: channel.cjs readRing with folder doc
+  const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+  const chProg = Ch.createProgram({ pin: { teamId: T6, keyId: LEAD.keyId, public: LEAD.public } });
+  const folderDocWithRing = teamFile({ team: T6, epoch: 1, roster: [], ring: embeddedRing });
+  const folderDocNoRing = teamFile({ team: T6, epoch: 1, roster: [] });
+  const chWithRing = chProg.readRing({ teamDoc: folderDocWithRing, looseRing: looseRing });
+  const chLoose = chProg.readRing({ teamDoc: folderDocNoRing, looseRing: looseRing });
+  const chNone = chProg.readRing({ teamDoc: folderDocNoRing, looseRing: null });
+  check(chWithRing.source === "team" && JSON.stringify(chWithRing.ring) === JSON.stringify(embeddedRing)
+    && chLoose.source === "loose" && JSON.stringify(chLoose.ring) === JSON.stringify(looseRing)
+    && chNone.source === "none" && chNone.ring === null,
+    "14bh channel.cjs readRing accepts embedded ring in folder teamDoc and falls back to looseRing without one: "
+    + chWithRing.source + " / " + chLoose.source + " / " + chNone.source);
+
+  // 14bi: a relay pin still ignores a folder file's ring and never reads the loose file
+  const relayRt = crypto.randomBytes(16).toString("hex");
+  const relayProg = Ch.createProgram({ pin: { teamId: T6, rt: relayRt, lead: { keyId: LEAD.keyId, public: LEAD.public } } });
+  const relayDoc = teamFile({ team: T6, epoch: 1, rev: 1, roster: [], ring: embeddedRing, channel: { kind: "relay", rt: relayRt } });
+  const bareRelayDoc = teamFile({ team: T6, epoch: 1, rev: 1, roster: [], channel: { kind: "relay", rt: relayRt } });
+  const folderOnRelay = relayProg.readRing({ teamDoc: folderDocWithRing, looseRing: looseRing });
+  const ownOnRelay = relayProg.readRing({ teamDoc: relayDoc, looseRing: looseRing });
+  const bareOnRelay = relayProg.readRing({ teamDoc: bareRelayDoc, looseRing: looseRing });
+  const loadedFolder = relayProg.loadTeamFile(folderDocWithRing);
+  check(folderOnRelay.source === "loose" && JSON.stringify(folderOnRelay.ring) === JSON.stringify(looseRing)
+    && ownOnRelay.source === "team" && JSON.stringify(ownOnRelay.ring) === JSON.stringify(embeddedRing)
+    && bareOnRelay.source === "none" && bareOnRelay.ring === null
+    && loadedFolder.ok === false && loadedFolder.reason === "wrong-team",
+    "14bi a relay pin keeps the relay ring rule: a folder file is the wrong team, the relay file's own ring is read, and a loose ring is not: "
+    + folderOnRelay.source + " / " + ownOnRelay.source + " / " + bareOnRelay.source + " / " + (loadedFolder.ok ? "loaded" : loadedFolder.reason));
   /* A folder key that has not arrived yet. The bound is the relay channel's pending retry ceiling, sixty seconds. */
   const WAIT_MS = 60 * 1000;
   const keyMiss = D => D.said.some(l => l.indexOf("holds no key") >= 0);

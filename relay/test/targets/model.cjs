@@ -1427,19 +1427,13 @@ function createTarget(limits) {
 
   function readRing({ teamDoc, looseRing }) {
     const relayMode = !!(teamDoc && teamDoc.channel && teamDoc.channel.kind === "relay");
-    if (!relayMode) {
-      return { source: looseRing ? "loose" : "none", ring: looseRing || null };
-    }
-    let source = "none";
-    let ring = null;
     if (teamSignedByPin(teamDoc) && teamDoc.ring) {
-      source = "team";
-      ring = teamDoc.ring;
+      return { source: "team", ring: teamDoc.ring };
     }
     let useLoose = true;
-    useLoose = false; /* plant:E4 */
+    useLoose = !relayMode; /* plant:E4 */
     if (useLoose && looseRing) return { source: "loose", ring: looseRing };
-    return { source: source, ring: ring };
+    return { source: "none", ring: null };
   }
 
   function verifyDeskSignature({ publicKey, body, signature }) {
