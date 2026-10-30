@@ -416,7 +416,7 @@ function conflictSiblingName(canonical, name) {
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
   return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
-    || conflictSiblingName(TEAM_NAME, n);
+    || n === PAUSE_NAME || conflictSiblingName(TEAM_NAME, n);
 }
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the
@@ -1401,6 +1401,8 @@ function deskEnvelopeBody(keysText) {
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
     + (ejectOwed ? ',"ejectOwed":' + JSON.stringify(ejectOwed) : "")
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
+    + (inUseN > 0 ? ',"inUseN":' + inUseN : "")
+    + (Object.keys(teamPauseSeen).length ? ',"teamPauseSeen":' + JSON.stringify(teamPauseSeen) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -1880,6 +1882,8 @@ function statsAnswerGenuine(doc, folder, keyHex) {
    Studio slices these to read a request and to say its code. */
 const JOIN_PREFIX = "etiuda-desk-join\n";
 const JOIN_KIND = "etiuda-join", JOINS_KIND = "etiuda-team-joins", JOINS_NAME = "etiuda-team-joins.json";
+const PAUSE_NAME = "etiuda-team-pause.json", PAUSE_KIND = "etiuda-team-pause";
+const WITHDRAWN_NAME = ".withdrawn.json", WITHDRAWN_KIND = "etiuda-catalog-ask-withdrawn";
 const JOIN_HEX_RE = /^[0-9a-f]{64}$/;
 function joinHash(parts) {
   return crypto.createHash("sha256").update(Buffer.from(JOIN_PREFIX + parts.map(String).join("\n"), "utf8")).digest();
@@ -2400,11 +2404,36 @@ function inUseFile() {
   const me = branchIdentity(false);
   return me ? path.join(catalogFolder(), "desks", me.id, IN_USE_STEM + ".ec") : "";
 }
+function writeClearedInUse() {
+  const use = teamUse();
+  const me = branchIdentity(true);
+  const at = branchDest(IN_USE_STEM);
+  if (!use.seal || !me || !at) return false;
+  inUseN = Math.max(Number.isInteger(inUseN) && inUseN >= 1 ? inUseN : 0, 0) + 1; /* plant:f9-desk-in-use-n */
+  const desk = { id: me.id, key: me.key, box: me.box };
+  const who = deskTitle();
+  if (who) desk.name = who;
+  const out = {
+    format: 1, kind: IN_USE_KIND, desk: desk, at: new Date().toISOString(),
+    n: inUseN, cleared: true, sig: { alg: "Ed25519", keyId: me.id }
+  };
+  out.sig.value = branchSign(out);
+  if (!out.sig.value) return false;
+  for (const dir of [path.join(at.root, "desks"), at.dir]) {
+    try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
+  }
+  writeReplacing(at.dest, JSON.stringify(sealCatalog(use.seal.key, use.seal.team, use.seal.epoch, JSON.stringify(out)), null, 1) + "\n");
+  return true;
+}
 function clearInUseFile() {
   const dest = inUseFile();
   if (!dest || !folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
-  try { fs.unlinkSync(dest); }
-  catch (e) { if (e.code !== "ENOENT") { heldInUse = { remove: true }; return; } }
+  let written = false;
+  try { written = writeClearedInUse(); } catch { written = false; }
+  if (!written) {
+    try { fs.unlinkSync(dest); }
+    catch (e) { if (e.code !== "ENOENT") { heldInUse = { remove: true }; return; } }
+  }
   inUseKept = null;
   if (heldInUse && heldInUse.remove) heldInUse = null;
   dropLoadedCatalog();
@@ -2554,6 +2583,7 @@ function writeInUse(pin, win) {
       tryCatalogAsk(win);
       return;
     }
+    inUseN = Math.max(Number.isInteger(inUseN) && inUseN >= 1 ? inUseN : 0, 0) + 1; /* plant:f9-desk-in-use-n */
     const cat = { id: typeof doc.id === "string" ? doc.id : "", rev: Number.isInteger(+doc.rev) ? +doc.rev : 0,
       sha256: pin, signer: catalogSignerOf(doc), source: got.source };
     const title = catalogTitleClean(doc.name);
@@ -2562,6 +2592,7 @@ function writeInUse(pin, win) {
     const who = deskTitle();
     if (who) desk.name = who;
     const out = { format: 1, kind: IN_USE_KIND, desk: desk, at: new Date().toISOString(), catalog: cat,
+      n: inUseN,
       sig: { alg: "Ed25519", keyId: me.id } };
     out.sig.value = branchSign(out);
     if (!out.sig.value) return;
@@ -2658,6 +2689,31 @@ function writeAnswer(seal, pin, catalogDoc) {
   writeReplacing(at.dest, JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, inner), null, 1) + "\n");
   return true;
 }
+function checkWithdrawnAsks(root, me, lead) {
+  if (!root || !me || !lead) return;
+  const file = path.join(root, ASK_DIR, me.id + WITHDRAWN_NAME);
+  let text = "";
+  try { text = fs.readFileSync(file, "utf8"); } catch { return; }
+  try {
+    const doc = JSON.parse(text.replace(/^\uFEFF/, ""));
+    if (doc && +doc.format === 1 && doc.kind === WITHDRAWN_KIND && doc.desk === me.id && Array.isArray(doc.ids)) {
+      const sig = doc.sig;
+      if (sig && sig.alg === "Ed25519" && String(sig.keyId) === String(lead.keyId) && /^[0-9a-f]{128}$/.test(String(sig.value || ""))) {
+        const pub = crypto.createPublicKey({
+          key: Buffer.concat([SPKI_ED25519, Buffer.from(String(lead.public), "hex")]),
+          format: "der", type: "spki"
+        });
+        if (crypto.verify(null, askSignedBytes(doc), pub, Buffer.from(String(sig.value), "hex"))) {
+          for (const id of doc.ids) {
+            if (typeof id === "string" && ASK_ID_RE.test(id)) {
+              rememberAsk(id); /* plant:f9-ask-withdrawn */
+            }
+          }
+        }
+      }
+    }
+  } catch { /* ignore bad doc */ }
+}
 /* An ask is answered once, and the answer is taken away when the ask is gone, unsigned, or expired. */
 function tryCatalogAsk(win) {
   try {
@@ -2669,6 +2725,7 @@ function tryCatalogAsk(win) {
     const use = teamUse();
     if (use.away || !use.member) return;
     const me = branchIdentity(false);
+    checkWithdrawnAsks(catalogFolder(), me, use.seal && use.seal.lead);
     const ask = got.bad ? null : askFresh(got.doc, me, use.seal.lead);
     if (!ask) { removeAnswer(); return; }
     if (use.stale || !loadedText || catalogAskIds.indexOf(ask.id) >= 0) return;
@@ -2758,6 +2815,8 @@ const teamBarred = new Set();                  // teams whose lead the agent for
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamRelayGone = {};                        // team id -> true: the relay refused this desk as removed, so the desk stops asking and says so
+let teamPauseSeen = {};                        // team id -> {t: number, paused: boolean}
+let inUseN = 0;                                // monotonic counter for in-use.ec
 const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone|unknown):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
 const editionTeams = new Map();                // pin -> every team whose envelope held it; this run only
@@ -4070,6 +4129,55 @@ function refusedWithdrawEnds(j) {
   endRefusedRelay(j); /* plant:refused-cancel-ends */
   return true;
 }
+function leadForPause(team, root) {
+  if (teamPins[team]) return teamPins[team];
+  if (teamJoin && teamJoin.team === team && teamJoin.invite && teamJoin.invite.lead
+      && typeof teamJoin.invite.lead.keyId === "string" && /^[0-9a-f]{64}$/.test(String(teamJoin.invite.lead.public || ""))) {
+    return { keyId: teamJoin.invite.lead.keyId, public: teamJoin.invite.lead.public };
+  }
+  if (root) {
+    try {
+      const doc = teamTextChosen(root).doc;
+      if (doc && doc.id === team && teamWhole(doc) && doc.lead && typeof doc.lead.keyId === "string" && /^[0-9a-f]{64}$/.test(String(doc.lead.public || ""))) {
+        return { keyId: doc.lead.keyId, public: doc.lead.public };
+      }
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+function pauseJudge(team, root) {
+  if (!team || !root) return false;
+  const lead = leadForPause(team, root);
+  if (!lead) return teamPauseSeen[team] ? teamPauseSeen[team].paused === true : false;
+  let file = path.join(root, PAUSE_NAME);
+  let text = "";
+  try { text = fs.readFileSync(file, "utf8"); } catch {
+    return teamPauseSeen[team] ? teamPauseSeen[team].paused === true : false;
+  }
+  try {
+    const doc = JSON.parse(text.replace(/^\uFEFF/, ""));
+    if (doc && +doc.format === 1 && doc.kind === PAUSE_KIND && doc.team === team
+        && typeof doc.paused === "boolean" && Number.isInteger(doc.t) && doc.t >= 0) {
+      const highest = teamPauseSeen[team] ? teamPauseSeen[team].t : -1;
+      if (doc.t > highest) {
+        const sig = doc.sig;
+        if (sig && sig.alg === "Ed25519" && String(sig.keyId) === String(lead.keyId) && /^[0-9a-f]{128}$/.test(String(sig.value || ""))) {
+          const pub = crypto.createPublicKey({
+            key: Buffer.concat([SPKI_ED25519, Buffer.from(String(lead.public), "hex")]),
+            format: "der", type: "spki"
+          });
+          if (crypto.verify(null, askSignedBytes(doc), pub, Buffer.from(String(sig.value), "hex"))) {
+            if (true) { /* plant:f9-team-pause */
+              teamPauseSeen[team] = { t: doc.t, paused: doc.paused };
+              persistDeskEnvelope();
+            }
+          }
+        }
+      }
+    }
+  } catch { /* ignore bad pause */ }
+  return teamPauseSeen[team] ? teamPauseSeen[team].paused === true : false;
+}
 /* Moves the request on and says where it stands: admitted once this desk keeps a newer key for the team than when it
    asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so.
    `leads` is leadsView's. */
@@ -4086,6 +4194,7 @@ function joinView() {
     joinDone = null;
   }
   if (j && me) {
+    const paused = pauseJudge(j.team, root);
     if (!j.file) {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
@@ -4106,6 +4215,7 @@ function joinView() {
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
                   state: j.refused ? "refused" : j.opened ? "code" : relayEnd,
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
+    if (paused) view.join.paused = true;
     if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
@@ -4615,6 +4725,7 @@ function forgetLead(team, left) {
   teamRingAt = null;
   teamSeen.delete(team);
   delete teamLapseSeen[team];
+  delete teamPauseSeen[team];
   delete teamRelayGone[team];
   delete teamHeadT[team];
   teamBarred.add(team);
@@ -5461,6 +5572,13 @@ function readDesk() {
         if (u.source === "folder" || u.source === "opened" || u.source === "desk-file") inUseKept.source = u.source;
       }
     }
+    if (doc && Number.isInteger(doc.inUseN) && doc.inUseN >= 1 && doc.inUseN > inUseN) inUseN = doc.inUseN;
+    if (doc && table(doc.teamPauseSeen)) Object.keys(doc.teamPauseSeen).forEach(t => {
+      const v = doc.teamPauseSeen[t];
+      if (SEALED_TEAM_RE.test(t) && table(v) && Number.isInteger(v.t) && v.t >= 0 && typeof v.paused === "boolean") {
+        if (!teamPauseSeen[t] || v.t > teamPauseSeen[t].t) teamPauseSeen[t] = { t: v.t, paused: v.paused };
+      }
+    });
     if (doc && Array.isArray(doc.catalogAsks)) doc.catalogAsks.forEach(id => {
       const s = String(id || "");
       if (ASK_ID_RE.test(s) && catalogAskIds.indexOf(s) < 0) catalogAskIds.push(s);
