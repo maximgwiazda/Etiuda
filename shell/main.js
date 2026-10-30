@@ -6186,9 +6186,9 @@ function deskRowOf(file, folder) {
   if (me && folder === me.id) {
     const relay = relayHere();
     if (relay) {
-      const ch = relayChannel || relayRun();
+      const ch = relayChannel; /* a listing never starts a channel: with none, the row is kept */
       const st = ch && ch.program && ch.program.state();
-      const relKey = ("desks/" + folder + "/" + path.basename(file)).toLowerCase();
+      const relKey = RelayChannel().pathKey("desks/" + folder + "/" + path.basename(file));
       let fileSha = "";
       try { fileSha = sha256Hex(fs.readFileSync(file)); } catch {}
       const sent = st && st.sent && st.sent[relKey];

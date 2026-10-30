@@ -43,6 +43,8 @@ const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+/* The channel's own key function, so a key-format change in the channel reaches these legs too (E2). */
+const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 
 /* ================================================================================================
    A PAGE SMALL ENOUGH TO READ: elements, text, a parser for the markup the desk writes, and the
@@ -269,6 +271,7 @@ async function launch(plan) {
   /* A file main.js requires from beside itself is the tree's: the lab's shell folder holds its built-in catalogs alone. */
   const beside = n => (path.isAbsolute(n) && path.dirname(n) === SHELL ? path.join(ROOT, "shell", path.basename(n)) : n);
   const mockRelay = plan.mockRelay ? {
+    pathKey: REAL_CHANNEL.pathKey,
     createChannel: () => ({
       start: noop, stop: async () => {}, kick: noop, online: () => true,
       program: {
@@ -638,7 +641,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 127;
+  const EXPECTED = 128;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1216,12 +1219,18 @@ async function parent() {
     const deskBranchText = fs.readFileSync(path.join(lab75w2, "catalogs", "desks", ownDeskRelay.id, stem75 + ".ec"), "utf8");
     fs.writeFileSync(path.join(mirrorDesk, stem75 + ".ec"), deskBranchText, "utf8");
     fs.copyFileSync(path.join(lab75w2, "catalogs", "lamp.ec"), path.join(mirrorRt, "lamp.ec"));
-    const relKey = ("desks/" + ownDeskRelay.id + "/" + stem75 + ".ec").toLowerCase();
-    const L_w2 = run(lab75w2, ["rows"], true, { mockRelay: { sent: { [relKey]: { sha: "wrong-sha", owe: true } } } });
-    const rows_w2 = L_w2.rows[0] || [];
-    check(same((rows_w2[0] || {}).mine, [RELAY_KEPT_LINE]),
-      "75w2 relay upload refused/owed: loaded row says edits are kept on this computer and go to the team as soon as it can take them: "
-      + JSON.stringify((rows_w2[0] || {}).mine));
+    const relKey = REAL_CHANNEL.pathKey("desks/" + ownDeskRelay.id + "/" + stem75 + ".ec");
+    const mirrorSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(mirrorDesk, stem75 + ".ec"))).digest("hex");
+    const relayMine = sent => ((run(lab75w2, ["rows"], true, { mockRelay: { sent: { [relKey]: sent } } }).rows[0] || [])[0] || {}).mine;
+    const mineOwed = relayMine({ sha: mirrorSha, owe: true });
+    const mineWrong = relayMine({ sha: "0".repeat(64) });
+    check(same(mineOwed, [RELAY_KEPT_LINE]) && same(mineWrong, [RELAY_KEPT_LINE]),
+      "75w2 relay upload owed alone, and a sent sha that is not the file's alone, each leave the row saying the edits are kept on this computer: "
+      + JSON.stringify({ owed: mineOwed, wrongSha: mineWrong }));
+    const mineReached = relayMine({ sha: mirrorSha });
+    check(same(mineReached, ["Your edits are with the team"]),
+      "75w5 relay upload taken (the sent sha is the mirror file's sha256, nothing owed, not deleted, keyed by the channel's own pathKey): the row says the edits are with the team: "
+      + JSON.stringify(mineReached));
 
     /* 75w3: lifting plant:w1-folder-reached turns 75w1 red */
     {
@@ -1264,7 +1273,7 @@ async function parent() {
           fs.cpSync(lab75w2, labScratch, { recursive: true });
           const tmpMain = path.join(labScratch, "shell", "main.js");
           fs.writeFileSync(tmpMain, lines.join("\n"), "utf8");
-          const L_p = run(labScratch, ["rows"], true, { mockRelay: { sent: { [relKey]: { sha: "wrong-sha", owe: true } } } });
+          const L_p = run(labScratch, ["rows"], true, { mockRelay: { sent: { [relKey]: { sha: mirrorSha, owe: true } } } });
           const rows_p = L_p.rows[0] || [];
           turned = same((rows_p[0] || {}).mine, ["Your edits are with the team"]);
           detail = turned ? "turned red: kept line replaced by reached" : "did not turn red";
