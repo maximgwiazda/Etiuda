@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 302;
+const EXPECTED = 304;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -8066,6 +8066,77 @@ check(retryPlant.turned && retryPlant.back,
   });
   check(pChainTrust.turned && pChainTrust.back, "932j lifting plant:chain-trust refuses blobs signed by the old lead after the move, and the product file is never written: "
     + pChainTrust.detail + ", sha " + (pChainTrust.back ? "restored" : "differs"));
+
+  const tmK = "t-" + hex(8), rtK = hex(16);
+  const lK1 = keyPair(false), lK2 = keyPair(false);
+  const pinK = { teamId: tmK, rt: rtK, lead: { keyId: lK1.keyId, public: lK1.pub } };
+  const dirK = path.join(LAB, "ho-932k-" + hex(4));
+  fs.mkdirSync(dirK, { recursive: true });
+  const KK = crypto.randomBytes(32);
+  const progK = C.createProgram({ io: C.diskIO(dirK, C.writeWhole), pin: pinK, save() {}, say() {} });
+
+  const docK1 = teamDocWith(tmK, rtK, lK1, 1, 1, []);
+  const bK1 = B.seal({
+    relayTeamId: rtK, epoch: 1, teamKey: KK,
+    writer: { keyId: lK1.keyId, privateKey: lK1.privateKey },
+    path: C.TEAM_NAME, body: JSON.stringify(docK1), counter: 1, place: "root", kind: "file",
+  });
+  const rK1 = progK.acceptBlob({ blob: bK1, teamDoc: docK1, teamKey: KK });
+
+  const bG1 = B.seal({
+    relayTeamId: rtK, epoch: 1, teamKey: KK,
+    writer: { keyId: lK1.keyId, privateKey: lK1.privateKey },
+    path: "guide.ec", body: "guide v1\n", counter: 2, place: "root", kind: "file",
+  });
+  const rG1 = progK.acceptBlob({ blob: bG1, teamDoc: docK1, teamKey: KK });
+
+  const stepK = makeHandoverStep(tmK, lK1, lK2);
+  const docK2 = teamDocWith(tmK, rtK, lK2, 1, 2, [], [stepK]);
+  const bK2 = B.seal({
+    relayTeamId: rtK, epoch: 1, teamKey: KK,
+    writer: { keyId: lK2.keyId, privateKey: lK2.privateKey },
+    path: C.TEAM_NAME, body: JSON.stringify(docK2), counter: 3, place: "root", kind: "file",
+    supersedes: bK1.id,
+  });
+  const rK2 = progK.acceptBlob({ blob: bK2, teamDoc: docK2, teamKey: KK });
+
+  const headK2 = signHead({ v: 1, team: tmK, epoch: 1, rev: 2, editions: [{ catalog: "pebble-board", rev: 1, edition: "Handover edition", published: "30 October 2026" }], t: Date.now() }, lK2);
+  const bHeadK2 = B.seal({
+    relayTeamId: rtK, epoch: 1, teamKey: KK,
+    writer: { keyId: lK2.keyId, privateKey: lK2.privateKey },
+    path: HEAD_FILE, body: headK2, counter: 4, place: "root", kind: "file",
+  });
+  const rHeadK2 = progK.acceptBlob({ blob: bHeadK2, teamDoc: docK2, teamKey: KK });
+  const newsK = progK.headNews(Date.now());
+
+  const bG2 = B.seal({
+    relayTeamId: rtK, epoch: 1, teamKey: KK,
+    writer: { keyId: lK2.keyId, privateKey: lK2.privateKey },
+    path: "guide.ec", body: "guide v2\n", counter: 5, place: "root", kind: "file",
+    supersedes: bG1.id,
+  });
+  const rG2 = progK.acceptBlob({ blob: bG2, teamDoc: docK2, teamKey: KK });
+
+  check(rK1.ok === true && rG1.ok === true && rK2.ok === true && progK.pinned().lead.keyId === lK2.keyId
+    && rHeadK2.ok === true && newsK.edition === "Handover edition"
+    && rG2.ok === false && rG2.reason === "outside-place",
+    "932k a synced relay desk follows a handover: synced " + rK1.ok + ", handed " + rK2.ok
+    + ", pinned " + (progK.pinned() && progK.pinned().lead.keyId === lK2.keyId)
+    + ", head " + rHeadK2.ok + ", edition " + newsK.edition + ", other-refused " + rG2.reason);
+
+  const pChainSame = await liftChannel("plant:chain-same", async mod => {
+    const dirP = path.join(LAB, "plant-cs-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
+    const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pinE, save() {}, say() {} });
+    p.loadTeamFile(docE);
+    const b1 = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: "guide.ec", body: "v1\n", counter: 10, place: "root", kind: "file" });
+    const r1 = p.acceptBlob({ blob: b1, teamDoc: docE, teamKey: KE });
+    if (!r1.ok) return false;
+    const b2 = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: newLead.keyId, privateKey: newLead.privateKey }, path: "guide.ec", body: "v2\n", counter: 11, place: "root", kind: "file", supersedes: b1.id });
+    const r2 = p.acceptBlob({ blob: b2, teamDoc: docE, teamKey: KE });
+    return r2.ok === true;
+  });
+  check(pChainSame.turned && pChainSame.back, "932l lifting plant:chain-same accepts an unhanded writer change, and the product file is never written: "
+    + pChainSame.detail + ", sha " + (pChainSame.back ? "restored" : "differs"));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
