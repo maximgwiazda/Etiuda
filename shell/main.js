@@ -2130,6 +2130,13 @@ function branchContent(doc) {
   ["rev", "date", "hash", "sig"].forEach(k => { delete copy[k]; });
   return canonJson(copy);
 }
+/* The rev a desk file states, or null where it is not JSON or states none. */
+function deskFileRev(file) {
+  try {
+    const d = JSON.parse(fs.readFileSync(file, "utf8"));
+    return d && typeof d === "object" && Number.isFinite(d.rev) ? d.rev : null;
+  } catch { return null; }
+}
 function branchStemOk(s) {
   return !!s && s.length <= BRANCH_STEM_MAX && s === s.trim() && !/[\\/:*?"<>|\u0000-\u001f]/.test(s)
     && !/[. ]$/.test(s) && s !== "." && s !== ".." && !DESK_ID_RESERVED.test(s);
@@ -3310,7 +3317,13 @@ function heedTeam() {
             fs.mkdirSync(dstDir, { recursive: true });
             for (const f of fs.readdirSync(srcDir)) {
               if (/\.ec$/i.test(f)) {
-                fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f)); /* plant:follow-copy */
+                const from = path.join(srcDir, f), to = path.join(dstDir, f);
+                /* A name the mirror already holds is kept unless the folder's copy states a higher rev; no rev on either leaves it. */
+                if (fs.existsSync(to)) {
+                  const mine = deskFileRev(from), held = deskFileRev(to);
+                  if (!(mine !== null && held !== null && mine > held)) continue; /* plant:follow-keep-rev */
+                }
+                fs.copyFileSync(from, to); /* plant:follow-copy */
               }
             }
           }

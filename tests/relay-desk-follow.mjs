@@ -292,6 +292,10 @@ async function launch(plan) {
     channelStarted: !!(createdChannel && createdChannel.started),
     channelMirror: createdChannel && createdChannel.opts ? createdChannel.opts.mirror : "",
     mirrorFiles,
+    mirrorMarks: mirrorFiles.reduce((o, f) => {
+      try { const d = JSON.parse(fs.readFileSync(path.join(mirrorDeskDir, f), "utf8")); o[f] = { rev: d.rev, from: d.from }; } catch {}
+      return o;
+    }, {}),
     branchReachable: mirrorFiles.includes("branch-lamp.ec"),
     inUseReachable: mirrorFiles.includes("in-use.ec"),
     answerSurvived: mirrorFiles.includes("catalog-answer.ec"),
@@ -406,6 +410,16 @@ function makeScenario(kind, extra = {}) {
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env, null, 2));
 
   const mirror = path.join(ud, "relay", rt);
+
+  /* Files a desk that was on the relay before already holds in the mirror, and the folder's copies beside them. */
+  if (extra.mirrorHolds) {
+    const held = path.join(mirror, "desks", ownDesk.keyId);
+    fs.mkdirSync(held, { recursive: true });
+    for (const [name, doc] of Object.entries(extra.mirrorHolds)) fs.writeFileSync(path.join(held, name), JSON.stringify(doc));
+  }
+  if (extra.folderHolds) {
+    for (const [name, doc] of Object.entries(extra.folderHolds)) fs.writeFileSync(path.join(ownDesksFolder, name), JSON.stringify(doc));
+  }
 
   const heldStem = "branch-lamp-12345678";
   const heldDoc = {
@@ -631,8 +645,54 @@ async function main() {
     );
   }
 
+  /* Scenario 6: a desk that was on the relay before keeps the higher rev it holds there (945s13 to 945s15) */
+  const heldPlan = () => {
+    const p = makeScenario("mirror-holds", {
+      mirrorHolds: {
+        "branch-lamp.ec": { format: 2, kind: "etiuda-catalog", id: "lamp", rev: 5, from: "mirror" },
+        "fresh.ec": { format: 2, kind: "etiuda-catalog", id: "fresh", rev: 2, from: "mirror" },
+        "norev.ec": { from: "mirror" },
+      },
+      folderHolds: {
+        "fresh.ec": { format: 2, kind: "etiuda-catalog", id: "fresh", rev: 3, from: "folder" },
+        "norev.ec": { from: "folder" },
+      },
+    });
+    fs.writeFileSync(path.join(p.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(p.movedTeamDoc, p.lead), null, 2));
+    return p;
+  };
+  const s6 = heldPlan();
+  const r6 = runScenario(s6);
+
+  check(
+    r6.channelCreated && r6.mirrorMarks["branch-lamp.ec"] && r6.mirrorMarks["branch-lamp.ec"].rev === 5
+      && r6.mirrorMarks["branch-lamp.ec"].from === "mirror" && r6.mirrorMarks["norev.ec"] && r6.mirrorMarks["norev.ec"].from === "mirror",
+    "945s13 a file the mirror already holds at a higher rev, or at none to compare, is not overwritten by the folder's: "
+    + JSON.stringify(r6.mirrorMarks)
+  );
+
+  check(
+    r6.mirrorMarks["fresh.ec"] && r6.mirrorMarks["fresh.ec"].rev === 3 && r6.mirrorMarks["fresh.ec"].from === "folder"
+      && r6.branchReachable && r6.inUseReachable,
+    "945s14 a folder file at a higher rev than the mirror's replaces it, and a name the mirror lacks is still copied: "
+    + JSON.stringify(r6.mirrorMarks)
+  );
+
+  // 945s15: lifting plant:follow-keep-rev turns 945s13 red
+  {
+    const p = testPlant("plant:follow-keep-rev", (lines, at) => {
+      lines[at] = "  /* plant:follow-keep-rev */";
+    }, heldPlan());
+    const turned = p.found && !(p.res.mirrorMarks["branch-lamp.ec"] && p.res.mirrorMarks["branch-lamp.ec"].rev === 5
+      && p.res.mirrorMarks["norev.ec"] && p.res.mirrorMarks["norev.ec"].from === "mirror");
+    check(
+      turned && p.shaSame,
+      "945s15 lifting plant:follow-keep-rev turns 945s13 red: turned=" + turned + ", shaSame=" + p.shaSame
+    );
+  }
+
   // Clean up scenario temp dirs
-  [s1, s2, s3, s4].forEach(s => {
+  [s1, s2, s3, s4, s6].forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 
