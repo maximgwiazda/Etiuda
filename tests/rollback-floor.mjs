@@ -56,7 +56,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "offerFile", "keepCatalogRev", "keepReadRev",
-  "catalogSigValid"];
+  "catalogSigValid", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -92,6 +92,7 @@ function syncFolder(dir) {
             floor,
             keyFor: (ep) => knownTeamKeys.get(tDoc.id + ":" + ep) || null,
             logger: (msg) => { D.said.push(msg); },
+            checks: D.api.deskTrustChecks(),
           });
           prog.syncOnce();
           prog.syncOnce();

@@ -52,7 +52,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder"];
+  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -166,6 +166,7 @@ function syncFolder(dir) {
           }
         },
         logger: (msg) => { D.said.push(msg); },
+        checks: D.api.deskTrustChecks(),
       });
       prog.folder = targetDir;
       deskProgs.set(cacheKey, prog);

@@ -66,51 +66,6 @@ function isTeamConflict(rel) {
   return norm.indexOf("/") < 0 && conflictSiblingName("etiuda-team.json", norm);
 }
 
-let defaultChecks;
-function loadFallbackChecks() {
-  try {
-    const mainPath = path.join(__dirname, "..", "main.js");
-    if (!fs.existsSync(mainPath)) return null;
-    const src = fs.readFileSync(mainPath, "utf8");
-    const inert = new Proxy(function () {}, {
-      get: (t, p) => (p === Symbol.iterator ? function* () {} : inert),
-      set: () => true,
-      apply: () => inert
-    });
-    const electron = {
-      app: inert, BrowserWindow: inert, Menu: inert, dialog: inert, ipcMain: inert, net: inert,
-      protocol: inert, session: inert, shell: inert, screen: inert, systemPreferences: inert,
-      nativeTheme: { themeSource: "system" }, safeStorage: inert
-    };
-    const nodeModules = {
-      "electron": electron,
-      "node:fs": fs,
-      "node:path": path,
-      "node:crypto": crypto
-    };
-    const req = (name) => nodeModules[name] || inert;
-    const fn = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-      src + "\nreturn typeof deskTrustChecks === 'function' ? deskTrustChecks() : null;");
-    return fn(req, path.dirname(mainPath), mainPath, { exports: {} }, {}, { log: () => {}, error: () => {}, warn: () => {} });
-  } catch (e) {
-    return null;
-  }
-}
-
-function setDefaultChecks(checks) {
-  defaultChecks = checks;
-  if (typeof globalThis !== "undefined") {
-    globalThis.__etiuda_default_checks = checks;
-  }
-}
-function getDefaultChecks() {
-  if (defaultChecks !== undefined) return defaultChecks;
-  if (typeof globalThis !== "undefined" && globalThis.__etiuda_default_checks !== undefined) {
-    return globalThis.__etiuda_default_checks;
-  }
-  defaultChecks = loadFallbackChecks();
-  return defaultChecks;
-}
 
 function teamRevOf(doc) {
   if (doc.rev === undefined) return 0;
@@ -225,7 +180,7 @@ function mirrorHasCatalog(mirror, catalogId, io, keyFor, openSealedFn) {
           if (doc && doc.kind === "etiuda-sealed") {
             const key = typeof keyFor === "function" ? keyFor(doc.epoch) : null;
             if (key) {
-              const openFn = typeof openSealedFn === "function" ? openSealedFn : (defaultChecks && defaultChecks.openSealed);
+              const openFn = typeof openSealedFn === "function" ? openSealedFn : null;
               const inner = openFn ? openFn(key, doc) : null;
               if (inner && inner.indexOf('"' + catalogId + '"') >= 0) return true;
             }
@@ -300,7 +255,7 @@ function createFolderProgram(opts) {
   const onStatus = typeof opts.onStatus === "function" ? opts.onStatus : () => {};
   const onChange = typeof opts.onChange === "function" ? opts.onChange : () => {};
 
-  const checks = opts.checks || (defaultChecks !== undefined ? defaultChecks : getDefaultChecks()) || {};
+  const checks = (opts && opts.checks) || {};
   const teamWhole = typeof checks.teamWhole === "function" ? checks.teamWhole : () => false;
   const openSealed = typeof checks.openSealed === "function" ? checks.openSealed : () => null;
   const catalogSigValid = typeof checks.catalogSigValid === "function" ? checks.catalogSigValid : () => false;
@@ -993,12 +948,13 @@ function createFolderProgram(opts) {
 
 class FolderSyncerController {
   constructor(opts) {
+    if (!opts || !opts.checks) throw new Error("Folder syncer created without the desk's checks"); /* plant:syncer-without-checks */
     this.team = opts.team;
     this.folder = opts.folder;
     this.mirror = opts.mirror;
     this.pin = opts.pin;
     this.keyFor = opts.keyFor;
-    this.checks = opts.checks || (defaultChecks !== undefined ? defaultChecks : getDefaultChecks());
+    this.checks = opts.checks;
     this.useWorker = opts.useWorker !== false;
     this.onStatus = opts.onStatus;
     this.onChange = opts.onChange;
@@ -1105,9 +1061,8 @@ module.exports = {
   conflictSiblingName,
   createFolderProgram,
   FolderSyncerController,
+  createSyncer: startFolderSyncer,
   startFolderSyncer,
   stopAllFolderSyncers,
-  setDefaultChecks,
-  getDefaultChecks,
   folderMirrorOf
 };

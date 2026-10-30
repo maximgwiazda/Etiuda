@@ -63,7 +63,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-roster-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "catalogChanged", "branchSignedBytes", "branchIdOf", "branchSign", "channelHash", "offerFile", "handOpenedOffRoster"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "catalogChanged", "branchSignedBytes", "branchIdOf", "branchSign", "channelHash", "offerFile", "handOpenedOffRoster", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -203,6 +203,7 @@ try {
         mirror: mirror,
         pin: LEAD,
         keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
+        checks: d.api.deskTrustChecks(),
       });
       prog.syncOnce();
       prog.syncOnce();
@@ -409,6 +410,7 @@ try {
         mirror: mirror,
         pin: LEAD,
         keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
+        checks: A.api.deskTrustChecks(),
       });
       prog.syncOnce();
       prog.syncOnce();
@@ -456,6 +458,7 @@ try {
         mirror: mirror,
         pin: LEAD,
         keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
+        checks: A.api.deskTrustChecks(),
       });
       prog.syncOnce();
       prog.syncOnce();

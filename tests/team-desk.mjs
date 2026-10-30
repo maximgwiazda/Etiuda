@@ -44,7 +44,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -118,6 +118,7 @@ function syncFolder(dir) {
               return rootLead && rootLead.public ? [rootLead.public, ...fromSeen] : fromSeen;
             },
             logger: (msg) => { D.said.push(msg); },
+            checks: D.api.deskTrustChecks(),
           });
           prog.folder = resolvedFolder;
           deskProgs.set(cacheKey, prog);

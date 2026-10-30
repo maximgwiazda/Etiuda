@@ -283,6 +283,7 @@ async function launch(plan) {
   const quiet = { log: noop, error: noop, warn: noop, info: noop };
   const shellSrc = f => (fs.existsSync(path.join(SHELL, f)) ? fs.readFileSync(path.join(SHELL, f), "utf8") : fs.readFileSync(path.join(ROOT, "shell", f), "utf8"));
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
+  let latestChecks = null;
   /* A file main.js requires from beside itself is the tree's: the lab's shell folder holds its built-in catalogs alone. */
   const beside = n => (path.isAbsolute(n) && path.dirname(n) === SHELL ? path.join(ROOT, "shell", path.basename(n)) : n);
   const mockRelay = plan.mockRelay ? {
@@ -298,12 +299,16 @@ async function launch(plan) {
       }
     })
   } : null;
-  new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
+  const shellModule = { exports: {} };
+  new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js") + "\nif (typeof deskTrustChecks === 'function') module.exports.deskTrustChecks = deskTrustChecks;")(
     n => {
       if (n === "electron") return electron;
       if (mockRelay && n.endsWith(path.join("relay", "channel.cjs"))) return mockRelay;
       return nodeRequire(beside(n));
-    }, SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet);
+    }, SHELL, path.join(SHELL, "main.js"), shellModule, shellModule.exports, quiet);
+  if (typeof shellModule.exports.deskTrustChecks === "function") {
+    latestChecks = shellModule.exports.deskTrustChecks();
+  }
 
   const FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ev = () => ({ sender: { id: 1, once: noop, send: noop }, senderFrame: FRAME, returnValue: undefined });
@@ -626,7 +631,8 @@ async function launch(plan) {
               folder: path.join(LAB, "catalogs"),
               mirror: mirror,
               pin: doc.lead,
-              keys: {}
+              keys: {},
+              checks: latestChecks
             });
             prog.syncOnce();
             prog.syncOnce();

@@ -69,6 +69,7 @@ function boot(ud, source) {
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     src + "\n__test.isCatalogName = isCatalogName; __test.heed = heedTeam; __test.teamDoc = folderTeamDoc;"
     + " __test.conflictSiblingName = typeof conflictSiblingName === \"function\" ? conflictSiblingName : null;"
+    + " __test.deskTrustChecks = typeof deskTrustChecks === \"function\" ? deskTrustChecks : null;"
     + " __test.signDesk = function (doc) {"
     + "   const me = branchIdentity(true); if (!me) return null;"
     + "   const out = JSON.parse(JSON.stringify(doc));"
@@ -235,14 +236,19 @@ try {
   /* ---- the team file: a higher genuine sibling is heeded ------------------------------------- */
   const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
   const teamId = "t-" + crypto.randomBytes(8).toString("hex");
+  let conflictChecks = null;
   function syncMirror(ud, folder) {
+    if (!conflictChecks) {
+      conflictChecks = boot(ud).test.deskTrustChecks();
+    }
     const mirror = path.join(ud, "folder-mirror", teamId);
     const prog = syncerMod.createFolderProgram({
       team: teamId,
       folder: folder,
       mirror: mirror,
       pin: LEAD,
-      keys: {}
+      keys: {},
+      checks: conflictChecks
     });
     prog.syncOnce();
   }

@@ -44,7 +44,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
-  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile"];
+  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -117,6 +117,7 @@ try {
       mirror: mirror,
       pin: LEAD,
       keyFor: (epoch) => box.key,
+      checks: box.D.api.deskTrustChecks(),
     });
     prog.syncOnce();
     prog.syncOnce();

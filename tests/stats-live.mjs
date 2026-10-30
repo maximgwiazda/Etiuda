@@ -41,7 +41,7 @@ const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
-  "catalogChanged", "channelHash", "isCatalogName"];
+  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -128,7 +128,8 @@ try {
       folder: box.share,
       mirror: mirror,
       pin: LEAD,
-      keys: keys
+      keys: keys,
+      checks: box.D.api.deskTrustChecks(),
     });
     prog.syncOnce();
     prog.syncOnce();

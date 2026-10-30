@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 33;
+const EXPECTED = 37;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -172,15 +172,15 @@ async function run() {
     // Expected on main before implementation
   }
 
+  const initDesk = loadDesk(folder("init-desk-ud"));
+  const checks = typeof initDesk.api.deskTrustChecks === "function" ? initDesk.api.deskTrustChecks() : null;
+
   /* -------------------------------------------------------------------------------------------------
    * Leg 1 (41a): Main thread synchronous fs calls spy during readCatalog & catalogChanged
    * ----------------------------------------------------------------------------------------------- */
   {
     const desk1 = newDesk("desk1", SHARE);
     const deskChecks = typeof desk1.api.deskTrustChecks === "function" ? desk1.api.deskTrustChecks() : null;
-    if (syncerMod && typeof syncerMod.setDefaultChecks === "function" && deskChecks) {
-      syncerMod.setDefaultChecks(deskChecks);
-    }
     // Setup desk envelope with pinned team
     const envPath = path.join(desk1.ud, "desk.json");
     const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
@@ -263,7 +263,7 @@ async function run() {
 
       const prog = syncerMod.createFolderProgram({
         team: TEAM, folder: shareDir, mirror: mirrorDir,
-        pin: LEAD, keys: { 1: K1 }
+        pin: LEAD, keys: { 1: K1 }, checks
       });
 
       // Pass 1: changing.ec has invalid json
@@ -318,7 +318,7 @@ async function run() {
 
       const prog = syncerMod.createFolderProgram({
         team: TEAM, folder: shareDir, mirror: mirrorDir,
-        pin: LEAD, keys: { 1: K1, 2: K2 }
+        pin: LEAD, keys: { 1: K1, 2: K2 }, checks
       });
       await prog.syncOnce();
 
@@ -359,7 +359,7 @@ async function run() {
 
       const prog = syncerMod.createFolderProgram({
         team: TEAM, folder: shareDir, mirror: mirrorDir,
-        pin: LEAD, keys: { 1: K1 }
+        pin: LEAD, keys: { 1: K1 }, checks
       });
       await prog.syncOnce();
 
@@ -408,7 +408,7 @@ async function run() {
 
       const prog = syncerMod.createFolderProgram({
         team: TEAM, folder: SHARE, mirror: mirrorDir,
-        pin: LEAD, keys: { 1: K1 },
+        pin: LEAD, keys: { 1: K1 }, checks,
         io: {
           readdir: () => { const err = new Error("network timeout"); err.code = "ETIMEDOUT"; throw err; },
           stat: () => { const err = new Error("network timeout"); err.code = "ETIMEDOUT"; throw err; },
@@ -456,17 +456,17 @@ async function run() {
       const TEAM2 = "t-" + crypto.randomBytes(8).toString("hex");
 
       const s1 = syncerMod.startFolderSyncer({
-        team: TEAM, folder: shareDir1, mirror: mirrorDir1, pin: LEAD, useWorker: false
+        team: TEAM, folder: shareDir1, mirror: mirrorDir1, pin: LEAD, useWorker: false, checks
       });
       const s2 = syncerMod.startFolderSyncer({
-        team: TEAM, folder: shareDir1, mirror: mirrorDir1, pin: LEAD, useWorker: false
+        team: TEAM, folder: shareDir1, mirror: mirrorDir1, pin: LEAD, useWorker: false, checks
       });
 
       const startingTwiceIsSame = s1 === s2;
 
       // Start for TEAM2
       const s3 = syncerMod.startFolderSyncer({
-        team: TEAM2, folder: shareDir2, mirror: mirrorDir2, pin: LEAD, useWorker: false
+        team: TEAM2, folder: shareDir2, mirror: mirrorDir2, pin: LEAD, useWorker: false, checks
       });
 
       const oldStopped = s1.stopped === true;
@@ -517,7 +517,7 @@ async function run() {
     // Now run syncer
     const prog = syncerMod.createFolderProgram({
       team: TEAM, folder: SHARE, mirror: mirrorDir,
-      pin: LEAD, keys: { 1: K1 }
+      pin: LEAD, keys: { 1: K1 }, checks
     });
     await prog.syncOnce();
     const landsInMirrorAfterSync = fs.existsSync(mirrorBranch);
@@ -638,7 +638,7 @@ async function run() {
 
     const prog = syncerMod.createFolderProgram({
       team: TEAM, folder: UNREACHABLE, mirror: mirrorDir,
-      pin: LEAD, keys: { 1: K1 },
+      pin: LEAD, keys: { 1: K1 }, checks,
       onStatus: (status) => {
         if (!status.answers) {
           d.api.settleFolder(status.folder, false);
@@ -683,7 +683,7 @@ async function run() {
 
     const prog = syncerMod.createFolderProgram({
       team: TEAM, folder: shareT, mirror: mirrorDir,
-      pin: LEAD, keys: { 1: K1 }
+      pin: LEAD, keys: { 1: K1 }, checks
     });
 
     await prog.syncOnce();
@@ -827,7 +827,7 @@ async function run() {
 
     const prog = syncerMod.createFolderProgram({
       team: TEAM_V, folder: shareV, mirror: mirrorV,
-      pin: LEAD, keyFor: e => (e === 1 ? K1 : null)
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks
     });
     await prog.syncOnce();
 
@@ -861,7 +861,7 @@ async function run() {
 
     const prog = syncerMod.createFolderProgram({
       team: TEAM_W, folder: shareW, mirror: mirrorW,
-      pin: LEAD, keyFor: e => (e === 1 ? K1 : null),
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks,
       io: {
         readdir: fs.readdirSync,
         stat: fs.statSync,
@@ -936,7 +936,7 @@ async function run() {
 
     const prog = syncerMod.createFolderProgram({
       team: TEAM_Y, folder: shareY, mirror: mirrorY,
-      pin: LEAD, keyFor: e => (e === 1 ? K1 : null)
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks
     });
 
     await prog.syncOnce();
@@ -1001,7 +1001,7 @@ async function run() {
 
     const prog = syncerMod.createFolderProgram({
       team: TEAM_9, folder: share9, mirror: mirror9,
-      pin: LEAD, keyFor: e => (e === 1 ? K1 : null)
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks
     });
 
     const swept1 = !fs.existsSync(leftover1);
@@ -1178,6 +1178,31 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
+   * Leg 19 (42k): E2 - a syncer made without checks refuses and nothing starts
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    let refused = false;
+    let thrownMsg = "";
+    try {
+      const s = syncerMod.startFolderSyncer({
+        team: TEAM,
+        folder: SHARE,
+        mirror: folder("mirror-nochecks"),
+        pin: LEAD,
+        useWorker: false
+      });
+      if (s && typeof s.stop === "function") s.stop();
+    } catch (e) {
+      refused = true;
+      thrownMsg = (e && e.message) || "";
+    }
+    const saysChecks = /without the desk's checks/i.test(thrownMsg);
+    check(refused && saysChecks,
+      "42k a syncer made without checks refuses, saying it was made without the desk's checks: "
+      + JSON.stringify({ refused, saysChecks, thrownMsg }));
+  }
+
+  /* -------------------------------------------------------------------------------------------------
    * Plants: Proved by removal in scratch copy, never in checkout, sha256 restored
    * ----------------------------------------------------------------------------------------------- */
   const syncerFile = path.join(ROOT, "shell", "folder", "syncer.cjs");
@@ -1230,7 +1255,7 @@ async function run() {
       // Team file signed by forger
       const forgedTeam = JSON.stringify(teamFile({ epoch: 1, rev: 1, signer: forger.privateKey, keyId: FORGER.keyId, public: FORGER.public }));
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), forgedTeam, "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 } });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 }, checks });
       prog.syncOnce();
       // Without pin check, forged team file lands
       return fs.existsSync(path.join(mirrorDir, "etiuda-team.json"));
@@ -1248,7 +1273,7 @@ async function run() {
       fs.writeFileSync(path.join(mirrorDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 2 })), "utf8");
       // Share has older rev 1
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 } });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 }, checks });
       prog.syncOnce();
       const mirrorDoc = JSON.parse(fs.readFileSync(path.join(mirrorDir, "etiuda-team.json"), "utf8"));
       // Without rev check, older rev 1 overwrites rev 2
@@ -1269,7 +1294,7 @@ async function run() {
         forger.privateKey, FORGER.keyId);
       const sealedForged = seal(K1, 1, text(forgedEd));
       fs.writeFileSync(path.join(shareDir, "forged.ec"), sealedForged, "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 } });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 }, checks });
       prog.syncOnce();
       // Without signature check, forged edition lands
       return fs.existsSync(path.join(mirrorDir, "forged.ec"));
@@ -1286,7 +1311,7 @@ async function run() {
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
       const sealedE2 = seal(K2, 2, CAT_A2);
       fs.writeFileSync(path.join(shareDir, "lamp-e2.ec"), sealedE2, "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1, 2: K2 } });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1, 2: K2 }, checks });
       prog.syncOnce();
       // Without pending guard, file is applied prematurely to mirror while team is at epoch 1
       return fs.existsSync(path.join(mirrorDir, "lamp-e2.ec"));
@@ -1302,7 +1327,7 @@ async function run() {
       const mirrorDir = folder("plant-key-mirror");
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
       fs.writeFileSync(path.join(shareDir, "edition.ec"), seal(K1, 1, CAT_A1), "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keyFor: e => (e === 1 ? K1 : null) });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks });
       let failedKey = false;
       try {
         prog.syncOnce();
@@ -1338,7 +1363,7 @@ async function run() {
         handover: [step]
       }, lead2.privateKey, LEAD2.keyId);
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(handedTeam), "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM_H, folder: shareDir, mirror: mirrorDir, pin: LEAD });
+      const prog = mod.createFolderProgram({ team: TEAM_H, folder: shareDir, mirror: mirrorDir, pin: LEAD, checks });
       prog.syncOnce();
       // Without handover support, handed-over team file does not land
       return !fs.existsSync(path.join(mirrorDir, "etiuda-team.json"));
@@ -1362,7 +1387,7 @@ async function run() {
       const bHead = Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), signedBytesOf(headSigned)]);
       headSigned.sig.value = crypto.sign(null, bHead, lead.privateKey).toString("hex");
       fs.writeFileSync(path.join(shareDir, "etiuda-head.json"), JSON.stringify(headSigned), "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM_HD, folder: shareDir, mirror: mirrorDir, pin: LEAD });
+      const prog = mod.createFolderProgram({ team: TEAM_HD, folder: shareDir, mirror: mirrorDir, pin: LEAD, checks });
       prog.syncOnce();
       // Without head-wait, head lands prematurely before its edition
       return fs.existsSync(path.join(mirrorDir, "etiuda-head.json"));
@@ -1379,7 +1404,7 @@ async function run() {
       fs.mkdirSync(stagingDir, { recursive: true });
       const tmpFile = path.join(stagingDir, "leftover.tmp");
       fs.writeFileSync(tmpFile, "old", "utf8");
-      mod.createFolderProgram({ team: TEAM, folder: folder("f"), mirror: mirrorDir, pin: LEAD });
+      mod.createFolderProgram({ team: TEAM, folder: folder("f"), mirror: mirrorDir, pin: LEAD, checks });
       // Without staging sweep, leftover tmp file remains
       return fs.existsSync(tmpFile);
     });
@@ -1394,7 +1419,7 @@ async function run() {
       const mirrorDir = folder("plant-reuse-mirror");
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
       fs.writeFileSync(path.join(shareDir, "future.ec"), seal(K1, 10, CAT_A1), "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, checks });
       prog.syncOnce();
       fs.writeFileSync(path.join(shareDir, "future.ec"), seal(K1, 10, CAT_A2), "utf8");
       prog.syncOnce();
@@ -1413,7 +1438,7 @@ async function run() {
       const mirrorDir = folder("plant-rm-mirror");
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
       fs.writeFileSync(path.join(mirrorDir, "temp.ec"), CAT_A1, "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 } });
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 }, checks });
       prog.syncOnce(); // only 1 missing listing
       // Without two-absent guard, file is removed after only 1 missing listing
       return !fs.existsSync(path.join(mirrorDir, "temp.ec"));
@@ -1425,8 +1450,8 @@ async function run() {
   {
     const r = await testPlant("syncer-singleton", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
-      const s1 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false });
-      const s2 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false });
+      const s1 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false, checks });
+      const s2 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false, checks });
       mod.stopAllFolderSyncers();
       // Without singleton check, s1 !== s2
       return s1 !== s2;
@@ -1438,9 +1463,9 @@ async function run() {
   {
     const r = await testPlant("syncer-team-change", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
-      const s1 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false });
+      const s1 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false, checks });
       const TEAM2 = "t-" + crypto.randomBytes(8).toString("hex");
-      const s2 = mod.startFolderSyncer({ team: TEAM2, folder: SHARE, mirror: folder("m2"), pin: LEAD, useWorker: false });
+      const s2 = mod.startFolderSyncer({ team: TEAM2, folder: SHARE, mirror: folder("m2"), pin: LEAD, useWorker: false, checks });
       const s1StillRunning = s1.stopped === false;
       mod.stopAllFolderSyncers();
       return s1StillRunning;
@@ -1503,8 +1528,6 @@ async function run() {
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
       const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
       fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
-      const savedDefault = typeof syncerMod.getDefaultChecks === "function" ? syncerMod.getDefaultChecks() : null;
-      if (typeof syncerMod.setDefaultChecks === "function") syncerMod.setDefaultChecks(null);
       try {
         const reloaded = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
         const s = reloaded.api.folderSyncerRun();
@@ -1513,11 +1536,32 @@ async function run() {
         if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") syncerMod.stopAllFolderSyncers();
         return ret;
       } finally {
-        if (typeof syncerMod.setDefaultChecks === "function") syncerMod.setDefaultChecks(savedDefault);
         if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") syncerMod.stopAllFolderSyncers();
       }
     });
     check(r.ok, "42j lifting plant:syncer-checks leaves the syncer without trust checks, refusing the team file: " + JSON.stringify(r));
+  }
+
+  // 42l: plant:syncer-without-checks
+  {
+    const r = await testPlant("syncer-without-checks", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      try {
+        const s = mod.startFolderSyncer({
+          team: TEAM,
+          folder: folder("plant-nochk-share"),
+          mirror: folder("plant-nochk-mirror"),
+          pin: LEAD,
+          useWorker: false
+        });
+        if (s && typeof s.stop === "function") s.stop();
+        if (mod && typeof mod.stopAllFolderSyncers === "function") mod.stopAllFolderSyncers();
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    check(r.ok, "42l lifting plant:syncer-without-checks lets a syncer start without the desk's checks: " + JSON.stringify(r));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

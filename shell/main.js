@@ -29,13 +29,7 @@ let relayLayer = null;
 function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
 let folderSyncerLayer = null;
 function FolderSyncer() {
-  if (!folderSyncerLayer) {
-    folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs"));
-    if (typeof folderSyncerLayer.setDefaultChecks === "function") {
-      folderSyncerLayer.setDefaultChecks(deskTrustChecks());
-    }
-  }
-  return folderSyncerLayer;
+  return folderSyncerLayer || (folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs")));
 }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
@@ -851,7 +845,11 @@ function folderSyncerRun(win) {
       }
     }
   };
-  folderSyncer = FolderSyncer().startFolderSyncer(opts);
+  try {
+    folderSyncer = FolderSyncer().startFolderSyncer(opts);
+  } catch {
+    folderSyncer = null;
+  }
   return folderSyncer;
 }
 function watchCatalog(win) {
