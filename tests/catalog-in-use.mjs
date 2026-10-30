@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 54;
+const EXPECTED = 57;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -43,7 +43,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
-  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse"];
+  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -1095,6 +1095,123 @@ try {
     check(!!matched && matched.kind === "etiuda-catalog-answer" && matched.sha256 === pin
         && matchedText.indexOf(MARK) >= 0 && raw.indexOf(MARK) < 0,
       "890am THE CONTROL: an ask naming the loaded catalog's hash is answered, sealed, and the share does not hold the card in the clear");
+  }
+
+  /* ---- Board 945 item 9, Part B: in-use counter n, cleared: true on release, and withdrawn asks ---- */
+  {
+    const box = await arm("counter-use");
+    const priv = textOf(catalog(1, { id: "counter-lamps", name: "Counter lamps" }));
+    const outside = path.join(folder("counter-out"), "counter.ec");
+    put(path.dirname(outside), "counter.ec", priv);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["counter-lamps"]);
+    box.D.api.offerFile(box.D.win, outside);
+    const pin = pinOf(box.D, priv);
+    box.D.sync("etiuda:catalog-taken", pin);
+    const inUse1 = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const env1 = box.D.envelope();
+    const firstOk = inUse1 && inUse1.n === 1 && env1.inUseN === 1 && inUse1.cleared === undefined;
+
+    // Release the catalog: clearInUseFile writes in-use.ec sealed with cleared: true and rising counter n = 2
+    box.D.api.clearInUseFile();
+    const inUse2 = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const env2 = box.D.envelope();
+    const releaseOk = inUse2 && inUse2.n === 2 && env2.inUseN === 2 && inUse2.cleared === true
+      && box.D.api.deskFileGenuine(inUse2, box.me.id);
+
+    // Load another catalog: counter increments strictly to n = 3
+    const priv2 = textOf(catalog(2, { id: "counter-lamps", name: "Counter lamps revised" }));
+    const outside2 = path.join(folder("counter-out-2"), "counter2.ec");
+    put(path.dirname(outside2), "counter2.ec", priv2);
+    box.D.api.offerFile(box.D.win, outside2);
+    const pin2 = pinOf(box.D, priv2);
+    box.D.sync("etiuda:catalog-taken", pin2);
+    const inUse3 = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const env3 = box.D.envelope();
+    const loadOk = inUse3 && inUse3.n === 3 && env3.inUseN === 3 && inUse3.cleared === undefined;
+
+    check(firstOk && releaseOk && loadOk,
+      "890an written in-use carries counter n strictly above last, kept in desk envelope; release writes in-use sealed with cleared: true and rising n");
+  }
+
+  {
+    // 890ao: withdrawn ask in catalog-asks/<deskId>.withdrawn.json is not answered when ask file comes back; forged withdrawal changes nothing
+    const box = await arm("withdrawn-ask");
+    const priv = textOf(catalog(1, { id: "quay-lamps", name: "Quay lamps" }));
+    const outside = path.join(folder("quay-out"), "quay.ec");
+    put(path.dirname(outside), "quay.ec", priv);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-lamps"]);
+    box.D.api.offerFile(box.D.win, outside);
+    const pin = pinOf(box.D, priv);
+    box.D.sync("etiuda:catalog-taken", pin);
+
+    const askId = "ask-withdrawn-target";
+    const askFile = path.join(box.share, "catalog-asks", box.me.id + ".json");
+    const withdrawnFile = path.join(box.share, "catalog-asks", box.me.id + ".withdrawn.json");
+    const ans = answerPath(box.share, box.me.id);
+
+    // Studio writes catalog-asks/<deskId>.withdrawn.json signed by lead
+    const signDoc = (doc, keyPair) => {
+      const o = Object.assign({}, doc, { sig: { alg: "Ed25519", keyId: keyPair.keyId } });
+      o.sig.value = crypto.sign(null, box.D.api.askSignedBytes(o), keyPair.privateKey).toString("hex");
+      return o;
+    };
+    const withdrawnDoc = signDoc({
+      format: 1, kind: "etiuda-catalog-ask-withdrawn", desk: box.me.id, ids: [askId]
+    }, { keyId: LEAD.keyId, privateKey: lead.privateKey });
+    fs.mkdirSync(path.dirname(withdrawnFile), { recursive: true });
+    put(path.dirname(withdrawnFile), path.basename(withdrawnFile), withdrawnDoc);
+
+    // Resurrected ask file comes back
+    putAsk(box, askId, pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+
+    const env = box.D.envelope();
+    const ignoredResurrected = (env.catalogAsks || []).indexOf(askId) >= 0 && !fs.existsSync(ans);
+
+    // A fresh ask with a new ID is answered normally
+    const freshId = "ask-fresh-new";
+    putAsk(box, freshId, pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const answeredFresh = fs.existsSync(ans);
+
+    // Forged withdrawal for freshId does not retract or affect it
+    const forgedPair = crypto.generateKeyPairSync("ed25519");
+    const forgedWithdrawn = signDoc({
+      format: 1, kind: "etiuda-catalog-ask-withdrawn", desk: box.me.id, ids: [freshId]
+    }, { keyId: "forged-lead", privateKey: forgedPair.privateKey });
+    put(path.dirname(withdrawnFile), path.basename(withdrawnFile), forgedWithdrawn);
+    box.D.api.tryCatalogAsk(box.D.win);
+
+    check(ignoredResurrected && answeredFresh,
+      "890ao a withdrawn ask whose file comes back is not answered; a fresh ask is answered and a forged withdrawal changes nothing");
+
+    // 890ap: lifting plant:f9-ask-withdrawn answers the resurrected ask
+    {
+      const mainPath = path.join(APP, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:f9-ask-withdrawn") >= 0);
+      let turned = false;
+      if (at >= 0) {
+        lines[at] = "    /* plant:f9-ask-withdrawn */";
+        fs.writeFileSync(mainPath, lines.join("\n"));
+        // Remove answer, clear catalogAsks in envelope, reload desk and re-run ask
+        try { fs.unlinkSync(ans); } catch {}
+        const deskJsonPath = path.join(box.D.ud, "desk.json");
+        const deskData = JSON.parse(fs.readFileSync(deskJsonPath, "utf8"));
+        deskData.catalogAsks = [];
+        fs.writeFileSync(deskJsonPath, JSON.stringify(deskData));
+        const pDesk = loadDesk(box.D.ud);
+        putAsk(box, askId, pin);
+        pDesk.api.tryCatalogAsk(pDesk.win);
+        turned = fs.existsSync(ans);
+      }
+      fs.writeFileSync(mainPath, before);
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same,
+        "890ap lifting plant:f9-ask-withdrawn answers the resurrected ask (FAIL 890ao withdrawn ask ignored): "
+        + (turned ? "turned" : "did not turn") + ", sha " + (same ? "restored" : "differs"));
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

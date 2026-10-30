@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 137;
+const EXPECTED = 141;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -52,7 +52,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink"];
+  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -1317,6 +1317,114 @@ try {
     + " a request still waits with empty places and then shows its code: view " + (shellWait && shellWait.join ? shellWait.join.state + "/" + shellWait.join.code : "none")
     + (quietInvite ? " lead named" : " lead missing")
     + " parts " + [!!quietInvite, !!enInvite, !!armedDigits, !!namedLead, !!requestDoor, !!plInvite].join("/"));
+
+  /* Board 945 item 9, Part A: etiuda-team-pause.json tells a waiting desk the lead cannot admit desks for now */
+  const LAPSE_EN = "The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.";
+  const LAPSE_PL = "Lider zespołu nie może na razie wpuszczać stanowisk, bo jego licencja jest wstrzymana. Tutaj nic nie trzeba robić: gdy licencja znów będzie aktywna, stanowisko zostanie wpuszczone samo.";
+  const pausePath = path.join(waitYard, "etiuda-team-pause.json");
+  const signPause = (doc, keyPair) => {
+    const o = Object.assign({}, doc, { sig: { alg: "Ed25519", keyId: keyPair.keyId } });
+    o.sig.value = crypto.sign(null, Dwait.api.askSignedBytes(o), keyPair.privateKey).toString("hex");
+    return o;
+  };
+  const pauseDoc = (paused, t, keyPair, teamId) => signPause({
+    format: 1, kind: "etiuda-team-pause", team: teamId || TEAM, paused, t
+  }, keyPair || { keyId: LEAD.keyId, privateKey: lead.privateKey });
+
+  // 15ea: a paused:true file signed by the lead turns a waiting desk's line into the lapse sentence, in English and Polish
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(true, 1000)) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let pState = await Dwait.join("state");
+  if (tookFn) tookFn(pState);
+  ST.lsSet("eUiLang", "en");
+  let pEn = TJ.teamJoinEmptyHtml();
+  ST.lsSet("eUiLang", "pl");
+  let pPl = TJ.teamJoinEmptyHtml();
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  const pausedOk = !!(pState && pState.join && pState.join.paused === true)
+    && (pEn.indexOf(LAPSE_EN) >= 0 || pEn.indexOf("The team&#39;s lead cannot let desks in for now, as the lead&#39;s licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") >= 0)
+    && pEn.indexOf("Waiting for the team") < 0
+    && pPl.indexOf(LAPSE_PL) >= 0 && pPl.indexOf("Stanowisko czeka, aż lider") < 0;
+  check(pausedOk,
+    "15ea a paused:true file signed by the lead turns a waiting desk's line into the lapse sentence, in English and in Polish: "
+    + (pausedOk ? "said" : "not said"));
+
+  // 15eb: forged, other-team, and older pause files do not change anything
+  const pauseForgedPair = crypto.generateKeyPairSync("ed25519");
+  const pauseForgedLead = { keyId: "forged-lead", privateKey: pauseForgedPair.privateKey };
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(true, 5000, pauseForgedLead)) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let forgedState = await Dwait.join("state");
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(true, 6000, null, "t-other-team-1234")) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let otherTeamState = await Dwait.join("state");
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(false, 2000)) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let resumedState = await Dwait.join("state");
+  if (tookFn) tookFn(resumedState);
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(true, 1500)) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let oldPauseState = await Dwait.join("state");
+  if (tookFn) tookFn(oldPauseState);
+  ST.lsSet("eUiLang", "en");
+  let oldPauseHtml = TJ.teamJoinEmptyHtml();
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  const ignoreBad = !!(resumedState && resumedState.join && !resumedState.join.paused)
+    && !!(oldPauseState && oldPauseState.join && !oldPauseState.join.paused)
+    && oldPauseHtml.indexOf("Waiting for the team&#39;s lead to let this desk in") >= 0
+    && oldPauseHtml.indexOf("cannot let desks in for now") < 0;
+  check(ignoreBad,
+    "15eb forged, other-team, and older pause files change nothing: "
+    + (ignoreBad ? "ignored" : "changed state"));
+
+  // 15ec: newer paused:true lifts to pause again, and resume at strictly higher t restores waiting line
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(true, 3000)) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let pauseAgain = await Dwait.join("state");
+  fs.writeFileSync(pausePath, JSON.stringify(pauseDoc(false, 4000)) + "\n");
+  Dwait.api.catalogChanged(Dwait.win);
+  let resumeAgain = await Dwait.join("state");
+  if (tookFn) tookFn(resumeAgain);
+  ST.lsSet("eUiLang", "en");
+  let resumedHtml = TJ.teamJoinEmptyHtml();
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  const cycleOk = !!(pauseAgain && pauseAgain.join && pauseAgain.join.paused === true)
+    && !!(resumeAgain && resumeAgain.join && !resumeAgain.join.paused)
+    && resumedHtml.indexOf("Waiting for the team&#39;s lead to let this desk in") >= 0;
+  check(cycleOk,
+    "15ec a paused:false file with rising t clears the pause and restores the waiting line: "
+    + (cycleOk ? "cycle ok" : "cycle failed"));
+
+  // 15ed: lifting plant:f9-team-pause leaves the waiting line bare while paused
+  {
+    if (PLANTS_OFF) {
+      skip("15ed lifting plant:f9-team-pause leaves the waiting line bare while paused");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:f9-team-pause") >= 0);
+      let turned = false;
+      if (at >= 0) {
+        lines[at] = "      if (false) { /* plant:f9-team-pause */";
+        fs.writeFileSync(mainPath, lines.join("\n"));
+        const Dplanted = await deskWith("door-wait-plant", folder("invite-own-plant"), null, lines.join("\n"));
+        const plantYard = folder("invite-wait-yard-plant");
+        const plantBlob = inviteBlob({ team: TEAM, folder: plantYard, lead: lampLead, secret: newSecret() });
+        await Dplanted.join("read", plantBlob);
+        typeFour(codeFor(plantBlob));
+        await Dplanted.join("invite", plantBlob, "Nia", codeFor(plantBlob));
+        fs.writeFileSync(path.join(plantYard, "etiuda-team-pause.json"), JSON.stringify(pauseDoc(true, 1000)) + "\n");
+        Dplanted.api.catalogChanged(Dplanted.win);
+        const st = await Dplanted.join("state");
+        turned = !st.join || !st.join.paused;
+      }
+      fs.writeFileSync(mainPath, before);
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15ed lifting plant:f9-team-pause leaves the waiting line bare while paused (FAIL 15ea pause file ignored): "
+        + (turned ? "turned" : "did not turn") + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
 
   /* Board 922, F1. A relay join that waits says so in the copywriter's words, and a relay invitation the relay refused as used or
      expired is said on the same card, in English and in Polish, with acts that clear it; a shared-folder join keeps its own line. */
@@ -3457,7 +3565,7 @@ try {
   const wrapEnv2 = Dwrap.envelope();
   const heldKey2 = wrapEnv2.teamKeys && wrapEnv2.teamKeys[TEAM] && wrapEnv2.teamKeys[TEAM][2];
   check(heldKey2 && wrapCatalog2 === A1.trim(),
-    "15ea after a key change the open invitation's wrap is at the new epoch and opens the new edition: key kept "
+    "15ee after a key change the open invitation's wrap is at the new epoch and opens the new edition: key kept "
     + !!heldKey2 + ", catalog " + (wrapCatalog2 === A1.trim() ? "opened" : "shut"));
 
   const refuseYard = folder("folder-wrap-refuse");
@@ -3517,13 +3625,13 @@ try {
     && cardHtml.indexOf('data-join="cancel"') >= 0 && cardHtml.indexOf('data-join="ask"') < 0;
 
   check(initialOpen && forgedIgnored && otherTeamIgnored && otherInvIgnored && keyForgotten && catalogShut && saysRefused && saysWords,
-    "15eb a genuine refusal makes a waiting desk forget the key and say so; forged, other-team and other-invitation refusals change nothing: forged ignored "
+    "15ef a genuine refusal makes a waiting desk forget the key and say so; forged, other-team and other-invitation refusals change nothing: forged ignored "
     + !!forgedIgnored + ", key forgotten " + keyForgotten + ", state " + (stateAfterRefuse.join && stateAfterRefuse.join.state) + ", words " + saysWords);
 
-  // 15ec: lifting plant:folder-wrap-aad turns 15dy red
+  // 15eg: lifting plant:folder-wrap-aad turns 15dy red
   {
     if (PLANTS_OFF) {
-      skip("15ec lifting plant:folder-wrap-aad turns 15dy red");
+      skip("15eg lifting plant:folder-wrap-aad turns 15dy red");
     } else {
       const blobPath = path.join(ROOT, "shell", "relay", "blob.cjs");
       const before = fs.readFileSync(blobPath);
@@ -3544,15 +3652,15 @@ try {
         detail = turned ? "folder wrap rejected with planted AAD" : "folder wrap still opened";
       }
       const same = fs.readFileSync(blobPath).equals(before);
-      check(turned && same, "15ec lifting plant:folder-wrap-aad turns folder wrap opening red (FAIL 15dy: wrap opens with bad AAD): "
+      check(turned && same, "15eg lifting plant:folder-wrap-aad turns folder wrap opening red (FAIL 15dy: wrap opens with bad AAD): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
 
-  // 15ed: lifting plant:refuse-forget turns 15eb red
+  // 15eh: lifting plant:refuse-forget turns 15ef red
   {
     if (PLANTS_OFF) {
-      skip("15ed lifting plant:refuse-forget turns 15eb red");
+      skip("15eh lifting plant:refuse-forget turns 15ef red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -3572,7 +3680,7 @@ try {
         detail = turned ? "planted desk retained key after refusal" : "desk still forgot key";
       }
       const same = fs.readFileSync(mainPath).equals(before);
-      check(turned && same, "15ed lifting plant:refuse-forget retains key after refusal (FAIL 15eb: key forgotten without forgetWrapped): "
+      check(turned && same, "15eh lifting plant:refuse-forget retains key after refusal (FAIL 15ef: key forgotten without forgetWrapped): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }

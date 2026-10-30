@@ -7627,6 +7627,8 @@ What you type stays in this browser only.`;
     "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
     "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
     "Joining {LEAD}'s team": "Dołączanie do zespołu osoby {LEAD}",
+    "The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.": "Lider zespołu nie może na razie wpuszczać stanowisk, bo jego licencja jest wstrzymana. Tutaj nic nie trzeba robić: gdy licencja znów będzie aktywna, stanowisko zostanie wpuszczone samo.",
+    /* copywriter, 2026-10-30 00:20 */
     "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.": "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
     "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.": "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.",
     "This invitation has already been used. Ask your lead for a new one.": "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
@@ -15107,6 +15109,7 @@ What you type stays in this browser only.`;
     if (j.keeps === false) row.keeps = false;
     if (j.left === true) row.left = true;
     if (j.doubted === true) row.doubted = true;
+    if (j.paused === true) row.paused = true;
     return row;
   }
   function syncJoinDoor() {
@@ -15435,7 +15438,7 @@ What you type stays in this browser only.`;
       };
       return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-        line: j.invite.relay || j.invite.wrapped ? t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.") : t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+        line: j.paused ? t("The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") : j.invite.relay || j.invite.wrapped ? t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.") : t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
         body: meta,
         acts: [["cancel", t("Cancel the request")]]
       };
@@ -15470,7 +15473,7 @@ What you type stays in this browser only.`;
     }
     if (j) return {
       title: t("Waiting for the lead to open the request"),
-      line: t("The code to read to them appears here as soon as they do."),
+      line: j.paused ? t("The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") : t("The code to read to them appears here as soon as they do."),
       body: joinCodeHtml("") + meta,
       acts: [["cancel", t("Cancel the request")]]
     };
