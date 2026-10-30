@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 89;
+const EXPECTED = 93;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -238,6 +238,153 @@ function hygieneLegs() {
     "18d a FLOOR name planted onto HYGIENE is refused at load with exit 78, and the tool as shipped is not: planted exit "
     + clashRun.exit + " | " + clashRun.out.trim().split(/\r?\n/).filter(l => /FLOOR/.test(l)).join(" | ")
     + " | control exit " + clashControl.exit);
+}
+
+/* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (the test architect's C3, 2026-10-30) ------------------------------
+   In the release profile, a diff against the newest release run that held nothing (same path, head under HEAD) that names only
+   files under tests/ runs the changed test files that are profile steps, every step that imports them (transitively), and the
+   floor, and its chain line says "inherits" the base's git tree and "ran" the files. Each lab is a git repository of its own with a
+   four-leg chain (a, b, c, and pick, which is on the floor and so is added), b importing tests/helper.mjs, which imports tests/deep.mjs.
+   18e one changed test; 18f a changed helper two imports down; 18g a changed file outside tests/ is the full profile, and the run
+   after it inherits from it; 18h a base with a hold red is not inherited, against a green control and a planted copy of the tool
+   with the guard cut out, which does inherit it. Legs 18e to 18h sit beside 18a to 18d: the ids are the next four unused. */
+function inheritLegs() {
+  const OK = prints(1, 0, "process.exit(0);");
+  const RED = prints(0, 1, "process.exit(1);");
+  const B = red => 'import "./helper.mjs";\n' + (red ? RED : OK);
+  const SHA = /^[0-9a-f]{40,64}$/;
+  const chainLines = file => { try { return fs.readFileSync(file, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) { return []; } };
+  const gitIn = (cwd, args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args),
+    { cwd, encoding: "utf8", timeout: 30000 });
+  const gatesOf = r => r.line ? r.line.gates.map(g => g.gate).join(",") : "no chain line";
+  const ranOf = r => r.line && r.line.ran ? r.line.ran.join(",") : "none";
+  const summary = (name, r) => name + " exit " + r.exit + " gates [" + gatesOf(r) + "] inherits "
+    + (r.line && r.line.inherits ? r.line.inherits.slice(0, 8) : "none") + " ran [" + ranOf(r) + "]";
+  const ALL = "tests-a,tests-b,tests-c,tests-pick";
+
+  /** A lab, committed, whose base run has not been made yet. `o.bRed` makes leg b red; `o.plant` is [from, to] for the lab's own
+      copy of the tool, applied before the commit because a changed tool is itself a file outside tests/. */
+  function inheritLab(kind, o) {
+    const l = makeLab(kind, { a: OK, b: B(o.bRed), c: OK, pick: OK }, {
+      git: true,
+      files: {
+        "tests/helper.mjs": 'import "./deep.mjs";\nexport const helper = 1;\n',
+        "tests/deep.mjs": "export const deep = 1;\n",
+        "src/leaf.mjs": "export const leaf = 1;\n",
+        "package-lock.json": "{}\n",
+      },
+    });
+    const pkgFile = path.join(l.lab, "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf8"));
+    pkg.scripts = { test: ["a", "b", "c"].map(n => "node tests/" + n + ".mjs").join(" && ") };
+    fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + "\n");
+    let planted = false;
+    if (o.plant) {
+      const tool = path.join(l.lab, "tools", "gate-run.mjs");
+      const bytes = fs.readFileSync(tool, "utf8");
+      const next = bytes.replace(o.plant[0], o.plant[1]);
+      planted = next !== bytes;
+      fs.writeFileSync(tool, next);
+    }
+    const commit = msg => { gitIn(l.lab, ["add", "."]); return gitIn(l.lab, ["commit", "-q", "-m", msg]).status === 0; };
+    const committed = commit("base");
+    const chains = path.join(l.root, "chains.jsonl");
+    return {
+      planted,
+      committed: () => committed,
+      release: () => {
+        const r = run(l, ["release"], null, {
+          ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+          ETIUDA_LOCK_PATH: path.join(l.root, "machine.lock"),
+          ETIUDA_CHAINS_PATH: chains,
+        });
+        return Object.assign(r, { line: chainLines(chains).pop() || null });
+      },
+      edit: (files, msg) => {
+        for (const rel of Object.keys(files)) {
+          const at = path.join(l.lab, rel);
+          fs.mkdirSync(path.dirname(at), { recursive: true });
+          fs.writeFileSync(at, files[rel]);
+        }
+        return commit(msg || "edit");
+      },
+      pkgFile,
+    };
+  }
+
+  /* (e) one changed test file: it and the floor run, the line carries inherits and ran. */
+  const e = inheritLab("inherit-one", {});
+  const eBase = e.release();
+  e.edit({ "tests/a.mjs": OK + "// changed\n" });
+  const eRun = e.release();
+  check(e.committed() && eBase.exit === 0 && !!eBase.line && !("inherits" in eBase.line) && gatesOf(eBase) === ALL
+    && eRun.exit === 0 && !!eRun.line && SHA.test(eBase.line.gitTree) && eRun.line.inherits === eBase.line.gitTree
+    && eRun.line.holds === false && gatesOf(eRun) === "tests-a,tests-pick" && ranOf(eRun) === "tests/a.mjs,tests/pick.mjs",
+    "18e a green release base and one changed test file: only that file and the floor run, and the line carries inherits (the base's git tree) and ran: "
+    + summary("base", eBase) + " | " + summary("then", eRun));
+
+  /* (f) a changed helper: the files that import it, two imports down, run too; the ones that do not, do not. */
+  const f = inheritLab("inherit-helper", {});
+  const fBase = f.release();
+  f.edit({ "tests/deep.mjs": "export const deep = 2;\n" });
+  const fRun = f.release();
+  check(fBase.exit === 0 && gatesOf(fBase) === ALL && fRun.exit === 0 && !!fRun.line && !!fBase.line
+    && fRun.line.inherits === fBase.line.gitTree && gatesOf(fRun) === "tests-b,tests-pick" && ranOf(fRun) === "tests/b.mjs,tests/pick.mjs",
+    "18f a changed test helper: the step that imports it through another helper runs with the floor, and the steps that do not import it do not: "
+    + summary("base", fBase) + " | " + summary("then", fRun));
+
+  /* (g) a changed file outside tests/ is the full profile, whichever it is; the next test-only run inherits from that full run. */
+  const g = inheritLab("inherit-outside", {});
+  const gBase = g.release();
+  const outside = [
+    ["src/leaf.mjs", { "src/leaf.mjs": "export const leaf = 2;\n" }],
+    ["tools/note.mjs", { "tools/note.mjs": "export const note = 1;\n" }],
+    ["package-lock.json", { "package-lock.json": "{ \"lockfileVersion\": 3 }\n" }],
+    ["package.json", null],
+  ];
+  const gRuns = [];
+  for (const [name, files] of outside) {
+    if (files) g.edit(files, name);
+    else {
+      const p = JSON.parse(fs.readFileSync(g.pkgFile, "utf8"));
+      p.private = true;
+      g.edit({ "package.json": JSON.stringify(p, null, 2) + "\n" }, name);
+    }
+    gRuns.push([name, g.release()]);
+  }
+  g.edit({ "tests/c.mjs": OK + "// changed\n" }, "test only");
+  const gThen = g.release();
+  const gLast = gRuns[gRuns.length - 1][1];
+  check(gBase.exit === 0 && gRuns.every(([, r]) => r.exit === 0 && !!r.line && !("inherits" in r.line) && gatesOf(r) === ALL)
+    && !!gLast.line && SHA.test(gLast.line.gitTree) && gThen.exit === 0 && !!gThen.line && gThen.line.inherits === gLast.line.gitTree
+    && gatesOf(gThen) === "tests-c,tests-pick",
+    "18g a file outside tests/ (src, tools, the lockfile, package.json) changed: the full profile runs and the line inherits nothing; the next test-only run inherits from that full run: "
+    + gRuns.map(([name, r]) => name + " -> " + gatesOf(r) + (r.line && r.line.inherits ? " INHERITS" : "")).join(" | ") + " | " + summary("then", gThen));
+
+  /* (h) a base with a hold red is not inherited. The same fix on a green base is the control, which does inherit; the copy of the
+     tool with the guard cut out is the plant, which inherits the hold-red base and so skips legs the base never ran green. */
+  const GUARD = "if (baseHolds(c)) continue; /* plant:inherit-hold */";
+  const hRed = inheritLab("inherit-hold", { bRed: true });
+  const hBase = hRed.release();
+  hRed.edit({ "tests/b.mjs": B(false) }, "fix b");
+  const hRun = hRed.release();
+  const hGreen = inheritLab("inherit-hold-control", {});
+  const hGreenBase = hGreen.release();
+  hGreen.edit({ "tests/b.mjs": B(false) + "// changed\n" }, "touch b");
+  const hGreenRun = hGreen.release();
+  const hPlant = inheritLab("inherit-hold-planted", { bRed: true, plant: [GUARD, ""] });
+  const hPlantBase = hPlant.release();
+  hPlant.edit({ "tests/b.mjs": B(false) }, "fix b");
+  const hPlantRun = hPlant.release();
+  check(hBase.exit === 1 && !!hBase.line && hBase.line.holds === true && hRun.exit === 0 && !!hRun.line && !("inherits" in hRun.line)
+    && gatesOf(hRun) === ALL
+    && hGreenBase.exit === 0 && hGreenRun.exit === 0 && !!hGreenRun.line && !!hGreenBase.line
+    && hGreenRun.line.inherits === hGreenBase.line.gitTree && gatesOf(hGreenRun) === "tests-b,tests-pick"
+    && hPlant.planted && hPlantBase.exit === 1 && !!hPlantBase.line && !!hPlantRun.line
+    && hPlantRun.line.inherits === hPlantBase.line.gitTree && gatesOf(hPlantRun) === "tests-b,tests-pick",
+    "18h a base with a hold red is not inherited, the full profile runs; the same fix on a green base inherits, and the tool with the guard cut out inherits the hold-red base: "
+    + summary("held base", hBase) + " | " + summary("then", hRun) + " | " + summary("green control", hGreenRun)
+    + " | planted " + hPlant.planted + " " + summary("then", hPlantRun));
 }
 
 async function main() {
@@ -1616,6 +1763,9 @@ async function main() {
 
   /* ---- 18. THE HYGIENE LEGS WARN IN THE RELEASE PROFILE (see hygieneLegs) --------------------- */
   hygieneLegs();
+
+  /* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (see inheritLegs) ----------- */
+  inheritLegs();
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
