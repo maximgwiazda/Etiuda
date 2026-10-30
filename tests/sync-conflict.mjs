@@ -69,6 +69,7 @@ function boot(ud, source) {
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     src + "\n__test.isCatalogName = isCatalogName; __test.heed = heedTeam; __test.teamDoc = folderTeamDoc;"
     + " __test.conflictSiblingName = typeof conflictSiblingName === \"function\" ? conflictSiblingName : null;"
+    + " __test.deskTrustChecks = typeof deskTrustChecks === \"function\" ? deskTrustChecks : null;"
     + " __test.signDesk = function (doc) {"
     + "   const me = branchIdentity(true); if (!me) return null;"
     + "   const out = JSON.parse(JSON.stringify(doc));"
@@ -233,7 +234,24 @@ try {
   }
 
   /* ---- the team file: a higher genuine sibling is heeded ------------------------------------- */
+  const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
   const teamId = "t-" + crypto.randomBytes(8).toString("hex");
+  let conflictChecks = null;
+  function syncMirror(ud, folder) {
+    if (!conflictChecks) {
+      conflictChecks = boot(ud).test.deskTrustChecks();
+    }
+    const mirror = path.join(ud, "folder-mirror", teamId);
+    const prog = syncerMod.createFolderProgram({
+      team: teamId,
+      folder: folder,
+      mirror: mirror,
+      pin: LEAD,
+      keys: {},
+      checks: conflictChecks
+    });
+    prog.syncOnce();
+  }
   function teamDoc(rev, epoch) {
     return sign({
       format: 1, kind: "etiuda-team", id: teamId, catalogs: ["lamp-board"],
@@ -258,6 +276,7 @@ try {
     const canon = teamDoc(1, 1), sib = teamDoc(4, 1);
     const canonAt = put(folder, "etiuda-team.json", canon);
     const sibAt = put(folder, "etiuda-team (1).json", sib);
+    syncMirror(ud, folder);
     const before = [fileSha(canonAt), fileSha(sibAt)];
     const A = boot(ud);
     A.test.heed();
@@ -279,6 +298,7 @@ try {
     plantRing(folder);
     put(folder, "etiuda-team.json", teamDoc(4, 1));
     put(folder, "etiuda-team (1).json", teamDoc(2, 1));
+    syncMirror(ud, folder);
     const A = boot(ud);
     A.test.heed();
     const floor = floorOf(ud);
@@ -293,6 +313,7 @@ try {
     const bad = teamDoc(9, 1);
     bad.sig.value = "ab".repeat(64);
     put(folder, "etiuda-team (conflicted copy 2026-10-28).json", bad);
+    syncMirror(ud, folder);
     const A = boot(ud);
     A.test.heed();
     const floor = floorOf(ud);
@@ -305,11 +326,13 @@ try {
     plantRing(folder);
     put(folder, "etiuda-team.json", teamDoc(2, 1));
     put(folder, "etiuda-team (1).json", teamDoc(6, 1));
+    syncMirror(ud, folder);
     const A = boot(ud);
     A.test.heed();
     const rose = floorOf(ud);
     put(folder, "etiuda-team.json", teamDoc(2, 1));
     put(folder, "etiuda-team (1).json", teamDoc(3, 1));
+    syncMirror(ud, folder);
     const B = boot(ud);
     B.test.heed();
     const held = floorOf(ud);
@@ -353,6 +376,7 @@ try {
       plantRing(folder);
       put(folder, "etiuda-team.json", teamDoc(1, 1));
       put(folder, "etiuda-team (1).json", teamDoc(4, 1));
+      syncMirror(ud, folder);
       const A = boot(ud, fs.readFileSync(sib.scratch, "utf8"));
       await A.ask("etiuda:catalog-files");
       const floor = floorOf(ud);

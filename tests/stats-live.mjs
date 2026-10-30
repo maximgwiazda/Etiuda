@@ -20,6 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const EXPECTED = 18;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
@@ -40,7 +41,7 @@ const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
-  "catalogChanged", "channelHash", "isCatalogName"];
+  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -89,7 +90,13 @@ function newDesk(folder) {
   return D;
 }
 const folder = () => { const f = path.join(LAB, "share-" + (++seq)); fs.mkdirSync(f, { recursive: true }); return f; };
-const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+const boxMap = new Map();
+let syncMirror = () => {};
+const put = (dir, name, t) => {
+  fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+  const b = boxMap.get(dir);
+  if (b) syncMirror(b);
+};
 const ymd = d => { const p = v => String(v).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()); };
 const shift = (s, days) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -113,6 +120,20 @@ try {
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey), box: pubHex(leadBox.publicKey) };
   const OTHER = { keyId: "other-lead", public: pubHex(other.publicKey) };
+  syncMirror = (box) => {
+    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
+    const keys = Object.assign({ 1: box.key }, box.extraKeys || {});
+    const prog = syncerMod.createFolderProgram({
+      team: box.team,
+      folder: box.share,
+      mirror: mirror,
+      pin: LEAD,
+      keys: keys,
+      checks: box.D.api.deskTrustChecks(),
+    });
+    prog.syncOnce();
+    prog.syncOnce();
+  };
   const signTeam = (doc) => {
     const o = JSON.parse(JSON.stringify(doc));
     o.sig = { alg: "Ed25519", keyId: LEAD.keyId };
@@ -152,14 +173,16 @@ try {
   };
   async function joined(badWrap) {
     const share = folder();
-    put(share, "etiuda-ring.json", RING);
     const D = newDesk(share);
     const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
     const key = crypto.randomBytes(32);
     const who = badWrap ? "k-" + "ab".repeat(8) : me.id;
+    const box = { share, D, me, team, key };
+    boxMap.set(share, box);
+    put(share, "etiuda-ring.json", RING);
     put(share, "etiuda-team.json", teamText(team, 1, [entry(D, me, key, team, 1, who)]));
-    return { share, D, me, team, key };
+    return box;
   }
   function adopt(box, span, key, who, n) {
     put(box.share, "stats-span.json", spanDoc(box.D, span, key, who));

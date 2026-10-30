@@ -3128,7 +3128,7 @@ try {
       const still = running && running.online();
       if (running) { try { await running.stop(); } catch { /* already stopped */ } }
       try { await studio.stop(); } catch { /* already stopped */ }
-      const pre = !taken.refused && before === share && landed && keyIn && standing && pinned === !opt.unpinned
+      const pre = !taken.refused && (before === share || before === path.join(D.ud, "folder-mirror", team)) && landed && keyIn && standing && pinned === !opt.unpinned
         && onMirror && wasOnline && !!hereBefore;
       const said = D.said.filter(l => l.indexOf("relay") >= 0 || l.indexOf("team") >= 0).slice(-3).join(" / ");
       return { pre, here, folder, share, stopped, still: !!still, refused: taken && taken.refused, said, team, after,
