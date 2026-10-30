@@ -2,7 +2,7 @@
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
-  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog } from "./catalog-file.js";
+  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog, deskBranchHolds } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionNameOf, editionLabel, editionSaid,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -371,10 +371,20 @@ function paintCatalogList(){
        loaded file rewritten since is marked too. A desk older than that key falls back to the
        loaded row's date, which can only under-mark - the safe direction. */
     const at=+(nsGet("CatalogFileAt")||0) || ((files[onAt]||{}).mtime||0);
-    /* THIS DESK'S OWN FILE, said under the catalog it grew from: in use, that its edits are in the folder; not in use,
-       that they wait for it. */
+    /* THIS DESK'S OWN FILE, said under the catalog it grew from: in use, that its edits are with the team (or kept on this computer
+       if held / refused); not in use, that they wait for it. */
     const ownOf=id=>own.find(o=>o.grew && o.grew.id===id);
-    const mineLine=ownOf(heldId) ? ecMineHtml(t("Your edits are in the folder, for the team to see").split("{DESK}").join(deskName(ownOf(heldId))),true) : "";
+    const ownEntry=ownOf(heldId);
+    const ownReached=!!(ownEntry && ownEntry.reached);
+    const holdsEdits=deskBranchHolds();
+    const isRelay=!!((ownEntry && ownEntry.relay) || all.some(f=>f.relay));
+    const mineLine=(ownEntry || holdsEdits)
+      ? ecMineHtml(t(ownReached
+          ? "Your edits are with the team"
+          : (isRelay
+              ? "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead."
+              : "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead.")), true)
+      : "";
     const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your edits to it come back when it is loaded again"),false) : "";
     const tops=files.map((f,i)=>{
       const on=i===onAt;

@@ -43,6 +43,8 @@ const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+/* The channel's own key function, so a key-format change in the channel reaches these legs too (E2). */
+const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 
 /* ================================================================================================
    A PAGE SMALL ENOUGH TO READ: elements, text, a parser for the markup the desk writes, and the
@@ -227,6 +229,12 @@ function makeDocument() {
   return doc;
 }
 
+const safeStorage = {
+  isEncryptionAvailable: () => true,
+  encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+  decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+};
+
 /* ================================================================================================
    ONE LAUNCH: the shell's main process and preload, the page's modules, then the acts in order.
    Prints one line, `#launch {...}`, with what the page showed.
@@ -240,29 +248,62 @@ async function launch(plan) {
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   const onHandlers = {}, invokeHandlers = {}, rendererOn = {};
   const pickBox = { answer: null };
+  const bwListeners = {}, wcListeners = {};
   const pageWin = {
-    isDestroyed: () => false, isMaximized: () => false,
-    webContents: { id: 1, once: noop, send: (ch, ...args) => { (rendererOn[ch] || []).forEach(fn => fn({}, ...args)); } },
+    isDestroyed: () => false, isMaximized: () => false, isMinimized: () => false,
+    setBounds: noop, getBounds: () => ({ x: 0, y: 0, width: 1024, height: 720 }),
+    show: noop, showInactive: noop, maximize: noop, focus: noop, loadFile: noop, close: noop,
+    on: (t, fn) => { (bwListeners[t] = bwListeners[t] || []).push(fn); },
+    once: (t, fn) => { (bwListeners[t] = bwListeners[t] || []).push(fn); },
+    webContents: {
+      id: 1, once: noop,
+      on: (t, fn) => { (wcListeners[t] = wcListeners[t] || []).push(fn); },
+      send: (ch, ...args) => { (rendererOn[ch] || []).forEach(fn => fn({}, ...args)); },
+      setWindowOpenHandler: noop, getZoomLevel: () => 0, setZoomLevel: noop,
+      getURL: () => "file:///C:/lab/engine/etiuda.html", reload: noop,
+    },
   };
+  let whenReadyResolve = noop;
+  const whenReadyPromise = new Promise(r => { whenReadyResolve = r; });
   const electron = {
-    app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
-           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), isPackaged: false,
+    app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => true, quit: noop, on: noop,
+           getVersion: () => "0.0.0", whenReady: () => whenReadyPromise, isPackaged: false,
            commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
     shell: { openPath: async () => "" },
-    BrowserWindow: { fromWebContents: () => pageWin, getAllWindows: () => [] },
+    BrowserWindow: Object.assign(function () { return pageWin; }, { fromWebContents: () => pageWin, getAllWindows: () => [pageWin] }),
     Menu: inert,
     dialog: { showOpenDialog: async () => pickBox.answer || { canceled: true, filePaths: [] }, showSaveDialog: async () => ({ canceled: true }) },
     net: inert, protocol: inert, session: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
+    powerMonitor: { on: noop },
+    globalShortcut: inert,
+    safeStorage,
   };
   const quiet = { log: noop, error: noop, warn: noop, info: noop };
-  const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
+  const shellSrc = f => (fs.existsSync(path.join(SHELL, f)) ? fs.readFileSync(path.join(SHELL, f), "utf8") : fs.readFileSync(path.join(ROOT, "shell", f), "utf8"));
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   /* A file main.js requires from beside itself is the tree's: the lab's shell folder holds its built-in catalogs alone. */
   const beside = n => (path.isAbsolute(n) && path.dirname(n) === SHELL ? path.join(ROOT, "shell", path.basename(n)) : n);
+  const mockRelay = plan.mockRelay ? {
+    pathKey: REAL_CHANNEL.pathKey,
+    createChannel: () => ({
+      start: noop, stop: async () => {}, kick: noop, online: () => true,
+      program: {
+        state: () => ({
+          sent: plan.mockRelay.sent || {},
+          refused: plan.mockRelay.refused || {},
+          pending: plan.mockRelay.pending || []
+        })
+      }
+    })
+  } : null;
   new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
-    n => (n === "electron" ? electron : nodeRequire(beside(n))), SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet);
+    n => {
+      if (n === "electron") return electron;
+      if (mockRelay && n.endsWith(path.join("relay", "channel.cjs"))) return mockRelay;
+      return nodeRequire(beside(n));
+    }, SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet);
 
   const FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ev = () => ({ sender: { id: 1, once: noop, send: noop }, senderFrame: FRAME, returnValue: undefined });
@@ -353,6 +394,7 @@ async function launch(plan) {
     }) : [];
   };
   const act = {
+    window: async () => { whenReadyResolve(); await settle(); },
     boot: () => { OFFER.eOfferCatalogAtBoot(); OFFER.wireHostCatalogWatch(); },
     settle: () => settle(),
     offer: () => { obs.offers.push(readOffer()); },
@@ -569,6 +611,19 @@ async function launch(plan) {
     over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
     // A colleague's file landing while the Library is open, and the list read as it then stands, painted by nothing here.
     drop: () => { const at = path.join(LAB, "catalogs", plan.drop.rel); fs.mkdirSync(path.dirname(at), { recursive: true }); fs.writeFileSync(at, plan.drop.text, "utf8"); },
+    holdbranch: async stem => {
+      const dest = path.join(LAB, "catalogs", "desks", plan.ownDeskId, stem + ".ec");
+      const bak = dest + ".bak";
+      if (fs.existsSync(dest)) fs.renameSync(dest, bak);
+      fs.mkdirSync(dest);
+      try {
+        const text = fs.existsSync(bak) ? fs.readFileSync(bak, "utf8") : "";
+        await ipcRenderer.invoke("etiuda:branch-write", stem, text);
+      } finally {
+        fs.rmdirSync(dest);
+        if (fs.existsSync(bak)) fs.renameSync(bak, dest);
+      }
+    },
     reread: async () => { await settle(); obs.rows.push(readRows()); },
   });
   for (const a of plan.acts) {
@@ -602,7 +657,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 123;
+  const EXPECTED = 128;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1130,8 +1185,9 @@ async function parent() {
     const piotr = deskOf(Object.assign(JSON.parse(JSON.stringify(wanted)), { id: "made-here" }), "Piotr");
     deskFile(lab75, withRev(wanted, 5), "Ala", true);
     const ownPair = crypto.generateKeyPairSync("ed25519"), ownDesk = deskOf(grown("Hello there."), "Max", ownPair);
+    const sealPriv = k => safeStorage.encryptString(k.export({ type: "pkcs8", format: "der" }).toString("base64")).toString("base64");
     const env75 = JSON.parse(fs.readFileSync(envAt75, "utf8"));
-    env75.branch = { sign: { pub: ownDesk.raw.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+    env75.branch = { sign: { pub: ownDesk.raw.toString("hex"), priv: sealPriv(ownPair.privateKey) }, box: { pub: "ef".repeat(32), priv: "sealed" } };
     fs.writeFileSync(envAt75, JSON.stringify(env75), "utf8");
     const grouped = id => id.slice(2).replace(/(.{4})(?=.)/g, "$1 ");
     const r75 = run(lab75, ["desk", "rows"], true);
@@ -1144,9 +1200,107 @@ async function parent() {
       + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
     check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola's desk, key /.test(olaRow.tip),
       "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
-    check(same(rows75[0].mine, ["Your edits are in the folder, for the team to see"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
+    check(same(rows75[0].mine, ["Your edits are with the team"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
       "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
       + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
+
+    /* 75w1: folder write refused for access/held leaves edits kept on computer */
+    const FOLDER_KEPT_LINE = "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead.";
+    const RELAY_KEPT_LINE = "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.";
+    const stem75 = "lamp-" + sha8(wanted.id);
+    const L_w1 = run(lab75, ["holdbranch:" + stem75, "rows"], true, { ownDeskId: ownDesk.id });
+    const rows_w1 = L_w1.rows[0] || [];
+    check(same((rows_w1[0] || {}).mine, [FOLDER_KEPT_LINE]),
+      "75w1 folder write refused for access/held: loaded row says edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts: "
+      + JSON.stringify((rows_w1[0] || {}).mine));
+
+    /* 75w2: relay upload refusal/owed leaves edits kept on computer */
+    const lab75w2 = accepted();
+    const envAt75w2 = path.join(lab75w2, "userdata", "desk.json");
+    const relayLead = crypto.generateKeyPairSync("ed25519");
+    const RELAY_LEAD = { keyId: "relay-lead", public: pubHex(relayLead.publicKey) };
+    const RELAY_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const RELAY_RT = "1".repeat(32);
+    const ownDeskRelay = deskOf(grown("Hello there."), "Max", ownPair, lab75w2);
+    const env75w2 = JSON.parse(fs.readFileSync(envAt75w2, "utf8"));
+    env75w2.branch = { sign: { pub: ownDeskRelay.raw.toString("hex"), priv: sealPriv(ownPair.privateKey) }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+    env75w2.teamPins = { [RELAY_TEAM]: RELAY_LEAD };
+    env75w2.teamPinFrom = { [RELAY_TEAM]: "invite" };
+    env75w2.teamChannel = { [RELAY_TEAM]: { kind: "relay", rt: RELAY_RT, url: "https://relay.test/relay/v1" } };
+    fs.writeFileSync(envAt75w2, JSON.stringify(env75w2), "utf8");
+    // Place team mirror and desk branch file in userData/relay/<RELAY_RT>/desks/...
+    const mirrorRt = path.join(lab75w2, "userdata", "relay", RELAY_RT);
+    const mirrorDesk = path.join(mirrorRt, "desks", ownDeskRelay.id);
+    fs.mkdirSync(mirrorDesk, { recursive: true });
+    const deskBranchText = fs.readFileSync(path.join(lab75w2, "catalogs", "desks", ownDeskRelay.id, stem75 + ".ec"), "utf8");
+    fs.writeFileSync(path.join(mirrorDesk, stem75 + ".ec"), deskBranchText, "utf8");
+    fs.copyFileSync(path.join(lab75w2, "catalogs", "lamp.ec"), path.join(mirrorRt, "lamp.ec"));
+    const relKey = REAL_CHANNEL.pathKey("desks/" + ownDeskRelay.id + "/" + stem75 + ".ec");
+    const mirrorSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(mirrorDesk, stem75 + ".ec"))).digest("hex");
+    const relayMine = sent => ((run(lab75w2, ["window", "rows"], true, { mockRelay: { sent: { [relKey]: sent } } }).rows[0] || [])[0] || {}).mine;
+    const mineOwed = relayMine({ sha: mirrorSha, owe: true });
+    const mineWrong = relayMine({ sha: "0".repeat(64) });
+    check(same(mineOwed, [RELAY_KEPT_LINE]) && same(mineWrong, [RELAY_KEPT_LINE]),
+      "75w2 relay upload owed alone, and a sent sha that is not the file's alone, each leave the row saying the edits are kept on this computer: "
+      + JSON.stringify({ owed: mineOwed, wrongSha: mineWrong }));
+    const mineReached = relayMine({ sha: mirrorSha });
+    check(same(mineReached, ["Your edits are with the team"]),
+      "75w5 relay upload taken (the sent sha is the mirror file's sha256, nothing owed, not deleted, keyed by the channel's own pathKey): the row says the edits are with the team: "
+      + JSON.stringify(mineReached));
+
+    /* 75w3: lifting plant:w1-folder-reached turns 75w1 red */
+    {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:w1-folder-reached") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "    reached = true; /* plant:w1-folder-reached */";
+        const labScratch = fs.mkdtempSync(path.join(os.tmpdir(), "plant-w1-"));
+        try {
+          fs.cpSync(lab75, labScratch, { recursive: true });
+          const tmpMain = path.join(labScratch, "shell", "main.js");
+          fs.writeFileSync(tmpMain, lines.join("\n"), "utf8");
+          const L_p = run(labScratch, ["holdbranch:" + stem75, "rows"], true, { ownDeskId: ownDesk.id });
+          const rows_p = L_p.rows[0] || [];
+          turned = same((rows_p[0] || {}).mine, ["Your edits are with the team"]);
+          detail = turned ? "turned red: kept line replaced by reached" : "did not turn red";
+        } finally {
+          try { fs.rmSync(labScratch, { recursive: true, force: true }); } catch {}
+        }
+      }
+      const sameFile = fs.readFileSync(mainPath).equals(before);
+      check(turned && sameFile, "75w3 lifting plant:w1-folder-reached turns 75w1 red (FAIL 75w1: folder held not recognized): "
+        + detail + ", sha " + (sameFile ? "restored" : "differs"));
+    }
+
+    /* 75w4: lifting plant:w1-relay-reached turns 75w2 red */
+    {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:w1-relay-reached") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "      reached = true; /* plant:w1-relay-reached */";
+        const labScratch = fs.mkdtempSync(path.join(os.tmpdir(), "plant-w2-"));
+        try {
+          fs.cpSync(lab75w2, labScratch, { recursive: true });
+          const tmpMain = path.join(labScratch, "shell", "main.js");
+          fs.writeFileSync(tmpMain, lines.join("\n"), "utf8");
+          const L_p = run(labScratch, ["window", "rows"], true, { mockRelay: { sent: { [relKey]: { sha: mirrorSha, owe: true } } } });
+          const rows_p = L_p.rows[0] || [];
+          turned = same((rows_p[0] || {}).mine, ["Your edits are with the team"]);
+          detail = turned ? "turned red: kept line replaced by reached" : "did not turn red";
+        } finally {
+          try { fs.rmSync(labScratch, { recursive: true, force: true }); } catch {}
+        }
+      }
+      const sameFile = fs.readFileSync(mainPath).equals(before);
+      check(turned && sameFile, "75w4 lifting plant:w1-relay-reached turns 75w2 red (FAIL 75w2: relay owe/refusal not recognized): "
+        + detail + ", sha " + (sameFile ? "restored" : "differs"));
+    }
 
     const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
     const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
@@ -1611,9 +1765,9 @@ async function parent() {
     const ola77 = deskOf(grown77("Good day to you."), "Ola", null, lab77b), cy77 = deskOf(grown77("Good day, from Cy."), "Cy", null, lab77b);
     onRoster(lab77b, [ola77.id], own77);
     const r77 = run(lab77b, ["desk", "rows"], true), rows77 = r77.rows[0] || [];
-    check(same(rows77.map(r => r.name), ["lamp.ec", "Ola's desk"]) && same((rows77[0] || {}).mine, ["Your edits are in the folder, for the team to see"])
+    check(same(rows77.map(r => r.name), ["lamp.ec", "Ola's desk"]) && same((rows77[0] || {}).mine, ["Your edits are with the team"])
       && rows77.every(r => r.fp !== cy77.four) && !(r77.errors || []).length,
-      "77b the Library draws the roster's desk and not the one off it, and this desk's own file, though the roster does not list it, still says its edits are in the folder: "
+      "77b the Library draws the roster's desk and not the one off it, and this desk's own file, though the roster does not list it, still says its edits are with the team: "
       + JSON.stringify({ rows: rows77.map(r => [r.name, r.fp, r.mine]), errors: (r77.errors || []).slice(0, 2) }));
     /* The lead adds a desk at the epoch already accepted: the team file says so, under the pinned lead, and the roster kept
        at that epoch follows it. The file lands while the desk runs, after its boot has read the folder, so the listing

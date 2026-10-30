@@ -7586,6 +7586,11 @@ What you type stays in this browser only.`;
     "The catalog could not be loaded:": "Nie udało się wczytać katalogu:",
     "{FILE} is sealed for its team": "{FILE} jest zaszyfrowany dla swojego zespołu",
     "Once the team's lead lets this desk in, the catalog opens here by itself.": "Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
+    "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.": "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Windows zwykle pomaga zalogowanie się na własne konto, a nie na konto usługi ani profil tymczasowy. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
+    "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.": "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie macOS zwykle pomaga zezwolenie Etiudzie na dostęp do pęku kluczy, gdy system o to zapyta. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
+    "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.": "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
+    "Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.": "Wystarczy ponownie poprosić o dołączenie, gdy folder zespołu będzie osiągalny; teraz ten komputer nie może się z nim połączyć, więc nic nie zapisano.",
+    "Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.": "Osoba zarządzająca folderem zespołu może pozwolić temu komputerowi na zapis, którego wymaga prośba; do tego czasu nic tu nie zapisano. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
     "Asks as {NAME}, the name in Settings.": "Prośba pójdzie jako {NAME}, pod nazwą z Ustawień.",
     "this desk": "to stanowisko",
     "Ask to join": "Poproś o dołączenie",
@@ -7767,7 +7772,9 @@ What you type stays in this browser only.`;
     "See what changed": "Zobacz zmiany",
     "Work from this file": "Wczytaj ten plik do pracy",
     "A catalog of its own": "Osobny katalog",
-    "Your edits are in the folder, for the team to see": "Własne zmiany są w folderze, widoczne dla zespołu",
+    "Your edits are with the team": "Własne zmiany są już u zespołu",
+    "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead.": "Własne zmiany są zachowane na tym komputerze i trafią do folderu zespołu, gdy coś się w nim zmieni albo przy następnym uruchomieniu Etiudy. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
+    "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.": "Własne zmiany są zachowane na tym komputerze i trafią do zespołu, gdy tylko będzie mógł je przyjąć. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
     "Your edits to it come back when it is loaded again": "Własne zmiany w tym katalogu wrócą po jego ponownym wczytaniu",
     "In the team's edition": "W wydaniu zespołu",
     "At {DESK}": "{DESK}",
@@ -14626,6 +14633,8 @@ What you type stays in this browser only.`;
       grew: f && f.grew && typeof f.grew === "object" && f.grew.id ? { id: String(f.grew.id), rev: +f.grew.rev || 0, sha: String(f.grew.sha || "") } : null,
       // Only a colleague's file in the share has one: {id,name}, the desk that wrote it.
       desk: f && f.desk && typeof f.desk === "object" && f.desk.id ? { id: String(f.desk.id), name: String(f.desk.name || "") } : null,
+      reached: !!(f && f.reached),
+      relay: !!(f && f.relay),
       // The copy Etiuda ships, rather than a folder's own file.
       builtIn: !!(f && f.builtIn)
     })).filter((f) => f.name) : [];
@@ -14969,6 +14978,8 @@ What you type stays in this browser only.`;
   var joinRead = "";
   var joinTyped = "";
   var joinWhy = "";
+  var askWhy = "";
+  var askPlatform = "";
   var joinLinkSaid = null;
   var joinReads = 0;
   var lapseUp = "";
@@ -14976,6 +14987,11 @@ What you type stays in this browser only.`;
   function eHasJoin() {
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
+  }
+  function deskPlatform() {
+    const h = eHost();
+    const p = h && h.platform || askPlatform || typeof process !== "undefined" && process.platform || "";
+    return String(p).toLowerCase();
   }
   function joinAsk(op, file, name, check, before) {
     if (!eHasJoin()) return Promise.resolve(null);
@@ -15215,6 +15231,7 @@ What you type stays in this browser only.`;
     joinNow = {
       sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
       join: joinShown(s.join),
+      askRefused: s.askRefused || s.refused || null,
       leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => {
         const row = {
           team: String(l.team),
@@ -15251,6 +15268,14 @@ What you type stays in this browser only.`;
       paintJoin();
       return joinNow;
     }
+    const hadAskWhy = askWhy;
+    if (s.askRefused || s.refused === "no-identity" || s.refused === "folder-not-answering" || s.refused === "folder-not-writable") {
+      askWhy = s.askRefused || s.refused;
+      if (s.platform) askPlatform = String(s.platform);
+    } else if (s.join) {
+      askWhy = "";
+      askPlatform = "";
+    }
     const offer = s.offer;
     if (offer && offer.link === true && typeof offer.relay === "string" && offer.relay) {
       joinOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "", left: String(offer.left || "") };
@@ -15263,7 +15288,7 @@ What you type stays in this browser only.`;
       paintJoin();
       return joinNow;
     }
-    if (changed === true || JSON.stringify(joinNow) !== was) paintJoin();
+    if (changed === true || JSON.stringify(joinNow) !== was || askWhy !== hadAskWhy) paintJoin();
     return joinNow;
   }
   function noteCatalogCopy() {
@@ -15493,9 +15518,17 @@ What you type stays in this browser only.`;
       };
       return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask, acts };
     }
+    let line = t("Once the team's lead lets this desk in, the catalog opens here by itself.");
+    if (askWhy === "no-identity") {
+      const p = deskPlatform();
+      line = p === "win32" ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.") : p === "darwin" ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.") : t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.");
+    } else if (askWhy === "folder-not-answering")
+      line = t("Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.");
+    else if (askWhy === "folder-not-writable")
+      line = t("Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.");
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
-      line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
+      line,
       body: ask,
       acts
     };
@@ -28938,7 +28971,11 @@ What you type stays in this browser only.`;
       const deskOn = heldId ? desks.findIndex((f) => f.id === heldId) : -1;
       const at = +(nsGet("CatalogFileAt") || 0) || ((files[onAt] || {}).mtime || 0);
       const ownOf = (id) => own.find((o) => o.grew && o.grew.id === id);
-      const mineLine = ownOf(heldId) ? ecMineHtml(t("Your edits are in the folder, for the team to see").split("{DESK}").join(deskName(ownOf(heldId))), true) : "";
+      const ownEntry = ownOf(heldId);
+      const ownReached = !!(ownEntry && ownEntry.reached);
+      const holdsEdits = deskBranchHolds();
+      const isRelay = !!(ownEntry && ownEntry.relay || all.some((f) => f.relay));
+      const mineLine = ownEntry || holdsEdits ? ecMineHtml(t(ownReached ? "Your edits are with the team" : isRelay ? "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead." : "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead."), true) : "";
       const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your edits to it come back when it is loaded again"), false) : "";
       const tops = files.map((f, i) => {
         const on = i === onAt;

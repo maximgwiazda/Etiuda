@@ -149,6 +149,13 @@ const ALLOWED_IN = [
     within: "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji." },
   { fold: "zwykle", since: "2026-10-26",
     within: "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją." },
+  /* 2026-10-30. The copywriter's three no-identity lines on Ask to join (board 949 W2) say "zwykle pomaga", the other word. */
+  { fold: "zwykle", since: "2026-10-30",
+    within: "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Windows zwykle pomaga zalogowanie się na własne konto, a nie na konto usługi ani profil tymczasowy. Potem wystarczy ponownie nacisnąć Poproś o dołączenie." },
+  { fold: "zwykle", since: "2026-10-30",
+    within: "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie macOS zwykle pomaga zezwolenie Etiudzie na dostęp do pęku kluczy, gdy system o to zapyta. Potem wystarczy ponownie nacisnąć Poproś o dołączenie." },
+  { fold: "zwykle", since: "2026-10-30",
+    within: "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie." },
 ];
 function allowedAt(line, k, at) {
   return ALLOWED_IN.some(a => {

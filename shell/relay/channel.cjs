@@ -2289,7 +2289,7 @@ module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
   SESSION_KEEP_MS, WAITING_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
-  canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
+  pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
   inviteRefusedSignedBytes: B.inviteRefusedSignedBytes, inviteRefusedGenuine: B.inviteRefusedGenuine,
   createProgram, createChannel, newestEdition,
