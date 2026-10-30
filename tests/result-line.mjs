@@ -1253,7 +1253,12 @@ async function main() {
      package.json's test script, which need not hold a floor file. A plan for a change to package.json, which is SHARED, fails
      closed; each FLOOR entry must be among its steps, by its own command or by its file run whole. */
   const closedPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-  const closedPlan = await gr.planAreaRun(ROOT, ["package.json"], closedPkg);
+  /* package-lock.json, on SHARED in both trees, fails closed whatever the diff; package.json does not since the gate batch
+     (an edit that only adds or removes script entries is selected), so a branch adding a test to the chain read 16m red. Its
+     own selection is 16r to 16u's (the test architect's ruling, 2026-10-30 00:59). */
+  const CLOSED_FILE = "package-lock.json";
+  const closedOnShared = (gfFloor.SHARED || []).includes(CLOSED_FILE); /* plant:c16m-shared */
+  const closedPlan = await gr.planAreaRun(ROOT, [CLOSED_FILE], closedPkg);
   const closedMissing = (gr.FLOOR || []).filter(f => !(closedPlan.steps || []).some(s => s.cmd === f.cmd
     || (s.file === f.file && !(s.args || []).length))).map(f => f.cmd);
   /* The release profile, nightly included, runs every FLOOR entry too (the test architect's E2, 2026-10-28), and every FLOOR
@@ -1271,8 +1276,8 @@ async function main() {
   const bare = typeof gr.withFloor === "function" ? gr.withFloor(ROOT, [{ cmd: "node tests/plant-compare.mjs", file: "tests/plant-compare.mjs", args: [] }]) : [];
   const bareMissing = (gr.FLOOR || []).filter(f => !bare.some(s => s.cmd === f.cmd)).map(f => f.cmd);
   if (!bare.length || bare[bare.length - 1].file !== "tests/plant-compare.mjs") bareMissing.push("plant-compare not last");
-  check(closedPlan.failClosed === true && (gr.FLOOR || []).length > 0 && closedMissing.length === 0 && bareMissing.length === 0,
-    "16m a fail-closed plan runs every FLOOR entry: " + (closedPlan.failClosed ? "fail-closed, " : "NOT fail-closed, ")
+  check(closedOnShared && closedPlan.failClosed === true && (gr.FLOOR || []).length > 0 && closedMissing.length === 0 && bareMissing.length === 0,
+    "16m a fail-closed plan runs every FLOOR entry: " + CLOSED_FILE + (closedOnShared ? " on SHARED, " : " NOT on SHARED, ") + (closedPlan.failClosed ? "fail-closed, " : "NOT fail-closed, ")
     + (closedMissing.length ? "missing " + closedMissing.join("; ") : (gr.FLOOR || []).length + " entries among " + (closedPlan.steps || []).length + " steps")
     + (bareMissing.length ? "; a bare chain misses " + bareMissing.join("; ") : "; a bare chain gets all " + (gr.FLOOR || []).length));
 
