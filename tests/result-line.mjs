@@ -1746,8 +1746,10 @@ async function main() {
   const rbOnChecks = rbOnM ? Number(rbOnM[1]) : -1;
   const rbOffChecks = rbOffM ? Number(rbOffM[1]) : -1;
   const rbOffSkipped = rbOffM ? Number(rbOffM[2]) : -1;
-  check(rbOn.status === 0 && rbOff.status === 0 && rbOffSkipped === 2 && rbOnChecks - rbOffChecks === 2,
-    "17c ETIUDA_PLANTS=off on tests/rollback-floor.mjs skips exactly 2 plants: on checks=" + rbOnChecks + " off checks=" + rbOffChecks + " skipped=" + rbOffSkipped);
+  /* The plants are counted from the file, so a new plant leg moves the count with it. */
+  const rbPlants = (fs.readFileSync(path.join(ROOT, "tests", "rollback-floor.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
+  check(rbOn.status === 0 && rbOff.status === 0 && rbPlants > 0 && rbOffSkipped === rbPlants && rbOnChecks - rbOffChecks === rbPlants,
+    "17c ETIUDA_PLANTS=off on tests/rollback-floor.mjs skips exactly its " + rbPlants + " plants: on checks=" + rbOnChecks + " off checks=" + rbOffChecks + " skipped=" + rbOffSkipped);
 
   const tjOn = spawnSync(process.execPath, [path.join(ROOT, "tests", "team-join.mjs")], { cwd: ROOT, encoding: "utf8" });
   const tjOff = spawnSync(process.execPath, [path.join(ROOT, "tests", "team-join.mjs")], { cwd: ROOT, encoding: "utf8", env: Object.assign({}, process.env, { ETIUDA_PLANTS: "off" }) });
