@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 151;
+const EXPECTED = 153;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -3936,6 +3936,52 @@ try {
       }
       const same = fs.readFileSync(mainPath).equals(before);
       check(turned && same, "15ep lifting plant:w2-folder-not-writable turns 15em red (FAIL 15em: folder-not-writable reason absent): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  // 15es: Ask to join when write throws ENOENT (e.g. folder vanished before write) returns folder-not-answering
+  {
+    const udNoAns = path.join(LAB, "noans-write");
+    fs.mkdirSync(udNoAns, { recursive: true });
+    const shareNoAns = path.join(LAB, "share-noans-write");
+    fs.mkdirSync(shareNoAns, { recursive: true });
+    fs.copyFileSync(path.join(SHARE, "lamps.ec"), path.join(shareNoAns, "lamps.ec"));
+    fs.writeFileSync(path.join(shareNoAns, "desks"), "block");
+    fs.writeFileSync(path.join(udNoAns, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareNoAns, eUiLang: "en" } }), "utf8");
+    const deskNoAns = loadDesk(udNoAns);
+    const askRes = await deskNoAns.join("ask", "lamps.ec", "Max G.");
+    check(askRes && askRes.askRefused === "folder-not-answering",
+      "15es ask to join when write failure is ENOENT returns folder-not-answering: "
+      + JSON.stringify({ refused: askRes && askRes.askRefused }));
+  }
+
+  // 15et: lifting plant:w2-not-writable-codes turns 15es red
+  {
+    if (PLANTS_OFF) {
+      skip("15et lifting plant:w2-not-writable-codes turns 15es red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:w2-not-writable-codes") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "    const notWritable = true; /* plant:w2-not-writable-codes */";
+        const udPlant = path.join(LAB, "plant-notwritable-codes");
+        fs.mkdirSync(udPlant, { recursive: true });
+        const sharePlant = path.join(LAB, "plant-share-codes");
+        fs.mkdirSync(sharePlant, { recursive: true });
+        fs.copyFileSync(path.join(SHARE, "lamps.ec"), path.join(sharePlant, "lamps.ec"));
+        fs.writeFileSync(path.join(sharePlant, "desks"), "block");
+        fs.writeFileSync(path.join(udPlant, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: sharePlant, eUiLang: "en" } }), "utf8");
+        const planted = loadDesk(udPlant, lines.join("\n"));
+        const res = await planted.join("ask", "lamps.ec", "Max G.");
+        turned = !res || res.askRefused !== "folder-not-answering";
+        detail = turned ? "planted ask returned " + (res && res.askRefused) : "still returned folder-not-answering";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15et lifting plant:w2-not-writable-codes turns 15es red (FAIL 15es: ENOENT write failure not folder-not-answering): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }

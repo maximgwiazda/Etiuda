@@ -624,6 +624,9 @@ async function launch(plan) {
         if (fs.existsSync(bak)) fs.renameSync(bak, dest);
       }
     },
+    baddoc: async stem => {
+      await ipcRenderer.invoke("etiuda:branch-write", stem, "{ not valid json");
+    },
     reread: async () => { await settle(); obs.rows.push(readRows()); },
   });
   for (const a of plan.acts) {
@@ -657,7 +660,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 128;
+  const EXPECTED = 130;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1299,6 +1302,45 @@ async function parent() {
       }
       const sameFile = fs.readFileSync(mainPath).equals(before);
       check(turned && sameFile, "75w4 lifting plant:w1-relay-reached turns 75w2 red (FAIL 75w2: relay owe/refusal not recognized): "
+        + detail + ", sha " + (sameFile ? "restored" : "differs"));
+    }
+
+    /* 75w6: early failure in writeBranch (a bad doc) leaves the row saying edits are kept on this computer, not reached */
+    const L_w6 = run(lab75, ["baddoc:" + stem75, "rows"], true, { ownDeskId: ownDesk.id });
+    const rows_w6 = L_w6.rows[0] || [];
+    check(same((rows_w6[0] || {}).mine, [FOLDER_KEPT_LINE]),
+      "75w6 early failure in writeBranch (a bad doc) leaves row saying edits are kept on this computer: "
+      + JSON.stringify((rows_w6[0] || {}).mine));
+
+    /* 75w7: lifting plant:w1-early-hold turns 75w6 red */
+    {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      let replaced = 0;
+      lines.forEach((l, i) => {
+        if (l.indexOf("plant:w1-early-hold") >= 0) {
+          lines[i] = l.replace("return branchHold(stem, text);", "return { ok: false };");
+          replaced++;
+        }
+      });
+      let turned = false, detail = "plant line absent";
+      if (replaced > 0) {
+        const labScratch = fs.mkdtempSync(path.join(os.tmpdir(), "plant-w1-early-"));
+        try {
+          fs.cpSync(lab75, labScratch, { recursive: true });
+          const tmpMain = path.join(labScratch, "shell", "main.js");
+          fs.writeFileSync(tmpMain, lines.join("\n"), "utf8");
+          const L_p = run(labScratch, ["baddoc:" + stem75, "rows"], true, { ownDeskId: ownDesk.id });
+          const rows_p = L_p.rows[0] || [];
+          turned = same((rows_p[0] || {}).mine, ["Your edits are with the team"]);
+          detail = turned ? "turned red: kept line replaced by reached" : "did not turn red";
+        } finally {
+          try { fs.rmSync(labScratch, { recursive: true, force: true }); } catch {}
+        }
+      }
+      const sameFile = fs.readFileSync(mainPath).equals(before);
+      check(turned && sameFile, "75w7 lifting plant:w1-early-hold turns 75w6 red (FAIL 75w6: early failure said reached): "
         + detail + ", sha " + (sameFile ? "restored" : "differs"));
     }
 
