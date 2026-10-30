@@ -115,6 +115,7 @@ function mapListing(v){
                                            // Only a colleague's file in the share has one: {id,name}, the desk that wrote it.
                                            desk:(f&&f.desk&&typeof f.desk==="object"&&f.desk.id)?{id:String(f.desk.id),name:String(f.desk.name||"")}:null,
                                            reached:!!(f&&f.reached),
+                                           relay:!!(f&&f.relay),
                                            // The copy Etiuda ships, rather than a folder's own file.
                                            builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[];

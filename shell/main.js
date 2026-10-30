@@ -4015,7 +4015,7 @@ function askJoin(file, name) {
   relayProbeMs = RELAY_PROBE_FIRST;
   if (w && w.invite && w.invite.relay && (w.invite.relay.withdrawn === true || w.invite.relay.withdrawing === true)) return askAgain(w); /* plant:e4-ask-again-desk */
   const me = branchIdentity(), root = catalogFolder(), at = path.join(root, path.basename(String(file || "")));
-  if (!me) return Object.assign({}, joinView(), { refused: "no-identity", askRefused: "no-identity", why: "no-identity" }); /* plant:w2-no-identity */
+  if (!me) return Object.assign({}, joinView(), { refused: "no-identity", askRefused: "no-identity", why: "no-identity", platform: process.platform }); /* plant:w2-no-identity */
   if (!folderAnswers(root)) return Object.assign({}, joinView(), { sealed: file ? { file: path.basename(file) } : null, refused: "folder-not-answering", askRefused: "folder-not-answering", why: "folder-not-answering" }); /* plant:w2-folder-not-answering */
   const out = sealedOutside();
   let d = null;
@@ -6199,7 +6199,7 @@ function deskRowOf(file, folder) {
   }
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
            awaiting: x.awaiting, sample: false, id: x.id, builtIn: false, rev: x.rev, grew: x.grew, sha: x.sha,
-           genuine: true, reached: reached, desk: { id: folder, name: x.deskName } };
+           genuine: true, reached: reached, relay: !!relayHere(), desk: { id: folder, name: x.deskName } };
 }
 function deskRows() {
   const root = catalogFolder();
@@ -6277,6 +6277,7 @@ function stripGenuine(row) {
   return copy;
 }
 function listingRows() {
+  const onRelay = !!relayHere();
   const folder = sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0;
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
@@ -6284,7 +6285,7 @@ function listingRows() {
     return { name: path.basename(f), mtime: mt, cards: x ? x.cards : -1, edition: x ? x.edition : "",
              macros: x ? x.macros : -1, intents: x ? x.intents : -1, cats: x ? x.cats : -1, awaiting: x ? x.awaiting : [],
              sample: isTheSample(f), id: x ? x.id : "", rev: x ? x.rev : 0, grew: x ? x.grew : null, sha: x ? x.sha : "",
-             genuine: !!(x && x.genuine),
+             genuine: !!(x && x.genuine), relay: onRelay,
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
   });

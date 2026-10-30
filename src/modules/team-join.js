@@ -24,6 +24,7 @@ let joinRead="";                  // the text the shell read for the confirm on 
 let joinTyped="";                 // the check code the agent typed on the confirm
 let joinWhy="";                   // the refusal's word, as the shell said it
 let askWhy="";                    // why ask to join did nothing ("no-identity" | "folder-not-answering" | "folder-not-writable")
+let askPlatform="";               // platform reported with the refusal ("win32" | "darwin" | "linux")
 let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell's two sentences, the secret never among them
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 let lapseUp="";                   // "team|step|until" of the lapse notice on screen
@@ -31,6 +32,11 @@ const lapseDismissed=new Set();   // the same keys, dismissed here while the she
 function eHasJoin(){
   const h=eHost();
   return !!h && typeof h.teamJoin==="function";
+}
+function deskPlatform(){
+  const h=eHost();
+  const p=(h && h.platform) || askPlatform || (typeof process!=="undefined" && process.platform) || "";
+  return String(p).toLowerCase();
 }
 /* A failed call lets go of any invitation the page holds, and of what it shows. `before` sees the answer first and
    says whether it changed what the invitation shows. */
@@ -264,9 +270,13 @@ function joinTook(v,changed){
     return joinNow;
   }
   const hadAskWhy=askWhy;
-  if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable")
+  if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){
     askWhy=s.askRefused || s.refused;
-  else if(s.join) askWhy="";
+    if(s.platform) askPlatform=String(s.platform);
+  }else if(s.join){
+    askWhy="";
+    askPlatform="";
+  }
   const offer=s.offer;
   if(offer && offer.link===true && typeof offer.relay==="string" && offer.relay){
     joinOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
@@ -506,8 +516,14 @@ function joinParts(){
     return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
   }
   let line=t("Once the team's lead lets this desk in, the catalog opens here by itself.");
-  if(askWhy==="no-identity")
-    line=t("Ask to join works once this computer can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.");
+  if(askWhy==="no-identity"){
+    const p=deskPlatform();
+    line=(p==="win32")
+      ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.")
+      : (p==="darwin")
+      ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.")
+      : t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.");
+  }
   else if(askWhy==="folder-not-answering")
     line=t("Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.");
   else if(askWhy==="folder-not-writable")

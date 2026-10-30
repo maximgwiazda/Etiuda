@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 149;
+const EXPECTED = 151;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -3761,7 +3761,7 @@ try {
     }
   }
 
-  // 15ek: Ask to join with no identity returns reason no-identity and card explains with Linux hint
+  // 15ek: Ask to join with no identity on win32 returns reason no-identity and card explains with Windows hint
   const safeNoEnc = { isEncryptionAvailable: () => false, encryptString: () => Buffer.from([]), decryptString: () => "" };
   {
     const udNoId = path.join(LAB, "noid");
@@ -3769,16 +3769,43 @@ try {
     fs.writeFileSync(path.join(udNoId, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
     const deskNoId = loadDesk(udNoId, null, { safeStorage: safeNoEnc });
     await pageOn(deskNoId);
+    window.E_HOST.platform = "win32";
     const askRes = await press("ask");
-    const cardEn = TJ.teamJoinEmptyHtml();
+    const cardEnWin = TJ.teamJoinEmptyHtml();
     ST.lsSet("eUiLang", "pl");
-    const cardPl = TJ.teamJoinEmptyHtml();
+    const cardPlWin = TJ.teamJoinEmptyHtml();
     ST.lsSet("eUiLang", "en");
-    const EN_NOID = "Ask to join works once this computer can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.";
-    const PL_NOID = "Prośba o dołączenie zadziała, gdy ten komputer będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
-    check(askRes && askRes.askRefused === "no-identity" && cardEn.indexOf(escHtml(EN_NOID)) >= 0 && cardPl.indexOf(PL_NOID) >= 0,
-      "15ek ask to join with no identity returns reason no-identity and the card explains in English and Polish: "
-      + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOID)) >= 0, pl: cardPl.indexOf(PL_NOID) >= 0 }));
+    const EN_WIN = "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.";
+    const PL_WIN = "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Windows zwykle pomaga zalogowanie się na własne konto, a nie na konto usługi ani profil tymczasowy. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
+    check(askRes && askRes.askRefused === "no-identity" && cardEnWin.indexOf(escHtml(EN_WIN)) >= 0 && cardPlWin.indexOf(PL_WIN) >= 0,
+      "15ek ask to join with no identity on win32 returns reason no-identity and card explains in English and Polish: "
+      + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEnWin.indexOf(escHtml(EN_WIN)) >= 0, pl: cardPlWin.indexOf(PL_WIN) >= 0 }));
+
+    // 15eq: Ask to join with no identity on darwin shows macOS sentence in English and Polish
+    window.E_HOST.platform = "darwin";
+    TJ.paintJoin();
+    const cardEnMac = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const cardPlMac = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const EN_MAC = "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.";
+    const PL_MAC = "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie macOS zwykle pomaga zezwolenie Etiudzie na dostęp do pęku kluczy, gdy system o to zapyta. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
+    check(cardEnMac.indexOf(escHtml(EN_MAC)) >= 0 && cardPlMac.indexOf(PL_MAC) >= 0,
+      "15eq ask to join with no identity on darwin shows macOS sentence in English and Polish: "
+      + JSON.stringify({ en: cardEnMac.indexOf(escHtml(EN_MAC)) >= 0, pl: cardPlMac.indexOf(PL_MAC) >= 0 }));
+
+    // 15er: Ask to join with no identity on linux shows Linux sentence in English and Polish
+    window.E_HOST.platform = "linux";
+    TJ.paintJoin();
+    const cardEnLinux = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const cardPlLinux = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const EN_LINUX = "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.";
+    const PL_LINUX = "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
+    check(cardEnLinux.indexOf(escHtml(EN_LINUX)) >= 0 && cardPlLinux.indexOf(PL_LINUX) >= 0,
+      "15er ask to join with no identity on linux shows Linux sentence in English and Polish: "
+      + JSON.stringify({ en: cardEnLinux.indexOf(escHtml(EN_LINUX)) >= 0, pl: cardPlLinux.indexOf(PL_LINUX) >= 0 }));
   }
 
   // 15el: Ask to join when the folder does not answer returns folder-not-answering

@@ -377,10 +377,13 @@ function paintCatalogList(){
     const ownEntry=ownOf(heldId);
     const ownReached=!!(ownEntry && ownEntry.reached);
     const holdsEdits=deskBranchHolds();
+    const isRelay=!!((ownEntry && ownEntry.relay) || all.some(f=>f.relay));
     const mineLine=(ownEntry || holdsEdits)
       ? ecMineHtml(t(ownReached
           ? "Your edits are with the team"
-          : "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead."), true)
+          : (isRelay
+              ? "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead."
+              : "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead.")), true)
       : "";
     const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your edits to it come back when it is loaded again"),false) : "";
     const tops=files.map((f,i)=>{
