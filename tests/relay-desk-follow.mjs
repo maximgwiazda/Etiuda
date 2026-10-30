@@ -56,6 +56,14 @@ function signTeamDoc(doc, lead) {
   return o;
 }
 
+function signAskDoc(doc, lead) {
+  const o = JSON.parse(JSON.stringify(doc));
+  o.sig = { alg: "Ed25519", keyId: lead.keyId };
+  const bytes = Buffer.concat([Buffer.from("etiuda-catalog-ask\n", "utf8"), REAL_CHANNEL.signedBytes(o)]);
+  o.sig.value = crypto.sign(null, bytes, lead.privateKey).toString("hex");
+  return o;
+}
+
 const noop = () => {};
 function makePolicyExport(folder, leadHex) {
   const normFolder = folder.replace(/\//g, "\\");
@@ -250,7 +258,13 @@ async function launch(plan) {
   const ev = { sender: pageWin.webContents, senderFrame: FRAME };
 
   if (plan.holdBranch && invokeHandlers["etiuda:branch-write"]) {
-    invokeHandlers["etiuda:branch-write"](ev, plan.holdBranch.stem, plan.holdBranch.text);
+    const blockDir = path.join(SHARED, "desks", ownId, plan.holdBranch.stem + ".ec");
+    fs.mkdirSync(blockDir, { recursive: true });
+    try {
+      await invokeHandlers["etiuda:branch-write"](ev, plan.holdBranch.stem, plan.holdBranch.text);
+    } finally {
+      try { fs.rmdirSync(blockDir); } catch {}
+    }
   }
 
   if (plan.triggerTeamMove && invokeHandlers["etiuda:team-join"]) {
@@ -322,6 +336,17 @@ function makeScenario(kind, extra = {}) {
   const ansDoc = { format: 1, kind: "etiuda-catalog-answer", catalog: { id: "lamp" } };
   fs.writeFileSync(path.join(ownDesksFolder, "catalog-answer.ec"), JSON.stringify(ansDoc));
 
+  const askDoc = signAskDoc({
+    desk: ownDesk.keyId,
+    expires: new Date(Date.now() + 86400000).toISOString(),
+    format: 1,
+    id: "ask1",
+    kind: "etiuda-catalog-ask",
+    sha256: "sha256:" + "a".repeat(64),
+  }, lead);
+  fs.mkdirSync(path.join(catalogs, "catalog-asks"), { recursive: true });
+  fs.writeFileSync(path.join(catalogs, "catalog-asks", ownDesk.keyId + ".json"), JSON.stringify(askDoc));
+
   const initialTeamDoc = {
     format: 1,
     kind: "etiuda-team",
@@ -382,6 +407,18 @@ function makeScenario(kind, extra = {}) {
 
   const mirror = path.join(ud, "relay", rt);
 
+  const heldStem = "branch-lamp-12345678";
+  const heldDoc = {
+    format: 2,
+    kind: "etiuda-catalog",
+    id: ownDesk.keyId + "-12345678",
+    rev: 1,
+    date: "2026-10-30",
+    tags: [],
+    cards: [{ id: "c-1", bodyShape: "plain", title: { en: "Held Card" }, body: { en: "Text" } }],
+    desk: { id: ownDesk.keyId, key: ownDesk.public, box: ownBox.public },
+  };
+
   return {
     lab,
     sharedFolder: catalogs,
@@ -390,16 +427,18 @@ function makeScenario(kind, extra = {}) {
     lead,
     movedTeamDoc,
     triggerTeamMove: true,
-    holdBranch: extra.holdBranch,
+    holdBranch: extra.holdBranch !== undefined ? extra.holdBranch : { stem: heldStem, text: JSON.stringify(heldDoc) },
     policyFolder: extra.policyFolder,
     policyLead: lead.public,
   };
 }
 
 function runScenario(plan) {
-  const res = spawnSync(process.execPath, [SELF, "--launch", JSON.stringify(plan)], {
+  const res = spawnSync(process.execPath, [SELF, "--launch"], {
+    input: JSON.stringify(plan),
     encoding: "utf8",
     env: Object.assign({}, process.env, { ETIUDA_TEST_DEVTOOLS: "1" }),
+    maxBuffer: 32 * 1024 * 1024,
   });
   if (res.status !== 0) {
     throw new Error("child run failed: " + (res.stderr || res.stdout));
@@ -418,8 +457,9 @@ function check(cond, line) {
 
 async function main() {
   if (process.argv[2] === "--launch") {
-    const plan = JSON.parse(process.argv[3]);
     try {
+      const input = process.argv[3] || fs.readFileSync(0, "utf8");
+      const plan = JSON.parse(input);
       const res = await launch(plan);
       process.stdout.write("#result " + JSON.stringify(res) + "\n");
       process.exit(0);
@@ -430,9 +470,7 @@ async function main() {
   }
 
   /* Scenario 1: Rostered desk follows folder move to relay (945s1, 945s4, 945s5, 945s6) */
-  const s1 = makeScenario("rostered-follow", {
-    holdBranch: { stem: "branch-held", text: "held-content" },
-  });
+  const s1 = makeScenario("rostered-follow");
   // Write the moved team doc into the shared folder before heed
   fs.writeFileSync(
     path.join(s1.sharedFolder, "etiuda-team.json"),
@@ -511,16 +549,22 @@ async function main() {
   const mainPath = path.join(ROOT, "shell", "main.js");
   const origMain = fs.readFileSync(mainPath, "utf8");
 
-  function testPlant(plantTag, mutator) {
+  function testPlant(plantTag, mutator, customScenario) {
     const lines = origMain.split(/\n/);
     const at = lines.findIndex(l => l.includes(plantTag));
     if (at < 0) return { found: false, turned: false, shaSame: true };
     mutator(lines, at);
     const scratchSrc = lines.join("\n");
-    const plan = Object.assign({}, s1, { scratchMainSource: scratchSrc });
+    const sc = customScenario || (() => {
+      const p = makeScenario("rostered-plant");
+      fs.writeFileSync(path.join(p.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(p.movedTeamDoc, p.lead), null, 2));
+      return p;
+    })();
+    const plan = Object.assign({}, sc, { scratchMainSource: scratchSrc });
     const res = runScenario(plan);
+    try { fs.rmSync(sc.lab, { recursive: true, force: true }); } catch {}
     const shaSame = fs.readFileSync(mainPath, "utf8") === origMain;
-    return { found: true, res, shaSame };
+    return { found: true, res, shaSame, plan };
   }
 
   // 945s8: lifting plant:follow-roster turns 945s1 red
@@ -528,7 +572,7 @@ async function main() {
     const p = testPlant("plant:follow-roster", (lines, at) => {
       lines[at] = "  /* plant:follow-roster */";
     });
-    const turned = p.found && (!p.res.channelCreated || p.res.openedDir !== s1.mirrorFolder);
+    const turned = p.found && (!p.res.channelCreated || p.res.openedDir !== p.plan.mirrorFolder);
     check(
       turned && p.shaSame,
       "945s8 lifting plant:follow-roster turns 945s1 red: turned=" + turned + ", shaSame=" + p.shaSame
@@ -552,7 +596,7 @@ async function main() {
     const p = testPlant("plant:follow-folder-changed", (lines, at) => {
       lines[at] = "  /* plant:follow-folder-changed */";
     });
-    const turned = p.found && (p.res.sharedWatched || !p.res.mirrorWatched);
+    const turned = p.found && (p.res.sharedWatched || !p.res.mirrorWatched || p.res.openedDir !== p.plan.mirrorFolder);
     check(
       turned && p.shaSame,
       "945s10 lifting plant:follow-folder-changed turns 945s4 red: turned=" + turned + ", shaSame=" + p.shaSame
@@ -573,20 +617,17 @@ async function main() {
 
   // 945s12: lifting plant:follow-builtin-url turns 945s7 red
   {
-    const lines = origMain.split(/\n/);
-    const at = lines.findIndex(l => l.includes("plant:follow-builtin-url"));
-    let turned = false, shaSame = true;
-    if (at >= 0) {
+    const p = testPlant("plant:follow-builtin-url", (lines, at) => {
       lines[at] = "  return true; /* plant:follow-builtin-url */";
-      const scratchSrc = lines.join("\n");
-      const plan = Object.assign({}, s4, { scratchMainSource: scratchSrc });
-      const res = runScenario(plan);
-      turned = res.channelCreated || res.openedDir !== s4.sharedFolder;
-      shaSame = fs.readFileSync(mainPath, "utf8") === origMain;
-    }
+    }, (() => {
+      const p = makeScenario("other-url-plant", { url: "https://other.test/relay/v1" });
+      fs.writeFileSync(path.join(p.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(p.movedTeamDoc, p.lead), null, 2));
+      return p;
+    })());
+    const turned = p.found && (p.res.channelCreated || p.res.openedDir !== p.plan.sharedFolder);
     check(
-      turned && shaSame,
-      "945s12 lifting plant:follow-builtin-url turns 945s7 red: turned=" + turned + ", shaSame=" + shaSame
+      turned && p.shaSame,
+      "945s12 lifting plant:follow-builtin-url turns 945s7 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
   }
 
