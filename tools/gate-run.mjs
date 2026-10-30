@@ -304,7 +304,9 @@ function normRel(file) {
    changed test files that are profile steps, every profile step that imports or requires a changed file (followed through the static
    require( and import of the test files, transitively), and the FLOOR legs; its chain line says "inherits" the base's git tree and
    lists "ran". Any file elsewhere (package.json, tools/, the lockfile), an unclean tree or no usable base is the full profile.
-   Not followed: a path built at run time (path.join, a spawn of another test file) and a fixture read as text. */
+   Not followed: a path built at run time from pieces none of which names the file. A test source also reaches where it holds a changed
+    file's path or basename inside a quoted string, which is how a fixture read as text and a test spawned by path are named; a source
+    that names another file of the same name over-reaches, and that costs a leg. */
 const TEST_SOURCE = /\.(mjs|js|cjs)$/;
 const TREE_SHA = /^[0-9a-f]{40,64}$/;
 
@@ -389,17 +391,35 @@ function specTargets(fromFile, spec) {
   return out;
 }
 
-/** The changed files and every file that requires or imports one of them, through the static require( and import, transitively. */
+/** Whether the text holds, inside a quoted string on one line, the path or the basename of any of the changed files. */
+const namedMatchers = new Map();
+export function namesAnyOf(text, changed) {
+  for (const c of changed) {
+    for (const name of new Set([c, path.posix.basename(c)])) {
+      let re = namedMatchers.get(name);
+      if (!re) {
+        re = new RegExp("[\"'`][^\"'`\\r\\n]*(?<![\\w.-])" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])[^\"'`\\r\\n]*[\"'`]");
+        namedMatchers.set(name, re);
+      }
+      if (re.test(text)) return true;
+    }
+  }
+  return false;
+}
+
+/** The changed files and every file that requires or imports one of them, through the static require( and import, transitively,
+    and every file that names one of them in a string. */
 export function filesReaching(root, changed, scanFiles) {
   const imports = new Map();
+  const reaching = new Set(changed);
   for (const f of scanFiles) {
     let text;
     try { text = fs.readFileSync(path.join(root, f), "utf8"); } catch (e) { continue; }
     const set = new Set();
     for (const spec of staticSpecs(text)) for (const t of specTargets(f, spec)) set.add(t);
     imports.set(f, set);
+    if (namesAnyOf(text, changed)) reaching.add(f); /* plant:inherit-named */
   }
-  const reaching = new Set(changed);
   let grew = true;
   while (grew) {
     grew = false;
