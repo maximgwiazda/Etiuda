@@ -813,7 +813,7 @@ function folderSyncerRun(win) {
     folder: ft.folder,
     mirror: mirror,
     pin: pin ? { keyId: pin.keyId, public: pin.public } : null,
-    keys: teamKeys[ft.team] || {},
+    keyFor: (epoch) => teamKeyAt(ft.team, epoch),
     onStatus: (status) => {
       settleFolder(status.folder, status.answers);
     },
@@ -839,7 +839,6 @@ function watchCatalog(win) {
     if (!folderAnswers(dir)) { retryFolder(FOLDER_RETRY_MS); continue; }
     try {
       const w = fs.watch(dir, (ev, name) => {
-        if (folderSyncer) folderSyncer.kick();
         if (name && String(name) === "desks" && dir === watchedFolder && !desksWatcher) watchDesks(win);
         if (name && String(name) === ASK_DIR && dir === watchedFolder && !asksWatcher) watchAsks(win);
         if (name && !isCatalogName(path.basename(String(name)))) return;
@@ -2726,7 +2725,7 @@ function askSignedBytes(doc) { return Buffer.concat([Buffer.from(ASK_PREFIX, "ut
 function readAskFile() {
   const me = branchIdentity(false);
   if (!me) return { away: true };
-  const root = sharedFolderForWrite();
+  const root = catalogFolder(); /* plant:read-ask-mirror */
   if (!folderAnswers(root)) return { away: true };
   const file = path.join(root, ASK_DIR, me.id + ".json");
   let text = "";
@@ -2840,7 +2839,7 @@ function tryCatalogAsk(win) {
 }
 function watchAsks(win) {
   if (asksWatcher) { try { asksWatcher.close(); } catch { /* already gone */ } asksWatcher = null; }
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   if (!folderAnswers(root)) return;
   try {
     const w = fs.watch(path.join(root, ASK_DIR), () => {
@@ -4284,7 +4283,7 @@ function refusedWithdrawEnds(j) {
 function checkInviteRefusal() {
   const j = teamJoin;
   if (!j || !j.invite || (j.invite.relay && !j.invite.folder) || j.refused) return false;
-  const root = j.invite.folder || catalogFolder();
+  const root = folderTeamHere() ? catalogFolder() : (j.invite.folder || catalogFolder());
   if (!folderAnswers(root)) return false;
   const invId = j.invite.id;
   if (!invId) return false;
@@ -6573,7 +6572,7 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
-    defaultPath: catalogFolder(),
+    defaultPath: sharedFolderForWrite(),
     properties: ["openDirectory", "createDirectory"],
   };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
@@ -6689,7 +6688,7 @@ ipcMain.on("etiuda:offer-dropped", (e, file) => {
    folder is opened. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
-  const dir = catalogFolder();
+  const dir = sharedFolderForWrite(); /* plant:open-catalog-shared */
   // A folder that is not answering cannot be shown to be a folder, so it is not opened either.
   let isDir = false;
   if (folderAnswers(dir)) {

@@ -25,19 +25,48 @@ let pollTimer = null;
 let pollMs = FOLDER_SYNC_CADENCE_MS;
 let stopped = false;
 let inFlight = false;
+let folderWatcher = null;
+let kickDebounce = null;
+const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
+
+function isAllowedPath(rel) {
+  const norm = String(rel || "").replace(/\\/g, "/");
+  const parts = norm.split("/");
+  if (parts.length === 1) {
+    if (norm.endsWith(".ec")) return true;
+    if (/^etiuda-team.*\.json$/i.test(norm)) return true;
+    if (/^etiuda-head.*\.json$/i.test(norm)) return true;
+    if (/^etiuda-ring.*\.json$/i.test(norm)) return true;
+    if (/^etiuda-team-joins.*\.json$/i.test(norm)) return true;
+    if (/^etiuda-team-pause.*\.json$/i.test(norm)) return true;
+    if (/^stats-span.*\.json$/i.test(norm)) return true;
+    return false;
+  }
+  if (parts[0] === "invites" && parts.length === 2) {
+    return parts[1].endsWith(".wrap.json") || parts[1].endsWith(".refused.json");
+  }
+  if (parts[0] === "catalog-asks" && parts.length === 2) {
+    return parts[1].endsWith(".json");
+  }
+  if (parts[0] === "desks" && parts.length === 3) {
+    const deskId = parts[1];
+    const file = parts[2];
+    if (!/^k-[0-9a-f]{16}$/.test(deskId)) return false;
+    if (file.endsWith(".ec")) return true;
+    if (file === "stats.estat" || file === "join.json") return true;
+    return false;
+  }
+  return false;
+}
 
 function walkFolder(baseDir, sub = "") {
   const out = new Map();
   const current = path.join(baseDir, sub);
   let entries = [];
-  if (sub === "") {
+  try {
     entries = fs.readdirSync(current);
-  } else {
-    try {
-      entries = fs.readdirSync(current);
-    } catch {
-      return out;
-    }
+  } catch {
+    return out;
   }
   for (const name of entries) {
     if (name.startsWith(".") || name.endsWith(".tmp")) continue;
@@ -53,12 +82,14 @@ function walkFolder(baseDir, sub = "") {
       if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
         const inner = walkFolder(baseDir, name);
         for (const [k, v] of inner.entries()) out.set(k, v);
-      } else if (sub === "desks") {
+      } else if (sub === "desks" && /^k-[0-9a-f]{16}$/.test(name)) {
         const inner = walkFolder(baseDir, path.join(sub, name));
         for (const [k, v] of inner.entries()) out.set(k, v);
       }
     } else {
-      out.set(rel, { size: st.size, mtimeMs: st.mtimeMs || 0 });
+      if (isAllowedPath(rel)) {
+        out.set(rel, { size: st.size, mtimeMs: st.mtimeMs || 0 });
+      }
     }
   }
   return out;
@@ -85,15 +116,20 @@ function syncOnce() {
     for (const [relPath, st] of foundFiles.entries()) {
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
-      try {
-        if (fs.existsSync(mirrorFile)) {
-          const srcData = fs.readFileSync(path.join(folder, relPath));
-          const dstData = fs.readFileSync(mirrorFile);
-          if (Buffer.compare(srcData, dstData) === 0) {
-            alreadyInMirror = true;
+      const known = knownMtimes.get(relPath);
+      if (known && known.size === st.size && known.mtimeMs === st.mtimeMs && fs.existsSync(mirrorFile)) {
+        alreadyInMirror = true;
+      } else {
+        try {
+          if (fs.existsSync(mirrorFile)) {
+            const dstSt = fs.statSync(mirrorFile);
+            if (dstSt.size === st.size && dstSt.mtimeMs === st.mtimeMs) {
+              alreadyInMirror = true;
+              knownMtimes.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
@@ -101,7 +137,13 @@ function syncOnce() {
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         try {
           fs.copyFileSync(srcFile, tmpFile);
-          staged.push({ relPath, tmpPath: tmpFile, size: st.size, mtimeMs: st.mtimeMs });
+          const postSt = fs.statSync(srcFile);
+          if (postSt.size !== st.size || postSt.mtimeMs !== st.mtimeMs) {
+            try { fs.unlinkSync(tmpFile); } catch {}
+          } else {
+            knownMtimes.set(relPath, { size: postSt.size, mtimeMs: postSt.mtimeMs });
+            staged.push({ relPath, tmpPath: tmpFile, size: postSt.size, mtimeMs: postSt.mtimeMs });
+          }
         } catch {
           try { fs.unlinkSync(tmpFile); } catch {}
         }
@@ -127,6 +169,23 @@ function init(data) {
   mirror = data.mirror;
   pollMs = data.pollMs || FOLDER_SYNC_CADENCE_MS;
 
+  try {
+    folderWatcher = fs.watch(folder, { recursive: true }, (ev, filename) => {
+      if (stopped) return;
+      clearTimeout(kickDebounce);
+      kickDebounce = setTimeout(() => {
+        if (!stopped) { try { syncOnce(); } catch {} }
+      }, 200);
+      if (kickDebounce && kickDebounce.unref) kickDebounce.unref();
+    });
+    folderWatcher.on("error", () => {
+      try { folderWatcher.close(); } catch {}
+      folderWatcher = null;
+    });
+  } catch {
+    folderWatcher = null;
+  }
+
   function loop() {
     if (stopped) return;
     try {
@@ -150,6 +209,11 @@ if (parentPort) {
     } else if (msg.type === "stop") {
       stopped = true;
       if (pollTimer) clearTimeout(pollTimer);
+      if (kickDebounce) clearTimeout(kickDebounce);
+      if (folderWatcher) {
+        try { folderWatcher.close(); } catch {}
+        folderWatcher = null;
+      }
       if (parentPort) parentPort.postMessage({ type: "stopped" });
     }
   });

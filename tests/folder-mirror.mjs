@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 20;
+const EXPECTED = 33;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -43,25 +43,27 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, overrides = {}) {
-  const said = [], on = {}, invoke = {};
+  const said = [], on = {}, invoke = [], openedPaths = [], dialogOpts = [];
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
   const safeStorage = {
     isEncryptionAvailable: () => true,
     encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
     decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
   };
+  const shell = { openPath: async p => { openedPaths.push(p); return ""; } };
+  const dialog = { showOpenDialog: async opts => { dialogOpts.push(opts); return { canceled: false, filePaths: [opts && opts.defaultPath] }; } };
   const electron = {
     app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
            whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert,
+    BrowserWindow: inert, Menu: inert, dialog, net: inert, protocol: inert, session: inert, shell,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage,
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
@@ -72,7 +74,7 @@ function loadDesk(ud, overrides = {}) {
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-  return { api, ask, ipc, on, invoke, said, ud, envelope, electron };
+  return { api, ask, ipc, on, invoke, said, ud, envelope, electron, openedPaths, dialogOpts };
 }
 
 function newDesk(name, folder, extraKeys = {}) {
@@ -94,6 +96,26 @@ const LEAD = { keyId: "lead-01", public: pubHex(lead.publicKey) };
 const FORGER = { keyId: "lead-forger", public: pubHex(forger.publicKey) };
 
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
+function canonJson(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonJson).join(",") + "]";
+  const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + canonJson(v[k])).join(",") + "}";
+}
+function signedBytesOf(doc) {
+  const copy = {};
+  Object.keys(doc).forEach(k => {
+    if (k === "hash") return;
+    if (k !== "sig") { copy[k] = doc[k]; return; }
+    const s = doc.sig;
+    if (s && typeof s === "object") {
+      copy.sig = {};
+      if (s.alg !== undefined) copy.sig.alg = s.alg;
+      if (s.keyId !== undefined) copy.sig.keyId = s.keyId;
+    }
+  });
+  return Buffer.from(canonJson(copy), "utf8");
+}
 const sign = (doc, key, keyId) => {
   const out = JSON.parse(JSON.stringify(doc));
   delete out.sig;
@@ -160,6 +182,7 @@ async function run() {
     const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
     env.teamPins = { [TEAM]: LEAD };
     env.teamShown = { [TEAM]: { lead: "Lead", folder: SHARE } };
+    env.teamJoin = { team: TEAM, file: "lamp-shop", invite: { id: "inv-01", folder: SHARE, lead: LEAD } };
     fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
 
     // Put catalog and team file in the local mirror
@@ -190,8 +213,11 @@ async function run() {
     let readResult = null;
     try {
       const d = loadDesk(desk1.ud);
+      d.api.branchIdentity(true);
       readResult = d.api.readCatalog();
       d.api.catalogChanged({ isDestroyed: () => false, webContents: { send: noop } });
+      d.api.readAskFile();
+      d.api.checkInviteRefusal();
     } finally {
       fs.readdirSync = origReaddirSync;
       fs.readFileSync = origReadFileSync;
@@ -228,7 +254,7 @@ async function run() {
       fs.writeFileSync(path.join(shareDir, "corrupted.ec"), "not valid json", "utf8");
 
       // 5. Changing size file
-      const changingFile = path.join(shareDir, "notes.txt");
+      const changingFile = path.join(shareDir, "changing.ec");
       fs.writeFileSync(changingFile, "initial content", "utf8");
 
       const prog = syncerMod.createFolderProgram({
@@ -236,23 +262,24 @@ async function run() {
         pin: LEAD, keys: { 1: K1 }
       });
 
-      // Pass 1: notes.txt has size 15
+      // Pass 1: changing.ec has invalid json
       await prog.syncOnce();
 
       // Check mirror state after pass 1
       const mirrorHasTeam = fs.existsSync(path.join(mirrorDir, "etiuda-team.json"));
       const mirrorHasEdition = fs.existsSync(path.join(mirrorDir, "lamp-shop.ec"));
       const mirrorHasCorrupt = fs.existsSync(path.join(mirrorDir, "corrupted.ec"));
-      const mirrorHasChangingPass1 = fs.existsSync(path.join(mirrorDir, "notes.txt"));
+      const mirrorHasChangingPass1 = fs.existsSync(path.join(mirrorDir, "changing.ec"));
 
-      // Mutate notes.txt before pass 2 (size changes)
+      // Mutate changing.ec before pass 2 (size changes, still invalid)
       fs.writeFileSync(changingFile, "initial content mutated to be longer", "utf8");
       await prog.syncOnce();
-      const mirrorHasChangingPass2 = fs.existsSync(path.join(mirrorDir, "notes.txt"));
+      const mirrorHasChangingPass2 = fs.existsSync(path.join(mirrorDir, "changing.ec"));
 
-      // Now leave notes.txt unchanged for pass 3
+      // Now leave changing.ec with valid edition for pass 3
+      fs.writeFileSync(changingFile, CAT_A1, "utf8");
       await prog.syncOnce();
-      const mirrorHasChangingPass3 = fs.existsSync(path.join(mirrorDir, "notes.txt"));
+      const mirrorHasChangingPass3 = fs.existsSync(path.join(mirrorDir, "changing.ec"));
 
       // D5: Team file rollback - team file in share with rev below mirror's is refused
       const teamOlderRev = JSON.stringify(teamFile({ epoch: 1, rev: 0 }));
@@ -676,12 +703,335 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
+   * Leg 12 (41u): F1 - Sealed edition reaches mirror with live unwrapped keys; rotates without restart; foreign key stays out
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareU = folder("share-41u");
+    const deskU = newDesk("desk-41u", shareU);
+    const envPath = path.join(deskU.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    const TEAM_U = "t-" + crypto.randomBytes(8).toString("hex");
+    const K_U1 = crypto.randomBytes(32);
+    const K_U2 = crypto.randomBytes(32);
+    const K_FOREIGN = crypto.randomBytes(32);
+
+    env.teamPins = { [TEAM_U]: LEAD };
+    env.teamShown = { [TEAM_U]: { lead: "Lead", folder: shareU } };
+    const encK1 = deskU.electron.safeStorage.encryptString(K_U1.toString("base64")).toString("base64");
+    env.teamKeys = { [TEAM_U]: { 1: encK1 } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    fs.writeFileSync(path.join(shareU, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_U, epoch: 1, rev: 1 })), "utf8");
+    const CAT_U1 = text(catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01"));
+    fs.writeFileSync(path.join(shareU, "lamp-shop.ec"), seal(K_U1, 1, CAT_U1, TEAM_U), "utf8");
+    fs.writeFileSync(path.join(shareU, "foreign.ec"), seal(K_FOREIGN, 1, text(catalog("foreign", 1, "Foreign", "2026-02-01")), TEAM_U), "utf8");
+
+    const d = loadDesk(deskU.ud);
+    const syncer = d.api.folderSyncerRun(null);
+    if (syncer && syncer.program) {
+      syncer.program.syncOnce();
+    }
+
+    const mirrorDir = path.join(deskU.ud, "folder-mirror", TEAM_U);
+    const edition1Landed = fs.existsSync(path.join(mirrorDir, "lamp-shop.ec"));
+    const foreignStaysOut = !fs.existsSync(path.join(mirrorDir, "foreign.ec"));
+
+    fs.writeFileSync(path.join(shareU, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_U, epoch: 2, rev: 1 })), "utf8");
+    const CAT_U2 = text(catalog("lamp-shop", 2, "Lamp Shop", "2026-02-02"));
+    fs.writeFileSync(path.join(shareU, "lamp-shop-e2.ec"), seal(K_U2, 2, CAT_U2, TEAM_U), "utf8");
+
+    const encK2 = deskU.electron.safeStorage.encryptString(K_U2.toString("base64")).toString("base64");
+    const liveEnv = d.envelope();
+    liveEnv.teamKeys[TEAM_U][2] = encK2;
+    fs.writeFileSync(envPath, JSON.stringify(liveEnv), "utf8");
+    d.api.readDesk();
+    d.api.heedTeam();
+
+    if (syncer && syncer.program) {
+      syncer.program.syncOnce();
+    }
+
+    const edition2Landed = fs.existsSync(path.join(mirrorDir, "lamp-shop-e2.ec"));
+    if (syncer) syncer.stop();
+
+    const ok = edition1Landed && foreignStaysOut && edition2Landed;
+    check(ok,
+      "41u a sealed edition at the team's epoch reaches the mirror with live team keys; after the team file rotates the epoch, an edition at the new epoch reaches the mirror without a restart; a sealed edition under a key the desk does not hold stays out: "
+      + "e1 landed " + edition1Landed + ", foreign out " + foreignStaysOut + ", e2 landed without restart " + edition2Landed);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 13 (41v): F2 - in-use.ec, catalog-answer.ec, unsigned shared catalog, and handed-over lead reach mirror
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareV = folder("share-41v");
+    const mirrorV = folder("mirror-41v");
+    const TEAM_V = "t-" + crypto.randomBytes(8).toString("hex");
+    const deskKeyV = crypto.generateKeyPairSync("ed25519");
+    const deskPubV = pubHex(deskKeyV.publicKey);
+    const deskIdV = "k-" + crypto.createHash("sha256").update(Buffer.from(deskPubV, "hex")).digest("hex").slice(0, 16);
+
+    const inUseDoc = {
+      format: 1, kind: "etiuda-in-use",
+      desk: { id: deskIdV, key: deskPubV },
+      at: new Date().toISOString(),
+      catalog: { id: "lamp-shop", rev: 1, name: "Lamp Shop" },
+      sig: { alg: "Ed25519", keyId: deskIdV }
+    };
+    const bInUse = Buffer.concat([Buffer.from("etiuda-desk-branch\n", "utf8"), signedBytesOf(inUseDoc)]);
+    inUseDoc.sig.value = crypto.sign(null, bInUse, deskKeyV.privateKey).toString("hex");
+
+    const inUseSealed = seal(K1, 1, JSON.stringify(inUseDoc), TEAM_V);
+    const inUseDir = path.join(shareV, "desks", deskIdV);
+    fs.mkdirSync(inUseDir, { recursive: true });
+    fs.writeFileSync(path.join(inUseDir, "in-use.ec"), inUseSealed, "utf8");
+
+    const answerDoc = {
+      format: 1, kind: "etiuda-catalog-answer",
+      sha256: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      catalog: catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01")
+    };
+    const answerSealed = seal(K1, 1, JSON.stringify(answerDoc), TEAM_V);
+    fs.writeFileSync(path.join(inUseDir, "catalog-answer.ec"), answerSealed, "utf8");
+
+    const unsignedDoc = {
+      format: 2, kind: "etiuda-catalog", id: "shared-collab", rev: 1, name: "Shared", date: "2026-02-01",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: []
+    };
+    fs.writeFileSync(path.join(shareV, "shared-collab.ec"), JSON.stringify(unsignedDoc, null, 1) + "\n", "utf8");
+
+    const lead2V = crypto.generateKeyPairSync("ed25519");
+    const LEAD2V = { keyId: "lead-v2", public: pubHex(lead2V.publicKey) };
+    const stepV = {
+      format: 1, kind: "etiuda-team-handover", team: TEAM_V,
+      to: { keyId: LEAD2V.keyId, public: LEAD2V.public },
+      sig: { alg: "Ed25519", keyId: LEAD.keyId }
+    };
+    const bStep = Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(JSON.stringify({
+      format: 1, kind: "etiuda-team-handover", sig: { alg: "Ed25519", keyId: LEAD.keyId },
+      team: TEAM_V, to: { keyId: LEAD2V.keyId, public: LEAD2V.public }
+    }), "utf8")]);
+    stepV.sig.value = crypto.sign(null, bStep, lead.privateKey).toString("hex");
+
+    const handedTeam = sign({
+      format: 1, kind: "etiuda-team", id: TEAM_V, catalogs: ["shared-collab"],
+      lead: { keyId: LEAD2V.keyId, public: LEAD2V.public },
+      sealed: false, epoch: 1, rev: 2, roster: [],
+      handover: [stepV]
+    }, lead2V.privateKey, LEAD2V.keyId);
+    fs.writeFileSync(path.join(shareV, "etiuda-team.json"), JSON.stringify(handedTeam), "utf8");
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM_V, folder: shareV, mirror: mirrorV,
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null)
+    });
+    await prog.syncOnce();
+
+    const inUseLands = fs.existsSync(path.join(mirrorV, "desks", deskIdV, "in-use.ec"));
+    const answerLands = fs.existsSync(path.join(mirrorV, "desks", deskIdV, "catalog-answer.ec"));
+    const sharedLands = fs.existsSync(path.join(mirrorV, "shared-collab.ec"));
+    const handedLands = fs.existsSync(path.join(mirrorV, "etiuda-team.json"));
+
+    const ok = inUseLands && answerLands && sharedLands && handedLands;
+    check(ok,
+      "41v in-use, answer, an unsigned shared catalog and a handed-over lead each reach the mirror: "
+      + "in-use " + inUseLands + ", answer " + answerLands + ", unsigned " + sharedLands + ", handed " + handedLands);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 14 (41w): F3 & Drop #1 - Unknown 50MB file is never opened, and unchanged edition is not reread
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareW = folder("share-41w");
+    const mirrorW = folder("mirror-41w");
+    const TEAM_W = "t-" + crypto.randomBytes(8).toString("hex");
+
+    fs.writeFileSync(path.join(shareW, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_W, epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(shareW, "lamp-shop.ec"), CAT_A1, "utf8");
+
+    const unknownFile = path.join(shareW, "large-video.mp4");
+    fs.writeFileSync(unknownFile, Buffer.alloc(1024 * 1024));
+
+    let unknownOpened = false;
+    let editionReadCount = 0;
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM_W, folder: shareW, mirror: mirrorW,
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null),
+      io: {
+        readdir: fs.readdirSync,
+        stat: fs.statSync,
+        readFile: (p, enc) => {
+          if (p.includes("large-video.mp4")) unknownOpened = true;
+          if (p.includes("lamp-shop.ec")) editionReadCount++;
+          return fs.readFileSync(p, enc);
+        },
+        writeFile: fs.writeFileSync,
+        unlink: fs.unlinkSync,
+        mkdir: (d) => fs.mkdirSync(d, { recursive: true }),
+        exists: fs.existsSync,
+        rename: fs.renameSync
+      }
+    });
+
+    await prog.syncOnce();
+    const edInMirrorP1 = fs.existsSync(path.join(mirrorW, "lamp-shop.ec"));
+    const unknownInMirrorP1 = fs.existsSync(path.join(mirrorW, "large-video.mp4"));
+    const p1ReadCount = editionReadCount;
+
+    await prog.syncOnce();
+    const p2ReadCount = editionReadCount;
+
+    const notOpened = !unknownOpened && !unknownInMirrorP1;
+    const notReread = p2ReadCount === p1ReadCount;
+
+    const ok = edInMirrorP1 && notOpened && notReread;
+    check(ok,
+      "41w an unknown 50 MB file in the folder is never opened, and an unchanged edition is not reread: "
+      + "edition in mirror " + edInMirrorP1 + ", unknown unopened " + notOpened + ", unchanged not reread " + notReread);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 15 (41x): F4 - The worker watches the share, not the mirror
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const mainSrc = getShellSrc();
+    const watchCatalogBody = mainSrc.slice(mainSrc.indexOf("function watchCatalog("), mainSrc.indexOf("function watchDesks("));
+    const kicksOnMirror = watchCatalogBody.includes("folderSyncer.kick()");
+
+    const workerSrc = fs.readFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), "utf8");
+    const workerWatchesShare = workerSrc.includes("fs.watch(folder");
+
+    const ok = !kicksOnMirror && workerWatchesShare;
+    check(ok,
+      "41x the worker watches the share, not the mirror: "
+      + "no mirror kick " + !kicksOnMirror + ", worker watches share " + workerWatchesShare);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 16 (41y): F6 - Protocol JSON kinds get their own check and head waits behind its editions
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareY = folder("share-41y");
+    const mirrorY = folder("mirror-41y");
+    const TEAM_Y = "t-" + crypto.randomBytes(8).toString("hex");
+
+    fs.writeFileSync(path.join(shareY, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_Y, epoch: 1, rev: 1 })), "utf8");
+
+    const ringDoc = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: LEAD.keyId, public: LEAD.public, alg: "Ed25519" }] };
+    fs.writeFileSync(path.join(shareY, "etiuda-ring.json"), JSON.stringify(ringDoc), "utf8");
+
+    const headSigned = {
+      v: 1, team: TEAM_Y, epoch: 1, rev: 2, t: 1700000000000,
+      editions: [{ catalog: "lamp-shop", rev: 2, edition: "Second", published: "2026-02-02" }],
+      sig: { alg: "Ed25519", keyId: LEAD.keyId }
+    };
+    const bHead = Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), signedBytesOf(headSigned)]);
+    headSigned.sig.value = crypto.sign(null, bHead, lead.privateKey).toString("hex");
+    fs.writeFileSync(path.join(shareY, "etiuda-head.json"), JSON.stringify(headSigned), "utf8");
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM_Y, folder: shareY, mirror: mirrorY,
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null)
+    });
+
+    await prog.syncOnce();
+    const ringLanded = fs.existsSync(path.join(mirrorY, "etiuda-ring.json"));
+    const headWaited = !fs.existsSync(path.join(mirrorY, "etiuda-head.json"));
+
+    fs.writeFileSync(path.join(shareY, "lamp-shop.ec"), CAT_A2, "utf8");
+
+    await prog.syncOnce();
+    const edLanded = fs.existsSync(path.join(mirrorY, "lamp-shop.ec"));
+    const headLanded = fs.existsSync(path.join(mirrorY, "etiuda-head.json"));
+
+    const ok = ringLanded && headWaited && edLanded && headLanded;
+    check(ok,
+      "41y protocol JSON kinds get their own check and head waits behind its editions: "
+      + "ring on first sight " + ringLanded + ", head waited " + headWaited + ", edition landed " + edLanded + ", head landed after " + headLanded);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 17 (41z): F8 - Open catalog folder opens the shared folder
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareZ = folder("share-41z");
+    const deskZ = newDesk("desk-41z", shareZ);
+    const envPath = path.join(deskZ.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    const TEAM_Z = "t-" + crypto.randomBytes(8).toString("hex");
+
+    env.teamPins = { [TEAM_Z]: LEAD };
+    env.teamShown = { [TEAM_Z]: { lead: "Lead", folder: shareZ } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const d = loadDesk(deskZ.ud);
+    await d.ask("etiuda:open-catalog-folder");
+    const opened = d.openedPaths[0] || "";
+
+    const opensShareNotMirror = path.resolve(opened) === path.resolve(shareZ);
+    check(opensShareNotMirror,
+      "41z open catalog folder opens the shared folder: "
+      + "opened " + opened + ", matches share " + opensShareNotMirror);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 18 (42a): F9 - .staging is swept at start, pending reuses its staged copy, and pending is bounded
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share9 = folder("share-42a");
+    const mirror9 = folder("mirror-42a");
+    const TEAM_9 = "t-" + crypto.randomBytes(8).toString("hex");
+
+    const stagingDir = path.join(mirror9, ".staging");
+    fs.mkdirSync(stagingDir, { recursive: true });
+    const leftover1 = path.join(stagingDir, "leftover-1.tmp");
+    const leftover2 = path.join(stagingDir, "leftover-2.tmp");
+    fs.writeFileSync(leftover1, "old 1");
+    fs.writeFileSync(leftover2, "old 2");
+
+    fs.writeFileSync(path.join(share9, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_9, epoch: 1, rev: 1 })), "utf8");
+
+    const sealedFuture = seal(K1, 10, CAT_A1, TEAM_9);
+    fs.writeFileSync(path.join(share9, "future.ec"), sealedFuture, "utf8");
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM_9, folder: share9, mirror: mirror9,
+      pin: LEAD, keyFor: e => (e === 1 ? K1 : null)
+    });
+
+    const swept1 = !fs.existsSync(leftover1);
+    const swept2 = !fs.existsSync(leftover2);
+
+    await prog.syncOnce();
+
+    const sealedFuture2 = seal(K1, 10, CAT_A2, TEAM_9);
+    fs.writeFileSync(path.join(share9, "future.ec"), sealedFuture2, "utf8");
+
+    await prog.syncOnce();
+    const stFilesPass2 = fs.readdirSync(stagingDir).filter(f => f.endsWith(".tmp"));
+    const reusedWithoutLeak = stFilesPass2.length <= 1;
+
+    for (let i = 0; i < 60; i++) {
+      fs.writeFileSync(path.join(share9, "f-" + i + ".ec"), seal(K1, 10 + i, CAT_A1, TEAM_9), "utf8");
+    }
+    await prog.syncOnce();
+    const pState = prog.state();
+    const bounded = pState.pendingLength <= 50;
+
+    const ok = swept1 && swept2 && reusedWithoutLeak && bounded;
+    check(ok,
+      "42a .staging is swept at start, pending reuses its staged copy without leaking, and pending is bounded: "
+      + "swept " + (swept1 && swept2) + ", reused without leak " + reusedWithoutLeak + ", bounded " + bounded + " (" + pState.pendingLength + ")");
+  }
+
+  /* -------------------------------------------------------------------------------------------------
    * Plants: Proved by removal in scratch copy, never in checkout, sha256 restored
    * ----------------------------------------------------------------------------------------------- */
   const syncerFile = path.join(ROOT, "shell", "folder", "syncer.cjs");
   const mainFile = path.join(ROOT, "shell", "main.js");
 
-  function testPlant(tag, file, testFn) {
+  async function testPlant(tag, file, testFn) {
     if (!fs.existsSync(file)) return { ok: false, reason: "file does not exist" };
     const before = fs.readFileSync(file);
     const text = before.toString("utf8");
@@ -697,7 +1047,7 @@ async function run() {
 
     let turned = false;
     try {
-      turned = testFn(scratchFile, scratchDir);
+      turned = await testFn(scratchFile, scratchDir);
     } catch (e) {
       turned = false;
     }
@@ -708,7 +1058,7 @@ async function run() {
 
   // 41g: plant:catalog-folder-mirror
   {
-    const r = testPlant("catalog-folder-mirror", mainFile, (scratchMain) => {
+    const r = await testPlant("catalog-folder-mirror", mainFile, (scratchMain) => {
       const ud = folder("plant-cfg-desk");
       const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: SHARE } } };
       fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
@@ -721,7 +1071,7 @@ async function run() {
 
   // 41h: plant:syncer-team-pin
   {
-    const r = testPlant("syncer-team-pin", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-team-pin", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const shareDir = folder("plant-pin-share");
       const mirrorDir = folder("plant-pin-mirror");
@@ -738,7 +1088,7 @@ async function run() {
 
   // 41i: plant:syncer-team-rev
   {
-    const r = testPlant("syncer-team-rev", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-team-rev", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const shareDir = folder("plant-rev-share");
       const mirrorDir = folder("plant-rev-mirror");
@@ -757,7 +1107,7 @@ async function run() {
 
   // 41j: plant:syncer-edition-sig
   {
-    const r = testPlant("syncer-edition-sig", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-edition-sig", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const shareDir = folder("plant-esig-share");
       const mirrorDir = folder("plant-esig-mirror");
@@ -777,7 +1127,7 @@ async function run() {
 
   // 41k: plant:syncer-epoch-pending
   {
-    const r = testPlant("syncer-epoch-pending", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-epoch-pending", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const shareDir = folder("plant-pend-share");
       const mirrorDir = folder("plant-pend-mirror");
@@ -792,25 +1142,120 @@ async function run() {
     check(r.ok, "41k lifting plant:syncer-epoch-pending drops or prematurely applies an edition above the mirror's epoch: " + JSON.stringify(r));
   }
 
-  // 41l: plant:syncer-two-listings
+  // 42b: plant:syncer-live-key
   {
-    const r = testPlant("syncer-two-listings", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-live-key", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
-      const shareDir = folder("plant-two-share");
-      const mirrorDir = folder("plant-two-mirror");
+      const shareDir = folder("plant-key-share");
+      const mirrorDir = folder("plant-key-mirror");
       fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
-      fs.writeFileSync(path.join(shareDir, "file.txt"), "hello", "utf8");
-      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 } });
-      prog.syncOnce();
-      // Without two-listings guard, unchecked file is taken on the very first listing
-      return fs.existsSync(path.join(mirrorDir, "file.txt"));
+      fs.writeFileSync(path.join(shareDir, "edition.ec"), seal(K1, 1, CAT_A1), "utf8");
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keyFor: e => (e === 1 ? K1 : null) });
+      let failedKey = false;
+      try {
+        prog.syncOnce();
+        failedKey = !fs.existsSync(path.join(mirrorDir, "edition.ec"));
+      } catch {
+        failedKey = true;
+      }
+      return failedKey;
     });
-    check(r.ok, "41l lifting plant:syncer-two-listings takes an unverified file on its first listing: " + JSON.stringify(r));
+    check(r.ok, "42b lifting plant:syncer-live-key prevents sealed edition from being decrypted and landed: " + JSON.stringify(r));
+  }
+
+  // 42c: plant:syncer-team-handover
+  {
+    const r = await testPlant("syncer-team-handover", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const shareDir = folder("plant-hand-share");
+      const mirrorDir = folder("plant-hand-mirror");
+      const TEAM_H = "t-" + crypto.randomBytes(8).toString("hex");
+      const lead2 = crypto.generateKeyPairSync("ed25519");
+      const LEAD2 = { keyId: "lead-2", public: pubHex(lead2.publicKey) };
+      const step = {
+        format: 1, kind: "etiuda-team-handover", team: TEAM_H,
+        to: { keyId: LEAD2.keyId, public: LEAD2.public },
+        sig: { alg: "Ed25519", keyId: LEAD.keyId }
+      };
+      const bStep = Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), signedBytesOf(step)]);
+      step.sig.value = crypto.sign(null, bStep, lead.privateKey).toString("hex");
+      const handedTeam = sign({
+        format: 1, kind: "etiuda-team", id: TEAM_H, catalogs: ["lamp-shop"],
+        lead: { keyId: LEAD2.keyId, public: LEAD2.public },
+        sealed: false, epoch: 1, rev: 2, roster: [],
+        handover: [step]
+      }, lead2.privateKey, LEAD2.keyId);
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(handedTeam), "utf8");
+      const prog = mod.createFolderProgram({ team: TEAM_H, folder: shareDir, mirror: mirrorDir, pin: LEAD });
+      prog.syncOnce();
+      // Without handover support, handed-over team file does not land
+      return !fs.existsSync(path.join(mirrorDir, "etiuda-team.json"));
+    });
+    check(r.ok, "42c lifting plant:syncer-team-handover prevents handed-over team file from landing: " + JSON.stringify(r));
+  }
+
+  // 42d: plant:syncer-head-wait
+  {
+    const r = await testPlant("syncer-head-wait", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const shareDir = folder("plant-head-share");
+      const mirrorDir = folder("plant-head-mirror");
+      const TEAM_HD = "t-" + crypto.randomBytes(8).toString("hex");
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_HD, epoch: 1, rev: 1 })), "utf8");
+      const headSigned = {
+        v: 1, team: TEAM_HD, epoch: 1, rev: 2, t: 1700000000000,
+        editions: [{ catalog: "lamp-shop", rev: 2, edition: "Second", published: "2026-02-02" }],
+        sig: { alg: "Ed25519", keyId: LEAD.keyId }
+      };
+      const bHead = Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), signedBytesOf(headSigned)]);
+      headSigned.sig.value = crypto.sign(null, bHead, lead.privateKey).toString("hex");
+      fs.writeFileSync(path.join(shareDir, "etiuda-head.json"), JSON.stringify(headSigned), "utf8");
+      const prog = mod.createFolderProgram({ team: TEAM_HD, folder: shareDir, mirror: mirrorDir, pin: LEAD });
+      prog.syncOnce();
+      // Without head-wait, head lands prematurely before its edition
+      return fs.existsSync(path.join(mirrorDir, "etiuda-head.json"));
+    });
+    check(r.ok, "42d lifting plant:syncer-head-wait lets etiuda-head.json land before its editions: " + JSON.stringify(r));
+  }
+
+  // 42e: plant:syncer-staging-sweep
+  {
+    const r = await testPlant("syncer-staging-sweep", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const mirrorDir = folder("plant-sweep-mirror");
+      const stagingDir = path.join(mirrorDir, ".staging");
+      fs.mkdirSync(stagingDir, { recursive: true });
+      const tmpFile = path.join(stagingDir, "leftover.tmp");
+      fs.writeFileSync(tmpFile, "old", "utf8");
+      mod.createFolderProgram({ team: TEAM, folder: folder("f"), mirror: mirrorDir, pin: LEAD });
+      // Without staging sweep, leftover tmp file remains
+      return fs.existsSync(tmpFile);
+    });
+    check(r.ok, "42e lifting plant:syncer-staging-sweep leaves stale tmp files in .staging on start: " + JSON.stringify(r));
+  }
+
+  // 42f: plant:syncer-pending-reuse
+  {
+    const r = await testPlant("syncer-pending-reuse", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const shareDir = folder("plant-reuse-share");
+      const mirrorDir = folder("plant-reuse-mirror");
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      fs.writeFileSync(path.join(shareDir, "future.ec"), seal(K1, 10, CAT_A1), "utf8");
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD });
+      prog.syncOnce();
+      fs.writeFileSync(path.join(shareDir, "future.ec"), seal(K1, 10, CAT_A2), "utf8");
+      prog.syncOnce();
+      const stFiles = fs.readdirSync(path.join(mirrorDir, ".staging")).filter(f => f.endsWith(".tmp"));
+      // Without pending reuse, multiple tmp files accumulate for the same pending path
+      return stFiles.length > 1;
+    });
+    check(r.ok, "42f lifting plant:syncer-pending-reuse leaks multiple staged files for one pending item: " + JSON.stringify(r));
   }
 
   // 41m: plant:syncer-two-absent-remove
   {
-    const r = testPlant("syncer-two-absent-remove", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-two-absent-remove", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const shareDir = folder("plant-rm-share");
       const mirrorDir = folder("plant-rm-mirror");
@@ -826,7 +1271,7 @@ async function run() {
 
   // 41n: plant:syncer-singleton
   {
-    const r = testPlant("syncer-singleton", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-singleton", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const s1 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false });
       const s2 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false });
@@ -839,7 +1284,7 @@ async function run() {
 
   // 41o: plant:syncer-team-change
   {
-    const r = testPlant("syncer-team-change", syncerFile, (scratchSyncer) => {
+    const r = await testPlant("syncer-team-change", syncerFile, (scratchSyncer) => {
       const mod = nodeRequire(scratchSyncer);
       const s1 = mod.startFolderSyncer({ team: TEAM, folder: SHARE, mirror: folder("m1"), pin: LEAD, useWorker: false });
       const TEAM2 = "t-" + crypto.randomBytes(8).toString("hex");
@@ -849,6 +1294,51 @@ async function run() {
       return s1StillRunning;
     });
     check(r.ok, "41o lifting plant:syncer-team-change leaves the old team's syncer running when switching teams: " + JSON.stringify(r));
+  }
+
+  // 42g: plant:open-catalog-shared
+  {
+    const r = await testPlant("open-catalog-shared", mainFile, async (scratchMain) => {
+      const shareG = folder("plant-share-42g");
+      const deskG = newDesk("desk-42g", shareG);
+      const envPath = path.join(deskG.ud, "desk.json");
+      const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+      const TEAM_G = "t-" + crypto.randomBytes(8).toString("hex");
+      env.teamPins = { [TEAM_G]: LEAD };
+      env.teamShown = { [TEAM_G]: { lead: "Lead", folder: shareG } };
+      fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+      const d = loadDesk(deskG.ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      let err = false;
+      try {
+        await d.ask("etiuda:open-catalog-folder");
+        err = d.openedPaths.length === 0 || path.resolve(d.openedPaths[0] || "") !== path.resolve(shareG);
+      } catch { err = true; }
+      return err;
+    });
+    check(r.ok, "42g lifting plant:open-catalog-shared prevents opening shared folder on folder team: " + JSON.stringify(r));
+  }
+
+  // 42h: plant:read-ask-mirror
+  {
+    const r = await testPlant("read-ask-mirror", mainFile, (scratchMain) => {
+      const shareH = folder("plant-share-42h");
+      const deskH = newDesk("desk-42h", shareH);
+      const envPath = path.join(deskH.ud, "desk.json");
+      const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+      const TEAM_H = "t-" + crypto.randomBytes(8).toString("hex");
+      env.teamPins = { [TEAM_H]: LEAD };
+      env.teamShown = { [TEAM_H]: { lead: "Lead", folder: shareH } };
+      fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+      const d = loadDesk(deskH.ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      d.api.branchIdentity(true);
+      let failedRead = false;
+      try {
+        const res = d.api.readAskFile();
+        failedRead = !res || res.away === true;
+      } catch { failedRead = true; }
+      return failedRead;
+    });
+    check(r.ok, "42h lifting plant:read-ask-mirror breaks readAskFile mirror lookup: " + JSON.stringify(r));
   }
 
   console.log("#counts checks=" + asserted + " failures=" + failed);
