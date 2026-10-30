@@ -44,6 +44,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const EXPECTED = 27;
 
 let asserted = 0, failed = 0;
@@ -52,6 +53,11 @@ function check(ok, line) {
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
 }
+
+let syncShare = () => {};
+let syncH1 = () => {};
+let syncRoute = () => {};
+let SHARE, H1, ROUTE;
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-roster-"));
 const APP = path.join(LAB, "app");
@@ -95,7 +101,15 @@ function loadDesk(ud, opened) {
       n => (n === "electron" ? electron : nodeRequire(n)),
       path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   } finally { if (opened) process.argv = argv; }
-  const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+  const ask = async (ch, ...args) => {
+    const res = await Promise.resolve(invoke[ch](eventFor(), ...args));
+    if (ch === "etiuda:branch-write") {
+      if (typeof syncShare === "function") syncShare();
+      if (typeof syncH1 === "function") syncH1();
+      if (typeof syncRoute === "function") syncRoute();
+    }
+    return res;
+  };
   const sent = [];
   const win = { isDestroyed: () => false, isMaximized: () => false, webContents: { send: (...a) => sent.push(a), id: 1 } };
   holder.win = win;
@@ -111,9 +125,20 @@ function newDesk(name, dir) {
   return loadDesk(ud);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
-const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+const put = (dir, name, t) => {
+  fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+  if (typeof SHARE !== "undefined" && (dir === SHARE || String(dir).startsWith(SHARE))) syncShare();
+  if (typeof H1 !== "undefined" && (dir === H1 || String(dir).startsWith(H1))) syncH1();
+  if (typeof ROUTE !== "undefined" && (dir === ROUTE || String(dir).startsWith(ROUTE))) syncRoute();
+};
 let clock = Date.now();
-const touch = file => { clock += 5000; fs.utimesSync(file, clock / 1000, clock / 1000); };
+const touch = file => {
+  clock += 5000;
+  fs.utimesSync(file, clock / 1000, clock / 1000);
+  if (typeof SHARE !== "undefined" && String(file).startsWith(SHARE)) syncShare();
+  if (typeof H1 !== "undefined" && String(file).startsWith(H1)) syncH1();
+  if (typeof ROUTE !== "undefined" && String(file).startsWith(ROUTE)) syncRoute();
+};
 
 try {
   const V2 = await import(MOD("catalog-v2.js"));
@@ -162,12 +187,28 @@ try {
   const heed = async D => { await D.ask("etiuda:catalog-read", "board.ec"); };
 
   /* ---- a team of three at epoch 1: the author, the colleague, and the desk later removed -------------------- */
-  const SHARE = folder("share");
+  SHARE = folder("share");
   put(SHARE, "etiuda-ring.json", RING);
   const A = newDesk("author", SHARE), C = newDesk("colleague", SHARE), R = newDesk("removed", SHARE);
   const a = await A.ask("etiuda:branch-identity", true), c = await C.ask("etiuda:branch-identity", true),
     r = await R.ask("etiuda:branch-identity", true);
   const K1 = crypto.randomBytes(32), K2 = crypto.randomBytes(32), K3 = crypto.randomBytes(32);
+  syncShare = () => {
+    for (const d of [A, C, R]) {
+      if (!d || !d.ud) continue;
+      const mirror = syncerMod.folderMirrorOf(d.ud, TEAM);
+      const prog = syncerMod.createFolderProgram({
+        team: TEAM,
+        folder: SHARE,
+        mirror: mirror,
+        pin: LEAD,
+        keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
+      });
+      prog.syncOnce();
+      prog.syncOnce();
+    }
+  };
+  syncShare();
   put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT)));
   const team1 = teamFile(1, [entry(A, a, K1, 1), entry(A, c, K1, 1), entry(A, r, K1, 1)]);
   put(SHARE, "etiuda-team.json", team1);
@@ -342,7 +383,7 @@ try {
 
   /* ---- a lead pinned, the roster field absent, the older epoch's file on disk ------------------------------ */
   {
-    const H1 = folder("h1");
+    H1 = folder("h1");
     put(H1, "etiuda-ring.json", RING);
     put(H1, "etiuda-team.json", team1);
     const plain = "plain.ec";
@@ -360,6 +401,19 @@ try {
     env.teamEpochSeen = Object.assign({}, env.teamEpochSeen, { [TEAM]: 2 });
     env.keys = Object.assign({}, env.keys, { eCatalogFolder: H1 });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+    syncH1 = () => {
+      const mirror = syncerMod.folderMirrorOf(ud, TEAM);
+      const prog = syncerMod.createFolderProgram({
+        team: TEAM,
+        folder: H1,
+        mirror: mirror,
+        pin: LEAD,
+        keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
+      });
+      prog.syncOnce();
+      prog.syncOnce();
+    };
+    syncH1();
     const H = loadDesk(ud);
     const removedRows = await lists(H, r.id), authorRows = await lists(H, a.id), ownRows = await lists(H, c.id);
     const removedRead = await unasked(H, r.id, plain), ownRead = await unasked(H, c.id, plain);
@@ -377,7 +431,7 @@ try {
 
   /* ---- open on purpose: double-click, the boot's return, a drop, Import, a kept version -------------------- */
   {
-    const ROUTE = folder("route");
+    ROUTE = folder("route");
     put(ROUTE, "etiuda-ring.json", RING);
     put(ROUTE, "etiuda-team.json", team2);
     const OPEN = folder("opened");
@@ -394,6 +448,19 @@ try {
     env.teamEpochSeen = Object.assign({}, env.teamEpochSeen, { [TEAM]: 2 });
     env.teamRoster = { [TEAM]: { epoch: 2, desks: [a.id, c.id] } };
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+    syncRoute = () => {
+      const mirror = syncerMod.folderMirrorOf(ud, TEAM);
+      const prog = syncerMod.createFolderProgram({
+        team: TEAM,
+        folder: ROUTE,
+        mirror: mirror,
+        pin: LEAD,
+        keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
+      });
+      prog.syncOnce();
+      prog.syncOnce();
+    };
+    syncRoute();
     const P = loadDesk(ud);
     const memberSend = offerSend(P, memberFile), removedSend = offerSend(P, removedFile), neverSend = offerSend(P, neverFile);
     const looseSend = offerSend(P, looseFile);

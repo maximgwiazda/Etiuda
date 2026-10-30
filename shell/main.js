@@ -130,7 +130,7 @@ function rawCatalogFolder() {
 }
 function folderTeamHere() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (relayHere()) return null;
+  if (relayHere() || relayFlagged()) return null;
   const rawFolder = rawCatalogFolder();
   const j = teamJoin;
   if (j && j.team && (!j.invite || !j.invite.relay)) {
@@ -139,6 +139,8 @@ function folderTeamHere() {
   }
   const teams = Object.keys(teamPins).filter(t => {
     if (teamBarred.has(t)) return false;
+    if (teamRelayGone[t] === true) return false;
+    if (teamShown[t] && teamShown[t].relay) return false;
     if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
     const shown = teamShown[t];
     if (shown && shown.folder) {

@@ -83,6 +83,16 @@ function teamRevOf(doc) {
   return Number.isSafeInteger(doc.rev) && doc.rev >= 0 ? doc.rev : null;
 }
 
+function teamChannelOf(doc) {
+  const c = doc.channel;
+  if (c === undefined) return { kind: "folder" };
+  if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+  if (c.kind === "folder") return { kind: "folder" };
+  if (c.kind !== "relay" || typeof c.rt !== "string" || !/^[0-9a-f]{32}$/.test(c.rt) || typeof c.url !== "string"
+    || c.url.length > 512 || !/^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(c.url)) return null;
+  return { kind: "relay", rt: c.rt, url: c.url };
+}
+
 function sealedAad(team, epoch) {
   return Buffer.from("etiuda-sealed\n" + team + "\n" + epoch, "utf8");
 }
@@ -246,6 +256,7 @@ function createFolderProgram(opts) {
   const mirror = opts.mirror;
   let pin = opts.pin;
   const io = opts.io || defaultIO;
+  const logger = typeof opts.logger === "function" ? opts.logger : (msg) => console.log(msg);
   const onStatus = typeof opts.onStatus === "function" ? opts.onStatus : () => {};
   const onChange = typeof opts.onChange === "function" ? opts.onChange : () => {};
 
@@ -408,24 +419,56 @@ function createFolderProgram(opts) {
           }
           if (pin && !leadMatch && !handedMatch) pinOk = false; /* plant:syncer-team-pin */
           if (pinOk) {
-            const rev = teamRevOf(doc) || 0;
-            const olderEpoch = doc.epoch < mirrorEpoch;
-            const olderRevAtEpoch = doc.epoch === mirrorEpoch && rev < mirrorRev;
-            let revOk = true;
-            if (olderEpoch || olderRevAtEpoch) revOk = false; /* plant:syncer-team-rev */
-            if (revOk) {
-              const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
-              ensureDir(mirrorTeamPath, io);
-              io.rename(teamStaged.tmpPath, mirrorTeamPath); /* plant:syncer-team-atomic */
-              applied.push("etiuda-team.json");
-              mirrorEpoch = doc.epoch;
-              mirrorRev = rev;
-            } else {
+            const revVal = teamRevOf(doc);
+            const channelVal = teamChannelOf(doc);
+            if (revVal === null || channelVal === null) {
+              const used = path.join(folder, "etiuda-team.json");
+              logger("etiuda: " + used + " names a rev or a channel this desk does not read, so nothing in it is used");
               try { io.unlink(teamStaged.tmpPath); } catch {}
+            } else {
+              const rev = revVal || 0;
+              const floor = typeof opts.floor === "function" ? opts.floor(team, doc.lead && doc.lead.public) : opts.floor;
+              let olderEpoch = false, olderRevAtEpoch = false;
+              let compEpoch = mirrorEpoch, compRev = mirrorRev;
+              if (floor) {
+                compEpoch = floor.epoch;
+                compRev = floor.rev;
+                olderEpoch = doc.epoch < compEpoch;
+                olderRevAtEpoch = doc.epoch === compEpoch && rev < compRev;
+              } else if (floor === null) {
+                olderEpoch = false;
+                olderRevAtEpoch = false;
+              } else {
+                olderEpoch = doc.epoch < mirrorEpoch;
+                olderRevAtEpoch = doc.epoch === mirrorEpoch && rev < mirrorRev;
+              }
+              let revOk = true;
+              if (olderEpoch || olderRevAtEpoch) revOk = false; /* plant:syncer-team-rev */
+              if (revOk) {
+                const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
+                ensureDir(mirrorTeamPath, io);
+                io.rename(teamStaged.tmpPath, mirrorTeamPath); /* plant:syncer-team-atomic */
+                applied.push("etiuda-team.json");
+                mirrorEpoch = doc.epoch;
+                mirrorRev = rev;
+              } else {
+                const why = olderEpoch
+                  ? "key number " + doc.epoch + ", below " + compEpoch
+                  : "rev " + rev + ", below " + compRev + " at key number " + doc.epoch;
+                const used = path.join(folder, "etiuda-team.json");
+                logger("etiuda: " + used + " is an older file of team " + doc.id + " than one this desk has heeded (" + why + "), so nothing in it is used");
+                try { io.unlink(teamStaged.tmpPath); } catch {}
+              }
             }
           } else {
+            const used = path.join(folder, "etiuda-team.json");
+            logger("etiuda: " + used + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
             try { io.unlink(teamStaged.tmpPath); } catch {}
           }
+        } else if (doc && !teamWhole(doc)) {
+          const used = path.join(folder, "etiuda-team.json");
+          logger("etiuda: " + used + " is not a team file whole under its lead's key, so nothing in it is used");
+          try { io.unlink(teamStaged.tmpPath); } catch {}
         } else {
           try { io.unlink(teamStaged.tmpPath); } catch {}
         }
@@ -619,6 +662,11 @@ function createFolderProgram(opts) {
               try { io.unlink(tmpPath); } catch {}
               continue;
             }
+            const target = path.join(mirror, relPath);
+            ensureDir(target, io);
+            io.rename(tmpPath, target);
+            applied.push(relPath);
+          } else if (parts.length === 1 && doc.desk && deskFileGenuine(doc, doc.desk.id)) {
             const target = path.join(mirror, relPath);
             ensureDir(target, io);
             io.rename(tmpPath, target);
@@ -864,6 +912,7 @@ class FolderSyncerController {
       mirror: this.mirror,
       pin: this.pin,
       keyFor: this.keyFor,
+      logger: opts.logger,
       onStatus: this.onStatus,
       onChange: this.onChange
     });

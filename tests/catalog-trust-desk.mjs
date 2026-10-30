@@ -610,7 +610,32 @@ async function launch(plan) {
     work: at => { const b = doc.querySelector("button[data-ec-work=\"" + at + "\"]"); if (!b) throw new Error("no Work on row " + at); b.onclick(); },
     over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
     // A colleague's file landing while the Library is open, and the list read as it then stands, painted by nothing here.
-    drop: () => { const at = path.join(LAB, "catalogs", plan.drop.rel); fs.mkdirSync(path.dirname(at), { recursive: true }); fs.writeFileSync(at, plan.drop.text, "utf8"); },
+    drop: () => {
+      const at = path.join(LAB, "catalogs", plan.drop.rel);
+      fs.mkdirSync(path.dirname(at), { recursive: true });
+      fs.writeFileSync(at, plan.drop.text, "utf8");
+      try {
+        const teamFile = path.join(LAB, "catalogs", "etiuda-team.json");
+        if (fs.existsSync(teamFile)) {
+          const doc = JSON.parse(fs.readFileSync(teamFile, "utf8"));
+          if (doc && doc.id) {
+            const mirror = path.join(LAB, "userdata", "folder-mirror", doc.id);
+            const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+            const prog = syncerMod.createFolderProgram({
+              team: doc.id,
+              folder: path.join(LAB, "catalogs"),
+              mirror: mirror,
+              pin: doc.lead,
+              keys: {}
+            });
+            prog.syncOnce();
+            prog.syncOnce();
+          }
+        }
+      } catch (e) {
+        obs.errors.push("syncDrop: " + String(e && e.message || e));
+      }
+    },
     holdbranch: async stem => {
       const dest = path.join(LAB, "catalogs", "desks", plan.ownDeskId, stem + ".ec");
       const bak = dest + ".bak";

@@ -62,6 +62,45 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
+const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+const allDesks = [];
+const knownTeamKeys = new Map();
+function syncFolder(dir) {
+  if (!dir) return;
+  const targetDir = path.resolve(dir);
+  for (const D of allDesks) {
+    let folder = "";
+    try {
+      const env = D.envelope();
+      folder = env.keys && env.keys.eCatalogFolder;
+    } catch {}
+    if (!folder) continue;
+    const resolvedFolder = path.resolve(folder);
+    if (targetDir === resolvedFolder || targetDir.startsWith(resolvedFolder + path.sep)) {
+      const teamFilePath = path.join(resolvedFolder, "etiuda-team.json");
+      if (fs.existsSync(teamFilePath)) {
+        let tDoc = null;
+        try { tDoc = JSON.parse(fs.readFileSync(teamFilePath, "utf8")); } catch {}
+        if (tDoc && tDoc.id) {
+          const mirror = syncerMod.folderMirrorOf(D.ud, tDoc.id);
+          const floor = (D.envelope().teamRevSeen || {})[tDoc.id] ? (D.envelope().teamRevSeen[tDoc.id])[tDoc.lead.public] || null : null;
+          const prog = syncerMod.createFolderProgram({
+            team: tDoc.id,
+            folder: resolvedFolder,
+            mirror,
+            pin: tDoc.lead,
+            floor,
+            keyFor: (ep) => knownTeamKeys.get(tDoc.id + ":" + ep) || null,
+            logger: (msg) => { D.said.push(msg); },
+          });
+          prog.syncOnce();
+          prog.syncOnce();
+        }
+      }
+    }
+  }
+}
+
 function loadDesk(ud, src = SRC) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -82,12 +121,24 @@ function loadDesk(ud, src = SRC) {
     src + "\nreturn { " + EXPOSE.join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
-  const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+  const ask = async (ch, ...args) => {
+    const res = await Promise.resolve(invoke[ch](eventFor(), ...args));
+    if (ch === "etiuda:branch-write") {
+      try {
+        const env = envelope();
+        const f = env.keys && env.keys.eCatalogFolder;
+        if (f) syncFolder(f);
+      } catch {}
+    }
+    return res;
+  };
   const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
-  return { api, ask, said, ud, envelope, sent, win, sync };
+  const deskObj = { api, ask, said, ud, envelope, sent, win, sync };
+  allDesks.push(deskObj);
+  return deskObj;
 }
 function newDesk(name, folder) {
   const ud = path.join(LAB, name);
@@ -97,8 +148,14 @@ function newDesk(name, folder) {
   return loadDesk(ud);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
-const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
-const touch = (file, ms) => fs.utimesSync(file, ms / 1000, ms / 1000);
+const put = (dir, name, t) => {
+  fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+  syncFolder(dir);
+};
+const touch = (file, ms) => {
+  fs.utimesSync(file, ms / 1000, ms / 1000);
+  syncFolder(path.dirname(file));
+};
 const held = w => !!(w && w.ok === false && w.held === true);
 const epochsOf = (D, team) => Object.keys(((D.envelope().teamKeys || {})[team]) || {}).sort((a, b) => a - b).join(",") || "-";
 
@@ -132,10 +189,13 @@ try {
     format: 1, kind: "etiuda-team", id, catalogs: ["quay-board"], lead: LEAD,
     sealed: true, exportsSealed: false, epoch, roster,
   }));
-  const entry = (D, who, key, team, epoch) => ({
-    desk: { id: who.id, key: who.key, box: who.box },
-    wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id),
-  });
+  const entry = (D, who, key, team, epoch) => {
+    knownTeamKeys.set(team + ":" + epoch, key);
+    return {
+      desk: { id: who.id, key: who.key, box: who.box },
+      wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id),
+    };
+  };
   const readText = async (D, name, whose) => ((await D.ask("etiuda:catalog-read", name, whose)) || {}).text || "";
   const facts = text => {
     try {
@@ -1401,7 +1461,9 @@ try {
       keys: { eCatalogFolder: share, eUiLang: "en" },
       teamPins: { [OPEN_TEAM]: { keyId: LEAD.keyId, public: LEAD.public } },
     }), "utf8");
-    return loadDesk(ud);
+    const d = loadDesk(ud);
+    syncFolder(share);
+    return d;
   };
   const hostOpened = D => !!(D.sync("etiuda:host") || {}).openedWith;
   const SIDE = sideOf("quay-side", 1, "Quay Side");
@@ -1552,7 +1614,9 @@ try {
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
       keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
-    return loadDesk(ud);
+    const d = loadDesk(ud);
+    syncFolder(SHARE);
+    return d;
   };
   {
     const SHARE = folder("team-rev");

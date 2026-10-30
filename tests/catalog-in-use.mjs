@@ -20,6 +20,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 57;
 
@@ -85,7 +86,19 @@ function newDesk(name, folder) {
   return loadDesk(ud);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
-const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+const boxMap = new Map();
+let syncMirror = () => {};
+function getBoxForDir(dir) {
+  for (const [share, box] of boxMap.entries()) {
+    if (dir === share || dir.startsWith(share + path.sep) || dir.startsWith(share + "/")) return box;
+  }
+  return null;
+}
+const put = (dir, name, t) => {
+  fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+  const b = getBoxForDir(dir);
+  if (b) syncMirror(b);
+};
 const touch = (file, ms) => fs.utimesSync(file, ms / 1000, ms / 1000);
 const inUsePath = (share, id) => path.join(share, "desks", id, "in-use.ec");
 const answerPath = (share, id) => path.join(share, "desks", id, "catalog-answer.ec");
@@ -96,6 +109,18 @@ try {
   const lead = crypto.generateKeyPairSync("ed25519");
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  syncMirror = (box) => {
+    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
+    const prog = syncerMod.createFolderProgram({
+      team: box.team,
+      folder: box.share,
+      mirror: mirror,
+      pin: LEAD,
+      keyFor: (epoch) => box.key,
+    });
+    prog.syncOnce();
+    prog.syncOnce();
+  };
   const OTHER = { keyId: "other-lead", public: pubHex(other.publicKey) };
   const sign = (doc, key, who) => {
     const o = JSON.parse(JSON.stringify(doc));
@@ -150,7 +175,9 @@ try {
     const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
     const key = crypto.randomBytes(32);
-    return { share, D, me, team, key };
+    const box = { share, D, me, team, key };
+    boxMap.set(share, box);
+    return box;
   };
   const join = (box, epoch, roster, catalogs) => {
     put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs));
@@ -223,6 +250,8 @@ try {
     /* side.ec is a second catalog, newer than board.ec. A restart would boot that one and the
        original pin would not be a hand, so the file would stay for a reason other than the skip. */
     fs.unlinkSync(path.join(box.share, "side.ec"));
+    syncMirror(box);
+    syncMirror(box);
     const stable = fs.readFileSync(file);
     const again = loadDesk(box.D.ud);
     const bootedAgain = again.sync("etiuda:catalog");
@@ -299,6 +328,8 @@ try {
       "890m an ask filed under another desk's name is not this desk's, and its own answer stays");
 
     fs.unlinkSync(path.join(box.share, "catalog-asks", box.me.id + ".json"));
+    syncMirror(box);
+    syncMirror(box);
     box.D.api.tryCatalogAsk(box.D.win);
     check(!fs.existsSync(ans), "890n when the ask is gone, the answer is removed");
 
@@ -360,6 +391,7 @@ try {
       desk: { id: box.me.id, key: box.me.key, box: box.me.box, name: "North desk" },
     };
     const wrote = await box.D.ask("etiuda:branch-write", stem, JSON.stringify(deskDoc));
+    syncMirror(box);
     const read = await box.D.ask("etiuda:catalog-read", stem + ".ec", box.me.id, true, false);
     const deskPin = pinOf(box.D, (read && read.text) || "");
     take(box.D, deskPin);
