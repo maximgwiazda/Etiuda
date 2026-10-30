@@ -248,21 +248,36 @@ async function launch(plan) {
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   const onHandlers = {}, invokeHandlers = {}, rendererOn = {};
   const pickBox = { answer: null };
+  const bwListeners = {}, wcListeners = {};
   const pageWin = {
-    isDestroyed: () => false, isMaximized: () => false,
-    webContents: { id: 1, once: noop, send: (ch, ...args) => { (rendererOn[ch] || []).forEach(fn => fn({}, ...args)); } },
+    isDestroyed: () => false, isMaximized: () => false, isMinimized: () => false,
+    setBounds: noop, getBounds: () => ({ x: 0, y: 0, width: 1024, height: 720 }),
+    show: noop, showInactive: noop, maximize: noop, focus: noop, loadFile: noop, close: noop,
+    on: (t, fn) => { (bwListeners[t] = bwListeners[t] || []).push(fn); },
+    once: (t, fn) => { (bwListeners[t] = bwListeners[t] || []).push(fn); },
+    webContents: {
+      id: 1, once: noop,
+      on: (t, fn) => { (wcListeners[t] = wcListeners[t] || []).push(fn); },
+      send: (ch, ...args) => { (rendererOn[ch] || []).forEach(fn => fn({}, ...args)); },
+      setWindowOpenHandler: noop, getZoomLevel: () => 0, setZoomLevel: noop,
+      getURL: () => "file:///C:/lab/engine/etiuda.html", reload: noop,
+    },
   };
+  let whenReadyResolve = noop;
+  const whenReadyPromise = new Promise(r => { whenReadyResolve = r; });
   const electron = {
-    app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
-           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), isPackaged: false,
+    app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => true, quit: noop, on: noop,
+           getVersion: () => "0.0.0", whenReady: () => whenReadyPromise, isPackaged: false,
            commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
     shell: { openPath: async () => "" },
-    BrowserWindow: { fromWebContents: () => pageWin, getAllWindows: () => [] },
+    BrowserWindow: Object.assign(function () { return pageWin; }, { fromWebContents: () => pageWin, getAllWindows: () => [pageWin] }),
     Menu: inert,
     dialog: { showOpenDialog: async () => pickBox.answer || { canceled: true, filePaths: [] }, showSaveDialog: async () => ({ canceled: true }) },
     net: inert, protocol: inert, session: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
+    powerMonitor: { on: noop },
+    globalShortcut: inert,
     safeStorage,
   };
   const quiet = { log: noop, error: noop, warn: noop, info: noop };
@@ -379,6 +394,7 @@ async function launch(plan) {
     }) : [];
   };
   const act = {
+    window: async () => { whenReadyResolve(); await settle(); },
     boot: () => { OFFER.eOfferCatalogAtBoot(); OFFER.wireHostCatalogWatch(); },
     settle: () => settle(),
     offer: () => { obs.offers.push(readOffer()); },
@@ -1221,7 +1237,7 @@ async function parent() {
     fs.copyFileSync(path.join(lab75w2, "catalogs", "lamp.ec"), path.join(mirrorRt, "lamp.ec"));
     const relKey = REAL_CHANNEL.pathKey("desks/" + ownDeskRelay.id + "/" + stem75 + ".ec");
     const mirrorSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(mirrorDesk, stem75 + ".ec"))).digest("hex");
-    const relayMine = sent => ((run(lab75w2, ["rows"], true, { mockRelay: { sent: { [relKey]: sent } } }).rows[0] || [])[0] || {}).mine;
+    const relayMine = sent => ((run(lab75w2, ["window", "rows"], true, { mockRelay: { sent: { [relKey]: sent } } }).rows[0] || [])[0] || {}).mine;
     const mineOwed = relayMine({ sha: mirrorSha, owe: true });
     const mineWrong = relayMine({ sha: "0".repeat(64) });
     check(same(mineOwed, [RELAY_KEPT_LINE]) && same(mineWrong, [RELAY_KEPT_LINE]),
@@ -1273,7 +1289,7 @@ async function parent() {
           fs.cpSync(lab75w2, labScratch, { recursive: true });
           const tmpMain = path.join(labScratch, "shell", "main.js");
           fs.writeFileSync(tmpMain, lines.join("\n"), "utf8");
-          const L_p = run(labScratch, ["rows"], true, { mockRelay: { sent: { [relKey]: { sha: mirrorSha, owe: true } } } });
+          const L_p = run(labScratch, ["window", "rows"], true, { mockRelay: { sent: { [relKey]: { sha: mirrorSha, owe: true } } } });
           const rows_p = L_p.rows[0] || [];
           turned = same((rows_p[0] || {}).mine, ["Your edits are with the team"]);
           detail = turned ? "turned red: kept line replaced by reached" : "did not turn red";
