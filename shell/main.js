@@ -4882,14 +4882,16 @@ function isBuiltinRelayUrl(u) {
 
 const PIN_FROM = ["invite", "policy", "answer"];
 function relayFollowed(team) {
-  if (sayJoinPolicy().folder) return false;
   const pin = teamPins[team];
   if (!pin) return false;
-  const ch = teamChannel[team];
-  if (ch && ch.kind === "relay" && !isBuiltinRelayUrl(ch.url)) return false;
   if (PIN_FROM.indexOf(teamPinFrom[team]) >= 0) return true; /* plant:907-from */
   const policy = sayJoinPolicy().lead;
   if (policy && policy === pin.public) return true;
+  /* A desk that pinned its lead from the folder itself follows the team to the relay only when the lead-signed roster names
+     it, no machine policy names a folder, and the address is the built-in relay (board 945 stage 3 (a)). */
+  if (sayJoinPolicy().folder) return false;
+  const ch = teamChannel[team];
+  if (!ch || ch.kind !== "relay" || !isBuiltinRelayUrl(ch.url)) return false;
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
   const roster = teamRoster[team];
   if (me && roster && Array.isArray(roster.desks) && roster.desks.indexOf(me) >= 0) return true; /* plant:follow-roster */
