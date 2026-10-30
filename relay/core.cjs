@@ -324,6 +324,9 @@ function parseMeta(header) {
   if (!m || typeof m !== "object" || Array.isArray(m) || m.v !== 1) return null;
   const out = { id: m.id, supersedes: m.supersedes === undefined ? null : m.supersedes, epoch: m.epoch, writer: m.writer,
     counter: m.counter, del: m.del, sig: m.sig, nonce: m.nonce, place: m.place, pub: m.pub === undefined ? null : m.pub };
+  if (m.channel && typeof m.channel === "object" && !Array.isArray(m.channel) && typeof m.channel.kind === "string") {
+    out.channel = { kind: m.channel.kind };
+  }
   const placed = out.place === "root" || INVITE_PLACE.test(String(out.place)) || ANSWER_PLACE.test(String(out.place))
     || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
   if (!is(HEX32, out.id) || (out.supersedes !== null && (!is(HEX32, out.supersedes) || out.supersedes === out.id))
@@ -460,12 +463,13 @@ function createCore(deps) {
 
   /* null where the team may do this now, or the refusal. A read is answered while working and read-only, a write while working.
      Each route asks after its caller has shown who it is, so the lapse is told to no one who holds only the team's id. */
-  function lapseGate(write) {
+  function lapseGate(write, channel) {
     const team = store.get("team");
     if (!team) return null;
     const state = lapseOf(team, clock()).state;
     if (state === "working") return null; /* plant:lapse-working */
     if (state === "read-only" && !write) return null; /* plant:lapse-read */
+    if (state === "read-only" && channel && channel.kind === "folder") return null; /* plant:lapse-folder */
     return no("team-lapsed");
   }
 
@@ -1012,7 +1016,8 @@ function createCore(deps) {
     if (!team) return no("not-enrolled");
     const s = sessionOf(token);
     if (!s.ok) return s; /* plant:put-session */
-    const lapsedPut = lapseGate(true);
+    const folderMove = !s.inv && m && m.writer === team.lead.keyId && m.place === "root" && !!(m.channel && m.channel.kind === "folder");
+    const lapsedPut = lapseGate(true, folderMove ? m.channel : null);
     if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
     if (!m || m.id !== pathId) return no("bad-signature");
     if (s.inv) return admitInvite(team, s, m);

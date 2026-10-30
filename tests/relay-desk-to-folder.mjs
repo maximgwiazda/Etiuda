@@ -186,7 +186,7 @@ async function launch(plan) {
         started: false,
         kicked: false,
         start() { this.started = true; channelStopped = false; },
-        stop: async () => { this.started = false; channelStopped = true; },
+        async stop() { this.started = false; channelStopped = true; },
         kick() { this.kicked = true; },
         online: () => true,
         program: {
@@ -454,10 +454,24 @@ async function main() {
   const knownFolder = path.join(s2.lab, "known-folder");
   fs.mkdirSync(knownFolder, { recursive: true });
   fs.writeFileSync(path.join(knownFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s2.movedTeamDoc, s2.lead), null, 2));
-  // Put this folder in desk.json as eCatalogFolder or earlier invitation
+  // Record this folder in teamJoin.invite.folder (a known root)
   const deskJsonPath = path.join(s2.lab, "userdata", "desk.json");
   const deskEnv = JSON.parse(fs.readFileSync(deskJsonPath, "utf8"));
-  deskEnv.keys.eCatalogFolder = knownFolder;
+  deskEnv.teamJoin = {
+    team: s2.teamId,
+    file: "etiuda-join-" + s2.teamId + ".json",
+    nonce: crypto.randomBytes(32).toString("hex"),
+    commit: crypto.randomBytes(32).toString("hex"),
+    asked: Date.now(),
+    held: 0,
+    name: "Desk",
+    invite: {
+      id: crypto.randomBytes(8).toString("hex"),
+      proof: crypto.randomBytes(32).toString("hex"),
+      lead: { keyId: s2.lead.keyId, public: s2.lead.public, name: "Lead" },
+      folder: knownFolder,
+    },
+  };
   fs.writeFileSync(deskJsonPath, JSON.stringify(deskEnv, null, 2));
 
   const plan2 = Object.assign({}, s2, {
@@ -596,8 +610,9 @@ async function main() {
     // Advance clock past 30-day working span into read-only (e.g. until + 35 days)
     now = until + REAL_CORE.WORK_AFTER_MS + 5 * 24 * 3600 * 1000;
 
-    const token = crypto.randomBytes(16).toString("hex");
-    st.put("s:" + token, { hash: token, key: leadK.keyId, pub: leadK.public, t: now });
+    const token = crypto.randomBytes(32).toString("hex");
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    st.put("ses:" + hash, { key: leadK.keyId, inv: null, until: now + 60000 });
 
     const folderMeta = {
       id: crypto.randomBytes(16).toString("hex"),
@@ -645,13 +660,13 @@ async function main() {
     const admEdition = core.admit(rt, token, editionMeta, editionMeta.id);
 
     const roOk = admFolder.ok === true
-      && admRelay.ok === false && admRelay.error === "team-lapsed"
-      && admEdition.ok === false && admEdition.error === "team-lapsed";
+      && admRelay.ok === false && (admRelay.reason === "team-lapsed" || admRelay.error === "team-lapsed")
+      && admEdition.ok === false && (admEdition.reason === "team-lapsed" || admEdition.error === "team-lapsed");
 
     check(
       roOk,
       "945f10 the relay in read-only accepts the lead's folder-channel team file and still refuses a relay-channel one and an edition: "
-      + JSON.stringify({ folder: admFolder.ok, relay: admRelay.error, edition: admEdition.error })
+      + JSON.stringify({ folder: admFolder.ok, relay: admRelay.reason || admRelay.error, edition: admEdition.reason || admEdition.error })
     );
   }
 
@@ -693,7 +708,21 @@ async function main() {
     fs.writeFileSync(path.join(kf, "etiuda-team.json"), JSON.stringify(signTeamDoc(sc.movedTeamDoc, sc.lead), null, 2));
     const deskPath = path.join(sc.lab, "userdata", "desk.json");
     const de = JSON.parse(fs.readFileSync(deskPath, "utf8"));
-    de.keys.eCatalogFolder = kf;
+    de.teamJoin = {
+      team: sc.teamId,
+      file: "etiuda-join-" + sc.teamId + ".json",
+      nonce: crypto.randomBytes(32).toString("hex"),
+      commit: crypto.randomBytes(32).toString("hex"),
+      asked: Date.now(),
+      held: 0,
+      name: "Desk",
+      invite: {
+        id: crypto.randomBytes(8).toString("hex"),
+        proof: crypto.randomBytes(32).toString("hex"),
+        lead: { keyId: sc.lead.keyId, public: sc.lead.public, name: "Lead" },
+        folder: kf,
+      },
+    };
     fs.writeFileSync(deskPath, JSON.stringify(de, null, 2));
 
     const p = testMainPlant("plant:folder-known-root", (lines, at) => {
@@ -776,7 +805,7 @@ async function main() {
     if (at >= 0) {
       lines[at] = "    /* plant:lapse-folder */";
       const scratchCoreSrc = lines.join("\n");
-      const scratchPath = path.join(os.tmpdir(), "scratch-core-" + crypto.randomBytes(4).toString("hex") + ".cjs");
+      const scratchPath = path.join(path.dirname(corePath), "scratch-core-" + crypto.randomBytes(4).toString("hex") + ".cjs");
       fs.writeFileSync(scratchPath, scratchCoreSrc);
       const scratchCore = nodeRequire(scratchPath);
 
@@ -791,8 +820,9 @@ async function main() {
       const rt = crypto.randomBytes(16).toString("hex");
       const until = now - 35 * 24 * 3600 * 1000;
       st.put("team", { rt, lead: { keyId: leadK.keyId, pub: leadK.public }, epoch: 1, until, paid: true, made: now, secret: "sec" });
-      const token = crypto.randomBytes(16).toString("hex");
-      st.put("s:" + token, { hash: token, key: leadK.keyId, pub: leadK.public, t: now });
+      const token = crypto.randomBytes(32).toString("hex");
+      const hash = crypto.createHash("sha256").update(token).digest("hex");
+      st.put("ses:" + hash, { key: leadK.keyId, inv: null, until: now + 60000 });
 
       const folderMeta = {
         id: crypto.randomBytes(16).toString("hex"),
@@ -808,7 +838,7 @@ async function main() {
         channel: { kind: "folder" },
       };
       const adm = core.admit(rt, token, folderMeta, folderMeta.id);
-      turned = adm.ok === false && adm.error === "team-lapsed";
+      turned = adm.ok === false && (adm.reason === "team-lapsed" || adm.error === "team-lapsed");
       try { fs.unlinkSync(scratchPath); } catch {}
     }
     const shaSame = fs.readFileSync(corePath, "utf8") === origCore;

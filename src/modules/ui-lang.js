@@ -1145,6 +1145,12 @@ UI_STRINGS.pl={
   "The relay does not know the team just now":"Przekaźnik nie zna teraz tego zespołu",
   "The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.":"Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; przez przekaźnik nie przychodzi nic nowego. Przekaźnik usunął kopię zespołu po wygaśnięciu licencji albo zespół jeszcze do niego nie dotarł.",
   "When the team is back on the relay, this desk follows by itself while it is still in the team; nothing is needed here.":"Gdy zespół wróci na przekaźnik, to stanowisko dołączy samo, o ile nadal należy do zespołu; tutaj nic nie trzeba robić.",
+  /* draft words: copywriter */
+  "This team now meets in a shared folder.":"Ten zespół spotyka się teraz w folderze współdzielonym.",
+  "Open a folder":"Otwórz folder",
+  "That folder does not hold this team's files, so nothing was changed.":"Ten folder nie zawiera plików tego zespołu, więc nic nie zostało zmienione.",
+  "The team file in that folder was not signed by this team's lead, so nothing was changed.":"Plik zespołu w tym folderze nie został podpisany przez lidera tego zespołu, więc nic nie zostało zmienione.",
+  "The team file in that folder is older than the current one, so nothing was changed.":"Plik zespołu w tym folderze jest starszy niż obecny, więc nic nie zostało zmienione.",
   "Studio's signing key":"Klucz podpisu Studia",
   "A desk's key":"Klucz stanowiska",
   "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
