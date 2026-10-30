@@ -3305,7 +3305,7 @@ function heedTeam() {
     const heldRev = (heldFloor && heldFloor.epoch === r.epoch) ? (heldFloor.rev || 0) : 0;
     const revAbove = rev > heldRev;
     const currentCh = teamChannel[r.team];
-    const wasOnRelay = !!(currentCh && currentCh.kind === "relay");
+    const wasOnRelay = !!(currentCh && currentCh.kind === "relay" && currentCh.rt && relayFollowed(r.team) && root === relayMirrorOf(currentCh.rt));
     const isFolderMove = wasOnRelay && channel.kind === "folder" && revAbove && isPinnedLead;
 
     const was = JSON.stringify(teamChannel[r.team] || null);
@@ -5025,11 +5025,11 @@ function findMatchingFolderInKnownRoots(teamId, leadPub, minRev, currentRoot, do
     if (typeof teamJoin.was === "string") candidates.add(teamJoin.was);
     if (typeof teamJoin.folder === "string") candidates.add(teamJoin.folder);
   }
-  let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(null)); } catch { roots = []; }
   if (doc) {
     if (typeof doc.folder === "string" && doc.folder) candidates.add(doc.folder);
     if (doc.place) {
+      let roots = [];
+      try { roots = syncRootsFrom(readSyncRecords(null)); } catch { roots = []; }
       try {
         const res = placeResolve(doc.folder || "", doc.place, roots, d => folderAnswers(d));
         if (res && res.path) candidates.add(res.path);
@@ -6946,7 +6946,7 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
         folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
         folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
-        pickTeamFolder: "Choose the shared folder for this team" },
+        pickTeamFolder: "Choose the team's shared folder" },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
@@ -6955,8 +6955,7 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
         folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
         folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
-        /* The folder picker's title: a draft for the copywriter. */
-        pickTeamFolder: "Wybierz folder współdzielony tego zespołu" },
+        pickTeamFolder: "Wybierz wspólny folder zespołu" },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();
