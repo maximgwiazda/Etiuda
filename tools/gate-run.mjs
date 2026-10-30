@@ -203,6 +203,8 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
     /* The window gates this run's diff reached and left out: a merge that needs an argued window run, counted by the week review. */
     walled: record.walled || [],
   };
+  /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree and the files that did run. */
+  if (record.inherits) { line.inherits = record.inherits; line.ran = record.ran || []; }
   fs.appendFileSync(chainsPath, JSON.stringify(line) + "\n", "utf8");
   return line;
 }
@@ -294,6 +296,138 @@ export function profileSteps(root, pkg) {
 
 function normRel(file) {
   return String(file || "").replace(/\\/g, "/");
+}
+
+/* A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (the test architect's C3, 2026-10-30). In the release profile only: the newest
+   release chain line on this tree's path that holds nothing (holds false, or no reds) and whose head is an ancestor of HEAD is the
+   base. If `git diff --name-only <base head> HEAD` names only files under tests/ (a fixture there is a test file), the run is the
+   changed test files that are profile steps, every profile step that imports or requires a changed file (followed through the static
+   require( and import of the test files, transitively), and the FLOOR legs; its chain line says "inherits" the base's git tree and
+   lists "ran". Any file elsewhere (package.json, tools/, the lockfile), an unclean tree or no usable base is the full profile.
+   Not followed: a path built at run time (path.join, a spawn of another test file) and a fixture read as text. */
+const TEST_SOURCE = /\.(mjs|js|cjs)$/;
+const TREE_SHA = /^[0-9a-f]{40,64}$/;
+
+function sameTreePath(a, b) {
+  const n = p => { const r = path.resolve(String(p || "")); return process.platform === "win32" ? r.toLowerCase() : r; };
+  return n(a) === n(b);
+}
+
+function readChainLines(chainsPath) {
+  let raw = "";
+  try { raw = fs.readFileSync(chainsPath, "utf8"); } catch (e) { return []; }
+  const out = [];
+  for (const l of raw.split(/\r?\n/)) { if (!l) continue; try { out.push(JSON.parse(l)); } catch (e) { /* a torn line is skipped */ } }
+  return out;
+}
+
+/** Whether a chain line is a run that holds: a hold red (holds true), or a line that cannot say it holds nothing. */
+export function baseHolds(c) {
+  if (!c) return true;
+  return c.holds === true || (c.holds !== false && !(Array.isArray(c.reds) && c.reds.length === 0))
+    || !c.counts || c.counts.exitCode !== 0;
+}
+
+function gitIn(root, args) {
+  const r = spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 1 << 26, windowsHide: true });
+  return { ok: r.status === 0, out: String(r.stdout || "") };
+}
+
+/** The newest release chain line on this tree's path that a test-only diff may inherit, or null. */
+export function releaseBase(root, chainsPath = CHAINS_PATH) {
+  const lines = readChainLines(chainsPath);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const c = lines[i];
+    if (!c || c.gate !== "release" || !c.tree || !sameTreePath(c.tree, root)) continue;
+    if (baseHolds(c)) continue; /* plant:inherit-hold */
+    if (!c.head || c.head === "no commit" || !TREE_SHA.test(String(c.gitTree || ""))) continue;
+    /* The line must be a clean run of that very commit, or its git tree says nothing about HEAD's history. */
+    const t = gitIn(root, ["rev-parse", "--verify", "-q", c.head + "^{tree}"]);
+    if (!t.ok || t.out.trim() !== c.gitTree) continue;
+    if (!gitIn(root, ["merge-base", "--is-ancestor", c.head, "HEAD"]).ok) continue;
+    return c;
+  }
+  return null;
+}
+
+/** The files `git diff --name-only <head> HEAD` names (renames as a delete and an add), or null where git cannot say. */
+export function changedSince(root, head) {
+  const r = gitIn(root, ["diff", "--name-only", "--no-renames", "-z", head, "HEAD"]);
+  return r.ok ? r.out.split("\0").filter(Boolean).map(normRel) : null;
+}
+
+function listTestSources(root) {
+  const out = [];
+  const walk = (dir, rel) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of entries) {
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name), rel + e.name + "/"); }
+      else if (e.isFile() && TEST_SOURCE.test(e.name)) out.push(rel + e.name);
+    }
+  };
+  walk(path.join(root, "tests"), "tests/");
+  return out;
+}
+
+/** The relative specifiers a source file requires or imports with a string literal. */
+export function staticSpecs(text) {
+  const specs = [];
+  const take = (re, at) => { let m; while ((m = re.exec(text))) specs.push(m[at]); };
+  take(/\brequire\(\s*(["'])([^"'\r\n]+)\1\s*\)/g, 2);
+  take(/\bimport\s*(?:[\w$*{][^"'`;()]*?\s*from\s*)?(["'])([^"'\r\n]+)\1/g, 2);
+  take(/\bexport\s[^"'`;()]*?\sfrom\s*(["'])([^"'\r\n]+)\1/g, 2);
+  take(/\bimport\(\s*(["'])([^"'\r\n]+)\1\s*\)/g, 2);
+  return specs.filter(s => /^\.\.?(\/|\\|$)/.test(s));
+}
+
+function specTargets(fromFile, spec) {
+  const base = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), spec.replace(/\\/g, "/")));
+  const out = [base];
+  for (const ext of [".js", ".mjs", ".cjs", ".json"]) out.push(base + ext);
+  for (const idx of ["index.js", "index.mjs", "index.cjs"]) out.push(base + "/" + idx);
+  return out;
+}
+
+/** The changed files and every file that requires or imports one of them, through the static require( and import, transitively. */
+export function filesReaching(root, changed, scanFiles) {
+  const imports = new Map();
+  for (const f of scanFiles) {
+    let text;
+    try { text = fs.readFileSync(path.join(root, f), "utf8"); } catch (e) { continue; }
+    const set = new Set();
+    for (const spec of staticSpecs(text)) for (const t of specTargets(f, spec)) set.add(t);
+    imports.set(f, set);
+  }
+  const reaching = new Set(changed);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [f, set] of imports) {
+      if (reaching.has(f)) continue;
+      for (const t of set) if (reaching.has(t)) { reaching.add(f); grew = true; break; }
+    }
+  }
+  return reaching;
+}
+
+const stepFile = s => normRel(s.file).replace(/^\.\//, "");
+const isFloorStep = s => FLOOR.some(f => f.cmd === s.cmd || (f.file === stepFile(s) && !(s.args || []).length));
+
+/** The release steps a test-only diff runs, with the base it inherits; or { reason } where the full profile runs. `tree` is the
+    run's own git tree as gitTree() says it: a clean commit's sha, or why it is not one. */
+export function planTestOnly(root, steps, tree, chainsPath = CHAINS_PATH) {
+  if (!TREE_SHA.test(String(tree || ""))) return { reason: "the tree is not a clean commit (" + tree + ")" };
+  const base = releaseBase(root, chainsPath);
+  if (!base) return { reason: "no release run with no hold red, on this path, of a commit under HEAD to inherit" };
+  const changed = changedSince(root, base.head);
+  if (!changed) return { reason: "git could not diff " + base.head + " against HEAD" };
+  const outside = changed.filter(f => !f.startsWith("tests/"));
+  if (outside.length) return { reason: outside.length + " changed file(s) outside tests/ since " + base.head + ", the first " + outside[0] };
+  const scan = new Set(listTestSources(root));
+  for (const s of steps) scan.add(stepFile(s));
+  const reaching = filesReaching(root, changed, [...scan]);
+  return { base, changed, steps: steps.filter(s => reaching.has(stepFile(s)) || isFloorStep(s)) };
 }
 
 function showFile(root, base, file) {
@@ -1012,6 +1146,20 @@ async function main() {
   console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
               + " byte(s), by " + before.how + "; git tree " + tree);
 
+  /* C3: in the release profile a diff of files under tests/ alone, against the newest release run that held nothing, runs only what
+     it reaches and the floor. Nightly and the full profile as before. */
+  let inherits = "";
+  if (mode === "release") {
+    const plan = planTestOnly(ROOT, steps, tree);
+    if (plan.base) {
+      inherits = plan.base.gitTree;
+      console.log("gate-run release: only files under tests/ changed since " + plan.base.head + " (" + plan.changed.length
+        + " file(s)), whose release run held nothing: " + plan.steps.length + " of " + steps.length
+        + " gate(s) run, the rest inherited from git tree " + inherits);
+      steps = plan.steps;
+    } else console.log("gate-run release: the full profile: " + plan.reason);
+  }
+
   if (asked.includes("--dry-run") || asked.includes("--list")) {
     console.log("gate-run " + mode + " dry run: " + steps.length + " gate(s) to run:");
     for (const s of steps) console.log("  " + s.cmd + (s.note ? " (" + s.note + ")" : ""));
@@ -1051,11 +1199,13 @@ async function main() {
   const totalCounts = { ok: 0, fail: 0, lines: 0 };
   const redsList = [];
   const gatesList = [];
+  const ranFiles = [];
 
   for (const step of ordered) {
     const now = new Date();
     if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run after the rest of its list (not alone on the machine)");
     console.log("\n> " + step.cmd);
+    if (!ranFiles.includes(stepFile(step))) ranFiles.push(stepFile(step));
     const res = await runStep(step, customEnv);
     const after = fingerprint();
     tree = gitTree();
@@ -1156,6 +1306,8 @@ async function main() {
     staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
     gates: gatesList,
     walled,
+    inherits,
+    ran: ranFiles,
   }, CHAINS_PATH);
 
   if (isHeavy) releaseLock();
