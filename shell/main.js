@@ -2809,7 +2809,10 @@ function tryCatalogAsk(win) {
     resealHeld(win);
     const got = readAskFile();
     if (got.away) return;
-    if (got.gone) { removeAnswer(); return; }
+    if (got.gone) {
+      if (!relayHere()) removeAnswer(); /* plant:follow-ask-keep */
+      return;
+    }
     const use = teamUse();
     if (use.away || !use.member) return;
     const me = branchIdentity(false);
@@ -3387,6 +3390,28 @@ function heedTeam() {
     if (channel.kind === "relay") teamChannel[r.team] = channel; else delete teamChannel[r.team];
     if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
     teamRingAt = { root: root, relay: channel.kind === "relay", ring: (channel.kind === "relay" || doc.ring) ? teamRingIn(doc) : null };
+    if (channel.kind === "relay" && relayFollowed(r.team) && root !== relayMirrorOf(channel.rt)) {
+      const mirror = relayMirrorOf(channel.rt);
+      const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
+      if (me) {
+        const srcDir = path.join(root, "desks", me);
+        const dstDir = path.join(mirror, "desks", me);
+        try {
+          if (fs.existsSync(srcDir)) {
+            fs.mkdirSync(dstDir, { recursive: true });
+            for (const f of fs.readdirSync(srcDir)) {
+              if (/\.ec$/i.test(f)) {
+                fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f)); /* plant:follow-copy */
+              }
+            }
+          }
+        } catch (e) {
+          console.error("etiuda: failed to copy desk files to mirror - " + e.message);
+        }
+      }
+      tryHeldBranches();
+      catalogFolderChanged(); /* plant:follow-folder-changed */
+    }
   }
   // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
   // that epoch at rev 0, since deleting it would let the older epoch back (board 931); with no floor kept, a floor of 0
@@ -4938,15 +4963,32 @@ function forgetLead(team, left) {
 /* ---- the relay: the team folder as a mirror the channel layer keeps (board 900, relay slice 1, step 4) -----------------
    The desk follows a relay address only for a team whose lead was pinned by an invitation, machine policy or an answered
    request (board 907): a ring and a wrapped key both travel in a file anybody who can write the share may sign, so a first
-   pin by a file's own vouching is no wider than today's folder ring and its address is never followed. A folder named by
-   machine policy wins over any relay, and the desk says so. */
+   pin by a file's own vouching is no wider than today's folder ring. Its relay address is followed only when the lead-signed
+   roster names this desk, no machine policy names a folder, and the address is the built-in relay (board 945 stage 3 (a), which
+   widens 907 knowingly: whoever planted that first team file can move such a desk to a built-in relay team they lead). A folder
+   named by machine policy wins over any relay, and the desk says so. */
+const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
+function isBuiltinRelayUrl(u) {
+  if (typeof u !== "string") return false;
+  return u.trim().replace(/\/+$/, "") === BUILTIN_RELAY_URL; /* plant:follow-builtin-url */
+}
+
 const PIN_FROM = ["invite", "policy", "answer"];
 function relayFollowed(team) {
   const pin = teamPins[team];
   if (!pin) return false;
   if (PIN_FROM.indexOf(teamPinFrom[team]) >= 0) return true; /* plant:907-from */
   const policy = sayJoinPolicy().lead;
-  return !!policy && policy === pin.public;
+  if (policy && policy === pin.public) return true;
+  /* A desk that pinned its lead from the folder itself follows the team to the relay only when the lead-signed roster names
+     it, no machine policy names a folder, and the address is the built-in relay (board 945 stage 3 (a)). */
+  if (sayJoinPolicy().folder) return false;
+  const ch = teamChannel[team];
+  if (!ch || ch.kind !== "relay" || !isBuiltinRelayUrl(ch.url)) return false;
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
+  const roster = teamRoster[team];
+  if (me && roster && Array.isArray(roster.desks) && roster.desks.indexOf(me) >= 0) return true; /* plant:follow-roster */
+  return false;
 }
 /* The relay team this desk works through, or null: a join waiting on a relay invitation, else the one pinned team whose
    heeded file names the relay and whose pin the rule above lets it follow. */

@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 85;
+const EXPECTED = 93;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -137,6 +137,255 @@ function run(l, names, cwd, extraEnv) {
 const derivedSays = (line, ok, bad, lines) => !!line && line.countsFrom === "ok/FAIL lines"
   && line.counts.ok === ok && line.counts.fail === bad && line.counts.lines === lines;
 const declaredSays = (line, key, value) => !!line && line.counts[key] === value;
+
+/* ---- 18. THE HYGIENE LEGS WARN IN THE RELEASE PROFILE (the test architect's C2, 2026-10-30) ---------------------------
+   A HYGIENE leg (tools/gate-run.mjs, beside FLOOR) checks the suite's own bookkeeping or the wording of source text, so its
+   red cannot change what a user's build does. In a release or nightly run it is class warn: the run goes on past it, holds
+   is false when nothing else is red, and the exit is 0. Any other red is class hold. Area and whole runs do not read the list.
+   Each leg is a pair: 18a and 18b are one lab with and without a product red, 18c is the same hygiene red in an area run, and
+   18d plants a FLOOR name onto the list in the lab's own copy of the tool and expects the refusal, with the unplanted copy as
+   its control. */
+function hygieneLegs() {
+  const RED = prints(0, 1, "process.exit(1);");
+  const chainLines = file => { try { return fs.readFileSync(file, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) { return []; } };
+  const releaseOf = (kind, stubs, chain) => {
+    const l = makeLab(kind, stubs);
+    const pkg = JSON.parse(fs.readFileSync(path.join(l.lab, "package.json"), "utf8"));
+    pkg.scripts = { test: chain.map(n => "node tests/" + n + ".mjs").join(" && ") };
+    fs.writeFileSync(path.join(l.lab, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+    const chains = path.join(l.root, "chains.jsonl");
+    const r = run(l, ["release"], null, {
+      ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+      ETIUDA_LOCK_PATH: path.join(l.root, "machine.lock"),
+      ETIUDA_CHAINS_PATH: chains,
+    });
+    return Object.assign(r, { line: chainLines(chains).pop() || null });
+  };
+  const summary = r => "exit " + r.exit + ", holds " + (r.line ? r.line.holds : "no chain line") + ", reds "
+    + JSON.stringify(r.line ? r.line.reds.map(x => x.gate + ":" + x.class) : []);
+
+  /* (a) tests/chain-split is on the list, so its red is a warn; the product leg after it still ran. */
+  const warnRun = releaseOf("hygiene-warn", { "chain-split": RED, prod: prints(2, 0, "process.exit(0);") }, ["chain-split", "prod"]);
+  const warnReds = warnRun.line ? warnRun.line.reds : [];
+  check(warnRun.exit === 0 && !!warnRun.line && warnRun.line.holds === false && warnReds.length === 1
+    && warnReds[0].gate === "tests-chain-split" && warnReds[0].class === "warn"
+    && /^WARN tests-chain-split/m.test(warnRun.out) && !!warnRun.byGate["tests-prod"] && warnRun.byGate["tests-prod"].exit === 0,
+    "18a a release run with one hygiene red holds nothing: exit 0, the red listed as warn, a WARN line, the next leg still run: "
+    + summary(warnRun));
+
+  /* (b) the same lab with a product red as well: that one is a hold, and the exit is not 0. */
+  const holdRun = releaseOf("hygiene-hold", { "chain-split": RED, prod: prints(2, 0, "process.exit(0);"), prodred: RED }, ["chain-split", "prod", "prodred"]);
+  const holdReds = holdRun.line ? holdRun.line.reds : [];
+  check(holdRun.exit === 1 && !!holdRun.line && holdRun.line.holds === true && holdReds.length === 2
+    && holdReds.some(x => x.gate === "tests-chain-split" && x.class === "warn")
+    && holdReds.some(x => x.gate === "tests-prodred" && x.class === "hold"),
+    "18b the same release run with one product red holds: exit 1, holds true, the product red class hold, the hygiene red still warn: "
+    + summary(holdRun));
+
+  /* (c) the same hygiene red in an area run is red: the merge waits. Editing the leg selects it. */
+  const hArea = makeLab("hygiene-area", {
+    g1: prints(2, 0, "process.exit(0);"),
+    "chain-split": RED,
+  }, {
+    git: true,
+    gatesFor: true,
+    files: {
+      "src/leaf.mjs": "export const leaf = 1;\n",
+      "tests/pick.mjs": "console.log('  ok   pick');\nprocess.exit(0);\n",
+      "tests/links.js": "console.log('  ok   links');\nprocess.exit(0);\n",
+    },
+  });
+  const hAreaPkg = JSON.parse(fs.readFileSync(path.join(hArea.lab, "package.json"), "utf8"));
+  hAreaPkg.scripts = {
+    test: "node tests/plant-hold.mjs && node tests/g1.mjs && node tests/chain-split.mjs && node tests/plant-compare.mjs",
+    g1: "node tests/g1.mjs",
+    "chain-split": "node tests/chain-split.mjs",
+  };
+  fs.writeFileSync(path.join(hArea.lab, "package.json"), JSON.stringify(hAreaPkg, null, 2) + "\n");
+  fs.writeFileSync(path.join(hArea.lab, "tests", "plant-hold.mjs"), 'console.log("  ok   plant-hold");\nprocess.exit(0);\n');
+  fs.writeFileSync(path.join(hArea.lab, "tests", "plant-compare.mjs"), 'console.log("  ok   plant-compare");\nprocess.exit(0);\n');
+  spawnSync("git", ["add", "."], { cwd: hArea.lab });
+  spawnSync("git", ["commit", "-q", "-m", "initial"], { cwd: hArea.lab });
+  fs.appendFileSync(path.join(hArea.lab, "tests", "chain-split.mjs"), "// edited, so the area run selects it\n");
+  const hAreaChains = path.join(hArea.root, "chains.jsonl");
+  const hAreaRun = run(hArea, ["area", "HEAD"], null, {
+    ETIUDA_LOCK_PATH: path.join(hArea.root, "machine.lock"),
+    ETIUDA_CHAINS_PATH: hAreaChains,
+  });
+  const hAreaLine = chainLines(hAreaChains).pop() || null;
+  check(hAreaRun.exit === 1 && "tests-chain-split" in hAreaRun.byGate && hAreaRun.byGate["tests-chain-split"].exit === 1
+    && !/^WARN /m.test(hAreaRun.out) && !!hAreaLine && hAreaLine.holds === true
+    && hAreaLine.reds.length === 1 && hAreaLine.reds[0].class === "hold",
+    "18c the same hygiene red in an area run is red: exit 1, no WARN line, the red class hold: exit " + hAreaRun.exit
+    + ", legs [" + Object.keys(hAreaRun.byGate).join(", ") + "], reds " + JSON.stringify(hAreaLine ? hAreaLine.reds.map(x => x.gate + ":" + x.class) : []));
+
+  /* (d) a FLOOR name planted onto HYGIENE, in the lab's own copy of the tool, is refused at load with exit 78. Control: the
+     copy as shipped loads and lists its gates. The plant must be one the text really took, or the control proves nothing. */
+  const clash = makeLab("hygiene-clash", { prod: prints(1, 0, "process.exit(0);") });
+  const clashPkg = JSON.parse(fs.readFileSync(path.join(clash.lab, "package.json"), "utf8"));
+  clashPkg.scripts = { test: "node tests/prod.mjs" };
+  fs.writeFileSync(path.join(clash.lab, "package.json"), JSON.stringify(clashPkg, null, 2) + "\n");
+  const clashTool = path.join(clash.lab, "tools", "gate-run.mjs");
+  const clashBytes = fs.readFileSync(clashTool, "utf8");
+  const clashEnv = { ETIUDA_LOCK_PATH: path.join(clash.root, "machine.lock") };
+  const clashControl = run(clash, ["release", "--dry-run"], null, clashEnv);
+  const planted = clashBytes.replace("export const HYGIENE = [", 'export const HYGIENE = [\n  "tests/pick",');
+  fs.writeFileSync(clashTool, planted);
+  const clashRun = run(clash, ["release", "--dry-run"], null, clashEnv);
+  fs.writeFileSync(clashTool, clashBytes);
+  check(planted !== clashBytes && clashControl.exit === 0 && /gate\(s\) to run/.test(clashControl.out)
+    && clashRun.exit === 78 && /on both FLOOR and HYGIENE: tests\/pick\.mjs/.test(clashRun.out) && !/gate\(s\) to run/.test(clashRun.out),
+    "18d a FLOOR name planted onto HYGIENE is refused at load with exit 78, and the tool as shipped is not: planted exit "
+    + clashRun.exit + " | " + clashRun.out.trim().split(/\r?\n/).filter(l => /FLOOR/.test(l)).join(" | ")
+    + " | control exit " + clashControl.exit);
+}
+
+/* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (the test architect's C3, 2026-10-30) ------------------------------
+   In the release profile, a diff against the newest release run that held nothing (same path, head under HEAD) that names only
+   files under tests/ runs the changed test files that are profile steps, every step that imports them (transitively), and the
+   floor, and its chain line says "inherits" the base's git tree and "ran" the files. Each lab is a git repository of its own with a
+   four-leg chain (a, b, c, and pick, which is on the floor and so is added), b importing tests/helper.mjs, which imports tests/deep.mjs.
+   18e one changed test; 18f a changed helper two imports down; 18g a changed file outside tests/ is the full profile, and the run
+   after it inherits from it; 18h a base with a hold red is not inherited, against a green control and a planted copy of the tool
+   with the guard cut out, which does inherit it. Legs 18e to 18h sit beside 18a to 18d: the ids are the next four unused. */
+function inheritLegs() {
+  const OK = prints(1, 0, "process.exit(0);");
+  const RED = prints(0, 1, "process.exit(1);");
+  const B = red => 'import "./helper.mjs";\n' + (red ? RED : OK);
+  const SHA = /^[0-9a-f]{40,64}$/;
+  const chainLines = file => { try { return fs.readFileSync(file, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) { return []; } };
+  const gitIn = (cwd, args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args),
+    { cwd, encoding: "utf8", timeout: 30000 });
+  const gatesOf = r => r.line ? r.line.gates.map(g => g.gate).join(",") : "no chain line";
+  const ranOf = r => r.line && r.line.ran ? r.line.ran.join(",") : "none";
+  const summary = (name, r) => name + " exit " + r.exit + " gates [" + gatesOf(r) + "] inherits "
+    + (r.line && r.line.inherits ? r.line.inherits.slice(0, 8) : "none") + " ran [" + ranOf(r) + "]";
+  const ALL = "tests-a,tests-b,tests-c,tests-pick";
+
+  /** A lab, committed, whose base run has not been made yet. `o.bRed` makes leg b red; `o.plant` is [from, to] for the lab's own
+      copy of the tool, applied before the commit because a changed tool is itself a file outside tests/. */
+  function inheritLab(kind, o) {
+    const l = makeLab(kind, { a: OK, b: B(o.bRed), c: OK, pick: OK }, {
+      git: true,
+      files: {
+        "tests/helper.mjs": 'import "./deep.mjs";\nexport const helper = 1;\n',
+        "tests/deep.mjs": "export const deep = 1;\n",
+        "src/leaf.mjs": "export const leaf = 1;\n",
+        "package-lock.json": "{}\n",
+      },
+    });
+    const pkgFile = path.join(l.lab, "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf8"));
+    pkg.scripts = { test: ["a", "b", "c"].map(n => "node tests/" + n + ".mjs").join(" && ") };
+    fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + "\n");
+    let planted = false;
+    if (o.plant) {
+      const tool = path.join(l.lab, "tools", "gate-run.mjs");
+      const bytes = fs.readFileSync(tool, "utf8");
+      const next = bytes.replace(o.plant[0], o.plant[1]);
+      planted = next !== bytes;
+      fs.writeFileSync(tool, next);
+    }
+    const commit = msg => { gitIn(l.lab, ["add", "."]); return gitIn(l.lab, ["commit", "-q", "-m", msg]).status === 0; };
+    const committed = commit("base");
+    const chains = path.join(l.root, "chains.jsonl");
+    return {
+      planted,
+      committed: () => committed,
+      release: () => {
+        const r = run(l, ["release"], null, {
+          ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+          ETIUDA_LOCK_PATH: path.join(l.root, "machine.lock"),
+          ETIUDA_CHAINS_PATH: chains,
+        });
+        return Object.assign(r, { line: chainLines(chains).pop() || null });
+      },
+      edit: (files, msg) => {
+        for (const rel of Object.keys(files)) {
+          const at = path.join(l.lab, rel);
+          fs.mkdirSync(path.dirname(at), { recursive: true });
+          fs.writeFileSync(at, files[rel]);
+        }
+        return commit(msg || "edit");
+      },
+      pkgFile,
+    };
+  }
+
+  /* (e) one changed test file: it and the floor run, the line carries inherits and ran. */
+  const e = inheritLab("inherit-one", {});
+  const eBase = e.release();
+  e.edit({ "tests/a.mjs": OK + "// changed\n" });
+  const eRun = e.release();
+  check(e.committed() && eBase.exit === 0 && !!eBase.line && !("inherits" in eBase.line) && gatesOf(eBase) === ALL
+    && eRun.exit === 0 && !!eRun.line && SHA.test(eBase.line.gitTree) && eRun.line.inherits === eBase.line.gitTree
+    && eRun.line.holds === false && gatesOf(eRun) === "tests-a,tests-pick" && ranOf(eRun) === "tests/a.mjs,tests/pick.mjs",
+    "18e a green release base and one changed test file: only that file and the floor run, and the line carries inherits (the base's git tree) and ran: "
+    + summary("base", eBase) + " | " + summary("then", eRun));
+
+  /* (f) a changed helper: the files that import it, two imports down, run too; the ones that do not, do not. */
+  const f = inheritLab("inherit-helper", {});
+  const fBase = f.release();
+  f.edit({ "tests/deep.mjs": "export const deep = 2;\n" });
+  const fRun = f.release();
+  check(fBase.exit === 0 && gatesOf(fBase) === ALL && fRun.exit === 0 && !!fRun.line && !!fBase.line
+    && fRun.line.inherits === fBase.line.gitTree && gatesOf(fRun) === "tests-b,tests-pick" && ranOf(fRun) === "tests/b.mjs,tests/pick.mjs",
+    "18f a changed test helper: the step that imports it through another helper runs with the floor, and the steps that do not import it do not: "
+    + summary("base", fBase) + " | " + summary("then", fRun));
+
+  /* (g) a changed file outside tests/ is the full profile, whichever it is; the next test-only run inherits from that full run. */
+  const g = inheritLab("inherit-outside", {});
+  const gBase = g.release();
+  const outside = [
+    ["src/leaf.mjs", { "src/leaf.mjs": "export const leaf = 2;\n" }],
+    ["tools/note.mjs", { "tools/note.mjs": "export const note = 1;\n" }],
+    ["package-lock.json", { "package-lock.json": "{ \"lockfileVersion\": 3 }\n" }],
+    ["package.json", null],
+  ];
+  const gRuns = [];
+  for (const [name, files] of outside) {
+    if (files) g.edit(files, name);
+    else {
+      const p = JSON.parse(fs.readFileSync(g.pkgFile, "utf8"));
+      p.private = true;
+      g.edit({ "package.json": JSON.stringify(p, null, 2) + "\n" }, name);
+    }
+    gRuns.push([name, g.release()]);
+  }
+  g.edit({ "tests/c.mjs": OK + "// changed\n" }, "test only");
+  const gThen = g.release();
+  const gLast = gRuns[gRuns.length - 1][1];
+  check(gBase.exit === 0 && gRuns.every(([, r]) => r.exit === 0 && !!r.line && !("inherits" in r.line) && gatesOf(r) === ALL)
+    && !!gLast.line && SHA.test(gLast.line.gitTree) && gThen.exit === 0 && !!gThen.line && gThen.line.inherits === gLast.line.gitTree
+    && gatesOf(gThen) === "tests-c,tests-pick",
+    "18g a file outside tests/ (src, tools, the lockfile, package.json) changed: the full profile runs and the line inherits nothing; the next test-only run inherits from that full run: "
+    + gRuns.map(([name, r]) => name + " -> " + gatesOf(r) + (r.line && r.line.inherits ? " INHERITS" : "")).join(" | ") + " | " + summary("then", gThen));
+
+  /* (h) a base with a hold red is not inherited. The same fix on a green base is the control, which does inherit; the copy of the
+     tool with the guard cut out is the plant, which inherits the hold-red base and so skips legs the base never ran green. */
+  const GUARD = "if (baseHolds(c)) continue; /* plant:inherit-hold */";
+  const hRed = inheritLab("inherit-hold", { bRed: true });
+  const hBase = hRed.release();
+  hRed.edit({ "tests/b.mjs": B(false) }, "fix b");
+  const hRun = hRed.release();
+  const hGreen = inheritLab("inherit-hold-control", {});
+  const hGreenBase = hGreen.release();
+  hGreen.edit({ "tests/b.mjs": B(false) + "// changed\n" }, "touch b");
+  const hGreenRun = hGreen.release();
+  const hPlant = inheritLab("inherit-hold-planted", { bRed: true, plant: [GUARD, ""] });
+  const hPlantBase = hPlant.release();
+  hPlant.edit({ "tests/b.mjs": B(false) }, "fix b");
+  const hPlantRun = hPlant.release();
+  check(hBase.exit === 1 && !!hBase.line && hBase.line.holds === true && hRun.exit === 0 && !!hRun.line && !("inherits" in hRun.line)
+    && gatesOf(hRun) === ALL
+    && hGreenBase.exit === 0 && hGreenRun.exit === 0 && !!hGreenRun.line && !!hGreenBase.line
+    && hGreenRun.line.inherits === hGreenBase.line.gitTree && gatesOf(hGreenRun) === "tests-b,tests-pick"
+    && hPlant.planted && hPlantBase.exit === 1 && !!hPlantBase.line && !!hPlantRun.line
+    && hPlantRun.line.inherits === hPlantBase.line.gitTree && gatesOf(hPlantRun) === "tests-b,tests-pick",
+    "18h a base with a hold red is not inherited, the full profile runs; the same fix on a green base inherits, and the tool with the guard cut out inherits the hold-red base: "
+    + summary("held base", hBase) + " | " + summary("then", hRun) + " | " + summary("green control", hGreenRun)
+    + " | planted " + hPlant.planted + " " + summary("then", hPlantRun));
+}
 
 async function main() {
   check(fs.existsSync(TOOL), "0 the tool is there: " + TOOL);
@@ -1497,8 +1746,10 @@ async function main() {
   const rbOnChecks = rbOnM ? Number(rbOnM[1]) : -1;
   const rbOffChecks = rbOffM ? Number(rbOffM[1]) : -1;
   const rbOffSkipped = rbOffM ? Number(rbOffM[2]) : -1;
-  check(rbOn.status === 0 && rbOff.status === 0 && rbOffSkipped === 2 && rbOnChecks - rbOffChecks === 2,
-    "17c ETIUDA_PLANTS=off on tests/rollback-floor.mjs skips exactly 2 plants: on checks=" + rbOnChecks + " off checks=" + rbOffChecks + " skipped=" + rbOffSkipped);
+  /* The plants are counted from the file, so a new plant leg moves the count with it. */
+  const rbPlants = (fs.readFileSync(path.join(ROOT, "tests", "rollback-floor.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
+  check(rbOn.status === 0 && rbOff.status === 0 && rbPlants > 0 && rbOffSkipped === rbPlants && rbOnChecks - rbOffChecks === rbPlants,
+    "17c ETIUDA_PLANTS=off on tests/rollback-floor.mjs skips exactly its " + rbPlants + " plants: on checks=" + rbOnChecks + " off checks=" + rbOffChecks + " skipped=" + rbOffSkipped);
 
   const tjOn = spawnSync(process.execPath, [path.join(ROOT, "tests", "team-join.mjs")], { cwd: ROOT, encoding: "utf8" });
   const tjOff = spawnSync(process.execPath, [path.join(ROOT, "tests", "team-join.mjs")], { cwd: ROOT, encoding: "utf8", env: Object.assign({}, process.env, { ETIUDA_PLANTS: "off" }) });
@@ -1511,6 +1762,12 @@ async function main() {
   const tjPlants = (fs.readFileSync(path.join(ROOT, "tests", "team-join.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
   check(tjOn.status === 0 && tjOff.status === 0 && tjPlants > 0 && tjOffSkipped === tjPlants && tjOnChecks - tjOffChecks === tjPlants,
     "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly its " + tjPlants + " plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
+
+  /* ---- 18. THE HYGIENE LEGS WARN IN THE RELEASE PROFILE (see hygieneLegs) --------------------- */
+  hygieneLegs();
+
+  /* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (see inheritLegs) ----------- */
+  inheritLegs();
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
