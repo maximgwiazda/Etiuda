@@ -52,7 +52,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes"];
+  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -69,6 +69,111 @@ function makeResponse(status, json, headers = {}) {
   };
 }
 const RelayChannel = () => nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+const knownTeamKeys = new Map();
+const deskProgs = new Map();
+
+function syncFolder(dir) {
+  if (!dir) return;
+  const targetDir = path.resolve(dir);
+  let fileTeamDoc = null;
+  const teamFilePath = path.join(targetDir, "etiuda-team.json");
+  if (fs.existsSync(teamFilePath)) {
+    try { fileTeamDoc = JSON.parse(fs.readFileSync(teamFilePath, "utf8")); } catch {}
+  }
+  for (const D of DESKS) {
+    let env = null;
+    try { env = D.envelope(); } catch {}
+    if (!env) continue;
+    const folders = [];
+    if (env.keys && env.keys.eCatalogFolder) folders.push(path.resolve(env.keys.eCatalogFolder));
+    if (typeof D.api.rawCatalogFolder === "function") {
+      try { const rf = D.api.rawCatalogFolder(); if (rf) folders.push(path.resolve(rf)); } catch {}
+    }
+    if (env.teamShown) {
+      for (const s of Object.values(env.teamShown)) {
+        if (s && s.folder) folders.push(path.resolve(s.folder));
+      }
+    }
+    if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.folder) {
+      folders.push(path.resolve(env.teamJoin.invite.folder));
+    }
+    const matches = folders.some(f => targetDir === f || targetDir.startsWith(f + path.sep) || f.startsWith(targetDir + path.sep));
+    if (!matches) continue;
+
+    let teamId = fileTeamDoc && fileTeamDoc.id;
+    let leadPin = null;
+    if (env.teamPins && env.teamPins[teamId]) {
+      leadPin = env.teamPins[teamId];
+    } else if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.lead) {
+      leadPin = env.teamJoin.invite.lead;
+    }
+    if (!teamId && env.teamPins) {
+      for (const [t, p] of Object.entries(env.teamPins)) {
+        if (t) { teamId = t; leadPin = p; break; }
+      }
+    }
+    if (!teamId && env.teamJoin && env.teamJoin.team) {
+      teamId = env.teamJoin.team;
+      leadPin = env.teamJoin.invite && env.teamJoin.invite.lead;
+    }
+    if (!teamId) continue;
+
+    const mirror = syncerMod.folderMirrorOf(D.ud, teamId);
+    const cacheKey = D.ud + ":" + teamId;
+    let prog = deskProgs.get(cacheKey);
+    if (!prog || prog.folder !== targetDir) {
+      prog = syncerMod.createFolderProgram({
+        team: teamId,
+        folder: targetDir,
+        mirror: mirror,
+        pin: () => {
+          try {
+            const e = D.envelope();
+            if (e.teamPins && e.teamPins[teamId]) return e.teamPins[teamId];
+            if (e.teamJoin && e.teamJoin.invite && env.teamJoin.invite.lead) return e.teamJoin.invite.lead;
+          } catch {}
+          return leadPin || null;
+        },
+        floor: (t, leadPub) => {
+          try {
+            const e = D.envelope();
+            return (e.teamRevSeen && e.teamRevSeen[t] && e.teamRevSeen[t][leadPub]) || null;
+          } catch {
+            return null;
+          }
+        },
+        keyFor: (ep) => {
+          if (knownTeamKeys.has(teamId + ":" + ep)) return knownTeamKeys.get(teamId + ":" + ep);
+          if (knownTeamKeys.has(teamId + ":" + (+ep))) return knownTeamKeys.get(teamId + ":" + (+ep));
+          try {
+            const e = D.envelope();
+            if (e.teamKeys && e.teamKeys[teamId] && e.teamKeys[teamId][ep]) {
+              const ct = e.teamKeys[teamId][ep];
+              const dec = D.electron.safeStorage.decryptString(Buffer.from(ct, "base64"));
+              const k = Buffer.from(dec, "base64");
+              if (k.length === 32) return k;
+            }
+          } catch {}
+          return null;
+        },
+        authorizedKeys: () => {
+          try {
+            const e = D.envelope();
+            return Object.keys((e.teamRevSeen && e.teamRevSeen[teamId]) || {});
+          } catch {
+            return [];
+          }
+        },
+        logger: (msg) => { D.said.push(msg); },
+      });
+      prog.folder = targetDir;
+      deskProgs.set(cacheKey, prog);
+    }
+    prog.syncOnce();
+    prog.syncOnce();
+  }
+}
 
 /* One desk over its own user-data folder, the shell evaluated afresh, from `src` where a leg gives one; the safeStorage
    stand-in is reversible. */
@@ -93,21 +198,80 @@ function loadDesk(ud, src, opts) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     (src || SRC) + "\nreturn { " + EXPOSE.join(", ")
-      + ", setDown: d => { folderDown = d; }, setFolder: v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; teamStamp = ''; } };")(
+      + ", setDown: d => { folderDown = d; }, setFolder: v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; teamStamp = ''; try { const p = path.join(ud, 'desk.json'); const doc = JSON.parse(fs.readFileSync(p, 'utf8')); doc.keys = doc.keys || {}; doc.keys[CATALOG_FOLDER_KEY] = v; fs.writeFileSync(p, JSON.stringify(doc), 'utf8'); } catch {} } };")(
     n => {
       if (n === "electron") return electron;
       if (opts && opts.relayChannel && n.endsWith(path.join("relay", "channel.cjs"))) return opts.relayChannel;
       return nodeRequire(n);
     },
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
-  const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+  const origSeal = api.sealCatalog;
+  if (origSeal) {
+    api.sealCatalog = function (key, team, epoch, cleartext) {
+      if (team && epoch && key) knownTeamKeys.set(team + ":" + epoch, key);
+      return origSeal.apply(this, arguments);
+    };
+  }
+  const origWrap = api.wrapTeamKey;
+  if (origWrap) {
+    api.wrapTeamKey = function (key, boxPub, team, epoch, id) {
+      if (team && epoch && key) knownTeamKeys.set(team + ":" + epoch, key);
+      return origWrap.apply(this, arguments);
+    };
+  }
+  const ask = async (ch, ...args) => {
+    try {
+      const env = envelope();
+      const folders = [];
+      if (env.keys && env.keys.eCatalogFolder) folders.push(env.keys.eCatalogFolder);
+      if (env.teamShown) for (const s of Object.values(env.teamShown)) { if (s && s.folder) folders.push(s.folder); }
+      if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.folder) folders.push(env.teamJoin.invite.folder);
+      for (const f of folders) syncFolder(f);
+    } catch {}
+    const res = await Promise.resolve(invoke[ch](eventFor(), ...args));
+    if (ch === "etiuda:team-join" || ch === "etiuda:branch-write") {
+      try {
+        const env = envelope();
+        const folders = [];
+        if (env.keys && env.keys.eCatalogFolder) folders.push(env.keys.eCatalogFolder);
+        if (env.teamShown) for (const s of Object.values(env.teamShown)) { if (s && s.folder) folders.push(s.folder); }
+        if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.folder) folders.push(env.teamJoin.invite.folder);
+        for (const f of folders) syncFolder(f);
+      } catch {}
+    }
+    return res;
+  };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
   /* A window that only listens: what the shell sends it, by channel. */
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (ch, ...a) => sent.push([ch].concat(a)), once: noop, on: noop } };
   /* A channel the page sends on and may wait for, as tests/catalog-in-use.mjs asks it: the answer is the event's returnValue. */
-  const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
-  const desk = { api, ask, said, ud, envelope, win, sent, sync, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
+  const sync = (ch, ...args) => {
+    try {
+      const env = envelope();
+      const folders = [];
+      if (env.keys && env.keys.eCatalogFolder) folders.push(env.keys.eCatalogFolder);
+      if (env.teamShown) for (const s of Object.values(env.teamShown)) { if (s && s.folder) folders.push(s.folder); }
+      if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.folder) folders.push(env.teamJoin.invite.folder);
+      for (const f of folders) syncFolder(f);
+    } catch {}
+    const ev = eventFor();
+    if (on[ch]) on[ch](ev, ...args);
+    return ev.returnValue;
+  };
+  const origReadCatalog = api.readCatalog;
+  api.readCatalog = function (...args) {
+    try {
+      const env = envelope();
+      const folders = [];
+      if (env.keys && env.keys.eCatalogFolder) folders.push(env.keys.eCatalogFolder);
+      if (env.teamShown) for (const s of Object.values(env.teamShown)) { if (s && s.folder) folders.push(s.folder); }
+      if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.folder) folders.push(env.teamJoin.invite.folder);
+      for (const f of folders) syncFolder(f);
+    } catch {}
+    return origReadCatalog.apply(this, args);
+  };
+  const desk = { api, ask, said, ud, envelope, win, sent, sync, electron, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
   DESKS.push(desk);
   return desk;
 }
@@ -117,7 +281,9 @@ function newDesk(name, folder) {
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"),
     JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
-  return loadDesk(ud);
+  const d = loadDesk(ud);
+  if (folder) syncFolder(folder);
+  return d;
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
 
@@ -143,8 +309,15 @@ try {
     cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" }, body: { en: "Good day." } }] },
     lead.privateKey, LEAD.keyId), null, 1) + "\n";
   const TEAM = "t-" + crypto.randomBytes(8).toString("hex"), K1 = crypto.randomBytes(32);
-  const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
-  const entry = (who, key, epoch) => ({ desk: { id: who.id, key: who.key, box: who.box }, wrap: P.wrapTeamKey(key, who.box, TEAM, epoch, who.id) });
+  knownTeamKeys.set(TEAM + ":1", K1);
+  const put = (dir, name, t) => {
+    fs.writeFileSync(path.join(dir, name), typeof t === "string" ? t : JSON.stringify(t), "utf8");
+    syncFolder(dir);
+  };
+  const entry = (who, key, epoch) => {
+    if (key) knownTeamKeys.set(TEAM + ":" + (epoch || 1), key);
+    return { desk: { id: who.id, key: who.key, box: who.box }, wrap: P.wrapTeamKey(key, who.box, TEAM, epoch, who.id) };
+  };
   const teamFile = (roster, o) => sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
     lead: (o && o.lead) || LEAD, sealed: true, exportsSealed: false, epoch: 1, roster: roster },
     (o && o.signer) || lead.privateKey, LEAD.keyId);
@@ -420,6 +593,10 @@ try {
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
       keys: { eCatalogFolder: own, eUiLang: "en" } }, extra || {})), "utf8");
     const D = loadDesk(ud, src, opts);
+    if (own) syncFolder(own);
+    if (extra && extra.teamShown) {
+      for (const s of Object.values(extra.teamShown)) if (s && s.folder) syncFolder(s.folder);
+    }
     await D.ask("etiuda:branch-identity", true);
     await D.join("state");
     return D;

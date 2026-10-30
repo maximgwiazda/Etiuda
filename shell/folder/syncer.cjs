@@ -795,7 +795,8 @@ function createFolderProgram(opts) {
             applied.push(relPath);
           } else {
             // Unsigned shared catalog (no doc.sig) or signed catalog
-            if (doc.sig && !catalogSigValid(doc, pin && pin.public)) {
+            const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
+            if (doc.sig && !authKeys.some(pub => catalogSigValid(doc, pub))) {
               try { io.unlink(tmpPath); } catch {}
               continue;
             }
