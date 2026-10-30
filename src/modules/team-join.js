@@ -23,6 +23,7 @@ let joinBlob="";                  // the paste box's text while it is open, so a
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
 let joinTyped="";                 // the check code the agent typed on the confirm
 let joinWhy="";                   // the refusal's word, as the shell said it
+let askWhy="";                    // why ask to join did nothing ("no-identity" | "folder-not-answering" | "folder-not-writable")
 let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell's two sentences, the secret never among them
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 let lapseUp="";                   // "team|step|until" of the lapse notice on screen
@@ -232,6 +233,7 @@ function joinTook(v,changed){
   const was=JSON.stringify(joinNow);
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
            join:joinShown(s.join),
+           askRefused:(s.askRefused || s.refused) || null,
            leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>{
              const row={team:String(l.team),print:String(l.print||""),
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
@@ -260,6 +262,10 @@ function joinTook(v,changed){
     paintJoin();
     return joinNow;
   }
+  const hadAskWhy=askWhy;
+  if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable")
+    askWhy=s.askRefused || s.refused;
+  else if(s.join) askWhy="";
   const offer=s.offer;
   if(offer && offer.link===true && typeof offer.relay==="string" && offer.relay){
     joinOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
@@ -268,7 +274,7 @@ function joinTook(v,changed){
     paintJoin();
     return joinNow;
   }
-  if(changed===true || JSON.stringify(joinNow)!==was) paintJoin();
+  if(changed===true || JSON.stringify(joinNow)!==was || askWhy!==hadAskWhy) paintJoin();
   return joinNow;
 }
 function noteCatalogCopy(){
@@ -498,8 +504,15 @@ function joinParts(){
       body:ask, acts:acts};
     return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
   }
+  let line=t("Once the team's lead lets this desk in, the catalog opens here by itself.");
+  if(askWhy==="no-identity")
+    line=t("Ask to join works once this computer can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.");
+  else if(askWhy==="folder-not-answering")
+    line=t("Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.");
+  else if(askWhy==="folder-not-writable")
+    line=t("Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.");
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
-    line:t("Once the team's lead lets this desk in, the catalog opens here by itself."), body:ask, acts:acts};
+    line:line, body:ask, acts:acts};
 }
 function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;

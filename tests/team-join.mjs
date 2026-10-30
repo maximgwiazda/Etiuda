@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 141;
+const EXPECTED = 147;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -77,7 +77,7 @@ function loadDesk(ud, src, opts) {
   // Every way the shell can log is kept, so a leg can say what reached the log and what did not.
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
     info: s => said.push("INFO " + String(s)), debug: s => said.push("DEBUG " + String(s)) };
-  const safeStorage = {
+  const safeStorage = (opts && opts.safeStorage) || {
     isEncryptionAvailable: () => true,
     encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
     decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
@@ -93,7 +93,7 @@ function loadDesk(ud, src, opts) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     (src || SRC) + "\nreturn { " + EXPOSE.join(", ")
-      + ", setFolder: v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; teamStamp = ''; } };")(
+      + ", setDown: d => { folderDown = d; }, setFolder: v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; teamStamp = ''; } };")(
     n => {
       if (n === "electron") return electron;
       if (opts && opts.relayChannel && n.endsWith(path.join("relay", "channel.cjs"))) return opts.relayChannel;
@@ -3681,6 +3681,158 @@ try {
       }
       const same = fs.readFileSync(mainPath).equals(before);
       check(turned && same, "15eh lifting plant:refuse-forget retains key after refusal (FAIL 15ef: key forgotten without forgetWrapped): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  // 15ei: Ask to join with no identity returns reason no-identity and card explains with Linux hint
+  const safeNoEnc = { isEncryptionAvailable: () => false, encryptString: () => Buffer.from([]), decryptString: () => "" };
+  {
+    const udNoId = path.join(LAB, "noid");
+    fs.mkdirSync(udNoId, { recursive: true });
+    fs.writeFileSync(path.join(udNoId, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+    const deskNoId = loadDesk(udNoId, null, { safeStorage: safeNoEnc });
+    await pageOn(deskNoId);
+    const askRes = await press("ask");
+    const cardEn = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const cardPl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const EN_NOID = "Ask to join works once this computer can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.";
+    const PL_NOID = "Prośba o dołączenie zadziała, gdy ten komputer będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
+    check(askRes && askRes.askRefused === "no-identity" && cardEn.indexOf(escHtml(EN_NOID)) >= 0 && cardPl.indexOf(PL_NOID) >= 0,
+      "15ei ask to join with no identity returns reason no-identity and the card explains in English and Polish: "
+      + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOID)) >= 0, pl: cardPl.indexOf(PL_NOID) >= 0 }));
+  }
+
+  // 15ej: Ask to join when the folder does not answer returns folder-not-answering
+  {
+    const udNoFolder = path.join(LAB, "nofolder");
+    fs.mkdirSync(udNoFolder, { recursive: true });
+    fs.writeFileSync(path.join(udNoFolder, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+    const deskNoFolder = loadDesk(udNoFolder);
+    await pageOn(deskNoFolder);
+    deskNoFolder.api.setDown(SHARE);
+    const askRes = await press("ask");
+    const cardEn = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const cardPl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const EN_NOFOLDER = "Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.";
+    const PL_NOFOLDER = "Wystarczy ponownie poprosić o dołączenie, gdy folder zespołu będzie osiągalny; teraz ten komputer nie może się z nim połączyć, więc nic nie zapisano.";
+    check(askRes && askRes.askRefused === "folder-not-answering" && cardEn.indexOf(escHtml(EN_NOFOLDER)) >= 0 && cardPl.indexOf(PL_NOFOLDER) >= 0,
+      "15ej ask to join when the folder does not answer returns folder-not-answering and card explains: "
+      + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOFOLDER)) >= 0, pl: cardPl.indexOf(PL_NOFOLDER) >= 0 }));
+  }
+
+  // 15ek: Ask to join when the folder is not writable returns folder-not-writable
+  {
+    const udNoWrite = path.join(LAB, "nowrite");
+    fs.mkdirSync(udNoWrite, { recursive: true });
+    fs.writeFileSync(path.join(udNoWrite, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+    const deskNoWrite = loadDesk(udNoWrite);
+    const meNW = await deskNoWrite.ask("etiuda:branch-identity", true);
+    await pageOn(deskNoWrite);
+    const joinDest = path.join(SHARE, "desks", meNW.id, "join.json");
+    fs.mkdirSync(path.join(SHARE, "desks", meNW.id), { recursive: true });
+    fs.mkdirSync(joinDest);
+    let askRes;
+    try {
+      askRes = await press("ask");
+    } finally {
+      fs.rmdirSync(joinDest);
+    }
+    const cardEn = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const cardPl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const EN_NOWRITE = "Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.";
+    const PL_NOWRITE = "Osoba zarządzająca folderem zespołu może pozwolić temu komputerowi na zapis, którego wymaga prośba; do tego czasu nic tu nie zapisano. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
+    check(askRes && askRes.askRefused === "folder-not-writable" && cardEn.indexOf(escHtml(EN_NOWRITE)) >= 0 && cardPl.indexOf(PL_NOWRITE) >= 0,
+      "15ek ask to join when the folder is not writable returns folder-not-writable and card explains: "
+      + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOWRITE)) >= 0, pl: cardPl.indexOf(PL_NOWRITE) >= 0 }));
+  }
+
+  // 15el: lifting plant:w2-no-identity turns 15ei red
+  {
+    if (PLANTS_OFF) {
+      skip("15el lifting plant:w2-no-identity turns 15ei red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:w2-no-identity") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "  if (!me) return joinView(); /* plant:w2-no-identity */";
+        const udPlant = path.join(LAB, "plant-noid");
+        fs.mkdirSync(udPlant, { recursive: true });
+        fs.writeFileSync(path.join(udPlant, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+        const planted = loadDesk(udPlant, lines.join("\n"), { safeStorage: safeNoEnc });
+        const res = await planted.join("ask", "lamps.ec", "Max G.");
+        turned = !res || res.askRefused !== "no-identity";
+        detail = turned ? "planted ask omitted no-identity reason" : "still returned no-identity";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15el lifting plant:w2-no-identity turns 15ei red (FAIL 15ei: no-identity reason absent): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  // 15em: lifting plant:w2-folder-not-answering turns 15ej red
+  {
+    if (PLANTS_OFF) {
+      skip("15em lifting plant:w2-folder-not-answering turns 15ej red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:w2-folder-not-answering") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "  if (!folderAnswers(root)) return joinView(); /* plant:w2-folder-not-answering */";
+        const udPlant = path.join(LAB, "plant-nofolder");
+        fs.mkdirSync(udPlant, { recursive: true });
+        fs.writeFileSync(path.join(udPlant, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+        const planted = loadDesk(udPlant, lines.join("\n"));
+        planted.api.setDown(SHARE);
+        const res = await planted.join("ask", "lamps.ec", "Max G.");
+        turned = !res || res.askRefused !== "folder-not-answering";
+        detail = turned ? "planted ask omitted folder-not-answering reason" : "still returned folder-not-answering";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15em lifting plant:w2-folder-not-answering turns 15ej red (FAIL 15ej: folder-not-answering reason absent): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  // 15en: lifting plant:w2-folder-not-writable turns 15ek red
+  {
+    if (PLANTS_OFF) {
+      skip("15en lifting plant:w2-folder-not-writable turns 15ek red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:w2-folder-not-writable") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = "    return joinView(); /* plant:w2-folder-not-writable */";
+        const udPlant = path.join(LAB, "plant-nowrite");
+        fs.mkdirSync(udPlant, { recursive: true });
+        fs.writeFileSync(path.join(udPlant, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
+        const planted = loadDesk(udPlant, lines.join("\n"));
+        const mePl = await planted.ask("etiuda:branch-identity", true);
+        const joinDestPl = path.join(SHARE, "desks", mePl.id, "join.json");
+        fs.mkdirSync(path.join(SHARE, "desks", mePl.id), { recursive: true });
+        fs.mkdirSync(joinDestPl);
+        let res;
+        try { res = await planted.join("ask", "lamps.ec", "Max G."); } finally { fs.rmdirSync(joinDestPl); }
+        turned = !res || res.askRefused !== "folder-not-writable";
+        detail = turned ? "planted ask omitted folder-not-writable reason" : "still returned folder-not-writable";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15en lifting plant:w2-folder-not-writable turns 15ek red (FAIL 15ek: folder-not-writable reason absent): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
