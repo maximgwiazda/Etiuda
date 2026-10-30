@@ -4499,7 +4499,7 @@ async function takeInvite(text, name, check) {
     chosen = (!picked || picked.canceled || !picked.filePaths || !picked.filePaths[0]) ? "" : picked.filePaths[0];
     if (!chosen) {
       if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-      return Object.assign({}, joinView(), { refused: "silent" });
+      return Object.assign({}, joinView(), { canceled: true });
     }
     const chosenAnswers = await askFolder(chosen);
     if (!chosenAnswers || !inviteFolderBelongs(chosen, parsed)) {

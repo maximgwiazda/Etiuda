@@ -15087,6 +15087,7 @@ What you type stays in this browser only.`;
   }
   function yesTook(v, sent) {
     if (joinRead !== sent) return false;
+    if (v && typeof v === "object" && v.canceled) return false;
     if (v && typeof v === "object" && v.refused) refuseInvite(v);
     else dropInvite();
     return true;

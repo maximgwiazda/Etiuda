@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 147;
+const EXPECTED = 149;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -87,7 +87,7 @@ function loadDesk(ud, src, opts) {
     app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
            whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+    BrowserWindow: inert, Menu: inert, dialog: (opts && opts.dialog) ? opts.dialog : inert, net, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage,
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
@@ -576,10 +576,10 @@ try {
     const silentBlob = inviteBlob({ team: TEAM, folder: silentFolder, lead: lampLead, secret: newSecret() });
     tookV = await Dv.join("invite", silentBlob, "Ola", codeFor(silentBlob));
   });
-  check(tookV && tookV.refused === "silent" && trustOf(Dv) === trustV && !fs.existsSync(silentFolder)
+  check(tookV && tookV.canceled === true && trustOf(Dv) === trustV && !fs.existsSync(silentFolder)
       && touchedV.length > 0 && touchedV.every(n => n.indexOf("promises.") === 0),
     "15av at yes, a folder that does not answer is asked and nothing more: no call that could wait on it with the window behind it, the"
-    + " desk's folder put back, nothing pinned or written: " + (tookV && tookV.refused) + ", touched " + JSON.stringify(touchedV));
+    + " desk's folder put back, nothing pinned or written: " + (tookV && (tookV.canceled ? "canceled" : tookV.refused)) + ", touched " + JSON.stringify(touchedV));
 
   const ringYard = folder("files-ring");
   put(ringYard, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
@@ -770,6 +770,40 @@ try {
   await press("back");
   check(hostHtml.indexOf("<p>" + hostLine + "</p>") >= 0,
     "15at the confirm says which computer the folder is on, in the line under its title: " + hostLine);
+
+  let pickCount = 0;
+  const cancelYard = folder("cancel-yard");
+  put(cancelYard, "etiuda-team.json", teamFile([], { lead: lampLead, signer: lead.privateKey }));
+  const Dcancel = await deskWith("cancel-picker", folder("cancel-picker-own"), null, null, {
+    dialog: {
+      showOpenDialog: async () => {
+        pickCount++;
+        if (pickCount === 1) return { canceled: true, filePaths: [] };
+        return { canceled: false, filePaths: [cancelYard] };
+      }
+    }
+  });
+  const missingYard = path.join(LAB, "gone-cancel-" + crypto.randomBytes(4).toString("hex"), "team");
+  const cancelBlob = inviteBlob({ team: TEAM, folder: missingYard, lead: lampLead, secret: newSecret() });
+  await pageOn(Dcancel);
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, cancelBlob);
+  await press("read");
+  typeFour(codeFor(cancelBlob));
+  await press("invite");
+  const heldAfterCancel = held(), cancelHtml = TJ.teamJoinEmptyHtml();
+  await press("invite");
+  const heldAfterSecondPress = held();
+  check(pickCount === 2
+      && heldAfterCancel && heldAfterCancel.mode === "confirm" && heldAfterCancel.typed === codeFor(cancelBlob)
+      && heldAfterCancel.offer !== null
+      && cancelHtml.indexOf("data-join-check") >= 0
+      && !/ disabled/.test(yesOf(cancelHtml))
+      && cancelHtml.indexOf("could not be reached") < 0
+      && cancelHtml.indexOf("Lamp lead") >= 0
+      && heldAfterSecondPress && heldAfterSecondPress.mode === ""
+      && fs.existsSync(path.join(cancelYard, "desks")),
+    "15ei cancelling the folder picker keeps the confirmation card with the invitation and the typed check code in place, and says nothing; pressing Join again with nothing re-typed takes the invitation");
 
   window.E_HOST = hostOver(fresh7);
   TJ.wireTeamJoin();
@@ -3685,7 +3719,49 @@ try {
     }
   }
 
-  // 15ei: Ask to join with no identity returns reason no-identity and card explains with Linux hint
+  // 15ej: lifting plant:picker-cancel drops the invitation on picker cancel
+  {
+    if (PLANTS_OFF) {
+      skip("15ej lifting plant:picker-cancel drops the invitation on picker cancel");
+    } else {
+      const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
+      const before = fs.readFileSync(joinPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:picker-cancel") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const dir = fs.mkdtempSync(path.join(LAB, "join-plant-cancel-"));
+        const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+        fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+        const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+        const DplantCancel = await deskWith("cancel-plant-desk", folder("cancel-plant-own"), null, null, {
+          dialog: {
+            showOpenDialog: async () => ({ canceled: true, filePaths: [] })
+          }
+        });
+        window.E_HOST = hostOver(DplantCancel);
+        planted.wireTeamJoin();
+        await new Promise(r => setTimeout(r, 30));
+        planted.openJoinPaste();
+        const plantBlob = inviteBlob({ team: TEAM, folder: path.join(LAB, "gone-plant-" + crypto.randomBytes(4).toString("hex")), lead: lampLead, secret: newSecret() });
+        pasted = elOf({ "data-join-paste": "" }, plantBlob);
+        const pressPlanted = act => { const b = elOf({ "data-join": act }); planted.wireTeamJoinEmpty({ querySelectorAll: () => [b] }); return Promise.resolve(b.onclick && b.onclick()); };
+        const typePlanted = val => { const c = elOf({ "data-join-check": "" }, val); planted.wireTeamJoinEmpty({ querySelectorAll: () => [c] }); if (c.oninput) c.oninput(); };
+        await pressPlanted("read");
+        typePlanted(codeFor(plantBlob));
+        await pressPlanted("invite");
+        const heldPlanted = typeof planted.inviteHeld === "function" ? planted.inviteHeld() : null;
+        turned = !!heldPlanted && heldPlanted.mode !== "confirm";
+        detail = turned ? "invitation dropped without guard (mode: " + JSON.stringify(heldPlanted && heldPlanted.mode) + ")" : "invitation still kept";
+      }
+      const same = fs.readFileSync(joinPath).equals(before);
+      check(turned && same, "15ej lifting plant:picker-cancel drops the invitation on picker cancel (FAIL 15ei: invitation not kept on picker cancel): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  // 15ek: Ask to join with no identity returns reason no-identity and card explains with Linux hint
   const safeNoEnc = { isEncryptionAvailable: () => false, encryptString: () => Buffer.from([]), decryptString: () => "" };
   {
     const udNoId = path.join(LAB, "noid");
@@ -3701,11 +3777,11 @@ try {
     const EN_NOID = "Ask to join works once this computer can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.";
     const PL_NOID = "Prośba o dołączenie zadziała, gdy ten komputer będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
     check(askRes && askRes.askRefused === "no-identity" && cardEn.indexOf(escHtml(EN_NOID)) >= 0 && cardPl.indexOf(PL_NOID) >= 0,
-      "15ei ask to join with no identity returns reason no-identity and the card explains in English and Polish: "
+      "15ek ask to join with no identity returns reason no-identity and the card explains in English and Polish: "
       + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOID)) >= 0, pl: cardPl.indexOf(PL_NOID) >= 0 }));
   }
 
-  // 15ej: Ask to join when the folder does not answer returns folder-not-answering
+  // 15el: Ask to join when the folder does not answer returns folder-not-answering
   {
     const udNoFolder = path.join(LAB, "nofolder");
     fs.mkdirSync(udNoFolder, { recursive: true });
@@ -3721,11 +3797,11 @@ try {
     const EN_NOFOLDER = "Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.";
     const PL_NOFOLDER = "Wystarczy ponownie poprosić o dołączenie, gdy folder zespołu będzie osiągalny; teraz ten komputer nie może się z nim połączyć, więc nic nie zapisano.";
     check(askRes && askRes.askRefused === "folder-not-answering" && cardEn.indexOf(escHtml(EN_NOFOLDER)) >= 0 && cardPl.indexOf(PL_NOFOLDER) >= 0,
-      "15ej ask to join when the folder does not answer returns folder-not-answering and card explains: "
+      "15el ask to join when the folder does not answer returns folder-not-answering and card explains: "
       + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOFOLDER)) >= 0, pl: cardPl.indexOf(PL_NOFOLDER) >= 0 }));
   }
 
-  // 15ek: Ask to join when the folder is not writable returns folder-not-writable
+  // 15em: Ask to join when the folder is not writable returns folder-not-writable
   {
     const udNoWrite = path.join(LAB, "nowrite");
     fs.mkdirSync(udNoWrite, { recursive: true });
@@ -3749,14 +3825,14 @@ try {
     const EN_NOWRITE = "Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.";
     const PL_NOWRITE = "Osoba zarządzająca folderem zespołu może pozwolić temu komputerowi na zapis, którego wymaga prośba; do tego czasu nic tu nie zapisano. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.";
     check(askRes && askRes.askRefused === "folder-not-writable" && cardEn.indexOf(escHtml(EN_NOWRITE)) >= 0 && cardPl.indexOf(PL_NOWRITE) >= 0,
-      "15ek ask to join when the folder is not writable returns folder-not-writable and card explains: "
+      "15em ask to join when the folder is not writable returns folder-not-writable and card explains: "
       + JSON.stringify({ refused: askRes && askRes.askRefused, en: cardEn.indexOf(escHtml(EN_NOWRITE)) >= 0, pl: cardPl.indexOf(PL_NOWRITE) >= 0 }));
   }
 
-  // 15el: lifting plant:w2-no-identity turns 15ei red
+  // 15en: lifting plant:w2-no-identity turns 15ek red
   {
     if (PLANTS_OFF) {
-      skip("15el lifting plant:w2-no-identity turns 15ei red");
+      skip("15en lifting plant:w2-no-identity turns 15ek red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -3774,15 +3850,15 @@ try {
         detail = turned ? "planted ask omitted no-identity reason" : "still returned no-identity";
       }
       const same = fs.readFileSync(mainPath).equals(before);
-      check(turned && same, "15el lifting plant:w2-no-identity turns 15ei red (FAIL 15ei: no-identity reason absent): "
+      check(turned && same, "15en lifting plant:w2-no-identity turns 15ek red (FAIL 15ek: no-identity reason absent): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
 
-  // 15em: lifting plant:w2-folder-not-answering turns 15ej red
+  // 15eo: lifting plant:w2-folder-not-answering turns 15el red
   {
     if (PLANTS_OFF) {
-      skip("15em lifting plant:w2-folder-not-answering turns 15ej red");
+      skip("15eo lifting plant:w2-folder-not-answering turns 15el red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -3801,15 +3877,15 @@ try {
         detail = turned ? "planted ask omitted folder-not-answering reason" : "still returned folder-not-answering";
       }
       const same = fs.readFileSync(mainPath).equals(before);
-      check(turned && same, "15em lifting plant:w2-folder-not-answering turns 15ej red (FAIL 15ej: folder-not-answering reason absent): "
+      check(turned && same, "15eo lifting plant:w2-folder-not-answering turns 15el red (FAIL 15el: folder-not-answering reason absent): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
 
-  // 15en: lifting plant:w2-folder-not-writable turns 15ek red
+  // 15ep: lifting plant:w2-folder-not-writable turns 15em red
   {
     if (PLANTS_OFF) {
-      skip("15en lifting plant:w2-folder-not-writable turns 15ek red");
+      skip("15ep lifting plant:w2-folder-not-writable turns 15em red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -3832,7 +3908,7 @@ try {
         detail = turned ? "planted ask omitted folder-not-writable reason" : "still returned folder-not-writable";
       }
       const same = fs.readFileSync(mainPath).equals(before);
-      check(turned && same, "15en lifting plant:w2-folder-not-writable turns 15ek red (FAIL 15ek: folder-not-writable reason absent): "
+      check(turned && same, "15ep lifting plant:w2-folder-not-writable turns 15em red (FAIL 15em: folder-not-writable reason absent): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
