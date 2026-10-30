@@ -512,9 +512,13 @@ function createProgram(opts) {
   }
   const persist = () => { try { save(st); } catch (e) { say("the relay's record could not be kept - " + (e && e.message)); } };
   const revKey = t => ({ teamId: pin.teamId, leadKeyId: pin.lead.keyId, epoch: t.epoch, rev: t.rev });
-  function leadTrust(desks) {
+  function leadTrust(desks, leads) {
     const t = { lead: { keyId: pin.lead.keyId, public: pin.lead.public }, desks: desks || [] };
-    t.leads = chainLeads(); /* plant:chain-trust */
+    const list = chainLeads();
+    if (Array.isArray(leads)) {
+      for (const k of leads) if (k && !list.some(l => l.keyId === k.keyId)) list.push({ keyId: k.keyId, public: k.public });
+    }
+    t.leads = list; /* plant:chain-trust */
     return t;
   }
   const dropSaid = (what, r) => { say(what + ": " + r.said); return r; };
@@ -652,7 +656,12 @@ function createProgram(opts) {
     if (!r.ok) return r;
     if (r.supersedes !== null && has(st.taken, r.supersedes)) {
       const was = st.taken[r.supersedes];
-      if (was.writer !== r.writerKeyId || was.path.toLowerCase() !== r.path.toLowerCase()) return R("outside-place"); /* plant:chain-same */
+      const handover = r.path === TEAM_NAME && r.kind === "file" ? judgedBytes(r.body) : null;
+      const genuineHandover = !!(handover && Array.isArray(handover.chain)
+        && handover.chain.some(k => k.keyId === was.writer)
+        && handover.chain.some(k => k.keyId === r.writerKeyId)
+        && handover.doc && handover.doc.lead && handover.doc.lead.keyId === r.writerKeyId);
+      if (was.path.toLowerCase() !== r.path.toLowerCase() || (was.writer !== r.writerKeyId && !genuineHandover)) return R("outside-place"); /* plant:chain-same */
     }
     return r;
   }
@@ -763,7 +772,7 @@ function createProgram(opts) {
     if (!t.ok) return t;
     const cur = B.revCurrent(st.revs, revKey(t));
     if (!cur.ok) return cur; /* plant:rev-current */
-    const r = judge(b, leadTrust(rosterOf(t.doc)), t.epoch, i.teamKey, st.counters);
+    const r = judge(b, leadTrust(rosterOf(t.doc), t.chain), t.epoch, i.teamKey, st.counters);
     if (!r.ok) return r;
     if (r.path === TEAM_NAME && r.kind === "file") {
       const landed = landTeam(r, null);
