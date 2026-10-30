@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 19;
+const EXPECTED = 20;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -628,6 +628,51 @@ async function run() {
     check(ok,
       "41s a first join with the folder never yet reached shows the not-reached sentence over an empty mirror: "
       + "mirror empty " + mirrorEmpty + ", not-reached sentence said " + notReachedSentence + ", read empty " + readEmpty);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * Leg 11 (41t): A genuine higher conflict sibling reaches the mirror and is heeded
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareT = folder("share-41t");
+    const deskT = newDesk("desk-41t", shareT);
+    const envPath = path.join(deskT.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    env.teamPins = { [TEAM]: LEAD };
+    env.teamShown = { [TEAM]: { lead: "Lead", folder: shareT } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const mirrorDir = path.join(deskT.ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirrorDir, { recursive: true });
+
+    // Canonical team file at rev 1
+    fs.writeFileSync(path.join(shareT, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    // Genuine conflict sibling at higher rev 4
+    fs.writeFileSync(path.join(shareT, "etiuda-team (1).json"), JSON.stringify(teamFile({ epoch: 1, rev: 4 })), "utf8");
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM, folder: shareT, mirror: mirrorDir,
+      pin: LEAD, keys: { 1: K1 }
+    });
+
+    await prog.syncOnce();
+
+    const siblingInMirror = fs.existsSync(path.join(mirrorDir, "etiuda-team (1).json"));
+    let mirrorSibRev = 0;
+    try {
+      mirrorSibRev = JSON.parse(fs.readFileSync(path.join(mirrorDir, "etiuda-team (1).json"), "utf8")).rev;
+    } catch {}
+
+    const d = loadDesk(deskT.ud);
+    d.api.readCatalog();
+    const envAfter = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    const floor = envAfter.teamRevSeen && envAfter.teamRevSeen[TEAM] && envAfter.teamRevSeen[TEAM][LEAD.public];
+    const heededRev = floor ? floor.rev : 0;
+
+    const ok = siblingInMirror && mirrorSibRev === 4 && heededRev === 4;
+    check(ok,
+      "41t a genuine higher conflict sibling reaches the mirror and is heeded: "
+      + "sibling in mirror " + siblingInMirror + " (rev " + mirrorSibRev + "), heeded rev " + heededRev);
   }
 
   /* -------------------------------------------------------------------------------------------------

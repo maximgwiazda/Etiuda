@@ -43,6 +43,28 @@ function signedBytesOf(doc) {
   return Buffer.from(canonJson(copy), "utf8");
 }
 
+function conflictSiblingName(canonical, name) {
+  const c = path.basename(String(canonical || ""));
+  const n = path.basename(String(name || ""));
+  if (!c || !n) return false;
+  const cExt = path.extname(c), nExt = path.extname(n);
+  if (!cExt || cExt.toLowerCase() !== nExt.toLowerCase()) return false;
+  const cStem = c.slice(0, -cExt.length), nStem = n.slice(0, -nExt.length);
+  if (!cStem || nStem.length <= cStem.length) return false;
+  if (nStem.slice(0, cStem.length).toLowerCase() !== cStem.toLowerCase()) return false;
+  const tail = nStem.slice(cStem.length);
+  if (/^( \(\d+\))+$/.test(tail)) return true;
+  if (/^ \(.*conflicted copy.*\)$/i.test(tail)) return true;
+  if (/^-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(tail)) return true;
+  if (/^\.sync-conflict-/.test(tail)) return true;
+  return false;
+}
+
+function isTeamConflict(rel) {
+  const norm = String(rel || "").replace(/\\/g, "/");
+  return norm.indexOf("/") < 0 && conflictSiblingName("etiuda-team.json", norm);
+}
+
 function teamWhole(doc) {
   const lead = doc && doc.lead, sig = doc && doc.sig;
   try {
@@ -281,6 +303,35 @@ function createFolderProgram(opts) {
       }
     }
 
+    // Step 1b: Conflict siblings of team file
+    const teamSiblingsStaged = staged.filter(s => isTeamConflict(s.relPath));
+    for (const sibItem of teamSiblingsStaged) {
+      let text = null;
+      try { text = io.readFile(sibItem.tmpPath, "utf8"); } catch {}
+      if (text) {
+        let doc = null;
+        try { doc = JSON.parse(text); } catch {}
+        if (doc && teamWhole(doc) && doc.id === team) {
+          const leadMatch = pin && doc.lead && doc.lead.public === pin.public && doc.lead.keyId === pin.keyId;
+          if (leadMatch) {
+            const target = path.join(mirror, sibItem.relPath);
+            ensureDir(target, io);
+            io.rename(sibItem.tmpPath, target);
+            applied.push(sibItem.relPath);
+            if (doc.epoch > mirrorEpoch) {
+              mirrorEpoch = doc.epoch;
+            }
+          } else {
+            try { io.unlink(sibItem.tmpPath); } catch {}
+          }
+        } else {
+          try { io.unlink(sibItem.tmpPath); } catch {}
+        }
+      } else {
+        try { io.unlink(sibItem.tmpPath); } catch {}
+      }
+    }
+
     // Step 2: Pending queue re-evaluation
     const stillPending = [];
     for (const item of pending) {
@@ -330,7 +381,7 @@ function createFolderProgram(opts) {
     // Step 3: Process remaining staged files
     for (const item of staged) {
       const relPath = item.relPath;
-      if (relPath === "etiuda-team.json") continue;
+      if (relPath === "etiuda-team.json" || isTeamConflict(relPath)) continue;
       const tmpPath = item.tmpPath;
       let text = null;
       try { text = io.readFile(tmpPath, "utf8"); } catch {
@@ -615,6 +666,7 @@ function folderMirrorOf(userData, teamId) {
 
 module.exports = {
   FOLDER_SYNC_CADENCE_MS,
+  conflictSiblingName,
   createFolderProgram,
   FolderSyncerController,
   startFolderSyncer,
