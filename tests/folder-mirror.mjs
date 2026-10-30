@@ -40,7 +40,9 @@ function check(ok, line) {
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-folder-mirror-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
-const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
+function getShellSrc() {
+  return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+}
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
@@ -63,7 +65,7 @@ function loadDesk(ud, overrides = {}) {
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage,
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
-  const srcToRun = overrides.src || SRC;
+  const srcToRun = overrides.src || getShellSrc();
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     srcToRun + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
@@ -475,13 +477,10 @@ async function run() {
   // 41g: plant:catalog-folder-mirror
   {
     const r = testPlant("catalog-folder-mirror", mainFile, (scratchMain) => {
-      const d = loadDesk(folder("plant-cfg-desk"), { src: fs.readFileSync(scratchMain, "utf8") });
-      const envPath = path.join(d.ud, "desk.json");
-      const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
-      env.teamPins = { [TEAM]: LEAD };
-      env.teamShown = { [TEAM]: { folder: SHARE } };
-      fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
-      const reloaded = loadDesk(d.ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      const ud = folder("plant-cfg-desk");
+      const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: SHARE } } };
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+      const reloaded = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
       // Without the mirror guard, catalogFolder returns SHARE instead of mirror
       return reloaded.api.catalogFolder() === SHARE;
     });

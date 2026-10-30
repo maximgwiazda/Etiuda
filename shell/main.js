@@ -27,6 +27,8 @@ const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
 function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
+let folderSyncerLayer = null;
+function FolderSyncer() { return folderSyncerLayer || (folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs"))); }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
@@ -118,13 +120,55 @@ if (TEST_DOOR && process.env.ETIUDA_TEST_DOCUMENTS) {
   } catch (e) { console.error("etiuda: ETIUDA_TEST_DOCUMENTS could not be honoured - " + e.message); }
 }
 function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Etiuda"); }
-function catalogFolder() {
+function folderMirrorOf(teamId) { return path.join(app.getPath("userData"), "folder-mirror", String(teamId)); }
+function rawCatalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const named = sayJoinPolicy().folder;
   if (named) return named;
+  const set = deskKeys[CATALOG_FOLDER_KEY];
+  return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
+}
+function folderTeamHere() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (relayHere()) return null;
+  const rawFolder = rawCatalogFolder();
+  const j = teamJoin;
+  if (j && j.team && (!j.invite || !j.invite.relay)) {
+    const folder = (j.invite && j.invite.folder) || rawFolder;
+    return { team: j.team, folder: folder, joining: true };
+  }
+  const teams = Object.keys(teamPins).filter(t => {
+    if (teamBarred.has(t)) return false;
+    if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
+    const shown = teamShown[t];
+    if (shown && shown.folder) {
+      return path.resolve(shown.folder) === path.resolve(rawFolder)
+        || path.resolve(shown.folder) === path.resolve(folderMirrorOf(t));
+    }
+    return true;
+  }).sort();
+  if (teams.length) {
+    return { team: teams[0], folder: rawFolder, joining: false };
+  }
+  return null;
+}
+function sharedFolderForWrite() {
+  const relay = relayHere();
+  if (relay) return relayMirrorOf(relay.rt);
+  const ft = folderTeamHere();
+  if (ft) return ft.folder;
+  return catalogFolder();
+}
+function catalogFolder() {
+  if (deskKeys === undefined) deskKeys = readDesk();
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
+  /* On a folder team the catalog folder is the local mirror the syncer keeps. */
+  const ft = folderTeamHere();
+  if (ft) return folderMirrorOf(ft.team); /* plant:catalog-folder-mirror */
+  const named = sayJoinPolicy().folder;
+  if (named) return named;
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -748,8 +792,38 @@ function readCatalog() {
    answers, and at once after a resume, and then read, which also keeps the statistics for the span. */
 let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
 const watchSaid = new Map();                   // folder -> the refusal last logged for it
+let folderSyncer = null;
+function folderSyncerRun(win) {
+  const ft = folderTeamHere();
+  if (!ft) {
+    if (folderSyncer) { folderSyncer.stop(); folderSyncer = null; }
+    return null;
+  }
+  const pin = teamPins[ft.team] || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
+  const mirror = folderMirrorOf(ft.team);
+  try { fs.mkdirSync(mirror, { recursive: true }); } catch {}
+
+  const opts = {
+    team: ft.team,
+    folder: ft.folder,
+    mirror: mirror,
+    pin: pin ? { keyId: pin.keyId, public: pin.public } : null,
+    keys: teamKeys[ft.team] || {},
+    onStatus: (status) => {
+      settleFolder(status.folder, status.answers);
+    },
+    onChange: (change) => {
+      if (theWindow && !theWindow.isDestroyed()) {
+        catalogChanged(theWindow);
+      }
+    }
+  };
+  folderSyncer = FolderSyncer().startFolderSyncer(opts);
+  return folderSyncer;
+}
 function watchCatalog(win) {
   relayRun();
+  folderSyncerRun(win);
   catalogWatchers.forEach(w => { try { w.close(); } catch { /* already gone */ } });
   catalogWatchers = [];
   watchedFolder = catalogFolder();
@@ -940,7 +1014,9 @@ function askFolder(dir) {
 }
 /* Records what an ask found, said in the log once per change, and whether it answered. */
 function settleFolder(dir, ok) {
-  if (dir !== catalogFolder()) return false;
+  const current = catalogFolder();
+  const raw = rawCatalogFolder();
+  if (dir !== current && dir !== raw) return false;
   if (!ok && folderSaidDown !== dir)
     console.error("etiuda: the catalog folder " + dir + " did not answer, so it is read as empty until it does");
   if (ok && folderSaidDown === dir) console.log("etiuda: the catalog folder " + dir + " answers again");
@@ -974,6 +1050,7 @@ function catalogFolderChanged() {
   const win = theWindow;
   /* A different folder is a different team file. A wait begun for the one before must not hide a failure here. */
   sealWaitStop();
+  folderSyncerRun(win);
   console.log("etiuda: catalog folder " + catalogFolder());
   // Somebody has just picked this folder, so it is read as answering while it is asked.
   folderDown = "";
@@ -1510,7 +1587,7 @@ function statsContentKey(out) {
 function statsFile() {
   const me = branchIdentity(false);
   if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   const dir = path.join(root, "desks", me.id);
   const dest = path.join(dir, "stats.estat");
   if (path.dirname(dest) !== dir || path.basename(dest) !== "stats.estat") return null;
@@ -2137,7 +2214,7 @@ function branchStemOk(s) {
 /* Where this desk's own file for a catalog goes, and null where the catalog folder is not there to
    hold it: the folder is never made here, since a share that has gone away would be made again. */
 function branchDest(stem) {
-  const root = catalogFolder(), dir = path.join(root, "desks", deskBranch ? branchIdOf(deskBranch.sign.pub) : "");
+  const root = sharedFolderForWrite(), dir = path.join(root, "desks", deskBranch ? branchIdOf(deskBranch.sign.pub) : "");
   const dest = path.join(dir, stem + ".ec");
   if (path.dirname(dest) !== dir || path.basename(dest) !== stem + ".ec") return null;
   return { root: root, dir: dir, dest: dest };
@@ -2402,7 +2479,7 @@ function teamUse() {
 }
 function inUseFile() {
   const me = branchIdentity(false);
-  return me ? path.join(catalogFolder(), "desks", me.id, IN_USE_STEM + ".ec") : "";
+  return me ? path.join(sharedFolderForWrite(), "desks", me.id, IN_USE_STEM + ".ec") : "";
 }
 function writeClearedInUse() {
   const use = teamUse();
@@ -3275,10 +3352,13 @@ function heedTeam() {
         teamShown[r.team] = Object.assign({}, was, { folder: root }, host ? { relay: host } : {}); /* plant:relay-shown-folder */
         changed = true;
       }
-    } else if ((teamShown[r.team] || {}).folder !== root) {
-      teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: root });
-      delete teamShown[r.team].relay;
-      changed = true;
+    } else {
+      const share = rawCatalogFolder();
+      if ((teamShown[r.team] || {}).folder !== share) {
+        teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: share });
+        delete teamShown[r.team].relay;
+        changed = true;
+      }
     }
   }
   if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch > (teamEpochSeen[r.team] || 0)) {
@@ -3503,7 +3583,7 @@ function sealedOutside() {
   return null;
 }
 function joinFile() {
-  return path.join(catalogFolder(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
+  return path.join(sharedFolderForWrite(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
 }
 /* Signs the request with the desk's key under the join prefix and writes it by replacement; throws what stopped it. */
 function writeJoin(doc) {
@@ -4681,7 +4761,7 @@ function deskEditionRev(catalogId, folder, leadPublic) {
 function folderHeadShown(team) {
   const pin = teamPins[team];
   if (!pin || !pin.public || typeof pin.public !== "string") return null;
-  const folder = (teamShown[team] && teamShown[team].folder) || catalogFolder();
+  const folder = folderMirrorOf(team);
   if (!folder || !folderAnswers(folder)) return null;
   const file = path.join(folder, "etiuda-head.json");
   let text = "";
@@ -5354,7 +5434,7 @@ function historyPutBack(sha, file) {
 // A lock this old is a desk that stopped mid-write, and is taken over.
 const SHARED_LOCK_MS = 30 * 1000;
 function sharedFile(name) {
-  const base = String(name || ""), root = catalogFolder();
+  const base = String(name || ""), root = sharedFolderForWrite();
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base) || !folderAnswers(root)) return "";
   return path.resolve(root, base);
 }
@@ -5432,7 +5512,7 @@ function sharedWrite(name, text, sha, create) {
   let data = null;
   try { data = catalogPayload(text).data; } catch { return { ok: false }; }
   if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
-  const root = catalogFolder();
+  const root = sharedFolderForWrite();
   const seal = sealFor(String(data.id || ""), "", root);
   if (seal && !seal.plain) {
     try { text = JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n"; }
@@ -5955,7 +6035,7 @@ ipcMain.on("etiuda:window", (e, act) => {
    the Windows session, the refusal page's own Close, and the harness's placed windows. */
 const CLOSE_WAIT_MS = 1500;
 let quitting = false;
-app.on("before-quit", () => { quitting = true; try { flushHeldStats(); } catch { /* the last sealed answer stays */ } });
+app.on("before-quit", () => { quitting = true; try { flushHeldStats(); } catch { /* the last sealed answer stays */ } try { FolderSyncer().stopAllFolderSyncers(); } catch {} });
 function closeHeld(win, e) {
   const lost = win.webContents.etiudaLost;
   if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
