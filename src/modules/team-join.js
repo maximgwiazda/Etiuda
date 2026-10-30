@@ -116,9 +116,10 @@ function readTook(v,n,sent){
   }else refuseInvite(v);
   return true;
 }
-/* The shell's answer to a yes: a refusal stays on screen with only its sentence, and anything else lets go. */
+/* The shell's answer to a yes: a refusal stays on screen with only its sentence, a cancelled picker keeps the confirmation card as it was, and anything else lets go. */
 function yesTook(v,sent){
   if(joinRead!==sent) return false;
+  if(v && typeof v==="object" && v.canceled) return false; /* plant:picker-cancel */
   if(v && typeof v==="object" && v.refused) refuseInvite(v);
   else dropInvite();
   return true;
