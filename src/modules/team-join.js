@@ -133,7 +133,7 @@ function joinShown(j){
   if(!j || !(j.file||j.state)) return null;
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
-  if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")};
+  if(j.invite && typeof j.invite==="object") row.invite=Object.assign({lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")}, j.invite.wrapped ? {wrapped:true} : {});
   if(j.withdrawn===true) row.withdrawn=true;
   if(j.withdrawing===true) row.withdrawing=true;
   if(j.unkept===true) row.unkept=true;
@@ -453,7 +453,7 @@ function joinParts(){
       body:meta, acts:[]}; /* plant:g2-card */
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.paused?t("The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
-        :j.invite.relay?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
+        :(j.invite.relay || j.invite.wrapped)?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
@@ -476,7 +476,7 @@ function joinParts(){
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
   if(j && j.state==="refused"){
-    if(j.invite && j.invite.relay) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]}; /* plant:relay-refused-card */
+    if(j.invite) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]}; /* plant:relay-refused-card */
     return {title:t("The lead turned the request down"),
       line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
   }
