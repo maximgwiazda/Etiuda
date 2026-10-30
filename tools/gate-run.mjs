@@ -74,6 +74,38 @@ export const FLOOR = [
   { step: "test checkCatalogRoundTrip", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
 ];
 
+/* THE HYGIENE LEGS (the test architect's C2, 2026-10-30). A leg belongs here only when its failure cannot change what a user's
+   build does: it checks the suite's own bookkeeping (leg ids, chain splits, a tool's selftest), or the wording rules of source
+   text (pl-diacritics, rev-words, log-hygiene). In the release and nightly profiles a red on one is a WARN: it is written in the
+   chain line's reds with class "warn", the run goes on past it and exits 0 if nothing else is red, and the next merge fixes it.
+   Every other red there is class "hold". Area and whole runs do not read this list: there a hygiene red is red.
+   An entry is a leg's file without its extension, with * standing for any run of characters. A name on both FLOOR and HYGIENE
+   is refused at load (exit 78). tests/engine-selftest is not here: it also compares the shipped sample catalog with the bytes a
+   gate is handed and reads tools/release.mjs and tools/pre-commit, so it does not test the harness alone. This list changes by the
+   test architect's word only. */
+export const HYGIENE = [
+  "tests/leg-ids",
+  "tests/chain-split",
+  "tests/plant-hold",
+  "tools/*-selftest",
+  "tests/log-hygiene-selftest",
+  "tests/pl-diacritics",
+  "tests/rev-words",
+];
+
+const hygieneName = file => String(file || "").replace(/\\/g, "/").replace(/^\.\//, "").replace(/\.(mjs|js|cjs)$/, "");
+
+/** Whether a leg's file is on the HYGIENE list. */
+export function isHygiene(file, list = HYGIENE) {
+  const name = hygieneName(file);
+  return list.some(h => new RegExp("^" + String(h).split("*").map(p => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$").test(name));
+}
+
+/** The FLOOR files a HYGIENE list also names, as they are written in FLOOR; empty when the two lists are apart. */
+export function hygieneFloorClash(list = HYGIENE, floor = FLOOR) {
+  return floor.filter(f => isHygiene(f.file, list)).map(f => f.file);
+}
+
 /* The test architect's named core for a product file gates-for maps to no leg, outside the relay (his role file; office
    bcb48c64, 2026-10-28 00:03): seven node legs, about 65 s. It changes by his word only. */
 export const PRODUCT_CORE = [
@@ -160,7 +192,11 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
       cmd: r.cmd,
       exit: r.exit,
       cause: r.cause || "unread",
+      /* "warn" for a HYGIENE leg red in a release or nightly run, "hold" for every other red (the test architect's C2). */
+      class: r.class === "warn" ? "warn" : "hold",
     })),
+    /* True if any red is class hold: only then does a release-profile run hold what builds from it (and exit non-zero). */
+    holds: (record.reds || []).some(r => r.class !== "warn"),
     staleTakenOver: record.staleTakenOver || false,
     /* Which gates ate the run: one entry per gate run, in order, each with its wall-clock and its verdict. */
     gates: (record.gates || []).map(g => ({ gate: g.gate, wallMs: g.wallMs, exit: g.exit })),
@@ -874,6 +910,7 @@ async function main() {
   if (!asked.length) refuse("no npm script was named", "node tools/gate-run.mjs test split-guard");
 
   const mode = asked[0];
+  const inProfile = mode === "release" || mode === "nightly";
 
   if (mode === "wait-lock") {
     console.log("gate-run: waiting for machine lock...");
@@ -1034,12 +1071,16 @@ async function main() {
     if (counts.lines) totalCounts.lines = (totalCounts.lines || 0) + counts.lines;
 
     const isRed = verdict !== 0;
+    /* A HYGIENE leg red in a release or nightly run is a warn: it holds nothing and the run goes on (the test architect's C2).
+       A tree that moved under a gate has no verdict at all, so it is always a hold. */
+    const isWarn = isRed && inProfile && !moved.length && isHygiene(step.file);
     if (isRed) {
       redsList.push({
         gate: gateName(step.file),
         cmd: step.cmd,
         exit: verdict,
         cause: "unread",
+        class: isWarn ? "warn" : "hold",
       });
     }
 
@@ -1093,11 +1134,14 @@ async function main() {
       break;
     }
     before = after;
+    if (res.exit !== 0 && isWarn) { console.log("  gate-run: " + line.gate + " is a HYGIENE leg and red in the " + gateLabel + " profile: a warn, the run goes on"); continue; }
     if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }
   }
 
   const runEnd = new Date().toISOString();
   totalCounts.exitCode = worst;
+  const warns = redsList.filter(r => r.class === "warn");
+  const holds = redsList.some(r => r.class !== "warn");
 
   appendChainLine({
     gate: gateLabel,
@@ -1124,9 +1168,12 @@ async function main() {
                    + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
                  : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
                    + " refused, did not finish, or left a leg not run"
-                 : worst ? ", stopped at a gate exiting " + worst : ", all green"));
+                 : worst ? ", stopped at a gate exiting " + worst
+                 : warns.length ? ", " + warns.length + " HYGIENE warn(s), nothing held" : ", all green"));
 
-  process.exitCode = worst === 0 ? 0 : (worst > 0 && worst < 256 ? worst : 1);
+  for (const w of warns) console.log("WARN " + w.gate + " (exit " + w.exit + "): a HYGIENE leg, red in the " + gateLabel + " profile; it holds nothing and is fixed at the next merge");
+
+  process.exitCode = !holds && worst === 0 ? 0 : (worst > 0 && worst < 256 ? worst : 1);
 }
 
 const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..", "etiuda-runs"));
@@ -1136,6 +1183,10 @@ const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..",
 export const CHAINS_PATH = path.resolve(process.env.ETIUDA_CHAINS_PATH || path.join(RUNS, "chains.jsonl"));
 /* The yield ledger's marks sit beside the chains they mark, so a lab's marks stay in its lab. */
 export const MARKS_PATH = path.resolve(process.env.ETIUDA_MARKS_PATH || path.join(path.dirname(CHAINS_PATH), "marks.jsonl"));
+const bothLists = hygieneFloorClash();
+if (bothLists.length) refuse("a leg is on both FLOOR and HYGIENE: " + bothLists.join(", "),
+  "the floor holds every merge and a hygiene red only warns; a leg is on one list, not both");
+
 if (inside(ROOT, RUNS)) refuse("the runs folder is inside the repository: " + RUNS,
   "these files are a record of runs, not of the tree; put them beside it, not in it");
 fs.mkdirSync(RUNS, { recursive: true });

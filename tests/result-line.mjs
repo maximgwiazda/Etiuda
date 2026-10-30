@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 85;
+const EXPECTED = 89;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -137,6 +137,108 @@ function run(l, names, cwd, extraEnv) {
 const derivedSays = (line, ok, bad, lines) => !!line && line.countsFrom === "ok/FAIL lines"
   && line.counts.ok === ok && line.counts.fail === bad && line.counts.lines === lines;
 const declaredSays = (line, key, value) => !!line && line.counts[key] === value;
+
+/* ---- 18. THE HYGIENE LEGS WARN IN THE RELEASE PROFILE (the test architect's C2, 2026-10-30) ---------------------------
+   A HYGIENE leg (tools/gate-run.mjs, beside FLOOR) checks the suite's own bookkeeping or the wording of source text, so its
+   red cannot change what a user's build does. In a release or nightly run it is class warn: the run goes on past it, holds
+   is false when nothing else is red, and the exit is 0. Any other red is class hold. Area and whole runs do not read the list.
+   Each leg is a pair: 18a and 18b are one lab with and without a product red, 18c is the same hygiene red in an area run, and
+   18d plants a FLOOR name onto the list in the lab's own copy of the tool and expects the refusal, with the unplanted copy as
+   its control. */
+function hygieneLegs() {
+  const RED = prints(0, 1, "process.exit(1);");
+  const chainLines = file => { try { return fs.readFileSync(file, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) { return []; } };
+  const releaseOf = (kind, stubs, chain) => {
+    const l = makeLab(kind, stubs);
+    const pkg = JSON.parse(fs.readFileSync(path.join(l.lab, "package.json"), "utf8"));
+    pkg.scripts = { test: chain.map(n => "node tests/" + n + ".mjs").join(" && ") };
+    fs.writeFileSync(path.join(l.lab, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+    const chains = path.join(l.root, "chains.jsonl");
+    const r = run(l, ["release"], null, {
+      ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+      ETIUDA_LOCK_PATH: path.join(l.root, "machine.lock"),
+      ETIUDA_CHAINS_PATH: chains,
+    });
+    return Object.assign(r, { line: chainLines(chains).pop() || null });
+  };
+  const summary = r => "exit " + r.exit + ", holds " + (r.line ? r.line.holds : "no chain line") + ", reds "
+    + JSON.stringify(r.line ? r.line.reds.map(x => x.gate + ":" + x.class) : []);
+
+  /* (a) tests/chain-split is on the list, so its red is a warn; the product leg after it still ran. */
+  const warnRun = releaseOf("hygiene-warn", { "chain-split": RED, prod: prints(2, 0, "process.exit(0);") }, ["chain-split", "prod"]);
+  const warnReds = warnRun.line ? warnRun.line.reds : [];
+  check(warnRun.exit === 0 && !!warnRun.line && warnRun.line.holds === false && warnReds.length === 1
+    && warnReds[0].gate === "tests-chain-split" && warnReds[0].class === "warn"
+    && /^WARN tests-chain-split/m.test(warnRun.out) && !!warnRun.byGate["tests-prod"] && warnRun.byGate["tests-prod"].exit === 0,
+    "18a a release run with one hygiene red holds nothing: exit 0, the red listed as warn, a WARN line, the next leg still run: "
+    + summary(warnRun));
+
+  /* (b) the same lab with a product red as well: that one is a hold, and the exit is not 0. */
+  const holdRun = releaseOf("hygiene-hold", { "chain-split": RED, prod: prints(2, 0, "process.exit(0);"), prodred: RED }, ["chain-split", "prod", "prodred"]);
+  const holdReds = holdRun.line ? holdRun.line.reds : [];
+  check(holdRun.exit === 1 && !!holdRun.line && holdRun.line.holds === true && holdReds.length === 2
+    && holdReds.some(x => x.gate === "tests-chain-split" && x.class === "warn")
+    && holdReds.some(x => x.gate === "tests-prodred" && x.class === "hold"),
+    "18b the same release run with one product red holds: exit 1, holds true, the product red class hold, the hygiene red still warn: "
+    + summary(holdRun));
+
+  /* (c) the same hygiene red in an area run is red: the merge waits. Editing the leg selects it. */
+  const hArea = makeLab("hygiene-area", {
+    g1: prints(2, 0, "process.exit(0);"),
+    "chain-split": RED,
+  }, {
+    git: true,
+    gatesFor: true,
+    files: {
+      "src/leaf.mjs": "export const leaf = 1;\n",
+      "tests/pick.mjs": "console.log('  ok   pick');\nprocess.exit(0);\n",
+      "tests/links.js": "console.log('  ok   links');\nprocess.exit(0);\n",
+    },
+  });
+  const hAreaPkg = JSON.parse(fs.readFileSync(path.join(hArea.lab, "package.json"), "utf8"));
+  hAreaPkg.scripts = {
+    test: "node tests/plant-hold.mjs && node tests/g1.mjs && node tests/chain-split.mjs && node tests/plant-compare.mjs",
+    g1: "node tests/g1.mjs",
+    "chain-split": "node tests/chain-split.mjs",
+  };
+  fs.writeFileSync(path.join(hArea.lab, "package.json"), JSON.stringify(hAreaPkg, null, 2) + "\n");
+  fs.writeFileSync(path.join(hArea.lab, "tests", "plant-hold.mjs"), 'console.log("  ok   plant-hold");\nprocess.exit(0);\n');
+  fs.writeFileSync(path.join(hArea.lab, "tests", "plant-compare.mjs"), 'console.log("  ok   plant-compare");\nprocess.exit(0);\n');
+  spawnSync("git", ["add", "."], { cwd: hArea.lab });
+  spawnSync("git", ["commit", "-q", "-m", "initial"], { cwd: hArea.lab });
+  fs.appendFileSync(path.join(hArea.lab, "tests", "chain-split.mjs"), "// edited, so the area run selects it\n");
+  const hAreaChains = path.join(hArea.root, "chains.jsonl");
+  const hAreaRun = run(hArea, ["area", "HEAD"], null, {
+    ETIUDA_LOCK_PATH: path.join(hArea.root, "machine.lock"),
+    ETIUDA_CHAINS_PATH: hAreaChains,
+  });
+  const hAreaLine = chainLines(hAreaChains).pop() || null;
+  check(hAreaRun.exit === 1 && "tests-chain-split" in hAreaRun.byGate && hAreaRun.byGate["tests-chain-split"].exit === 1
+    && !/^WARN /m.test(hAreaRun.out) && !!hAreaLine && hAreaLine.holds === true
+    && hAreaLine.reds.length === 1 && hAreaLine.reds[0].class === "hold",
+    "18c the same hygiene red in an area run is red: exit 1, no WARN line, the red class hold: exit " + hAreaRun.exit
+    + ", legs [" + Object.keys(hAreaRun.byGate).join(", ") + "], reds " + JSON.stringify(hAreaLine ? hAreaLine.reds.map(x => x.gate + ":" + x.class) : []));
+
+  /* (d) a FLOOR name planted onto HYGIENE, in the lab's own copy of the tool, is refused at load with exit 78. Control: the
+     copy as shipped loads and lists its gates. The plant must be one the text really took, or the control proves nothing. */
+  const clash = makeLab("hygiene-clash", { prod: prints(1, 0, "process.exit(0);") });
+  const clashPkg = JSON.parse(fs.readFileSync(path.join(clash.lab, "package.json"), "utf8"));
+  clashPkg.scripts = { test: "node tests/prod.mjs" };
+  fs.writeFileSync(path.join(clash.lab, "package.json"), JSON.stringify(clashPkg, null, 2) + "\n");
+  const clashTool = path.join(clash.lab, "tools", "gate-run.mjs");
+  const clashBytes = fs.readFileSync(clashTool, "utf8");
+  const clashEnv = { ETIUDA_LOCK_PATH: path.join(clash.root, "machine.lock") };
+  const clashControl = run(clash, ["release", "--dry-run"], null, clashEnv);
+  const planted = clashBytes.replace("export const HYGIENE = [", 'export const HYGIENE = [\n  "tests/pick",');
+  fs.writeFileSync(clashTool, planted);
+  const clashRun = run(clash, ["release", "--dry-run"], null, clashEnv);
+  fs.writeFileSync(clashTool, clashBytes);
+  check(planted !== clashBytes && clashControl.exit === 0 && /gate\(s\) to run/.test(clashControl.out)
+    && clashRun.exit === 78 && /on both FLOOR and HYGIENE: tests\/pick\.mjs/.test(clashRun.out) && !/gate\(s\) to run/.test(clashRun.out),
+    "18d a FLOOR name planted onto HYGIENE is refused at load with exit 78, and the tool as shipped is not: planted exit "
+    + clashRun.exit + " | " + clashRun.out.trim().split(/\r?\n/).filter(l => /FLOOR/.test(l)).join(" | ")
+    + " | control exit " + clashControl.exit);
+}
 
 async function main() {
   check(fs.existsSync(TOOL), "0 the tool is there: " + TOOL);
@@ -1511,6 +1613,9 @@ async function main() {
   const tjPlants = (fs.readFileSync(path.join(ROOT, "tests", "team-join.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
   check(tjOn.status === 0 && tjOff.status === 0 && tjPlants > 0 && tjOffSkipped === tjPlants && tjOnChecks - tjOffChecks === tjPlants,
     "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly its " + tjPlants + " plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
+
+  /* ---- 18. THE HYGIENE LEGS WARN IN THE RELEASE PROFILE (see hygieneLegs) --------------------- */
+  hygieneLegs();
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
