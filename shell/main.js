@@ -3614,13 +3614,19 @@ function sealMiss(data) {
    One the team file has not reached, where this desk already holds a key, is waited on and not shown. */
 function sealedOutside() {
   heedTeam();
-  for (const f of ecFilesIn(catalogFolder())) {
-    let d = null;
-    try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
-    if (!d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || !Number.isInteger(d.epoch)) continue;
-    if (!(teamKeys[d.team] && teamKeys[d.team][d.epoch])) {
-      if (sealVerdict(d) === "wait") continue;
-      return { file: path.basename(f), team: String(d.team) };
+  const places = [catalogFolder()];
+  const pend = path.join(catalogFolder(), ".pending");
+  if (folderAnswers(pend)) places.push(pend);
+  for (const root of places) {
+    for (const f of ecFilesIn(root)) {
+      let d = null;
+      try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
+      if (!d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || !Number.isInteger(d.epoch)) continue;
+      if (!(teamKeys[d.team] && teamKeys[d.team][d.epoch])) {
+        if (sealVerdict(d) === "wait") continue;
+        console.error("etiuda: " + f + " did not parse as a catalog - sealed for team " + String(d.team) + ", which this desk holds no key for");
+        return { file: path.basename(f), team: String(d.team) };
+      }
     }
   }
   return null;
@@ -6648,7 +6654,7 @@ function exportText(text, from) {
   const id = from && typeof from === "object" ? String(from.id || "") : "";
   if (!id || !teamOpened.has(id)) return text;
   const pin = String(from.sha || "");
-  const seal = PIN_RE.test(pin) ? sealFor(id, pin, catalogFolder()) : null;
+  const seal = PIN_RE.test(pin) ? sealFor(id, pin, sharedFolderForWrite()) : null;
   if (!seal) return null;
   return seal.plain ? text : JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n";
 }

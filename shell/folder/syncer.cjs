@@ -250,11 +250,89 @@ const defaultIO = {
   rename: (from, to) => fs.renameSync(from, to)
 };
 
+function mirrorHasCatalog(mirror, catalogId, io, keyFor) {
+  if (io.exists(path.join(mirror, catalogId + ".ec"))) return true;
+  try {
+    const names = io.readdir(mirror);
+    for (const name of names) {
+      if (name.endsWith(".ec") && name !== "in-use.ec" && name !== "catalog-answer.ec") {
+        try {
+          const content = io.readFile(path.join(mirror, name), "utf8");
+          if (content.indexOf('"' + catalogId + '"') >= 0) return true;
+          let doc = null;
+          try { doc = JSON.parse(content); } catch {}
+          if (doc && doc.kind === "etiuda-sealed") {
+            const key = typeof keyFor === "function" ? keyFor(doc.epoch) : null;
+            if (key) {
+              const inner = openSealed(key, doc);
+              if (inner && inner.indexOf('"' + catalogId + '"') >= 0) return true;
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+  return false;
+}
+
+function teamAuthorizedKeys(folder, mirror, io, pin, authorizedKeys) {
+  const keys = [];
+  if (pin && pin.public) keys.push(pin.public);
+  if (Array.isArray(authorizedKeys)) {
+    for (const k of authorizedKeys) {
+      if (k && keys.indexOf(k) < 0) keys.push(k);
+    }
+  } else if (typeof authorizedKeys === "function") {
+    try {
+      const extra = authorizedKeys();
+      if (Array.isArray(extra)) {
+        for (const k of extra) {
+          if (k && keys.indexOf(k) < 0) keys.push(k);
+        }
+      }
+    } catch {}
+  }
+  for (const dir of [mirror, folder]) {
+    try {
+      const ringFile = path.join(dir, "etiuda-ring.json");
+      if (io.exists(ringFile)) {
+        const doc = JSON.parse(io.readFile(ringFile, "utf8"));
+        if (doc && Array.isArray(doc.keys)) {
+          for (const k of doc.keys) {
+            if (k && k.public && keys.indexOf(k.public) < 0) keys.push(k.public);
+          }
+        }
+      }
+    } catch {}
+    try {
+      const teamFile = path.join(dir, "etiuda-team.json");
+      if (io.exists(teamFile)) {
+        const tDoc = JSON.parse(io.readFile(teamFile, "utf8"));
+        if (tDoc) {
+          if (tDoc.lead && tDoc.lead.public && keys.indexOf(tDoc.lead.public) < 0) keys.push(tDoc.lead.public);
+          if (tDoc.ring && Array.isArray(tDoc.ring.keys)) {
+            for (const k of tDoc.ring.keys) {
+              if (k && k.public && keys.indexOf(k.public) < 0) keys.push(k.public);
+            }
+          }
+          if (Array.isArray(tDoc.handover)) {
+            for (const h of tDoc.handover) {
+              if (h && h.from && h.from.public && keys.indexOf(h.from.public) < 0) keys.push(h.from.public);
+              if (h && h.to && h.to.public && keys.indexOf(h.to.public) < 0) keys.push(h.to.public);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+  return keys;
+}
+
 function createFolderProgram(opts) {
   const team = opts.team;
   const folder = opts.folder;
   const mirror = opts.mirror;
-  let pin = opts.pin;
+  let pin = typeof opts.pin === "function" ? opts.pin() : opts.pin;
   const io = opts.io || defaultIO;
   const logger = typeof opts.logger === "function" ? opts.logger : (msg) => console.log(msg);
   const onStatus = typeof opts.onStatus === "function" ? opts.onStatus : () => {};
@@ -265,6 +343,7 @@ function createFolderProgram(opts) {
   let pending = []; // [{ kind, relPath, epoch, tmpPath, text, doc }]
   const missingCount = new Map(); // relPath -> number of consecutive answered listings missing
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
+  const refusedMtimes = new Map(); // relPath -> { size, mtimeMs }
 
   const fallbackKeys = new Map();
   if (opts.keys) {
@@ -283,8 +362,9 @@ function createFolderProgram(opts) {
 
   const keyFor = typeof opts.keyFor === "function" ? opts.keyFor : (opts.keys ? (ep => fallbackKeys.get(ep) || null) : () => null); /* plant:syncer-live-key */
 
-  // Sweep .staging directory at startup
+  // Sweep .staging and .pending directories at startup
   const stagingDir = path.join(mirror, ".staging");
+  const pendingDir = path.join(mirror, ".pending");
   try {
     if (io.exists(stagingDir)) {
       const entries = io.readdir(stagingDir);
@@ -292,6 +372,12 @@ function createFolderProgram(opts) {
         if (name.endsWith(".tmp")) {
           try { io.unlink(path.join(stagingDir, name)); /* plant:syncer-staging-sweep */ } catch {}
         }
+      }
+    }
+    if (io.exists(pendingDir)) {
+      const entries = io.readdir(pendingDir);
+      for (const name of entries) {
+        try { io.unlink(path.join(pendingDir, name)); } catch {}
       }
     }
   } catch {}
@@ -316,15 +402,26 @@ function createFolderProgram(opts) {
         try { io.unlink(old.tmpPath); /* plant:syncer-pending-reuse */ } catch {}
       }
       pending[existingIdx] = item;
-      return;
-    }
-    while (pending.length >= PENDING_MAX) {
-      const evicted = pending.shift();
-      if (evicted && evicted.tmpPath) {
-        try { io.unlink(evicted.tmpPath); } catch {}
+    } else {
+      while (pending.length >= PENDING_MAX) {
+        const evicted = pending.shift();
+        if (evicted && evicted.tmpPath) {
+          try { io.unlink(evicted.tmpPath); } catch {}
+        }
+        if (evicted && evicted.relPath) {
+          try { io.unlink(path.join(pendingDir, evicted.relPath)); } catch {}
+        }
       }
+      pending.push(item);
     }
-    pending.push(item);
+    if (item.kind === "ec" && item.relPath && (item.text || item.tmpPath)) {
+      try {
+        const dest = path.join(pendingDir, item.relPath);
+        ensureDir(dest, io);
+        const data = item.text || io.readFile(item.tmpPath, "utf8");
+        io.writeFile(dest, data);
+      } catch {}
+    }
   }
 
   function walkFolder(baseDir, sub = "") {
@@ -424,6 +521,7 @@ function createFolderProgram(opts) {
             if (revVal === null || channelVal === null) {
               const used = path.join(folder, "etiuda-team.json");
               logger("etiuda: " + used + " names a rev or a channel this desk does not read, so nothing in it is used");
+              refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
               try { io.unlink(teamStaged.tmpPath); } catch {}
             } else {
               const rev = revVal || 0;
@@ -449,6 +547,7 @@ function createFolderProgram(opts) {
                 ensureDir(mirrorTeamPath, io);
                 io.rename(teamStaged.tmpPath, mirrorTeamPath); /* plant:syncer-team-atomic */
                 applied.push("etiuda-team.json");
+                refusedMtimes.delete(teamStaged.relPath);
                 mirrorEpoch = doc.epoch;
                 mirrorRev = rev;
               } else {
@@ -457,22 +556,27 @@ function createFolderProgram(opts) {
                   : "rev " + rev + ", below " + compRev + " at key number " + doc.epoch;
                 const used = path.join(folder, "etiuda-team.json");
                 logger("etiuda: " + used + " is an older file of team " + doc.id + " than one this desk has heeded (" + why + "), so nothing in it is used");
+                refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
                 try { io.unlink(teamStaged.tmpPath); } catch {}
               }
             }
           } else {
             const used = path.join(folder, "etiuda-team.json");
             logger("etiuda: " + used + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
+            refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
             try { io.unlink(teamStaged.tmpPath); } catch {}
           }
         } else if (doc && !teamWhole(doc)) {
           const used = path.join(folder, "etiuda-team.json");
           logger("etiuda: " + used + " is not a team file whole under its lead's key, so nothing in it is used");
+          refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
           try { io.unlink(teamStaged.tmpPath); } catch {}
         } else {
+          refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
           try { io.unlink(teamStaged.tmpPath); } catch {}
         }
       } else {
+        refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
         try { io.unlink(teamStaged.tmpPath); } catch {}
       }
     }
@@ -530,7 +634,7 @@ function createFolderProgram(opts) {
           let allEditionsPresent = true;
           if (item.doc && Array.isArray(item.doc.editions)) {
             for (const ed of item.doc.editions) {
-              if (ed && ed.catalog && !io.exists(path.join(mirror, ed.catalog + ".ec"))) {
+              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor)) {
                 allEditionsPresent = false;
                 break;
               }
@@ -571,8 +675,11 @@ function createFolderProgram(opts) {
                     } else {
                       if (deskFileGenuine(cat, deskFolder)) genuine = true;
                     }
-                  } else if (cat && cat.kind === "etiuda-catalog" && catalogSigValid(cat, pin && pin.public)) {
-                    genuine = true;
+                  } else if (cat && cat.kind === "etiuda-catalog") {
+                    const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
+                    if (authKeys.some(pub => catalogSigValid(cat, pub))) {
+                      genuine = true;
+                    }
                   }
                 }
               }
@@ -587,9 +694,11 @@ function createFolderProgram(opts) {
             } else if (item.text) {
               io.writeFile(target, item.text);
             }
+            try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
             applied.push(item.relPath);
           } else {
             if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+            try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
           }
         } else {
           stillPending.push(item);
@@ -621,6 +730,11 @@ function createFolderProgram(opts) {
           if (doc.epoch > mirrorEpoch || !key) waitPending = true; /* plant:syncer-epoch-pending */
           if (waitPending) {
             pushPending({ kind: "ec", relPath, epoch: doc.epoch, tmpPath, text });
+            const target = path.join(mirror, relPath);
+            if (io.exists(target)) {
+              try { io.unlink(target); } catch {}
+              applied.push(relPath);
+            }
           } else {
             const decrypted = openSealed(key, doc);
             let genuine = false;
@@ -638,8 +752,11 @@ function createFolderProgram(opts) {
                   } else {
                     if (deskFileGenuine(cat, deskFolder)) genuine = true;
                   }
-                } else if (cat.kind === "etiuda-catalog" && catalogSigValid(cat, pin && pin.public)) {
-                  genuine = true;
+                } else if (cat.kind === "etiuda-catalog") {
+                  const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
+                  if (authKeys.some(pub => catalogSigValid(cat, pub))) {
+                    genuine = true;
+                  }
                 }
               }
             }
@@ -647,6 +764,11 @@ function createFolderProgram(opts) {
             if (!genuine) sigOk = false; /* plant:syncer-edition-sig */
             if (!sigOk) {
               try { io.unlink(tmpPath); } catch {}
+              const target = path.join(mirror, relPath);
+              if (io.exists(target)) {
+                try { io.unlink(target); } catch {}
+                applied.push(relPath);
+              }
               continue;
             }
             const target = path.join(mirror, relPath);
@@ -694,7 +816,7 @@ function createFolderProgram(opts) {
           let waitEditions = false;
           if (doc.editions && Array.isArray(doc.editions)) {
             for (const ed of doc.editions) {
-              if (ed && ed.catalog && !io.exists(path.join(mirror, ed.catalog + ".ec"))) {
+              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor)) {
                 waitEditions = true; /* plant:syncer-head-wait */
                 break;
               }
@@ -710,6 +832,11 @@ function createFolderProgram(opts) {
           }
         } else {
           try { io.unlink(tmpPath); } catch {}
+          const target = path.join(mirror, relPath);
+          if (io.exists(target)) {
+            try { io.unlink(target); } catch {}
+            applied.push(relPath);
+          }
         }
       } else if (/^etiuda-ring.*\.json$/i.test(relPath)) {
         let doc = null;
@@ -842,6 +969,7 @@ function createFolderProgram(opts) {
   }
 
   function syncOnce() {
+    if (typeof opts.pin === "function") pin = opts.pin();
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
@@ -858,7 +986,8 @@ function createFolderProgram(opts) {
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const prev = knownMtimes.get(relPath);
-      if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile)) {
+      const prevRef = refusedMtimes.get(relPath);
+      if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && (io.exists(mirrorFile) || (prevRef && prevRef.size === st.size && prevRef.mtimeMs === st.mtimeMs))) {
         alreadyInMirror = true;
       }
 
