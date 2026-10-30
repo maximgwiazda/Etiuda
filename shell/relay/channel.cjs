@@ -1202,6 +1202,14 @@ function createProgram(opts) {
       path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind, supersedes: was ? was.id : null,
       id: op.id || held || null });
     if (op.place) blob.place = op.place;
+    if (op.rel === TEAM_NAME && typeof op.body === "string") {
+      try {
+        const td = JSON.parse(op.body);
+        if (td && td.channel && typeof td.channel === "object" && typeof td.channel.kind === "string") {
+          blob.channel = { kind: td.channel.kind };
+        }
+      } catch {}
+    }
     return blob;
   }
 
@@ -1845,6 +1853,7 @@ function createChannel(opts) {
     if (!lim.ok) return { lim };
     const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
       del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
+    if (blob.channel) meta.channel = blob.channel;
     if (sealing.byInvite) meta.pub = who.public;
     const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
     if (r.status === 200) { prog.sentOut(op, blob); return { ok: true }; }
