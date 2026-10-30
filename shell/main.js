@@ -6941,20 +6941,20 @@ const SHELL_WORDS = {
   en: { lang: "en", undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
         addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
         restart: "Restart", close: "Close Etiuda", wait: "Wait",
-        teamMeetsInFolder: "This team now meets in a shared folder.", /* draft words: copywriter */
-        openFolder: "Open a folder", /* draft words: copywriter */
-        folderRefusedWrongTeam: "That folder does not hold this team's files, so nothing was changed.", /* draft words: copywriter */
-        folderRefusedWrongLead: "The team file in that folder was not signed by this team's lead, so nothing was changed.", /* draft words: copywriter */
-        folderRefusedLowerRev: "The team file in that folder is older than the current one, so nothing was changed.", /* draft words: copywriter */
+        teamMeetsInFolder: "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.",
+        openFolder: "Open a folder",
+        folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
+        folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
+        folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
         pickTeamFolder: "Choose the shared folder for this team" },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
-        teamMeetsInFolder: "Ten zespół spotyka się teraz w folderze współdzielonym.", /* draft words: copywriter */
-        openFolder: "Otwórz folder", /* draft words: copywriter */
-        folderRefusedWrongTeam: "Ten folder nie zawiera plików tego zespołu, więc nic nie zostało zmienione.", /* draft words: copywriter */
-        folderRefusedWrongLead: "Plik zespołu w tym folderze nie został podpisany przez lidera tego zespołu, więc nic nie zostało zmienione.", /* draft words: copywriter */
-        folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż obecny, więc nic nie zostało zmienione.", /* draft words: copywriter */
+        teamMeetsInFolder: "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
+        openFolder: "Otwórz folder",
+        folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
+        folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
+        folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
         /* The folder picker's title: a draft for the copywriter. */
         pickTeamFolder: "Wybierz folder współdzielony tego zespołu" },
 };

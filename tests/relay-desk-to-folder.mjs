@@ -497,7 +497,7 @@ async function main() {
     deliverTeamDoc: signTeamDoc(s3.movedTeamDoc, s3.lead),
   });
   const r3 = runScenario(plan3);
-  const saidMeets = r3.said.some(s => s.includes("This team now meets in a shared folder."));
+  const saidMeets = r3.said.some(s => s.includes("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
   const leadRow = r3.leads.find(l => l.team === s3.teamId);
   const offersOpen = leadRow && leadRow.needsFolder === true && leadRow.openFolder === "Open a folder";
 
@@ -538,7 +538,7 @@ async function main() {
   const r4 = runScenario(plan4);
 
   const refusedWrongTeam = r4.pickResults[0] && r4.pickResults[0].ok === false;
-  const saidWrongTeam = r4.said.some(s => s.includes("That folder does not hold this team's files, so nothing was changed."));
+  const saidWrongTeam = r4.said.some(s => s.includes("That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is."));
   check(
     refusedWrongTeam && saidWrongTeam && path.resolve(r4.openedDir) !== path.resolve(wrongTeamFolder),
     "945f5 a picked folder with the wrong team id is refused and nothing changes: "
@@ -546,7 +546,7 @@ async function main() {
   );
 
   const refusedWrongLead = r4.pickResults[1] && r4.pickResults[1].ok === false;
-  const saidWrongLead = r4.said.some(s => s.includes("The team file in that folder was not signed by this team's lead, so nothing was changed."));
+  const saidWrongLead = r4.said.some(s => s.includes("The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it."));
   check(
     refusedWrongLead && saidWrongLead && path.resolve(r4.openedDir) !== path.resolve(otherLeadFolder),
     "945f6 a picked folder with another lead's signature is refused and nothing changes: "
@@ -554,7 +554,7 @@ async function main() {
   );
 
   const refusedLowerRev = r4.pickResults[2] && r4.pickResults[2].ok === false;
-  const saidLowerRev = r4.said.some(s => s.includes("The team file in that folder is older than the current one, so nothing was changed."));
+  const saidLowerRev = r4.said.some(s => s.includes("The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one."));
   check(
     refusedLowerRev && saidLowerRev && path.resolve(r4.openedDir) !== path.resolve(lowerRevFolder),
     "945f7 a picked folder with a lower rev is refused and nothing changes: "
@@ -742,7 +742,7 @@ async function main() {
     const p = testMainPlant("plant:folder-not-found-offer", (lines, at) => {
       lines[at] = "        /* plant:folder-not-found-offer */";
     }, Object.assign({}, sc, { deliverTeamDoc: signTeamDoc(sc.movedTeamDoc, sc.lead) }));
-    const turned = p.found && (!p.res.said.some(s => s.includes("This team now meets in a shared folder."))
+    const turned = p.found && (!p.res.said.some(s => s.includes("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."))
       || !(p.res.leads.find(l => l.team === sc.teamId) || {}).needsFolder);
     check(
       turned && p.shaSame,
