@@ -72,13 +72,23 @@ function loadFallbackChecks() {
     const mainPath = path.join(__dirname, "..", "main.js");
     if (!fs.existsSync(mainPath)) return null;
     const src = fs.readFileSync(mainPath, "utf8");
-    const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+    const inert = new Proxy(function () {}, {
+      get: (t, p) => (p === Symbol.iterator ? function* () {} : inert),
+      set: () => true,
+      apply: () => inert
+    });
     const electron = {
       app: inert, BrowserWindow: inert, Menu: inert, dialog: inert, ipcMain: inert, net: inert,
       protocol: inert, session: inert, shell: inert, screen: inert, systemPreferences: inert,
       nativeTheme: { themeSource: "system" }, safeStorage: inert
     };
-    const req = (name) => (name === "electron" ? electron : require(name));
+    const nodeModules = {
+      "electron": electron,
+      "node:fs": fs,
+      "node:path": path,
+      "node:crypto": crypto
+    };
+    const req = (name) => nodeModules[name] || inert;
     const fn = new Function("require", "__dirname", "__filename", "module", "exports", "console",
       src + "\nreturn typeof deskTrustChecks === 'function' ? deskTrustChecks() : null;");
     return fn(req, path.dirname(mainPath), mainPath, { exports: {} }, {}, { log: () => {}, error: () => {}, warn: () => {} });
