@@ -5,7 +5,7 @@ import { listEntryEls } from "./entry-walk.js";
 import { render } from "./render.js";
 import { setEntrySel } from "./mark.js";
 import { applyUiLang } from "./repaint.js";
-import { whenMarkFormed, dialogStanding } from "./empty-mark.js";
+import { whenMarkFormed, markCovered } from "./empty-mark.js";
 import { warmMenu } from "./header-menus.js";
 import { ssGet, ssSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
@@ -47,7 +47,7 @@ function deskLaunch(){
   ssSet("eLaunched","1");
   const region=document.querySelector("#dotField>div");
   if(!region || document.querySelector(".empty-desk")) return null;
-  return launchMark({app:"desk", region:region, still:mgReduceMotion, covered:dialogStanding, phase:fifthPhase,
+  return launchMark({app:"desk", region:region, still:mgReduceMotion, covered:markCovered, phase:fifthPhase,
     ready:new Promise(r=>requestAnimationFrame(()=>r()))});
 }
 

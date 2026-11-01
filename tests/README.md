@@ -726,7 +726,9 @@ stand-in: built at the work area and maximised there (15a, red on the shell befo
 restored rectangle kept when closed maximised (15b), given back at the first restore (15c), and a
 snap left where it lands (15d). 15b to 15d each went red once under a planted fault: the held
 rectangle not passed at close, the restore handler unregistered, the built-size test removed. What
-Windows then paints is the eye's, at the next install.
+Windows then paints is the eye's, at the next install. 15e: the page is told `etiuda:shown` once
+ready-to-show has shown the window, maximised or restored, and never before, so the opening waits for a
+window on screen (red on the shell before the change; lifting `plant:shown-told` turns it red).
 
 ## The debugging switches of an installed desk
 

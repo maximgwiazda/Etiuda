@@ -132,9 +132,24 @@ function whenMarkFormed(fn){
   setTimeout(watch, MARK_QUIET_MS);
 }
 function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone)"); }
+/* THE WINDOW ON SCREEN: a host says whether it was when this load asked, and once when it is; a page
+   with no host, or a host that never says, is on screen. The first ask listens, and boot asks. */
+let eShown=null;
+function windowShown(){
+  if(eShown!==null) return eShown;
+  const h=(typeof window!=="undefined" && window.E_HOST) || null;
+  eShown=!h || typeof h.onShown!=="function" || !!h.shown;
+  if(!eShown) try{ h.onShown(()=>{ eShown=true; }); }catch(e){ eShown=true; }
+  return eShown;
+}
+// An opening waits under a dialog, and for a window not yet on screen, whose frames nobody sees.
+function markCovered(){
+  if(!windowShown()) return true; /* plant:mark-waits-shown */
+  return dialogStanding();
+}
 function startMark(k){
   if(mgReduceMotion()){ drawMark(k, k.ms); markFormed(k); return; }
-  if(dialogStanding()){ k.hold=setTimeout(()=>startMark(k),150); return; }
+  if(markCovered()){ k.hold=setTimeout(()=>startMark(k),150); return; }
   k.ms=0; k.last=0;
   k.raf=requestAnimationFrame(markFrame);
 }
@@ -174,6 +189,7 @@ function syncEmptyMark(host){
 
 export {
   dialogStanding,
+  markCovered,
   syncEmptyMark,
   whenMarkFormed
 };

@@ -20,13 +20,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 113;
+const EXPECTED = 115;
 
-let asserted = 0, failed = 0;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
@@ -1428,6 +1433,46 @@ try {
     check(!N.calls.slice(n0).some(c => c[0] === "setBounds"),
       "15d a restore landing anywhere else, a snap to half the screen, is left where it landed: " + JSON.stringify(N.calls.slice(n0)));
   }
+  /* ---- 15e. the page is told its window is on screen once ready-to-show has shown it, maximised or not, and not
+     before; the opening waits for that word (board 952). Lifting plant:shown-told from a copy of the source leaves a
+     window shown restored unsaid. ---- */
+  {
+    const WA = { x: 0, y: 0, width: 1920, height: 1040 }, SAVED = { x: 200, y: 100, width: 1000, height: 700 };
+    const screen = { getAllDisplays: () => [{ workArea: WA, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }],
+      getPrimaryDisplay: () => ({ workArea: WA }), getDisplayMatching: () => ({ workArea: WA }) };
+    const told = async (maximized, src) => {
+      const steps = [], ev = {};
+      let shown = false, maxed = false;
+      const wc = anything({ send: ch => steps.push("send " + ch) });
+      const window = o => anything({ isDestroyed: () => false, webContents: wc, isMinimized: () => false, isMaximized: () => maxed,
+        isVisible: () => shown, isSnapped: () => false, getBounds: () => ({ x: o.x, y: o.y, width: o.width, height: o.height }),
+        getNormalBounds: () => ({ x: o.x, y: o.y, width: o.width, height: o.height }), setBounds: () => {},
+        maximize: () => { steps.push("maximize"); maxed = true; shown = true; }, focus: () => steps.push("focus"),
+        show: () => { steps.push("show"); shown = true; }, loadFile: () => {},
+        on: (k, fn) => { (ev[k] = ev[k] || []).push(fn); }, once: (k, fn) => { (ev[k] = ev[k] || []).push(fn); } });
+      const S = loadShell({ ready: true, clock: fakeClock(), window, screen, place: Object.assign({ maximized }, SAVED),
+        env: { ETIUDA_TEST_OFFSCREEN: null }, src });
+      for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+      await new Promise(r => setTimeout(r, 40));
+      const before = steps.filter(x => x === "send etiuda:shown").length;
+      (ev["ready-to-show"] || []).forEach(fn => fn());
+      S.ipc("etiuda:window", "close");
+      (ev.close || []).forEach(fn => fn());
+      return [before, steps.filter(x => x !== "send etiuda:maximized").join(",")];
+    };
+    const m = await told(true), r = await told(false);
+    check(JSON.stringify([m, r]) === JSON.stringify([[0, "maximize,focus,send etiuda:shown"], [0, "show,send etiuda:shown"]]),
+      "15e ready-to-show tells the page its window is on screen once it has shown it, maximised or restored, and nothing says so before: "
+      + JSON.stringify([m, r]));
+    if (PLANTS_OFF) skip("15e lifting plant:shown-told leaves a window shown restored unsaid");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:shown-told") >= 0);
+      let lifted = null;
+      if (at >= 0) { lines.splice(at, 1); lifted = await told(false, lines.join("\n")); }
+      check(!!lifted && lifted[1] === "show",
+        "15e lifting plant:shown-told leaves a window shown restored unsaid: " + JSON.stringify(lifted));
+    }
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
@@ -1435,9 +1480,9 @@ try {
   try { realFs.rmSync(LAB, { recursive: true, force: true }); } catch { /* a leftover in the temp folder */ }
 }
 
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

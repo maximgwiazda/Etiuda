@@ -2612,9 +2612,12 @@ function arrivalTests() {
    VM on a clock and a frame queue written here, with one dot flying from x 0 to x 100, so the x it
    is drawn at is the gather's progress. The tour's start and the boot repaint are sliced into the
    same VM and asked when they run. What the eye sees on a first launch is the verifier's frames. */
-function markLab() {
+function markLab(o) {
   const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
-  const mark = read("empty-mark.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  /* o.lift: a plant's line taken out of empty-mark.js before it runs; o.host: the desk host the page reads. */
+  const lift = t => { if (!o || !o.lift) return t; const ls = t.split("\n"), at = ls.findIndex(l => l.indexOf(o.lift) >= 0);
+    if (at < 0) throw new Error(o.lift + " is not in empty-mark.js"); ls.splice(at, 1); return ls.join("\n"); };
+  const mark = lift(read("empty-mark.js")).replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
   const tour = read("tour.js"), open = read("on-open.js");
   const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
@@ -2643,6 +2646,7 @@ function markLab() {
     warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
+  if (o && o.host) sb.E_HOST = o.host;
   require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\nfunction __lay(f){ markLay = f; }\n", sb);
   sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
   const timersTo = t => {
@@ -2767,6 +2771,50 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
     got, [[2600], [900]]);
+
+  /* THE WINDOW ON SCREEN, board 952: a desk's first load is answered before ready-to-show shows its window, and frames
+     come all the same, so an opening that starts at its first frame is partly played to nobody. */
+  const unseen = () => { const h = { shown: false, onShown(fn) { h.tell = fn; } }; return h; };
+  const gatherFrom = (lab, host, shownAt) => {
+    lab.make();
+    let t = 500, drawnBefore = null;
+    for (; t < shownAt; t += hz(250)) { lab.frame(t); if (drawnBefore === null) drawnBefore = lab.x(); }
+    if (host && host.tell) host.tell();
+    let i = 0;
+    while (!(lab.x() >= 100) && i < 2000) { lab.frame(t); t += hz(250); i++; }
+    return [drawnBefore, Math.round(t - hz(250))];
+  };
+  try {
+    const h = unseen(), w = markLab({ host: h }), b = markLab();
+    got = [gatherFrom(w, h, 1000), gatherFrom(b, null, 0)];
+    got = [got[0][0], got[0][1] >= 2100 && got[0][1] <= 2100 + 150 + 2 * hz(250), got[1][1] >= 1600 && got[1][1] <= 1600 + 2 * hz(250)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("952c the empty desk's mark draws nothing while the host says its window is not on screen, and gathers whole once it is, in 1100 ms from then; a page with no host gathers from its first frame",
+    got, [null, true, true]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952c lifting plant:mark-waits-shown starts the gather unseen");
+  else {
+    try {
+      const h = unseen(), w = markLab({ host: h, lift: "plant:mark-waits-shown" });
+      got = gatherFrom(w, h, 1000)[0] !== null;
+    } catch (e) { got = "the lab threw: " + e.message; }
+    eq("952c lifting plant:mark-waits-shown starts the gather unseen", got, true);
+  }
+  try {
+    // The launch is handed the same wait: the opts deskLaunch gives launchMark, read while unseen, shown and under a dialog.
+    const h = unseen(), w = markLab({ host: h });
+    let opts = null, dialog = false;
+    w.sb.launchMark = x => { opts = x; return null; };
+    w.sb.fifthPhase = () => 0;
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".modal:not([hidden]):not(.e-gone)" && dialog ? {} : null;
+    w.sb.deskLaunch();
+    const a = !!opts && opts.covered();
+    h.tell();
+    const b = !!opts && opts.covered();
+    dialog = true;
+    got = [a, b, !!opts && opts.covered()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("952d the desk's launch waits while its window is not on screen and under a dialog, and not once it is shown with none",
+    got, [true, false, true]);
 }
 /* THE LAUNCH MARK: launch-mark.js runs in a VM on a page, a clock, a frame queue and a promise written here (the
    promise settles in the same task, so a timeline is read without awaiting). Its figure is held to fifth.js's, its
@@ -3169,9 +3217,21 @@ function launchMarkTests() {
     // the parts the launch hides take no pointer while hidden, so a click on them falls on nothing unseen
     const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
     const rule = /body\.e-launch #pageScroll,body\.e-launch #pillsSlot\{([^}]*)\}/.exec(tpl);
-    got = [!!rule, !!rule && /opacity:0/.test(rule[1]), !!rule && /pointer-events:none/.test(rule[1])];
+    const op = rule && /opacity:([0-9.]+)/.exec(rule[1]), a = op ? +op[1] : NaN;
+    got = [!!rule, a > 0 && a < 1 / 255, !!rule && /pointer-events:none/.test(rule[1])];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the cards, the intent panel and the category row hidden by the launch take no click", got, [true, true, true]);
+  eq("952e the cards, the intent panel and the category row hidden by the launch take no click, and are painted under the mark at an opacity no screen shows, so the give-way's first frame is not their first paint",
+    got, [true, true, true]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952e lifting plant:launch-work-painted leaves the work unhidden");
+  else {
+    try {
+      const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8").split("\n");
+      const at = tpl.findIndex(l => l.indexOf("plant:launch-work-painted") >= 0);
+      if (at >= 0) tpl.splice(at, 1);
+      got = at >= 0 && !/body\.e-launch #pageScroll,body\.e-launch #pillsSlot\{([^}]*)\}/.test(tpl.join("\n"));
+    } catch (e) { got = "the lab threw: " + e.message; }
+    eq("952e lifting plant:launch-work-painted leaves the work unhidden", got, true);
+  }
 
   try {
     // a screen painted under the launch takes the same drawing, clock and points, and the launch gives way to it
@@ -3198,13 +3258,13 @@ function launchMarkTests() {
     const fn = extractDecl(read("on-open.js"), "function deskLaunch(");
     const desk = (seen, empty) => {
       const calls = [], set = [];
-      const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, dialogStanding: () => false,
+      const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, markCovered: () => false,
         fifthPhase: () => 0, requestAnimationFrame: () => 0, Promise,
         document: { querySelector: s => s === "#dotField>div" ? { id: "field" } : s === ".empty-desk" ? empty : null },
         launchMark: o => { calls.push(o); return {}; } };
       require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
       const o = calls[0];
-      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.dialogStanding, typeof o.ready.then,
+      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.markCovered, typeof o.ready.then,
         o.phase === sb.fifthPhase] : null];
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
