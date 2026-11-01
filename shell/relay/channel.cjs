@@ -591,7 +591,10 @@ function createProgram(opts) {
       if (isCount(m.epoch) && m.epoch > top && !(typeof ctx.keyFor === "function" && ctx.keyFor(m.epoch))) b.above = Math.max(b.above, m.epoch);
     }
   }
-  /* Judged once a catch-up has read the whole list, so a copy on a later page is found before this desk is said to be left. */
+  /* Judged once a catch-up has read the whole list, so a copy on a later page is found before this desk is said to be left.
+     A known limit: the desk cannot verify the handover itself, so "left behind" rests on writes only the relay's current lead
+     can make at those places; closing it would take a handover step readable under the old key, a protocol addition not
+     built. A desk taken off the roster at that key change is told the same, which is true for it too. */
   function judgeBehind() {
     if (!pin || st.stranded) return false;
     const top = teamEpoch();
