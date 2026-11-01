@@ -5258,7 +5258,7 @@ function relayConnect(url, headers, on) {
   ws.onerror = () => {};
   return { send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
 }
-let relayChannel = null, relayAt = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
+let relayChannel = null, relayAt = "", relayAtPin = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
 function relaySoon() {
   clearTimeout(relayTimer);
   relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
@@ -5314,6 +5314,9 @@ function relayRun() {
   const followed = relayChannel && relayChannel.program && typeof relayChannel.program.pinned === "function" ? relayChannel.program.pinned() : null;
   let samePin = false;
   samePin = !!pin && !!followed && !!followed.lead && followed.lead.public === pin.public; /* plant:ho9-keep-channel */
+  /* Or the pin is the one the channel was built with: a desk that refused a handover its program followed (machine policy
+     naming the old lead) keeps its channel, as before item 9, rather than rebuilding it at every run. */
+  if (pin && pin.public === relayAtPin) samePin = true;
   if (at === relayAt && relayChannel && samePin) {
     /* A channel halted on a team the relay refused starts again only at the probe, so its pace is the backoff's. */
     let restart = true;
@@ -5324,6 +5327,7 @@ function relayRun() {
   }
   if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); }
   relayAt = at;
+  relayAtPin = pin ? pin.public : "";
   if (!at) return null;
   if (!deskBranch) {
     teamSay("this desk keeps no key of its own, so it cannot reach the relay of team " + want.team);
