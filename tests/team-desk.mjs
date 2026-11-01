@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 69;
+const EXPECTED = 82;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -93,11 +93,12 @@ function syncFolder(dir) {
         } catch {}
       }
       if (teamId) {
-        const mirror = syncerMod.folderMirrorOf(D.ud, teamId);
+        const SY = D.syncer || syncerMod;
+        const mirror = SY.folderMirrorOf(D.ud, teamId);
         const cacheKey = D.ud + ":" + teamId;
         let prog = deskProgs.get(cacheKey);
         if (!prog || prog.folder !== resolvedFolder) {
-          prog = syncerMod.createFolderProgram({
+          prog = SY.createFolderProgram({
             team: teamId,
             folder: resolvedFolder,
             mirror: mirror,
@@ -133,7 +134,7 @@ function syncFolder(dir) {
 /* One desk: its own user-data folder and desk.json naming the catalog folder, the shell evaluated afresh over it. The
    safeStorage stand-in is reversible and shows nothing of what it holds. While `flaky.down` is "seal" it seals nothing,
    and while it is "all" it opens nothing either, throwing as Electron's does. */
-function loadDesk(ud, flaky) {
+function loadDesk(ud, flaky, plant) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
   const down = () => (flaky && flaky.down) || "";
@@ -151,7 +152,7 @@ function loadDesk(ud, flaky) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + ", teamOf: pin => { const v = editionTeam.get(String(pin || '')); return v === undefined ? null : String(v); } };")(n => (n === "electron" ? electron : nodeRequire(n)),
+    ((plant && plant.src) || SRC) + "\nreturn { " + EXPOSE.join(", ") + ", teamOf: pin => { const v = editionTeam.get(String(pin || '')); return v === undefined ? null : String(v); } };")(n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = async (ch, ...args) => {
     const res = await Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -177,16 +178,16 @@ function loadDesk(ud, flaky) {
     return e.returnValue;
   };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope };
+  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, syncer: plant && plant.syncer };
   allDesks.push(deskObj);
   return deskObj;
 }
-function newDesk(name, folder, flaky) {
+function newDesk(name, folder, flaky, plant) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"),
     JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
-  const d = loadDesk(ud, flaky);
+  const d = loadDesk(ud, flaky, plant);
   syncFolder(folder);
   return d;
 }
@@ -978,6 +979,255 @@ try {
       "14an a desk that missed a handover follows the chain from the key it pinned, in any order in the file, to the file's"
       + " lead: opens " + (chained ? "yes" : "no") + ", the pin the last key " + (pinOf(R) === JSON.stringify(L[4]) ? "yes" : "no")
       + ", epochs kept " + epochs(R, TR));
+  }
+
+  /* ---- a lead key in two hands: a desk never follows a stolen key into a fork, and says when it sees one ------------
+     A genuine handover from a key that had already handed the team on, or two genuine successors of the pinned key in one
+     look, proves that key is in someone else's hands. The legs run whole on the product, and each plant on a copy of
+     shell/main.js or shell/folder/syncer.cjs with its guarding line removed; neither product file is ever written. */
+  {
+    const FORK_LATER = "Someone has used this team's old lead key to hand the team to another key as well";
+    const FORK_TWO = "This team's lead key was handed to two different new keys at once";
+    let forkN = 0;
+    /* A folder team led by key 0, a desk admitted to it under that key, and keys 1 to 3. `plant` is {src} or {syncer}. */
+    async function forkWorld(plant) {
+      const n = "fork-" + (++forkN);
+      const FD = folder(n), D = newDesk(n, FD, null, plant), me = await D.ask("etiuda:branch-identity", true);
+      const T = "t-" + crypto.randomBytes(8).toString("hex"), KT = [0, 1, 2, 3, 4].map(() => crypto.randomBytes(32));
+      const keys = [0, 1, 2, 3].map(() => crypto.generateKeyPairSync("ed25519")), stranger = crypto.generateKeyPairSync("ed25519");
+      const L = keys.map((k, i) => ({ keyId: n + "-lead-" + i, public: pubHex(k.publicKey) }));
+      const step = (from, to, signer) => {
+        const s = { format: 1, kind: "etiuda-team-handover", team: T, from: L[from], to: L[to], sig: { alg: "Ed25519", keyId: L[from].keyId } };
+        s.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(s))]),
+          (signer || keys[from]).privateKey).toString("hex");
+        return s;
+      };
+      const w = { n, FD, D, me, T, KT, L, plant,
+        step: (from, to) => step(from, to),
+        forged: (from, to) => step(from, to, stranger),
+        led: (i, epoch, ho) => JSON.stringify(teamFile({ team: T, catalogs: ["lamp-shop"], keyId: L[i].keyId, public: L[i].public,
+          signer: keys[i].privateKey, epoch: epoch, roster: [entry(me, KT[epoch], epoch, T)], handover: ho })) };
+      w.pin = () => (((w.D.envelope().teamPins || {})[T]) || {}).public;
+      w.opens = async epoch => { put(FD, "lamps.ec", seal(KT[epoch], epoch, A2, T)); return (await read(w.D, "lamps.ec")) === A2.trim(); };
+      w.row = async () => ((((await w.D.ask("etiuda:team-join", "leads")) || {}).leads) || []).find(l => l.team === T) || null;
+      w.said = s => w.D.said.filter(l => l.indexOf(s) >= 0).length;
+      /* Both files written before one sync, as a share's sync tool lands a conflict sibling beside the file. */
+      w.both = (a, b) => {
+        for (const [name, t] of [["etiuda-team.json", a], ["etiuda-team (1).json", b]]) {
+          clock += 1000;
+          fs.writeFileSync(path.join(FD, name), t, "utf8");
+          fs.utimesSync(path.join(FD, name), clock / 1000, clock / 1000);
+        }
+        syncFolder(FD);
+      };
+      /* The desk's shell started afresh over its own record; the syncer of the run before goes with it. */
+      w.restart = () => {
+        allDesks.splice(allDesks.indexOf(w.D), 1);
+        for (const k of Array.from(deskProgs.keys())) if (k.startsWith(w.D.ud + ":")) deskProgs.delete(k);
+        w.D = loadDesk(w.D.ud, null, plant);
+        return w.D;
+      };
+      put(FD, "etiuda-team.json", w.led(0, 1));
+      w.admitted = await w.opens(1) && w.pin() === L[0].public;
+      return w;
+    }
+    /* One after the other: the desk follows key 0 to key 1, then the share's file hands key 0 to key 2. After a restart the
+       same file is put back, then key 0 is handed to key 3. */
+    async function laterScene(plant) {
+      const w = await forkWorld(plant);
+      put(w.FD, "etiuda-team.json", w.led(1, 2, [w.step(0, 1)]));
+      const followed = await w.opens(2) && w.pin() === w.L[1].public;
+      put(w.FD, "etiuda-team.json", w.led(2, 3, [w.step(0, 2)]));
+      const k2Opens = await w.opens(3), pinAfter = w.pin(), saidFirst = w.said(FORK_LATER), rowFirst = await w.row();
+      put(w.FD, "etiuda-team.json", w.led(2, 3, [w.step(0, 2)]));
+      await read(w.D, "lamps.ec");
+      const saidAgain = w.said(FORK_LATER);
+      w.restart();
+      put(w.FD, "etiuda-team.json", w.led(2, 3, [w.step(0, 2)]));
+      await read(w.D, "lamps.ec");
+      const saidRestart = w.said(FORK_LATER), rowRestart = await w.row();
+      put(w.FD, "etiuda-team.json", w.led(3, 3, [w.step(0, 3)]));
+      await read(w.D, "lamps.ec");
+      const saidNew = w.said(FORK_LATER), pinEnd = w.pin();
+      return { w, followed, k2Opens, pinAfter, saidFirst, rowFirst, saidAgain, saidRestart, rowRestart, saidNew, pinEnd };
+    }
+    /* Two at once: the share's file and a conflict sibling hand key 0 to key 1 and to key 2 in one sync. The sibling then
+       goes, and the desk follows the one file left. */
+    async function twoScene(plant) {
+      const w = await forkWorld(plant);
+      w.both(w.led(1, 2, [w.step(0, 1)]), w.led(2, 2, [w.step(0, 2)]));
+      const opened = await w.opens(2), pinAfter = w.pin(), said = w.said(FORK_TWO), row = await w.row();
+      /* What the syncer keeps of the share for the shell to read: the team file it had, and no sibling. */
+      const mdir = syncerMod.folderMirrorOf(w.D.ud, w.T), mt = JSON.parse(fs.readFileSync(path.join(mdir, "etiuda-team.json"), "utf8"));
+      const mirrorTeam = mt.lead.keyId + ":" + mt.epoch + (fs.existsSync(path.join(mdir, "etiuda-team (1).json")) ? " and a sibling" : "");
+      fs.unlinkSync(path.join(w.FD, "etiuda-team (1).json"));
+      syncFolder(w.FD);
+      const resolved = await w.opens(2) && w.pin() === w.L[1].public;
+      return { w, opened, pinAfter, said, row, mirrorTeam, resolved };
+    }
+
+    const ls = await laterScene(null);
+    check(ls.w.admitted && ls.followed && !ls.k2Opens && ls.pinAfter === ls.w.L[1].public && ls.saidFirst === 1
+      && !!ls.rowFirst && !!ls.rowFirst.fork && ls.rowFirst.fork.kind === "later" && ls.rowFirst.fork.seen === false
+      && ls.saidAgain === 1 && ls.saidRestart === 0 && !!ls.rowRestart && !!ls.rowRestart.fork && ls.saidNew === 1 && ls.pinEnd === ls.w.L[1].public,
+      "14bm a desk that followed key 0 to key 1 and then sees a genuine handover of key 0 to key 2 stays on key 1, says so once and"
+      + " gives the team's row the fork for its notice, says nothing more at the next look or after a restart, and says a later"
+      + " handover of key 0 to key 3 as a fork of its own: followed " + ls.followed + ", key 2's epoch opens " + ls.k2Opens
+      + ", pin key 1 " + (ls.pinAfter === ls.w.L[1].public) + ", said " + ls.saidFirst + " then " + ls.saidAgain + ", after the restart "
+      + ls.saidRestart + ", key 3 " + ls.saidNew + ", row " + JSON.stringify(ls.rowFirst && ls.rowFirst.fork));
+
+    const ts = await twoScene(null);
+    check(ts.w.admitted && !ts.opened && ts.pinAfter === ts.w.L[0].public && ts.mirrorTeam === ts.w.L[0].keyId + ":1" && ts.said === 1
+      && !!ts.row && !!ts.row.fork && ts.row.fork.kind === "two" && ts.resolved,
+      "14bn a desk pinned to key 0 whose share holds the team file and a conflict sibling handing key 0 to key 1 and to key 2"
+      + " follows neither and keeps what it has, says so once with the fork on the team's row, and follows the one file left"
+      + " once the sibling goes: epoch 2 opens " + ts.opened + ", pin key 0 " + (ts.pinAfter === ts.w.L[0].public)
+      + ", the syncer's copy " + ts.mirrorTeam + ", said " + ts.said + ", row " + JSON.stringify(ts.row && ts.row.fork) + ", followed afterwards " + ts.resolved);
+
+    /* A forged second successor: key 0's step to key 2 signed by a stranger, after the handover and beside it. */
+    const fa = await forkWorld(null);
+    put(fa.FD, "etiuda-team.json", fa.led(1, 2, [fa.step(0, 1)]));
+    const faFollowed = await fa.opens(2);
+    put(fa.FD, "etiuda-team.json", fa.led(2, 3, [fa.forged(0, 2)]));
+    const faOpens = await fa.opens(3), faRow = await fa.row();
+    const fb = await forkWorld(null);
+    fb.both(fb.led(1, 2, [fb.step(0, 1)]), fb.led(2, 2, [fb.forged(0, 2)]));
+    const fbOpens = await fb.opens(2), fbRow = await fb.row();
+    check(faFollowed && !faOpens && fa.pin() === fa.L[1].public && fa.said(FORK_LATER) + fa.said(FORK_TWO) === 0 && !!faRow && !faRow.fork
+      && fbOpens && fb.pin() === fb.L[1].public && fb.said(FORK_LATER) + fb.said(FORK_TWO) === 0 && !!fbRow && !fbRow.fork,
+      "14bo a second successor whose step key 0 did not sign shows no fork: after the handover its file is refused as before and"
+      + " nothing is said (epoch 3 opens " + faOpens + ", row fork " + !!(faRow && faRow.fork) + "), and beside the genuine file in"
+      + " one sync the desk follows key 1 and says nothing (opens " + fbOpens + ", row fork " + !!(fbRow && fbRow.fork) + ")");
+
+    /* The shell's own look, where a team file is read from the folder itself: both successors written beside each other in
+       the folder the shell reads, past the syncer. */
+    async function heedScene(plant) {
+      const w = await forkWorld(plant);
+      const mirror = syncerMod.folderMirrorOf(w.D.ud, w.T);
+      fs.writeFileSync(path.join(mirror, "etiuda-team.json"), w.led(1, 2, [w.step(0, 1)]), "utf8");
+      fs.writeFileSync(path.join(mirror, "etiuda-team (1).json"), w.led(2, 2, [w.step(0, 2)]), "utf8");
+      await read(w.D, "lamps.ec");
+      return { w, pin: w.pin(), said: w.said(FORK_TWO), row: await w.row() };
+    }
+    const hs = await heedScene(null);
+    check(hs.w.admitted && hs.pin === hs.w.L[0].public && hs.said === 1 && !!hs.row && !!hs.row.fork && hs.row.fork.kind === "two",
+      "14bp the shell reading the team file and a conflict sibling that hand key 0 to two keys follows neither and says so, so a"
+      + " folder read without the syncer holds the same rule: pin key 0 " + (hs.pin === hs.w.L[0].public) + ", said " + hs.said
+      + ", row " + JSON.stringify(hs.row && hs.row.fork));
+
+    /* The agent dismisses the notice: the shell keeps it, a restart included, for that fork only. */
+    const dz = await laterScene(null);
+    await dz.w.D.ask("etiuda:team-join", "fork-seen", dz.w.T);
+    const dzRow = await dz.w.row();
+    dz.w.restart();
+    await read(dz.w.D, "lamps.ec");
+    const dzFresh = await dz.w.row();
+    check(!!dzRow && !!dzRow.fork && dzRow.fork.seen === true && !!dzFresh && !!dzFresh.fork && dzFresh.fork.seen === true,
+      "14bq a dismissed fork notice stays dismissed for that fork, a restart included: seen " + (dzRow && dzRow.fork && dzRow.fork.seen)
+      + ", after the restart " + (dzFresh && dzFresh.fork && dzFresh.fork.seen));
+
+    /* The page: the team's notice in the copywriter's words, English for one fork and Polish for the other, and its
+       dismissal sent to the shell. A DOM as much as a lasting notice touches, as tests/relay-channel.mjs 978 draws it. */
+    {
+      const nodes = new Map();
+      const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
+        classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
+        setAttribute(k, v) { this.attrs[k] = String(v); },
+        appendChild(c) { c.parent = this; this.children.push(c); if (c.id) nodes.set(c.id, c); return c; },
+        remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); if (this.id && nodes.get(this.id) === this) nodes.delete(this.id); this.parent = null; },
+        get firstChild() { return this.children[0] || null; } });
+      const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
+      const pause = ms => new Promise(r => setTimeout(r, ms));
+      const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
+      const asked = [];
+      let shown = { en: "", pl: "" }, dismissed = false, seenAfter = null;
+      try {
+        const pl = await laterScene(null), pt = await twoScene(null);
+        let deskNow = pl, took = null;
+        globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
+          createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
+          querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
+        globalThis.addEventListener = () => {};
+        globalThis.removeEventListener = () => {};
+        window.E_HOST = { teamJoin: (...a) => { asked.push(a[0]); return deskNow.w.D.ask("etiuda:team-join", ...a); }, onTeamJoin: fn => { took = fn; } };
+        const HK = await import(MOD("hooks.js"));
+        HK.hooks.render = () => {};
+        const ST = await import(MOD("storage.js")), TJ = await import(MOD("team-join.js"));
+        const notice = () => { const n = nodes.get("eTeamFork"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
+        ST.lsSet("eUiLang", "en");
+        TJ.wireTeamJoin();
+        await pause(30);
+        shown.en = notice();
+        deskNow = pt;
+        ST.lsSet("eUiLang", "pl");
+        took(await pt.w.D.ask("etiuda:team-join", "state"));
+        await pause(30);
+        shown.pl = notice();
+        ST.lsSet("eUiLang", "en");
+        const buttons = [];
+        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamFork") || { children: [] });
+        if (buttons.length) { buttons[buttons.length - 1].onclick(); dismissed = true; }
+        await pause(30);
+        const r = await pt.w.row();
+        seenAfter = r && r.fork ? r.fork.seen : null;
+      } finally {
+        globalThis.document = was.document;
+        window.E_HOST = was.host;
+        globalThis.addEventListener = was.add;
+        globalThis.removeEventListener = was.remove;
+      }
+      const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
+      const TWO_PL = "Klucz lidera tego zespołu przekazano jednocześnie dwóm różnym nowym kluczom, więc stanowisko nie podąża za żadnym z nich. Katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.";
+      check(shown.en === LATER_EN && shown.pl === TWO_PL && dismissed && asked.indexOf("fork-seen") >= 0 && seenAfter === true,
+        "14by the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and"
+        + " two at once in Polish, and a dismissal reaches the shell: English " + JSON.stringify(shown.en) + ", Polish " + JSON.stringify(shown.pl)
+        + ", dismissed " + dismissed + ", asked " + asked.filter(a => a === "fork-seen").length + ", seen " + seenAfter);
+    }
+
+    /* The plants: each guarding line removed from a copy, the scene that line guards run on it. */
+    const shaOf = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+    async function liftDesk(file, tag, fn) {
+      const src = path.join(ROOT, "shell", file), digest = shaOf(src);
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = fs.readFileSync(src, "utf8").split("\n");
+        const at = lines.findIndex(l => l.indexOf("plant:" + tag + " ") >= 0 || l.endsWith("plant:" + tag + " */"));
+        if (at >= 0) {
+          lines.splice(at, 1);
+          let plant;
+          if (file === "main.js") plant = { src: lines.join("\n") };
+          else {
+            const dir = fs.mkdtempSync(path.join(LAB, "plant-" + tag + "-"));
+            fs.writeFileSync(path.join(dir, "syncer.cjs"), lines.join("\n"), "utf8");
+            plant = { syncer: nodeRequire(path.join(dir, "syncer.cjs")) };
+          }
+          turned = await fn(plant);
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: shaOf(src) === digest, detail };
+    }
+    const lifts = [
+      ["14br", "main.js", "fork-in-desk", "shows no fork, so the desk says nothing of key 0 handed on twice and follows one of two successors",
+        async p => { const a = await laterScene(p), b = await heedScene(p); return a.saidFirst === 0 && b.pin !== b.w.L[0].public; }],
+      ["14bs", "main.js", "fork-once-desk", "says the same fork again after a restart",
+        async p => (await laterScene(p)).saidRestart > 0],
+      ["14bt", "main.js", "fork-was", "forgets the keys the desk followed, so after a restart key 0 handed to key 3 is not said",
+        async p => (await laterScene(p)).saidNew === 0],
+      ["14bu", "main.js", "fork-two-heed", "follows one of two successors the shell reads in its own look",
+        async p => { const h = await heedScene(p); return h.pin === h.w.L[1].public; }],
+      ["14bv", "main.js", "fork-row", "keeps the fork from the team's row, so the notice never shows",
+        async p => { const a = await laterScene(p); return a.saidFirst === 1 && !!a.rowFirst && !a.rowFirst.fork; }],
+      ["14bw", "main.js", "fork-seen", "forgets the dismissal",
+        async p => { const a = await laterScene(p); await a.w.D.ask("etiuda:team-join", "fork-seen", a.w.T); const r = await a.w.row(); return !!r && !!r.fork && r.fork.seen === false; }],
+      ["14bx", "folder/syncer.cjs", "syncer-fork-two", "lets the syncer take one of two successors in one sync into the copy the shell reads",
+        async p => { const t = await twoScene(p); return t.mirrorTeam !== t.w.L[0].keyId + ":1"; }],
+    ];
+    for (const [id, file, tag, what, fn] of lifts) {
+      const r = await liftDesk(file, tag, fn);
+      check(r.turned && r.back, id + " lifting plant:" + tag + " in shell/" + file + " " + what + ", and the product file is never written: "
+        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
+    }
   }
 
   /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */

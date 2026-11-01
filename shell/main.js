@@ -816,7 +816,9 @@ function deskTrustChecks() {
     catalogSigValid,
     branchSignedBytes,
     deskFileGenuine,
-    handedTo
+    handedTo,
+    handedPath,
+    forkSeen: folderForkSeen
   };
 }
 function folderSyncerRun(win) {
@@ -1513,6 +1515,8 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
     + (Object.keys(teamLapseSeen).length ? ',"teamLapseSeen":' + JSON.stringify(teamLapseSeen) : "")
     + (Object.keys(teamRelayGone).length ? ',"teamRelayGone":' + JSON.stringify(teamRelayGone) : "")
+    + (Object.keys(teamWas).length ? ',"teamWas":' + JSON.stringify(teamWas) : "")
+    + (Object.keys(teamForks).length ? ',"teamForks":' + JSON.stringify(teamForks) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
     + (ejectOwed ? ',"ejectOwed":' + JSON.stringify(ejectOwed) : "")
@@ -2078,26 +2082,25 @@ function handedTo(doc, pin) {
   }
   return false;
 }
-/* The keys of the handovers' path, one genuine step at a time, from `pin` to the lead the file names, `pin` first; empty where
-   they do not lead there. */
+/* The keys a team file's handovers pass through from `pin` to the lead it names, `pin` first and that lead left out; empty
+   where they do not lead there. */
 function handedPath(doc, pin) {
   const list = Array.isArray(doc.handover) ? doc.handover : [];
   let at = { keyId: pin.keyId, public: pin.public };
-  const out = [at];
+  const out = [];
   for (let step = 0; step < HANDOVER_STEPS; step++) {
     const s = list.find(x => handoverGenuine(x, doc.id, at));
     if (!s) return [];
-    at = { keyId: s.to.keyId, public: s.to.public };
     out.push(at);
+    at = { keyId: s.to.keyId, public: s.to.public };
     if (at.keyId === doc.lead.keyId && at.public === doc.lead.public) return out;
   }
   return [];
 }
-/* Whether the team files of one look show the team's lead key in two hands (board 931 (7)); shell/relay/blob.cjs forkIn is the
-   same rule. `chain` is the leads this desk followed, oldest first, the one it is pinned to last. A step counts only where it is
-   genuine for that team and signed by that key, so a forged second successor shows nothing. "later": a key already handed on to
-   the next of the chain is shown handing to another, and the desk stays where it is. "two": the key the desk is pinned to is
-   shown handing to two different keys in this look, and it follows neither. Null where there is no such step. */
+/* Whether the team files of one look show the team's lead key in two hands; shell/relay/blob.cjs forkIn is the same rule.
+   `chain` is the leads this desk followed, oldest first, its pin last. A step counts only where it is genuine for that team
+   and signed by that key, so a forged second successor shows nothing. "later": a key already handed on to the next of the
+   chain is shown handing to another. "two": the pin is shown handing to two different keys. Null where there is neither. */
 function forkIn(docs, chain, teamId) {
   const at = Array.isArray(chain) ? chain.filter(k => !!k && typeof k === "object" && !!k.keyId && !!k.public) : [];
   const files = (Array.isArray(docs) ? docs : []).filter(d => !!d && typeof d === "object" && d.id === teamId);
@@ -2978,6 +2981,8 @@ const teamBarred = new Set();                  // teams whose lead the agent for
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamRelayGone = {};                        // team id -> true: the relay refused this desk as removed, so the desk stops asking and says so
+let teamWas = {};                              // team id -> [{keyId, public}]: the leads this desk followed before its pin, oldest first
+let teamForks = {};                            // team id -> {said, last, seen}: the forks of its lead key this desk has said, the latest, and the one the agent dismissed
 let teamPauseSeen = {};                        // team id -> {t: number, paused: boolean}
 let teamNeedsFolder = {};                        // team id -> {rev, lead, mirror}: moved to folder, waiting for folder
 let inUseN = 0;                                // monotonic counter for in-use.ec
@@ -3055,7 +3060,7 @@ function memberStateCopy(state) {
   const keys = {}, src = (state && state.keys) || {};
   Object.keys(src).forEach(t => { keys[t] = Object.assign({}, src[t]); });
   return { pins: pins, keys: keys, barred: Array.isArray(state && state.barred) ? state.barred.slice() : [],
-    join: (state && state.join) || null, was: Object.assign({}, state && state.was) };
+    join: (state && state.join) || null };
 }
 /* What heeding one team file changes for one member. `doc` is the parsed file, or null. `state` is
    {pins, keys, barred, join}: pins is a team id to {keyId, public}, keys is a team id to the epochs
@@ -3072,24 +3077,14 @@ function memberHeed(doc, state, seen) {
   const look = seen || {};
   const out = memberStateCopy(state);
   const said = [];
-  let fork = null;
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
-    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false, fork: fork, passed: [] }, extra);
+    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
   if (!teamWhole(doc)) {
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
   }
   const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = out.pins[doc.id], hadPin = !!pin;
   const handed = hadPin && (pin.keyId !== lead.keyId || pin.public !== lead.public);
-  /* A lead key shown in two hands (board 931 (7)): said, and where the key the desk holds is shown handing to two keys in
-     one look, the desk follows neither and keeps what it has. The files of the look are `seen.look`. */
-  const followed = state && state.was && typeof state.was === "object" && Array.isArray(state.was[doc.id]) ? state.was[doc.id] : [];
-  const chain = hadPin ? followed.filter(k => !!k && k.public !== pin.public).concat([pin]) : [];
-  const look = seen && Array.isArray(seen.look) && seen.look.length ? seen.look : [doc];
-  fork = hadPin ? forkIn(look, chain, doc.id) : null;
-  if (fork) said.push(file + (fork.kind === "two" ? " and another team file seen with it hand the lead key this desk trusts for team " + doc.id + " to two different keys, so this desk follows neither and keeps what it has"
-    : " hands team " + doc.id + " from a lead key this desk already followed on to a key it did not follow, so that older key is in someone else's hands too; this desk stays with the lead it follows")); /* plant:fork-said-desk */
-  if (fork && fork.kind === "two") return ret({ stop: true, team: doc.id }); /* plant:fork-two-desk */
   if (handed && !handedTo(doc, pin)) {
     said.push(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
     return ret({ stop: true, team: doc.id });
@@ -3365,6 +3360,57 @@ function teamSay(line) {
 function fileStamp(file) {
   try { const st = fs.statSync(file); return Math.round(st.mtimeMs) + "|" + st.size; } catch { return "-"; }
 }
+/* Every whole team file in `root`, the canonical one and its conflict siblings. */
+function teamLook(root) {
+  const out = [];
+  for (const name of [TEAM_NAME].concat(teamSiblingFiles(root))) {
+    try {
+      const f = path.join(root, name);
+      if (fs.statSync(f).size > TEAM_MAX) continue;
+      const doc = teamParse(fs.readFileSync(f, "utf8"));
+      if (doc && teamWhole(doc)) out.push(doc);
+    } catch { /* a file that cannot be read shows nothing */ }
+  }
+  return out;
+}
+/* A FORK: the team's lead key seen in two hands, which a genuine handover from a key that had already handed the team on
+   proves. Each is said once, kept for the page's notice until the agent dismisses it, and the page told. A fork is known by
+   a digest of its kind and keys, so no name a file chose is kept or compared. */
+const FORK_SAID_MAX = 16;
+const FORK_KEY_RE = /^[0-9a-f]{64}$/;
+const forkKeyOf = (kind, from, to) => crypto.createHash("sha256")
+  .update([kind, String(from)].concat(to.map(String).sort()).join("\n"), "utf8").digest("hex");
+const forkKept = v => !!v && typeof v === "object" && (v.kind === "later" || v.kind === "two") && FORK_KEY_RE.test(String(v.key))
+  ? { kind: v.kind, key: v.key } : null;
+function deskForkNoted(team, fork) {
+  if (!SEALED_TEAM_RE.test(String(team)) || !fork || (fork.kind !== "later" && fork.kind !== "two")) return;
+  const shown = { kind: fork.kind, key: forkKeyOf(fork.kind, fork.from.public, fork.to.map(k => k.public)) };
+  const key = shown.key, had = teamForks[team] || { said: [], last: null, seen: "" };
+  if (had.said.indexOf(key) >= 0) return; /* plant:fork-once-desk */
+  teamForks[team] = { said: had.said.concat([key]).slice(-FORK_SAID_MAX), last: shown, seen: had.seen };
+  persistDeskEnvelope();
+  teamSay("team " + team + ": " + RelayChannel().FORK_SAID[shown.kind]);
+  sendJoin(theWindow);
+}
+/* The leads a folder team's files are read against for a fork: those this desk followed, then `leads`, the syncer's own with
+   its pin last, or the pin kept here where it names none. */
+function forkChain(team, leads) {
+  const given = Array.isArray(leads) ? leads.filter(k => !!k && typeof k.keyId === "string" && typeof k.public === "string") : [];
+  const pin = given.length ? given[given.length - 1] : teamPins[team];
+  if (!pin) return [];
+  const out = [];
+  for (const k of (teamWas[team] || []).concat(given.slice(0, -1))) {
+    if (k.public !== pin.public && !out.some(o => o.public === k.public)) out.push({ keyId: k.keyId, public: k.public });
+  }
+  out.push({ keyId: pin.keyId, public: pin.public });
+  return out;
+}
+function folderForkSeen(docs, team, leads) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const fork = forkIn(docs, forkChain(team, leads), team);
+  if (fork) deskForkNoted(team, fork);
+  return fork;
+}
 /* Reads the team file where it, the ring or the desk's box has changed since, pins its lead by the rule above and
    keeps this desk's key for its epoch. What it learns is in teamPins and teamKeys, and in the desk envelope. */
 function heedTeam() {
@@ -3385,6 +3431,12 @@ function heedTeam() {
   if (chosen.text != null && chosen.doc == null && chosen.file === file) return;
   const doc = chosen.doc;
   const used = chosen.file;
+  /* The team file and its conflict siblings are one look: a lead key shown in two hands there is said, and where the pinned
+     key is handed to two keys nothing in them is heeded. */
+  if (doc && teamWhole(doc) && teamPins[doc.id]) {
+    const fork = folderForkSeen(teamLook(root), doc.id, null);
+    if (fork && fork.kind === "two") return; /* plant:fork-two-heed */
+  }
   // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
   const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin, epochSeen: teamEpochSeen };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
@@ -3434,6 +3486,11 @@ function heedTeam() {
   if (r.pinned && teamPins[r.team] && teamShown[r.team] && teamShown[r.team].lead) {
     teamShown[r.team] = Object.assign({}, teamShown[r.team]);
     delete teamShown[r.team].lead;
+  }
+  const wasPin = teamPins[r.team];
+  if (r.pinned && wasPin && wasPin.public !== r.state.pins[r.team].public) {
+    const had = teamWas[r.team] || [];
+    teamWas[r.team] = had.concat(handedPath(doc, wasPin).filter(k => !had.some(h => h.public === k.public))).slice(-HANDOVER_STEPS); /* plant:fork-was */
   }
   if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
   if (r.unbar) { teamBarred.delete(r.team); delete teamLeft[r.team]; }
@@ -4987,6 +5044,30 @@ function lapseSeen(team, step) {
   if (v && v.step === step && !v.seen) { teamLapseSeen[team] = v.step + ":" + v.until; persistDeskEnvelope(); } /* plant:lapse-seen */
   return joinView();
 }
+/* The fork of the team's lead key this desk saw last: the relay channel's for the relay team it follows, else the one kept here. */
+function forkLast(team) {
+  const here = relayHere();
+  if (!here || here.team !== team) return teamForks[team] ? teamForks[team].last : null;
+  let f = null;
+  try { f = relayChannel && typeof relayChannel.fork === "function" ? relayChannel.fork() : null; } catch { f = null; }
+  return f && (f.kind === "later" || f.kind === "two") && Array.isArray(f.to) ? { kind: f.kind, key: forkKeyOf(f.kind, f.from, f.to) } : null;
+}
+/* That fork for the team's notice, `seen` once the agent has dismissed it. */
+function forkShown(team) {
+  const f = forkLast(team);
+  return f ? { kind: f.kind, seen: !!teamForks[team] && teamForks[team].seen === f.key } : null;
+}
+/* The agent dismissed the fork notice of `team`: kept for the fork it showed, so a new fork shows again. */
+function forkDismissed(team) {
+  team = String(team || "");
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const f = SEALED_TEAM_RE.test(team) ? forkLast(team) : null;
+  if (f) {
+    teamForks[team] = Object.assign({ said: [], last: null }, teamForks[team], { seen: f.key }); /* plant:fork-seen */
+    persistDeskEnvelope();
+  }
+  return joinView();
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
@@ -5007,6 +5088,8 @@ function leadsView() {
     if (head) row.head = head;
     const lapse = lapseShown(t);
     if (lapse) row.lapse = lapse;
+    const fork = forkShown(t);
+    if (fork) row.fork = fork; /* plant:fork-row */
     if (teamNeedsFolder[t]) {
       row.needsFolder = true;
       row.openFolder = shellWords().openFolder;
@@ -5053,6 +5136,8 @@ function forgetLead(team, left) {
   delete teamLapseSeen[team];
   delete teamPauseSeen[team];
   delete teamRelayGone[team];
+  delete teamWas[team];
+  delete teamForks[team];
   delete teamHeadT[team];
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
@@ -5409,6 +5494,8 @@ function relayRun() {
     },
     /* The team's lapse moved a step, so the page is told now. */
     onLapse: () => sendJoin(theWindow),
+    /* The team's lead key was seen in two hands, so the page is told now. */
+    onFork: () => sendJoin(theWindow),
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
     onInviteEnd: kind => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
@@ -6034,6 +6121,17 @@ function readDesk() {
     });
     if (doc && table(doc.teamRelayGone)) Object.keys(doc.teamRelayGone).forEach(t => {
       if (SEALED_TEAM_RE.test(t) && doc.teamRelayGone[t] === true) teamRelayGone[t] = true;
+    });
+    const leadRow = k => table(k) && typeof k.keyId === "string" && k.keyId.length > 0 && k.keyId.length <= 80 && JOIN_HEX_RE.test(String(k.public));
+    if (doc && table(doc.teamWas)) Object.keys(doc.teamWas).forEach(t => {
+      const v = doc.teamWas[t];
+      if (SEALED_TEAM_RE.test(t) && Array.isArray(v)) teamWas[t] = v.filter(leadRow).slice(-HANDOVER_STEPS).map(k => ({ keyId: k.keyId, public: k.public }));
+    });
+    if (doc && table(doc.teamForks)) Object.keys(doc.teamForks).forEach(t => {
+      const v = doc.teamForks[t];
+      if (!SEALED_TEAM_RE.test(t) || !table(v)) return;
+      const said = Array.isArray(v.said) ? v.said.filter(k => typeof k === "string" && FORK_KEY_RE.test(k)).slice(-FORK_SAID_MAX) : [];
+      teamForks[t] = { said: said, last: forkKept(v.last), seen: typeof v.seen === "string" && FORK_KEY_RE.test(v.seen) ? v.seen : "" };
     });
     if (doc && table(doc.teamNeedsFolder)) Object.keys(doc.teamNeedsFolder).forEach(t => {
       const v = doc.teamNeedsFolder[t];
@@ -6818,13 +6916,13 @@ ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyP
 ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
-// "seen", "forget", "leave" and "lapse-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
+// "seen", "forget", "leave", "lapse-seen" and "fork-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "lapse-seen" ? lapseSeen(file, name)
+  : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
   : op === "pick-moved-folder" ? pickMovedFolder(file, name)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */

@@ -722,13 +722,10 @@ function handedTo(doc, pin) {
   return false;
 }
 
-/* Whether the team files of one look show the team's lead key in two hands (board 931 (7)). `chain` is the leads this desk
-   has followed, oldest first, the one it is pinned to last; `teamId` is the team. A step counts only where it is genuine for
-   that team and signed by that key (handoverGenuine), so a forged second successor shows nothing. Two kinds:
-     "later": a key already handed on to the next one of the chain is shown handing to another, as a K1 to K3 step is once the
-              desk has followed K1 to K2. The desk stays where it is, and the step proves K1 is in someone else's hands.
-     "two":   the key the desk is pinned to is shown handing to two different keys in this look. It follows neither.
-   Null where there is no such step. `to` is the other keys by their public halves, once each. */
+/* Whether the team files of one look show the team's lead key in two hands. `chain` is the leads this desk followed, oldest
+   first, its pin last; a step counts only where it is genuine for that team and signed by that key, so a forged successor
+   shows nothing. "later": a key already handed on to the next of the chain is shown handing to another. "two": the pin is
+   shown handing to two different keys. `to` is the other keys, once each by public half; null where there is neither. */
 function forkIn(docs, chain, teamId) {
   const at = Array.isArray(chain) ? chain.filter(k => k && typeof k === "object" && k.keyId && k.public) : [];
   const files = (Array.isArray(docs) ? docs : []).filter(d => d && typeof d === "object" && d.id === teamId);

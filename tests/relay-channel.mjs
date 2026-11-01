@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 312;
+const EXPECTED = 314;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -8209,27 +8209,58 @@ check(retryPlant.turned && retryPlant.back,
     "932m a desk that followed K1 to K2 and later sees a genuine K1 to K3 file stays on K2 and says the fork once, not at every look, a restart included: followed "
     + ls.toK2.ok + ", K3 file " + ls.first.reason + ", pinned K2 " + (ls.prog.pinned().lead.keyId === ls.k2.keyId) + ", said " + ls.said.length + ", shown " + ls.tolds.length);
 
-  const ts = twoScene(C);
-  check(ts.look.ok === false && ts.look.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId && ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore
-    && ts.again.reason === "fork" && ts.reopened.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId
-    && ts.saidFirst === 1 && ts.said.length === 1 && /two different keys/.test(ts.said[0]) && ts.tolds.length === 1
-    && !!ts.prog.fork() && ts.prog.fork().kind === "two" && ts.prog.fork().from === ts.k1.keyId && sameIds(ts.prog.fork(), [ts.k2.keyId, ts.k3.keyId]),
-    "932n a desk pinned to K1 that sees K1 handed to K2 and to K3 in one look follows neither, keeps its pin and the file it has, and says so once: "
-    + ts.look.reason + ", pinned K1 " + (ts.prog.pinned().lead.keyId === ts.k1.keyId) + ", mirror kept " + (ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore) + ", said " + ts.said.length);
+  try {
+    const ts = twoScene(C);
+    check(ts.look.ok === false && ts.look.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId && ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore
+      && ts.again.reason === "fork" && ts.reopened.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId
+      && ts.saidFirst === 1 && ts.said.length === 1 && /two different new keys/.test(ts.said[0]) && ts.tolds.length === 1
+      && !!ts.prog.fork() && ts.prog.fork().kind === "two" && ts.prog.fork().from === ts.k1.keyId && sameIds(ts.prog.fork(), [ts.k2.keyId, ts.k3.keyId]),
+      "932n a desk pinned to K1 that sees K1 handed to K2 and to K3 in one look follows neither, keeps its pin and the file it has, and says so once: "
+      + ts.look.reason + ", pinned K1 " + (ts.prog.pinned().lead.keyId === ts.k1.keyId) + ", mirror kept " + (ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore) + ", said " + ts.said.length);
+  } catch (e) {
+    check(false, "932n a desk pinned to K1 that sees K1 handed to K2 and to K3 in one look follows neither, keeps its pin and the file it has, and says so once: " + (e && e.message ? e.message : String(e)));
+  }
 
   /* A forged second successor: the K1 to K3 step is not K1's signature. */
-  const fd = forkDesk(C);
-  const strangerF = keyPair(false);
-  const forged = stepBy(fd.tm, fd.k1, fd.k3, strangerF);
-  const fdK2 = fd.prog.loadTeamFile(fd.file(fd.k2, 2, [makeHandoverStep(fd.tm, fd.k1, fd.k2)]));
-  const fdForged = fd.prog.loadTeamFile(fd.file(fd.k3, 3, [forged]));
-  const fp = forkDesk(C);
-  const fpLook = fp.prog.loadTeamFiles([fp.file(fp.k2, 2, [makeHandoverStep(fp.tm, fp.k1, fp.k2)]), fp.file(fp.k3, 2, [stepBy(fp.tm, fp.k1, fp.k3, strangerF)])]);
-  check(fdK2.ok === true && fdForged.ok === false && fdForged.reason === "bad-signature" && fd.prog.pinned().lead.keyId === fd.k2.keyId
-    && fd.said.length === 0 && fd.tolds.length === 0 && fd.prog.fork() === null
-    && fpLook.ok === true && fp.prog.pinned().lead.keyId === fp.k2.keyId && fp.said.length === 0 && fp.tolds.length === 0 && fp.prog.fork() === null,
-    "932o a second successor whose step K1 did not sign shows no fork: refused as before " + fdForged.reason + ", said " + fd.said.length
-    + "; in one look with the genuine K1 to K2 file the desk follows K2 and says nothing, said " + fp.said.length);
+  try {
+    const fd = forkDesk(C);
+    const strangerF = keyPair(false);
+    const forged = stepBy(fd.tm, fd.k1, fd.k3, strangerF);
+    const fdK2 = fd.prog.loadTeamFile(fd.file(fd.k2, 2, [makeHandoverStep(fd.tm, fd.k1, fd.k2)]));
+    const fdForged = fd.prog.loadTeamFile(fd.file(fd.k3, 3, [forged]));
+    const fp = forkDesk(C);
+    const fpLook = fp.prog.loadTeamFiles([fp.file(fp.k2, 2, [makeHandoverStep(fp.tm, fp.k1, fp.k2)]), fp.file(fp.k3, 2, [stepBy(fp.tm, fp.k1, fp.k3, strangerF)])]);
+    check(fdK2.ok === true && fdForged.ok === false && fdForged.reason === "bad-signature" && fd.prog.pinned().lead.keyId === fd.k2.keyId
+      && fd.said.length === 0 && fd.tolds.length === 0 && fd.prog.fork() === null
+      && fpLook.ok === true && fp.prog.pinned().lead.keyId === fp.k2.keyId && fp.said.length === 0 && fp.tolds.length === 0 && fp.prog.fork() === null,
+      "932o a second successor whose step K1 did not sign shows no fork: refused as before " + fdForged.reason + ", said " + fd.said.length
+      + "; in one look with the genuine K1 to K2 file the desk follows K2 and says nothing, said " + fp.said.length);
+  } catch (e) {
+    check(false, "932o a second successor whose step K1 did not sign shows no fork: " + (e && e.message ? e.message : String(e)));
+  }
+
+  /* Two at once in one file: K1's two genuine steps in the handovers of a single team file, in either order. */
+  function oneFileTwo(mod, k3First) {
+    const d = forkDesk(mod);
+    const steps = [makeHandoverStep(d.tm, d.k1, d.k2), makeHandoverStep(d.tm, d.k1, d.k3)];
+    const r = d.prog.loadTeamFile(d.file(d.k3, 2, k3First ? steps.reverse() : steps));
+    return Object.assign(d, { r });
+  }
+  try {
+    const of2 = [oneFileTwo(C, false), oneFileTwo(C, true)];
+    check(of2.every(d => d.r.ok === false && d.r.reason === "fork" && d.prog.pinned().lead.keyId === d.k1.keyId && d.said.length === 1
+        && /two different new keys/.test(d.said[0]) && d.tolds.length === 1 && !!d.prog.fork() && d.prog.fork().kind === "two"),
+      "932u a desk pinned to K1 given one team file whose handovers hand K1 to K2 and to K3 follows neither, in either order of the steps, and says so once: "
+      + of2.map(d => d.r.reason + ", pinned K1 " + (d.prog.pinned().lead.keyId === d.k1.keyId) + ", said " + d.said.length).join("; "));
+  } catch (e) {
+    check(false, "932u a desk pinned to K1 given one team file whose handovers hand K1 to K2 and to K3 follows neither, in either order of the steps, and says so once: " + (e && e.message ? e.message : String(e)));
+  }
+  const pForkFile = await liftChannel("plant:fork-file-two", mod => {
+    const d = oneFileTwo(mod, true);
+    return d.r.ok === true && d.prog.pinned().lead.keyId === d.k3.keyId;
+  });
+  check(pForkFile.turned && pForkFile.back, "932v lifting plant:fork-file-two follows one file that hands K1 to two keys, and the product file is never written: "
+    + pForkFile.detail + ", sha " + (pForkFile.back ? "restored" : "differs"));
 
   const pForkIn = await liftBlobChannel("plant:fork-in", mod => {
     const a = laterScene(mod), b = twoScene(mod);

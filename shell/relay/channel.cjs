@@ -103,14 +103,14 @@ const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 /* The label of the lead's answer to one invitation. One key, 32 bytes, and no place id: the blob's id is the invitation's. */
 const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
+/* A team's lead key shown in two hands: what the desk says once for each fork it sees, the copywriter's words. */
+const FORK_SAID = {
+  later: "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.",
+  two: "This team's lead key was handed to two different new keys at once, so this desk follows neither. The catalogs on it stay as they are. Tell the team's lead about it.",
+};
+const FORKS_MAX = 64, FORKS_TO_MAX = 16;
 /* The page shows this while a relay request waits. After the one upload the channel says the same line, once, where an
    enrolment fault would have been said. */
-/* A team's lead key shown in two hands (board 931 (7)): what the desk says once for each fork it sees. */
-const FORK_SAID = {
-  later: "A team file hands the lead key this desk followed from to a key this desk did not follow, so that older key is in someone else's hands too. This desk stays with the lead it follows.", /* draft words: copywriter */
-  two: "The team's lead key has been handed to two different keys at once. This desk follows neither, and keeps the lead and the catalog it has.", /* draft words: copywriter */
-};
-const FORKS_MAX = 64;
 const WAITING_SAID = "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.";
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
@@ -554,7 +554,7 @@ function createProgram(opts) {
   /* A fork said once: its key, kept with the record, so a later look at the same files says nothing more. The latest fork
      stays for the shell to show. */
   function noteFork(f) {
-    const shown = { kind: f.kind, from: f.from.keyId, to: f.to.map(k => k.keyId) };
+    const shown = { kind: f.kind, from: f.from.keyId, to: f.to.slice(0, FORKS_TO_MAX).map(k => k.keyId) };
     const key = forkKey(shown);
     if (!st.fork || forkKey(st.fork) !== key) st.fork = shown;
     if (has(st.forks, key)) return; /* plant:fork-once */
@@ -586,9 +586,11 @@ function createProgram(opts) {
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
     const lead = doc.lead;
     const leadDiffers = !lead || typeof lead !== "object" || lead.keyId !== pin.lead.keyId || lead.public !== pin.lead.public;
-    /* A file that hands a key this desk already followed on to another than the one it followed proves that key is in
-       someone else's hands. It is refused as any unhanded lead is, and the fork is said once. */
-    if (leadDiffers && !B.handedTo(doc, pin.lead)) { const f = forkIn([doc]); if (f) noteFork(f); } /* plant:fork-later */
+    /* A file whose genuine handovers hand one key on to two others proves that key is in someone else's hands, whatever
+       else it holds: the fork is said once, and where the key is this desk's pin the file is not followed. */
+    const fork = forkIn([doc]);
+    if (fork) noteFork(fork); /* plant:fork-later */
+    if (fork && fork.kind === "two") return { ok: false, reason: "fork", said: FORK_SAID.two, served: false }; /* plant:fork-file-two */
     if (leadDiffers && !B.handedTo(doc, pin.lead)) return R("bad-signature"); /* plant:team-handover */
     const signerPub = leadDiffers ? (lead && lead.public) : pin.lead.public;
     if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
@@ -2369,7 +2371,7 @@ function createChannel(opts) {
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
-  SESSION_KEEP_MS, WAITING_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
+  SESSION_KEEP_MS, WAITING_SAID, FORK_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
   pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
