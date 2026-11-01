@@ -31,6 +31,16 @@ let folderSyncerLayer = null;
 function FolderSyncer() {
   return folderSyncerLayer || (folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs")));
 }
+/* Why the folder mirror's syncer could not start on this desk, or "" while it can (Argon's updates review of 2026-11-01,
+   finding 1): a desk whose syncer does not run reads the shared folder itself, as it did before the mirror, and says
+   why once, rather than reading an empty mirror and taking itself for no member of its team. */
+let folderSyncerBroken = "";
+function folderSyncerFailed(e) {
+  const why = String(e && e.message || e || "unknown").split("\n")[0];
+  if (folderSyncerBroken === why) return;
+  folderSyncerBroken = why;
+  teamSay("the shared folder's local copy could not be kept on this desk, so it reads the shared folder itself: " + why);
+}
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
@@ -176,6 +186,7 @@ function catalogFolder() {
   if (need && need.mirror) return need.mirror;
   /* On a folder team the catalog folder is the local mirror the syncer keeps. */
   const ft = folderTeamHere();
+  if (ft && !ft.joining && folderSyncerBroken) return ft.folder; /* plant:syncer-broken-share */
   if (ft && !ft.joining) return folderMirrorOf(ft.team); /* plant:catalog-folder-mirror */
   if (ft && ft.joining) return ft.folder;
   const set = deskKeys[CATALOG_FOLDER_KEY];
@@ -825,6 +836,8 @@ function folderSyncerRun(win) {
     if (folderSyncer) { folderSyncer.stop(); folderSyncer = null; }
     return null;
   }
+  /* A syncer that failed once stays off until the desk restarts, so the desk does not swing between share and mirror. */
+  if (folderSyncerBroken) return null;
   const pin = teamPins[ft.team] || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
   const mirror = folderMirrorOf(ft.team);
   try { fs.mkdirSync(mirror, { recursive: true }); } catch {}
@@ -845,10 +858,16 @@ function folderSyncerRun(win) {
       }
     }
   };
+  opts.onFail = (err) => {
+    if (folderSyncer) { try { folderSyncer.stop(); } catch { /* already gone */ } folderSyncer = null; }
+    folderSyncerFailed(err);
+    if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
+  };
   try {
     folderSyncer = FolderSyncer().startFolderSyncer(opts);
-  } catch {
+  } catch (e) {
     folderSyncer = null;
+    folderSyncerFailed(e); /* plant:syncer-start-said */
   }
   return folderSyncer;
 }
