@@ -15033,6 +15033,7 @@ What you type stays in this browser only.`;
     onJoinPainted: () => onJoinPainted,
     openJoinPaste: () => openJoinPaste,
     paintJoin: () => paintJoin,
+    pickMovedFolder: () => pickMovedFolder,
     teamCanJoin: () => teamCanJoin,
     teamJoinEmptyHtml: () => teamJoinEmptyHtml,
     teamJoinShown: () => teamJoinShown,
@@ -15407,6 +15408,7 @@ What you type stays in this browser only.`;
         const fork = forkKept(l.fork);
         if (fork) row.fork = fork;
         if (l.stranded && typeof l.stranded === "object") row.stranded = { seen: l.stranded.seen === true };
+        if (l.needsFolder === true) row.needsFolder = true;
         return row;
       }) : []
     };
@@ -15834,6 +15836,23 @@ What you type stays in this browser only.`;
     return joinAsk("leave", team).then((v) => {
       if (typeof then === "function") then();
       return v;
+    });
+  }
+  function pickMovedFolder(team, then) {
+    team = String(team || "");
+    if (!team || !eHasJoin()) return Promise.resolve(null);
+    return ePickCatalogFolder(t("Choose the team's shared folder")).then((dir) => {
+      if (!dir) return null;
+      let asked;
+      try {
+        asked = Promise.resolve(eHost().teamJoin("pick-moved-folder", team, dir));
+      } catch (e) {
+        asked = Promise.reject(e);
+      }
+      return asked.then((r) => joinAsk("state").then(() => {
+        if (typeof then === "function") then();
+        return r;
+      }), () => null);
     });
   }
 
@@ -30712,7 +30731,8 @@ What you type stays in this browser only.`;
     ];
     if (l.head) notes.push(teamHeadNote(l.head));
     if (l.lapse) notes.push(lapseNote(l.lapse));
-    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
+    if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
+    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
   var leaveHold = "";
   function leaveThisTeam(team) {
@@ -30737,6 +30757,11 @@ What you type stays in this browser only.`;
   function wireTeamRows(box) {
     box.querySelectorAll("[data-leave-team]").forEach((b) => {
       b.onclick = () => leaveThisTeam(b.getAttribute("data-leave-team"));
+    });
+    box.querySelectorAll("[data-team-pick-folder]").forEach((b) => {
+      b.onclick = () => pickMovedFolder(b.getAttribute("data-team-pick-folder"), () => {
+        if (document.getElementById("setBody")) paintSettings();
+      });
     });
   }
   function settingsBodyHtml() {

@@ -3,7 +3,7 @@
    acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
    lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. An
    invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
-import { eHost, eOnCatalogCopy } from "./host.js";
+import { eHost, eOnCatalogCopy, ePickCatalogFolder } from "./host.js";
 import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { wholeThingEmpty } from "./app-state.js";
@@ -322,6 +322,7 @@ function joinTook(v,changed){
              const fork=forkKept(l.fork);
              if(fork) row.fork=fork;
              if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};
+             if(l.needsFolder===true) row.needsFolder=true; /* plant:needs-folder-kept */
              return row;
            }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
@@ -720,5 +721,19 @@ function openJoinBubble(){
 function forgetTeamLead(team,then){
   return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
+/* Open a folder, for a team that moved to a shared folder this desk did not find: the shell's dialog, then the shell checks
+   the folder holds this team's file from its lead and follows it, or says why not. Its answer is no join view, so the view
+   is asked for again. */
+function pickMovedFolder(team,then){
+  team=String(team||"");
+  if(!team || !eHasJoin()) return Promise.resolve(null);
+  return ePickCatalogFolder(t("Choose the team's shared folder")).then(dir=>{
+    if(!dir) return null;
+    let asked;
+    try{ asked=Promise.resolve(eHost().teamJoin("pick-moved-folder",team,dir)); } /* plant:pick-moved-call */
+    catch(e){ asked=Promise.reject(e); }
+    return asked.then(r=>joinAsk("state").then(()=>{ if(typeof then==="function") then(); return r; }),()=>null);
+  });
+}
 
-export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

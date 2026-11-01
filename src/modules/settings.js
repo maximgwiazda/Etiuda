@@ -21,7 +21,7 @@ import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared } from "./host.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, joinDoorButton, openJoinPaste } from "./team-join.js";
+import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -157,9 +157,11 @@ function teamRowHtml(l,status,bar){
     l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */
+  if(l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.filter(Boolean).map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
+    +(l.needsFolder?'<button type="button" class="btn" data-team-pick-folder="'+esc(l.team)+'">'+esc(t("Open a folder"))+'</button>':'') /* plant:needs-folder-button */
     +(l.policy?'':'<button type="button" class="btn danger" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
     +'</div></div>';
 }
@@ -183,6 +185,9 @@ function leaveThisTeam(team){
 function wireTeamRows(box){
   box.querySelectorAll("[data-leave-team]").forEach(b=>{
     b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"));
+  });
+  box.querySelectorAll("[data-team-pick-folder]").forEach(b=>{
+    b.onclick=()=>pickMovedFolder(b.getAttribute("data-team-pick-folder"),()=>{ if(document.getElementById("setBody")) paintSettings(); }); /* plant:needs-folder-press */
   });
 }
 function settingsBodyHtml(){
