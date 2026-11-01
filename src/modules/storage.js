@@ -184,6 +184,13 @@ function eDeskRefused(){
     return Array.isArray(v) ? v.filter(x=>x && typeof x.kept==="string" && x.kept) : [];
   }catch(e){ return []; }
 }
+/* {app, schema} of a desk a later Etiuda saved, which the host leaves alone, or null. */
+function eDeskNewer(){
+  try{
+    const v=(E_DESK && typeof E_DESK.host.deskNewer==="function") ? JSON.parse(E_DESK.host.deskNewer()||"null") : null;
+    return (v && typeof v==="object" && Number.isInteger(v.schema)) ? { app:String(v.app||""), schema:v.schema } : null;
+  }catch(e){ return null; }
+}
 function eDeskRefusedSeen(){
   try{ if(E_DESK && typeof E_DESK.host.deskRefusedSeen==="function") E_DESK.host.deskRefusedSeen(); }catch(e){}
 }
@@ -362,6 +369,7 @@ export {
   eDeskFileShown,
   eDeskHome,
   eHomeless,
+  eDeskNewer,
   eDeskRefused,
   eDeskRefusedSeen,
   eNsFor,

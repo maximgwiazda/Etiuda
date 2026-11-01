@@ -554,6 +554,7 @@ function runUnitTests() {
   emptyBandTests();
   menuWarmTests();
   ecTypeNameTests();
+  installerUpdateTests();
   pageWatchTests();
   recoveryWindowTests();
   shippedFlagTests();
@@ -3588,6 +3589,69 @@ function nsisInstallWrites(root, cfg) {
   }
   return { include, assoc: assoc.length, writes };
 }
+/* UPDATES 8, THE INSTALLER'S HALF: Etiuda is asked to close and never stopped, the installer says so in the copywriter's words,
+   and an update leaves the installed files in place until the new ones are copied. Read as text from shell/installer.nsh,
+   beside electron-builder's own templates, which call the two macros in place of their own steps; then each plant lifted
+   from the text, and both macros inserted under makensis's preprocessor, which expands what LogicLib writes of them. */
+function installerUpdateTests() {
+  const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
+  const tpl = n => fs.readFileSync(path.join(lib, "templates", "nsis", n), "utf8");
+  const macro = (text, name) => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
+  const EN = "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: while a conversation is in progress, Etiuda asks first. The installation carries on once it has closed; if it stays open, close it by hand and press Retry.";
+  const PL = "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: jeśli trwa rozmowa, Etiuda najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę.";
+  const asks = text => {
+    const m = macro(text, "customCheckAppRunning");
+    return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
+      !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R9"/.test(m),
+      /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 2\r?\n\s*Quit\b/.test(m)];
+  };
+  const keeps = text => {
+    const m = macro(text, "customRemoveFiles");
+    return [!!m, /\$\{IfNot\} \$\{isUpdated\}[^\n]*\r?\n\s*SetOutPath \$TEMP\r?\n\s*RMDir \/r \$INSTDIR\r?\n\s*\$\{EndIf\}/.test(m),
+      (m.match(/RMDir|Delete|Rename/g) || []).length];
+  };
+  let nsh = "", got;
+  try { nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
+  try {
+    const check = tpl(path.join("include", "allowOnlyOneInstallerInstance.nsh"));
+    got = asks(nsh).concat([/!ifmacrodef customCheckAppRunning\r?\n\s*!insertmacro customCheckAppRunning\r?\n\s*!else/.test(check)]);
+  } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
+  eq("1152a the installer asks a running Etiuda to close with taskkill and no /F, the close its window's X sends, says so, asks for Retry where it stays open, and a silent install gives up with error level 2 rather than stopping it; electron-builder inserts this in place of its own check",
+    got, [true, true, true, true, true, true, true]);
+  const words = macro(nsh, "customCheckAppRunning");
+  got = [/\$\{If\} \$LANGUAGE == 1045\r?\n\s*StrCpy \$R9 "([^"]*)"/.exec(words), /\$\{Else\}\r?\n\s*StrCpy \$R9 "([^"]*)"/.exec(words)].map(m => m && m[1]);
+  eq("1152b the installer's line is the copywriter's, Polish under the Polish LCID and English otherwise, without its sentence on work in progress (nothing is kept at the close), and the Polish names Windows's own Retry button",
+    got, [PL, EN]);
+  try {
+    const un = tpl("uninstaller.nsh");
+    got = keeps(nsh).concat([/!ifmacrodef customRemoveFiles\r?\n\s*!insertmacro customRemoveFiles\r?\n\s*!else/.test(un)]);
+  } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
+  eq("1152c an update leaves the installed files in place for the new installer to copy over, which it does only once its own extraction has finished, while a plain uninstall still removes the folder; electron-builder's uninstaller calls this in place of its own removal",
+    got, [true, true, 1, true]);
+  const lift = tag => { const lines = nsh.split("\n"), at = lines.findIndex(l => l.indexOf(tag) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
+  const l1 = lift("plant:installer-asks-close"), l2 = lift("plant:installer-gives-up"), l3 = lift("plant:update-keeps-files");
+  got = [!!l1 && asks(l1)[1] === false, !!l2 && asks(l2)[5] === false, !!l3 && keeps(l3)[1] === false];
+  eq("1152d lifting plant:installer-asks-close, plant:installer-gives-up or plant:update-keeps-files turns its leg red", got, [true, true, true]);
+  /* Preprocessed only, never compiled: makensis expands the two macros inserted where electron-builder inserts them. */
+  try {
+    const cp = require("child_process");
+    const where = cp.spawnSync(process.execPath, ["-e", "require(process.argv[1]).getMakeNsisPath(process.argv[2] || undefined)"
+      + ".then(r => process.stdout.write(JSON.stringify(r)), e => { process.stderr.write(String(e)); process.exit(1); })",
+      path.join(lib, "out", "toolsets", "windows.js"), ""], { encoding: "utf8" });
+    const mk = JSON.parse(String(where.stdout).trim().split(/\r?\n/).pop());
+    const script = ["Unicode true", "!include LogicLib.nsh", "!define APP_EXECUTABLE_FILENAME \"Etiuda.exe\"", "!define isUpdated \"$0 == 1\"",
+      "!define APP_INSTALLER_STORE_FILE \"etiuda-updater\\installer.exe\"",
+      "!include /CHARSET=UTF8 \"" + path.join(root, "shell", "installer.nsh") + "\"",
+      "Section", "!insertmacro customCheckAppRunning", "!insertmacro customRemoveFiles", "SectionEnd", ""].join("\n");
+    const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
+      { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
+    const out = String(r.stdout || "");
+    got = r.status !== 0 ? "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ")
+      : [/taskkill \/IM "Etiuda\.exe"/.test(out), out.indexOf(EN) > -1, out.indexOf(PL) > -1, /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
+  } catch (e) { got = "makensis could not be asked: " + e.message; }
+  eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, both lines, the removal and the give-up intact",
+    got, [true, true, true, true, true]);
+}
 function ecTypeNameTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   let got;
@@ -4143,11 +4207,11 @@ function shippedFlagTests() {
     try {
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
         "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
-        "openedRefused", "recovering", "deskFile", "os", "hostAccent",
+        "openedRefused", "recovering", "deskFile", "os", "hostAccent", "catalogWaitNewer", "newerKey", "catalogNewerSaid",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
         () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
-        null, new Set(), () => "", { homedir: () => "" }, () => "");
+        null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "");
     } catch (e) { return "the host answer did not run: " + e.message; }
     const ev = { sender: { id: 1 } };
     handler(ev);
@@ -5523,8 +5587,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1209;
-const UI_STRINGS_SHA256 = "471a2f1a461f1ca58874e6c73984cd6619ea014f84aafc53ab28946f374242ef";
+const UI_STRINGS_COUNT = 1214;
+const UI_STRINGS_SHA256 = "6793a916026a927daaf7ada61608629d51d8551f679c930eb13c212820f4902b";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
