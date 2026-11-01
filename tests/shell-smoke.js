@@ -57,9 +57,12 @@
  * catalog folder, holds a team file and an edition, both signed through the engine's catalog-v2
  * the way tests/folder-mirror.mjs and tests/team-desk.mjs sign them. 8a reads the mirror under
  * that user-data folder: the primed marker and the team file, each written within 30 s of the
- * launch, or the fallback line shell/main.js says when the syncer cannot start, and it names
- * which of the two it read. 8A is the control, the same launch from a variant asar whose syncer
- * worker name is bent, and it reads that the mirror was not primed and that the fallback was said.
+ * launch, and nothing else passes it. The fallback line shell/main.js says when the syncer cannot
+ * start is a red here, named as such: in a packaged desk that fallback is exactly what a worker
+ * missing from the package produces (updates finding 1), so passing on it would let that fault
+ * through (the test architect, 2026-11-01 20:56). 8A is the control, the same launch from a
+ * variant asar whose syncer worker name is bent, and it reads that the mirror was not primed and
+ * that the fallback was said, which proves the fallback is seen.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all. Every
  * process is killed by pid, never by image name, and the lab is removed in a finally.
@@ -3411,11 +3414,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   let which;
   if (primed) which = "primed the mirror (" + FOLDER_PRIMED + " at " + folderAge(got.primed, started)
     + ", " + FOLDER_TEAM_FILE + " at " + folderAge(got.team, started) + ")";
-  else if (line) which = "could not start, and said its fallback: " + line;
+  else if (line) which = "could not start and fell back to the share, which is the packaging fault this leg exists to catch: " + line;
   else which = "did neither: primed " + folderAge(got.primed, started)
     + ", team file " + folderAge(got.team, started) + ", fallback not said";
-  check(primed || !!line,
-    "8a the packaged desk's folder syncer " + which);
+  check(primed && !line,
+    "8a the packaged desk's folder syncer " + which + (primed && line ? ", but the fallback was also said: " + line : ""));
   await run.stop();
 
   let named = 0;
