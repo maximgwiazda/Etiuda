@@ -172,7 +172,8 @@ const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
 
 /* THE OUTBOX: what this desk wrote into the mirror and the share has not yet taken, one record a path ({owe, sha, del}),
    kept beside the mirror's files under a dot name neither walk lists, with the rev and counter floors. A record goes once
-   the share holds exactly those bytes, or no file for a deletion. */
+   the share holds exactly those bytes, or no file for a deletion. The floors never go down: an edition deleted and published
+   again under the same name at a lower rev would stay out. That holds while Studio always raises rev. */
 const OUTBOX_NAME = ".outbox.json";
 const OUTBOX_KIND = "etiuda-folder-outbox";
 const PRIMED_NAME = ".primed";
@@ -280,7 +281,9 @@ function flushOwed(folder, mirror, items, io) {
 
 /* ---- the shared catalog's compare and swap, against the share and off the main thread ----------------------------------
    The lock is `<name>.ec.lock` beside the file, taken by exclusive create; a lock older than SHARED_LOCK_MS is a desk that
-   stopped mid-write and is taken over. Begin holds the lock and answers the bytes there now; the caller judges them, then
+   stopped mid-write and is taken over. Exclusive create is atomic only on a real share (SMB, a local disk): on a cloud-synced
+   folder two desks can each take the lock before either sees the other's, and the outbox's owe and the conflict sibling then
+   settle it. The lock is not a guarantee there. Begin holds the lock and answers the bytes there now; the caller judges them, then
    commits, which writes the share and the mirror before the lock goes, or lets the lock go. */
 const SHARED_LOCK_MS = 30 * 1000;
 function shareName(name) {
