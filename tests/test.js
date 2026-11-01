@@ -2708,11 +2708,45 @@ function markClockTests() {
   eq("952d the desk's launch waits while its window is not on screen and under a dialog, and not once it is shown with none",
     got, [true, false, true]);
 
+  /* 952i. NOTHING WAITS ON THE WORD FOR EVER: an older shell, a word sent before the page listened, or a harness's stand-in
+     never says the window is on screen, and the opening must still start. With no word, the page counts as on screen
+     1500 ms after its first frame, 3000 ms after the ask where no frame comes, or when it turns visible from hidden. */
+  const silent = o => {
+    const h = { shown: false, onShown() {} }, w = markLab(Object.assign({ host: h }, o || {}));
+    let vis = null;
+    w.sb.document.visibilityState = "hidden";
+    w.sb.document.addEventListener = (t, fn) => { if (t === "visibilitychange") vis = fn; };
+    w.make();
+    const opts = w.handed[0] && w.handed[0][1];
+    opts.covered();   // the first ask, which boot makes as the drawing starts
+    return { w, covered: () => opts.covered(), turn: () => { w.sb.document.visibilityState = "visible"; if (vis) vis(); } };
+  };
+  const boundRun = o => {
+    const a = silent(o), at0 = a.covered();
+    a.w.frame(500); a.w.timersTo(1990);
+    const before = a.covered();
+    a.w.timersTo(2010);
+    return [at0, before, a.covered()];
+  };
+  try {
+    const b = silent(); b.w.timersTo(2990); const nb = b.covered(); b.w.timersTo(3010);
+    const c = silent(); c.turn();
+    got = [boundRun(), [nb, b.covered()], c.covered()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("952i with no word from the host the opening still starts: on screen 1500 ms after the page's first frame, 3000 ms after the ask where no frame comes, or when it turns visible from hidden",
+    got, [[true, true, false], [true, false], false]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952i lifting plant:shown-has-a-bound holds the opening past the first frame's bound");
+  else {
+    try { got = boundRun({ lift: { file: "empty-mark.js", tag: "plant:shown-has-a-bound" } })[2]; }
+    catch (e) { got = "the lab threw: " + e.message; }
+    eq("952i lifting plant:shown-has-a-bound holds the opening past the first frame's bound", got, true);
+  }
+
   /* 952h. THE EMPTY DESK'S WORK RISES UNDER THE LOGO, as Studio's empty screen does (Max, 2026-11-01 18:19): at a launch
      over the empty desk the launch stands, hiding the work, and the block takes its drawing in the same task, so the
      launch gives way "moved" once the work is ready, the work rising over LAUNCH_OUT_MS with the mark in it (the launch
      lab's "moved" and give-way legs and 952e hold those two). The work is ready on the first frame after the window is
-     on screen. */
+     on screen: before the word one frame is asked, the bound's of 952i, and the word asks the work's. */
   const riseRun = o => {
     const h = unseen(), w = markLab(Object.assign({ host: h }, o || {})), order = [];
     let opts = null, frames = 0;
@@ -2729,7 +2763,7 @@ function markClockTests() {
     got = [r.order, r.R, before, r.frames()];
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("952h at a launch over the empty desk the launch stands and the block takes its drawing in the same task, at R 10, so the work rises with the mark in it; the work's ready frame is asked only once the window is on screen",
-    got, [["launch", "handed"], 10, 0, 1]);
+    got, [["launch", "handed"], 10, 1, 2]);
   if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952h lifting plant:empty-desk-rises leaves the drawing over the veil");
   else {
     try { got = riseRun({ lift: { file: "on-open.js", tag: "plant:empty-desk-rises" } }).order; }

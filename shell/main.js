@@ -6827,7 +6827,7 @@ ipcMain.on("etiuda:host", (e) => {
     backdrop: hostBackdrop(),
     maximized: !!(win && win.isMaximized()),
     // Whether the window is on screen yet, or never will be: a first load is answered before ready-to-show.
-    shown: !!(win && (win.etiudaShown || win.isVisible())),
+    shown: !!(win && (win.etiudaShown || (typeof win.isVisible === "function" && win.isVisible()))),
     /* Which file is loaded and where it was found, because the page cannot look: About prints
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
