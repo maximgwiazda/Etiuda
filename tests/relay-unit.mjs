@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 473;
+const EXPECTED = 489;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -38,11 +38,17 @@ function productShas() {
 }
 const PRODUCT_AT_START = productShas();
 
-let asserted = 0, failed = 0;
+/* The plants of 1168 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const SPKI = Buffer.from("302a300506032b6570032100", "hex");
@@ -5801,6 +5807,167 @@ async function main() {
       + " its step alone, and the product file is never written: " + how(lifted) + ", altered step " + at + " found at " + JSON.stringify(seen));
   }
 
+  /* ---- 1168: an upload reserves its room before the bucket's write, and a fault gives it back and leaves no object (relay triage
+     item 8) ---- */
+  {
+    const SMALL = 4112;
+    const objsOf = (w, id) => [...w.R.bucket.objects.keys()].filter(k => k.indexOf(w.rt + "/" + id + "/") === 0);
+    const rowsOf = w => { const st = w.R.stores.get(w.rt); return { put: st.list("put:").length, orphan: st.list("orphan:").length }; };
+    const sameJ = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const said = r => (r && r.status === 200 ? 200 : r && r.json && r.json.error ? r.json.error : r ? r.status : null);
+    const guarded = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.message) }; } };
+    /* Two uploads of the lead's, the first parked at the bucket while the second is judged. Answers the session, both answers, and
+       how many objects the second wrote. */
+    async function race(w, a, b) {
+      const ls = await sessionOf(w, w.lead);
+      const gate = w.R.bucket.hold();
+      const firstP = put(w, ls, a);
+      await gate.parked;
+      const second = await put(w, ls, b);
+      const wrote = objsOf(w, b.id).length;
+      gate.release();
+      const first = await firstP;
+      return { ls, first, second, wrote };
+    }
+    /* A team capped at one small blob: the first is taken, the second refused team-size with nothing written, and the room stays
+       exact: the bytes are the first's, and the lead's next file over it is taken. */
+    async function sizeScene(T) {
+      const w = await world({ limits: { teamMax: SMALL }, team: T });
+      const a = sealAs(w, w.lead, "a.ec", 1), b = sealAs(w, w.lead, "b.ec", 2);
+      const r = await race(w, a, b);
+      const bytes = w.R.stores.get(w.rt).get("bytes");
+      const next = await put(w, r.ls, sealAs(w, w.lead, "a.ec", 3, { supersedes: a.id }));
+      const ok = a.ciphertext.length === SMALL && r.first.status === 200 && refused(r.second, "team-size") && r.wrote === 0 && bytes === SMALL
+        && next.status === 200 && w.R.stores.get(w.rt).get("bytes") === SMALL && sameJ(rowsOf(w), { put: 0, orphan: 0 });
+      return { ok, detail: JSON.stringify({ first: said(r.first), second: said(r.second), wrote: r.wrote, bytes, next: said(next), rows: rowsOf(w) }) };
+    }
+    /* A writer with 59 uploads in the minute: the sixtieth in flight is taken, and another beside it refused rate with nothing written. */
+    async function rateScene() {
+      const w = await world();
+      const ls = await sessionOf(w, w.lead);
+      let taken = true;
+      for (let i = 1; i <= 59; i++) if ((await put(w, ls, sealAs(w, w.lead, "g.ec", i))).status !== 200) taken = false;
+      const r = await race(w, sealAs(w, w.lead, "g.ec", 60), sealAs(w, w.lead, "g.ec", 61));
+      const stamps = w.R.stores.get(w.rt).get("rate:" + w.lead.keyId);
+      const ok = taken && r.first.status === 200 && refused(r.second, "rate") && r.wrote === 0 && Array.isArray(stamps) && stamps.length === 60;
+      return { ok, detail: JSON.stringify({ taken, first: said(r.first), second: said(r.second), wrote: r.wrote, stamps: Array.isArray(stamps) ? stamps.length : null }) };
+    }
+    /* A team one blob short of the count: its count row stands for the blobs, as a team that holds them has it. */
+    async function countScene() {
+      const w = await world();
+      w.R.stores.get(w.rt).put("blobs", C.BLOBS_MAX - 1);
+      const r = await race(w, sealAs(w, w.lead, "a.ec", 1), sealAs(w, w.lead, "b.ec", 2));
+      const ok = r.first.status === 200 && refused(r.second, "team-size") && r.wrote === 0;
+      return { ok, detail: JSON.stringify({ first: said(r.first), second: said(r.second), wrote: r.wrote }) };
+    }
+    /* On a team capped at one small blob, a write that faults (`how` sets the bucket's fault) answers fault and leaves no object and no
+       row, and the same blob then goes up, so the fault held none of the room. */
+    async function faultScene(how, T) {
+      const w = await world({ limits: { teamMax: SMALL }, team: T });
+      const ls = await sessionOf(w, w.lead);
+      const b = sealAs(w, w.lead, "a.ec", 1);
+      how(w.R.bucket);
+      const fault = await put(w, ls, b);
+      const left = objsOf(w, b.id).length, rows = rowsOf(w);
+      const again = await put(w, ls, b);
+      const ok = fault.status === 500 && !!fault.json && fault.json.error === "fault" && left === 0 && sameJ(rows, { put: 0, orphan: 0 })
+        && again.status === 200 && objsOf(w, b.id).length === 1;
+      return { ok, detail: JSON.stringify({ fault: fault.status, left, rows, again: said(again) }) };
+    }
+    /* A request that died with its object after the bucket's write: the next prune, a list's, deletes its object and its row, long
+       before any sweep, and the same blob then goes up. */
+    async function deadScene() {
+      const w = await world();
+      const ls = await sessionOf(w, w.lead);
+      const b = sealAs(w, w.lead, "a.ec", 1);
+      const lost = await diedAfterWrite(w, ls, b);
+      const before = !!lost && w.R.bucket.objects.has(lost) && rowsOf(w).put === 1;
+      const listed = await since(w, ls);
+      const gone = !!lost && !w.R.bucket.objects.has(lost) && sameJ(rowsOf(w), { put: 0, orphan: 0 });
+      const again = await put(w, ls, b);
+      const ok = before && listed.status === 200 && gone && again.status === 200;
+      return { ok, detail: JSON.stringify({ before, listed: listed.status, gone, again: said(again) }) };
+    }
+    /* An upload whose object the bucket has written, its answer not yet back, while a list prunes keeps its object: it is taken, a
+       later list prunes again, and it is served. */
+    async function flightScene() {
+      const w = await world();
+      const ls = await sessionOf(w, w.lead);
+      const b = sealAs(w, w.lead, "a.ec", 1);
+      const bucket = w.R.bucket, real = bucket.put;
+      let release = null, landed = null;
+      const gate = new Promise(r => { release = r; }), wrote = new Promise(r => { landed = r; });
+      bucket.put = async (key, value) => { bucket.objects.set(key, Buffer.from(value)); landed(); await gate; return { key }; };
+      const upP = put(w, ls, b);
+      await wrote;
+      bucket.put = real;
+      const mid = await since(w, ls);
+      release();
+      const up = await upP;
+      const after = await since(w, ls);
+      const got = await getBlob(w, ls, b.id);
+      const ok = mid.status === 200 && up.status === 200 && after.status === 200 && got.status === 200 && objsOf(w, b.id).length === 1;
+      return { ok, detail: JSON.stringify({ mid: mid.status, up: said(up), after: after.status, got: said(got), objs: objsOf(w, b.id).length }) };
+    }
+    const lose = bucket => bucket.losePuts(1), refuse = bucket => bucket.failPuts(1);
+    const sized = await guarded(() => sizeScene());
+    check(sized.ok === true, "1168a of two uploads that together pass the team's room, the second judged while the first is at the bucket is refused team-size"
+      + " before anything is written, the first is taken, the bytes are exactly the first's and the lead's next file over it is taken: " + (sized.detail || sized.failed));
+    const rated = await guarded(() => rateScene());
+    check(rated.ok === true, "1168b of two uploads beside a writer's 59 in the minute, the second judged while the first is at the bucket is refused rate before"
+      + " anything is written, and the first is the sixtieth stamp: " + (rated.detail || rated.failed));
+    const counted = await guarded(() => countScene());
+    check(counted.ok === true, "1168c of two uploads that together pass the team's blob count, the second judged while the first is at the bucket is refused"
+      + " team-size before anything is written, and the first is taken: " + (counted.detail || counted.failed));
+    const refusedWrite = await guarded(() => faultScene(refuse));
+    check(refusedWrite.ok === true, "1168d a write the bucket refuses answers fault and leaves no object, no put row and no orphan row, and on a team with room for"
+      + " one blob the same blob then goes up, so the fault held none of the room: " + (refusedWrite.detail || refusedWrite.failed));
+    const lostWrite = await guarded(() => faultScene(lose));
+    check(lostWrite.ok === true, "1168e a write the bucket kept whose answer is lost answers fault, its object is deleted and no row stays, and the same blob then"
+      + " goes up on a team with room for one: " + (lostWrite.detail || lostWrite.failed));
+    const dead = await guarded(() => deadScene());
+    check(dead.ok === true, "1168f the object of a request that died with its object after the bucket's write is deleted with its row at the next list's prune,"
+      + " not left for the sweep, and the same blob then goes up: " + (dead.detail || dead.failed));
+    const flight = await guarded(() => flightScene());
+    check(flight.ok === true, "1168g an upload whose object the bucket has written, its answer not yet back, while a list prunes keeps its object: it is taken, a later list prunes again, and it is served: "
+      + (flight.detail || flight.failed));
+
+    /* Each guard lifted in a copy turns its leg red, and no product file is written. Skipped where ETIUDA_PLANTS is off. */
+    async function editTeamCopy(edit, fn) {
+      const digest = sha(fs.readFileSync(PRODUCT.team));
+      let turned = false, detail = "plant line absent";
+      try {
+        const edited = edit(fs.readFileSync(PRODUCT.team, "utf8"));
+        if (edited !== null) {
+          const dir = copyOf({ "relay/team.cjs": edited, "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+    }
+    const base = { "1168a": sized.ok === true, "1168b": rated.ok === true, "1168c": counted.ok === true, "1168d": refusedWrite.ok === true,
+      "1168e": lostWrite.ok === true, "1168f": dead.ok === true, "1168g": flight.ok === true };
+    const redOf = s => !s || s.ok !== true;
+    const PLANTS = [
+      ["core", "reserve-hold", "1168h", "1168a", "an upload judged is held against nothing", async () => redOf(await guarded(() => sizeScene()))],
+      ["core", "reserve-bytes", "1168i", "1168a", "the bytes in flight count toward nothing", async () => redOf(await guarded(() => sizeScene()))],
+      ["core", "reserve-rate", "1168j", "1168b", "the stamps in flight count toward nothing", async () => redOf(await guarded(() => rateScene()))],
+      ["core", "reserve-count", "1168k", "1168c", "the blobs in flight count toward nothing", async () => redOf(await guarded(() => countScene()))],
+      ["core", "put-reap", "1168l", "1168f", "a dead request's put row waits for the sweep", async () => redOf(await guarded(() => deadScene()))],
+      ["core", "put-in-flight", "1168m", "1168g", "a prune takes the object of an upload still at the bucket", async () => redOf(await guarded(() => flightScene()))],
+      ["team", "put-fault-release", "1168n", "1168d", "a fault keeps its reservation", async T => redOf(await guarded(() => faultScene(refuse, T)))],
+      ["team", "put-fault-drop", "1168o", "1168e", "a fault leaves its object", async T => redOf(await guarded(() => faultScene(lose, T)))],
+      ["team", "put-release", "1168p", "1168a", "a committed upload keeps its reservation", async T => redOf(await guarded(() => sizeScene(T)))],
+    ];
+    for (const [where, tag, id, leg, say, turns] of PLANTS) {
+      const line = id + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written";
+      if (PLANTS_OFF) { skip(line); continue; }
+      const p = where === "core" ? await liftCore("plant:" + tag, turns) : await editTeamCopy(lineLifted("plant:" + tag), turns);
+      check(base[leg] && p.turned && p.back, line + ": " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }
+  }
+
   /* ---- 16: the harness through this relay, on the routine chain ---- */
   {
     /* Slice 2 on the real channel, the same list as relay-channel 943a. Empty once each attack is green. */
@@ -5842,9 +6009,9 @@ try { await main(); }
 catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
 /* The plants' copies were made under WORK alone, and the run takes them away. */
 try { fs.rmSync(WORK, { recursive: true, force: true }); } catch { /* a temp folder */ }
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
