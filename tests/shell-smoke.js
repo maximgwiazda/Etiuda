@@ -27,6 +27,8 @@
  *   the pin         the good pin, in a launch of the same app, where nothing is refused and the
  *                   refusal document is nowhere on screen.
  *   the plant       the same plant with the pin extended to name it, where it does run.
+ *   the folder      a variant asar whose syncer names a worker file that is not there. The
+ *                   mirror is not primed and the desk says the fallback line.
  *
  * WHAT IS MEASURED AND WHAT IS NOT. Counts, rectangles, file contents and console text. No
  * screenshot decides anything here and no card's text is read, printed or compared: the catalog
@@ -50,6 +52,15 @@
  *     that needs them reloads once with the listener in place. A reload is NOT free here: see
  *     check 2c.
  *
+ * PHASE 8 READS THE FOLDER SYNCER FROM DISK. The packaged desk is launched on its own user-data
+ * folder, as every launch here is, as a member of a folder team. The shared folder, this launch's
+ * catalog folder, holds a team file and an edition, both signed through the engine's catalog-v2
+ * the way tests/folder-mirror.mjs and tests/team-desk.mjs sign them. 8a reads the mirror under
+ * that user-data folder: the primed marker and the team file, each written within 30 s of the
+ * launch, or the fallback line shell/main.js says when the syncer cannot start, and it names
+ * which of the two it read. 8A is the control, the same launch from a variant asar whose syncer
+ * worker name is bent, and it reads that the mirror was not primed and that the fallback was said.
+ *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all. Every
  * process is killed by pid, never by image name, and the lab is removed in a finally.
  */
@@ -61,6 +72,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 const E = require("./engine.js");
 const LW = require("./launch-wait.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -129,8 +141,8 @@ const step = async (label, body, opts) => {
  * SO THE DECLARATION IS THE PHASES, which this file already numbers in its own log as [n/7] and
  * which do not move when a leg is added. The list is written out rather than derived from the
  * source: a phase added to the file and never reached would otherwise add itself to both sides
- * of the comparison and prove nothing. Seven is the count in the labels; the run also has a
- * phase 0, so the majors are eight.
+ * of the comparison and prove nothing. The labels of the phases already numbered still say
+ * [n/7]; phase 8 says [8/8]. The run has phase 0 through phase 8, so the majors are nine.
  *
  * AND SINCE 2026-09-20 THE CHECK COUNT IS DECLARED TOO, board item 630, because the number has
  * now been measured three times and counted a second way.
@@ -150,6 +162,8 @@ const step = async (label, body, opts) => {
  *     keyboard (board 766). The same anchored grep returns 116 here.
  *   - 126 SINCE 2026-09-29, both ways: 2q12s is the site added, a name put into the stored copy and
  *     read for everywhere it could show (board 817). The same anchored grep returns 126 here.
+ *   - 131: 8a and 8A are the two sites added, the packaged desk on a folder team and the bent
+ *     worker that does not prime. The same anchored grep returns 131 here.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -167,13 +181,13 @@ const step = async (label, body, opts) => {
  * A leg that never ran INSIDE a phase that did is what the phase floor alone could not see, and
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
-const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 129;
+const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7", "8"];
+const EXPECTED = KEEP ? null : 131;
 /* 1g3 may record NOT RUN instead of calling its check (board 655). NOT RUN only when an early
    sample, taken straight after connect, was on a display and not iconic, and the late sample
    is iconic. iconic is the window pickWindow chose. Already iconic at the early sample is a
    FAIL, and so is every other wrong window. The verdict below subtracts notRun.length from
-   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 129:
+   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 131:
    the call is still in the file and still runs whenever the reading is not not-run. */
 /* COUNTS:PREDICATES
    Members that must be there, in order where the order is the claim.
@@ -423,6 +437,89 @@ async function launch(ud, args, env, assocExe, realCatalogFolder) {
     inline: () => errs.filter(t => /inline script/i.test(t)),
     stop: async () => { try { b.disconnect(); } catch (x) {} killPid(child.pid); await sleep(1000); },
   };
+}
+
+/* PHASE 8's folder team. Membership is written after newUserData, because pinCatalogFolder
+   rewrites desk.json and keeps only keys. The ceiling is taken from before the launch, and the
+   first stat runs even when the launch itself passed 30 s: a file written at two seconds still
+   counts, and one written after 30 s does not. Two seconds before the start is slack for a coarse
+   file clock. The control waits out the whole ceiling, so a prime that arrives after the fallback
+   line is still seen. The mirror directory is made before start() can throw, so the control reads
+   the primed marker. */
+const FOLDER_MARK_MS = 30000;
+const FOLDER_FALLBACK = "the shared folder's local copy could not be kept on this desk, so it reads the shared folder itself: ";
+const FOLDER_WORKER = "syncer-worker.cjs";
+const FOLDER_WORKER_BENT = "syncer-worker-missing.cjs";
+const FOLDER_TEAM_FILE = "etiuda-team.json";
+const FOLDER_PRIMED = ".primed";
+function folderFallback(said) {
+  const parts = said || [];
+  for (let i = 0; i < parts.length; i++) {
+    const at = parts[i].indexOf(FOLDER_FALLBACK);
+    if (at < 0) continue;
+    const rest = parts[i].slice(at);
+    const nl = rest.indexOf("\n");
+    return (nl < 0 ? rest : rest.slice(0, nl)).trim();
+  }
+  const text = parts.join("");
+  const at = text.indexOf(FOLDER_FALLBACK);
+  if (at < 0) return "";
+  return text.slice(at, at + 400).trim();
+}
+function folderStamp(file) {
+  try { return fs.statSync(file).mtimeMs; } catch (e) { return null; }
+}
+function folderInCeiling(at, started) {
+  return typeof at === "number" && at + 2000 >= started && at - started <= FOLDER_MARK_MS;
+}
+function folderAge(at, started) {
+  return typeof at === "number" ? Math.round(at - started) + " ms" : "absent";
+}
+async function folderMirrorBy(mirror, started, waitOut) {
+  const primedPath = path.join(mirror, FOLDER_PRIMED);
+  const teamPath = path.join(mirror, FOLDER_TEAM_FILE);
+  let primed = null, team = null;
+  for (;;) {
+    primed = folderStamp(primedPath);
+    team = folderStamp(teamPath);
+    const both = folderInCeiling(primed, started) && folderInCeiling(team, started);
+    if (!waitOut && both) break;
+    if (Date.now() >= started + FOLDER_MARK_MS) break;
+    await sleep(250);
+  }
+  return { primed: primed, team: team };
+}
+function folderSign(doc, privateKey, keyId, signBytes) {
+  const out = JSON.parse(JSON.stringify(doc));
+  delete out.sig;
+  out.sig = { alg: "Ed25519", keyId: keyId };
+  out.sig.value = crypto.sign(null, Buffer.from(signBytes(out)), privateKey).toString("hex");
+  return out;
+}
+function folderShare(share, teamId, lead, privateKey, signBytes) {
+  fs.mkdirSync(share, { recursive: true });
+  const team = folderSign({
+    format: 1, kind: "etiuda-team", id: teamId, catalogs: ["lamp-shop"],
+    lead: { keyId: lead.keyId, public: lead.public },
+    sealed: true, exportsSealed: false, epoch: 1, rev: 1, roster: []
+  }, privateKey, lead.keyId, signBytes);
+  const edition = folderSign({
+    format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1, name: "Lamp Shop", date: "2026-02-01",
+    langs: [{ code: "en", label: "EN" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: [{ id: "c-hello", shelf: "t-op", bodyShape: "plain", title: { en: "Hello" }, body: { en: "Hello world" } }]
+  }, privateKey, lead.keyId, signBytes);
+  fs.writeFileSync(path.join(share, FOLDER_TEAM_FILE), JSON.stringify(team), "utf8");
+  fs.writeFileSync(path.join(share, "lamp-shop.ec"), JSON.stringify(edition, null, 1) + "\n", "utf8");
+}
+function folderMember(ud, share, teamId, lead) {
+  const file = path.join(ud, "desk.json");
+  const d = JSON.parse(fs.readFileSync(file, "utf8"));
+  d.teamPins = {};
+  d.teamPins[teamId] = { keyId: lead.keyId, public: lead.public };
+  d.teamShown = {};
+  d.teamShown[teamId] = { lead: "Lead", folder: share };
+  fs.writeFileSync(file, JSON.stringify(d), "utf8");
 }
 
 /* ---- what a launch is asked ---------------------------------------------------------------- */
@@ -3292,9 +3389,65 @@ const placeEc = (dir, from, as, minutesOld) => {
     + (allowed.planted ? "SET" : "undefined") + "), so 6a is the policy refusing it and not a plant that never arrived");
   await s.stop();
   pristine();
+  });
+  await step("[8/8] the folder syncer on a folder team", async () => {
+  phase("[8/8] the folder syncer on a folder team");
+  const V2 = await import(pathToFileURL(path.join(E.ROOT, "src", "modules", "catalog-v2.js")).href);
+  const pair = crypto.generateKeyPairSync("ed25519");
+  const der = pair.publicKey.export({ type: "spki", format: "der" });
+  const lead = { keyId: "lead-01", public: der.subarray(-32).toString("hex") };
+  if (der.length !== 44 || lead.public.length !== 64) throw new Error("the lead public is not 32 bytes of an Ed25519 SPKI");
+  const teamId = "t-" + crypto.randomBytes(8).toString("hex");
+  const ud = newUserData("folder-team");
+  const share = catFolder("folder-team");
+  folderShare(share, teamId, lead, pair.privateKey, V2.v2SignedBytes);
+  folderMember(ud, share, teamId, lead);
+  const mirror = path.join(ud, "folder-mirror", teamId);
+  const started = Date.now();
+  const run = await launch(ud);
+  const got = await folderMirrorBy(mirror, started, false);
+  const line = folderFallback(run.said);
+  const primed = folderInCeiling(got.primed, started) && folderInCeiling(got.team, started);
+  let which;
+  if (primed) which = "primed the mirror (" + FOLDER_PRIMED + " at " + folderAge(got.primed, started)
+    + ", " + FOLDER_TEAM_FILE + " at " + folderAge(got.team, started) + ")";
+  else if (line) which = "could not start, and said its fallback: " + line;
+  else which = "did neither: primed " + folderAge(got.primed, started)
+    + ", team file " + folderAge(got.team, started) + ", fallback not said";
+  check(primed || !!line,
+    "8a the packaged desk's folder syncer " + which);
+  await run.stop();
+
+  let named = 0;
+  await variant(w => {
+    const f = path.join(w, "shell", "folder", "syncer.cjs");
+    const text = fs.readFileSync(f, "utf8");
+    named = text.split(FOLDER_WORKER).length - 1;
+    if (named === 1) fs.writeFileSync(f, text.replace(FOLDER_WORKER, () => FOLDER_WORKER_BENT), "utf8");
+  });
+  const packed = asar.extractFile(ASAR, "shell/folder/syncer.cjs").toString("utf8");
+  const bentHeld = named === 1 && packed.indexOf(FOLDER_WORKER_BENT) > -1
+    && packed.split(FOLDER_WORKER_BENT).join("").indexOf(FOLDER_WORKER) < 0;
+  const udB = newUserData("folder-bent");
+  const shareB = catFolder("folder-bent");
+  folderShare(shareB, teamId, lead, pair.privateKey, V2.v2SignedBytes);
+  folderMember(udB, shareB, teamId, lead);
+  const mirrorB = path.join(udB, "folder-mirror", teamId);
+  const startedB = Date.now();
+  const bentRun = await launch(udB);
+  const gotB = await folderMirrorBy(mirrorB, startedB, true);
+  const bentLine = folderFallback(bentRun.said);
+  const bentPrimed = folderInCeiling(gotB.primed, startedB);
+  check(bentHeld && !bentPrimed && !!bentLine,
+    "8A CONTROL: a variant asar whose syncer names " + FOLDER_WORKER_BENT
+    + " (" + named + " place, held in the packed file: " + bentHeld + ") left the mirror unprimed (primed "
+    + folderAge(gotB.primed, startedB) + ", team file " + folderAge(gotB.team, startedB)
+    + ") and the fallback was said: " + (bentLine || "not said"));
+  await bentRun.stop();
+  pristine();
+  });
 
   reachedEnd = true;
-  });
 })().catch(e => {
   console.error("  FAIL " + String(e && e.stack || e));
   fails++;
@@ -3323,7 +3476,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     + (missed.length ? ", MISSING " + missed.join(", ") + " - the tally below is not a verdict"
                      : " (" + PHASE_MAJORS.join(", ") + ")"));
   /* Since a phase now survives its own throw, "every phase started" no longer says the phases
-     RAN: eight could start and eight could die on their first line. So the other side of it is
+     RAN: nine could start and nine could die on their first line. So the other side of it is
      declared here, where it runs whatever happened above, and the count below says how many
      checks the throws took with them. */
   check(phasesThrew === 0, phasesThrew === 0
@@ -3335,7 +3488,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      one, the longest run in the tree at some ten minutes, did not: the record read it as `ok` and
      `fail` lines alone, which are derived from what it happened to print and say nothing about
      whether the run WAS the suite. The three numbers that answer that are here - what ran, what
-     is declared, and how many of the eight majors were reached - so a shortened run is legible in
+     is declared, and how many of the nine majors were reached - so a shortened run is legible in
      the record as numbers rather than by reading the log.
        `expected=-1` is a --keep run, which declares nothing because its lab removal never runs:
      minus one rather than a missing key, because a key that comes and goes is a count that falls
