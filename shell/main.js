@@ -1610,6 +1610,7 @@ function deskEnvelopeBody(keysText) {
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
+    + (teamHeldOut.size ? ',"teamHeldOut":' + JSON.stringify(Array.from(teamHeldOut)) : "")
     + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
     + (Object.keys(teamLapseSeen).length ? ',"teamLapseSeen":' + JSON.stringify(teamLapseSeen) : "")
     + (Object.keys(teamRelayGone).length ? ',"teamRelayGone":' + JSON.stringify(teamRelayGone) : "")
@@ -3095,6 +3096,7 @@ let teamShown = {};                            // team id -> {lead?, folder?}: t
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
+const teamHeldOut = new Set();                 // relay teams a left-behind desk took a new lead's invitation for: its files stay here until "It matches"
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamRelayGone = {};                        // team id -> true: the relay refused this desk as removed, so the desk stops asking and says so
@@ -3949,16 +3951,23 @@ function joinFile() {
   return path.join(shareFolderShown(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
 }
 /* Signs the request with the desk's key under the join prefix and writes it by replacement; throws what stopped it. */
-function writeJoin(doc) {
+function writeJoin(doc, at) {
   const key = openPrivate(deskBranch.sign.priv);
   if (!key) throw new Error("the desk's key could not be opened");
   doc.sig = { alg: "Ed25519", keyId: branchIdOf(deskBranch.sign.pub) };
   doc.sig.value = crypto.sign(null, joinSignedBytes(doc), key).toString("hex");
-  const file = joinFile();
+  const file = at || joinFile();
   for (const dir of [path.dirname(path.dirname(file)), path.dirname(file)]) {
     try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
   }
-  writeReplacing(file, JSON.stringify(doc, null, 1) + "\n");
+  const text = JSON.stringify(doc, null, 1) + "\n";
+  writeReplacing(file, text);
+  return text;
+}
+/* Whether a request written ahead still stands where it was written, word for word. */
+function askKept(ask) {
+  if (!ask || !ask.written) return false;
+  try { return fs.readFileSync(ask.file, "utf8") === ask.text; } catch { return false; }
 }
 /* HMAC-SHA256 of the commitment under the invitation's secret, in hex, or "" where either is not the
    shape a request carries. The secret is 128 bits, the commitment the hex joinCommit already made. */
@@ -4818,6 +4827,12 @@ function inviteSettled(team, lead) {
   const pin = teamPins[team];
   return pin && (pin.keyId !== lead.keyId || pin.public !== lead.public) ? "pinned" : "";
 }
+/* A relay invitation from another lead for the team this desk's channel holds as left behind (strandedShown) is not refused as
+   "pinned": the yes leaves the team as Leave this team does and then takes it, so the lead's key is shown to compare once
+   admitted. Every other pinned team refuses it. */
+function inviteStranded(parsed) {
+  return !!parsed.relay && inviteSettled(parsed.team, parsed.lead) === "pinned" && !!strandedShown(parsed.team); /* plant:stranded-invite */
+}
 /* "" where the folder an invitation names may take its request: it holds no team file, or one whole under the invited
    lead and for the invited team. "unreadable" where its team file cannot be read, is larger than a team file, or is not
    JSON; "foreign" for any other. */
@@ -4848,7 +4863,7 @@ function readInvite(text) {
   if (shut) return Object.assign({}, view, { refused: shut });
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
-  if (settled) return Object.assign({}, view, { refused: settled });
+  if (settled && !inviteStranded(parsed)) return Object.assign({}, view, { refused: settled });
   /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
      code and no folder, as the link's confirm offers it. */
   if (parsed.relay) {
@@ -4922,7 +4937,8 @@ async function takeInvite(text, name, check) {
   const parsed = inviteParse(text);
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
-  if (settled) return Object.assign({}, joinView(), { refused: settled });
+  const stranded = !!settled && inviteStranded(parsed);
+  if (settled && !stranded) return Object.assign({}, joinView(), { refused: settled });
   const code = inviteCode(parsed.secret, parsed.lead.public);
   if (!parsed.relay) /* plant:relay-code */ /* plant:folder-code */
   {
@@ -4930,7 +4946,26 @@ async function takeInvite(text, name, check) {
   }
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
-  if (parsed.relay) return takeRelayInvite(parsed, name, me);
+  let ask = null;
+  if (parsed.relay && stranded) {
+    if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
+    /* The request is written before the old lead is let go, so a write that fails leaves this desk as it was: left behind, with
+       its notice, and the page told nothing was written (the test architect, 2026-11-01 11:51). */
+    ask = relayAsk(parsed, name, me);
+    if (ask.refused) return Object.assign({}, joinView(), { refused: ask.refused });
+    if (!askWritten(ask)) return Object.assign({}, joinView(), { refused: "silent" }); /* plant:stranded-ask-first */
+    const old = relayChannel;
+    forgetLead(parsed.team, true);
+    /* The leave stops its channel on the shell's next turn (relaySoon); the request waits for that, and for the old channel's last cycle. */
+    await new Promise(r => setTimeout(r, 0));
+    if (old && old !== relayChannel) await old.stop().catch(() => {});
+    const now = inviteDoor() || inviteSettled(parsed.team, parsed.lead);
+    if (now) {
+      if (askKept(ask)) { try { unlinkOwn(ask.file); } catch { /* gone */ } }
+      return Object.assign({}, joinView(), { refused: now });
+    }
+  }
+  if (parsed.relay) return takeRelayInvite(parsed, name, me, ask);
   const previous = catalogFolder();
   const keptJoin = teamJoin;
   /* The desk's own folder setting before any invitation still kept here moved it, for policyLetsInviteGo. */
@@ -5035,32 +5070,51 @@ async function takeInvite(text, name, check) {
   catalogFolderChanged();
   return joinView();
 }
-/* Yes to a relay invitation: no folder is asked, since the team folder is the mirror the channel layer keeps. The token
-   and the key the request is sealed under are kept sealed by safeStorage until the lead admits this desk; the pin the
-   invitation sets is the one board 907 lets the desk follow a relay address under. */
-function takeRelayInvite(parsed, name, me) {
-  if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
+/* Everything a yes to a relay invitation makes before it changes anything, so whatever can fail fails first: the request's nonce,
+   commitment and proof, the time it is dated, the token and the two keys sealed by safeStorage, the invitation's mirror made, and
+   the signed request to be written in that mirror, where it is kept once the invitation is taken. {refused} where one fails. */
+function relayAsk(parsed, name, me) {
   const nonce = crypto.randomBytes(32).toString("hex");
   const commit = joinCommit(parsed.team, me.key, me.box, nonce);
   const proof = memberProof(parsed.secret, commit);
   const incomingId = inviteIdOf(parsed.secret);
   const sealKey = RelayChannel().inviteSealKey(parsed.secret);
   const wrapKey = RelayChannel().inviteWrapKey(parsed.secret);
-  if (!proof || !incomingId || !sealKey || !wrapKey) return Object.assign({}, joinView(), { refused: "unread" });
+  if (!proof || !incomingId || !sealKey || !wrapKey || !deskBranch) return { refused: "unread" };
   let token = "", seal = "", wrap = "";
   try {
     /* The link's token, as the lead registered its hash, and the two keys derived from the secret. The secret itself is not kept. */
     token = safeStorage.encryptString(parsed.relay.token).toString("base64");
     seal = safeStorage.encryptString(sealKey.toString("base64")).toString("base64");
     wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
-  } catch { return Object.assign({}, joinView(), { refused: "unread" }); }
+  } catch { return { refused: "unread" }; }
   try { fs.mkdirSync(relayMirrorOf(parsed.relay.rt), { recursive: true }); }
-  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return Object.assign({}, joinView(), { refused: "silent" }); }
+  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return { refused: "silent" }; }
+  const asked = Date.now(), cut = String(name || "").trim().slice(0, 120);
+  const doc = memberRequestDoc({ team: parsed.team, name: cut, asked: asked, commit: commit }, null, me, { id: incomingId, proof: proof });
+  const file = path.join(relayMirrorOf(parsed.relay.rt), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
+  return { nonce: nonce, commit: commit, proof: proof, id: incomingId, token: token, seal: seal, wrap: wrap, asked: asked, doc: doc, file: file,
+    text: "", written: false };
+}
+/* Writes the request made ahead and keeps its text, or says why it could not be written and returns false. */
+function askWritten(ask) {
+  try { ask.text = writeJoin(ask.doc, ask.file); ask.written = true; return true; }
+  catch (e) { console.error("etiuda: the request to join could not be written - " + e.message); return false; }
+}
+/* Yes to a relay invitation: no folder is asked, since the team folder is the mirror the channel layer keeps. The token
+   and the key the request is sealed under are kept sealed by safeStorage until the lead admits this desk; the pin the
+   invitation sets is the one board 907 lets the desk follow a relay address under. */
+/* `ahead`: a left-behind desk's yes, its request made and written before it let the old lead go (relayAsk, askWritten). */
+function takeRelayInvite(parsed, name, me, ahead) {
+  if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
+  const ask = ahead || relayAsk(parsed, name, me);
+  if (ask.refused) return Object.assign({}, joinView(), { refused: ask.refused });
+  const nonce = ask.nonce, commit = ask.commit, proof = ask.proof, incomingId = ask.id, token = ask.token, seal = ask.seal, wrap = ask.wrap;
   const keptJoin = teamJoin, previous = catalogFolder();
   const was = { join: teamJoin, pin: teamPins[parsed.team], from: teamPinFrom[parsed.team], shown: teamShown[parsed.team] };
   const pinned = !teamPins[parsed.team] || (!!(keptJoin && keptJoin.invite) && keptJoin.team === parsed.team && keptJoin.invite.pinned === true);
   const before = inviteBeforeFor(parsed.team, keptJoin);
-  const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
+  const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: ask.asked, held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
       pinned: pinned, before: before, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal, wrap: wrap } } };
@@ -5074,7 +5128,8 @@ function takeRelayInvite(parsed, name, me) {
   let relayHost = "";
   try { relayHost = new URL(parsed.relay.url).host; } catch { relayHost = ""; }
   teamShown[parsed.team] = Object.assign({ folder: relayMirrorOf(parsed.relay.rt) }, relayHost ? { relay: relayHost } : {}, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
-  try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
+  /* A request written ahead (a left-behind desk's) is written again only where the leave took it from the mirror. */
+  try { if (!askKept(ahead)) writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
     teamJoin = was.join;
@@ -5089,6 +5144,8 @@ function takeRelayInvite(parsed, name, me) {
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
   delete teamRelayGone[parsed.team];
   relayCatalogNamed.delete(parsed.team);
+  /* A left-behind desk's own files wait for "It matches", and go nowhere on "It does not match" (the test architect, 2026-11-01 11:51). */
+  if (ahead) teamHeldOut.add(parsed.team);
   teamStamp = "";
   joinTold = false;
   persistDeskEnvelope();
@@ -5215,6 +5272,20 @@ function forkShown(team) {
   const f = forkLast(team);
   return f ? { kind: f.kind, seen: !!teamForks[team] && teamForks[team].seen === f.key } : null;
 }
+/* Whether the relay team this desk follows has left it behind (the channel's judgeBehind), `seen` once the agent has
+   dismissed its notice; the channel keeps both. */
+function strandedShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || typeof relayChannel.stranded !== "function") return null;
+  let s = null;
+  try { s = relayChannel.stranded(); } catch { s = null; }
+  return s ? { seen: s.seen === true } : null;
+}
+function strandedDismissed(team) {
+  const here = relayHere();
+  if (here && here.team === String(team || "") && relayChannel && typeof relayChannel.strandedSeen === "function") relayChannel.strandedSeen();
+  return joinView();
+}
 /* The agent dismissed the fork notice of `team`: kept for the fork it showed, so a new fork shows again. */
 function forkDismissed(team) {
   team = String(team || "");
@@ -5248,6 +5319,8 @@ function leadsView() {
     if (lapse) row.lapse = lapse;
     const fork = forkShown(t);
     if (fork) row.fork = fork; /* plant:fork-row */
+    const stranded = strandedShown(t);
+    if (stranded) row.stranded = stranded; /* plant:stranded-row */
     if (teamNeedsFolder[t]) {
       row.needsFolder = true;
       row.openFolder = shellWords().openFolder;
@@ -5263,6 +5336,8 @@ function shownName(name) {
 function leadSeen(team) {
   team = String(team || "");
   if (teamPins[team] && !teamSeen.has(team)) { teamSeen.add(team); persistDeskEnvelope(); }
+  /* "It matches": what a left-behind desk held from the new lead's invitation on goes up now. */
+  if (teamPins[team] && teamHeldOut.delete(team)) { persistDeskEnvelope(); relaySoon(); }
   return joinView();
 }
 /* Forgetting a lead takes its pin and every key kept under it, and bars a first admission for its team until a request the
@@ -5302,6 +5377,7 @@ function forgetLead(team, left) {
   relayCatalogNamed.delete(team);
   if (relayCatalogOwed === team) relayCatalogOwed = "";
   teamBarred.add(team);
+  teamHeldOut.delete(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team]; /* plant:leave-remembers */
   // A request already withdrawn waits nowhere, so it goes with the keys; a waiting relay request is withdrawn.
   if (teamJoin && teamJoin.team === team) {
@@ -5672,6 +5748,10 @@ function relayRun() {
     onLapse: () => sendJoin(theWindow),
     /* The team's lead key was seen in two hands, so the page is told now. */
     onFork: () => sendJoin(theWindow),
+    /* This desk was left behind by a handover and the key change after it, so the page is told now. */
+    onStranded: () => sendJoin(theWindow),
+    /* This desk was left behind and took the new lead's invitation: its files wait for "It matches". */
+    holdOut: () => teamHeldOut.has(team),
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
     onInviteEnd: kind => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
@@ -6361,7 +6441,7 @@ function readDesk() {
       const v = doc.teamNeedsFolder[t];
       if (SEALED_TEAM_RE.test(t) && table(v) && Number.isSafeInteger(v.rev)) teamNeedsFolder[t] = v;
     });
-    [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
+    [["teamSeen", teamSeen], ["teamBarred", teamBarred], ["teamHeldOut", teamHeldOut]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
     });
     teamJoin = joinKept(doc && doc.teamJoin);
@@ -7160,13 +7240,13 @@ ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyP
 ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
-// "seen", "forget", "leave", "lapse-seen" and "fork-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
+// "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file)
+  : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
   : op === "pick-moved-folder" ? pickMovedFolder(file, name)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */

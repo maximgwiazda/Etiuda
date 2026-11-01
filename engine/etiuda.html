@@ -7729,6 +7729,8 @@ What you type stays in this browser only.`;
     "The catalogs on it stay as they are. Tell the team's lead about it.": "Katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.",
     "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands.": "Ktoś użył starego klucza lidera tego zespołu, by przekazać zespół także innemu kluczowi, więc ten klucz najwyraźniej jest w cudzych rękach.",
     "This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.": "Stanowisko zostaje przy kluczu, za którym już podąża, a katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.",
+    "While this desk was switched off, the team moved to a new key and its keys were secured anew, so this desk cannot open what comes next.": "Gdy to stanowisko było wyłączone, zespół przeszedł pod nowy klucz, a jego klucze zabezpieczono od nowa, więc stanowisko nie otworzy tego, co przychodzi teraz.",
+    "It sends nothing new to the team, and everything on this computer stays as it is. To join, a new invitation from the team's lead is needed.": "Nie wysyła niczego nowego do zespołu, a wszystko na tym komputerze zostaje bez zmian. Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
     "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.": "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
     "Open a folder": "Otwórz folder",
     "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.": "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
@@ -15328,6 +15330,27 @@ What you type stays in this browser only.`;
       joinAsk("fork-seen", team);
     });
   }
+  var strandedUp = "";
+  var strandedDismissed = /* @__PURE__ */ new Set();
+  function syncStrandedNotice() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.stranded && !x.stranded.seen && !strandedDismissed.has(x.team))[0] || null;
+    const want = l ? l.team : "", up = document.getElementById("eTeamStranded");
+    if (want === strandedUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    strandedUp = want;
+    if (!l) return;
+    eNotice(
+      "eTeamStranded",
+      t("While this desk was switched off, the team moved to a new key and its keys were secured anew, so this desk cannot open what comes next."),
+      t("It sends nothing new to the team, and everything on this computer stays as it is. To join, a new invitation from the team's lead is needed."),
+      () => {
+        strandedDismissed.add(want);
+        if (strandedUp === want) strandedUp = "";
+        joinAsk("stranded-seen", want);
+      }
+    );
+  }
   var relayGoneUp = "";
   var relayGoneDismissed = /* @__PURE__ */ new Set();
   function syncRelayRemoved() {
@@ -15375,6 +15398,7 @@ What you type stays in this browser only.`;
         if (lapse) row.lapse = lapse;
         const fork = forkKept(l.fork);
         if (fork) row.fork = fork;
+        if (l.stranded && typeof l.stranded === "object") row.stranded = { seen: l.stranded.seen === true };
         return row;
       }) : []
     };
@@ -15387,6 +15411,7 @@ What you type stays in this browser only.`;
     syncLapseNotice();
     syncRelayRemoved();
     syncForkNotice();
+    syncStrandedNotice();
     const refusal = s.linkRefusal;
     if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
       dropInvite();

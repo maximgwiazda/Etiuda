@@ -109,6 +109,9 @@ const FORK_SAID = {
   two: "This team's lead key was handed to two different new keys at once, so this desk follows neither. The catalogs on it stay as they are. Tell the team's lead about it.",
 };
 const FORKS_MAX = 64, FORKS_TO_MAX = 16;
+/* A desk left behind by a handover to a key with a box of its own and the key change after it: what it says once, the
+   copywriter's words. */
+const STRANDED_SAID = "While this desk was switched off, the team moved to a new key and its keys were secured anew, so this desk cannot open what comes next. It sends nothing new to the team, and everything on this computer stays as it is. To join, a new invitation from the team's lead is needed.";
 /* The most keys a batch's invitation places are tried under for a desk's own copy (copiesByWriter). */
 const COPY_WRITERS_MAX = 8;
 /* The page shows this while a relay request waits. After the one upload the channel says the same line, once, where an
@@ -389,7 +392,7 @@ function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null, was: [], forks: {}, fork: null, listed: null };
+    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -420,6 +423,14 @@ function stateOf(x) {
   if (table(x.forks)) for (const k of Object.keys(x.forks).slice(-FORKS_MAX)) if (/^(later|two):/.test(k) && x.forks[k] === true) s.forks[k] = true;
   if (table(x.fork) && (x.fork.kind === "later" || x.fork.kind === "two") && B.isId(x.fork.from) && Array.isArray(x.fork.to) && x.fork.to.length && x.fork.to.every(B.isId)) {
     s.fork = { kind: x.fork.kind, from: x.fork.from, to: x.fork.to.slice() };
+  }
+  if (table(x.behind)) for (const k of Object.keys(x.behind).slice(-COPY_WRITERS_MAX)) {
+    const b = x.behind[k];
+    if (B.isId(k) && table(b) && typeof b.copy === "boolean" && count(b.above)) s.behind[k] = { copy: b.copy, above: b.above };
+  }
+  const sx = x.stranded;
+  if (table(sx) && isCount(sx.epoch) && isCount(sx.above) && sx.above > sx.epoch && B.isId(sx.lead) && B.isId(sx.writer)) {
+    s.stranded = { epoch: sx.epoch, above: sx.above, lead: sx.lead, writer: sx.writer, seen: sx.seen === true };
   }
   const idSet = m => {
     const out = {};
@@ -515,6 +526,7 @@ function createProgram(opts) {
   const teamMax = Number.isSafeInteger(o.teamMax) ? o.teamMax : B.TEAM_MAX;
   let st = stateOf(typeof o.load === "function" ? o.load() : null);
   let pin = pinOf((st && st.pin) || o.pin);
+  if (st.stranded && (!pin || pin.lead.keyId !== st.stranded.lead)) { st.stranded = null; st.behind = {}; } /* plant:stranded-out-invite */
   const rates = new Map();
   /* What waits on a refusal that lifts, by path or copy, with the reason last said for it, so a wait is said once. */
   const waiting = new Map();
@@ -558,7 +570,55 @@ function createProgram(opts) {
 
   function setPin(p) {
     pin = pinOf(p);
+    if (st.stranded && (!pin || pin.lead.keyId !== st.stranded.lead)) unstrand();
     return pin ? { ok: true } : R("not-enrolled");
+  }
+
+  /* LEFT BEHIND: one key this desk does not follow has written in the lead's places, copies among them none of which opened
+     here, and at an epoch it holds no key for. From then it sends nothing under the old epoch, keeps what it has and says
+     so once, until it lands a team file at that epoch or later, follows a handover, or is pinned to another lead. */
+  function rosterNames(keyId) {
+    return Object.keys(st.trust).some(e => (st.trust[e].desks || []).concat(st.trust[e].prior || []).some(d => d.keyId === keyId));
+  }
+  function noteBehind(items, ctx) {
+    const self = ctx && ctx.self;
+    if (!pin || !self || typeof ctx.agree !== "function" || typeof self.place !== "string" || !self.place.startsWith("desk:")) return;
+    const top = teamEpoch();
+    for (const it of items || []) {
+      const m = it && it.meta;
+      if (!table(m) || !B.isId(m.writer) || isLeadKey(m.writer) || typeof m.pub === "string" || rosterNames(m.writer)) continue;
+      const copy = typeof m.place === "string" && m.place.startsWith("invite:");
+      if (!copy && !(m.place === undefined || m.place === null || m.place === "root")) continue;
+      if (!has(st.behind, m.writer) && Object.keys(st.behind).length >= COPY_WRITERS_MAX) continue;
+      const b = has(st.behind, m.writer) ? st.behind[m.writer] : (st.behind[m.writer] = { copy: false, above: 0 });
+      if (copy) b.copy = true;
+      if (isCount(m.epoch) && m.epoch > top && !(typeof ctx.keyFor === "function" && ctx.keyFor(m.epoch))) b.above = Math.max(b.above, m.epoch);
+    }
+  }
+  /* Judged once a catch-up has read the whole list, so a copy on a later page is found before this desk is said to be left.
+     A known limit: the desk cannot verify the handover itself, so "left behind" rests on writes only the relay's current lead
+     can make at those places; closing it would take a handover step readable under the old key, a protocol addition not
+     built. A desk taken off the roster at that key change is told the same, which is true for it too. */
+  function judgeBehind() {
+    if (!pin || st.stranded) return false;
+    const top = teamEpoch();
+    for (const w of Object.keys(st.behind)) {
+      const b = st.behind[w];
+      if (isLeadKey(w) || rosterNames(w) || !top) { delete st.behind[w]; continue; }
+      let left = false;
+      left = b.copy && b.above > top; /* plant:stranded-judge */
+      if (!left) continue;
+      st.stranded = { epoch: top, above: b.above, lead: pin.lead.keyId, writer: w, seen: false };
+      persist();
+      say(STRANDED_SAID); /* plant:stranded-said */
+      return true;
+    }
+    return false;
+  }
+  function unstrand() {
+    st.stranded = null;
+    st.behind = {};
+    persist();
   }
 
   /* The leads this desk has followed, oldest first, the one it is pinned to last: what a team file's handovers are read
@@ -594,6 +654,8 @@ function createProgram(opts) {
     if (t.handed) {
       pin = { teamId: pin.teamId, rt: pin.rt, lead: { keyId: t.doc.lead.keyId, public: t.doc.lead.public } }; /* plant:team-pin-move */
       st.pin = pin; /* plant:team-pin-save */
+      st.stranded = null; /* plant:stranded-out-recopy */
+      st.behind = {};
     }
   }
 
@@ -908,6 +970,7 @@ function createProgram(opts) {
     if (!landed.ok || landed.stale) return landed;
     st.revs = lr.revs;
     keepTrust(t);
+    if (st.stranded && t.epoch >= st.stranded.above) { st.stranded = null; st.behind = {}; } /* plant:stranded-out-invite */ /* plant:stranded-out-recopy */
     persist();
     if (ctx && typeof ctx.onTeam === "function") {
       try { ctx.onTeam(); } catch (e) { say("the team file could not be heeded - " + (e && e.message)); }
@@ -1255,6 +1318,7 @@ function createProgram(opts) {
     const desks = [];
     for (const it of others) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
     landNewest(desks, out, ctx);
+    noteBehind(items, ctx);
     persist();
     return out;
   }
@@ -1510,6 +1574,10 @@ function createProgram(opts) {
     state: () => st,
     /* The latest fork this desk has seen, {kind, from, to} by key ids, or null. */
     fork: () => (st.fork ? { kind: st.fork.kind, from: st.fork.from, to: st.fork.to.slice() } : null),
+    judgeBehind,
+    /* Left behind (judgeBehind): the epoch it holds, the one it cannot open, and whether the agent dismissed the notice. */
+    stranded: () => (st.stranded ? { epoch: st.stranded.epoch, above: st.stranded.above, seen: st.stranded.seen } : null),
+    strandedSeen() { if (st.stranded && !st.stranded.seen) { st.stranded.seen = true; persist(); } },
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed(id) {
       st.tokenUsed = true;
@@ -2007,13 +2075,23 @@ function createChannel(opts) {
       }
       prog.applyBatch(items, ctx());
       prog.setSeq(top);
-      if (r.json.length < SINCE_MAX) return caughtUp(began, behind);
+      /* Judged on the short page alone: a catch-up that ran out at the round cap read part of the list, and the next cycle reads on. */
+      if (r.json.length < SINCE_MAX) {
+        judgeStranded(); /* plant:stranded-whole */
+        return caughtUp(began, behind);
+      }
     }
     return { ok: true };
   }
 
   /* The top reached on this computer's own key: past the deletion keep, the whole list first, and what it no longer names
      dropped; then the stamp. A list that does not come whole leaves both for the next cycle. */
+  /* Whether this desk was left behind, judged once a whole catch-up has been read (the lead box's stranded desk). */
+  function judgeStranded() {
+    if (prog.judgeBehind() && typeof o.onStranded === "function") {
+      try { o.onStranded(); } catch (e) { say("that this desk was left behind could not be shown - " + (e && e.message)); }
+    }
+  }
   async function caughtUp(began, behind) {
     if (!session || session.by !== "key") return { ok: true };
     if (behind && !prog.suspect()) {
@@ -2137,6 +2215,12 @@ function createChannel(opts) {
         if (isCount(e) && e < floor) sayOnce("what this computer sends waits for the team key of epoch " + floor + ", which its team file names");
         continue;
       }
+      /* Left behind, nothing goes under a team key; a request under a new invitation's key still does. */
+      let left = false;
+      left = !sealing.byInvite && !!prog.stranded(); /* plant:stranded-hold */
+      /* A left-behind desk that took a new lead's invitation holds its files until the agent says the key matches. */
+      if (!sealing.byInvite && typeof o.holdOut === "function" && o.holdOut()) left = true; /* plant:stranded-match-hold */
+      if (left) continue;
       op.byInvite = !!sealing.byInvite;
       if (sealing.byInvite) op.inviteId = ctx().inviteId;
       let u = await upload(op, who, sealing);
@@ -2537,12 +2621,14 @@ function createChannel(opts) {
     writeAnswer,
     lapse: lapseView,
     fork: () => prog.fork(),
+    stranded: () => prog.stranded(),
+    strandedSeen: () => prog.strandedSeen(),
   };
 }
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
-  SESSION_KEEP_MS, WAITING_SAID, FORK_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
+  SESSION_KEEP_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
   pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,

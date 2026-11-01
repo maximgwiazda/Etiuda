@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 82;
+const EXPECTED = 83;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1191,6 +1191,76 @@ try {
         "14by the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and"
         + " two at once in Polish, and a dismissal reaches the shell: English " + JSON.stringify(shown.en) + ", Polish " + JSON.stringify(shown.pl)
         + ", dismissed " + dismissed + ", asked " + asked.filter(a => a === "fork-seen").length + ", seen " + seenAfter);
+    }
+
+    /* The page, for a desk left behind (the test architect's E1 on the lead box): the team's row as the shell gives it
+       (tests/relay-channel.mjs 939l drives the shell's half), shown in English, taken down by a view without it, shown again
+       in Polish, and dismissed: "stranded-seen" with the team goes to the shell and the notice stays down. The host is a
+       stand-in that answers every ask with that view, the row turning seen once "stranded-seen" arrives. */
+    {
+      const nodes = new Map();
+      const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
+        classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
+        setAttribute(k, v) { this.attrs[k] = String(v); },
+        appendChild(c) { c.parent = this; this.children.push(c); if (c.id) nodes.set(c.id, c); return c; },
+        remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); if (this.id && nodes.get(this.id) === this) nodes.delete(this.id); this.parent = null; },
+        get firstChild() { return this.children[0] || null; } });
+      const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
+      const pause = ms => new Promise(r => setTimeout(r, ms));
+      const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
+      const T = "t-" + crypto.randomBytes(4).toString("hex");
+      const asked = [];
+      let state = "left", took = null;
+      const view = () => ({ leads: [Object.assign({ team: T, print: "0123456789abcdef", admitted: true, seen: true, lead: "Ada Quay", folder: "", relay: "relay.test" },
+        state === "gone" ? {} : { stranded: { seen: state === "seen" } })] });
+      const shown = { en: "", gone: null, pl: "", hidden: null, stays: null };
+      try {
+        globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
+          createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
+          querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
+        globalThis.addEventListener = () => {};
+        globalThis.removeEventListener = () => {};
+        window.E_HOST = { teamJoin: (...a) => { asked.push(a.slice(0, 2)); if (a[0] === "stranded-seen" && a[1] === T) state = "seen"; return Promise.resolve(view()); },
+          onTeamJoin: fn => { took = fn; } };
+        const HK = await import(MOD("hooks.js"));
+        HK.hooks.render = () => {};
+        const ST = await import(MOD("storage.js")), TJ = await import(MOD("team-join.js"));
+        const notice = () => { const n = nodes.get("eTeamStranded"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
+        ST.lsSet("eUiLang", "en");
+        TJ.wireTeamJoin();
+        await pause(30);
+        shown.en = notice();
+        state = "gone";
+        took(view());
+        shown.gone = !nodes.get("eTeamStranded");
+        state = "left";
+        ST.lsSet("eUiLang", "pl");
+        took(view());
+        shown.pl = notice();
+        ST.lsSet("eUiLang", "en");
+        const buttons = [];
+        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamStranded") || { children: [] });
+        if (buttons.length) buttons[buttons.length - 1].onclick();
+        await pause(30);
+        shown.hidden = !nodes.get("eTeamStranded");
+        took(view());
+        shown.stays = !nodes.get("eTeamStranded");
+      } finally {
+        globalThis.document = was.document;
+        window.E_HOST = was.host;
+        globalThis.addEventListener = was.add;
+        globalThis.removeEventListener = was.remove;
+      }
+      const STRANDED_EN = "While this desk was switched off, the team moved to a new key and its keys were secured anew, so this desk cannot open what comes next. It sends nothing new to the team, and everything on this computer stays as it is. To join, a new invitation from the team's lead is needed.";
+      const STRANDED_PL = "Gdy to stanowisko było wyłączone, zespół przeszedł pod nowy klucz, a jego klucze zabezpieczono od nowa, więc stanowisko nie otworzy tego, co przychodzi teraz. Nie wysyła niczego nowego do zespołu, a wszystko na tym komputerze zostaje bez zmian. Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.";
+      const seenAsks = asked.filter(a => a[0] === "stranded-seen");
+      check(shown.en === STRANDED_EN && shown.gone === true && shown.pl === STRANDED_PL && seenAsks.length === 1 && seenAsks[0][1] === T
+        && state === "seen" && shown.hidden === true && shown.stays === true,
+        "14bz the page shows a desk left behind on the team's lasting notice in the copywriter's words, in English and in Polish, a view"
+        + " without it takes it down, and its dismissal sends stranded-seen for the team and keeps it down: English " + JSON.stringify(shown.en)
+        + ", without it " + (shown.gone ? "down" : "still up") + ", Polish " + JSON.stringify(shown.pl) + ", asked stranded-seen "
+        + seenAsks.length + (seenAsks[0] ? " for " + (seenAsks[0][1] === T ? "the team" : JSON.stringify(seenAsks[0][1])) : "")
+        + ", dismissed " + (shown.hidden ? "down" : "still up") + ", after the next view " + (shown.stays ? "down" : "up again"));
     }
 
     /* The plants: each guarding line removed from a copy, the scene that line guards run on it. */
