@@ -7,7 +7,7 @@ const LAUNCH_R=7, LAUNCH_MIN_MS=1100, LAUNCH_OUT_MS=260, LAUNCH_QUICK_MS=140, LA
 const LM_TAU=Math.PI*2, LM_PHI0=Math.PI/4, LM_PHI1=LM_PHI0+Math.PI;
 const LM_A=96, LM_SPACING=0.6, LM_FINE=4000, LM_INK=150, LM_BOX=256, LM_T0=3*Math.PI/4, LM_T1=7*Math.PI/4, LM_FAR=0.6;
 const LM_PX=280, LM_STEP=3.5, LM_FEATHER=LM_STEP/2, LM_DOT=1.05, LM_ALPHA_STEPS=16, LM_W0=2*Math.PI*0.007;
-// The header's group transform (template.html, .brand svg g), which the empty mark reads off the page.
+// The header's group transform (template.html, .brand svg g).
 const LM_G={a:1.0581, b:0, c:0, d:1.0581, e:-7.441, f:-7.441};
 
 /* ---- the figure at a half-width R: fifth.js's pass, fit, band, light and lay ---- */
@@ -67,7 +67,7 @@ function launchFigure(R){
   }
   return {R:R, pass:pass, fit:fit, band:band, radius:radius, light:light, lay:lay};
 }
-// The lattice the figure is laid on, at LM_PX: empty-mark.js markDots without the page.
+// The lattice the figure is laid on, at LM_PX, in the header's group transform.
 function launchLattice(F){
   const s=LM_PX/LM_BOX, m=LM_G;
   const to=o=>{ const u=o[0], v=o[1]; o[0]=s*(m.a*u+m.c*v+m.e); o[1]=s*(m.b*u+m.d*v+m.f); };
@@ -249,7 +249,7 @@ function lmLanded(){
   w.forEach(fn=>setTimeout(fn,0));
 }
 /* THE ARRIVAL'S CLOCK starts with the drawing, and a frame moves it on by at most two of the shortest frame intervals
-   seen (60 Hz's until one is), as the empty mark's gather does: a frame stamped before the start counts nothing, and
+   seen (60 Hz's until one is): a frame stamped before the start counts nothing, and
    a stall (boot's work, the first layout) holds the points rather than jumping them, so the arrival is seen
    whole. What a stall held back is kept in `lost` for the launch's floor. Once landed the slow turn runs on
    the wall's time and asks for frames fifteen times a second. */

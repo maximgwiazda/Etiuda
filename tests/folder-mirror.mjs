@@ -34,13 +34,19 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 63;
+const EXPECTED = 71;
+/* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-folder-mirror-"));
@@ -2203,11 +2209,170 @@ async function run() {
     check(r.ok, "44v lifting plant:syncer-team-said leaves a tampered share's team file unsaid: " + JSON.stringify(r));
   }
 
+  /* 45: WHAT THE DESK SEES AFTER A SCAN (Argon's folder-as-built review, findings 2 and 6; the test regimen's rule 17). Each leg
+     starts a desk's shell over its own desk.json, starts its syncer as the shell does (folderSyncerRun, a real worker), and
+     reads after the scans: the catalog through readCatalog, the mirror on disk. A copy is counted from the scan messages the
+     worker sends: each staged entry for a path is one copy of it from the share. `syncerDir`, where given, holds the syncer
+     files the shell loads in place of its own, for a plant. */
+  const sleep = ms => new Promise(res => setTimeout(res, ms));
+  const keyIn = k => Buffer.from(Buffer.from(k.toString("base64"), "utf8").map(b => b ^ 0x5a)).toString("base64");
+  function deskOver(name, share, env, syncerDir) {
+    const ud = folder(name + "-desk");
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }, env)), "utf8");
+    const swap = syncerDir ? n => (/[\\/]folder[\\/]syncer\.cjs$/.test(String(n)) ? nodeRequire(path.join(syncerDir, "syncer.cjs")) : nodeRequire(n)) : undefined;
+    const d = loadDesk(ud, swap ? { require: swap } : {});
+    d.write = more => { fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }, more)), "utf8"); d.api.readDesk(); };
+    return d;
+  }
+  function watchScans(s) {
+    const seen = { scans: 0, copies: new Map() };
+    const apply = s.program.applyScan;
+    s.program.applyScan = msg => {
+      for (const it of (msg && msg.staged) || []) seen.copies.set(it.relPath, (seen.copies.get(it.relPath) || 0) + 1);
+      seen.scans++;
+      return apply(msg);
+    };
+    seen.copiesOf = rel => seen.copies.get(rel) || 0;
+    seen.next = async (n = 1) => {
+      for (let i = 0; i < n; i++) {
+        const at = seen.scans, until = Date.now() + 6000;
+        s.kick();
+        while (seen.scans === at && Date.now() < until) await sleep(25);
+      }
+    };
+    return seen;
+  }
+  function headBy(key, keyId, team, t) {
+    const doc = { v: 1, team, epoch: 1, rev: 1, t, editions: [], sig: { alg: "Ed25519", keyId } };
+    doc.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), signedBytesOf(doc)]), key).toString("hex");
+    return JSON.stringify(doc);
+  }
+  const syncerCopy = (scratch, name) => {
+    for (const f of ["syncer.cjs", "syncer-worker.cjs"]) if (f !== name) fs.copyFileSync(path.join(ROOT, "shell", "folder", f), path.join(path.dirname(scratch), f));
+    return path.dirname(scratch);
+  };
+
+  /* Finding 2: the share holds a newer edition at an epoch this desk has no key for, a new catalog at that epoch, and a
+     catalog whose signature fails. The desk keeps showing the catalog it had, each file is copied once over four scans, and
+     once the key and the team file of that epoch arrive both editions land, from the copy already taken. */
+  async function parkScene(name, syncerDir) {
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const KA = crypto.randomBytes(32), KB = crypto.randomBytes(32);
+    const team = epoch => JSON.stringify(teamFile({ team: T, epoch, rev: 1 }));
+    /* Whole files by rename, as a share's sync tool lands them, so no scan copies one half written. */
+    const putAt = (f, t) => { const tmp = path.join(share, f + ".tmp"); fs.writeFileSync(tmp, t, "utf8"); fs.renameSync(tmp, path.join(share, f)); };
+    putAt("etiuda-team.json", team(1));
+    putAt("lamp-shop.ec", seal(KA, 1, CAT_A1, T));
+    const env = { teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } }, teamKeys: { [T]: { 1: keyIn(KA) } } };
+    const d = deskOver(name, share, env, syncerDir);
+    const s = d.api.folderSyncerRun(null);
+    const out = { s: !!s };
+    if (!s) return out;
+    try {
+      const seen = watchScans(s);
+      await seen.next(1);
+      const shown = () => { const t = d.api.readCatalog(); try { const c = JSON.parse(t); return c.id + " rev " + c.rev; } catch { return null; } };
+      out.before = shown();
+      seen.copies.clear();
+      const forged = sign(JSON.parse(CAT_A1), forger.privateKey, FORGER.keyId);
+      putAt("lamp-shop.ec", seal(KB, 2, CAT_A2, T));
+      putAt("tea-room.ec", seal(KB, 2, text(catalog("tea-room", 1, "Tea Room", "2026-02-01")), T));
+      putAt("forged.ec", seal(KA, 1, text(forged), T));
+      await seen.next(4);
+      out.after = shown();
+      out.copies = ["lamp-shop.ec", "tea-room.ec", "forged.ec"].map(f => seen.copiesOf(f));
+      out.forgedOut = !fs.existsSync(path.join(d.ud, "folder-mirror", T, "forged.ec"));
+      d.write(Object.assign({}, env, { teamKeys: { [T]: { 1: keyIn(KA), 2: keyIn(KB) } } }));
+      putAt("etiuda-team.json", team(2));
+      await seen.next(2);
+      try { out.landed = JSON.parse(fs.readFileSync(path.join(d.ud, "folder-mirror", T, "lamp-shop.ec"), "utf8")).epoch; } catch { out.landed = null; }
+      out.tea = fs.existsSync(path.join(d.ud, "folder-mirror", T, "tea-room.ec"));
+    } finally { s.stop(); }
+    return out;
+  }
+  const parkGreen = r => r.s && r.before === "lamp-shop rev 1" && r.after === "lamp-shop rev 1" && JSON.stringify(r.copies) === "[1,1,1]" && r.forgedOut && r.landed === 2 && r.tea;
+  {
+    const r = await parkScene("park");
+    check(parkGreen(r), "45a a desk whose share holds an edition at an epoch it has no key for, a new catalog at that epoch and a"
+      + " catalog whose signature fails keeps showing its catalog after four scans (" + r.before + ", then " + r.after
+      + "), copies each file once (" + JSON.stringify(r.copies) + " for the edition, the new catalog and the refused one, counted"
+      + " from the worker's scan messages), and lands both once the key and its team file arrive (the mirror's edition at epoch " + r.landed + ", new catalog " + r.tea + ")");
+  }
+  /* Each lifted in a copy turns its leg red, and no product file is written. Skipped where ETIUDA_PLANTS is off (null). */
+  const parkPlant = async (tag, file, red) => (PLANTS_OFF ? null
+    : testPlant(tag, path.join(ROOT, "shell", "folder", file), async scratch => red(await parkScene("plant-" + tag, syncerCopy(scratch, file)))));
+  const newCopied = r => !!r.copies && r.copies[1] > 1;
+  { const r = await parkPlant("worker-held", "syncer-worker.cjs", newCopied); if (r) check(r.ok, "45b lifting plant:worker-held copies a parked file again at every scan: " + JSON.stringify(r)); else skip("45b lifting plant:worker-held copies a parked file again at every scan"); }
+  { const r = await parkPlant("syncer-pending-held", "syncer.cjs", newCopied); if (r) check(r.ok, "45c lifting plant:syncer-pending-held leaves a parked file off what the worker holds back, so it is copied at every scan: " + JSON.stringify(r)); else skip("45c lifting plant:syncer-pending-held leaves a parked file off what the worker holds back, so it is copied at every scan"); }
+  { const r = await parkPlant("syncer-held-post", "syncer.cjs", newCopied); if (r) check(r.ok, "45d lifting plant:syncer-held-post never tells the worker what is held, so a parked file is copied at every scan: " + JSON.stringify(r)); else skip("45d lifting plant:syncer-held-post never tells the worker what is held, so a parked file is copied at every scan"); }
+  { const r = await parkPlant("syncer-refused-held", "syncer.cjs", got => !!got.copies && got.copies[2] > 1); if (r) check(r.ok, "45e lifting plant:syncer-refused-held copies a catalog whose signature failed again at every scan: " + JSON.stringify(r)); else skip("45e lifting plant:syncer-refused-held copies a catalog whose signature failed again at every scan"); }
+
+  /* Finding 6: a desk joins with no lead pinned yet, then is admitted, and the shell calls folderSyncerRun as it does when the
+     catalog folder moves; later the lead hands the team to a new key. After each, at the next scan, the lead's head is in the
+     mirror and a team file under any other key is refused. */
+  async function pinScene(name, syncerDir) {
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const next = crypto.generateKeyPairSync("ed25519");
+    const NEXT = { keyId: "lead-next", public: pubHex(next.publicKey) };
+    const putAt = (f, t) => { const tmp = path.join(share, f + ".tmp"); fs.writeFileSync(tmp, t, "utf8"); fs.renameSync(tmp, path.join(share, f)); };
+    putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })));
+    putAt("etiuda-head.json", headBy(lead.privateKey, LEAD.keyId, T, 1700000000000));
+    const hex = () => crypto.randomBytes(32).toString("hex");
+    const d = deskOver(name, share, { teamJoin: { team: T, file: "lamp-shop", nonce: hex(), commit: hex(), asked: Date.now(), held: 0, name: "" } }, syncerDir);
+    const s = d.api.folderSyncerRun(null);
+    const out = { s: !!s };
+    if (!s) return out;
+    const mirror = path.join(d.ud, "folder-mirror", T);
+    const headKey = () => { try { return JSON.parse(fs.readFileSync(path.join(mirror, "etiuda-head.json"), "utf8")).sig.keyId; } catch { return null; } };
+    const teamLead = () => { try { return JSON.parse(fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8")).lead.keyId; } catch { return null; } };
+    try {
+      const seen = watchScans(s);
+      await seen.next(1);
+      out.joining = headKey();
+      d.write({ teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } } });
+      out.same = d.api.folderSyncerRun(null) === s;
+      await seen.next(1);
+      out.joinedHead = headKey();
+      putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 2, signer: forger.privateKey, keyId: FORGER.keyId, public: FORGER.public })));
+      await seen.next(1);
+      out.joinedTeam = teamLead();
+      const step = { format: 1, kind: "etiuda-team-handover", team: T, to: { keyId: NEXT.keyId, public: NEXT.public }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      step.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), signedBytesOf(step)]), lead.privateKey).toString("hex");
+      putAt("etiuda-team.json", JSON.stringify(sign({ format: 1, kind: "etiuda-team", id: T, catalogs: ["lamp-shop"], lead: NEXT, sealed: true, epoch: 1, rev: 3, roster: [], handover: [step] }, next.privateKey, NEXT.keyId)));
+      putAt("etiuda-head.json", headBy(next.privateKey, NEXT.keyId, T, 1700000100000));
+      d.write({ teamPins: { [T]: NEXT }, teamShown: { [T]: { folder: share } } });
+      d.api.folderSyncerRun(null);
+      await seen.next(1);
+      out.handedHead = headKey();
+      out.handedTeam = teamLead();
+      putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 4 })));
+      await seen.next(1);
+      out.oldLeadTeam = teamLead();
+    } finally { s.stop(); }
+    return out;
+  }
+  const pinGreen = r => r.s && r.same && r.joinedHead === LEAD.keyId && r.joinedTeam === LEAD.keyId
+    && r.handedHead === "lead-next" && r.handedTeam === "lead-next" && r.oldLeadTeam === "lead-next";
+  {
+    const r = await pinScene("pin");
+    check(pinGreen(r), "45f after a join the running syncer takes the lead's pin: at the next scan the lead's head is in the mirror ("
+      + r.joinedHead + ", while joining " + r.joining + ") and a team file under another key is refused (mirror's lead " + r.joinedTeam
+      + "); after a handover the new lead's head and team file are in the mirror (" + r.handedHead + ", " + r.handedTeam
+      + ") and a later file under the old lead's key is refused (" + r.oldLeadTeam + "), one syncer throughout " + r.same);
+  }
+  const pinPlant = async tag => (PLANTS_OFF ? null
+    : testPlant(tag, syncerFile, async scratch => { const got = await pinScene("plant-" + tag, syncerCopy(scratch, "syncer.cjs")); return got.s && got.joinedHead !== LEAD.keyId; }));
+  { const r = await pinPlant("syncer-new-pin"); if (r) check(r.ok, "45g lifting plant:syncer-new-pin leaves a joined desk's running syncer on no pin, so the lead's head never reaches the mirror: " + JSON.stringify(r)); else skip("45g lifting plant:syncer-new-pin leaves a joined desk's running syncer on no pin, so the lead's head never reaches the mirror"); }
+  { const r = await pinPlant("syncer-pin-forgets"); if (r) check(r.ok, "45h lifting plant:syncer-pin-forgets keeps the head refused under no pin held after the pin arrives, so it is never copied again: " + JSON.stringify(r)); else skip("45h lifting plant:syncer-pin-forgets keeps the head refused under no pin held after the pin arrives, so it is never copied again"); }
+
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();
   }
 
-  console.log("#counts checks=" + asserted + " failures=" + failed);
+  console.log("#counts checks=" + asserted + " skipped=" + skipped + " failures=" + failed + " expected=" + EXPECTED);
+  if (asserted + skipped < EXPECTED) console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   if (failed > 0) {
     process.exit(Math.min(failed, 63));
   }

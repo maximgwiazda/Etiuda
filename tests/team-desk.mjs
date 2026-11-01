@@ -245,6 +245,9 @@ try {
   const text = doc => JSON.stringify(doc, null, 1) + "\n";
   const A1 = text(catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01")), A2 = text(catalog("lamp-shop", 2, "Lamp Shop", "2026-02-02"));
   const A3 = text(catalog("lamp-shop", 3, "Lamp Shop", "2026-02-03")), B1 = text(catalog("tea-room", 1, "Tea Room", "2026-02-01"));
+  /* Edition 2 told apart by its epoch, so a read of the mirror says which envelope it opened: the mirror keeps the edition
+     before while a newer one waits for its key. */
+  const A2At = epoch => text(catalog("lamp-shop", 2, "Lamp Shop", "2026-03-" + String(10 + epoch)));
   let clock = Date.now();
   const put = (dir, name, t) => {
     clock += 1000;
@@ -946,7 +949,7 @@ try {
     const ledBy = (i, epoch, ho) => JSON.stringify(teamFile({ team: TR, catalogs: ["lamp-shop"], keyId: L[i].keyId, public: L[i].public,
       signer: keys[i].privateKey, epoch: epoch, roster: [entry(meR, KR[epoch], epoch, TR)], handover: ho }));
     const pinOf = D => JSON.stringify((D.envelope().teamPins || {})[TR] || null);
-    const opens = async epoch => { put(ROT, "lamps.ec", seal(KR[epoch], epoch, A2, TR)); return (await read(R, "lamps.ec")) === A2.trim(); };
+    const opens = async epoch => { put(ROT, "lamps.ec", seal(KR[epoch], epoch, A2At(epoch), TR)); return (await read(R, "lamps.ec")) === A2At(epoch).trim(); };
     put(ROT, "etiuda-team.json", ledBy(0, 1));
     const first = await opens(1) && pinOf(R) === JSON.stringify(LEAD);
 
@@ -1022,7 +1025,7 @@ try {
         led: (i, epoch, ho) => JSON.stringify(teamFile({ team: T, catalogs: ["lamp-shop"], keyId: L[i].keyId, public: L[i].public,
           signer: keys[i].privateKey, epoch: epoch, roster: [entry(me, KT[epoch], epoch, T)], handover: ho })) };
       w.pin = () => (((w.D.envelope().teamPins || {})[T]) || {}).public;
-      w.opens = async epoch => { put(FD, "lamps.ec", seal(KT[epoch], epoch, A2, T)); return (await read(w.D, "lamps.ec")) === A2.trim(); };
+      w.opens = async epoch => { put(FD, "lamps.ec", seal(KT[epoch], epoch, A2At(epoch), T)); return (await read(w.D, "lamps.ec")) === A2At(epoch).trim(); };
       w.row = async () => ((((await w.D.ask("etiuda:team-join", "leads")) || {}).leads) || []).find(l => l.team === T) || null;
       w.said = s => w.D.said.filter(l => l.indexOf(s) >= 0).length;
       /* Both files written before one sync, as a share's sync tool lands a conflict sibling beside the file. */

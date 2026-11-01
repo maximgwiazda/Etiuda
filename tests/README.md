@@ -16,7 +16,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
-    node tests/theme-switch.mjs                      no fixtures, the theme switch settles within 300ms and a press during the fade turns it back
+    node tests/theme-switch.mjs                      no fixtures, the theme lands at once as Studio's does: no crossfade or transition cut left in the sheet, a press puts data-theme on the root in its own task with no view transition and no waited write, and a second press straight after is taken (952a, 952b)
     node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2), the bubbles' fill (kc3) and no retired blue in shell/*.js (kc4)
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
@@ -62,7 +62,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures; npm run swap, in npm run gates and the release
-    node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows across a reload, a control that the fault still kills the page without the hold, and a fade skipped by the page's hiding leaving nothing on the root (tf6, tf7), Chrome, no fixtures
+    node tests/theme-fade.mjs                        every category, then the theme: the page lives and its window is painted in the theme asked for, read from screenshots by area against each theme's palette from a fresh start, no press opens a view transition or cuts the controls' transitions, and a second press 60 ms after the first is taken (tf1 to tf3), Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
@@ -726,7 +726,9 @@ stand-in: built at the work area and maximised there (15a, red on the shell befo
 restored rectangle kept when closed maximised (15b), given back at the first restore (15c), and a
 snap left where it lands (15d). 15b to 15d each went red once under a planted fault: the held
 rectangle not passed at close, the restore handler unregistered, the built-size test removed. What
-Windows then paints is the eye's, at the next install.
+Windows then paints is the eye's, at the next install. 15e: the page is told `etiuda:shown` once
+ready-to-show has shown the window, maximised or restored, and never before, so the opening waits for a
+window on screen (red on the shell before the change; lifting `plant:shown-told` turns it red).
 
 ## The debugging switches of an installed desk
 

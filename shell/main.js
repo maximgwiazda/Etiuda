@@ -6826,6 +6826,8 @@ ipcMain.on("etiuda:host", (e) => {
     platform: process.platform,
     backdrop: hostBackdrop(),
     maximized: !!(win && win.isMaximized()),
+    // Whether the window is on screen yet, or never will be: a first load is answered before ready-to-show.
+    shown: !!(win && (win.etiudaShown || (typeof win.isVisible === "function" && win.isVisible()))),
     /* Which file is loaded and where it was found, because the page cannot look: About prints
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
@@ -8329,11 +8331,14 @@ function createWindow() {
      probe after this statement and match it by its text: a handler whose body is inline makes
      that anchor break every time the body changes. */
   /* A window closed maximised is SHOWN by maximize(); built at that size, its first frame is already maximised. */
+  /* The page is told once the window is on screen, or will never be, and its opening waits for that word. */
   const showWhenReady = () => {
+    win.etiudaShown = true;
     if (OFFSCREEN_SHOWN) win.showInactive();
-    else if (OFFSCREEN) return;
+    else if (OFFSCREEN) { win.webContents.send("etiuda:shown"); return; }
     else if (place && place.maximized) { win.maximize(); win.focus(); }
     else win.show();
+    win.webContents.send("etiuda:shown"); /* plant:shown-told */
   };
   win.once("ready-to-show", showWhenReady);
 

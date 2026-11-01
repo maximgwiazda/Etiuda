@@ -551,7 +551,6 @@ function runUnitTests() {
   markClockTests();
   fifthTests();
   launchMarkTests();
-  emptyBandTests();
   menuWarmTests();
   ecTypeNameTests();
   installerUpdateTests();
@@ -2608,33 +2607,35 @@ function arrivalTests() {
   eq("held, the content is drawn at a trace rather than not at all, so it is rasterised before its fade",
     rule ? +rule[1] > 0 && +rule[1] < 0.01 : "no e-arriving rule", true);
 }
-/* THE EMPTY MARK'S CLOCK, as smooth on a first launch as on any later one: empty-mark.js runs in a
-   VM on a clock and a frame queue written here, with one dot flying from x 0 to x 100, so the x it
-   is drawn at is the gather's progress. The tour's start and the boot repaint are sliced into the
-   same VM and asked when they run. What the eye sees on a first launch is the verifier's frames. */
-function markLab() {
+/* THE EMPTY DESK'S MARK AND WHAT WAITS FOR IT (board 952): empty-mark.js hands the empty desk's block to the launch's
+   drawing (launch-mark.js, whose own clock the launch legs below hold), and the tour's start, the boot repaint and the
+   menu's warm copy wait for that drawing to land. empty-mark.js and the slices of tour.js and on-open.js run in a VM
+   on a clock written here; the landing is a stand-in, `land(t)`, so what is asked is when each waiter runs. */
+function markLab(o) {
   const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
-  const mark = read("empty-mark.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
-  const tour = read("tour.js"), open = read("on-open.js");
+  /* o.lift: a plant's line taken out of its file before it runs; o.host: the desk host the page reads. */
+  const lift = (f, t) => { if (!o || !o.lift || o.lift.file !== f) return t; const ls = t.split("\n"), at = ls.findIndex(l => l.indexOf(o.lift.tag) >= 0);
+    if (at < 0) throw new Error(o.lift.tag + " is not in " + f); ls.splice(at, 1); return ls.join("\n"); };
+  const mark = lift("empty-mark.js", read("empty-mark.js")).replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const tour = lift("tour.js", read("tour.js")), open = lift("on-open.js", read("on-open.js"));
   const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
     extractDecl(open, "function deskLaunch("), extractDecl(open, "function wireOnOpen(")];
-  let clock = 0, seq = 0, frames = [], timers = [], drawnX = null;
-  const log = [], warms = [];
-  const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
+  let clock = 0, seq = 0, frames = [], timers = [], landed = null, waiting = [];
+  const log = [], warms = [], handed = [];
   const sb = {
-    M_MS: { gather: 1100, twinkle: 66 }, FIFTH_PHI0: Math.PI / 4, mgReduceMotion: () => !!sb.still,
+    mgReduceMotion: () => !!sb.still, fifthPhase: () => 0,
     performance: { now: () => clock },
     requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
     setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
     clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
     requestIdleCallback: fn => { timers.push({ id: ++seq, at: clock, fn }); return seq; },
-    setInterval: () => 0, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
-    MutationObserver: class { observe() {} disconnect() {} },
-    document: { querySelector: () => null, documentElement: {},
-      createElement: () => ({ setAttribute() {}, getContext: () => ctx, isConnected: true, parentNode: null, remove() { this.parentNode = null; } }) },
-    ssSet: () => {}, dialogStanding: () => false, launchMark: () => null, whenLaunchLanded: fn => fn(),
+    setInterval: () => 0,
+    document: { querySelector: () => null },
+    syncLaunchMark: (host, opts) => { handed.push([host, opts]); if (host) landed = false; },
+    whenLaunchLanded: fn => { if (landed === false) waiting.push(fn); else fn(); },
+    ssSet: () => {}, launchMark: () => null,
     ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
     joinStands: () => false, heedJoin: () => {},
     startTour: () => log.push(["tour", Math.round(clock)]),
@@ -2643,8 +2644,8 @@ function markLab() {
     warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
-  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\nfunction __lay(f){ markLay = f; }\n", sb);
-  sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
+  if (o && o.host) sb.E_HOST = o.host;
+  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\n", sb);
   const timersTo = t => {
     for (;;) {
       const due = timers.filter(x => x.at <= t).sort((a, b) => a.at - b.at || a.id - b.id)[0];
@@ -2655,117 +2656,161 @@ function markLab() {
     }
     clock = t;
   };
-  const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(f => f.fn(t)); return drawnX; };
-  const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
-  return { sb, log, warms, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
+  const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(f => f.fn(t)); };
+  // The drawing lands at t: what waited runs then, each in the order it asked.
+  const land = t => { timersTo(t); landed = true; const w = waiting; waiting = []; w.forEach(fn => fn()); };
+  const host = { block: true };
+  return { sb, log, warms, handed, frame, timersTo, land, make: () => sb.syncEmptyMark(host), host };
 }
 function markClockTests() {
-  const hz = n => 1000 / n;
   let got;
+  const unseen = () => { const h = { shown: false, onShown(fn) { h.tell = fn; } }; return h; };
   try {
-    // Made 100 ms into the page, its first frame 500 ms later draws the dots where they start.
-    const a = markLab(); a.timersTo(100); a.make();
-    got = +a.frame(600).toFixed(2);
+    const h = unseen(), w = markLab({ host: h });
+    w.make(); w.sb.syncEmptyMark(null);
+    const [a, b] = w.handed, opts = a && a[1];
+    const waits = [!!opts && opts.covered()];
+    h.tell();
+    waits.push(!!opts && opts.covered());
+    got = [!!a && a[0] === w.host, !!opts && opts.still === w.sb.mgReduceMotion && opts.phase === w.sb.fifthPhase && opts.R === 10, waits, !!b && b[0] === null];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the gather's clock starts at its first frame, not when boot makes the mark", got, 0);
+  eq("952c the empty desk's block is handed to the launch's drawing at the desk's own R 10, on its quiet switch and header clock, waiting while the host says its window is not on screen and not once it is, and any other list stops it",
+    got, [true, true, [true, false], true]);
+  if (process.env.ETIUDA_PLANTS === "off") {
+    console.log("  SKIP  952c lifting plant:empty-desk-takes-launch hands the block to nothing");
+    console.log("  SKIP  952c lifting plant:mark-waits-shown starts the drawing unseen");
+  } else {
+    try {
+      const w = markLab({ lift: { file: "empty-mark.js", tag: "plant:empty-desk-takes-launch" } });
+      w.make(); got = w.handed.length === 0;
+    } catch (e) { got = "the lab threw: " + e.message; }
+    eq("952c lifting plant:empty-desk-takes-launch hands the block to nothing", got, true);
+    try {
+      const w = markLab({ host: unseen(), lift: { file: "empty-mark.js", tag: "plant:mark-waits-shown" } });
+      w.make(); got = w.handed[0][1].covered() === false;
+    } catch (e) { got = "the lab threw: " + e.message; }
+    eq("952c lifting plant:mark-waits-shown starts the drawing unseen", got, true);
+  }
 
   try {
-    // Two frames at 250 Hz, then one 200 ms late, against the same two and two more on time.
-    const late = markLab(), even = markLab(); late.make(); even.make();
-    [500, 500 + hz(250), 500 + 2 * hz(250), 700 + 2 * hz(250)].forEach(t => late.frame(t));
-    [0, 1, 2, 3, 4].forEach(i => even.frame(500 + i * hz(250)));
-    got = [+late.x().toFixed(4) === +even.x().toFixed(4), late.x() > 0];
+    // The launch is handed the same wait: the opts deskLaunch gives launchMark, read while unseen, shown and under a dialog.
+    const h = unseen(), w = markLab({ host: h });
+    let opts = null, dialog = false;
+    w.sb.launchMark = x => { opts = x; return null; };
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".modal:not([hidden]):not(.e-gone)" && dialog ? {} : null;
+    w.sb.deskLaunch();
+    const a = !!opts && opts.covered();
+    h.tell();
+    const b = !!opts && opts.covered();
+    dialog = true;
+    got = [a, b, !!opts && opts.covered()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a frame 200 ms late moves the dots as far as two frames of the display, never the wall's 200 ms", got, [true, true]);
+  eq("952d the desk's launch waits while its window is not on screen and under a dialog, and not once it is shown with none",
+    got, [true, false, true]);
 
+  /* 952i. NOTHING WAITS ON THE WORD FOR EVER: an older shell, a word sent before the page listened, or a harness's stand-in
+     never says the window is on screen, and the opening must still start. With no word, the page counts as on screen
+     1500 ms after its first frame, 3000 ms after the ask where no frame comes, or when it turns visible from hidden. */
+  const silent = o => {
+    const h = { shown: false, onShown() {} }, w = markLab(Object.assign({ host: h }, o || {}));
+    let vis = null;
+    w.sb.document.visibilityState = "hidden";
+    w.sb.document.addEventListener = (t, fn) => { if (t === "visibilitychange") vis = fn; };
+    w.make();
+    const opts = w.handed[0] && w.handed[0][1];
+    opts.covered();   // the first ask, which boot makes as the drawing starts
+    return { w, covered: () => opts.covered(), turn: () => { w.sb.document.visibilityState = "visible"; if (vis) vis(); } };
+  };
+  const boundRun = o => {
+    const a = silent(o), at0 = a.covered();
+    a.w.frame(500); a.w.timersTo(1990);
+    const before = a.covered();
+    a.w.timersTo(2010);
+    return [at0, before, a.covered()];
+  };
   try {
-    got = [240, 60, 30].map(n => {
-      const r = markLab(); r.make();
-      let i = 0;
-      while (r.frame(500 + i * hz(n)) < 100 && i < 2000) i++;
-      const took = i * hz(n);
-      return took >= 1100 - 0.01 && took < 1100 + hz(n) + 0.01;
-    });
+    const b = silent(); b.w.timersTo(2990); const nb = b.covered(); b.w.timersTo(3010);
+    const c = silent(); c.turn();
+    got = [boundRun(), [nb, b.covered()], c.covered()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("frames on time still gather in 1100 ms at 240, 60 and 30 Hz", got, [true, true, true]);
+  eq("952i with no word from the host the opening still starts: on screen 1500 ms after the page's first frame, 3000 ms after the ask where no frame comes, or when it turns visible from hidden",
+    got, [[true, true, false], [true, false], false]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952i lifting plant:shown-has-a-bound holds the opening past the first frame's bound");
+  else {
+    try { got = boundRun({ lift: { file: "empty-mark.js", tag: "plant:shown-has-a-bound" } })[2]; }
+    catch (e) { got = "the lab threw: " + e.message; }
+    eq("952i lifting plant:shown-has-a-bound holds the opening past the first frame's bound", got, true);
+  }
 
+  /* 952h. THE EMPTY DESK'S WORK RISES UNDER THE LOGO, as Studio's empty screen does (Max, 2026-11-01 18:19): at a launch
+     over the empty desk the launch stands, hiding the work, and the block takes its drawing in the same task, so the
+     launch gives way "moved" once the work is ready, the work rising over LAUNCH_OUT_MS with the mark in it (the launch
+     lab's "moved" and give-way legs and 952e hold those two). The work is ready on the first frame after the window is
+     on screen: before the word one frame is asked, the bound's of 952i, and the word asks the work's. */
+  const riseRun = o => {
+    const h = unseen(), w = markLab(Object.assign({ host: h }, o || {})), order = [];
+    let opts = null, frames = 0;
+    w.sb.launchMark = x => { opts = x; order.push("launch"); return null; };
+    w.sb.syncLaunchMark = host => { order.push(host === w.host ? "handed" : "other"); };
+    w.sb.requestAnimationFrame = fn => { frames++; fn(); return 1; };
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".empty-desk" ? w.host : null;
+    w.sb.deskLaunch();
+    return { h, order, R: opts && opts.R, frames: () => frames };
+  };
   try {
-    // Formed at 250 Hz, then the twinkle's timer-paced frames: each moves the clock by the wall's step.
-    const r = markLab(); r.make();
-    let t = 500, i = 0;
-    while (r.frame(t) < 100) t = 500 + ++i * hz(250);
-    const at = r.state().ms;
-    r.timersTo(t + 66); r.frame(t + 70);
-    got = +(r.state().ms - at).toFixed(3);
+    const r = riseRun(), before = r.frames();
+    r.h.tell();
+    got = [r.order, r.R, before, r.frames()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the twinkle after the gather keeps the wall's time", got, 70);
+  eq("952h at a launch over the empty desk the launch stands and the block takes its drawing in the same task, at R 10, so the work rises with the mark in it; the work's ready frame is asked only once the window is on screen",
+    got, [["launch", "handed"], 10, 1, 2]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952h lifting plant:empty-desk-rises leaves the drawing over the veil");
+  else {
+    try { got = riseRun({ lift: { file: "on-open.js", tag: "plant:empty-desk-rises" } }).order; }
+    catch (e) { got = "the lab threw: " + e.message; }
+    eq("952h lifting plant:empty-desk-rises leaves the drawing over the veil", got, ["launch"]);
+  }
 
+  const tourRun = (o, landAt) => { const c = markLab(o); c.make(); c.sb.maybeStartTour(); c.land(landAt); c.timersTo(4000); return c.log; };
   try {
-    const r = markLab(), seen = [];
-    r.sb.whenMarkFormed(() => seen.push("no mark, at once"));
-    r.make();
-    r.sb.whenMarkFormed(() => seen.push("formed " + Math.round(r.sb.performance.now())));
-    let t = 400, i = 0;
-    while (r.frame(t) < 100) { if (seen.length > 1) seen.push("early"); t = 400 + ++i * hz(250); }
-    r.timersTo(t);
-    const q = markLab(); q.make();
-    q.sb.whenMarkFormed(() => seen.push("no frames, let go at " + Math.round(q.sb.performance.now())));
-    q.timersTo(3000);
-    got = seen;
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a wait on the gather runs once it has formed, at once with no mark, and after 1 s without a frame",
-    got, ["no mark, at once", "formed 1500", "no frames, let go at 1000"]);
-
-  try {
-    got = [];
-    // A cold first frame 600 ms after boot, then 250 Hz; the same with no mark; no frames at all.
-    const c = markLab(); c.make(); c.sb.maybeStartTour();
-    let t = 600, i = 0;
-    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
-    c.timersTo(4000);
     const n = markLab(); n.sb.maybeStartTour(); n.timersTo(4000);
-    const q = markLab(); q.make(); q.sb.maybeStartTour(); q.timersTo(4000);
-    got = [c.log, n.log, q.log];
+    got = [tourRun(null, 1700), tourRun(null, 600), n.log];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the first run's tour starts 200 ms after the mark has formed, never before 1300 ms, and a mark that draws nothing holds it no longer",
+  eq("952f the first run's tour starts 200 ms after the empty desk's mark has landed, never before 1300 ms, and with no mark at 1300 ms",
     got, [[["tour", 1900]], [["tour", 1300]], [["tour", 1300]]]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952f lifting plant:tour-waits-landing never starts the tour");
+  else {
+    try { got = tourRun({ lift: { file: "tour.js", tag: "plant:tour-waits-landing" } }, 1700); }
+    catch (e) { got = "the lab threw: " + e.message; }
+    eq("952f lifting plant:tour-waits-landing never starts the tour", got, []);
+  }
 
   try {
-    // A reload in the middle of the tour, parked on a step: the same cold launch, then no mark.
+    // A reload in the middle of the tour, parked on a step: the mark landing at 1700, then no mark.
     const park = r => { r.sb.ssGet = () => "name"; r.sb.tourSeen = () => true; r.sb.TOUR_STEPS = [{ id: "load" }, { id: "name" }];
       r.sb.startTour = at => r.log.push(["tour", Math.round(r.sb.performance.now()), at]); };
-    const c = markLab(); park(c); c.make(); c.sb.maybeStartTour();
-    let t = 600, i = 0;
-    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
-    c.timersTo(4000);
+    const c = markLab(); park(c); c.make(); c.sb.maybeStartTour(); c.land(1700); c.timersTo(4000);
     const n = markLab(); park(n); n.sb.maybeStartTour(); n.timersTo(4000);
     got = [c.log, n.log];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a tour resumed after a reload waits for the mark to form as a first run does, and without one comes at 300 ms as before",
+  eq("a tour resumed after a reload waits for the mark to land as a first run does, and without one comes at 300 ms as before",
     got, [[["tour", 1900, 1]], [["tour", 300, 1]]]);
 
   try {
-    // The same cold launch; then no mark, where the second frame comes 20 ms after boot.
-    const c = markLab(); c.make(); c.sb.wireOnOpen();
-    let t = 600, i = 0;
-    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
-    c.timersTo(4000);
+    // The mark landing at 1700; then no mark, where the second frame comes 20 ms after boot.
+    const c = markLab(); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20); c.land(1700); c.timersTo(4000);
     const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
     got = [c.log, n.log];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the boot repaint waits for the mark to form, and without one comes on the second frame as before",
+  eq("the boot repaint waits for the mark to land, and without one comes on the second frame as before",
     got, [[["repaint", 1700]], [["repaint", 20]]]);
 
   try {
-    // The same cold launch, then no mark: when boot draws the menu's warm copy.
-    const c = markLab(); c.make(); c.sb.wireOnOpen();
-    let t = 600, i = 0;
-    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
-    c.timersTo(4000);
+    const c = markLab(); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20); c.land(1700); c.timersTo(4000);
     const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
     got = [c.warms, n.warms];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
+  eq("the menu's warm copy is drawn once, 900 ms after the mark has landed, and 900 ms after boot without one",
     got, [[2600], [900]]);
 }
 /* THE LAUNCH MARK: launch-mark.js runs in a VM on a page, a clock, a frame queue and a promise written here (the
@@ -3169,9 +3214,21 @@ function launchMarkTests() {
     // the parts the launch hides take no pointer while hidden, so a click on them falls on nothing unseen
     const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
     const rule = /body\.e-launch #pageScroll,body\.e-launch #pillsSlot\{([^}]*)\}/.exec(tpl);
-    got = [!!rule, !!rule && /opacity:0/.test(rule[1]), !!rule && /pointer-events:none/.test(rule[1])];
+    const op = rule && /opacity:([0-9.]+)/.exec(rule[1]), a = op ? +op[1] : NaN;
+    got = [!!rule, a > 0 && a < 1 / 255, !!rule && /pointer-events:none/.test(rule[1])];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the cards, the intent panel and the category row hidden by the launch take no click", got, [true, true, true]);
+  eq("952e the cards, the intent panel and the category row hidden by the launch take no click, and are painted under the mark at an opacity no screen shows, so the give-way's first frame is not their first paint",
+    got, [true, true, true]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952e lifting plant:launch-work-painted leaves the work unhidden");
+  else {
+    try {
+      const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8").split("\n");
+      const at = tpl.findIndex(l => l.indexOf("plant:launch-work-painted") >= 0);
+      if (at >= 0) tpl.splice(at, 1);
+      got = at >= 0 && !/body\.e-launch #pageScroll,body\.e-launch #pillsSlot\{([^}]*)\}/.test(tpl.join("\n"));
+    } catch (e) { got = "the lab threw: " + e.message; }
+    eq("952e lifting plant:launch-work-painted leaves the work unhidden", got, true);
+  }
 
   try {
     // a screen painted under the launch takes the same drawing, clock and points, and the launch gives way to it
@@ -3197,20 +3254,22 @@ function launchMarkTests() {
     // the desk's launch: deskLaunch from on-open.js on stubs
     const fn = extractDecl(read("on-open.js"), "function deskLaunch(");
     const desk = (seen, empty) => {
-      const calls = [], set = [];
-      const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, dialogStanding: () => false,
-        fifthPhase: () => 0, requestAnimationFrame: () => 0, Promise,
+      const calls = [], set = [], handed = [];
+      const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, markCovered: () => false,
+        fifthPhase: () => 0, requestAnimationFrame: () => 0, Promise, EMPTY_DESK_R: 10, afterShown: f => f(),
+        syncEmptyMark: b => handed.push(b),
         document: { querySelector: s => s === "#dotField>div" ? { id: "field" } : s === ".empty-desk" ? empty : null },
         launchMark: o => { calls.push(o); return {}; } };
       require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
       const o = calls[0];
-      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.dialogStanding, typeof o.ready.then,
-        o.phase === sb.fifthPhase] : null];
+      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.markCovered, typeof o.ready.then,
+        o.phase === sb.fifthPhase, o.R || null] : null, handed.length];
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock, and not over the empty desk",
-    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true]], [0, [], null], [0, [["eLaunched", "1"]], null]]);
+  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock, over the cards at R 7 and over the empty desk at its own R 10, handing the empty desk the drawing",
+    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0], [0, [], null, 0],
+      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, 10], 1]]);
 
   try {
     // with a launch arriving, the boot repaint and the menu's warm copy wait for it to land
@@ -3421,120 +3480,6 @@ function fifthTests() {
   eq("the band laid on a lattice lights the dots inside it, by depth and fading at the rim, the same twice, and more of them where the turned loop's two passes part",
     got, [true, true, true, true, true]);
 
-  try {
-    const run = still => {
-      const m = markLab(); m.sb.still = still;
-      m.sb.fifthPhase = () => 1;
-      m.sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1, l: 0 }];
-      m.sb.__lay((ds, phi) => { ds.forEach(p => { p.l = Math.abs(phi - 1) < 1e-9 ? 1 : 0; }); });
-      m.make();
-      let x = null;
-      for (let i = 0; i < 150; i++) x = m.frame(500 + i * 1000 / 60);
-      return x === null ? null : +x.toFixed(4);
-    };
-    got = [run(false), run(true)];
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the empty desk's dots are drawn where the band lights them at the clock's phase under motion, and at the standard figure's phase under a quiet switch",
-    got, [100, null]);
-}
-/* THE EMPTY DESK'S MARK IS ONE SOLID, EVEN BAND AT EVERY PHASE OF THE TURN (Maxim, 2026-10-03 19:09: "Currently it's
-   very thin and fragile/patchy looking."). empty-mark.js and fifth.js run in a VM over a canvas written here, which
-   keeps every dot it is told to draw; its hit test is the circle test the figure's own path allows, so the lab needs
-   no browser. The band's true centreline is worked out again from the figure's definition (x = sin(3s + phi),
-   y = sin(2s), fitted to 150 of the 256 box, the header's group transform, the canvas scale), never from the code
-   under test, and the dots are read against it:
-   - FILL: around each of 240 points of the centreline, the dots drawn within 0.8 of the band's radius, over the
-     number a full lattice of the desk's pitch holds in that disc (a disc entirely inside the band). A thin or
-     patchy stretch is a low fill, a pile of dots a high one;
-   - STRAYS: the share of dots farther from the centreline than the band's radius and a pixel. */
-function bandLab(phi, still) {
-  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
-  const strip = s => s.replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
-  const arcs = [], T = { a: 1.0581, b: 0, c: 0, d: 1.0581, e: -7.441, f: -7.441 };
-  class Path2D {
-    constructor(d) { this.circles = []; const re = /M(-?[\d.]+) (-?[\d.]+)a(-?[\d.]+) /g; let m;
-      while ((m = re.exec(d))) this.circles.push([+m[1] + +m[3], +m[2], +m[3]]); }
-  }
-  const mkCtx = () => {
-    let M = [1, 0, 0, 1, 0, 0];
-    const ctx = { globalAlpha: 1, clearRect() {}, beginPath() {}, fill() {}, moveTo() {},
-      arc(x, y, r) { arcs.push([x, y, r, ctx.globalAlpha]); },
-      setTransform(...m) { M = m; },
-      transform(a, b, c, d, e, f) { const [A, B, C, D, E_, F] = M;
-        M = [A * a + C * b, B * a + D * b, A * c + C * d, B * c + D * d, A * e + C * f + E_, B * e + D * f + F]; },
-      isPointInPath(path, x, y) { const [a, b, c, d, e, f] = M, det = a * d - b * c;
-        const u = (d * (x - e) - c * (y - f)) / det, v = (-b * (x - e) + a * (y - f)) / det;
-        return path.circles.some(k => Math.hypot(u - k[0], v - k[1]) <= k[2]); } };
-    return ctx;
-  };
-  const glyph = { parentNode: { transform: { baseVal: { consolidate: () => ({ matrix: T }) } } } };
-  const svg = { viewBox: { baseVal: { width: 256 } }, querySelector: () => glyph };
-  glyph.parentNode.parentNode = svg;
-  const sb = {
-    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => !!still, Path2D,
-    performance: { now: () => 0 }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
-    setTimeout: () => 1, clearTimeout() {}, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
-    MutationObserver: class { observe() {} disconnect() {} },
-    document: { documentElement: {}, querySelector: sel => sel === ".brand svg" ? svg : null,
-      createElement: () => { const ctx = mkCtx(); return { setAttribute() {}, getContext: () => ctx, isConnected: true,
-        parentNode: null, remove() { this.parentNode = null; } }; } }
-  };
-  sb.window = sb;
-  const seed = "Math.random = (() => { let s = 7; return () => (s = s * 16807 % 2147483647) / 2147483647; })();\n";
-  require("vm").runInNewContext(seed + strip(read("fifth.js")) + "\n" + strip(read("empty-mark.js"))
-    + "\nfunction __phase(p){ fifthClock.phi = p; }\nfunction __draw(ms){ drawMark(eMark, ms); }\n", sb);
-  const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
-  if (!still) sb.__phase(phi);
-  sb.syncEmptyMark(host);
-  if (!still) { arcs.length = 0; sb.__draw(5000); }
-  return arcs.map(a => [a[0], a[1], a[3]]);
-}
-/* The band's centreline in canvas pixels at a phase, 2400 points round the whole loop, and its radius. */
-function bandTruth(phi) {
-  const A = 96, R = 10, K = 150 / (2 * (A + R)), S = 280 / 256, G = 1.0581, T = -7.441, line = [];
-  for (let i = 0; i < 2400; i++) {
-    const t = i / 2400 * 2 * Math.PI, x = 128 + K * A * Math.sin(3 * t + phi), y = 128 + K * A * Math.sin(2 * t);
-    line.push([S * (G * x + T), S * (G * y + T)]);
-  }
-  return { line, rad: R * K * G * S };
-}
-function bandStats(dots, phi) {
-  const { line, rad } = bandTruth(phi), step = 3.5, rho = 0.8 * rad, full = Math.PI * rho * rho / (step * step);
-  let min = Infinity, max = 0, strays = 0;
-  for (let i = 0; i < line.length; i += 10) {
-    let n = 0;
-    for (const d of dots) if (Math.hypot(d[0] - line[i][0], d[1] - line[i][1]) <= rho) n++;
-    min = Math.min(min, n / full); max = Math.max(max, n / full);
-  }
-  for (const d of dots) {
-    let best = Infinity;
-    for (const p of line) best = Math.min(best, Math.hypot(d[0] - p[0], d[1] - p[1]));
-    if (best > rad + 1) strays++;
-  }
-  return { phi, dots: dots.length, min, max, strays: strays / Math.max(1, dots.length) };
-}
-function emptyBandTests() {
-  const PHI0 = Math.PI / 4, r2 = v => Math.round(v * 100) / 100;
-  const phases = [PHI0, 0.5, 1.2, 2, 2.8, 3.6, 4.5, 5.5], solid = s => s.min >= 0.7 && s.max <= 1.5 && s.strays <= 0.02;
-  let got;
-  try {
-    const rows = phases.map(p => bandStats(bandLab(p, false), p)).concat([bandStats(bandLab(PHI0, true), PHI0)]);
-    got = rows.filter(s => !solid(s)).map(s => [r2(s.phi), s.dots, r2(s.min), r2(s.max), r2(s.strays)]);
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the empty desk's mark is one solid, even band at eight phases of the turn and standing still: around every point of its centreline the dots drawn fill 0.7 to 1.5 of a full lattice, and at most 2 per cent stand outside the band (phase, dots, least fill, most fill, strays of each that fails)",
-    got, []);
-  try {
-    const t = bandTruth(2), base = [];
-    for (let j = 0; j < 80; j++) for (let i = 0; i < 80; i++) {
-      const x = 1.75 + 3.5 * i, y = 1.75 + 3.5 * j;
-      if (t.line.some(p => Math.hypot(x - p[0], y - p[1]) < t.rad)) base.push([x, y, 1]);
-    }
-    const sparse = base.filter((d, i) => i % 2), moved = base.map(d => [d[0] + t.rad + 4, d[1], d[2]]);
-    const piled = base.concat(base.map(d => [d[0] + 0.5, d[1] + 0.5, d[2]]));
-    got = [solid(bandStats(base, 2)), solid(bandStats(sparse, 2)), solid(bandStats(moved, 2)), solid(bandStats(piled, 2))];
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the measure sees what it guards, control: an ideal band of lattice dots is solid, with every other dot gone it is not, shifted out of the band it is not, and with every dot doubled it is not",
-    got, [true, false, false, false]);
 }
 /* THE .ec FILE TYPE IS NAMED IN THE INSTALLER'S LANGUAGE: electron-builder writes the English from
    fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
@@ -5587,8 +5532,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1215;
-const UI_STRINGS_SHA256 = "e71a5c48097ed9942bd3ffe11ff2bc7bde250eb7ed2436b8d6c759fdbccc354b";
+const UI_STRINGS_COUNT = 1214;
+const UI_STRINGS_SHA256 = "1edc62298723e588a9572c95929ea20091b1dcea49e69c30124fc648b2f0073a";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
