@@ -2635,7 +2635,6 @@ function markLab() {
       createElement: () => ({ setAttribute() {}, getContext: () => ctx, isConnected: true, parentNode: null, remove() { this.parentNode = null; } }) },
     ssSet: () => {}, dialogStanding: () => false, launchMark: () => null, whenLaunchLanded: fn => fn(),
     ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
-    joinStands: () => false, heedJoin: () => {},
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
     focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {},
@@ -3577,8 +3576,7 @@ function nsisInstallWrites(root, cfg) {
     { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
   if (r.status !== 0) return "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ");
   const open = [], writes = [];
-  /* makensis keeps a comment after a command, a plant's tag among them; one with no quote in it is the line's own end. */
-  for (const line of r.stdout.split(/\r?\n/).map(l => l.trim().replace(/\s+[#;][^"'`]*$/, ""))) {
+  for (const line of r.stdout.split(/\r?\n/).map(l => l.trim())) {
     const c = /^StrCmp `([^`]*)` `([^`]*)` `` `([^`]+)`$/.exec(line);
     if (c) { open.push({ when: c[1] + "==" + c[2], label: c[3] }); continue; }
     if (open.length && line === open[open.length - 1].label + ":") { open.pop(); continue; }
@@ -3645,13 +3643,12 @@ function ecTypeNameTests() {
      Polish, and a build that declares no type, which is how Studio includes this file, writes
      nothing under Classes in any language while customInstall's other work still runs. */
   const cfgNow = require(path.join(root, "electron-builder.js"));
-  const own = new Set([].concat(...(cfgNow.fileAssociations || []).map(a => [].concat(a.ext).map(x => "." + x).concat([a.name])),
-    ...(cfgNow.protocols || []).map(p => [].concat(p.schemes))));
+  const own = new Set([].concat(...(cfgNow.fileAssociations || []).map(a => [].concat(a.ext).map(x => "." + x).concat([a.name]))));
   const classes = r => r.writes.filter(w => /^Software\\Classes(\\|$)/i.test(w.key) || /^(HKCR|HKEY_CLASSES_ROOT)(32|64)?$/i.test(w.root));
   const desk = nsisInstallWrites(root, cfgNow);
   got = typeof desk === "string" ? desk : [classes(desk).filter(w => w.when).map(w => [w.key, w.value, w.when]),
     classes(desk).every(w => own.has(w.key.split("\\")[2]))];
-  eq("makensis reads the desk's installer writing only its own type's and its own link's keys, and in Polish the name and the open verb",
+  eq("makensis reads the desk's installer writing only its own type's keys, and in Polish the name and the open verb",
     got, [[["Software\\Classes\\Etiuda catalog", "Katalog Etiudy", "$LANGUAGE==1045"],
       ["Software\\Classes\\Etiuda catalog\\shell\\open", "Otwórz w Etiudzie", "$LANGUAGE==1045"]], true]);
   const bare = nsisInstallWrites(root, Object.assign({}, cfgNow, { fileAssociations: [] }));
@@ -5523,8 +5520,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1206;
-const UI_STRINGS_SHA256 = "3013ec6eb6791be2d00789bbbea9ce97946a0e6a8a187b8817dd56952e159832";
+const UI_STRINGS_COUNT = 1205;
+const UI_STRINGS_SHA256 = "53890c4589e43f972a9d8295d6ba555a8b1e4eb399c7f6d0e1059de8be765882";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

@@ -1241,13 +1241,14 @@ async function parent() {
       + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
 
     /* 75w1: folder write refused for access/held leaves edits kept on computer */
-    const FOLDER_KEPT_LINE = "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead.";
+    /* One line for both since slice 2: a folder team's outbox retries every few seconds, as the relay does (the copywriter, 2026-11-01 02:08). */
+    const FOLDER_KEPT_LINE = "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.";
     const RELAY_KEPT_LINE = "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.";
     const stem75 = "lamp-" + sha8(wanted.id);
     const L_w1 = run(lab75, ["holdbranch:" + stem75, "rows"], true, { ownDeskId: ownDesk.id });
     const rows_w1 = L_w1.rows[0] || [];
     check(same((rows_w1[0] || {}).mine, [FOLDER_KEPT_LINE]),
-      "75w1 folder write refused for access/held: loaded row says edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts: "
+      "75w1 folder write refused for access/held: loaded row says edits are kept on this computer and go to the team as soon as it can take them: "
       + JSON.stringify((rows_w1[0] || {}).mine));
 
     /* 75w2: relay upload refusal/owed leaves edits kept on computer */

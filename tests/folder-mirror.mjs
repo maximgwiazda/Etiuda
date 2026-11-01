@@ -12,7 +12,9 @@
  * 4. Dependencies: an edition above mirror's team epoch waits in pending until team file lands.
  * 5. Removal: a file leaves the mirror only when missing from two answered listings in a row.
  * 6. Not reached: if folder does not answer, mirror stays unchanged and desk says the existing sentence.
- * 7. Desk's own writes go straight to the shared folder in slice 1.
+ * 7. Slice 2: the desk's own writes land in the mirror first and reach the shared folder from the syncer's outbox;
+ *    an owed path is never overwritten or removed by an older share copy; rev and counter floors per (scope, id);
+ *    the shared catalog's compare and swap runs against the share off the main thread.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -26,9 +28,13 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+/* The stand-in reads REG.policy at each reg call, and a desk's shell reads the policy once, at its first ask. */
+const REG = { policy: null };
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
+const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
+  + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 41;
+const EXPECTED = 63;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -43,7 +49,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -69,7 +75,7 @@ function loadDesk(ud, overrides = {}) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const srcToRun = overrides.src || getShellSrc();
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    srcToRun + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
+    srcToRun + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
@@ -483,7 +489,8 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
-   * Leg 7 (41p): D1 leg 1 - Desk's own write lands in the folder and is never removed from or shadowed in mirror
+   * Leg 7 (41p): Slice 2 - Desk's own write lands in the mirror first, reaches the folder through the outbox,
+   * and is never removed from or shadowed in the mirror. (Slice 1's leg asserted the write went straight to the share.)
    * ----------------------------------------------------------------------------------------------- */
   {
     const deskP = newDesk("desk-41p", SHARE);
@@ -511,31 +518,31 @@ async function run() {
     const shareBranch = path.join(SHARE, "desks", me.id, stem + ".ec");
     const mirrorBranch = path.join(mirrorDir, "desks", me.id, stem + ".ec");
 
-    const landsInShare = fs.existsSync(shareBranch);
-    const notDirectlyInMirror = !fs.existsSync(mirrorBranch);
+    const inMirrorFirst = !!(wRes && wRes.ok) && fs.existsSync(mirrorBranch);
+    const notInShareYet = !fs.existsSync(shareBranch);
 
-    // Now run syncer
     const prog = syncerMod.createFolderProgram({
       team: TEAM, folder: SHARE, mirror: mirrorDir,
       pin: LEAD, keys: { 1: K1 }, checks
     });
     await prog.syncOnce();
-    const landsInMirrorAfterSync = fs.existsSync(mirrorBranch);
+    const reachesShare = fs.existsSync(shareBranch) && fs.existsSync(mirrorBranch)
+      && fs.readFileSync(shareBranch).equals(fs.readFileSync(mirrorBranch));
 
-    // Two more answered listings: remains in mirror
     await prog.syncOnce();
     await prog.syncOnce();
     const remainsInMirrorAfterListings = fs.existsSync(mirrorBranch);
 
-    const ok = landsInShare && notDirectlyInMirror && landsInMirrorAfterSync && remainsInMirrorAfterListings;
+    const ok = inMirrorFirst && notInShareYet && reachesShare && remainsInMirrorAfterListings;
     check(ok,
-      "41p a desk's own write lands in the folder and is never removed from or shadowed in the mirror: "
-      + "lands in share " + landsInShare + ", not in mirror before sync " + notDirectlyInMirror
-      + ", in mirror after sync " + landsInMirrorAfterSync + ", retained after listings " + remainsInMirrorAfterListings);
+      "41p a desk's own write lands in the mirror first, reaches the folder through the outbox, and is never removed from or shadowed in the mirror: "
+      + "in mirror first " + inMirrorFirst + ", not in share before the outbox " + notInShareYet
+      + ", reaches share whole " + reachesShare + ", retained after listings " + remainsInMirrorAfterListings);
   }
 
   /* -------------------------------------------------------------------------------------------------
-   * Leg 8 (41q): D1 leg 2 - With folder not answering, write is still held and row says kept
+   * Leg 8 (41q): Slice 2 - With the folder not answering, a write still lands in the mirror and the row says kept
+   * until the outbox lands it. (Slice 1's leg asserted the write was held in memory.)
    * ----------------------------------------------------------------------------------------------- */
   {
     const deskQ = newDesk("desk-41q", SHARE);
@@ -557,35 +564,36 @@ async function run() {
       desk: { id: me.id, key: me.key, box: me.box },
       rev: 0, cards: []
     };
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM, folder: SHARE, mirror: mirrorDir,
+      pin: LEAD, keys: { 1: K1 }, checks
+    });
+    const rowOf = () => (d.api.deskRows().filter(r => r.id === me.id + "-12345678")[0] || null);
 
-    // First write when folder is answering
-    const r1 = d.api.writeBranch(stem, JSON.stringify(branchDoc));
-    const dest = d.api.branchDest(stem);
-    const deskMirrorDir = path.join(mirrorDir, "desks", me.id);
-    fs.mkdirSync(deskMirrorDir, { recursive: true });
-    fs.copyFileSync(dest.dest, path.join(deskMirrorDir, stem + ".ec"));
-
-    const initialRows = d.api.deskRows();
-    const initialRow = initialRows.filter(r => r.id === me.id + "-12345678")[0] || null;
+    d.api.writeBranch(stem, JSON.stringify(branchDoc));
+    await prog.syncOnce();
+    const initialRow = rowOf();
     const initialReached = initialRow ? initialRow.reached : null;
 
-    // Now mark shared folder as not answering
     d.api.settleFolder(SHARE, false);
-
-    // Update branch while folder is down
     branchDoc.rev = 1;
+    branchDoc.name = "Edited while the folder is away";
     const wRes = d.api.writeBranch(stem, JSON.stringify(branchDoc));
-    const writeHeld = wRes && wRes.held === true;
+    const landedInMirror = !!(wRes && wRes.ok && !wRes.held) && wRes.rev === 2;
+    const keptRow = rowOf();
+    const rowSaysKept = keptRow !== null && keptRow.reached === false;
 
-    const rows = d.api.deskRows();
-    const deskRow = rows.filter(r => r.id === me.id + "-12345678")[0] || null;
-    const rowReached = deskRow ? deskRow.reached : null;
-    const rowSaysKept = deskRow !== null && rowReached === false;
+    d.api.settleFolder(SHARE, true);
+    await prog.syncOnce();
+    const afterRow = rowOf();
+    const reachedAfter = !!afterRow && afterRow.reached === true;
+    const shareRev = (() => { try { return JSON.parse(fs.readFileSync(path.join(SHARE, "desks", me.id, stem + ".ec"), "utf8")).rev; } catch { return null; } })();
 
-    const ok = initialReached === true && writeHeld && rowSaysKept;
+    const ok = initialReached === true && landedInMirror && rowSaysKept && reachedAfter && shareRev === 2;
     check(ok,
-      "41q with the folder not answering, a write is still held and the row says kept: "
-      + "held " + writeHeld + ", initial reached " + initialReached + ", held row reached " + rowReached);
+      "41q with the folder not answering, a write still lands in the mirror and the row says kept until the outbox lands it: "
+      + "initial reached " + initialReached + ", landed in mirror " + landedInMirror + ", row kept " + rowSaysKept
+      + ", reached after " + reachedAfter + ", share rev " + shareRev);
   }
 
   /* -------------------------------------------------------------------------------------------------
@@ -1202,6 +1210,340 @@ async function run() {
       + JSON.stringify({ refused, saysChecks, thrownMsg }));
   }
 
+  /* =================================================================================================
+   * Slice 2: the desk's writes go through the mirror and an outbox (board 945 stage 3 (b) slice 2)
+   * ================================================================================================= */
+  const APP_SYNCER = path.join(APP, "shell", "folder", "syncer.cjs");
+  const appSyncer = () => nodeRequire(APP_SYNCER);
+  function teamDesk(name, share, extra = {}) {
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    const env = Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+      teamPins: { [extra.team || TEAM]: LEAD }, teamShown: { [extra.team || TEAM]: { lead: "Lead", folder: share } } }, extra.env || {});
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    const mirror = path.join(ud, "folder-mirror", extra.team || TEAM);
+    fs.mkdirSync(mirror, { recursive: true });
+    return { ud, mirror };
+  }
+  /* The program's own disk calls, with every write into `share` refused with `code`: the folder lists and reads, and takes nothing. */
+  const refusingIo = (share, code) => ({
+    readdir: d => fs.readdirSync(d), stat: p => fs.statSync(p), readFile: (p, e) => fs.readFileSync(p, e),
+    writeFile: (p, data) => {
+      if (path.resolve(p).toLowerCase().startsWith(path.resolve(share).toLowerCase() + path.sep)) { const e = new Error(code); e.code = code; throw e; }
+      fs.writeFileSync(p, data);
+    },
+    unlink: p => fs.unlinkSync(p), mkdir: d => fs.mkdirSync(d, { recursive: true }), exists: p => fs.existsSync(p), rename: (a, b) => fs.renameSync(a, b)
+  });
+  const branchOf = (me, tail, rev) => ({ format: 2, kind: "etiuda-catalog", id: me.id + "-" + tail, desk: { id: me.id, key: me.key, box: me.box }, rev: rev || 0, cards: [] });
+  const revAt = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")).rev; } catch { return null; } };
+  const owedAtOf = (mirror, rel) => (typeof syncerMod.owedAt === "function" ? syncerMod.owedAt(mirror, rel) : null);
+  let bump = Date.now() / 1000 + 100;
+  const touch = f => { bump += 5; fs.utimesSync(f, bump, bump); };
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44a (point 1, F7.1): a desk's write on a folder team touches nothing under the share on the main thread, lands in the
+   * mirror, and reaches the share from the outbox
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44a");
+    const { ud, mirror } = teamDesk("desk-44a", share);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    const d = loadDesk(ud);
+    const me = d.api.branchIdentity(true);
+    const stem = "cat-44a-0a0b0c0d";
+    const spied = [];
+    const names = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
+    const orig = {};
+    for (const n of names) {
+      orig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string" && path.resolve(p).toLowerCase().startsWith(path.resolve(share).toLowerCase())) spied.push(n + " " + p);
+        return orig[n].call(fs, p, ...rest);
+      };
+    }
+    let w = null;
+    try { w = d.api.writeBranch(stem, JSON.stringify(branchOf(me, "0a0b0c0d"))); }
+    finally { for (const n of names) fs[n] = orig[n]; }
+    const rel = "desks/" + me.id + "/" + stem + ".ec";
+    const mirrorFile = path.join(mirror, "desks", me.id, stem + ".ec"), shareFile = path.join(share, "desks", me.id, stem + ".ec");
+    const inMirror = !!(w && w.ok) && fs.existsSync(mirrorFile), notYet = !fs.existsSync(shareFile);
+    const owedBefore = owedAtOf(mirror, rel);
+    const prog = syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks });
+    prog.syncOnce();
+    const landed = fs.existsSync(shareFile) && fs.readFileSync(shareFile).equals(fs.readFileSync(mirrorFile));
+    const owedAfter = owedAtOf(mirror, rel);
+    /* The same through the worker thread: a second write, owed while no syncer runs, reaches the share from the worker. */
+    d.api.writeBranch("cat-44a-1e1e1e1e", JSON.stringify(branchOf(me, "1e1e1e1e")));
+    const second = path.join(share, "desks", me.id, "cat-44a-1e1e1e1e.ec");
+    let byWorker = false, ctl = null;
+    try {
+      ctl = new syncerMod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks, pollMs: 200 });
+      ctl.start();
+      for (let i = 0; i < 50 && !(byWorker = fs.existsSync(second) && !owedAtOf(mirror, "desks/" + me.id + "/cat-44a-1e1e1e1e.ec")); i++) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+    } catch { byWorker = false; }
+    finally { if (ctl) ctl.stop(); }
+    check(spied.length === 0 && inMirror && notYet && owedBefore && landed && !owedAfter && byWorker,
+      "44a a desk's write on a folder team touches nothing under the share on the main thread, lands in the mirror and reaches the share from the outbox: "
+      + "share calls " + spied.length + (spied.length ? " (" + spied.slice(0, 3).join("; ") + ")" : "") + ", in mirror " + inMirror
+      + ", not in share yet " + notYet + ", owed " + owedBefore + ", landed whole " + landed + ", owed after " + owedAfter
+      + ", through the worker thread " + byWorker);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44b (point 2, F7.2): an owed file at rev 2 survives a share still answering rev 1, a new owed file survives two
+   * listings without it, and both reach the share once it takes writes
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44b");
+    const { ud, mirror } = teamDesk("desk-44b", share);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    const d = loadDesk(ud);
+    const me = d.api.branchIdentity(true);
+    const stemA = "cat-44b-1a1b1c1d", stemB = "cat-44b-2a2b2c2d";
+    const fileA = rel => path.join(rel, "desks", me.id, stemA + ".ec"), fileB = rel => path.join(rel, "desks", me.id, stemB + ".ec");
+    d.api.writeBranch(stemA, JSON.stringify(branchOf(me, "1a1b1c1d")));
+    syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks }).syncOnce();
+    const shareHadRev1 = revAt(fileA(share)) === 1;
+    d.api.writeBranch(stemA, JSON.stringify(Object.assign(branchOf(me, "1a1b1c1d"), { name: "Edited" })));
+    d.api.writeBranch(stemB, JSON.stringify(branchOf(me, "2a2b2c2d")));
+    touch(fileA(share));
+    const refused = syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, io: refusingIo(share, "EACCES") });
+    refused.syncOnce();
+    refused.syncOnce();
+    refused.syncOnce();
+    const keptRev2 = revAt(fileA(mirror)) === 2 && revAt(fileA(share)) === 1;
+    const newSurvives = fs.existsSync(fileB(mirror)) && !fs.existsSync(fileB(share));
+    syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks }).syncOnce();
+    const bothLanded = revAt(fileA(share)) === 2 && fs.existsSync(fileB(share)) && revAt(fileA(mirror)) === 2 && fs.existsSync(fileB(mirror));
+    check(shareHadRev1 && keptRev2 && newSurvives && bothLanded,
+      "44b an owed file at rev 2 survives a share still answering rev 1, a new owed file survives listings without it, and both reach the share once it takes writes: "
+      + "share had rev 1 " + shareHadRev1 + ", mirror kept rev 2 " + keptRev2 + ", new file survives " + newSurvives + ", both landed " + bothLanded);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44c (point 3): rev and counter floors per (scope, id) at each path: a lagging copy cannot roll an edition, a desk file or
+   * in-use's counter back in the mirror, not even after the mirror's copy has gone, while an older edition the folder keeps
+   * under a name of its own still reaches it (an older edition opened on purpose, tests/catalog-in-use.mjs 890r)
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44c"), mirror = folder("mirror-44c");
+    const TEAM_C = "t-" + crypto.randomBytes(8).toString("hex");
+    const kC = crypto.generateKeyPairSync("ed25519"), kPub = pubHex(kC.publicKey);
+    const kId = "k-" + crypto.createHash("sha256").update(Buffer.from(kPub, "hex")).digest("hex").slice(0, 16);
+    const deskSigned = doc => {
+      const out = JSON.parse(JSON.stringify(doc));
+      out.sig = { alg: "Ed25519", keyId: kId };
+      out.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch\n", "utf8"), signedBytesOf(out)]), kC.privateKey).toString("hex");
+      return out;
+    };
+    const deskFile = rev => JSON.stringify(deskSigned({ format: 2, kind: "etiuda-catalog", id: kId + "-0e0e0e0e", desk: { id: kId, key: kPub }, rev, cards: [] }), null, 1) + "\n";
+    const inUse = n => seal(K1, 1, JSON.stringify(deskSigned({ format: 1, kind: "etiuda-in-use", desk: { id: kId, key: kPub }, at: "2026-11-01T00:00:00.000Z",
+      catalog: { id: "lamp-shop", rev: 1 }, n })), TEAM_C);
+    const dDir = path.join(share, "desks", kId);
+    fs.mkdirSync(dDir, { recursive: true });
+    const put = (f, t) => { fs.writeFileSync(f, t, "utf8"); touch(f); };
+    put(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_C, epoch: 1, rev: 1 })));
+    put(path.join(share, "lamp-shop.ec"), CAT_A2);
+    put(path.join(dDir, "notes-0e0e0e0e.ec"), deskFile(3));
+    put(path.join(dDir, "in-use.ec"), inUse(5));
+    const prog = syncerMod.createFolderProgram({ team: TEAM_C, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks });
+    prog.syncOnce();
+    const nAt = f => { try { const env = JSON.parse(fs.readFileSync(f, "utf8")); return JSON.parse(checks.openSealed(K1, env)).n; } catch { return null; } };
+    const first = revAt(path.join(mirror, "lamp-shop.ec")) === 2 && revAt(path.join(mirror, "desks", kId, "notes-0e0e0e0e.ec")) === 3
+      && nAt(path.join(mirror, "desks", kId, "in-use.ec")) === 5;
+    put(path.join(share, "lamp-shop.ec"), CAT_A1);
+    put(path.join(share, "lamp-shop (1).ec"), CAT_A1);
+    put(path.join(dDir, "notes-0e0e0e0e.ec"), deskFile(2));
+    put(path.join(dDir, "in-use.ec"), inUse(4));
+    prog.syncOnce();
+    const editionHeld = revAt(path.join(mirror, "lamp-shop.ec")) === 2;
+    const keptOlder = revAt(path.join(mirror, "lamp-shop (1).ec")) === 1;
+    /* The edition leaves the share for two listings, so the mirror's copy goes; the lagging rev 1 then comes back. */
+    fs.unlinkSync(path.join(share, "lamp-shop.ec"));
+    prog.syncOnce();
+    prog.syncOnce();
+    const gone = !fs.existsSync(path.join(mirror, "lamp-shop.ec"));
+    put(path.join(share, "lamp-shop.ec"), CAT_A1);
+    prog.syncOnce();
+    const renamedOut = gone && !fs.existsSync(path.join(mirror, "lamp-shop.ec"));
+    const deskHeld = revAt(path.join(mirror, "desks", kId, "notes-0e0e0e0e.ec")) === 3;
+    const counterHeld = nAt(path.join(mirror, "desks", kId, "in-use.ec")) === 5;
+    put(path.join(dDir, "notes-0e0e0e0e.ec"), deskFile(4));
+    put(path.join(dDir, "in-use.ec"), inUse(6));
+    prog.syncOnce();
+    const forward = revAt(path.join(mirror, "desks", kId, "notes-0e0e0e0e.ec")) === 4 && nAt(path.join(mirror, "desks", kId, "in-use.ec")) === 6;
+    check(first && editionHeld && keptOlder && renamedOut && deskHeld && counterHeld && forward,
+      "44c a lagging copy cannot roll an edition, a desk file or in-use's counter back in the mirror, even after the mirror's copy has gone, an older edition under a name of its own still lands, and a newer one lands: "
+      + "first landed " + first + ", edition held " + editionHeld + ", older edition under its own name kept " + keptOlder + ", lagging copy after removal out " + renamedOut
+      + ", desk file held " + deskHeld + ", counter held " + counterHeld + ", newer lands " + forward);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44d (point 4, #4): two desks edit the shared catalog: the compare and swap runs against the share off the main thread
+   * under the lock, the winning bytes are in the writer's mirror, and the colleague's concurrent edit is never clobbered
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44d");
+    const team = "t-" + crypto.randomBytes(8).toString("hex");
+    const tf = JSON.stringify(teamFile({ team, sealed: false, catalogs: ["shop"], epoch: 1, rev: 1 }));
+    const shop = rev => JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "shop", rev, name: "Shop", date: "2026-11-01",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: [{ id: "c-" + rev, bodyShape: "plain", title: { en: "Card " + rev }, body: { en: "Body " + rev } }] }, null, 1) + "\n";
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), tf, "utf8");
+    fs.writeFileSync(path.join(share, "shop.ec"), shop(1), "utf8");
+    const A = teamDesk("desk-44d-a", share, { team }), B = teamDesk("desk-44d-b", share, { team });
+    for (const m of [A.mirror, B.mirror]) { fs.writeFileSync(path.join(m, "etiuda-team.json"), tf, "utf8"); fs.writeFileSync(path.join(m, "shop.ec"), shop(1), "utf8"); }
+    const sha = t => crypto.createHash("sha256").update(Buffer.from(t, "utf8")).digest("hex");
+    let modA = null, modB = null, out = {};
+    const spied = [];
+    try {
+      const dA = loadDesk(A.ud);
+      const rA = await dA.ask("etiuda:shared-read", "shop.ec", "");
+      modA = appSyncer();
+      delete nodeRequire.cache[nodeRequire.resolve(APP_SYNCER)];
+      const dB = loadDesk(B.ud);
+      const rB = await dB.ask("etiuda:shared-read", "shop.ec", "");
+      modB = appSyncer();
+      const names = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "openSync", "unlinkSync"];
+      const orig = {};
+      for (const n of names) {
+        orig[n] = fs[n];
+        fs[n] = function (p, ...rest) {
+          if (typeof p === "string" && path.resolve(p).toLowerCase().startsWith(path.resolve(share).toLowerCase())) spied.push(n + " " + p);
+          return orig[n].call(fs, p, ...rest);
+        };
+      }
+      let wA = null, wB = null;
+      try {
+        wA = await dA.ask("etiuda:shared-write", "shop.ec", shop(2), rA && rA.sha, false);
+        wB = await dB.ask("etiuda:shared-write", "shop.ec", shop(3), rB && rB.sha, false);
+      } finally { for (const n of names) fs[n] = orig[n]; }
+      const shareNow = fs.readFileSync(path.join(share, "shop.ec"), "utf8");
+      const rB2 = await dB.ask("etiuda:shared-write", "shop.ec", shop(3), sha(shop(2)), false);
+      out = {
+        sameRead: !!rA && !!rB && rA.sha === sha(shop(1)) && rB.sha === rA.sha,
+        aOk: !!wA && wA.ok === true, bChanged: !!wB && wB.changed === true && wB.ok === false,
+        shareHoldsA: shareNow === shop(2), mirrorA: fs.readFileSync(path.join(A.mirror, "shop.ec"), "utf8") === shop(2),
+        noLock: !fs.existsSync(path.join(share, "shop.ec.lock")),
+        bAfter: !!rB2 && rB2.ok === true && fs.readFileSync(path.join(share, "shop.ec"), "utf8") === shop(3)
+      };
+    } catch (e) { out.error = String(e && e.message); }
+    finally {
+      if (modA) modA.stopAllFolderSyncers();
+      if (modB) modB.stopAllFolderSyncers();
+    }
+    check(!out.error && spied.length === 0 && out.sameRead && out.aOk && out.bChanged && out.shareHoldsA && out.mirrorA && out.noLock && out.bAfter,
+      "44d two desks edit the shared catalog: the compare and swap runs against the share off the main thread under the lock, the winning bytes are in the writer's mirror, and the colleague's concurrent edit is never clobbered: "
+      + JSON.stringify(Object.assign({ mainThreadShareCalls: spied.length }, out)));
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44e (point 5, F5): a wake from sleep never marks the local mirror down; the share is asked again instead
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44e");
+    const { ud, mirror } = teamDesk("desk-44e", share);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(mirror, "lamp-shop.ec"), CAT_A1, "utf8");
+    const d = loadDesk(ud);
+    let mirrorAnswers = false, shareAsked = false, read = null, err = "";
+    try {
+      d.api.resumeFromSleep();
+      mirrorAnswers = d.api.folderAnswers(d.api.catalogFolder()) && path.resolve(d.api.catalogFolder()) === path.resolve(mirror);
+      shareAsked = !d.api.folderAnswers(share);
+      read = d.api.readCatalog();
+    } catch (e) { err = String(e && e.message); }
+    finally { try { appSyncer().stopAllFolderSyncers(); } catch {} }
+    check(!err && mirrorAnswers && shareAsked && read === CAT_A1.trim(),
+      "44e a wake from sleep never marks the local mirror down, and the share is asked again instead: "
+      + "mirror answers " + mirrorAnswers + ", share asked again " + shareAsked + ", reads the mirror " + (read === CAT_A1.trim()) + (err ? ", " + err : ""));
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44f (point 5, F5): a first boot under machine policy (TeamFolder and LeadKey, no pin yet) reads the named folder and
+   * never flips to an empty mirror before its syncer has run once; after that it reads the mirror
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44f");
+    const team = "t-" + crypto.randomBytes(8).toString("hex");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team, sealed: false, epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+    const ud = folder("desk-44f");
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }), "utf8");
+    const mirror = path.join(ud, "folder-mirror", team);
+    let out = {};
+    REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+    try {
+      const d = loadDesk(ud);
+      const before = d.api.catalogFolder();
+      const read = d.api.readCatalog();
+      const after = d.api.catalogFolder();
+      const ft = d.api.folderTeamHere();
+      const prog = syncerMod.createFolderProgram({ team, folder: share, mirror, pin: LEAD, keys: {}, checks });
+      prog.syncOnce();
+      const primed = d.api.catalogFolder();
+      const read2 = d.api.readCatalog();
+      out = {
+        policyWin: process.platform !== "win32" ? "skipped" : true,
+        namedFirst: path.resolve(before) === path.resolve(share), readNamed: read === CAT_A1.trim(),
+        noFlip: path.resolve(after) === path.resolve(share), pinned: !!ft && ft.team === team,
+        mirrorAfterSync: path.resolve(primed) === path.resolve(mirror), readMirror: read2 === CAT_A1.trim()
+      };
+    } catch (e) { out.error = String(e && e.message); }
+    finally { REG.policy = null; }
+    const ok = process.platform !== "win32" || (!out.error && out.namedFirst && out.readNamed && out.noFlip && out.pinned && out.mirrorAfterSync && out.readMirror);
+    check(ok, "44f a first boot under machine policy reads the named folder and never flips to an empty mirror before its syncer has run once, then reads the mirror: " + JSON.stringify(out));
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44g (point 5, F5): takeInvite stays a direct read of the invitation's folder, and says why where it reads
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const src = getShellSrc();
+    const at = src.indexOf("async function takeInvite(");
+    const end = at < 0 ? -1 : src.indexOf("\nasync function ", at + 10) < 0 ? src.length : src.indexOf("\nasync function ", at + 10);
+    const body = at < 0 ? "" : src.slice(at, end);
+    const said = /Read straight from the invitation's folder, not a mirror: no team is joined yet, so no syncer keeps one/.test(body);
+    const readsThere = /path\.join\(parsed\.folder, "invites"/.test(body);
+    check(said && readsThere, "44g takeInvite reads the invitation's folder directly, and says where it reads that no team exists yet to keep a mirror: comment " + said + ", direct read " + readsThere);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 44h (point 6): honest when it has not landed: while the share refuses (EACCES, ENOSPC) the row says kept, the outbox
+   * says why once and tries again, and nothing is dropped
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const share = folder("share-44h");
+    const { ud, mirror } = teamDesk("desk-44h", share);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    const d = loadDesk(ud);
+    const me = d.api.branchIdentity(true);
+    const stem = "cat-44h-3a3b3c3d";
+    d.api.writeBranch(stem, JSON.stringify(branchOf(me, "3a3b3c3d")));
+    const rowOf = () => (d.api.deskRows().filter(r => r.id === me.id + "-3a3b3c3d")[0] || null);
+    const said = [];
+    const logger = s => said.push(String(s));
+    const run = io => syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, logger, io }).syncOnce();
+    run(refusingIo(share, "EACCES"));
+    const keptEacces = !!rowOf() && rowOf().reached === false;
+    run(refusingIo(share, "EACCES"));
+    run(refusingIo(share, "ENOSPC"));
+    const keptEnospc = !!rowOf() && rowOf().reached === false;
+    const saidOnce = said.filter(l => l.indexOf("(EACCES)") >= 0).length === 1 && said.filter(l => l.indexOf("(ENOSPC)") >= 0).length === 1;
+    const notInShare = !fs.existsSync(path.join(share, "desks", me.id, stem + ".ec"));
+    run(undefined);
+    const reached = !!rowOf() && rowOf().reached === true;
+    const inShare = fs.existsSync(path.join(share, "desks", me.id, stem + ".ec"));
+    check(keptEacces && keptEnospc && saidOnce && notInShare && reached && inShare,
+      "44h while the share refuses the write the row says kept, the outbox says why once a cause and tries again, and the write lands once it can: "
+      + "kept on EACCES " + keptEacces + ", kept on ENOSPC " + keptEnospc + ", each cause said once " + saidOnce
+      + ", not in share meanwhile " + notInShare + ", reached after " + reached + ", in share " + inShare);
+  }
+
   /* -------------------------------------------------------------------------------------------------
    * Plants: Proved by removal in scratch copy, never in checkout, sha256 restored
    * ----------------------------------------------------------------------------------------------- */
@@ -1564,6 +1906,207 @@ async function run() {
     check(r.ok, "42l lifting plant:syncer-without-checks lets a syncer start without the desk's checks: " + JSON.stringify(r));
   }
 
+  /* ---- slice 2's plants, each lifted in a scratch copy ---------------------------------------------------------------- */
+  const OWN = "desks/k-0123456789abcdef/own.ec";
+  const plainShared = rev => JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "shared-44", rev, name: "Shared", date: "2026-11-01",
+    langs: [{ code: "en", label: "EN" }], tags: [], cards: [] }, null, 1) + "\n";
+  const scratchDesk = (name, share) => {
+    const ud = folder(name);
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+      teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { lead: "Lead", folder: share } } }), "utf8");
+    const mirror = path.join(ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirror, { recursive: true });
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    return { ud, mirror };
+  };
+
+  // 44i: plant:outbox-flush
+  {
+    const r = await testPlant("outbox-flush", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const share = folder("plant-flush-share"), mirror = folder("plant-flush-mirror");
+      fs.mkdirSync(path.join(mirror, "desks", "k-0123456789abcdef"), { recursive: true });
+      fs.writeFileSync(path.join(mirror, OWN), "own bytes", "utf8");
+      mod.noteOwed(mirror, OWN);
+      mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks }).syncOnce();
+      return !fs.existsSync(path.join(share, OWN));
+    });
+    check(r.ok, "44i lifting plant:outbox-flush leaves an owed write off the share while the outbox counts it landed: " + JSON.stringify(r));
+  }
+
+  // 44j: plant:outbox-owe-keep
+  {
+    const r = await testPlant("outbox-owe-keep", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const share = folder("plant-keep-share"), mirror = folder("plant-keep-mirror");
+      fs.writeFileSync(path.join(mirror, "shared-44.ec"), plainShared(5), "utf8");
+      mod.noteOwed(mirror, "shared-44.ec");
+      const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks });
+      fs.mkdirSync(path.join(mirror, ".staging"), { recursive: true });
+      const tmp = path.join(mirror, ".staging", "keep.tmp");
+      fs.writeFileSync(tmp, plainShared(6), "utf8");
+      prog.applyScan({ answers: true, listing: [["shared-44.ec", { size: 1, mtimeMs: 1 }]], staged: [{ relPath: "shared-44.ec", tmpPath: tmp, size: 1, mtimeMs: 1 }] });
+      return revAt(path.join(mirror, "shared-44.ec")) === 6;
+    });
+    check(r.ok, "44j lifting plant:outbox-owe-keep lets a share copy overwrite a write the outbox still owes: " + JSON.stringify(r));
+  }
+
+  // 44k: plant:outbox-owe-stay
+  {
+    const r = await testPlant("outbox-owe-stay", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const share = folder("plant-stay-share"), mirror = folder("plant-stay-mirror");
+      fs.writeFileSync(path.join(mirror, "shared-44.ec"), plainShared(1), "utf8");
+      mod.noteOwed(mirror, "shared-44.ec");
+      const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks });
+      prog.applyScan({ answers: true, listing: [], staged: [] });
+      prog.applyScan({ answers: true, listing: [], staged: [] });
+      prog.applyScan({ answers: true, listing: [], staged: [] });
+      return !fs.existsSync(path.join(mirror, "shared-44.ec"));
+    });
+    check(r.ok, "44k lifting plant:outbox-owe-stay removes a new owed file the share does not list yet: " + JSON.stringify(r));
+  }
+
+  // 44l: plant:edition-floor
+  {
+    const r = await testPlant("edition-floor", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const share = folder("plant-floor-share"), mirror = folder("plant-floor-mirror");
+      fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      fs.writeFileSync(path.join(mirror, "lamp-shop.ec"), CAT_A2, "utf8");
+      fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+      mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks }).syncOnce();
+      return revAt(path.join(mirror, "lamp-shop.ec")) === 1;
+    });
+    check(r.ok, "44l lifting plant:edition-floor lets a lagging rev 1 roll a rev 2 edition back in the mirror: " + JSON.stringify(r));
+  }
+
+  // 44m: plant:cas-share-compare
+  {
+    const r = await testPlant("cas-share-compare", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const share = folder("plant-cmp-share");
+      fs.writeFileSync(path.join(share, "shop.ec"), plainShared(1), "utf8");
+      const begun = mod.shareCasBegin(share, "shop.ec", "0".repeat(64), false);
+      if (begun.held) mod.shareRelease(begun.held);
+      return !!begun.held;
+    });
+    check(r.ok, "44m lifting plant:cas-share-compare lets a write over bytes it did not read take the lock: " + JSON.stringify(r));
+  }
+
+  // 44n: plant:cas-mirror-back
+  {
+    const r = await testPlant("cas-mirror-back", syncerFile, (scratchSyncer) => {
+      const mod = nodeRequire(scratchSyncer);
+      const share = folder("plant-back-share"), mirror = folder("plant-back-mirror");
+      fs.writeFileSync(path.join(share, "shop.ec"), plainShared(1), "utf8");
+      const sha = crypto.createHash("sha256").update(Buffer.from(plainShared(1), "utf8")).digest("hex");
+      const begun = mod.shareCasBegin(share, "shop.ec", sha, false);
+      const done = begun.held ? mod.shareCasCommit(begun.held, mirror, plainShared(2)) : null;
+      return !!done && done.ok && !fs.existsSync(path.join(mirror, "shop.ec"));
+    });
+    check(r.ok, "44n lifting plant:cas-mirror-back leaves the winning bytes out of the writer's mirror: " + JSON.stringify(r));
+  }
+
+  // 44o: plant:mirror-write-root
+  {
+    const r = await testPlant("mirror-write-root", mainFile, (scratchMain) => {
+      const share = folder("plant-root-share");
+      const { ud, mirror } = scratchDesk("plant-root-desk", share);
+      const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      const me = d.api.branchIdentity(true);
+      d.api.writeBranch("cat-44o-4a4b4c4d", JSON.stringify(branchOf(me, "4a4b4c4d")));
+      return fs.existsSync(path.join(share, "desks", me.id, "cat-44o-4a4b4c4d.ec")) && !fs.existsSync(path.join(mirror, "desks", me.id, "cat-44o-4a4b4c4d.ec"));
+    });
+    check(r.ok, "44o lifting plant:mirror-write-root sends the desk's write straight to the share again: " + JSON.stringify(r));
+  }
+
+  // 44p: plant:mirror-owes
+  {
+    const r = await testPlant("mirror-owes", mainFile, (scratchMain) => {
+      const share = folder("plant-owes-share");
+      const { ud, mirror } = scratchDesk("plant-owes-desk", share);
+      const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      const me = d.api.branchIdentity(true);
+      d.api.writeBranch("cat-44p-5a5b5c5d", JSON.stringify(branchOf(me, "5a5b5c5d")));
+      syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks }).syncOnce();
+      return fs.existsSync(path.join(mirror, "desks", me.id, "cat-44p-5a5b5c5d.ec")) && !fs.existsSync(path.join(share, "desks", me.id, "cat-44p-5a5b5c5d.ec"));
+    });
+    check(r.ok, "44p lifting plant:mirror-owes leaves the desk's write in the mirror and never sends it to the share: " + JSON.stringify(r));
+  }
+
+  // 44q: plant:outbox-row-kept
+  {
+    const r = await testPlant("outbox-row-kept", mainFile, (scratchMain) => {
+      const share = folder("plant-row-share");
+      const { ud } = scratchDesk("plant-row-desk", share);
+      const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      const me = d.api.branchIdentity(true);
+      d.api.writeBranch("cat-44q-6a6b6c6d", JSON.stringify(branchOf(me, "6a6b6c6d")));
+      const row = d.api.deskRows().filter(x => x.id === me.id + "-6a6b6c6d")[0];
+      return !!row && row.reached === true;
+    });
+    check(r.ok, "44q lifting plant:outbox-row-kept says a write the outbox still owes is with the team: " + JSON.stringify(r));
+  }
+
+  // 44r: plant:resume-mirror
+  {
+    const r = await testPlant("resume-mirror", mainFile, (scratchMain) => {
+      const share = folder("plant-resume-share");
+      const { ud } = scratchDesk("plant-resume-desk", share);
+      const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      try {
+        d.api.resumeFromSleep();
+        return !d.api.folderAnswers(d.api.catalogFolder());
+      } finally { try { appSyncer().stopAllFolderSyncers(); } catch {} }
+    });
+    check(r.ok, "44r lifting plant:resume-mirror marks the local mirror down after a wake from sleep: " + JSON.stringify(r));
+  }
+
+  // 44s: plant:policy-primed
+  {
+    const r = process.platform !== "win32" ? { ok: true, skipped: "machine policy is read on Windows only" } : await testPlant("policy-primed", mainFile, (scratchMain) => {
+      const share = folder("plant-policy-share");
+      const team = "t-" + crypto.randomBytes(8).toString("hex");
+      fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team, sealed: false, epoch: 1, rev: 1 })), "utf8");
+      fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+      const ud = folder("plant-policy-desk");
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }), "utf8");
+      REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+      try {
+        const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+        d.api.readCatalog();
+        return path.resolve(d.api.catalogFolder()) === path.resolve(path.join(ud, "folder-mirror", team));
+      } finally { REG.policy = null; }
+    });
+    check(r.ok, "44s lifting plant:policy-primed flips a first boot under machine policy to an empty mirror before its syncer has run: " + JSON.stringify(r));
+  }
+
+  // 44t: plant:cas-off-thread
+  {
+    const r = await testPlant("cas-off-thread", mainFile, async (scratchMain) => {
+      const share = folder("plant-cas-share");
+      const team = "t-" + crypto.randomBytes(8).toString("hex");
+      const tf = JSON.stringify(teamFile({ team, sealed: false, catalogs: ["shared-44"], epoch: 1, rev: 1 }));
+      fs.writeFileSync(path.join(share, "etiuda-team.json"), tf, "utf8");
+      fs.writeFileSync(path.join(share, "shared-44.ec"), plainShared(1), "utf8");
+      const ud = folder("plant-cas-desk");
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+        teamPins: { [team]: LEAD }, teamShown: { [team]: { lead: "Lead", folder: share } } }), "utf8");
+      const mirror = path.join(ud, "folder-mirror", team);
+      fs.mkdirSync(mirror, { recursive: true });
+      fs.writeFileSync(path.join(mirror, "etiuda-team.json"), tf, "utf8");
+      fs.writeFileSync(path.join(mirror, "shared-44.ec"), plainShared(1), "utf8");
+      const sha = crypto.createHash("sha256").update(Buffer.from(plainShared(1), "utf8")).digest("hex");
+      const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+      try {
+        await d.ask("etiuda:shared-write", "shared-44.ec", plainShared(2), sha, false);
+        return revAt(path.join(share, "shared-44.ec")) === 1;
+      } finally { try { appSyncer().stopAllFolderSyncers(); } catch {} }
+    });
+    check(r.ok, "44t lifting plant:cas-off-thread swaps the shared catalog in the mirror and never on the share: " + JSON.stringify(r));
+  }
 
   /* 42m: A DESK WHOSE SYNCER CANNOT START READS THE SHARE AND SAYS WHY (Argon's updates review of 2026-11-01, finding 1). A
      packaged desk missing the syncer's file used to read an empty mirror in silence; now it reads the shared folder itself, as
@@ -1633,6 +2176,31 @@ async function run() {
     });
     check(live && r.ok, "42n the syncer's worker starts from its source text and mirrors a genuine team file " + live
       + ", and lifting plant:syncer-worker-source stops it: " + JSON.stringify(r));
+  }
+
+
+  /* 44u: A SHARE'S TEAM FILE THAT IS NOT THE LEAD'S IS SAID, ONCE (the test architect's C1 to slice 2). The desk leaves it aside
+     and works on the last genuine one, so the line is the only alarm a tampered share gives: it goes through teamSay, once. */
+  async function forgedShareSaid(name, src) {
+    const ud = folder(name + "-desk");
+    const shareDir = folder(name + "-share");
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 2, signer: forger.privateKey, keyId: FORGER.keyId, public: FORGER.public })), "utf8");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    const d = loadDesk(ud, src ? { src } : {});
+    const s = d.api.folderSyncerRun();
+    const lines = () => d.said.filter(l => l.indexOf("ERR etiuda: ") === 0 && l.indexOf("etiuda-team.json is signed by a key other than the lead's") >= 0);
+    const until = Date.now() + 8000;
+    while (!lines().length && Date.now() < until) await new Promise(res => setTimeout(res, 150));
+    if (s && typeof s.kick === "function") { s.kick(); await new Promise(res => setTimeout(res, 1200)); }
+    try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+    return lines().length;
+  }
+  {
+    const n = await forgedShareSaid("forged-said");
+    check(n === 1, "44u a share's team file that is not the lead's is said through teamSay once, across two listings: " + n + " line(s)");
+    const r = await testPlant("syncer-team-said", mainFile, async (scratchMain) => (await forgedShareSaid("plant-forged-said", fs.readFileSync(scratchMain, "utf8"))) === 0);
+    check(r.ok, "44v lifting plant:syncer-team-said leaves a tampered share's team file unsaid: " + JSON.stringify(r));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
