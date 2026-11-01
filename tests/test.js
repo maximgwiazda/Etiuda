@@ -2617,7 +2617,7 @@ function markLab(o) {
   const lift = (f, t) => { if (!o || !o.lift || o.lift.file !== f) return t; const ls = t.split("\n"), at = ls.findIndex(l => l.indexOf(o.lift.tag) >= 0);
     if (at < 0) throw new Error(o.lift.tag + " is not in " + f); ls.splice(at, 1); return ls.join("\n"); };
   const mark = lift("empty-mark.js", read("empty-mark.js")).replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
-  const tour = lift("tour.js", read("tour.js")), open = read("on-open.js");
+  const tour = lift("tour.js", read("tour.js")), open = lift("on-open.js", read("on-open.js"));
   const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
     extractDecl(open, "function deskLaunch("), extractDecl(open, "function wireOnOpen(")];
@@ -2672,9 +2672,9 @@ function markClockTests() {
     const waits = [!!opts && opts.covered()];
     h.tell();
     waits.push(!!opts && opts.covered());
-    got = [!!a && a[0] === w.host, !!opts && opts.still === w.sb.mgReduceMotion && opts.phase === w.sb.fifthPhase, waits, !!b && b[0] === null];
+    got = [!!a && a[0] === w.host, !!opts && opts.still === w.sb.mgReduceMotion && opts.phase === w.sb.fifthPhase && opts.R === 10, waits, !!b && b[0] === null];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("952c the empty desk's block is handed to the launch's drawing on the desk's quiet switch and header clock, waiting while the host says its window is not on screen and not once it is, and any other list stops it",
+  eq("952c the empty desk's block is handed to the launch's drawing at the desk's own R 10, on its quiet switch and header clock, waiting while the host says its window is not on screen and not once it is, and any other list stops it",
     got, [true, true, [true, false], true]);
   if (process.env.ETIUDA_PLANTS === "off") {
     console.log("  SKIP  952c lifting plant:empty-desk-takes-launch hands the block to nothing");
@@ -2707,6 +2707,35 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("952d the desk's launch waits while its window is not on screen and under a dialog, and not once it is shown with none",
     got, [true, false, true]);
+
+  /* 952h. THE EMPTY DESK'S WORK RISES UNDER THE LOGO, as Studio's empty screen does (Max, 2026-11-01 18:19): at a launch
+     over the empty desk the launch stands, hiding the work, and the block takes its drawing in the same task, so the
+     launch gives way "moved" once the work is ready, the work rising over LAUNCH_OUT_MS with the mark in it (the launch
+     lab's "moved" and give-way legs and 952e hold those two). The work is ready on the first frame after the window is
+     on screen. */
+  const riseRun = o => {
+    const h = unseen(), w = markLab(Object.assign({ host: h }, o || {})), order = [];
+    let opts = null, frames = 0;
+    w.sb.launchMark = x => { opts = x; order.push("launch"); return null; };
+    w.sb.syncLaunchMark = host => { order.push(host === w.host ? "handed" : "other"); };
+    w.sb.requestAnimationFrame = fn => { frames++; fn(); return 1; };
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".empty-desk" ? w.host : null;
+    w.sb.deskLaunch();
+    return { h, order, R: opts && opts.R, frames: () => frames };
+  };
+  try {
+    const r = riseRun(), before = r.frames();
+    r.h.tell();
+    got = [r.order, r.R, before, r.frames()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("952h at a launch over the empty desk the launch stands and the block takes its drawing in the same task, at R 10, so the work rises with the mark in it; the work's ready frame is asked only once the window is on screen",
+    got, [["launch", "handed"], 10, 0, 1]);
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952h lifting plant:empty-desk-rises leaves the drawing over the veil");
+  else {
+    try { got = riseRun({ lift: { file: "on-open.js", tag: "plant:empty-desk-rises" } }).order; }
+    catch (e) { got = "the lab threw: " + e.message; }
+    eq("952h lifting plant:empty-desk-rises leaves the drawing over the veil", got, ["launch"]);
+  }
 
   const tourRun = (o, landAt) => { const c = markLab(o); c.make(); c.sb.maybeStartTour(); c.land(landAt); c.timersTo(4000); return c.log; };
   try {
@@ -3191,20 +3220,22 @@ function launchMarkTests() {
     // the desk's launch: deskLaunch from on-open.js on stubs
     const fn = extractDecl(read("on-open.js"), "function deskLaunch(");
     const desk = (seen, empty) => {
-      const calls = [], set = [];
+      const calls = [], set = [], handed = [];
       const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, markCovered: () => false,
-        fifthPhase: () => 0, requestAnimationFrame: () => 0, Promise,
+        fifthPhase: () => 0, requestAnimationFrame: () => 0, Promise, EMPTY_DESK_R: 10, afterShown: f => f(),
+        syncEmptyMark: b => handed.push(b),
         document: { querySelector: s => s === "#dotField>div" ? { id: "field" } : s === ".empty-desk" ? empty : null },
         launchMark: o => { calls.push(o); return {}; } };
       require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
       const o = calls[0];
       return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.markCovered, typeof o.ready.then,
-        o.phase === sb.fifthPhase] : null];
+        o.phase === sb.fifthPhase, o.R || null] : null, handed.length];
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock, and not over the empty desk",
-    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true]], [0, [], null], [0, [["eLaunched", "1"]], null]]);
+  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock, over the cards at R 7 and over the empty desk at its own R 10, handing the empty desk the drawing",
+    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0], [0, [], null, 0],
+      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, 10], 1]]);
 
   try {
     // with a launch arriving, the boot repaint and the menu's warm copy wait for it to land

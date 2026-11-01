@@ -56,7 +56,7 @@ function wireThemeBtn(){
        the shell the stored key is what turns the window's material, sent without waiting. */
     const nx=shownTheme()==="dark"?"light":"dark";
     paintTheme(nx);
-    lsSet("eTheme",nx);
+    lsSet("eTheme",nx); /* plant:theme-choice-saved */
     noteRoll();
   };
 }

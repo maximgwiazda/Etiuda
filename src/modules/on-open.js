@@ -5,7 +5,7 @@ import { listEntryEls } from "./entry-walk.js";
 import { render } from "./render.js";
 import { setEntrySel } from "./mark.js";
 import { applyUiLang } from "./repaint.js";
-import { markCovered } from "./empty-mark.js";
+import { EMPTY_DESK_R, afterShown, markCovered, syncEmptyMark } from "./empty-mark.js";
 import { warmMenu } from "./header-menus.js";
 import { ssGet, ssSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
@@ -39,16 +39,19 @@ function focusFirstEntryOnOpen(){
   setEntrySel(card.dataset.id, +el.dataset.v, {scroll:false, smooth:false});
 }
 
-/* THE LAUNCH, once per window: the first boot the window's session has seen, and not over the empty desk, whose
-   own mark is its arrival. A reload (a catalog accepted, the shell's recovery) is not a launch. The list is
-   painted by the first frame after boot. */
+/* THE LAUNCH, once per window: the first boot the window's session has seen. A reload (a catalog accepted, the
+   shell's recovery) is not a launch. The list is painted by the first frame after boot, and the work is ready on the
+   first frame once the window is on screen. Over the empty desk the block takes the drawing at once, as Studio's
+   empty screen does, so the work rises with the mark already in it; the figure there is the empty desk's own. */
 function deskLaunch(){
   if(ssGet("eLaunched")) return null;
   ssSet("eLaunched","1");
-  const region=document.querySelector("#dotField>div");
-  if(!region || document.querySelector(".empty-desk")) return null;
-  return launchMark({app:"desk", region:region, still:mgReduceMotion, covered:markCovered, phase:fifthPhase,
-    ready:new Promise(r=>requestAnimationFrame(()=>r()))});
+  const region=document.querySelector("#dotField>div"), empty=document.querySelector(".empty-desk");
+  if(!region) return null;
+  const h=launchMark({app:"desk", region:region, R:empty ? EMPTY_DESK_R : undefined, still:mgReduceMotion, covered:markCovered,
+    phase:fifthPhase, ready:new Promise(r=>afterShown(()=>requestAnimationFrame(()=>r())))});
+  if(empty) syncEmptyMark(empty); /* plant:empty-desk-rises */
+  return h;
 }
 
 function wireOnOpen(){

@@ -182,7 +182,7 @@ export const SCANS = {
   "tests/join-policy.mjs": ["shell/policy/**"],
   "tests/catalog-shared.mjs": ["src/modules/catalog-file.js", "src/modules/catalog-offer.js", "src/modules/ui-lang.js"],
   "tests/catalog-in-use.mjs": ["src/modules/catalog-offer.js", "src/modules/catalog-file.js", "src/modules/catalog-history.js", "src/modules/settings.js", "src/modules/ui-lang.js", "src/modules/local-memory.js", "shell/preload.js"],
-  "tests/desk-ipc.mjs": ["src/template.html", "src/modules/hooks.js"],
+  "tests/desk-ipc.mjs": ["src/template.html", "src/modules/{hooks,theme,storage,motion,dom}.js"],
   "tests/stats-live.mjs": ["src/modules/host.js", "shell/preload.js", "src/modules/settings.js", "src/modules/ui-lang.js"],
   "tests/tab-focus.mjs": ["src/template.html", "src/modules/list-pointer.js", "src/modules/run-shortcut.js", "src/modules/tabs.js", "shell/main.js", "shell/preload.js", "src/modules/host.js"],
   "tests/shell-office.mjs": ["shell/*.ec"],

@@ -21627,6 +21627,8 @@ What you type stays in this browser only.`;
   // src/modules/empty-mark.js
   var empty_mark_exports = {};
   __export(empty_mark_exports, {
+    EMPTY_DESK_R: () => EMPTY_DESK_R,
+    afterShown: () => afterShown,
     dialogStanding: () => dialogStanding,
     markCovered: () => markCovered,
     syncEmptyMark: () => syncEmptyMark
@@ -22560,6 +22562,7 @@ What you type stays in this browser only.`;
     return !!document.querySelector(".modal:not([hidden]):not(.e-gone)");
   }
   var eShown = null;
+  var shownWait = [];
   function windowShown() {
     if (eShown !== null) return eShown;
     const h = typeof window !== "undefined" && window.E_HOST || null;
@@ -22567,18 +22570,26 @@ What you type stays in this browser only.`;
     if (!eShown) try {
       h.onShown(() => {
         eShown = true;
+        const w = shownWait;
+        shownWait = [];
+        w.forEach((f) => f());
       });
     } catch (e) {
       eShown = true;
     }
     return eShown;
   }
+  function afterShown(fn) {
+    if (windowShown()) fn();
+    else shownWait.push(fn);
+  }
   function markCovered() {
     if (!windowShown()) return true;
     return dialogStanding();
   }
+  var EMPTY_DESK_R = 10;
   function deskMarkOpts() {
-    return { still: mgReduceMotion, covered: markCovered, phase: fifthPhase };
+    return { R: EMPTY_DESK_R, still: mgReduceMotion, covered: markCovered, phase: fifthPhase };
   }
   function syncEmptyMark(host) {
     syncLaunchMark(host || null, deskMarkOpts());
@@ -23386,16 +23397,19 @@ What you type stays in this browser only.`;
   function deskLaunch() {
     if (ssGet("eLaunched")) return null;
     ssSet("eLaunched", "1");
-    const region = document.querySelector("#dotField>div");
-    if (!region || document.querySelector(".empty-desk")) return null;
-    return launchMark({
+    const region = document.querySelector("#dotField>div"), empty = document.querySelector(".empty-desk");
+    if (!region) return null;
+    const h = launchMark({
       app: "desk",
       region,
+      R: empty ? EMPTY_DESK_R : void 0,
       still: mgReduceMotion,
       covered: markCovered,
       phase: fifthPhase,
-      ready: new Promise((r) => requestAnimationFrame(() => r()))
+      ready: new Promise((r) => afterShown(() => requestAnimationFrame(() => r())))
     });
+    if (empty) syncEmptyMark(empty);
+    return h;
   }
   function wireOnOpen() {
     deskLaunch();

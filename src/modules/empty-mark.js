@@ -9,21 +9,26 @@ import { syncLaunchMark } from "./launch-mark.js";
 function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone)"); }
 /* THE WINDOW ON SCREEN: a host says whether it was when this load asked, and once when it is; a page
    with no host, or a host that never says, is on screen. The first ask listens, and boot asks. */
-let eShown=null;
+let eShown=null, shownWait=[];
 function windowShown(){
   if(eShown!==null) return eShown;
   const h=(typeof window!=="undefined" && window.E_HOST) || null;
   eShown=!h || typeof h.onShown!=="function" || !!h.shown;
-  if(!eShown) try{ h.onShown(()=>{ eShown=true; }); }catch(e){ eShown=true; }
+  if(!eShown) try{ h.onShown(()=>{ eShown=true; const w=shownWait; shownWait=[]; w.forEach(f=>f()); }); }catch(e){ eShown=true; }
   return eShown;
 }
+// What waits for the window on screen runs once it is, at once where it already is.
+function afterShown(fn){ if(windowShown()) fn(); else shownWait.push(fn); }
 // An opening waits under a dialog, and for a window not yet on screen, whose frames nobody sees.
 function markCovered(){
   if(!windowShown()) return true; /* plant:mark-waits-shown */
   return dialogStanding();
 }
-// What every drawing of the mark on the desk is given: the quiet switch, the opening's wait, the header's clock.
-function deskMarkOpts(){ return {still:mgReduceMotion, covered:markCovered, phase:fifthPhase}; }
+/* The empty desk's figure is the desk's own fuller one, the header's R 10, where the launch over cards and Studio's
+   draw R 7 (Max, 2026-11-01 18:19). */
+const EMPTY_DESK_R=10;
+// What every drawing of the mark on the empty desk is given: its figure, the quiet switch, the opening's wait, the header's clock.
+function deskMarkOpts(){ return {R:EMPTY_DESK_R, still:mgReduceMotion, covered:markCovered, phase:fifthPhase}; }
 /* render() hands over the empty desk's block, or null for any other list, which stops a drawing no launch
    stands on. A re-render of the empty desk moves the same drawing into the new block: one arrival per
    appearance. */
@@ -32,6 +37,8 @@ function syncEmptyMark(host){
 }
 
 export {
+  EMPTY_DESK_R,
+  afterShown,
   dialogStanding,
   markCovered,
   syncEmptyMark

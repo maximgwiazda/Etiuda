@@ -8,6 +8,9 @@
  * safeStorage, a signed catalog under desks/<branch id>/ after an edit, and nothing else touched.
  * And the window's close (closing asks once while a conversation is in progress, 2026-10-12): held and the page asked,
  * let go by the page's answer, a second close, silence, a lost page or a quit, and the preload's two ends of the pipe.
+ * 952g, last: a theme chosen on the theme button survives a restart through the path that now saves it, the page's
+ * unwaited send and, for a quit straight after the press, the flush on pagehide; each restart is a fresh copy of the
+ * page's modules reading the desk back through main's own handler, and the window's material follows the file.
  *
  *   node tests/desk-ipc.mjs            exit code is the number of failed checks, capped at 63
  */
@@ -28,13 +31,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 88;
+const EXPECTED = 90;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 const tick = ms => new Promise(r => setTimeout(r, ms || 0));
 
@@ -1321,6 +1329,68 @@ try {
   check(askedHere === 1 && answered.join() === "etiuda:close-answer:stay" && typeof onHandlers["etiuda:close-answer"] === "function",
     "1012d3 the preload hands the page the shell's question and sends its answer on the channel main listens to ("
     + askedHere + ", " + JSON.stringify(answered) + ")");
+  /* 952g. THE CHOSEN THEME SURVIVES A RESTART. A page is copies of theme.js and its four neighbours in a folder of its own,
+     so each load is a fresh storage.js reading the desk through the preload and main's handler, as a restart does. The
+     first load boots on the system's dark, takes a press, lets the send land and is closed with nothing pending; the
+     second boots on the file, takes a press and is quit straight after it; the third boots on the file again. */
+  const themeLab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-theme-"));
+  let themeLoads = 0;
+  const docWas952 = globalThis.document, mmWas = globalThis.matchMedia;
+  const themePage = async lift => {
+    const dir = path.join(themeLab, "p" + (++themeLoads));
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+    for (const f of ["theme.js", "storage.js", "motion.js", "dom.js", "hooks.js"]) {
+      let text = fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8");
+      if (lift && f === "theme.js") {
+        const ls = text.split("\n"), at = ls.findIndex(l => l.indexOf(lift) >= 0);
+        if (at < 0) throw new Error(lift + " is not in theme.js");
+        ls.splice(at, 1); text = ls.join("\n");
+      }
+      fs.writeFileSync(path.join(dir, f), text);
+    }
+    const root = { dataset: {}, classList: { add() {}, remove() {}, contains: () => false, toggle() {} }, style: {} };
+    const btn = { onclick: null }, icon = { dataset: {}, style: {} };
+    globalThis.document = { visibilityState: "visible", addEventListener: listen("document"), removeEventListener: noop, documentElement: root,
+      querySelector: sel => sel === "#theme" ? btn : sel === "#theme svg" ? icon : null };
+    const T = await import(pathToFileURL(path.join(dir, "theme.js")).href);
+    T.applyTheme(); T.wireThemeBtn();
+    return { shown: () => root.dataset.theme, press: () => btn.onclick() };
+  };
+  const restartRun = async lift => {
+    fs.writeFileSync(DESK, JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: {} }));
+    globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+    try {
+      const a = await themePage(lift), booted = a.shown();
+      a.press(); const asked = a.shown();
+      await tick(5); await tick(5);
+      const material = electron.nativeTheme.themeSource, landed = onDisk().eTheme || null;
+      fire("window", "pagehide");
+      const b = await themePage(lift), after = b.shown();
+      b.press(); const asked2 = b.shown();
+      fire("window", "pagehide");
+      const c = await themePage(lift), after2 = c.shown();
+      return { booted, asked, landed, material, after, asked2, after2 };
+    } finally {
+      globalThis.document = docWas952;
+      globalThis.matchMedia = mmWas;
+    }
+  };
+  let R952 = null;
+  try { R952 = await restartRun(null); } catch (x) { R952 = { error: String(x && x.message || x) }; }
+  check(!!R952 && R952.booted === "dark" && R952.asked === "light" && R952.landed === "light" && R952.material === "light"
+    && R952.after === "light" && R952.asked2 === "dark" && R952.after2 === "dark",
+    "952g a theme chosen on the button survives a restart: sent without waiting it is on the disk and the material follows,"
+    + " the next start boots on it, and a choice quit straight after the press is flushed and the start after boots on that ("
+    + JSON.stringify(R952) + ")");
+  if (PLANTS_OFF) skip("952g lifting plant:theme-choice-saved loses the choice at the restart");
+  else {
+    let L952 = null;
+    try { L952 = await restartRun("plant:theme-choice-saved"); } catch (x) { L952 = { error: String(x && x.message || x) }; }
+    check(!!L952 && !L952.error && L952.asked === "light" && L952.after === "dark",
+      "952g lifting plant:theme-choice-saved loses the choice at the restart (" + JSON.stringify(L952) + ")");
+  }
+  try { fs.rmSync(themeLab, { recursive: true, force: true }); } catch { /* a temp folder */ }
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
@@ -1330,9 +1400,9 @@ try {
   check(!fs.existsSync(UD), "4a the temp desk folder is gone");
 }
 
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
