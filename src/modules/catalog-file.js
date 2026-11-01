@@ -2,7 +2,7 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature, eCatalog } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, eUnreadableLine, catalogDocOf, eCatalogSignature, eCatalog } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash, v2CatKey } from "./catalog-v2.js";
@@ -843,8 +843,7 @@ function catalogFromFileText(text,fileName){
       }catch(e){
         /* NAMED. The dialog opens on a folder that may hold several of these, and a refusal that
            says only that something failed leaves a person guessing which file they picked. */
-        toastRefusal(t("{FILE} is not a catalog Etiuda can read.")
-          .split("{FILE}").join(String(fileName||"")));
+        toastRefusal(eUnreadableLine(e,fileName));
         return null;
       }
 }

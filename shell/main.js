@@ -567,6 +567,40 @@ function refuseOpened(file, why) {
    there. Passed over until it is saved again. The next file opens in its place only when it
    is not a lower rev than one already handed on. */
 const engineRefused = new Map();
+/* THE VERSION OF THE ENGINE THIS SHELL SERVES, E_VERSION as the build wrote it into the engine's file, read once. A catalog's
+   minEngine is judged against it by the release numbers alone, so 2.0.0-dev reads a catalog that asks for 2.0.0; the
+   page's reader holds the same rule (v2NeedsEngine). "" where the file names none, and minEngine is then not judged. */
+let engineVersionRead = null;
+function engineVersion() {
+  if (engineVersionRead !== null) return engineVersionRead;
+  let m = null;
+  try { m = /\bE_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)[^"]*"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  engineVersionRead = m ? m[1] : "";
+  return engineVersionRead;
+}
+/* The release a catalog asks for where this engine is older, else "". */
+function needsNewerEngine(data) {
+  const want = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String((data && data.minEngine) || ""));
+  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(want ? engineVersion() : "");
+  if (!want || !have) return "";
+  for (let i = 1; i <= 3; i++) if (+want[i] !== +have[i]) return +want[i] > +have[i] ? [want[1], want[2], want[3]].map(Number).join(".") : "";
+  return "";
+}
+/* AN EDITION FOR A NEWER ENGINE IS KEPT AND NOT READ: passed over as a key not yet brought is, so the edition in use stays,
+   and the page is told which release it waits for. {name, version, rev}, the newest such edition, or null. */
+let catalogWaitNewer = null, catalogNewerSaid = "";
+function waitNewer(file, version, data) {
+  const rev = editionRev(data);
+  if (!catalogWaitNewer || rev > catalogWaitNewer.rev) catalogWaitNewer = { name: path.basename(file), version: version, rev: rev };
+  if (openedWith && file === openedWith) refuseOpened(file, "newer " + version);
+}
+function newerKey() { return catalogWaitNewer ? catalogWaitNewer.name + " " + catalogWaitNewer.version : ""; }
+function sayNewer(win) {
+  const key = newerKey();
+  if (!key || key === catalogNewerSaid || !win || win.isDestroyed()) return;
+  catalogNewerSaid = key;
+  win.webContents.send("etiuda:catalog-newer", { name: catalogWaitNewer.name, version: catalogWaitNewer.version });
+}
 function refusedByEngine(file) {
   if (!engineRefused.has(file)) return false;
   try { return Math.round(fs.statSync(file).mtimeMs) === engineRefused.get(file); } catch { return false; }
@@ -778,6 +812,7 @@ function pickEdition(found) {
 function readCatalog() {
   heedTeam();
   if (openedWith && openedBaseline === null) rememberOpenedBaseline();
+  catalogWaitNewer = null;
   const found = [];
   let seenOk = false;
   for (const file of catalogPlaces()) {
@@ -787,6 +822,8 @@ function readCatalog() {
     try {
       const peeked = catalogPeek(text);
       if (!isV2(peeked.data)) throw new Error("not an Etiuda catalog (format 2)");
+      const wants = needsNewerEngine(peeked.data);
+      if (wants) { waitNewer(file, wants, peeked.data); continue; } /* plant:catalog-needs-newer */
       found.push({ file: file, text: text, data: peeked.data });
       seenOk = true;
     } catch (e) {
@@ -797,9 +834,10 @@ function readCatalog() {
       refuseOpened(file, "parse");
     }
   }
+  if (catalogWaitNewer) console.log("etiuda: " + catalogWaitNewer.name + " needs Etiuda " + catalogWaitNewer.version + " or newer, so it is kept and not read");
   const chosen = pickEdition(found);
   if (!chosen) {
-    if (sealAnyWaiting()) return typeof catalogJson === "string" ? catalogJson : null;
+    if (sealAnyWaiting() || catalogWaitNewer) return typeof catalogJson === "string" ? catalogJson : null;
     console.log(found.length ? "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for"
       : "etiuda: no catalog found, so Etiuda starts as a clean slate");
     catalogFrom = "";
@@ -1171,6 +1209,7 @@ function catalogChanged(win) {
   tryHeldUse();
   resealHeld(win);
   const now = readCatalog();
+  sayNewer(win);
   /* The owed eject is in the envelope, which the read above loads on a fresh run. */
   if (ejectOwed) tryHeldUse();
   tryLiveStats(win);
@@ -1209,6 +1248,8 @@ function offerFile(win, file) {
   try {
     const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    const wants = needsNewerEngine(data);
+    if (wants) { console.error("etiuda: " + file + " needs Etiuda " + wants + " or newer, so it is kept and not read"); refuse("newer " + wants); return; }
     /* The agent opened this file. Whatever its rev, its signer or its signature, it is offered,
        and no mark moves until the page says the agent took it (etiuda:catalog-taken). */
     openedWith = file;
@@ -1307,7 +1348,7 @@ function offerNewerLead(win) {
   if (!item) return;
   let opened;
   try { opened = catalogRead(item.text); } catch { return; }
-  if (!isV2(opened.data) || !unsolicitedLeadText(opened.json)) return;
+  if (!isV2(opened.data) || needsNewerEngine(opened.data) || !unsolicitedLeadText(opened.json)) return;
   let pin = "";
   try { pin = signedSha(opened.data); } catch { return; }
   if (offeredLead && offeredLead.pin === pin) return;
@@ -1487,7 +1528,7 @@ let statsClock = null;
 let statsMidnightTimer = null;
 let statsWin = null;
 function ensureDeskId() {
-  if (theDeskId) return theDeskId;
+  if (theDeskId || deskNewer) return theDeskId;
   theDeskId = mintDeskId();
   return theDeskId;
 }
@@ -2297,6 +2338,7 @@ function branchIdentity(make) {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* Asked not to make one, it answers the public halves of the pair there is, or null: nothing is opened or made. */
   if (make === false) return deskBranch ? { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub } : null;
+  if (deskNewer) return null; /* plant:desk-newer-key */
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
@@ -6154,6 +6196,14 @@ const deskRefusedSeen = new Set();
 let deskUnkept = "";                           // a live desk.json that could not even be read
 let deskRestored = "";                         // when the backup this run opened was saved
 let deskIsNew = false;                         // no desk file at all, nor a backup: a first run
+/* A DESK FILE A LATER ETIUDA WROTE stops the read: an older backup is not opened in its place, nothing is written over
+   it and no key is made, so installing that version again finds the desk as it was. {app, schema}, app "" where the
+   file names no release. */
+let deskNewer = null;
+function releaseOf(v) { return /^[1-9][0-9]*\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(String(v || "")) ? String(v) : ""; }
+function deskFromLater(doc) {
+  return !!doc && doc.kind === DESK_KIND && Number.isInteger(doc.schema) && doc.schema > DESK_SCHEMA;
+}
 function keepAside(buf) {
   const to = path.join(path.dirname(deskFile()),
     "desk.unread-" + crypto.createHash("sha256").update(buf).digest("hex").slice(0, 12) + ".json");
@@ -6164,8 +6214,10 @@ function noteRefused(kept, restored) {
   if (deskRefusedSeen.has(kept) || deskRefused.some(r => r.kept === kept)) return;
   deskRefused.push({ kept: kept, restored: restored });
 }
-/* Throws while the live file is still neither readable nor kept, so no write can replace it. */
+/* Throws while the live file is still neither readable nor kept, so no write can replace it; and while it is a later
+   Etiuda's. */
 function keepUnkept() {
+  if (deskNewer) throw new Error("desk.json was saved by a later Etiuda, so this version leaves it as it is"); /* plant:desk-newer-write */
   if (!deskUnkept) return;
   noteRefused(keepAside(fs.readFileSync(deskUnkept)), deskRestored);
   deskUnkept = "";
@@ -6186,6 +6238,7 @@ function settleRefused(refused, unread, live, doc) {
 /* The live file first, then the backups oldest-last, so a desk that will not parse costs the
    last run's state rather than all of it. A refused file is left where it is and kept aside. */
 function readDesk() {
+  deskNewer = null;
   const tried = [deskFile()];
   for (let n = 1; n <= DESK_BACKUPS; n++) tried.push(deskBackup(n));
   const refused = [];
@@ -6196,6 +6249,7 @@ function readDesk() {
     catch (e) { if (file === tried[0] && e.code !== "ENOENT") unread = true; continue; }
     let keys = null, doc = null;
     try { doc = JSON.parse(buf.toString("utf8")); keys = migrateDesk(doc, DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
+    if (!keys && deskFromLater(doc)) { deskNewer = { app: releaseOf(doc.app), schema: doc.schema }; break; } /* plant:desk-newer */
     if (!keys) {
       console.error("etiuda: " + file + " is not a desk this version can read");
       refused.push({ file: file, buf: buf });
@@ -6345,6 +6399,10 @@ function readDesk() {
   }
   deskRestored = "";
   settleRefused(refused, unread, tried[0], null);
+  if (deskNewer) {
+    console.error("etiuda: the desk was saved by a later Etiuda (schema " + deskNewer.schema + "), so it is read as empty and left as it is");
+    return {};
+  }
   if (!refused.length && !unread) {
     deskIsNew = true;
     console.log("etiuda: no desk file yet, so this run starts one");
@@ -6534,6 +6592,10 @@ function dropSessionStorage() {
 ipcMain.on("etiuda:desk-refused", (e) => {
   e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
 });
+/* The later Etiuda's desk this run leaves alone, {app, schema} as text, or "". */
+ipcMain.on("etiuda:desk-newer", (e) => {
+  e.returnValue = fromEngine(e) && deskNewer ? JSON.stringify(deskNewer) : "";
+});
 ipcMain.on("etiuda:desk-refused-seen", (e) => {
   if (!fromEngine(e)) return;
   deskRefused.forEach(r => deskRefusedSeen.add(r.kept));
@@ -6690,6 +6752,8 @@ ipcMain.on("etiuda:host", (e) => {
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
     openedRefused: openedRefused,
+    // An edition in the folder that waits for a newer Etiuda, {name, version}, or null.
+    catalogNewer: catalogWaitNewer ? { name: catalogWaitNewer.name, version: catalogWaitNewer.version } : null,
     /* THIS LOAD IS THE SHELL'S OWN RELOAD after the page stopped, answered once: the page then
        holds its first frame until boot has ended, as it does for a reload it asks for itself. */
     recovering: recovering.delete(e.sender.id),
@@ -6700,6 +6764,7 @@ ipcMain.on("etiuda:host", (e) => {
     accent: hostAccent(),
   };
   openedRefused = null;
+  catalogNewerSaid = newerKey();
 });
 
 /* THE MARKER LINE'S ONE SHAPE, and the engine reads the same one. \x5d rather than a literal

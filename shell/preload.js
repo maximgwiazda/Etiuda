@@ -123,8 +123,14 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   home: host.home,
   deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
+  /* A desk a later Etiuda saved, which this one leaves alone: {app, schema} as text, or "". */
+  deskNewer: () => ipcRenderer.sendSync("etiuda:desk-newer"),
   /* A refused file somebody double-clicked, {name, why}, answered once. */
   openedRefused: host.openedRefused || null,
+  /* An edition in the folder that waits for a newer Etiuda, {name, version}: at boot, and each time the host finds another. */
+  catalogNewer: host.catalogNewer || null,
+  onCatalogNewer: (fn) => ipcRenderer.on("etiuda:catalog-newer",
+    (_e, v) => fn(v && typeof v === "object" ? { name: String(v.name || ""), version: String(v.version || "") } : null)),
   /* Export's dialog, then the write to what was chosen: {name} or null for a dialog closed, then
      {name, ok, sealed} once written or refused. `from` is the catalog the export was made from, {id, sha}. */
   chooseCatalogSave: (title, name, label) => ipcRenderer.invoke("etiuda:choose-catalog-save",
