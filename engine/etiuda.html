@@ -7671,9 +7671,8 @@ What you type stays in this browser only.`;
     "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.": "Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
     "It matches": "Zgadza się",
     "It does not match": "Nie zgadza się",
-    "Forget this team on this desk?": "Zapomnieć o tym zespole na tym stanowisku?",
-    "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead.": "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Potem stanowisko nie przyjmie już żadnego zaproszenia do tego zespołu; aby znów z nim pracować, trzeba porozmawiać z liderem zespołu.",
-    "Forget this team": "Zapomnij o tym zespole",
+    "Leave this team on this desk?": "Opuścić ten zespół na tym stanowisku?",
+    "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.": "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania.",
     "{LEAD}'s team": "Zespół osoby {LEAD}",
     "Leave this team": "Opuść ten zespół",
     "This desk will leave this team.": "To stanowisko opuści ten zespół.",
@@ -15545,10 +15544,10 @@ What you type stays in this browser only.`;
   function joinParts() {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk"), l = leadToShow();
     if (l && joinDoubt === l.team) return {
-      title: t("Forget this team on this desk?"),
-      line: t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead."),
+      title: t("Leave this team on this desk?"),
+      line: t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more."),
       body: '<div class="e-join-key">' + keySignHtml("studio", l.print) + "</div>",
-      acts: [["forget", t("Forget this team"), false, "danger"], ["keep", t("Cancel")]]
+      acts: [["forget", t("Leave this team"), false, "danger"], ["keep", t("Cancel")]]
     };
     if (l) return {
       title: t("You are on the team"),
@@ -15710,7 +15709,7 @@ What you type stays in this browser only.`;
     }
     if (act === "forget" && l) {
       joinDoubt = "";
-      return joinAsk("forget", l.team);
+      return forgetTeamLead(l.team);
     }
     if (act === "load") return Promise.resolve(hooks.importCatalogHere());
     return Promise.resolve(null);

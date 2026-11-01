@@ -2081,7 +2081,7 @@ try {
   const matchWithdrawn = !!(matchEnv.teamJoin && matchEnv.teamJoin.invite && matchEnv.teamJoin.invite.relay
     && (matchEnv.teamJoin.invite.relay.withdrawing === true || matchEnv.teamJoin.invite.relay.withdrawn === true));
   check(matchCanJoin && matchWithdrawn,
-    "15de a desk with a relay request waiting presses It does not match, staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
+    "15de a desk with a relay request waiting meets the shell's legacy forget op (a bar held from before the leave route), staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
     + matchCanJoin + ", withdrawn " + matchWithdrawn);
 
   /* Hold 2: relay link's confirm card shows disclosure and left heading for a desk that left */
@@ -2938,16 +2938,17 @@ try {
       + (s ? wrapSaid(s) : "plant line absent") + ", tree " + (said.same ? "untouched" : "changed"));
   }
 
-  /* F8: "It does not match" asks once, saying what it does, and the first press forgets nothing: the shell hears "forget" only from
-     the confirmation's own press. The copywriter's words, corrected for the bar (7f36d360). */
-  const DOUBT = { title: "Forget this team on this desk?", titlePl: "Zapomnieć o tym zespole na tym stanowisku?",
-    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead.",
-    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Potem stanowisko nie przyjmie już żadnego zaproszenia do tego zespołu; aby znów z nim pracować, trzeba porozmawiać z liderem zespołu." };
+  /* F8: "It does not match" asks once, saying what it does, and the first press forgets nothing: the shell hears "leave", the
+     route Settings' Leave this team takes, only from the confirmation's own press. The copywriter's words of 01:27. */
+  const DOUBT = { title: "Leave this team on this desk?", titlePl: "Opuścić ten zespół na tym stanowisku?",
+    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.",
+    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania." };
   async function doubtScene(M) {
     const ops = [];
     let leads = [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: false }];
-    window.E_HOST = { onTeamJoin: noop, teamJoin: op => { ops.push(op); if (op === "forget") leads = [];
+    window.E_HOST = { onTeamJoin: noop, teamJoin: op => { ops.push(op); if (op === "leave" || op === "forget") leads = [];
       return Promise.resolve({ sealed: null, join: null, leads: leads.slice() }); } };
+    const gone = () => ops.filter(o => o === "leave" || o === "forget").length;
     AS.setCards([]);
     ST.lsSet("eUiLang", "en");
     try {
@@ -2955,7 +2956,7 @@ try {
       await sleep(30);
       const key = M.teamJoinEmptyHtml();
       await pressOn(M, "forget");
-      const firstForgets = ops.filter(o => o === "forget").length;
+      const firstForgets = gone();
       const asked = M.teamJoinEmptyHtml();
       ST.lsSet("eUiLang", "pl");
       const askedPl = M.teamJoinEmptyHtml();
@@ -2964,22 +2965,22 @@ try {
       const back = M.teamJoinEmptyHtml();
       await pressOn(M, "forget");
       await pressOn(M, "forget");
-      return { key, firstForgets, asked, askedPl, back, forgets: ops.filter(o => o === "forget").length };
+      return { key, firstForgets, asked, askedPl, back, forgets: gone(), leaves: ops.filter(o => o === "leave").length };
     } finally {
       if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
     }
   }
   const doubted = await doubtScene(TJ);
   const doubtAsks = doubted.asked.indexOf(escPage(DOUBT.title)) >= 0 && doubted.asked.indexOf(escPage(DOUBT.body)) >= 0
-    && doubted.asked.indexOf("abcd abcd abcd abcd") >= 0 && /class="btn danger" data-join="forget">Forget this team</.test(doubted.asked)
+    && doubted.asked.indexOf("abcd abcd abcd abcd") >= 0 && /class="btn danger" data-join="forget">Leave this team</.test(doubted.asked)
     && /data-join="keep">Cancel</.test(doubted.asked) && doubted.asked.indexOf("You are on the team") < 0
     && doubted.askedPl.indexOf(DOUBT.titlePl) >= 0 && doubted.askedPl.indexOf(DOUBT.bodyPl) >= 0
-    && doubted.askedPl.indexOf(">Zapomnij o tym zespole<") >= 0 && doubted.askedPl.indexOf(">Anuluj<") >= 0;
+    && doubted.askedPl.indexOf(">Opuść ten zespół<") >= 0 && doubted.askedPl.indexOf(">Anuluj<") >= 0;
   check(doubted.key.indexOf("You are on the team") >= 0 && doubted.firstForgets === 0 && doubtAsks
-    && doubted.back.indexOf("You are on the team") >= 0 && doubted.forgets === 1,
-    "987j It does not match asks once, in English and in Polish, saying what forgetting the team does, and the first press forgets nothing; Cancel goes back"
-    + " to the key, and only the confirmation's Forget this team reaches the shell: first press " + doubted.firstForgets + " forget(s), asked "
-    + doubtAsks + ", back " + (doubted.back.indexOf("You are on the team") >= 0) + ", in all " + doubted.forgets);
+    && doubted.back.indexOf("You are on the team") >= 0 && doubted.forgets === 1 && doubted.leaves === 1,
+    "987j It does not match asks once, in English and in Polish, saying what leaving the team does, and the first press forgets nothing; Cancel goes back"
+    + " to the key, and only the confirmation's Leave this team reaches the shell, as a leave: first press " + doubted.firstForgets + " forget(s), asked "
+    + doubtAsks + ", back " + (doubted.back.indexOf("You are on the team") >= 0) + ", in all " + doubted.forgets + ", of them leaves " + doubted.leaves);
   if (PLANTS_OFF) skip("987k lifting plant:doubt-asks forgets at the first press");
   else {
     const asks = await plantedModule("team-join.js", "plant:doubt-asks");

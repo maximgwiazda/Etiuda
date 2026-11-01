@@ -4810,9 +4810,9 @@ function inviteDoor() {
 function inviteParse(text) {
   return inviteRead(text, process.platform !== "win32");
 }
-/* Why an invitation for `team` under `lead` is not taken here, or "": the team's lead was forgotten as not matching, which
-   only an answered request undoes, or the team is pinned under another key, which only a signed handover moves. A team
-   this desk left is no refusal: the confirm asks whether to join it again, and yes lifts the leave. */
+/* Why an invitation for `team` under `lead` is not taken here, or "": the team's lead was forgotten with no leave kept (the
+   op "forget"), which only an answered request undoes, or the team is pinned under another key, which only a signed handover
+   moves. A team this desk left is no refusal: the confirm asks whether to join it again, and yes lifts the leave. */
 function inviteSettled(team, lead) {
   if (teamBarred.has(team) && !teamLeft[team]) return "barred";
   const pin = teamPins[team];
@@ -5302,7 +5302,7 @@ function forgetLead(team, left) {
   relayCatalogNamed.delete(team);
   if (relayCatalogOwed === team) relayCatalogOwed = "";
   teamBarred.add(team);
-  if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
+  if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team]; /* plant:leave-remembers */
   // A request already withdrawn waits nowhere, so it goes with the keys; a waiting relay request is withdrawn.
   if (teamJoin && teamJoin.team === team) {
     if (teamJoin.invite && teamJoin.invite.relay) {
