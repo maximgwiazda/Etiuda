@@ -5950,18 +5950,28 @@ async function main() {
       "1168e": lostWrite.ok === true, "1168f": dead.ok === true, "1168g": flight.ok === true };
     const redOf = s => !s || s.ok !== true;
     const PLANTS = [
-      ["core", "reserve-hold", "1168h", "1168a", "an upload judged is held against nothing", async () => redOf(await guarded(() => sizeScene()))],
-      ["core", "reserve-bytes", "1168i", "1168a", "the bytes in flight count toward nothing", async () => redOf(await guarded(() => sizeScene()))],
-      ["core", "reserve-rate", "1168j", "1168b", "the stamps in flight count toward nothing", async () => redOf(await guarded(() => rateScene()))],
-      ["core", "reserve-count", "1168k", "1168c", "the blobs in flight count toward nothing", async () => redOf(await guarded(() => countScene()))],
-      ["core", "put-reap", "1168l", "1168f", "a dead request's put row waits for the sweep", async () => redOf(await guarded(() => deadScene()))],
-      ["core", "put-in-flight", "1168m", "1168g", "a prune takes the object of an upload still at the bucket", async () => redOf(await guarded(() => flightScene()))],
-      ["team", "put-fault-release", "1168n", "1168d", "a fault keeps its reservation", async T => redOf(await guarded(() => faultScene(refuse, T)))],
-      ["team", "put-fault-drop", "1168o", "1168e", "a fault leaves its object", async T => redOf(await guarded(() => faultScene(lose, T)))],
-      ["team", "put-release", "1168p", "1168a", "a committed upload keeps its reservation", async T => redOf(await guarded(() => sizeScene(T)))],
+      ["core", "reserve-hold", "1168a", async () => redOf(await guarded(() => sizeScene())),
+        "1168h lifting plant:reserve-hold turns 1168a red (an upload judged is held against nothing)"],
+      ["core", "reserve-bytes", "1168a", async () => redOf(await guarded(() => sizeScene())),
+        "1168i lifting plant:reserve-bytes turns 1168a red (the bytes in flight count toward nothing)"],
+      ["core", "reserve-rate", "1168b", async () => redOf(await guarded(() => rateScene())),
+        "1168j lifting plant:reserve-rate turns 1168b red (the stamps in flight count toward nothing)"],
+      ["core", "reserve-count", "1168c", async () => redOf(await guarded(() => countScene())),
+        "1168k lifting plant:reserve-count turns 1168c red (the blobs in flight count toward nothing)"],
+      ["core", "put-reap", "1168f", async () => redOf(await guarded(() => deadScene())),
+        "1168l lifting plant:put-reap turns 1168f red (a dead request's put row waits for the sweep)"],
+      ["core", "put-in-flight", "1168g", async () => redOf(await guarded(() => flightScene())),
+        "1168m lifting plant:put-in-flight turns 1168g red (a prune takes the object of an upload still at the bucket)"],
+      ["team", "put-fault-release", "1168d", async T => redOf(await guarded(() => faultScene(refuse, T))),
+        "1168n lifting plant:put-fault-release turns 1168d red (a fault keeps its reservation)"],
+      ["team", "put-fault-drop", "1168e", async T => redOf(await guarded(() => faultScene(lose, T))),
+        "1168o lifting plant:put-fault-drop turns 1168e red (a fault leaves its object)"],
+      ["team", "put-release", "1168a", async T => redOf(await guarded(() => sizeScene(T))),
+        "1168p lifting plant:put-release turns 1168a red (a committed upload keeps its reservation)"],
     ];
-    for (const [where, tag, id, leg, say, turns] of PLANTS) {
-      const line = id + " lifting plant:" + tag + " turns " + leg + " red (" + say + "), and the product file is never written";
+    /* Each plant's id opens its own line, so tests/leg-ids.js holds it against duplicates (the test architect, 2026-11-01 16:42). */
+    for (const [where, tag, leg, turns, said] of PLANTS) {
+      const line = said + ", and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }
       const p = where === "core" ? await liftCore("plant:" + tag, turns) : await editTeamCopy(lineLifted("plant:" + tag), turns);
       check(base[leg] && p.turned && p.back, line + ": " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
