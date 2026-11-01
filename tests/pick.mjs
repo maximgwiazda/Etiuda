@@ -1031,8 +1031,12 @@ try {
   const joined = sortedFiles.join(",");
   const smokeOk = fs.readFileSync(path.join(ROOT, "tests", "shell-smoke.js"), "utf8").indexOf('"' + joined + '"') >= 0;
   const reinstallOk = fs.readFileSync(path.join(ROOT, "tests", "reinstall.js"), "utf8").indexOf('"' + joined + '"') >= 0;
+  /* The worker is started from its source text, which holds only while it reaches nothing by path: Node's own modules alone. */
+  const workerCode = fs.readFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const workerReach = [...workerCode.matchAll(/require\(\s*([^)]*)\)/g)].map(m => m[1].trim()).filter(r => !/^"node:[\w/]+"$/.test(r))
+    .concat((workerCode.match(/\b__dirname\b|\b__filename\b/g) || []));
   check(reached.indexOf("shell/folder/syncer-worker.cjs") >= 0 && missing.length === 0
-    && J(releaseList) === J(sortedFiles) && smokeOk && reinstallOk,
+    && J(releaseList) === J(sortedFiles) && smokeOk && reinstallOk && workerReach.length === 0,
     "5h the package holds every file the shell loads (" + reached.length + " reached from shell/main.js; missing from the builder's files: "
     + (missing.join(", ") || "none") + "), and release.mjs " + (J(releaseList) === J(sortedFiles) ? "states" : "does NOT state")
     + ", shell-smoke " + (smokeOk ? "states" : "does NOT state") + " and reinstall " + (reinstallOk ? "states" : "does NOT state")
