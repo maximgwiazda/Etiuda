@@ -105,6 +105,7 @@ async function launch(plan) {
 
   const pageWin = {
     isDestroyed: () => false,
+    isVisible: () => true, /* the shell asks since board 952, which tells the page when the window is on screen */
     isMaximized: () => false,
     isMinimized: () => false,
     setBounds: noop,
