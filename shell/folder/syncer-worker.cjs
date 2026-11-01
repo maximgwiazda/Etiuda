@@ -6,6 +6,10 @@
  * The worker only stages files into the mirror's .staging directory.
  * No cryptographic keys or check functions are sent to or run in the worker.
  * Checks happen exclusively on the main thread on the local staged bytes.
+ *
+ * Started from its source text (syncer.cjs, { eval: true }), so a packaged desk does not need a Worker's loader to read a
+ * path inside app.asar. That holds only while this file requires nothing but Node's own modules ("node:" names) and never
+ * uses __dirname, __filename or a relative require: tests/pick.mjs 5h refuses any of those here.
  */
 "use strict";
 
