@@ -5302,10 +5302,19 @@ function relayRun() {
   if (!flagged) relayProbeMs = RELAY_PROBE_FIRST;
   if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
     + ", so this desk keeps that folder and not the relay its team file names");
-  const j = teamJoin;
-  const pin = want ? (teamPins[want.team] || (want.joining && j && j.team === want.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null)) : null;
-  const at = want && pin ? [want.team, want.rt, want.url, pin.public].join("|") : "";
-  if (at === relayAt && relayChannel) {
+  /* The lead this desk follows for a team, read when asked: the pin, or while joining the lead the invitation names. */
+  const pinFor = w => {
+    const j = teamJoin;
+    return teamPins[w.team] || (w.joining && j && j.team === w.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null);
+  };
+  const pin = want ? pinFor(want) : null;
+  /* THE PIN IS NOT IN THE FINGERPRINT (board 931 (7) item 9): a channel that followed a genuine handover itself already judges by
+     the new lead, so it is kept, not torn down mid-batch. Any other move of the pin, one the channel did not follow, rebuilds it. */
+  const at = want && pin ? [want.team, want.rt, want.url].join("|") : "";
+  const followed = relayChannel && relayChannel.program && typeof relayChannel.program.pinned === "function" ? relayChannel.program.pinned() : null;
+  let samePin = false;
+  samePin = !!pin && !!followed && !!followed.lead && followed.lead.public === pin.public; /* plant:ho9-keep-channel */
+  if (at === relayAt && relayChannel && samePin) {
     /* A channel halted on a team the relay refused starts again only at the probe, so its pace is the backoff's. */
     let restart = true;
     restart = !!open || relayProbing; /* plant:n2-hush-wait */
@@ -5326,7 +5335,7 @@ function relayRun() {
   catch (e) { teamSay("the relay's mirror " + mirror + " could not be made - " + e.message); relayAt = ""; return null; }
   relayChannel = RelayChannel().createChannel({
     rt: want.rt, url: want.url, mirror: mirror, stateFile: mirror + ".json", write: writeReplacing,
-    pin: () => ({ teamId: team, rt: want.rt, lead: { keyId: pin.keyId, public: pin.public } }),
+    pin: () => { const now = pinFor(want) || pin; return { teamId: team, rt: want.rt, lead: { keyId: now.keyId, public: now.public } }; },
     me: () => {
       if (!deskBranch) return null;
       const id = branchIdOf(deskBranch.sign.pub);
