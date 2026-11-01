@@ -13,6 +13,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { parentPort } = require("node:worker_threads");
+const S = require("./syncer.cjs");
 
 /* Cadence: worker lists the shared folder every FOLDER_SYNC_CADENCE_MS (3000ms by default).
  * A folder watch event asks for a listing early via kick().
@@ -28,6 +29,9 @@ let inFlight = false;
 let folderWatcher = null;
 let kickDebounce = null;
 const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
+let owedItems = [];                // the outbox as the main thread last sent it: [{ rel, sha, del }]
+const casHeld = new Map();         // ask id -> the lock a compare and swap holds
+const CAS_HOLD_MS = 20000;
 
 function isAllowedPath(rel) {
   const norm = String(rel || "").replace(/\\/g, "/");
@@ -95,10 +99,24 @@ function walkFolder(baseDir, sub = "") {
   return out;
 }
 
+/* The outbox first, so a listing taken after it shows what landed. A record that landed leaves the list here at once;
+   the main thread clears it from the outbox when it reads the result. */
+function flushOutbox() {
+  if (!owedItems.length) return;
+  const results = S.flushOwed(folder, mirror, owedItems, null);
+  for (const r of results) {
+    if (r.ok && !r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+  }
+  owedItems = owedItems.filter(it => !results.some(r => r.ok && r.rel === it.rel && (r.del ? it.del : r.sha === it.sha)));
+  if (parentPort && !stopped) parentPort.postMessage({ type: "landed", folder, results });
+}
+
 function syncOnce() {
   if (inFlight || stopped) return;
   inFlight = true;
   try {
+    try { flushOutbox(); } catch {}
+    const owedRels = new Set(owedItems.map(it => it.rel));
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
@@ -114,6 +132,7 @@ function syncOnce() {
 
     const staged = [];
     for (const [relPath, st] of foundFiles.entries()) {
+      if (owedRels.has(relPath)) continue;
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const known = knownMtimes.get(relPath);
@@ -168,6 +187,7 @@ function init(data) {
   folder = data.folder;
   mirror = data.mirror;
   pollMs = data.pollMs || FOLDER_SYNC_CADENCE_MS;
+  owedItems = Array.isArray(data.owed) ? data.owed : [];
 
   try {
     folderWatcher = fs.watch(folder, { recursive: true }, (ev, filename) => {
@@ -206,8 +226,38 @@ if (parentPort) {
       init(msg.data);
     } else if (msg.type === "kick") {
       if (!stopped) { try { syncOnce(); } catch {} }
+    } else if (msg.type === "outbox") {
+      owedItems = Array.isArray(msg.items) ? msg.items : [];
+    } else if (msg.type === "read") {
+      let got = null;
+      try { got = S.shareReadFile(folder, msg.name); } catch { got = null; }
+      parentPort.postMessage({ type: "read", id: msg.id, got });
+    } else if (msg.type === "cas") {
+      let begun = null;
+      try { begun = S.shareCasBegin(folder, msg.name, msg.sha, msg.create === true); } catch { begun = null; }
+      if (begun && begun.held) {
+        const held = begun.held;
+        held.timer = setTimeout(() => { if (casHeld.get(msg.id) === held) { casHeld.delete(msg.id); S.shareRelease(held); } }, CAS_HOLD_MS);
+        casHeld.set(msg.id, held);
+        parentPort.postMessage({ type: "cas", id: msg.id, held: true, now: begun.now });
+      } else {
+        parentPort.postMessage({ type: "cas", id: msg.id, done: true, result: (begun && begun.result) || { ok: false, busy: true } });
+      }
+    } else if (msg.type === "cas-commit") {
+      const held = casHeld.get(msg.id);
+      casHeld.delete(msg.id);
+      if (held) clearTimeout(held.timer);
+      const result = held ? S.shareCasCommit(held, mirror, String(msg.text || "")) : { ok: false, changed: true };
+      if (held && result.ok && result.size != null) knownMtimes.set(held.base, { size: result.size, mtimeMs: result.mtimeMs });
+      parentPort.postMessage({ type: "cas", id: msg.id, done: true, result });
+    } else if (msg.type === "cas-abort") {
+      const held = casHeld.get(msg.id);
+      casHeld.delete(msg.id);
+      if (held) { clearTimeout(held.timer); S.shareRelease(held); }
     } else if (msg.type === "stop") {
       stopped = true;
+      for (const held of casHeld.values()) { clearTimeout(held.timer); S.shareRelease(held); }
+      casHeld.clear();
       if (pollTimer) clearTimeout(pollTimer);
       if (kickDebounce) clearTimeout(kickDebounce);
       if (folderWatcher) {

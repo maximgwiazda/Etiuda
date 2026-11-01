@@ -21,6 +21,7 @@ const FOLDER_SYNC_CADENCE_MS = 3000;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 const SEALED_TEAM_RE = /^t-[0-9a-f]{16}$/;
 const PENDING_MAX = 50;
+const SHARE_ASK_MS = 10000;
 
 function canonJson(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v);
@@ -165,6 +166,190 @@ const defaultIO = {
   exists: (p) => fs.existsSync(p),
   rename: (from, to) => fs.renameSync(from, to)
 };
+
+const sha256hex = (bytes) => crypto.createHash("sha256").update(Buffer.isBuffer(bytes) ? bytes : Buffer.from(String(bytes), "utf8")).digest("hex");
+const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
+
+/* THE OUTBOX: what this desk wrote into the mirror and the share has not yet taken, one record a path ({owe, sha, del}),
+   kept beside the mirror's files under a dot name neither walk lists, with the rev and counter floors. A record goes once
+   the share holds exactly those bytes, or no file for a deletion. */
+const OUTBOX_NAME = ".outbox.json";
+const OUTBOX_KIND = "etiuda-folder-outbox";
+const PRIMED_NAME = ".primed";
+function readOutbox(mirror, io) {
+  try {
+    const doc = JSON.parse(io.readFile(path.join(mirror, OUTBOX_NAME), "utf8"));
+    if (doc && doc.kind === OUTBOX_KIND && doc.owe && typeof doc.owe === "object") {
+      return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {} };
+    }
+  } catch {}
+  return { owe: {}, floors: {} };
+}
+function writeOutbox(mirror, st, io) {
+  const file = path.join(mirror, OUTBOX_NAME);
+  const tmp = file + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  try { io.mkdir(mirror); } catch {}
+  io.writeFile(tmp, JSON.stringify({ kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors }));
+  try { io.rename(tmp, file); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
+}
+function owedRecord(mirror, rel, io) {
+  let bytes = null;
+  try { bytes = io.readFile(path.join(mirror, rel)); } catch { bytes = null; }
+  return bytes == null ? { owe: true, sha: null, del: true } : { owe: true, sha: sha256hex(bytes), del: false };
+}
+/* A write or a removal this desk made at `rel` in the mirror, owed to the share. False for a path Etiuda does not keep. */
+function noteOwed(mirror, rel, io) {
+  io = io || defaultIO;
+  const norm = normRel(rel);
+  if (!isAllowedPath(norm)) return false;
+  const st = readOutbox(mirror, io);
+  st.owe[norm] = owedRecord(mirror, norm, io);
+  writeOutbox(mirror, st, io);
+  return true;
+}
+function owedAt(mirror, rel, io) {
+  const st = readOutbox(mirror, io || defaultIO);
+  const rec = st.owe[normRel(rel)];
+  return !!(rec && rec.owe);
+}
+
+const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+function pause(ms) { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {} }
+function renameRetrying(from, to, io) {
+  for (let i = 1; ; i++) {
+    try { io.rename(from, to); return; }
+    catch (e) {
+      if (i >= 20 || RENAME_BUSY.indexOf(e && e.code) < 0) throw e;
+      pause(50);
+    }
+  }
+}
+/* Temp then rename beside the file, so the share never holds half a file under its name. */
+function writeWhole(file, bytes, io) {
+  const tmp = file + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  try {
+    io.writeFile(tmp, bytes);
+    renameRetrying(tmp, file, io);
+  } catch (e) {
+    try { io.unlink(tmp); } catch {}
+    throw e;
+  }
+}
+
+/* The owed records written to the share: a file's bytes as the mirror holds them now, a removal as a removal. The share's
+   folder must already be there, and only the folders below it are made, so a share that has gone away is never made again.
+   A record whose bytes the mirror no longer holds is left: a later write is owed in its place. Off the main thread. */
+function flushOwed(folder, mirror, items, io) {
+  io = io || defaultIO;
+  const out = [];
+  let rootCode = "";
+  try { if (!io.stat(folder).isDirectory()) rootCode = "ENOTDIR"; } catch (e) { rootCode = (e && e.code) || "EIO"; }
+  for (const it of items || []) {
+    const rel = normRel(it && it.rel);
+    if (!isAllowedPath(rel)) continue;
+    const del = !!it.del;
+    if (rootCode) { out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: rootCode }); continue; }
+    const parts = rel.split("/");
+    const dest = path.join(folder, ...parts);
+    try {
+      if (del) {
+        try { io.unlink(dest); } catch (e) { if (!e || e.code !== "ENOENT") throw e; }
+        out.push({ rel, sha: null, del: true, ok: true });
+        continue;
+      }
+      const bytes = io.readFile(path.join(mirror, ...parts));
+      const sha = sha256hex(bytes);
+      if (sha !== it.sha) continue;
+      for (let i = 1; i < parts.length; i++) {
+        try { fs.mkdirSync(path.join(folder, ...parts.slice(0, i))); } catch (e) { if (!e || e.code !== "EEXIST") throw e; }
+      }
+      writeWhole(dest, bytes, io); /* plant:outbox-flush */
+      let st = null;
+      try { st = io.stat(dest); } catch {}
+      out.push({ rel, sha, del: false, ok: true, size: st ? st.size : null, mtimeMs: st ? (st.mtimeMs || 0) : null });
+    } catch (e) {
+      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: (e && e.code) || "EIO" });
+    }
+  }
+  return out;
+}
+
+/* ---- the shared catalog's compare and swap, against the share and off the main thread ----------------------------------
+   The lock is `<name>.ec.lock` beside the file, taken by exclusive create; a lock older than SHARED_LOCK_MS is a desk that
+   stopped mid-write and is taken over. Begin holds the lock and answers the bytes there now; the caller judges them, then
+   commits, which writes the share and the mirror before the lock goes, or lets the lock go. */
+const SHARED_LOCK_MS = 30 * 1000;
+function shareName(name) {
+  const base = String(name || "");
+  return base && base === path.basename(base) && /\.ec$/i.test(base) ? base : "";
+}
+function shareLock(file) {
+  const lock = file + ".lock", token = crypto.randomBytes(16).toString("hex");
+  const take = () => {
+    const fd = fs.openSync(lock, "wx");
+    try { fs.writeSync(fd, JSON.stringify({ kind: "etiuda-lock", token: token, at: Date.now() })); } finally { fs.closeSync(fd); }
+  };
+  try { take(); return { lock: lock, token: token }; }
+  catch (e) { if (e.code !== "EEXIST") throw e; }
+  let st = null;
+  try { st = fs.statSync(lock); } catch { /* let go meanwhile */ }
+  if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
+  if (st) {
+    const aside = lock + "." + token + ".stale";
+    try { renameRetrying(lock, aside, defaultIO); } catch { return null; }
+    try { fs.unlinkSync(aside); } catch { /* left beside it */ }
+  }
+  try { take(); return { lock: lock, token: token }; }
+  catch (e) { if (e.code === "EEXIST") return null; throw e; }
+}
+function shareHolds(held) {
+  try { return JSON.parse(fs.readFileSync(held.lock, "utf8")).token === held.token; } catch { return false; }
+}
+function shareRelease(held) {
+  if (held && shareHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
+}
+/* {text} with "" for no file, or null where the share did not answer. */
+function shareReadFile(folder, name) {
+  const base = shareName(name);
+  if (!base) return null;
+  try { return { text: fs.readFileSync(path.join(folder, base), "utf8") }; }
+  catch (e) { return e && e.code === "ENOENT" ? { text: "" } : null; }
+}
+function shareCasBegin(folder, name, sha, create) {
+  const base = shareName(name);
+  if (!base) return { done: true, result: { ok: false } };
+  const file = path.join(folder, base);
+  let held = null;
+  try { held = shareLock(file); } catch { held = null; }
+  if (!held) return { done: true, result: { ok: false, busy: true } };
+  let now = "";
+  try { now = fs.readFileSync(file, "utf8"); }
+  catch (e) { if (!e || e.code !== "ENOENT") { shareRelease(held); return { done: true, result: { ok: false, busy: true } }; } }
+  if (create && now) { shareRelease(held); return { done: true, result: { ok: false, taken: true } }; }
+  let moved = false;
+  if (!create && (!now || sha256hex(Buffer.from(now, "utf8")) !== String(sha || ""))) moved = true; /* plant:cas-share-compare */
+  if (moved) {
+    shareRelease(held);
+    return { done: true, result: { ok: false, changed: true } };
+  }
+  held.file = file;
+  held.base = base;
+  return { held: held, now: now };
+}
+function shareCasCommit(held, mirror, text) {
+  try {
+    if (!held || !shareHolds(held)) return { ok: false, changed: true };
+    writeWhole(held.file, Buffer.from(String(text), "utf8"), defaultIO);
+    writeWhole(path.join(mirror, held.base), Buffer.from(String(text), "utf8"), defaultIO); /* plant:cas-mirror-back */
+    let st = null;
+    try { st = fs.statSync(held.file); } catch {}
+    return { ok: true, size: st ? st.size : null, mtimeMs: st ? (st.mtimeMs || 0) : null };
+  } catch (e) {
+    return { ok: false, busy: true, code: (e && e.code) || "EIO" };
+  } finally {
+    shareRelease(held);
+  }
+}
 
 function mirrorHasCatalog(mirror, catalogId, io, keyFor, openSealedFn) {
   if (io.exists(path.join(mirror, catalogId + ".ec"))) return true;
@@ -319,6 +504,93 @@ function createFolderProgram(opts) {
     }
   } catch {}
 
+  /* ---- the outbox and the floors, read afresh at each use: the main thread may note a debt with noteOwed between scans */
+  const saidWait = new Map(); // relPath -> the code last said for it
+  function owe(rel) { return noteOwed(mirror, rel, io); }
+  function owed() {
+    const st = readOutbox(mirror, io);
+    return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe).map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del }));
+  }
+  function isOwed(rel) { return owedAt(mirror, rel, io); }
+  function landed(results) {
+    if (!Array.isArray(results) || !results.length) return;
+    const st = readOutbox(mirror, io);
+    let changed = false;
+    for (const r of results) {
+      const rec = r && st.owe[r.rel];
+      if (!rec) continue;
+      if (r.ok) {
+        if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
+        delete st.owe[r.rel];
+        changed = true;
+        if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
+        if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+      } else if (rec.code !== r.code) {
+        rec.code = r.code;
+        changed = true;
+        if (saidWait.get(r.rel) !== r.code) {
+          saidWait.set(r.rel, r.code);
+          logger("etiuda: " + r.rel + " is kept on this computer until the team's folder " + folder + " takes it (" + r.code + "), and is tried again");
+        }
+      }
+    }
+    if (changed) { try { writeOutbox(mirror, st, io); } catch {} }
+  }
+  /* The catalog a staged or mirrored .ec holds, opened where sealed, or null. */
+  function catalogIn(text) {
+    let doc = null;
+    try { doc = JSON.parse(text); } catch { return null; }
+    if (doc && doc.kind === "etiuda-sealed") {
+      const key = typeof keyFor === "function" ? keyFor(doc.epoch) : null;
+      const inner = key ? openSealed(key, doc) : null;
+      try { return inner ? JSON.parse(inner) : null; } catch { return null; }
+    }
+    return doc && typeof doc === "object" ? doc : null;
+  }
+  /* (scope, id) and the number that may only rise: a root edition's rev under its signer, a desk file's rev, in-use's n. */
+  function floorKeyOf(relPath, cat) {
+    if (!cat || typeof cat !== "object") return null;
+    const parts = normRel(relPath).split("/");
+    if (parts[0] === "desks" && parts.length === 3) {
+      if (parts[2] === "in-use.ec") return Number.isSafeInteger(cat.n) ? { key: "u|" + parts[1], val: cat.n } : null;
+      if (parts[2] === "catalog-answer.ec" || typeof cat.id !== "string") return null;
+      return { key: "d|" + parts[1] + "|" + cat.id, val: Number.isSafeInteger(+cat.rev) ? +cat.rev : 0 };
+    }
+    if (parts.length === 1 && cat.kind === "etiuda-catalog" && typeof cat.id === "string") {
+      const signer = cat.sig && typeof cat.sig.keyId === "string" ? cat.sig.keyId : "-";
+      return { key: "r|" + signer + "|" + cat.id, val: Number.isSafeInteger(+cat.rev) ? +cat.rev : 0 };
+    }
+    return null;
+  }
+  let floorsDirty = null;
+  /* True where the copy may land: its number is at or above the floor kept for its (scope, id) and the copy the mirror holds. */
+  function floorHolds(item, cat) {
+    const k = floorKeyOf(item.relPath, cat);
+    if (!k) return true;
+    const st = floorsDirty || readOutbox(mirror, io);
+    let floor = Number.isSafeInteger(st.floors[k.key]) ? st.floors[k.key] : null;
+    try {
+      const target = path.join(mirror, item.relPath);
+      if (io.exists(target)) {
+        const cur = floorKeyOf(item.relPath, catalogIn(io.readFile(target, "utf8")));
+        if (cur && cur.key === k.key && (floor === null || cur.val > floor)) floor = cur.val;
+      }
+    } catch {}
+    let below = false;
+    if (floor !== null && k.val < floor) below = true; /* plant:edition-floor */
+    if (below) {
+      logger("etiuda: " + path.join(folder, item.relPath) + " is an older copy (" + k.val + ", below " + floor + ") than this desk holds, so nothing in it is used");
+      refusedMtimes.set(item.relPath, { size: item.size, mtimeMs: item.mtimeMs });
+      try { io.unlink(item.tmpPath); } catch {}
+      return false;
+    }
+    if (floor === null || k.val > floor) {
+      floorsDirty = floorsDirty || st;
+      floorsDirty.floors[k.key] = k.val;
+    }
+    return true;
+  }
+
   function pushPending(item) {
     const existingIdx = pending.findIndex(p => p.relPath === item.relPath);
     if (existingIdx >= 0) {
@@ -420,6 +692,7 @@ function createFolderProgram(opts) {
     onStatus({ folder, answers: true });
 
     const applied = [];
+    floorsDirty = null;
     const listing = scanData.listing || [];
     const staged = scanData.staged || [];
 
@@ -555,6 +828,11 @@ function createFolderProgram(opts) {
     function drainPending() {
       const stillPending = [];
       for (const item of pending) {
+        if (isOwed(item.relPath)) {
+          if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+          try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+          continue;
+        }
         if (item.kind === "head") {
           let allEditionsPresent = true;
           if (item.doc && Array.isArray(item.doc.editions)) {
@@ -581,7 +859,7 @@ function createFolderProgram(opts) {
         // Default: sealed .ec file waiting for epoch / live key
         const key = typeof keyFor === "function" ? keyFor(item.epoch) : null;
         if (item.epoch <= mirrorEpoch && key) {
-          let genuine = false;
+          let genuine = false, judged = null;
           try {
             const text = item.text || (item.tmpPath ? io.readFile(item.tmpPath, "utf8") : null);
             if (text) {
@@ -590,6 +868,7 @@ function createFolderProgram(opts) {
                 const decrypted = openSealed(key, parsed);
                 if (decrypted) {
                   const cat = JSON.parse(decrypted);
+                  judged = cat;
                   const parts = item.relPath.replace(/\\/g, "/").split("/");
                   if (parts[0] === "desks" && parts.length === 3) {
                     const deskFolder = parts[1];
@@ -611,7 +890,9 @@ function createFolderProgram(opts) {
             }
           } catch {}
 
-          if (genuine) {
+          if (genuine && !floorHolds(item, judged)) {
+            try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+          } else if (genuine) {
             const target = path.join(mirror, item.relPath);
             ensureDir(target, io);
             if (item.tmpPath && io.exists(item.tmpPath)) {
@@ -640,6 +921,12 @@ function createFolderProgram(opts) {
       const relPath = item.relPath;
       if (relPath === "etiuda-team.json" || isTeamConflict(relPath)) continue;
       const tmpPath = item.tmpPath;
+      let mayLand = true;
+      if (isOwed(relPath)) mayLand = false; /* plant:outbox-owe-keep */
+      if (!mayLand) {
+        try { io.unlink(tmpPath); } catch {}
+        continue;
+      }
       let text = null;
       try { text = io.readFile(tmpPath, "utf8"); } catch {
         try { io.unlink(tmpPath); } catch {}
@@ -662,9 +949,8 @@ function createFolderProgram(opts) {
             }
           } else {
             const decrypted = openSealed(key, doc);
-            let genuine = false;
+            let genuine = false, cat = null;
             if (decrypted) {
-              let cat = null;
               try { cat = JSON.parse(decrypted); } catch {}
               if (cat) {
                 const parts = relPath.replace(/\\/g, "/").split("/");
@@ -696,6 +982,7 @@ function createFolderProgram(opts) {
               }
               continue;
             }
+            if (!floorHolds(item, cat)) continue;
             const target = path.join(mirror, relPath);
             ensureDir(target, io);
             io.rename(tmpPath, target);
@@ -709,11 +996,13 @@ function createFolderProgram(opts) {
               try { io.unlink(tmpPath); } catch {}
               continue;
             }
+            if (!floorHolds(item, doc)) continue;
             const target = path.join(mirror, relPath);
             ensureDir(target, io);
             io.rename(tmpPath, target);
             applied.push(relPath);
           } else if (parts.length === 1 && doc.desk && deskFileGenuine(doc, doc.desk.id)) {
+            if (!floorHolds(item, doc)) continue;
             const target = path.join(mirror, relPath);
             ensureDir(target, io);
             io.rename(tmpPath, target);
@@ -725,6 +1014,7 @@ function createFolderProgram(opts) {
               try { io.unlink(tmpPath); } catch {}
               continue;
             }
+            if (!floorHolds(item, doc)) continue;
             const target = path.join(mirror, relPath);
             ensureDir(target, io);
             io.rename(tmpPath, target);
@@ -873,7 +1163,9 @@ function createFolderProgram(opts) {
     const currentMirrorFiles = walkMirror();
     const listingMap = new Set(listing.map(entry => Array.isArray(entry) ? entry[0] : entry.relPath || entry));
     for (const relPath of currentMirrorFiles) {
-      if (listingMap.has(relPath)) {
+      let stays = listingMap.has(relPath);
+      if (isOwed(relPath)) stays = true; /* plant:outbox-owe-stay */
+      if (stays) {
         missingCount.delete(relPath);
       } else {
         const count = (missingCount.get(relPath) || 0) + 1;
@@ -888,14 +1180,30 @@ function createFolderProgram(opts) {
       }
     }
 
-    if (applied.length > 0) {
-      onChange({ team, applied });
+    if (floorsDirty) {
+      const st = readOutbox(mirror, io);
+      for (const k of Object.keys(floorsDirty.floors)) {
+        if (!Number.isSafeInteger(st.floors[k]) || floorsDirty.floors[k] > st.floors[k]) st.floors[k] = floorsDirty.floors[k];
+      }
+      try { writeOutbox(mirror, st, io); } catch {}
+      floorsDirty = null;
+    }
+    /* The mark that this mirror has taken one answered listing: until then a desk under machine policy reads its folder. */
+    let primed = false;
+    try {
+      if (!io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
+    } catch {}
+    if (applied.length > 0 || primed) {
+      onChange(primed ? { team, applied, primed: true } : { team, applied });
     }
     return { answers: true, applied };
   }
 
   function syncOnce() {
     if (typeof opts.pin === "function") pin = opts.pin();
+    const owing = owed();
+    if (owing.length) landed(flushOwed(folder, mirror, owing, io));
+    const stillOwed = new Set(owed().map(x => x.rel));
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
@@ -909,6 +1217,7 @@ function createFolderProgram(opts) {
 
     const staged = [];
     for (const [relPath, st] of foundFiles.entries()) {
+      if (stillOwed.has(relPath)) continue;
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const prev = knownMtimes.get(relPath);
@@ -942,6 +1251,11 @@ function createFolderProgram(opts) {
   return {
     syncOnce,
     applyScan,
+    owe,
+    owed,
+    isOwed,
+    landed,
+    noteShareStat: (rel, st) => { if (st && st.size != null) knownMtimes.set(normRel(rel), { size: st.size, mtimeMs: st.mtimeMs }); },
     state: () => ({ mirrorEpoch, mirrorRev, pendingLength: pending.length, missingCount: new Map(missingCount) })
   };
 }
@@ -961,6 +1275,8 @@ class FolderSyncerController {
     this.pollMs = opts.pollMs || FOLDER_SYNC_CADENCE_MS;
     this.worker = null;
     this.stopped = false;
+    this.asked = 0;
+    this.waits = new Map();
 
     // The program runs on the main thread to perform verification and applying
     this.program = createFolderProgram({
@@ -987,6 +1303,10 @@ class FolderSyncerController {
           if (typeof this.onStatus === "function") this.onStatus(msg);
         } else if (msg.type === "scan") {
           this.program.applyScan(msg);
+        } else if (msg.type === "landed") {
+          this.program.landed(msg.results);
+        } else if (msg.type === "read" || msg.type === "cas") {
+          this.answer(msg);
         }
       });
       // D2: only folder and mirror sent to worker; NO keys, NO pin
@@ -995,10 +1315,73 @@ class FolderSyncerController {
         data: {
           folder: this.folder,
           mirror: this.mirror,
-          pollMs: this.pollMs
+          pollMs: this.pollMs,
+          owed: this.program.owed()
         }
       });
     }
+  }
+
+  /* A write this desk made into the mirror at `rel`, handed to the outbox and sent to the share at once. */
+  owe(rel) {
+    if (!this.program.owe(rel)) return false;
+    if (this.stopped) return true;
+    if (this.worker) this.worker.postMessage({ type: "outbox", items: this.program.owed() });
+    this.kick();
+    return true;
+  }
+
+  ask(msg, judge) {
+    const id = ++this.asked;
+    return new Promise(resolve => {
+      const timer = setTimeout(() => this.settle(id, msg.type === "read" ? null : { ok: false, busy: true }), SHARE_ASK_MS);
+      if (timer.unref) timer.unref();
+      this.waits.set(id, { resolve, timer, judge });
+      this.worker.postMessage(Object.assign({ id }, msg));
+    });
+  }
+  settle(id, value) {
+    const w = this.waits.get(id);
+    if (!w) return;
+    this.waits.delete(id);
+    clearTimeout(w.timer);
+    w.resolve(value);
+  }
+  answer(msg) {
+    const w = this.waits.get(msg.id);
+    if (msg.type === "read") { this.settle(msg.id, msg.got || null); return; }
+    if (msg.held) {
+      /* A lock answered after its ask gave up is let go at once. */
+      if (!w) { if (this.worker) this.worker.postMessage({ type: "cas-abort", id: msg.id }); return; }
+      let verdict = null;
+      try { verdict = w.judge(msg.now); } catch { verdict = { result: { ok: false, busy: true } }; }
+      if (verdict && typeof verdict.text === "string") this.worker.postMessage({ type: "cas-commit", id: msg.id, text: verdict.text });
+      else { this.worker.postMessage({ type: "cas-abort", id: msg.id }); this.settle(msg.id, (verdict && verdict.result) || { ok: false }); }
+      return;
+    }
+    if (msg.done) this.settle(msg.id, msg.result || { ok: false });
+  }
+
+  /* The shared catalog `name` as the share holds it now, read off the main thread: {text}, "" for no file, or null. */
+  shareRead(name) {
+    if (this.stopped) return Promise.resolve(null);
+    if (!this.worker) return Promise.resolve(shareReadFile(this.folder, name));
+    return this.ask({ type: "read", name: String(name || "") });
+  }
+  /* The compare and swap against the share: `judge(now)` answers {text} to write, or {result} to let the lock go with. */
+  shareSwap(name, sha, create, judge) {
+    if (this.stopped) return Promise.resolve({ ok: false, busy: true });
+    if (!this.worker) {
+      const begun = shareCasBegin(this.folder, name, sha, create);
+      if (begun.done) return Promise.resolve(begun.result);
+      let verdict = null;
+      try { verdict = judge(begun.now); } catch { verdict = null; }
+      if (!verdict || typeof verdict.text !== "string") { shareRelease(begun.held); return Promise.resolve((verdict && verdict.result) || { ok: false, busy: true }); }
+      const done = shareCasCommit(begun.held, this.mirror, verdict.text);
+      if (done.ok) this.program.noteShareStat(begun.held.base, done);
+      return Promise.resolve(done);
+    }
+    return this.ask({ type: "cas", name: String(name || ""), sha: String(sha || ""), create: create === true }, judge);
   }
 
   kick() {
@@ -1012,6 +1395,7 @@ class FolderSyncerController {
 
   stop() {
     this.stopped = true;
+    for (const id of Array.from(this.waits.keys())) this.settle(id, null);
     if (this.worker) {
       try {
         this.worker.postMessage({ type: "stop" });
@@ -1064,5 +1448,14 @@ module.exports = {
   createSyncer: startFolderSyncer,
   startFolderSyncer,
   stopAllFolderSyncers,
-  folderMirrorOf
+  folderMirrorOf,
+  isAllowedPath,
+  noteOwed,
+  owedAt,
+  flushOwed,
+  shareReadFile,
+  shareCasBegin,
+  shareCasCommit,
+  shareRelease,
+  PRIMED_NAME
 };

@@ -156,7 +156,25 @@ function folderTeamHere() {
   }
   return null;
 }
+/* The mirror a joined folder team reads from, or "". Under machine policy only once its syncer has taken one answered
+   listing, so a first boot reads the named folder until then rather than an empty mirror. */
+const mirrorsMade = new Set();
+function folderMirrorHere() {
+  const ft = folderTeamHere();
+  if (!ft || ft.joining) return "";
+  const mirror = folderMirrorOf(ft.team);
+  if (sayJoinPolicy().folder && !fs.existsSync(path.join(mirror, FolderSyncer().PRIMED_NAME))) return ""; /* plant:policy-primed */
+  if (!mirrorsMade.has(mirror)) { try { fs.mkdirSync(mirror, { recursive: true }); mirrorsMade.add(mirror); } catch { /* made by the syncer */ } }
+  return mirror;
+}
+/* Where the desk writes. On a folder team that is the mirror, and the syncer's outbox carries each write to the share. */
 function sharedFolderForWrite() {
+  const mirror = folderMirrorHere();
+  if (mirror) return mirror; /* plant:mirror-write-root */
+  return shareFolderShown();
+}
+/* The team's own folder, for what the person is shown or picks from: never the mirror. */
+function shareFolderShown() {
   const named = sayJoinPolicy().folder;
   if (named) return named;
   const relay = relayHere();
@@ -168,7 +186,7 @@ function sharedFolderForWrite() {
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const named = sayJoinPolicy().folder;
-  if (named) return named;
+  if (named) return folderMirrorHere() || named;
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
@@ -841,7 +859,8 @@ function folderSyncerRun(win) {
     },
     onChange: (change) => {
       if (theWindow && !theWindow.isDestroyed()) {
-        catalogChanged(theWindow);
+        if (change && change.primed && catalogFolder() !== watchedFolder) catalogFolderChanged();
+        else catalogChanged(theWindow);
       }
     }
   };
@@ -1072,6 +1091,15 @@ function armFolder(win) {
     watchCatalog(win);
     catalogChanged(win);
   });
+}
+/* After a sleep the folder is asked again before it is read. On a folder team that is the share, never the mirror,
+   which is on this computer and answers; the syncer is kicked and says how the share answers. */
+function resumeFromSleep(win) {
+  const mirror = folderMirrorHere();
+  const ft = mirror ? folderTeamHere() : null;
+  folderDown = catalogFolder();
+  if (ft && path.resolve(folderDown) === path.resolve(mirror)) folderDown = ft.folder; /* plant:resume-mirror */
+  armFolder(win);
 }
 function retryFolder(ms) {
   clearTimeout(folderRetry);
@@ -1565,6 +1593,24 @@ function writeReplacing(file, text) {
     try { fs.unlinkSync(tmp); } catch { /* never made */ }
     throw e;
   }
+  mirrorOwes(file);
+}
+/* A file written into, or taken out of, a folder team's mirror is owed to that team's share, and the syncer's outbox
+   carries it there (shell/folder/syncer.cjs). Every write and removal of the desk's own files in the mirror passes here. */
+function mirrorOwes(file) {
+  try {
+    const rel = path.relative(path.join(app.getPath("userData"), "folder-mirror"), path.resolve(String(file)));
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return;
+    const parts = rel.split(path.sep), team = parts.shift();
+    if (!SEALED_TEAM_RE.test(team) || !parts.length) return;
+    const mirror = folderMirrorOf(team), inside = parts.join("/");
+    const s = folderSyncer && !folderSyncer.stopped && path.resolve(folderSyncer.mirror) === path.resolve(mirror) ? folderSyncer : null;
+    if (s) s.owe(inside); else FolderSyncer().noteOwed(mirror, inside); /* plant:mirror-owes */
+  } catch (e) { console.error("etiuda: a write into the team's mirror could not be noted for the team's folder - " + (e && e.message)); }
+}
+function unlinkOwn(file) {
+  fs.unlinkSync(file);
+  mirrorOwes(file);
 }
 function persistDeskEnvelope() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -2406,11 +2452,11 @@ function writeBranch(stem, text) {
     const same = ownFilesWithId(at.dir, id);
     /* A file this desk did not sign does not raise the rev. The share is anybody's to write. */
     const lastRev = same.reduce((hi, e) => (branchGenuine(e.doc) ? Math.max(hi, +e.doc.rev || 0) : hi), branchRevs[id] || 0);
-    const tidy = () => same.forEach(e => { if (e.file !== at.dest) fs.unlinkSync(e.file); });
+    const tidy = () => same.forEach(e => { if (e.file !== at.dest) unlinkOwn(e.file); });
     if (!doc) {
       if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; persistDeskEnvelope(); }
-      same.forEach(e => fs.unlinkSync(e.file));
-      if (!same.some(e => e.file === at.dest) && fs.existsSync(at.dest)) fs.unlinkSync(at.dest);
+      same.forEach(e => unlinkOwn(e.file));
+      if (!same.some(e => e.file === at.dest) && fs.existsSync(at.dest)) unlinkOwn(at.dest);
       heldBranch.delete(stem);
       return { ok: true, removed: true };
     }
@@ -2555,7 +2601,7 @@ function clearInUseFile() {
   let written = false;
   try { written = writeClearedInUse(); } catch { written = false; }
   if (!written) {
-    try { fs.unlinkSync(dest); }
+    try { unlinkOwn(dest); }
     catch (e) { if (e.code !== "ENOENT") { heldInUse = { remove: true }; return; } }
   }
   inUseKept = null;
@@ -2642,7 +2688,7 @@ function ejectLoadedCatalog() {
     return;
   }
   let failed = false;
-  try { fs.unlinkSync(dest); }
+  try { unlinkOwn(dest); }
   catch (e) { if (e.code !== "ENOENT") failed = true; }
   if (failed) {
     rememberEjectOwed();
@@ -2795,7 +2841,7 @@ function removeAnswer() {
   const me = branchIdentity(false);
   const root = sharedFolderForWrite();
   if (!me || !folderAnswers(root)) { heldAnswer = { remove: true }; return; }
-  try { fs.unlinkSync(path.join(root, "desks", me.id, ANSWER_NAME)); }
+  try { unlinkOwn(path.join(root, "desks", me.id, ANSWER_NAME)); }
   catch (e) { if (e.code !== "ENOENT") { heldAnswer = { remove: true }; return; } }
   if (heldAnswer && heldAnswer.remove) heldAnswer = null;
 }
@@ -2896,7 +2942,7 @@ function tryHeldUse() {
     const dest = inUseFile();
     let failed = false;
     if (dest) {
-      try { fs.unlinkSync(dest); }
+      try { unlinkOwn(dest); }
       catch (e) { if (e.code !== "ENOENT") { heldInUse = { eject: true }; failed = true; } }
     }
     if (!failed) {
@@ -3575,7 +3621,7 @@ function finishJoin(admitted) {
      has enrolled its key. */
   const takenBack = !!(j.invite && ((j.invite.relay && (j.invite.relay.withdrawn === true || j.invite.relay.withdrawing === true)) || j.refused === true));
   if (takenBack && !(relayChannel && relayChannel.enrolled && relayChannel.enrolled())) return false; /* plant:e4-not-joined */
-  try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
+  try { unlinkOwn(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
   if (!joinTold) joinDone = { team: j.team, file: j.file };
   joinTold = false;
@@ -4250,7 +4296,7 @@ function inviteAccepted(j) {
    sees it. The join says withdrawing until the relay has taken that deletion (onWithdrawn). The token, the pin and the keys
    stay, so Ask again sends the same request anew with no new link. */
 function withdrawJoin(j) {
-  if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already */ } }
+  if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already */ } }
   j.invite.relay.withdrawing = true; /* plant:g2-withdrawing */
   joinTold = false;
   joinDone = null;
@@ -4279,7 +4325,7 @@ function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
   if (inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
-  if (j && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
+  if (j && deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
   /* An invitation, by folder or by relay, changed this team's pin, where it came from, the folder it showed, the channel and the
@@ -4335,7 +4381,7 @@ function undoInvite(team, b, inv) {
    the request is let go and what the invitation changed is put back, whether the relay takes the withdrawal or
    refuses it for good. A waiting request is left as it was, so Ask again still has what the invitation gave. */
 function endRefusedRelay(j) {
-  if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already */ } }
+  if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already */ } }
   const team = j.team, inv = j.invite, b = inv && inv.before, wrapped = (inv && ((inv.relay && inv.relay.wrapped) || inv.wrapped)) || [];
   const putBack = !!(b && newestEpoch(team, wrapped) === (b.epoch || 0));
   teamJoin = null;
@@ -4734,6 +4780,8 @@ async function takeInvite(text, name, check) {
       if (wrapKey) j.invite.wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
     } catch {}
   }
+  /* Read straight from the invitation's folder, not a mirror: no team is joined yet, so no syncer keeps one, and the folder
+     has just answered askFolder above. */
   const wrapPath = path.join(parsed.folder, "invites", incomingId + ".wrap.json");
   let wrapDoc = null;
   try {
@@ -5017,11 +5065,11 @@ function forgetLead(team, left) {
       if (teamJoin.invite.relay.withdrawn === true) teamJoin = null;
       else if (inviteAccepted(teamJoin)) withdrawJoin(teamJoin); /* plant:forget-withdraw */
       else {
-        if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone */ } }
+        if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone */ } }
         teamJoin = null;
       }
     } else {
-      if (deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone */ } }
+      if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone */ } }
       teamJoin = null;
     }
   }
@@ -5734,9 +5782,23 @@ function sharedBase(file, text, pin) {
 function sharedRead(name, pin) {
   const file = sharedFile(name);
   if (!file) return null;
+  const share = shareSyncer(path.dirname(file));
+  if (share) return share.then(s => (s ? s.shareRead(path.basename(file)) : null)).then(got => (got ? sharedReadOf(file, got.text, pin) : null));
   let text = "";
   try { text = fs.readFileSync(file, "utf8"); }
   catch (e) { if (e.code !== "ENOENT") return null; }
+  return sharedReadOf(file, text, pin);
+}
+/* On a folder team the shared catalog is read and swapped against the share by the syncer's worker, never on this thread:
+   a promise of the running syncer where `dir` is the team's mirror, else null and the file is read where it is. */
+function shareSyncer(dir) {
+  const mirror = folderMirrorHere();
+  if (!mirror || path.resolve(dir) !== path.resolve(mirror)) return null;
+  let s = folderSyncer && !folderSyncer.stopped && path.resolve(folderSyncer.mirror) === path.resolve(mirror) ? folderSyncer : null;
+  if (!s) s = folderSyncerRun(theWindow);
+  return Promise.resolve(s || null);
+}
+function sharedReadOf(file, text, pin) {
   const base = sharedBase(file, text, String(pin || ""));
   const free = (!text || historyFree(historyFacts(text))) && (!base || historyFree(historyFacts(base)));
   return { text: free ? text : "", sha: text ? sha256Hex(Buffer.from(text, "utf8")) : "", free: free, base: free ? base : "" };
@@ -5791,6 +5853,9 @@ function sharedWrite(name, text, sha, create) {
     try { text = JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n"; }
     catch { return { ok: false, refused: true, sealed: true }; }
   } else if (!seal && shareMustSeal(root)) return { ok: false, refused: true, sealed: true };
+  let share = null;
+  share = shareSyncer(root); /* plant:cas-off-thread */
+  if (share) return share.then(s => (s ? sharedSwap(s, file, text, sha, create, data) : { ok: false, busy: true }));
   let held = null;
   try { held = sharedLock(file); }
   catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
@@ -5813,6 +5878,25 @@ function sharedWrite(name, text, sha, create) {
   } finally {
     if (sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
+}
+
+/* sharedWrite's swap on a folder team: the worker holds the share's lock while this thread judges the bytes there and
+   keeps them in the history, then writes the share and the mirror before letting the lock go. */
+function sharedSwap(s, file, text, sha, create, data) {
+  return s.shareSwap(path.basename(file), sha, create, now => {
+    if (now && !historyFree(historyFacts(now))) return { result: { ok: false, refused: true } };
+    if (now) {
+      const buf = Buffer.from(now, "utf8");
+      if (!historyShipped(buf, sha256Hex(buf)) && !historyKeep(file, now, false)) return { result: { ok: false, busy: true } };
+    }
+    return { text: text };
+  }).then(r => {
+    if (!r || !r.ok) return Object.assign({ ok: false }, r && r.changed ? { changed: true } : r && r.taken ? { taken: true }
+      : r && r.refused ? { refused: true } : { busy: true });
+    historyKeep(file, text, true);
+    console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
+    return { ok: true, rev: +data.rev || 0 };
+  });
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -6535,6 +6619,14 @@ function ecFacts(file, deskFolder) {
   ecFactsRead.set(file, [stamp, out]);
   return out;
 }
+/* True while the outbox owes the share this file of the folder team's mirror. */
+function mirrorOwed(file) {
+  const mirror = folderMirrorHere();
+  if (!mirror) return false;
+  const rel = path.relative(mirror, path.resolve(file));
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
+  return FolderSyncer().owedAt(mirror, rel.split(path.sep).join("/"));
+}
 function deskRowOf(file, folder) {
   const x = ecFacts(file, folder);
   if (!x || !x.deskOk) return null;
@@ -6552,6 +6644,7 @@ function deskRowOf(file, folder) {
       reached = !!(sent && !sent.del && !sent.owe && sent.sha === fileSha); /* plant:w1-relay-reached */
     } else {
       reached = !heldBranch.has(path.basename(file, ".ec")); /* plant:w1-folder-reached */
+      if (reached && mirrorOwed(file)) reached = false; /* plant:outbox-row-kept */
     }
   }
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
@@ -6792,7 +6885,7 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
-    defaultPath: sharedFolderForWrite(),
+    defaultPath: shareFolderShown(),
     properties: ["openDirectory", "createDirectory"],
   };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
@@ -6908,7 +7001,7 @@ ipcMain.on("etiuda:offer-dropped", (e, file) => {
    folder is opened. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
-  const dir = sharedFolderForWrite(); /* plant:open-catalog-shared */
+  const dir = shareFolderShown(); /* plant:open-catalog-shared */
   // A folder that is not answering cannot be shown to be a folder, so it is not opened either.
   let isDir = false;
   if (folderAnswers(dir)) {
@@ -8130,7 +8223,7 @@ if (!theOnlyOne) {
       ensureCatalogFolder(); createWindow();
       hotkeyReady = true; syncHotkey();
       // Asked for here: powerMonitor is not to be used before the app is ready.
-      require("electron").powerMonitor.on("resume", () => { folderDown = catalogFolder(); armFolder(theWindow); });
+      require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
     });
   });
 }
