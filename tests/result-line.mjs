@@ -1782,8 +1782,9 @@ async function main() {
   const rbOnChecks = rbOnM ? Number(rbOnM[1]) : -1;
   const rbOffChecks = rbOffM ? Number(rbOffM[1]) : -1;
   const rbOffSkipped = rbOffM ? Number(rbOffM[2]) : -1;
-  /* The plants are counted from the file, so a new plant leg moves the count with it. */
-  const rbPlants = (fs.readFileSync(path.join(ROOT, "tests", "rollback-floor.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
+  /* The plants are counted from the file, one per skip("...") call, so a new plant leg moves the count with it, whether its
+     skip sits in a braced block, alone, or beside others in one block. */
+  const rbPlants = (fs.readFileSync(path.join(ROOT, "tests", "rollback-floor.mjs"), "utf8").match(/\bskip\("/g) || []).length;
   check(rbOn.status === 0 && rbOff.status === 0 && rbPlants > 0 && rbOffSkipped === rbPlants && rbOnChecks - rbOffChecks === rbPlants,
     "17c ETIUDA_PLANTS=off on tests/rollback-floor.mjs skips exactly its " + rbPlants + " plants: on checks=" + rbOnChecks + " off checks=" + rbOffChecks + " skipped=" + rbOffSkipped);
 
@@ -1794,8 +1795,9 @@ async function main() {
   const tjOnChecks = tjOnM ? Number(tjOnM[1]) : -1;
   const tjOffChecks = tjOffM ? Number(tjOffM[1]) : -1;
   const tjOffSkipped = tjOffM ? Number(tjOffM[2]) : -1;
-  /* The plants are counted from the file, so a new plant leg moves the count with it. */
-  const tjPlants = (fs.readFileSync(path.join(ROOT, "tests", "team-join.mjs"), "utf8").match(/\bif \(PLANTS_OFF\) \{/g) || []).length;
+  /* The plants are counted from the file, one per skip("...") call, so a new plant leg moves the count with it, whether its
+     skip sits in a braced block, alone, or beside others in one block. */
+  const tjPlants = (fs.readFileSync(path.join(ROOT, "tests", "team-join.mjs"), "utf8").match(/\bskip\("/g) || []).length;
   check(tjOn.status === 0 && tjOff.status === 0 && tjPlants > 0 && tjOffSkipped === tjPlants && tjOnChecks - tjOffChecks === tjPlants,
     "17d ETIUDA_PLANTS=off on tests/team-join.mjs skips exactly its " + tjPlants + " plants: on checks=" + tjOnChecks + " off checks=" + tjOffChecks + " skipped=" + tjOffSkipped);
 
