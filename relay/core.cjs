@@ -13,6 +13,8 @@ const CALL_SKEW_MS = 5 * 60 * 1000;
    (Maxim, 2026-10-20: a delegation from the root key to the licence service's key runs one year). */
 const DELEGATION_MAX_MS = 366 * 86400000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+/* How long a desk taken off leaves its blobs readable by the lead alone, counted toward nothing, before they are deleted. */
+const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 /* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
 const TRY_KEYS_MAX = 64;
@@ -558,10 +560,13 @@ function createCore(deps) {
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
-      /* A key taken off gives back what it held: its blobs are served no more and leave the team's counts, their objects
-         deleted at the next list or upload. No tombstone is kept, so the key put back starts its chains again. */
-      const freed = [];
-      if (withdrawn.length) for (const [, m] of store.list("blob:")) if (m && withdrawn.indexOf(m.writer) > -1) unserve(m, freed); /* plant:devices-free */
+      /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
+         alone for REMOVED_KEEP_MS, and are deleted at the first list or upload after it. No tombstone is kept, so the key put
+         back starts its chains again. */
+      const freed = [], heldUntil = clock() + REMOVED_KEEP_MS;
+      let grace = false;
+      grace = true; /* plant:removed-grace */
+      if (withdrawn.length) for (const [, m] of store.list("blob:")) if (m && withdrawn.indexOf(m.writer) > -1) (grace ? hold(m, heldUntil) : unserve(m, freed)); /* plant:devices-free */
       store.put("devrev", b.rev);
       if (from !== undefined) store.put("devfrom", { epoch: from.epoch, rev: from.rev }); /* plant:devices-from-kept */
       for (const [k, s] of store.list("ses:")) {
@@ -1041,6 +1046,15 @@ function createCore(deps) {
     return !!(m && ANSWER_PLACE.test(String(m.place || "")) && m.id === String(m.place).slice(7));
   }
 
+  /* A removed desk's held blobs are read on the lead's own session alone. */
+  function readsHeld(s) {
+    const team = store.get("team");
+    let reader = true;
+    reader = !s.inv && !!team && !!team.lead && s.key === team.lead.keyId; /* plant:held-lead-only */
+    return reader;
+  }
+  const heldLive = (h, now) => now <= h.heldUntil && !expired(h, now);
+
   function since(token, after) {
     const s = sessionOf(token);
     if (!s.ok) return s;
@@ -1049,11 +1063,18 @@ function createCore(deps) {
     const lapsedSince = lapseGate(false);
     if (lapsedSince) return lapsedSince; /* plant:lapse-since */
     const now = clock(), items = [];
-    for (const [, id] of store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX })) {
+    const page = store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX });
+    for (const [, id] of page) {
       const m = store.get("blob:" + id);
       if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
     }
-    return { ok: true, items, lapse: told() };
+    if (!readsHeld(s)) return { ok: true, items, lapse: told() };
+    /* A removed desk's blobs hold no seq row, so they join the lead's page in seq order, and never past a full page's last row. */
+    const top = page.length >= SINCE_MAX ? Number(page[page.length - 1][0].slice(4)) : Infinity, rows = items.length;
+    for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now)) items.push({ seq: h.seq, meta: served(h) });
+    if (items.length === rows) return { ok: true, items, lapse: told() };
+    items.sort((x, y) => x.seq - y.seq);
+    return { ok: true, items: items.slice(0, SINCE_MAX), lapse: told() };
   }
 
   function blobFor(token, id) {
@@ -1076,6 +1097,8 @@ function createCore(deps) {
     }
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
+    const h = is(HEX32, id) && readsHeld(s) ? store.get("held:" + id) : undefined;
+    if (h && heldLive(h, now)) return { ok: true, meta: served(h), obj: h.obj };
     const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
     if (tomb && now <= tomb.until) return no(tomb.why);
     return no("missing");
@@ -1156,6 +1179,8 @@ function createCore(deps) {
   function chainOwner(id) {
     const m = store.get("blob:" + id);
     if (m) return m.writer;
+    const h = store.get("held:" + id);
+    if (h && clock() <= h.heldUntil) return h.writer; /* plant:held-owner */
     const tomb = store.get("tomb:" + id);
     return tomb && clock() <= tomb.until ? tomb.writer : null;
   }
@@ -1184,7 +1209,7 @@ function createCore(deps) {
       resFloor = nameFloor ? floorVal : null; /* plant:put-counter-floor */
       return resFloor !== null ? Object.assign(no("replay-counter"), { floor: resFloor }) : no("replay-counter");
     }
-    if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
+    if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined || store.get("held:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
     if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
@@ -1212,6 +1237,8 @@ function createCore(deps) {
       store.put("rate:" + m.writer, j.stamps);
       store.put("bytes", (store.get("bytes") || 0) + ct.length);
       if (j.old) bury(j.old, "superseded", now, drop); /* plant:supersede-drop */
+      const heldOld = m.supersedes === null ? undefined : store.get("held:" + m.supersedes);
+      if (heldOld) release(heldOld, drop); /* plant:held-supersede */
       if (j.a.lead && m.epoch > j.a.team.epoch) store.put("team", Object.assign({}, j.a.team, { epoch: m.epoch }));
       if (j.a.invite) {
         const next = Object.assign({}, j.a.inv, { uploaded: true });
@@ -1280,6 +1307,24 @@ function createCore(deps) {
     drop.push(m.obj);
   }
 
+  /* A removed desk's blob, counted toward nothing and served to the lead alone until heldUntil: its seq row goes, so no other
+     list pages over it, and its own expiry row deletes it then. */
+  function hold(m, until) {
+    store.del("blob:" + m.id);
+    noteBlobs(-1);
+    store.del("seq:" + pad(m.seq));
+    if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
+    store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
+    store.put("held:" + m.id, Object.assign({}, m, { heldUntil: until }));
+    store.put(expiryKey(until, m.id), "held");
+  }
+  function release(h, drop) {
+    store.del("held:" + h.id);
+    store.del(expiryKey(h.heldUntil, h.id));
+    store.put("orphan:" + h.obj, 1);
+    drop.push(h.obj);
+  }
+
   /* Deletion records past their keep, tombstones past theirs, a spent invitation's hash and times past its keep (its id and
      that it was spent stay), and every object whose delete is still to be made. */
   function prune() {
@@ -1297,6 +1342,8 @@ function createCore(deps) {
           const id = k.slice(20);
           store.del(k);
           if (kind === "tomb") { store.del("tomb:" + id); continue; }
+          const h = kind === "held" ? store.get("held:" + id) : undefined;
+          if (h) { release(h, drop); continue; } /* plant:held-expiry */
           const m = store.get("blob:" + id);
           if (m && expired(m, now)) bury(m, "expired", now, drop);
         }
@@ -1353,6 +1400,7 @@ function createCore(deps) {
   function heldObjects() {
     const objs = new Set();
     for (const [, m] of store.list("blob:")) if (m && typeof m.obj === "string") objs.add(m.obj);
+    for (const [, h] of store.list("held:")) if (h && typeof h.obj === "string") objs.add(h.obj);
     for (const [k] of store.list("put:")) objs.add(k.slice(4));
     for (const [k] of store.list("orphan:")) objs.add(k.slice(7));
     return [...objs];
@@ -1407,7 +1455,7 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
+  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,

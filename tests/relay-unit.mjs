@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 463;
+const EXPECTED = 473;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5585,19 +5585,14 @@ async function main() {
       const st = stOf(w);
       const rows = st.list("blob:").filter(([, m]) => m.writer === w.desk.keyId).length;
       const counts = [st.get("bytes"), st.get("blobs")];
-      const listed = await since(w, leadSes);
-      const ids = Array.isArray(listed.json) ? listed.json.map(e => e.meta.id) : [];
-      const fetched = await getBlob(w, leadSes, mine[0].id);
-      const objsGone = objs.every(o => typeof o === "string" && !w.R.bucket.objects.has(o));
       const room = await put(w, leadSes, sealAs(w, w.lead, "a.ec", 2));
       const back = await devices(w, w.devs);
       const again = await put(w, await sessionOf(w, w.desk), sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 4, { supersedes: mine[0].id }));
       return {
         freed: ups.every(u => u === 200) && refused(full, "team-size") && off.status === 200 && rows === 0 && counts[0] === SMALL && counts[1] === 1
-          && ids.length === 1 && ids[0] === theirs.id && refused(fetched, "missing") && objsGone && room.status === 200,
+          && objs.every(o => typeof o === "string") && room.status === 200,
         readded: back.status === 200 && again.status === 200,
-        detail: JSON.stringify({ ups, full: said(full), off: said(off), rows, counts, listed: ids.length, fetched: said(fetched), objsGone, room: said(room),
-          back: said(back), again: said(again) }),
+        detail: JSON.stringify({ ups, full: said(full), off: said(off), rows, counts, room: said(room), back: said(back), again: said(again) }),
       };
     }
 
@@ -5609,9 +5604,8 @@ async function main() {
       + " the lead's hello in the first window is issued, the desk keeps its 16 newest sessions, and the lead's, the other desk's and its own newest still"
       + " read: " + (noisy.detail || noisy.failed));
     const freed = await guard(freedScene);
-    check(freed.freed === true, "1161a a desk taken off gives back its share: its three blobs are served no more, the team's bytes and count drop to the"
-      + " other desk's one blob, the list names that blob alone, a fetch of the desk's is missing, its objects are deleted at the next list, and the lead's"
-      + " upload refused team-size before is taken: " + (freed.detail || freed.failed));
+    check(freed.freed === true, "1161a a desk taken off gives back its share at once: its three blobs leave the live rows, the team's bytes and count drop"
+      + " to the other desk's one blob, and the lead's upload refused team-size before is taken: " + (freed.detail || freed.failed));
     check(freed.readded === true, "1161b the desk put back sends its file again over the id it held before the removal, and it is taken, since no tombstone"
       + " was kept: " + (freed.detail || freed.failed));
 
@@ -5626,6 +5620,133 @@ async function main() {
     for (const [tag, leg, say, turns] of LIFTS) {
       const p = await liftCore("plant:" + tag, turns);
       check(base[leg] && p.turned && p.back, "1160" + String.fromCharCode(99 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
+        + "), and the product file is never written: " + how(p));
+    }
+  }
+
+  /* ---- 1163: a desk taken off leaves its blobs to the lead for REMOVED_KEEP_MS, counted toward nothing, and they are deleted at
+     the first list or upload after it (the test architect's question on relay finding 4) ---- */
+  {
+    const T0R = 1800000000000, GRACE = 7 * DAY;
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const stOf = w => w.R.stores.get(w.rt);
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    const guard = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.stack || e) }; } };
+    const idsOf = r => (Array.isArray(r && r.json) ? r.json.map(e => e.meta.id) : []);
+    const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+    const inBucket = (w, objs) => objs.map(o => typeof o === "string" && w.R.bucket.objects.has(o));
+    /* The desk writes two files and a newer copy of the first, the other desk one file; at T0R the desk is taken off. */
+    async function heldWorld() {
+      const R = relayEnv();
+      R.clock.now = T0R;
+      const w = await world({ R });
+      const deskSes = await sessionOf(w, w.desk), otherSes = await sessionOf(w, w.other);
+      const f1 = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 1), f2 = sealAs(w, w.desk, "desks/" + w.deskId + "/f2.ec", 2);
+      const f1b = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 3, { supersedes: f1.id });
+      const theirs = sealAs(w, w.other, "desks/" + w.otherId + "/g.ec", 1);
+      const ups = [];
+      for (const [s, b] of [[deskSes, f1], [deskSes, f2], [deskSes, f1b], [otherSes, theirs]]) ups.push(said(await put(w, s, b)));
+      const objs = [f2, f1b].map(b => (stOf(w).get("blob:" + b.id) || {}).obj);
+      const off = await devices(w, [w.devs[1]]);
+      if (!ups.every(u => u === 200) || off.status !== 200) throw new Error("the scene was not set: " + JSON.stringify({ ups, off: said(off) }));
+      return { w, f1, f2, f1b, theirs, objs };
+    }
+    async function leadScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + GRACE - MIN;
+      const leadSes = await sessionOf(w, w.lead);
+      const listed = idsOf(await since(w, leadSes)), paged = idsOf(await since(w, leadSes, 2));
+      const got = await getBlob(w, leadSes, h.f1b.id);
+      const bytesOk = got.status === 200 && Buffer.from(got.bytes).equals(Buffer.from(h.f1b.ciphertext)) && !!got.meta && got.meta.writer === w.desk.keyId;
+      const counts = [stOf(w).get("bytes"), stOf(w).get("blobs")], kept = inBucket(w, h.objs);
+      return {
+        ok: C.REMOVED_KEEP_MS === GRACE && same(listed, [h.f2.id, h.f1b.id, h.theirs.id]) && same(paged, [h.f1b.id, h.theirs.id]) && bytesOk
+          && counts[0] === h.theirs.ciphertext.length && counts[1] === 1 && kept.every(Boolean),
+        detail: JSON.stringify({ grace: C.REMOVED_KEEP_MS, listed: listed.length, paged: paged.length, got: said(got), bytesOk, counts, kept }),
+      };
+    }
+    async function otherScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + GRACE - MIN;
+      const otherSes = await sessionOf(w, w.other);
+      const listed = idsOf(await since(w, otherSes)), got = await getBlob(w, otherSes, h.f1b.id);
+      return { ok: same(listed, [h.theirs.id]) && refused(got, "missing"), detail: JSON.stringify({ listed: listed.length, got: said(got) }) };
+    }
+    /* A list inside the grace, then past it a fetch, and the first list or upload. */
+    async function pastScene(via) {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + GRACE - MIN;
+      await since(w, await sessionOf(w, w.lead));
+      const keptIn = inBucket(w, h.objs);
+      w.R.clock.now = T0R + GRACE + 1;
+      const leadSes = await sessionOf(w, w.lead);
+      const early = await getBlob(w, leadSes, h.f1b.id), keptOver = inBucket(w, h.objs);
+      const moved = via === "list" ? await since(w, leadSes)
+        : await put(w, await sessionOf(w, w.other), sealAs(w, w.other, "desks/" + w.otherId + "/h.ec", 2));
+      const gone = inBucket(w, h.objs).every(x => !x), rows = stOf(w).list("held:").length;
+      const listed = idsOf(await since(w, leadSes)), got = await getBlob(w, leadSes, h.f1b.id);
+      return {
+        ok: keptIn.every(Boolean) && refused(early, "missing") && keptOver.every(Boolean) && moved.status === 200 && gone && rows === 0
+          && listed.indexOf(h.f2.id) < 0 && listed.indexOf(h.f1b.id) < 0 && listed.indexOf(h.theirs.id) > -1 && refused(got, "missing"),
+        detail: JSON.stringify({ via, keptIn, early: said(early), keptOver, moved: said(moved), gone, rows, listed: listed.length, got: said(got) }),
+      };
+    }
+    async function pastBoth() {
+      const a = await pastScene("list"), b = await pastScene("upload");
+      return { ok: a.ok === true && b.ok === true, detail: a.detail + " " + b.detail };
+    }
+    /* The desk put back inside the grace sends a newer copy of its newest file over the held id. */
+    async function readdScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + DAY;
+      const back = await devices(w, w.devs);
+      const again = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 4, { supersedes: h.f1b.id });
+      const up = await put(w, await sessionOf(w, w.desk), again);
+      const leadSes = await sessionOf(w, w.lead);
+      const listed = idsOf(await since(w, leadSes)), old = await getBlob(w, leadSes, h.f1b.id), oldGone = inBucket(w, [h.objs[1]])[0] === false;
+      return {
+        ok: back.status === 200 && up.status === 200 && same(listed, [h.f2.id, h.theirs.id, again.id]) && refused(old, "missing") && oldGone,
+        detail: JSON.stringify({ back: said(back), up: said(up), listed: listed.length, old: said(old), oldGone }),
+      };
+    }
+    /* Inside the grace the other desk sends a file over the removed desk's held id. */
+    async function ownerScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + DAY;
+      const over = await put(w, await sessionOf(w, w.other), sealAs(w, w.other, "desks/" + w.otherId + "/f1.ec", 2, { supersedes: h.f1b.id }));
+      const listed = idsOf(await since(w, await sessionOf(w, w.lead)));
+      return { ok: refused(over, "outside-place") && listed.indexOf(h.f1b.id) > -1, detail: JSON.stringify({ over: said(over), listed: listed.length }) };
+    }
+
+    const lead = await guard(leadScene);
+    check(lead.ok === true, "1163a inside the grace of 7 days the lead lists the removed desk's blobs beside the other desk's, in seq order and from a"
+      + " later seq too, and fetches its newest with its bytes, while the team's bytes and count hold the other desk's blob alone and the objects stay: "
+      + (lead.detail || lead.failed));
+    const other = await guard(otherScene);
+    check(other.ok === true, "1163b inside the grace the other desk lists its own blob alone, and its fetch of the removed desk's newest is missing: "
+      + (other.detail || other.failed));
+    const past = await guard(pastBoth);
+    check(past.ok === true, "1163c the removed desk's objects outlast a list inside the grace; past it the lead's fetch is missing at once, and the first"
+      + " list, or the first upload, deletes the objects and the held rows, after which the list does not name them: " + (past.detail || past.failed));
+    const readd = await guard(readdScene);
+    check(readd.ok === true, "1163d the desk put back inside the grace sends a newer copy over its held newest file, the lead then lists the new one and"
+      + " not the held one, and the held object is deleted: " + (readd.detail || readd.failed));
+    const owner = await guard(ownerScene);
+    check(owner.ok === true, "1163e inside the grace the other desk's upload over the removed desk's held file is refused outside-place, and the held"
+      + " file stays listed to the lead: " + (owner.detail || owner.failed));
+
+    const LIFTS = [
+      ["removed-grace", "1163a", "a desk taken off has its blobs deleted at once", leadScene],
+      ["held-lead-only", "1163b", "the other desk lists and fetches the removed desk's blobs", otherScene],
+      ["held-expiry", "1163c", "the removed desk's objects outlive the grace", pastBoth],
+      ["held-supersede", "1163d", "the held file stays beside the newer copy that supersedes it", readdScene],
+      ["held-owner", "1163e", "the other desk supersedes the removed desk's held file", ownerScene],
+    ];
+    const base = { "1163a": lead.ok === true, "1163b": other.ok === true, "1163c": past.ok === true, "1163d": readd.ok === true, "1163e": owner.ok === true };
+    let n = 0;
+    for (const [tag, leg, say, scene] of LIFTS) {
+      const p = await liftCore("plant:" + tag, async () => (await guard(scene)).ok !== true);
+      check(base[leg] && p.turned && p.back, "1163" + String.fromCharCode(102 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
     }
   }

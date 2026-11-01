@@ -118,7 +118,7 @@ A desk file's counter is that same writer counter. After `restart`, `catalog-ans
 
 `rev` is kept per team id, lead key and epoch. A lower or equal `rev` at that epoch is `replay-rev` on `loadTeamFile`. `acceptBlob` uses that same floor and refuses a team file whose `rev` is below it. The team file at the floor still opens a blob.
 
-`list`, `fetch`, `subscribe` and an upload require a live session for that team. An upload's session is its writer's own key's, or an invitation's for its one upload, and the upload is also authenticated by the upload signature, enrolment and place. Removing a desk refuses that desk's open session and its later uploads with `removed`, and its blobs are no longer listed, fetched or counted toward the team cap.
+`list`, `fetch`, `subscribe` and an upload require a live session for that team. An upload's session is its writer's own key's, or an invitation's for its one upload, and the upload is also authenticated by the upload signature, enrolment and place. Removing a desk refuses that desk's open session and its later uploads with `removed`, and its blobs at once count toward neither the team cap nor the blob cap. For 7 days they are listed to and fetched by the lead's session alone; another desk's upload over one is refused `outside-place`, and the desk, put back, may supersede one. At the first list or upload after the 7 days they are deleted.
 
 Limits, and the reason when they trip:
 
