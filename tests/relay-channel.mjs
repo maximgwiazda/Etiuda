@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 325;
+const EXPECTED = 327;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5002,11 +5002,17 @@ try {
     };
     s.sMirror = path.join(LAB, tag + "-studio");
     const sT = transport(tag + "-studio");
+    /* Every upload the lead's Studio makes, kept as a relay that kept everything would serve it (939j reads them as a thief would). */
+    s.sent = [];
+    s.request = async (m, u, h, b) => {
+      if (m === "PUT") s.sent.push({ meta: JSON.parse(Buffer.from(h["etiuda-blob"], "base64url").toString("utf8")), ct: Buffer.from(b) });
+      return sT.request(m, u, h, b);
+    };
     s.studio = C.createChannel({ rt, url: URLV1, mirror: s.sMirror, stateFile: path.join(LAB, tag + "-studio.json"),
       pin: () => ({ teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: s.lead.keyId, public: s.lead.pub, privateKey: s.lead.privateKey, place: "root" }),
       keyFor: e => keys.get(e) || null, sealEpoch: () => Math.max(...keys.keys()), inviteKeys: () => s.invs,
-      agree: peer => agreeWith(s.boxNow)(peer), request: sT.request, connect: sT.connect, pollMs: 1e9 });
+      agree: peer => agreeWith(s.boxNow)(peer), request: s.request, connect: sT.connect, pollMs: 1e9 });
     s.ud = path.join(LAB, tag + "-desk");
     s.share = path.join(LAB, tag + "-share");
     fs.mkdirSync(s.ud, { recursive: true });
@@ -5145,6 +5151,71 @@ try {
       await s.stop();
     }
   }
+  /* 939j, finding 2 (3) for a key that may be in other hands (Max's ruling of 2026-11-01 06:13): the lead hands the team to a new
+     key that makes a fresh box, then moves it to a new team key, while the desk is away. The desk, holding only the old box's
+     public half, does not open the new lead's copies, and stays on the old lead and the first key. And the old key's holder,
+     with the old box, the first team key and the old signing key, opens nothing uploaded from the epoch move on: no blob under
+     the first key, and no copy it can agree for the desk with the old box. The same search with the box the lead used finds
+     the desk's copy and opens it, so a miss is a miss and not a search that finds nothing. `keep` (939k): the lead keeps the
+     old box, as 939d does, and the old key's holder then finds and opens the desk's copy of the new key's file. */
+  function aesOpens(it, rt, key) {
+    try {
+      const ct = it.ct, k = Buffer.from(key);
+      const aad = B.aadOf({ relayTeamId: rt, epoch: it.meta.epoch, id: it.meta.id, supersedes: it.meta.supersedes, writerKeyId: it.meta.writer, counter: it.meta.counter });
+      if (!aad || k.length !== B.KEY_BYTES || ct.length < B.TAG_BYTES || !/^[0-9a-f]{24}$/.test(String(it.meta.nonce))) return false;
+      const d = crypto.createDecipheriv("aes-256-gcm", k, Buffer.from(it.meta.nonce, "hex"), { authTagLength: B.TAG_BYTES });
+      d.setAAD(aad);
+      d.setAuthTag(ct.subarray(ct.length - B.TAG_BYTES));
+      Buffer.concat([d.update(ct.subarray(0, ct.length - B.TAG_BYTES)), d.final()]);
+      return true;
+    } catch { return false; }
+  }
+  async function handoverAwayFresh(tag, keep) {
+    const out = { synced: false, moved: 0, now: null, notes: [], after: 0, underOld: 0, oldCopies: 0, oldCopyOpens: 0, newCopies: 0, newCopyOpens: 0 };
+    const s = await relayDeskScene(tag);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1), OLDBOX = s.box;
+      deskTransport.down = true;
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      if (!keep) s.boxNow = boxPair();
+      const step = s.step(LEAD, NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 1, 3, "Handover edition"));
+      put(s.sMirror, "stats-span.json", s.span(NEXT));
+      await s.studio.kick(); await s.studio.idle();
+      const atMove = s.sent.length;
+      const key2 = crypto.randomBytes(32);
+      s.keys.set(2, key2);
+      const span = s.span(NEXT, "this-month");
+      put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 1, roster: [s.entry(key2, 2)], lead: NEXT, box: s.boxNow, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key2, s.team, 2, s.catalog(2, NEXT, "edition two"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 2, 1, "Second key edition"));
+      put(s.sMirror, "stats-span.json", span);
+      await s.studio.kick(); await s.studio.idle();
+      /* What the old key's holder can reach of everything uploaded from the epoch move on. */
+      const after = s.sent.slice(atMove).filter(u => !u.meta.del);
+      out.after = after.length;
+      out.underOld = after.filter(u => aesOpens(u, s.rt, key1)).length;
+      const copyWith = (box, writer) => C.deskCopyOf(agreeWith(box)(s.me.box), { rt: s.rt, teamId: s.team, leadKeyId: writer.keyId, leadBox: box.pub,
+        deskId: s.me.id, deskBox: s.me.box });
+      const copies = box => [LEAD, NEXT].map(w => copyWith(box, w)).filter(Boolean);
+      out.oldCopies = copies(OLDBOX).reduce((n, c) => n + after.filter(u => u.meta.place === "invite:" + c.id).length, 0);
+      out.oldCopyOpens = copies(OLDBOX).reduce((n, c) => n + after.filter(u => u.meta.place === "invite:" + c.id && aesOpens(u, s.rt, c.key)).length, 0);
+      out.newCopies = copies(s.boxNow).reduce((n, c) => n + after.filter(u => u.meta.place === "invite:" + c.id).length, 0);
+      out.newCopyOpens = copies(s.boxNow).reduce((n, c) => n + after.filter(u => u.meta.place === "invite:" + c.id && aesOpens(u, s.rt, c.key)).length, 0);
+      deskTransport.down = false;
+      const settled = n => keep ? n.pin === "the new lead" && n.epoch === 2 : false;
+      await until(async () => { await s.pump(); return settled(deskNow(s, NEXT, span)); }, keep ? 8000 : 2500);
+      out.now = deskNow(s, NEXT, span);
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
   /* 939f, finding 3 (1): the lead moves the team to a shared folder, filled with its team file at a higher rev naming a folder
      channel, and puts the same file up to the relay. The desk's catalog folder before joining is that folder, so the move
      finds it there. */
@@ -5239,6 +5310,21 @@ try {
     const e = await liftApp("plant:copy-by-writer", async app => { const x = await handoverAway("939e", app); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead" && x.now.epoch === 1; });
     check(e.turned && e.back, "939e lifting plant:copy-by-writer leaves the desk that was away on the old lead and the first key, its copy"
       + " unfound, and the product file is never written: " + e.detail + ", sha " + (e.back ? "restored" : "differs"));
+    const j = await run(handoverAwayFresh, "939j", false);
+    const jText = x => (x ? "synced " + x.synced + ", relay move " + x.moved + ", " + nowText(x.now) + ", uploads from the epoch move " + x.after
+      + ", opened under the first key " + x.underOld + ", copies found with the old box " + x.oldCopies + " (opened " + x.oldCopyOpens
+      + "), with the box the lead used " + x.newCopies + " (opened " + x.newCopyOpens + ")" : "");
+    check(!!j.x && j.x.synced && j.x.moved === 200 && !!j.x.now && j.x.now.pin === "the old lead" && j.x.now.epoch === 1
+      && j.x.now.head !== "Second key edition" && j.x.after > 0 && j.x.underOld === 0 && j.x.oldCopies === 0 && j.x.oldCopyOpens === 0
+      && j.x.newCopies >= 1 && j.x.newCopyOpens >= 1,
+      "939j a desk away across a handover to a key with a fresh box and an epoch move does not open the new lead's copies with the old box,"
+      + " and the old key's holder opens nothing uploaded from the epoch move on, where the box the lead used finds the desk's copy: "
+      + jText(j.x) + (j.err ? ", " + j.err : ""));
+    const k = await run(handoverAwayFresh, "939k", true);
+    check(!!k.x && k.x.synced && k.x.moved === 200 && k.x.underOld === 0 && k.x.oldCopies >= 1 && k.x.oldCopyOpens >= 1 && !!k.x.now
+      && k.x.now.pin === "the new lead" && k.x.now.epoch === 2,
+      "939k the same scene with the old box kept: the desk follows (as 939d), and the old key's holder finds and opens the desk's copy of the"
+      + " new key's file with the old box, the trade the fresh box closes: " + jText(k.x) + (k.err ? ", " + k.err : ""));
     const f = await run(toFolder, "939f");
     check(!!f.x && f.x.ok === true,
       "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
