@@ -7712,6 +7712,10 @@ What you type stays in this browser only.`;
     "The relay does not know the team just now": "Przekaźnik nie zna teraz tego zespołu",
     "The catalogs on this desk stay as they are and work as before; nothing new arrives through the relay. Either the relay cleared the team's copy after its licence ended, or the team has not reached the relay yet.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; przez przekaźnik nie przychodzi nic nowego. Przekaźnik usunął kopię zespołu po wygaśnięciu licencji albo zespół jeszcze do niego nie dotarł.",
     "When the team is back on the relay, this desk follows by itself while it is still in the team; nothing is needed here.": "Gdy zespół wróci na przekaźnik, to stanowisko dołączy samo, o ile nadal należy do zespołu; tutaj nic nie trzeba robić.",
+    "This team's lead key was handed to two different new keys at once, so this desk follows neither.": "Klucz lidera tego zespołu przekazano jednocześnie dwóm różnym nowym kluczom, więc stanowisko nie podąża za żadnym z nich.",
+    "The catalogs on it stay as they are. Tell the team's lead about it.": "Katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.",
+    "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands.": "Ktoś użył starego klucza lidera tego zespołu, by przekazać zespół także innemu kluczowi, więc ten klucz najwyraźniej jest w cudzych rękach.",
+    "This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.": "Stanowisko zostaje przy kluczu, za którym już podąża, a katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.",
     "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.": "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
     "Open a folder": "Otwórz folder",
     "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.": "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
@@ -15243,6 +15247,36 @@ What you type stays in this browser only.`;
       joinAsk("lapse-seen", team, step);
     });
   }
+  function forkKept(v) {
+    return v && typeof v === "object" && (v.kind === "two" || v.kind === "later") ? { kind: v.kind, seen: v.seen === true } : null;
+  }
+  function forkWords(kind) {
+    if (kind === "two") return {
+      title: t("This team's lead key was handed to two different new keys at once, so this desk follows neither."),
+      body: t("The catalogs on it stay as they are. Tell the team's lead about it.")
+    };
+    return {
+      title: t("Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands."),
+      body: t("This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.")
+    };
+  }
+  var forkUp = "";
+  var forkDismissed = /* @__PURE__ */ new Set();
+  function syncForkNotice() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.fork && !x.fork.seen && !forkDismissed.has(x.team + "|" + x.fork.kind))[0] || null;
+    const want = l ? l.team + "|" + l.fork.kind : "", up = document.getElementById("eTeamFork");
+    if (want === forkUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    forkUp = want;
+    if (!l) return;
+    const w = forkWords(l.fork.kind), team = l.team;
+    eNotice("eTeamFork", w.title, w.body, () => {
+      forkDismissed.add(want);
+      if (forkUp === want) forkUp = "";
+      joinAsk("fork-seen", team);
+    });
+  }
   var relayGoneUp = "";
   var relayGoneDismissed = /* @__PURE__ */ new Set();
   function syncRelayRemoved() {
@@ -15288,6 +15322,8 @@ What you type stays in this browser only.`;
         if (head) row.head = head;
         const lapse = lapseKept(l.lapse);
         if (lapse) row.lapse = lapse;
+        const fork = forkKept(l.fork);
+        if (fork) row.fork = fork;
         return row;
       }) : []
     };
@@ -15299,6 +15335,7 @@ What you type stays in this browser only.`;
     syncJoinDoor();
     syncLapseNotice();
     syncRelayRemoved();
+    syncForkNotice();
     const refusal = s.linkRefusal;
     if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
       dropInvite();

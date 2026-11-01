@@ -722,6 +722,27 @@ function handedTo(doc, pin) {
   return false;
 }
 
+/* Whether the team files of one look show the team's lead key in two hands. `chain` is the leads this desk followed, oldest
+   first, its pin last; a step counts only where it is genuine for that team and signed by that key, so a forged successor
+   shows nothing. "later": a key already handed on to the next of the chain is shown handing to another. "two": the pin is
+   shown handing to two different keys. `to` is the other keys, once each by public half; null where there is neither. */
+function forkIn(docs, chain, teamId) {
+  const at = Array.isArray(chain) ? chain.filter(k => k && typeof k === "object" && k.keyId && k.public) : [];
+  const files = (Array.isArray(docs) ? docs : []).filter(d => d && typeof d === "object" && d.id === teamId);
+  for (let i = 0; i < at.length; i++) {
+    const from = at[i], next = i + 1 < at.length ? at[i + 1] : null;
+    const to = [];
+    for (const doc of files) {
+      for (const s of Array.isArray(doc.handover) ? doc.handover : []) {
+        if (handoverGenuine(s, teamId, from) && !to.some(t => t.public === s.to.public)) to.push({ keyId: s.to.keyId, public: s.to.public });
+      }
+    }
+    const others = next ? to.filter(t => t.public !== next.public) : to;
+    if (next ? others.length > 0 : others.length > 1) return { kind: next ? "later" : "two", from: { keyId: from.keyId, public: from.public }, to: others }; /* plant:fork-in */
+  }
+  return null;
+}
+
 /* The one signer `trust` holds for that key id, or null. `trust` is { lead: { keyId, public }, leads: [{ keyId,
    public }], desks: [{ deskId, keyId, public }] }, from a team file the caller verified; a key id it holds twice is held by nobody. */
 function writerOf(trust, keyId) {
@@ -1028,5 +1049,5 @@ module.exports = {
   INVITE_WRAP_INFO, INVITE_FOLDER_WRAP_INFO, REFUSED_PREFIX, REFUSED_KIND,
   inviteWrapKey, inviteWrapAad, sealInviteWrap, openInviteWrap, openWrap, inviteRefusedSignedBytes, inviteRefusedGenuine,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
-  HANDOVER_PREFIX, HANDOVER_KIND, HANDOVER_STEPS, canon, signedBytes, handoverSignedBytes, handoverGenuine, handedTo, genuineChain,
+  HANDOVER_PREFIX, HANDOVER_KIND, HANDOVER_STEPS, canon, signedBytes, handoverSignedBytes, handoverGenuine, handedTo, genuineChain, forkIn,
 };

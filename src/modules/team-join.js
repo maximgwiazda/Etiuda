@@ -226,6 +226,35 @@ function syncLapseNotice(){
     joinAsk("lapse-seen", team, step);
   });
 }
+/* The team's lead key seen in two hands, as the shell keeps it: "two" where the desk follows neither successor, "later"
+   where a key it followed on was handed on again. Claudette's words, 2026-11-01 01:04, the first sentence the notice's lead. */
+function forkKept(v){
+  return v && typeof v==="object" && (v.kind==="two" || v.kind==="later") ? {kind:v.kind, seen:v.seen===true} : null;
+}
+function forkWords(kind){
+  if(kind==="two") return {title:t("This team's lead key was handed to two different new keys at once, so this desk follows neither."),
+    body:t("The catalogs on it stay as they are. Tell the team's lead about it.")};
+  return {title:t("Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands."),
+    body:t("This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.")};
+}
+let forkUp="";
+const forkDismissed=new Set();
+/* One notice per fork the shell keeps, up until the agent dismisses it. */
+function syncForkNotice(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.fork && !x.fork.seen && !forkDismissed.has(x.team+"|"+x.fork.kind))[0]||null;
+  const want=l?l.team+"|"+l.fork.kind:"", up=document.getElementById("eTeamFork");
+  if(want===forkUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  forkUp=want;
+  if(!l) return;
+  const w=forkWords(l.fork.kind), team=l.team;
+  eNotice("eTeamFork", w.title, w.body, ()=>{
+    forkDismissed.add(want);
+    if(forkUp===want) forkUp="";
+    joinAsk("fork-seen", team);
+  });
+}
 /* The relay told this desk it is no longer on the team. The notice says so, and only for that: a roster that has
    dropped the desk already has its own sentence, and this one must not promise that the catalog opens by itself,
    because the desk has stopped asking. */
@@ -262,6 +291,8 @@ function joinTook(v,changed){
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
              if(lapse) row.lapse=lapse;
+             const fork=forkKept(l.fork);
+             if(fork) row.fork=fork;
              return row;
            }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
@@ -275,6 +306,7 @@ function joinTook(v,changed){
   syncJoinDoor();
   syncLapseNotice();
   syncRelayRemoved();
+  syncForkNotice();
   const refusal=s.linkRefusal;
   if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
     dropInvite();

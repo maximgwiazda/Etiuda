@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 307;
+const EXPECTED = 326;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1634,7 +1634,8 @@ try {
   const APP = path.join(LAB, "app");
   fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-  const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext"];
+  const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
+    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -1652,10 +1653,12 @@ try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
-  /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in). */
+  /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in, or `app`:
+     a copy of shell/ to load from, as a planted channel needs). */
   function loadDesk(ud, arg) {
     const hooks = arg && typeof arg === "object" ? arg : null;
     const source = typeof arg === "string" ? arg : SRC;
+    const shellDir = hooks && typeof hooks.app === "string" ? hooks.app : path.join(APP, "shell");
     const said = [], on = {}, invoke = {};
     const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
     const safeStorage = {
@@ -1680,7 +1683,7 @@ try {
     const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
       source + "\nreturn { " + EXPOSE.join(", ") + " };")(
       n => (n === "electron" ? electron : nodeRequire(n)),
-      path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet);
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -4915,6 +4918,351 @@ try {
     });
     check(kept.turned && kept.back, "932n lifting plant:ho9-keep-channel rebuilds the channel when only the pin moved, and the product"
       + " file is never written: " + kept.detail + ", sha " + (kept.back ? "restored" : "differs"));
+  }
+  /* ---- 939, a relay desk's live path (Argon's relay review of 2026-11-01, findings 2 and 3 (1), as the test architect
+     conditioned them at 01:43), and board 931 (7) item 7's fork rule on the same path. Each scene is a shell desk joined by
+     invitation and synced, driven through relayRun, createChannel and catchUp against the in-memory relay, with the lead's
+     Studio a channel of its own; "away" is the desk's transport down. A plant is lifted from a copy of shell/ the desk loads,
+     and the product file is only read. ---- */
+  async function liftApp(tag, fn) {
+    const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(src), digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const dir = fs.mkdtempSync(path.join(LAB, "app-plant-"));
+        fs.cpSync(path.join(APP, "shell"), path.join(dir, "shell"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "shell", "relay", "channel.cjs"), lines.join("\n"), "utf8");
+        turned = await fn(path.join(dir, "shell"));
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.stack ? e.stack : String(e);
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  /* An upload made by hand under `who`'s own session, as a program holding that key could make it. */
+  async function putRaw(rt, who, b) {
+    const t = transport("raw-" + hex(3));
+    const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
+    const challenge = JSON.parse(h.bytes.toString()).challenge;
+    const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
+      Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+    const token = JSON.parse(ses.bytes.toString()).session;
+    const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
+      sig: b.signature, nonce: b.nonce, place: b.place };
+    const r = await t.request("PUT", URLV1 + "/t/" + rt + "/b/" + b.id,
+      { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(meta)).toString("base64url") }, b.ciphertext);
+    return r.status;
+  }
+  /* One relay team: its lead's Studio, whose team file names the lead's box, and a desk joined by invitation and synced to its
+     edition, head and span. `app`: the copy of shell/ the desk loads. */
+  async function relayDeskScene(tag, app) {
+    const rt = hex(16), team = "t-" + hex(8), keys = new Map([[1, crypto.randomBytes(32)]]);
+    const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+    if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+    const s = { rt, team, keys, lead: LEAD, box: boxPair(), invs: [] };
+    s.boxNow = s.box;
+    const ringOf = leads => ({ format: 1, kind: "etiuda-ring", keys: leads.map(k => ({ catalog: "quay-board", keyId: k.keyId, alg: "Ed25519", public: k.pub })) });
+    s.doc = f => {
+      const lead = f.lead || LEAD;
+      const d = { format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"], lead: { keyId: lead.keyId, public: lead.pub, box: (f.box || s.box).pub },
+        sealed: true, exportsSealed: false, epoch: f.epoch || 1, rev: f.rev, channel: f.channel || { kind: "relay", rt, url: URLV1 },
+        ring: ringOf(f.ring || [LEAD]), roster: f.roster || [] };
+      if (f.handover) d.handover = f.handover;
+      d.sig = { alg: "Ed25519", keyId: lead.keyId };
+      d.sig.value = signHex(lead, C.signedBytes(d));
+      return JSON.stringify(d, null, 1) + "\n";
+    };
+    s.catalog = (rev, key, word) => {
+      const o = { format: 2, kind: "etiuda-catalog", id: "quay-board", rev, name: "Quay Board", date: "2026-03-0" + rev,
+        langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+        cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" }, body: { en: "Good day, " + word + "." } }] };
+      o.sig = { alg: "Ed25519", keyId: key.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), key.privateKey).toString("hex");
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    s.head = (key, epoch, rev, edition) => signHead({ v: 1, team, epoch, rev, t: Date.now(),
+      editions: [{ catalog: "quay-board", rev: 1, edition, published: "1 November 2026" }] }, key);
+    s.span = (key, span) => {
+      const d = { format: 1, kind: "etiuda-stats-span", span: span || "rolling-30", sig: { alg: "Ed25519", keyId: key.keyId } };
+      d.sig.value = signHex(key, Buffer.concat([Buffer.from("etiuda-stats-span\n", "utf8"), C.signedBytes(d)]));
+      return JSON.stringify(d, null, 1) + "\n";
+    };
+    s.step = (from, to) => {
+      const st = { format: 1, kind: "etiuda-team-handover", team, from: { keyId: from.keyId, public: from.pub },
+        to: { keyId: to.keyId, public: to.pub }, sig: { alg: "Ed25519", keyId: from.keyId } };
+      st.sig.value = signHex(from, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(st)]));
+      return st;
+    };
+    /* The relay moves the team to `next`, signed by the lead it names now; the lead's Studio then writes as `next`. */
+    s.handTo = async next => {
+      R.clock.now += 1;
+      const t = R.clock.now;
+      const bytes = Buffer.from("etiuda-relay-lead\n" + rt + "\n" + next.keyId + "\n" + next.pub + "\n" + t, "utf8");
+      const res = await admin("POST", "/relay/v1/t/" + rt + "/lead", { to: { keyId: next.keyId, pub: next.pub }, t, sig: signHex(s.lead, bytes),
+        grant: K.grantFor(next.pub, t) });
+      if (res.status === 200) s.lead = next;
+      return res.status;
+    };
+    s.sMirror = path.join(LAB, tag + "-studio");
+    const sT = transport(tag + "-studio");
+    s.studio = C.createChannel({ rt, url: URLV1, mirror: s.sMirror, stateFile: path.join(LAB, tag + "-studio.json"),
+      pin: () => ({ teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+      me: () => ({ keyId: s.lead.keyId, public: s.lead.pub, privateKey: s.lead.privateKey, place: "root" }),
+      keyFor: e => keys.get(e) || null, sealEpoch: () => Math.max(...keys.keys()), inviteKeys: () => s.invs,
+      agree: peer => agreeWith(s.boxNow)(peer), request: sT.request, connect: sT.connect, pollMs: 1e9 });
+    s.ud = path.join(LAB, tag + "-desk");
+    s.share = path.join(LAB, tag + "-share");
+    fs.mkdirSync(s.ud, { recursive: true });
+    fs.mkdirSync(s.share, { recursive: true });
+    fs.writeFileSync(path.join(s.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: s.share, eUiLang: "en" } }), "utf8");
+    s.Dk = loadDesk(s.ud, app ? { app } : undefined);
+    s.stop = async () => {
+      deskTransport.down = false;
+      try { await s.studio.stop(); } catch { /* stopped */ }
+      try { const c = s.Dk.api.relayRun(); if (c) await c.stop(); } catch { /* stopped */ }
+    };
+    try {
+      const key1 = keys.get(1);
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, team, 1, s.catalog(1, LEAD, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(LEAD, 1, 1, "First edition"));
+      put(s.sMirror, "stats-span.json", s.span(LEAD));
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 1 }));
+      s.studio.start();
+      await s.studio.idle();
+      const inv = await relayInviteOn(rt, team);
+      s.invs.push({ id: inv.inv, key: C.inviteSealKey(inv.secret) });
+      await s.studio.kick(); await s.studio.idle();
+      const taken = await s.Dk.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
+      if (!taken || taken.refused) throw new Error("the invitation was refused: " + JSON.stringify(taken));
+      s.me = await s.Dk.ask("etiuda:branch-identity", false);
+      s.mirror = path.join(s.ud, "relay", rt);
+      s.pump = async () => {
+        const c = s.Dk.api.relayRun();
+        if (c) { c.kick(); await c.idle(); }
+        await s.studio.kick(); await s.studio.idle();
+      };
+      const asked = await until(async () => { await s.pump(); return !!read(s.sMirror, "desks/" + s.me.id + "/join.json"); }, 8000);
+      s.entry = (key, epoch) => ({ desk: { id: s.me.id, key: s.me.key, box: s.me.box }, wrap: s.Dk.api.wrapTeamKey(key, s.me.box, team, epoch, s.me.id) });
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 2, roster: [s.entry(key1, 1)] }));
+      const t1 = R.clock.now, dk = [{ id: s.me.id, pub: s.me.key, desk: s.me.id }];
+      await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: dk, rev: 1, t: t1, sig: signHex(LEAD, core.devicesBytes(rt, 1, t1, dk)) });
+      await s.studio.kick(); await s.studio.idle();
+      s.invs.length = 0;
+      s.synced = asked && await until(async () => {
+        await s.pump();
+        const h = s.Dk.api.relayHere(), p = (s.Dk.envelope().teamPins || {})[team];
+        return factsOf(s.Dk.api.readCatalog() || "") === 1 && !!h && h.joining === false && !!p && p.public === LEAD.pub
+          && read(s.mirror, HEAD_FILE) !== null && read(s.mirror, "stats-span.json") !== null;
+      }, 8000);
+    } catch (e) {
+      await s.stop();
+      throw e;
+    }
+    return s;
+  }
+  /* What the desk shows now: whose its pin is, whose edition it opens and of which rev, the head's edition, the epoch of the
+     team file in its mirror, and whether the span in its mirror is `span` and verifies under the lead it follows. */
+  function deskNow(s, lead, span) {
+    const D = s.Dk, p = (D.envelope().teamPins || {})[s.team];
+    let cat = null;
+    try { cat = JSON.parse(D.api.readCatalog() || "null"); } catch { cat = null; }
+    const c = D.api.relayRun();
+    let n = null;
+    try { n = c && c.program ? c.program.headNews(Date.now()) : null; } catch { n = null; }
+    let epoch = null;
+    try { epoch = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { epoch = null; }
+    const text = read(s.mirror, "stats-span.json");
+    let spanOk = false;
+    try {
+      const doc = text === span ? D.api.spanDocument(text) : null, pl = D.api.pinnedLead();
+      spanOk = !!doc && !!pl && pl.public === lead.pub && D.api.spanGenuine(doc, pl) === true;
+    } catch { spanOk = false; }
+    return { pin: p && p.public === lead.pub ? "the new lead" : p && p.public === LEAD.pub ? "the old lead" : p ? "another key" : "none",
+      edition: cat && cat.sig ? (cat.sig.keyId === lead.keyId ? "re-signed" : "the old one") + " rev " + cat.rev : "none",
+      head: n && n.edition ? n.edition : "none", epoch, span: spanOk };
+  }
+
+  /* 939a, finding 2 (1) and (2): the lead hands the team to a new key on the relay, then writes as that key the team file
+     carrying the step the old key signed, and the edition, head and span re-signed under it, each replacing the old key's
+     blob of its path. The new key has a box of its own, as Studio makes one. */
+  async function handoverOnline(tag, app) {
+    const out = { synced: false, moved: 0, now: null, notes: [] };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      s.boxNow = boxPair();
+      const span = s.span(NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [s.step(LEAD, NEXT)], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 1, 3, "Handover edition"));
+      put(s.sMirror, "stats-span.json", span);
+      await s.studio.kick(); await s.studio.idle();
+      const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      out.now = deskNow(s, NEXT, span);
+      out.ok = done(out.now);
+      if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
+  /* 939d, finding 2 (3): the desk is away while the lead hands the team to a new key and then moves it to a new team key. The
+     lead keeps the team's box across the handover; Studio does not yet (the report says what it must change). */
+  async function handoverAway(tag, app) {
+    const out = { synced: false, moved: 0, now: null, notes: [] };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      const step = s.step(LEAD, NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 1, 3, "Handover edition"));
+      put(s.sMirror, "stats-span.json", s.span(NEXT));
+      await s.studio.kick(); await s.studio.idle();
+      const key2 = crypto.randomBytes(32);
+      s.keys.set(2, key2);
+      const span = s.span(NEXT, "this-month");
+      put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 1, roster: [s.entry(key2, 2)], lead: NEXT, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key2, s.team, 2, s.catalog(2, NEXT, "edition two"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 2, 1, "Second key edition"));
+      put(s.sMirror, "stats-span.json", span);
+      await s.studio.kick(); await s.studio.idle();
+      deskTransport.down = false;
+      const done = n => n.pin === "the new lead" && n.epoch === 2 && n.edition === "re-signed rev 2" && n.head === "Second key edition" && n.span;
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      out.now = deskNow(s, NEXT, span);
+      out.ok = done(out.now);
+      if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
+  /* 939f, finding 3 (1): the lead moves the team to a shared folder, filled with its team file at a higher rev naming a folder
+     channel, and puts the same file up to the relay. The desk's catalog folder before joining is that folder, so the move
+     finds it there. */
+  async function toFolder(tag, app) {
+    const out = { synced: false, folder: "", shown: "", channel: "" };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const moved = s.doc({ rev: 3, roster: [s.entry(s.keys.get(1), 1)], channel: { kind: "folder" } });
+      put(s.share, C.TEAM_NAME, moved);
+      put(s.share, "board.ec", read(s.sMirror, "board.ec"));
+      put(s.sMirror, C.TEAM_NAME, moved);
+      await s.studio.kick(); await s.studio.idle();
+      /* A folder team is read through the mirror its syncer keeps of the shared folder. */
+      const folderMirror = path.join(s.ud, "folder-mirror", s.team);
+      const look = () => {
+        const here = s.Dk.api.catalogFolder(), env = s.Dk.envelope();
+        out.folder = here === folderMirror ? "the folder team's mirror" : here === s.mirror ? "the relay's mirror" : String(here);
+        const shown = (env.teamShown || {})[s.team] || {};
+        out.shown = shown.folder === s.share && !shown.relay ? "the shared folder" : shown.relay ? "the relay" : String(shown.folder);
+        const ch = (env.teamChannel || {})[s.team];
+        out.channel = ch ? ch.kind : "none";
+        return out.folder === "the folder team's mirror" && out.shown === "the shared folder" && out.channel !== "relay";
+      };
+      await until(async () => { await s.pump(); return look(); }, 8000);
+      out.ok = look();
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
+  /* 939h, item 7 on the relay. The relay moves its lead only on the signature of the lead it names now (933p), so a second
+     successor reaches a desk only as a team file of a chain of its own put up under K1 while the relay still names K1. Here
+     someone else holding K1 puts up such a file handing K1 to K3; the team's lead then moves the relay to K2 and writes K2's
+     file under K2. A desk away meanwhile catches up both in one look. */
+  async function forkOnRelay(tag, app) {
+    const out = { synced: false, thief: 0, moved: 0, pin: "", channelPin: "", fork: "", said: 0, rev: 0 };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const K2 = keyPair(true), K3 = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      const k3File = s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: K3, handover: [s.step(LEAD, K3)], ring: [LEAD, K3] });
+      out.thief = await putRaw(s.rt, LEAD, B.seal({ relayTeamId: s.rt, epoch: 1, teamKey: key1, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey },
+        path: C.TEAM_NAME, body: k3File, counter: Date.now() + 5e6, place: "root", kind: "file" }));
+      out.moved = await s.handTo(K2);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: K2, handover: [s.step(LEAD, K2)], ring: [LEAD, K2] }));
+      await s.studio.kick(); await s.studio.idle();
+      deskTransport.down = false;
+      const two = C.FORK_SAID ? C.FORK_SAID.two : null;
+      const twoSaid = () => (two ? s.Dk.said.filter(l => l.indexOf(two) >= 0).length : 0);
+      await until(async () => { await s.pump(); return twoSaid() > 0; }, 8000);
+      for (let i = 0; i < 2; i++) await s.pump();
+      const p = (s.Dk.envelope().teamPins || {})[s.team];
+      const name = k => (k && k.public === LEAD.pub ? "K1" : k && k.public === K2.pub ? "K2" : k && k.public === K3.pub ? "K3" : "none");
+      out.pin = name(p);
+      const c = s.Dk.api.relayRun(), pinned = c && c.program ? c.program.pinned() : null;
+      out.channelPin = name(pinned && pinned.lead);
+      const st = c && c.program ? c.program.state() : null;
+      out.fork = st && st.fork ? st.fork.kind : "none";
+      out.said = twoSaid();
+      try { out.rev = JSON.parse(read(s.mirror, C.TEAM_NAME)).rev; } catch { out.rev = 0; }
+      out.ok = out.thief === 200 && out.moved === 200 && out.pin === "K1" && out.channelPin === "K1" && out.fork === "two" && out.said >= 1 && out.rev === 2;
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
+  const nowText = n => (n ? "pin " + n.pin + ", edition " + n.edition + ", head " + n.head + ", team file epoch " + n.epoch + ", span " + (n.span ? "taken" : "not taken") : "nothing");
+  const sceneText = (x, err) => (x ? "synced " + x.synced + ", relay move " + x.moved + ", " + nowText(x.now) + (x.notes.length ? ", " + x.notes.join("; ") : "") : "") + (err ? ", " + err : "");
+  async function run(fn, ...args) { try { return { x: await fn(...args), err: "" }; } catch (e) { return { x: null, err: e && e.stack ? e.stack : String(e) }; } }
+  {
+    const a = await run(handoverOnline, "939a");
+    check(!!a.x && a.x.ok === true,
+      "939a an online joined relay desk follows a handover the lead makes on the relay and then as the new key, and opens the edition, head and"
+      + " span re-signed under it: " + sceneText(a.x, a.err));
+    const b = await liftApp("plant:handed-first", async app => { const x = await handoverOnline("939b", app); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead"; });
+    check(b.turned && b.back, "939b lifting plant:handed-first leaves the desk on the old lead, the new key's team file dropped as from no roster,"
+      + " and the product file is never written: " + b.detail + ", sha " + (b.back ? "restored" : "differs"));
+    const c = await liftApp("plant:chain-handed", async app => {
+      const x = await handoverOnline("939c", app);
+      return x.synced && x.now && x.now.pin === "the new lead" && x.now.edition !== "re-signed rev 1" && x.now.head !== "Handover edition";
+    });
+    check(c.turned && c.back, "939c lifting plant:chain-handed follows the handover but refuses the re-signed edition and head as outside-place,"
+      + " and the product file is never written: " + c.detail + ", sha " + (c.back ? "restored" : "differs"));
+    const d = await run(handoverAway, "939d");
+    check(!!d.x && d.x.ok === true,
+      "939d a desk away across a handover and an epoch move, the lead keeping the team's box, finds its own copy under the new key, follows"
+      + " it and opens the second key's edition, head and span: " + sceneText(d.x, d.err));
+    const e = await liftApp("plant:copy-by-writer", async app => { const x = await handoverAway("939e", app); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead" && x.now.epoch === 1; });
+    check(e.turned && e.back, "939e lifting plant:copy-by-writer leaves the desk that was away on the old lead and the first key, its copy"
+      + " unfound, and the product file is never written: " + e.detail + ", sha " + (e.back ? "restored" : "differs"));
+    const f = await run(toFolder, "939f");
+    check(!!f.x && f.x.ok === true,
+      "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
+      + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", the team shown in " + f.x.shown + ", team channel " + f.x.channel : "")
+      + (f.err ? ", " + f.err : ""));
+    const g = await liftApp("plant:relay-to-folder", async app => { const x = await toFolder("939g", app); return x.synced && x.folder === "the relay's mirror" && x.channel === "relay"; });
+    check(g.turned && g.back, "939g lifting plant:relay-to-folder refuses the move as wrong-team, so the desk stays on the relay, and the product"
+      + " file is never written: " + g.detail + ", sha " + (g.back ? "restored" : "differs"));
+    const h = await run(forkOnRelay, "939h");
+    check(!!h.x && h.x.ok === true,
+      "939h through the relay, a desk that catches up K1 handed to K2 and to K3 in one look follows neither, keeps its pin and team file, and"
+      + " says so: " + (h.x ? "synced " + h.x.synced + ", the K3 file by K1 " + h.x.thief + ", relay move to K2 " + h.x.moved + ", desk pin "
+      + h.x.pin + ", channel pin " + h.x.channelPin + ", fork " + h.x.fork + ", said " + h.x.said + ", team file rev " + h.x.rev : "") + (h.err ? ", " + h.err : ""));
+    const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
+    check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
+      + i.detail + ", sha " + (i.back ? "restored" : "differs"));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
@@ -8257,27 +8605,193 @@ check(retryPlant.turned && retryPlant.back,
     supersedes: bG1.id,
   });
   const rG2 = progK.acceptBlob({ blob: bG2, teamDoc: docK2, teamKey: KK });
+  /* The old key, after the handover, taking back the file the new lead now holds. */
+  const bG3 = B.seal({
+    relayTeamId: rtK, epoch: 1, teamKey: KK,
+    writer: { keyId: lK1.keyId, privateKey: lK1.privateKey },
+    path: "guide.ec", body: "guide v3\n", counter: 6, place: "root", kind: "file",
+    supersedes: bG2.id,
+  });
+  const rG3 = progK.acceptBlob({ blob: bG3, teamDoc: docK2, teamKey: KK });
 
   check(rK1.ok === true && rG1.ok === true && rK2.ok === true && progK.pinned().lead.keyId === lK2.keyId
     && rHeadK2.ok === true && newsK.edition === "Handover edition"
-    && rG2.ok === false && rG2.reason === "outside-place",
-    "932k a synced relay desk follows a handover: synced " + rK1.ok + ", handed " + rK2.ok
+    && rG2.ok === true && progK.readMirror("guide.ec") === "guide v2\n" && rG3.ok === false && rG3.reason === "outside-place",
+    "932k a synced relay desk follows a handover, the new lead's re-signed root file replaces the old key's, and the old key cannot take"
+    + " it back: synced " + rK1.ok + ", handed " + rK2.ok
     + ", pinned " + (progK.pinned() && progK.pinned().lead.keyId === lK2.keyId)
-    + ", head " + rHeadK2.ok + ", edition " + newsK.edition + ", other-refused " + rG2.reason);
+    + ", head " + rHeadK2.ok + ", edition " + newsK.edition + ", re-signed " + (rG2.ok ? "taken" : rG2.reason)
+    + ", the old key's " + (rG3.ok ? "taken" : rG3.reason));
 
   const pChainSame = await liftChannel("plant:chain-same", async mod => {
     const dirP = path.join(LAB, "plant-cs-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });
     const p = mod.createProgram({ io: mod.diskIO(dirP, mod.writeWhole), pin: pinE, save() {}, say() {} });
     p.loadTeamFile(docE);
-    const b1 = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: "guide.ec", body: "v1\n", counter: 10, place: "root", kind: "file" });
+    /* The writer change no handover covers: a key earlier in the chain taking over the pinned lead's file. */
+    const b1 = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: newLead.keyId, privateKey: newLead.privateKey }, path: "guide.ec", body: "v1\n", counter: 10, place: "root", kind: "file" });
     const r1 = p.acceptBlob({ blob: b1, teamDoc: docE, teamKey: KE });
     if (!r1.ok) return false;
-    const b2 = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: newLead.keyId, privateKey: newLead.privateKey }, path: "guide.ec", body: "v2\n", counter: 11, place: "root", kind: "file", supersedes: b1.id });
+    const b2 = B.seal({ relayTeamId: rtE, epoch: 1, teamKey: KE, writer: { keyId: oldLead.keyId, privateKey: oldLead.privateKey }, path: "guide.ec", body: "v2\n", counter: 11, place: "root", kind: "file", supersedes: b1.id });
     const r2 = p.acceptBlob({ blob: b2, teamDoc: docE, teamKey: KE });
     return r2.ok === true;
   });
-  check(pChainSame.turned && pChainSame.back, "932l lifting plant:chain-same accepts an unhanded writer change, and the product file is never written: "
+  check(pChainSame.turned && pChainSame.back, "932l lifting plant:chain-same lets a key earlier in the chain take over the pinned lead's file, and the product file is never written: "
     + pChainSame.detail + ", sha " + (pChainSame.back ? "restored" : "differs"));
+
+  /* ---- a lead key in two hands (board 931 (7), the test architect's condition 2 of 2026-11-01): a desk never follows a stolen
+     key into a fork, and says when it sees one. K1 handed to K2 and to K3 are two successors of one key. ---- */
+  async function liftBlobChannel(tag, fn) {
+    const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        turned = await fn(loadPlantedBlobChannel(lines.join("\n")));
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  /* A step as makeHandoverStep makes it, but signed by `by`, so one can name K1 as the signer without K1 having signed. */
+  function stepBy(teamId, from, to, by) {
+    const s = { format: 1, kind: "etiuda-team-handover", team: teamId, from: { keyId: from.keyId, public: from.pub },
+      to: { keyId: to.keyId, public: to.pub }, sig: { alg: "Ed25519", keyId: from.keyId } };
+    s.sig.value = signHex(by, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(s)]));
+    return s;
+  }
+  /* A desk pinned to K1 that has loaded the team's first file. `mod` is the channel module, the product's or a planted copy. */
+  function forkDesk(mod) {
+    const tmX = "t-" + hex(8), rtX = hex(16), k1 = keyPair(false), k2 = keyPair(false), k3 = keyPair(false);
+    const dirX = path.join(LAB, "ho-938m-" + hex(4));
+    fs.mkdirSync(dirX, { recursive: true });
+    const said = [], tolds = [];
+    let saved = null;
+    const open = () => mod.createProgram({ io: mod.diskIO(dirX, mod.writeWhole), pin: { teamId: tmX, rt: rtX, lead: { keyId: k1.keyId, public: k1.pub } },
+      save: s => { saved = JSON.parse(JSON.stringify(s)); }, load: () => saved, say: l => said.push(l), onFork: () => tolds.push(1) });
+    const prog = open();
+    const file = (lead, rev, steps) => teamDocWith(tmX, rtX, lead, 1, rev, [], steps);
+    prog.loadTeamFile(file(k1, 1));
+    return { tm: tmX, k1, k2, k3, prog, open, said, tolds, file, dir: dirX };
+  }
+  /* One after the other: the desk follows K1 to K2, then sees a genuine K1 to K3 file. */
+  function laterScene(mod) {
+    const d = forkDesk(mod);
+    const toK2 = d.prog.loadTeamFile(d.file(d.k2, 2, [makeHandoverStep(d.tm, d.k1, d.k2)]));
+    const k3File = d.file(d.k3, 3, [makeHandoverStep(d.tm, d.k1, d.k3)]);
+    const first = d.prog.loadTeamFile(k3File);
+    const saidFirst = d.said.length;
+    const again = d.prog.loadTeamFile(k3File);
+    const reopened = d.open().loadTeamFile(k3File);
+    return Object.assign(d, { toK2, first, again, reopened, saidFirst });
+  }
+  /* Two at once: both successors of K1 in one look. */
+  function twoScene(mod) {
+    const d = forkDesk(mod);
+    const docs = [d.file(d.k2, 2, [makeHandoverStep(d.tm, d.k1, d.k2)]), d.file(d.k3, 2, [makeHandoverStep(d.tm, d.k1, d.k3)])];
+    const mirrorBefore = d.prog.readMirror(C.TEAM_NAME);
+    const look = d.prog.loadTeamFiles(docs);
+    const saidFirst = d.said.length;
+    const again = d.prog.loadTeamFiles(docs.slice().reverse());
+    const reopened = d.open().loadTeamFiles(docs);
+    return Object.assign(d, { look, again, reopened, saidFirst, mirrorBefore, docs });
+  }
+  const sameIds = (v, a) => !!v && JSON.stringify(v.to.slice().sort()) === JSON.stringify(a.slice().sort());
+
+  const ls = laterScene(C);
+  check(ls.toK2.ok === true && ls.first.ok === false && ls.first.reason === "bad-signature" && ls.prog.pinned().lead.keyId === ls.k2.keyId
+    && ls.again.reason === "bad-signature" && ls.saidFirst === 1 && ls.said.length === 1 && /someone else's hands/.test(ls.said[0]) && ls.tolds.length === 1
+    && !!ls.prog.fork() && ls.prog.fork().kind === "later" && ls.prog.fork().from === ls.k1.keyId && sameIds(ls.prog.fork(), [ls.k3.keyId])
+    && ls.reopened.reason === "bad-signature" && ls.said.length === 1 && ls.tolds.length === 1,
+    "938m a desk that followed K1 to K2 and later sees a genuine K1 to K3 file stays on K2 and says the fork once, not at every look, a restart included: followed "
+    + ls.toK2.ok + ", K3 file " + ls.first.reason + ", pinned K2 " + (ls.prog.pinned().lead.keyId === ls.k2.keyId) + ", said " + ls.said.length + ", shown " + ls.tolds.length);
+
+  try {
+    const ts = twoScene(C);
+    check(ts.look.ok === false && ts.look.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId && ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore
+      && ts.again.reason === "fork" && ts.reopened.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId
+      && ts.saidFirst === 1 && ts.said.length === 1 && /two different new keys/.test(ts.said[0]) && ts.tolds.length === 1
+      && !!ts.prog.fork() && ts.prog.fork().kind === "two" && ts.prog.fork().from === ts.k1.keyId && sameIds(ts.prog.fork(), [ts.k2.keyId, ts.k3.keyId]),
+      "938n a desk pinned to K1 that sees K1 handed to K2 and to K3 in one look follows neither, keeps its pin and the file it has, and says so once: "
+      + ts.look.reason + ", pinned K1 " + (ts.prog.pinned().lead.keyId === ts.k1.keyId) + ", mirror kept " + (ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore) + ", said " + ts.said.length);
+  } catch (e) {
+    check(false, "938n a desk pinned to K1 that sees K1 handed to K2 and to K3 in one look follows neither, keeps its pin and the file it has, and says so once: " + (e && e.message ? e.message : String(e)));
+  }
+
+  /* A forged second successor: the K1 to K3 step is not K1's signature. */
+  try {
+    const fd = forkDesk(C);
+    const strangerF = keyPair(false);
+    const forged = stepBy(fd.tm, fd.k1, fd.k3, strangerF);
+    const fdK2 = fd.prog.loadTeamFile(fd.file(fd.k2, 2, [makeHandoverStep(fd.tm, fd.k1, fd.k2)]));
+    const fdForged = fd.prog.loadTeamFile(fd.file(fd.k3, 3, [forged]));
+    const fp = forkDesk(C);
+    const fpLook = fp.prog.loadTeamFiles([fp.file(fp.k2, 2, [makeHandoverStep(fp.tm, fp.k1, fp.k2)]), fp.file(fp.k3, 2, [stepBy(fp.tm, fp.k1, fp.k3, strangerF)])]);
+    check(fdK2.ok === true && fdForged.ok === false && fdForged.reason === "bad-signature" && fd.prog.pinned().lead.keyId === fd.k2.keyId
+      && fd.said.length === 0 && fd.tolds.length === 0 && fd.prog.fork() === null
+      && fpLook.ok === true && fp.prog.pinned().lead.keyId === fp.k2.keyId && fp.said.length === 0 && fp.tolds.length === 0 && fp.prog.fork() === null,
+      "938o a second successor whose step K1 did not sign shows no fork: refused as before " + fdForged.reason + ", said " + fd.said.length
+      + "; in one look with the genuine K1 to K2 file the desk follows K2 and says nothing, said " + fp.said.length);
+  } catch (e) {
+    check(false, "938o a second successor whose step K1 did not sign shows no fork: " + (e && e.message ? e.message : String(e)));
+  }
+
+  /* Two at once in one file: K1's two genuine steps in the handovers of a single team file, in either order. */
+  function oneFileTwo(mod, k3First) {
+    const d = forkDesk(mod);
+    const steps = [makeHandoverStep(d.tm, d.k1, d.k2), makeHandoverStep(d.tm, d.k1, d.k3)];
+    const r = d.prog.loadTeamFile(d.file(d.k3, 2, k3First ? steps.reverse() : steps));
+    return Object.assign(d, { r });
+  }
+  try {
+    const of2 = [oneFileTwo(C, false), oneFileTwo(C, true)];
+    check(of2.every(d => d.r.ok === false && d.r.reason === "fork" && d.prog.pinned().lead.keyId === d.k1.keyId && d.said.length === 1
+        && /two different new keys/.test(d.said[0]) && d.tolds.length === 1 && !!d.prog.fork() && d.prog.fork().kind === "two"),
+      "938u a desk pinned to K1 given one team file whose handovers hand K1 to K2 and to K3 follows neither, in either order of the steps, and says so once: "
+      + of2.map(d => d.r.reason + ", pinned K1 " + (d.prog.pinned().lead.keyId === d.k1.keyId) + ", said " + d.said.length).join("; "));
+  } catch (e) {
+    check(false, "938u a desk pinned to K1 given one team file whose handovers hand K1 to K2 and to K3 follows neither, in either order of the steps, and says so once: " + (e && e.message ? e.message : String(e)));
+  }
+  const pForkFile = await liftChannel("plant:fork-file-two", mod => {
+    const d = oneFileTwo(mod, true);
+    return d.r.ok === true && d.prog.pinned().lead.keyId === d.k3.keyId;
+  });
+  check(pForkFile.turned && pForkFile.back, "938v lifting plant:fork-file-two follows one file that hands K1 to two keys, and the product file is never written: "
+    + pForkFile.detail + ", sha " + (pForkFile.back ? "restored" : "differs"));
+
+  const pForkIn = await liftBlobChannel("plant:fork-in", mod => {
+    const a = laterScene(mod), b = twoScene(mod);
+    return a.said.length === 0 && a.prog.fork() === null && b.said.length === 0 && b.prog.pinned().lead.keyId !== b.k1.keyId;
+  });
+  check(pForkIn.turned && pForkIn.back, "938p lifting plant:fork-in in blob.cjs shows no fork, so the desk says nothing of K1 handed on twice and follows one of two successors, and the product file is never written: "
+    + pForkIn.detail + ", sha " + (pForkIn.back ? "restored" : "differs"));
+  const pForkLater = await liftChannel("plant:fork-later", mod => {
+    const a = laterScene(mod);
+    return a.first.reason === "bad-signature" && a.said.length === 0 && a.prog.fork() === null;
+  });
+  check(pForkLater.turned && pForkLater.back, "938q lifting plant:fork-later leaves a genuine K1 to K3 file refused without a word, and the product file is never written: "
+    + pForkLater.detail + ", sha " + (pForkLater.back ? "restored" : "differs"));
+  const pForkSaid = await liftChannel("plant:fork-said", mod => {
+    const a = laterScene(mod);
+    return a.prog.fork() !== null && a.said.length === 0;
+  });
+  check(pForkSaid.turned && pForkSaid.back, "938r lifting plant:fork-said sees the fork and says nothing of it, and the product file is never written: "
+    + pForkSaid.detail + ", sha " + (pForkSaid.back ? "restored" : "differs"));
+  const pForkOnce = await liftChannel("plant:fork-once", mod => {
+    const a = laterScene(mod);
+    return a.said.length > 1 && a.tolds.length > 1;
+  });
+  check(pForkOnce.turned && pForkOnce.back, "938s lifting plant:fork-once says the same fork at every look, and the product file is never written: "
+    + pForkOnce.detail + ", sha " + (pForkOnce.back ? "restored" : "differs"));
+  const pForkTwo = await liftChannel("plant:fork-two", mod => {
+    const b = twoScene(mod);
+    return b.prog.pinned().lead.keyId !== b.k1.keyId;
+  });
+  check(pForkTwo.turned && pForkTwo.back, "938t lifting plant:fork-two follows one of two successors of K1 seen in one look, and the product file is never written: "
+    + pForkTwo.detail + ", sha " + (pForkTwo.back ? "restored" : "differs"));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
