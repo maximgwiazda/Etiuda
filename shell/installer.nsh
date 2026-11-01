@@ -43,6 +43,15 @@
   ${EndIf}
   !endif
 
+  # THE etiuda: LINK, so an invitation opened before the desk's first start still reaches it: the three values
+  # app.setAsDefaultProtocolClient("etiuda") writes at that start (registerEtiudaLink in shell/main.js), and under
+  # HKCU as it writes them, whatever the install mode. The desk is the build that registers the .ec type.
+  !ifmacrodef registerFileAssociations
+  WriteRegStr HKCU "Software\Classes\etiuda" "" "URL:etiuda" # plant:f6-link-name
+  WriteRegStr HKCU "Software\Classes\etiuda" "URL Protocol" "" # plant:f6-link-flag
+  WriteRegStr HKCU "Software\Classes\etiuda\shell\open\command" "" `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"` # plant:f6-link-open
+  !endif
+
   # THE UPDATER'S CACHE, which nothing here will ever spend: installApplicationFiles copies the
   # whole setup.exe into LOCALAPPDATA for electron-updater, this product has no auto-update, and
   # electron-builder offers no switch to stop the copy. So it is taken back at install rather than
@@ -56,4 +65,65 @@
   ${if} $installMode == "all"
     SetShellVarContext all
   ${endif}
+!macroend
+
+# ETIUDA IS ASKED TO CLOSE, NEVER STOPPED. taskkill without /F sends its window the close the window's own X sends, which
+# asks the person first while a conversation is in progress, and the installer waits and says so. Still open after that,
+# it asks for Retry; a silent install gives up there and leaves the installed version as it was.
+!macro customCheckAppRunning
+  Push $R7
+  Push $R8
+  Push $R9
+  ${If} $LANGUAGE == 1045
+    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: jeśli trwa rozmowa, Etiuda najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
+  ${Else}
+    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: while a conversation is in progress, Etiuda asks first. The installation carries on once it has closed; if it stays open, close it by hand and press Retry."
+  ${EndIf}
+  StrCpy $R7 0
+  ${Do}
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    Pop $R8
+    ${If} $R8 != 0
+      ${ExitDo}
+    ${EndIf}
+    ${If} $R7 == 0
+      DetailPrint "$R9"
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+      Pop $R8
+    ${EndIf}
+    IntOp $R7 $R7 + 1
+    ${If} $R7 > 20
+      ${If} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$R9" /SD IDCANCEL IDRETRY`
+        StrCpy $R7 0
+      ${Else}
+        SetErrorLevel 2
+        Quit ; plant:installer-gives-up
+      ${EndIf}
+    ${Else}
+      Sleep 1000
+    ${EndIf}
+  ${Loop}
+  Pop $R9
+  Pop $R8
+  Pop $R7
+!macroend
+
+# AN UPDATE LEAVES THE INSTALLED FILES WHERE THEY ARE: the new installer copies over them only once its own extraction to a
+# temporary folder has finished, so a run cut short before then leaves the old version whole. A plain uninstall removes
+# the folder, as electron-builder's own step does.
+!macro customRemoveFiles
+  ${IfNot} ${isUpdated} ; plant:update-keeps-files
+    SetOutPath $TEMP
+    RMDir /r $INSTDIR
+  ${EndIf}
+!macroend
+
+!macro customUnInstall
+  # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
+  !ifmacrodef unregisterFileAssociations
+  ReadRegStr $0 HKCU "Software\Classes\etiuda\shell\open\command" ""
+  ${If} $0 == `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"`
+    DeleteRegKey HKCU "Software\Classes\etiuda" # plant:f6-link-gone
+  ${EndIf}
+  !endif
 !macroend

@@ -55,13 +55,18 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 341;
+const EXPECTED = 353;
 
-let asserted = 0, failed = 0;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-channel-"));
@@ -2827,6 +2832,14 @@ try {
       + (boxKept ? "kept" : "not kept") + ", request " + (asked ? "sent" : "not sent") + " holding " + (heldNone ? "no team file" : "a team file")
       + ", at the lead " + atLead + ", the invitation's copy " + (copyGone ? "let go" : "still served") + ", then "
       + (joined ? "edition 1 loaded" : "nothing loaded: " + G.said.filter(l => l.indexOf("relay") >= 0).slice(-2).join(" / ")));
+    /* The first day's F3 at admission: the same desk, the invitation's copy never read, names the team's catalog to its page once
+       it holds the key, so an empty desk opens it with nothing pressed (the page's half is tests/team-join.mjs 987e). */
+    let namedG = null;
+    await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
+      const v = await G.ask("etiuda:team-join", "view"); if (v && v.opens) namedG = v; return !!namedG; }, 8000);
+    check(!!namedG && namedG.opens.team === TEAM4 && namedG.opens.file === "board.ec",
+      "987m admitted with no invitation's copy, the relay desk's view names the team's catalog for its page to open: "
+      + (namedG ? JSON.stringify(namedG.opens) : "nothing named"));
     const g = G.api.relayRun();
     if (g) await g.stop();
     await studio4.stop();
@@ -5019,7 +5032,8 @@ try {
     fs.mkdirSync(s.ud, { recursive: true });
     fs.mkdirSync(s.share, { recursive: true });
     fs.writeFileSync(path.join(s.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: s.share, eUiLang: "en" } }), "utf8");
-    s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
+    /* An object is hooks for loadDesk, or { src } for a planted shell source (the leave route's 987v). */
+    s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? (typeof app.src === "string" ? app.src : app) : { app }) : undefined);
     s.stop = async () => {
       deskTransport.down = false;
       try { await s.studio.stop(); } catch { /* stopped */ }
@@ -5635,6 +5649,179 @@ try {
     const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
     check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
       + i.detail + ", sha " + (i.back ? "restored" : "differs"));
+  }
+  /* ---- 987t, It does not match, once confirmed, leaves the team as Settings' Leave this team does (the ruling of 2026-11-01
+     06:13, the test architect's leg of 06:14): a relay desk joined by invitation, its page the engine's own team-join.js over
+     its shell, confirms It does not match and leaves, keys and pin forgotten and no bar; a later invitation for the same team
+     asks again and, admitted, shows the lead's key; It does not match leaves again, and It matches joins. `M` is the page
+     module, `app` what relayDeskScene loads. ---- */
+  async function leaveRouteScene(tag, M, app) {
+    const out = { synced: false };
+    const s = await relayDeskScene(tag, app);
+    globalThis.window = globalThis.window || {};
+    globalThis.document = globalThis.document || {};
+    const docWas = { querySelector: document.querySelector, querySelectorAll: document.querySelectorAll, body: document.body };
+    let hooksWas = null;
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const ops = [];
+      let pasted = { value: "" };
+      document.documentElement = document.documentElement || {};
+      document.body = document.body || { classList: { contains: () => false, toggle() {}, add() {}, remove() {} }, appendChild: el => el };
+      document.querySelectorAll = () => [];
+      document.querySelector = sel => (sel === "[data-join-paste]" ? pasted : null);
+      document.addEventListener = document.addEventListener || (() => {});
+      document.removeEventListener = document.removeEventListener || (() => {});
+      window.addEventListener = window.addEventListener || (() => {});
+      window.removeEventListener = window.removeEventListener || (() => {});
+      window.E_HOST = { onTeamJoin: () => {}, teamJoin: (op, file, name, four) => { ops.push(op); return s.Dk.ask("etiuda:team-join", op, file, name, four); } };
+      const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+      const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
+      const AS = await import(pathToFileURL(path.join(ROOT, "src", "modules", "app-state.js")).href);
+      HK.hooks.render = () => {};
+      hooksWas = { load: HK.hooks.loadCatalogFromFolder, hooks: HK.hooks };
+      HK.hooks.loadCatalogFromFolder = () => {};
+      AS.setCards([]);
+      ST.lsSet("eUiLang", "en");
+      const el = (attrs, value) => ({ value: value || "", hasAttribute: a => Object.prototype.hasOwnProperty.call(attrs, a),
+        getAttribute: a => (Object.prototype.hasOwnProperty.call(attrs, a) ? attrs[a] : null) });
+      const press = act => { const b = el({ "data-join": act }); M.wireTeamJoinEmpty({ querySelectorAll: () => [b] }); return Promise.resolve(b.onclick && b.onclick()); };
+      const refresh = async () => { M.wireTeamJoin(); await wait(40); return shownText(M.teamJoinEmptyHtml()); };
+      const key1 = s.keys.get(1);
+      let rev = 2;
+      const held = () => {
+        const env = s.Dk.envelope();
+        return { pin: !!(env.teamPins || {})[s.team], keys: !!(env.teamKeys || {})[s.team], left: !!(env.teamLeft || {})[s.team],
+          barred: (env.teamBarred || []).indexOf(s.team) >= 0, seen: (env.teamSeen || []).indexOf(s.team) >= 0 };
+      };
+      const leadOf = async () => {
+        const v = await s.Dk.ask("etiuda:team-join", "leads");
+        return (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === s.team)[0] || null;
+      };
+      /* The key card: the lead's key in four groups, It matches and It does not match. */
+      const keyCard = async () => {
+        const page = await refresh(), l = await leadOf();
+        const groups = l && l.print ? M.leadKeyText(l.print) : "";
+        return !!groups && page.indexOf("You are on the team") >= 0 && page.indexOf(groups) >= 0
+          && page.indexOf('data-join="seen"') >= 0 && page.indexOf('data-join="forget"') >= 0;
+      };
+      /* It does not match, then the confirmation's Leave this team: what the shell was sent, and what the desk keeps after. */
+      const mismatch = async () => {
+        const mark = ops.length;
+        await press("forget");
+        const asked = shownText(M.teamJoinEmptyHtml()).indexOf("Leave this team on this desk?") >= 0;
+        const first = ops.slice(mark).filter(o => o === "leave" || o === "forget").length;
+        await press("forget");
+        await wait(50);
+        return { asked, first, sent: ops.slice(mark).filter(o => o === "leave" || o === "forget"), after: held() };
+      };
+      /* The same team invites the desk again: pasted, read and taken on the page, and admitted by the lead over the relay. */
+      const invite = async () => {
+        R.clock.now += 1;
+        const inv = await relayInviteOn(s.rt, s.team);
+        s.invs.push({ id: inv.inv, key: C.inviteSealKey(inv.secret) });
+        await s.studio.kick(); await s.studio.idle();
+        M.openJoinPaste();
+        pasted = el({ "data-join-paste": "" }, inv.text);
+        await press("read");
+        const offer = M.inviteHeld();
+        const confirm = shownText(M.teamJoinEmptyHtml());
+        const r = { offered: !!(offer && offer.offer), again: confirm.indexOf("Join it again?") >= 0, joined: false, card: false };
+        if (!r.offered) { await press("back"); return r; }
+        const joinRel = "desks/" + s.me.id + "/join.json", was = read(s.sMirror, joinRel);
+        await press("invite");
+        await until(async () => { await s.pump(); const now = read(s.sMirror, joinRel); return !!now && now !== was; }, 8000);
+        rev += 1;
+        put(s.sMirror, C.TEAM_NAME, s.doc({ rev, roster: [s.entry(key1, 1)] }));
+        await s.studio.kick(); await s.studio.idle();
+        r.joined = await until(async () => {
+          await s.pump();
+          const h = held(), here = s.Dk.api.relayHere();
+          return h.pin && h.keys && !!here && here.joining === false;
+        }, 8000);
+        s.invs.length = 0;
+        r.card = r.joined && await keyCard();
+        return r;
+      };
+      out.card0 = await keyCard();
+      out.leave1 = await mismatch();
+      out.invite1 = await invite();
+      out.leave2 = out.invite1.card ? await mismatch() : null;
+      out.invite2 = out.leave2 ? await invite() : null;
+      if (out.invite2 && out.invite2.card) {
+        const mark = ops.length;
+        await press("seen");
+        const page = await refresh();
+        out.match = { sent: ops.slice(mark).filter(o => o !== "state" && o !== "held"), after: held(),
+          card: page.indexOf("You are on the team") >= 0, catalog: factsOf(s.Dk.api.readCatalog() || "") === 1 };
+      }
+      const left = x => !!x && x.asked && x.first === 0 && x.sent.length === 1 && x.sent[0] === "leave"
+        && !x.after.pin && !x.after.keys && x.after.left;
+      const back = x => !!x && x.offered && x.again && x.joined && x.card;
+      out.ok = out.card0 && left(out.leave1) && back(out.invite1) && left(out.leave2) && back(out.invite2)
+        && !!out.match && out.match.sent.join() === "seen" && out.match.after.pin && out.match.after.keys && out.match.after.seen
+        && !out.match.after.barred && !out.match.after.left && !out.match.card && out.match.catalog;
+      return out;
+    } finally {
+      document.querySelector = docWas.querySelector;
+      document.querySelectorAll = docWas.querySelectorAll;
+      document.body = docWas.body;
+      if (hooksWas) hooksWas.hooks.loadCatalogFromFolder = hooksWas.load;
+      await s.stop();
+    }
+  }
+  const leaveText = x => {
+    if (!x) return "no scene";
+    const lv = v => (v ? "asked " + v.asked + ", at the first press " + v.first + ", sent " + (v.sent.join("+") || "nothing")
+      + ", pin " + (v.after.pin ? "kept" : "gone") + ", keys " + (v.after.keys ? "kept" : "gone") + ", leave " + (v.after.left ? "kept" : "none")
+      + ", bar " + (v.after.barred ? (v.after.left ? "with a leave" : "with no leave") : "none") : "not reached");
+    const iv = v => (v ? (v.offered ? "offered" + (v.again ? " as Join it again" : " without Join it again") : "refused") + ", admitted " + v.joined
+      + ", key shown " + v.card : "not reached");
+    return "synced " + x.synced + "; key shown " + x.card0 + "; first leave: " + lv(x.leave1) + "; invited again: " + iv(x.invite1)
+      + "; second leave: " + lv(x.leave2) + "; invited a third time: " + iv(x.invite2) + "; It matches: "
+      + (x.match ? "sent " + x.match.sent.join("+") + ", pin " + x.match.after.pin + ", seen " + x.match.after.seen + ", bar " + x.match.after.barred
+        + ", key card " + (x.match.card ? "still shown" : "gone") + ", catalog " + (x.match.catalog ? "reads" : "does not read") : "not reached");
+  };
+  {
+    const TJm = await import(pathToFileURL(path.join(ROOT, "src", "modules", "team-join.js")).href + "?leave-route");
+    const t = await run(leaveRouteScene, "987t", TJm);
+    check(!!t.x && t.x.ok === true,
+      "987t It does not match, once confirmed, leaves the team as Settings' Leave this team does: keys and pin forgotten, no bar; a later"
+      + " invitation for the same team asks again and, admitted, shows the lead's key; It does not match leaves again, and It matches joins: "
+      + leaveText(t.x) + (t.err ? ", " + t.err : ""));
+    if (PLANTS_OFF) skip("987u lifting plant:mismatch-leaves leaves the team on the desk after the confirmation");
+    else {
+      const file = path.join(ROOT, "src", "modules", "team-join.js"), before = fs.readFileSync(file);
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = before.toString("utf8").split(/\n/), at = lines.findIndex(l => l.indexOf("plant:mismatch-leaves") >= 0);
+        if (at >= 0) {
+          lines.splice(at, 1);
+          const dir = fs.mkdtempSync(path.join(LAB, "leave-route-plant-"));
+          const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+          fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+          const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+          const u = await run(leaveRouteScene, "987u", planted);
+          turned = !!u.x && u.x.synced && !!u.x.leave1 && u.x.leave1.sent.length === 0 && u.x.leave1.after.pin;
+          detail = leaveText(u.x) + (u.err ? ", " + u.err : "");
+        }
+      } catch (e) {
+        detail = e && e.stack ? e.stack : String(e);
+      }
+      check(turned && fs.readFileSync(file).equals(before), "987u lifting plant:mismatch-leaves, the confirmation's Leave this team sends nothing"
+        + " and the team stays on the desk (FAIL 987t), and the product file is never written: " + detail);
+    }
+    if (PLANTS_OFF) skip("987v lifting plant:leave-remembers bars the team, so a later invitation is refused");
+    else {
+      const v = await liftDesk("plant:leave-remembers", async next => {
+        const x = await run(leaveRouteScene, "987v", TJm, { src: next });
+        return !!x.x && x.x.synced && !!x.x.leave1 && x.x.leave1.sent.join() === "leave" && x.x.leave1.after.barred
+          && !x.x.leave1.after.left && !!x.x.invite1 && !x.x.invite1.offered;
+      });
+      check(v.turned && v.back, "987v lifting plant:leave-remembers, the leave keeps no date, so the team stays barred and a later invitation"
+        + " is refused (FAIL 987t), and the product file is never written: " + v.detail + ", sha " + (v.back ? "restored" : "differs"));
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
@@ -8285,15 +8472,15 @@ function relay9() {
   };
   const liveBy = keyId => { const s = store9(); return s ? s.dump().filter(([k, v]) => k.startsWith("blob:") && JSON.parse(v).writer === keyId && !JSON.parse(v).del).length : 0; };
   const progs = [];
-  const lead9 = (mod, name) => {
+  const lead9 = (mod, name, more) => {
     const log = [];
-    const p = program(name, LEAD, "root", { mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
-      keyFor: e => K9.get(e) || null, sealEpoch: () => Math.max(...K9.keys()), agree: agreeWith(LB9) });
+    const p = program(name, LEAD, "root", Object.assign({ mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
+      keyFor: e => K9.get(e) || null, sealEpoch: () => Math.max(...K9.keys()), agree: agreeWith(LB9) }, more || {}));
     progs.push(p);
     return Object.assign(p, { log });
   };
   /* `cut`, where given: once armed, the first call after a session opens throws, as a computer shut down there would leave it. */
-  const desk9 = (mod, name, d, cut) => {
+  const desk9 = (mod, name, d, cut, more) => {
     const held = new Map([[1, K9.get(1)]]), mirror = path.join(LAB, name), log = [], base9 = way(log);
     const request = async (...a) => {
       if (cut && cut.armed && cut.seen) { cut.done = true; throw new Error("this computer was shut down"); }
@@ -8301,7 +8488,7 @@ function relay9() {
       if (cut && cut.armed && a[0] === "POST" && /\/session$/.test(String(a[1])) && res.status === 200) cut.seen = true;
       return res;
     };
-    const p = program(name, d.k, "desk:" + d.k.keyId, { mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
+    const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({ mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
       onTeam: () => {
@@ -8310,7 +8497,7 @@ function relay9() {
         const mine = (doc && Array.isArray(doc.roster) ? doc.roster : []).find(r => r && r.desk && r.desk.id === d.k.keyId);
         const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, doc.epoch, d.k.keyId) : null;
         if (key) held.set(doc.epoch, key);
-      } });
+      } }, more || {}));
     progs.push(p);
     return Object.assign(p, { held, log });
   };
@@ -8415,6 +8602,10 @@ async function scene991(mod, swept, noStamp) {
     if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
     if (noStamp) X.unstamp();
     const first = X.lead9(mod, "991-first-" + X.tag), second = X.lead9(mod, "991-second-" + X.tag);
+    /* A start over is the program forgetting the relay; a whole list after a long absence (1162) is not one. */
+    let over = 0;
+    const forget = second.prog.forgetRelay;
+    second.prog.forgetRelay = () => { over += 1; return forget(); };
     put(first.mirror, C.TEAM_NAME, X.doc9(1, []));
     put(first.mirror, "lane.ec", ED9[0]);
     first.ch.start();
@@ -8445,7 +8636,7 @@ async function scene991(mod, swept, noStamp) {
     const calls = second.log.slice(from);
     const since0 = calls.filter(c => c === "GET since/0").length, puts = calls.filter(c => c.indexOf("PUT ") === 0).length;
     const kept = X.leadFiles()["lane.ec"] === ED9[1] && read(first.mirror, "lane.ec") === ED9[1] && read(second.mirror, "lane.ec") === ED9[1];
-    return { both, published, kept, since0, puts, swept: !!swept };
+    return { both, published, kept, since0, puts, over, swept: !!swept };
   } finally {
     await X.done();
   }
@@ -8541,19 +8732,19 @@ try {
     + ", sha " + (gone.back ? "restored" : "differs"));
 
   const r1 = await scene991(C, false);
-  check(r1.both && r1.published && r1.kept && r1.since0 === 0 && r1.puts === 0,
+  check(r1.both && r1.published && r1.kept && r1.over === 0 && r1.since0 === 1 && r1.puts === 0,
     "991a the lead's second computer, back after the old sweep day of a team renewed and never swept, hears the copy's stamp unchanged, does not start over and"
     + " takes the newer edition: both had edition one " + r1.both + ", the first published edition two " + r1.published + ", edition two on the relay"
-    + " and on both computers " + r1.kept + ", lists from the start " + r1.since0 + ", uploads " + r1.puts);
+    + " and on both computers " + r1.kept + ", starts over " + r1.over + ", lists from the start " + r1.since0 + " (the whole list after its absence), uploads " + r1.puts);
   const r2 = await scene991(C, true);
-  check(r2.both && r2.published && r2.kept && r2.since0 === 1 && r2.puts === 0,
+  check(r2.both && r2.published && r2.kept && r2.over === 1 && r2.since0 === 1 && r2.puts === 0,
     "991b the lead's second computer, back after a sweep and the first's renewal, starts over with the new copy and still takes the newer edition,"
     + " sending nothing older: both had edition one " + r2.both + ", the first published edition two " + r2.published + ", edition two on the relay"
-    + " and on both computers " + r2.kept + ", lists from the start " + r2.since0 + ", uploads " + r2.puts);
+    + " and on both computers " + r2.kept + ", starts over " + r2.over + ", lists from the start " + r2.since0 + ", uploads " + r2.puts);
   const r3 = await scene991(C, false, true);
-  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false, true); return x.since0 !== 1; });
-  check(r3.kept && r3.since0 === 1 && r3.puts === 0 && known.turned && known.back, "991c with a relay from before the copy's stamp, the second computer"
-    + " asks the relay's list once and keeps its place (edition two everywhere " + r3.kept + ", lists from the start " + r3.since0 + ", uploads " + r3.puts
+  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false, true); return x.over !== 0; });
+  check(r3.kept && r3.over === 0 && r3.since0 === 2 && r3.puts === 0 && known.turned && known.back, "991c with a relay from before the copy's stamp, the second computer"
+    + " asks the relay's list once and keeps its place (edition two everywhere " + r3.kept + ", starts over " + r3.over + ", lists from the start " + r3.since0 + ", the question and the whole list after its absence, uploads " + r3.puts
     + "); lifting plant:remade-known, it starts over with a copy the relay kept: " + known.detail + ", sha " + (known.back ? "restored" : "differs"));
   const owe = await swapChannel("plant:remade-owe",
     "      const owedAgain = m => { for (const k of Object.keys(m)) if (!m[k].del) m[k] = Object.assign({}, m[k], { sha: null }); };",
@@ -9166,6 +9357,126 @@ check(retryPlant.turned && retryPlant.back,
     + pForkTwo.detail + ", sha " + (pForkTwo.back ? "restored" : "differs"));
 }
 
+/* ---- 1162: a computer back after the relay's deletion keep (Argon's relay review of 2026-11-01, finding 5, the test architect's
+   condition). The relay keeps a deletion 30 days, then lists neither the file nor its deletion. On day 1 the lead retracts two
+   catalogs and a joining desk withdraws its ask; the second computer of the lead has edited one of those catalogs while off. A
+   desk back on day 11 learns by the deletion records, as it always has, with no whole list. A desk and the lead's second computer
+   back on day 32 list the whole team and drop what it no longer names: the desk keeps the live catalog and its own note, and the
+   second computer keeps its edit, which goes up, and sends no deletion back. ---- */
+async function scene1162(mod) {
+  const X = relay9(), { tm, BASE, DAYMS } = X;
+  const DK = { k: keyPair(true), box: boxPair() }, DW = { k: keyPair(true), box: boxPair() }, NEW = { k: keyPair(true), box: boxPair() };
+  const inv = hex(16), token = hex(32), seal = mod.inviteSealKey(hex(16));
+  const RETIRED = "{\"note\":\"Lane Board retired\"}\n", NOTES = "{\"note\":\"Lane Board notes\"}\n";
+  const EDIT = "{\"note\":\"Lane Board notes, edited on the second computer\"}\n", ASK = "{\"kind\":\"etiuda-join-request\"}\n";
+  const MINE = "A note of the desk's own.\n", askRel = "desks/" + NEW.k.keyId + "/join.json", mineRel = "desks/" + DK.k.keyId + "/note.ec";
+  /* The lead's deletions the relay still serves: a deletion past its 30 days stays a row until a list buries it, and is served no more. */
+  const leadDels = () => { const s = X.store9(); return s ? s.dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k, m]) => k.startsWith("blob:") && m.writer === LEAD.keyId && m.del
+    && X.RS.clock.now - m.at <= 30 * DAYMS).length : 0; };
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    const enrolled = await X.enrol9(1, DK, DW);
+    const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }], at = X.RS.clock.now;
+    const reg = await X.admin9("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t: at, sig: signHex(LEAD, core.invitesBytes(tm.rt, at, add, [])) });
+    if (made.status !== 200 || enrolled.status !== 200 || reg.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json, reg.json]));
+    const inviteKeys = () => [{ id: inv, key: seal }];
+    const lead = X.lead9(mod, "1162-lead-" + X.tag, { inviteKeys }), second = X.lead9(mod, "1162-second-" + X.tag, { inviteKeys });
+    const dk = X.desk9(mod, "1162-away-" + X.tag, DK), dw = X.desk9(mod, "1162-week-" + X.tag, DW);
+    const nd = X.desk9(mod, "1162-new-" + X.tag, NEW, null, { invite: () => ({ inv, token, seal }) });
+    put(lead.mirror, C.TEAM_NAME, X.doc9(1, [DK, DW]));
+    put(lead.mirror, "lane.ec", ED9[0]);
+    put(lead.mirror, "retired.ec", RETIRED);
+    put(lead.mirror, "notes.ec", NOTES);
+    lead.ch.start();
+    await settle(lead);
+    put(nd.mirror, askRel, ASK);
+    for (const p of [second, dk, dw, nd]) p.ch.start();
+    await settle(nd, lead, second, dk, dw);
+    put(dk.mirror, mineRel, MINE);
+    await settle(dk, lead, second, dw);
+    const before = read(second.mirror, askRel) === ASK && read(second.mirror, "retired.ec") === RETIRED && read(second.mirror, "notes.ec") === NOTES
+      && read(dk.mirror, "retired.ec") === RETIRED && read(dw.mirror, "retired.ec") === RETIRED && read(lead.mirror, askRel) === ASK;
+    await second.ch.stop();
+    await dk.ch.stop();
+    await dw.ch.stop();
+
+    X.at(BASE + DAYMS);
+    fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
+    fs.unlinkSync(path.join(lead.mirror, "notes.ec"));
+    fs.unlinkSync(path.join(nd.mirror, ...askRel.split("/")));
+    await settle(nd, lead);
+    await settle(nd, lead);
+    const retracted = read(lead.mirror, askRel) === null && !X.leadFiles()["retired.ec"] && !X.leadFiles()["notes.ec"];
+    put(second.mirror, "notes.ec", EDIT);
+
+    X.at(BASE + 11 * DAYMS);
+    const wFrom = dw.log.length;
+    dw.ch.start();
+    await settle(dw);
+    const week = { retired: read(dw.mirror, "retired.ec"), lane: read(dw.mirror, "lane.ec") === ED9[0],
+      whole: dw.log.slice(wFrom).filter(c => c === "GET since/0").length };
+
+    X.at(BASE + 32 * DAYMS);
+    const delsBefore = leadDels(), kFrom = dk.log.length;
+    dk.ch.start();
+    second.ch.start();
+    await settle(dk, second);
+    await settle(dk, second);
+    const desk = { retired: read(dk.mirror, "retired.ec"), lane: read(dk.mirror, "lane.ec") === ED9[0], mine: read(dk.mirror, mineRel) === MINE,
+      whole: dk.log.slice(kFrom).filter(c => c === "GET since/0").length };
+    const files = X.leadFiles();
+    const two = { retired: read(second.mirror, "retired.ec"), ask: read(second.mirror, askRel), notes: read(second.mirror, "notes.ec") === EDIT,
+      lane: read(second.mirror, "lane.ec") === ED9[0], up: files["notes.ec"] === EDIT, back: !files["retired.ec"], dels: leadDels() - delsBefore };
+    return {
+      setup: before && retracted,
+      week: week.retired === null && week.lane && week.whole === 0,
+      desk: desk.retired === null && desk.lane && desk.mine && desk.whole >= 1,
+      two: two.retired === null && two.ask === null && two.notes && two.lane && two.up && two.back && two.dels === 0,
+      detail: JSON.stringify({ before, retracted, week, desk, two }),
+    };
+  } finally {
+    await X.done();
+  }
+}
+/* The team file is never dropped by that list: a program whose record names a team file and a catalog the list does not name
+   drops the catalog alone. */
+function teamKept(mod) {
+  const TEXT = "{\"kind\":\"etiuda-team\"}\n", LANE = "{\"note\":\"Lane Board\"}\n";
+  const files = new Map([[C.TEAM_NAME, Buffer.from(TEXT)], ["lane.ec", Buffer.from(LANE)]]);
+  const io = { read: r => (files.has(r) ? files.get(r) : null), write: (r, t) => files.set(r, Buffer.from(t)), remove: r => files.delete(r), list: () => [...files.keys()] };
+  const row = (body, counter) => ({ writer: LEAD.keyId, epoch: 1, counter, id: hex(16), at: 1, sha: sha(Buffer.from(body)) });
+  const state = { kind: "etiuda-relay-channel", v: 1, seq: 9, applied: { [C.TEAM_NAME]: row(TEXT, 1), "lane.ec": row(LANE, 2) } };
+  const prog = mod.createProgram({ io, load: () => state });
+  const dropped = prog.reconcile([]);
+  return { ok: dropped.length === 1 && dropped[0] === "lane.ec" && files.has(C.TEAM_NAME) && !files.has("lane.ec"), dropped };
+}
+try {
+  const s = await scene1162(C);
+  check(s.setup && s.desk, "1162a a desk back on day 32 lists the whole team and drops the catalog the lead retracted on day 1, whose deletion the relay"
+    + " has let go, and keeps the live catalog and its own note: " + s.detail);
+  check(s.setup && s.two, "1162b the lead's second computer back on day 32 drops the retracted catalog and the ask a joining desk withdrew, keeps the"
+    + " catalog it edited while off, which goes up, and sends no deletion back: " + s.detail);
+  check(s.setup && s.week, "1162c a desk back on day 11, inside the keep, learns of the retraction by its deletion record and lists nothing whole: " + s.detail);
+  const t = teamKept(C);
+  check(t.ok, "1162d that list never drops the team file: a record naming a team file and a catalog the list does not name drops the catalog alone: "
+    + JSON.stringify(t.dropped));
+  const lifts = [
+    ["plant:listed-behind", "1162a", "the desk back on day 32 keeps the retracted catalog", async mod => !(await scene1162(mod)).desk],
+    ["plant:reconcile-edit", "1162b", "the second computer's edit is dropped with the retracted catalogs", async mod => !(await scene1162(mod)).two],
+    ["plant:reconcile-sent", "1162b", "the second computer sends a deletion of the retracted catalog back", async mod => !(await scene1162(mod)).two],
+    ["plant:reconcile-team", "1162d", "the team file is dropped", async mod => !teamKept(mod).ok],
+  ];
+  let n = 0;
+  for (const [tag, leg, say, turns] of lifts) {
+    const p = await liftChannel(tag, turns);
+    check(p.turned && p.back, "1162" + String.fromCharCode(101 + n++) + " lifting " + tag + " turns " + leg + " red (" + say + "), and the product file is never written: "
+      + p.detail.split("\n")[0] + ", sha " + (p.back ? "restored" : "differs"));
+  }
+} catch (e) {
+  check(false, "harness (the leg 1162a): " + (e && e.stack ? e.stack : e));
+}
+
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
 {
   const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
@@ -9199,9 +9510,9 @@ check(retryPlant.turned && retryPlant.back,
   }
   check(productWrites.length === 0 && changed.length === 0, "943b no leg wrote a product file: " + productWrites.length + " write(s) into the repository" + (productWrites.length ? " (" + [...new Set(productWrites)].join(" ") + ")" : "") + ", and every file under shell/relay/, shell/main.js and src/modules/settings.js ends with the sha256 it began with" + (changed.length ? "; changed: " + changed.join(" ") : ""));
 }
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

@@ -3469,6 +3469,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* A WINDOW OPENED OVER THE PAGE takes the front, and the bubble waits behind it, under the modals
    (200); the tour's own dialog steps keep it in front. */
 #tourRoot.behind{z-index:190}
+/* THE TEAM'S JOIN TAKES THE TOUR'S PLACE, an invitation held or its form on screen, until it is answered (tour.js). */
+#tourRoot.away{visibility:hidden}
 /* The tour travels on the family's one spring, --m-travel on --m-spring. `.still` is set by
    tour.js under either quiet switch. */
 /* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the

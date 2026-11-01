@@ -13,12 +13,15 @@ const CALL_SKEW_MS = 5 * 60 * 1000;
    (Maxim, 2026-10-20: a delegation from the root key to the licence service's key runs one year). */
 const DELEGATION_MAX_MS = 366 * 86400000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+/* How long a desk taken off leaves its blobs readable by the lead alone, counted toward nothing, before they are deleted. */
+const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 /* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
 const TRY_KEYS_MAX = 64;
 /* Spent challenges held at once. 256 is the cap the stored challenges had. A live row is never dropped, because dropping it would let that challenge be used again. Past the cap the hello is refused rate. */
 const CHALLENGES_MAX = 256;
-/* Wrong-token spends tagged with one invitation, of the cap above. Past this share that try is refused rate. */
+/* Spent challenges one holder holds of the cap above: an invitation's wrong tokens, or one key's hellos. Past this share that
+   hello is refused rate, so no one holder fills the team's. */
 const CHALLENGE_SHARE = 64;
 const INVITES_MAX = 200;
 const INVITE_UPLOAD_MAX = 64 * 1024;
@@ -26,6 +29,8 @@ const INVITE_UPLOAD_MAX = 64 * 1024;
 const BLOB_MIN = B.PAD_FLOOR + B.TAG_BYTES;
 const BLOBS_MAX = 4096;
 const SESSIONS_MAX = 1024;
+/* Live sessions one holder keeps, a key or an invitation. A new one past this lets that holder's oldest go, and nobody else's. */
+const SESSION_SHARE = 16;
 const KEYS_MAX = 1000;
 const SINCE_MAX = 1000;
 const TOKEN_MAX = 256;
@@ -555,6 +560,13 @@ function createCore(deps) {
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
+      /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
+         alone for REMOVED_KEEP_MS, and are deleted at the first list or upload after it. No tombstone is kept, so the key put
+         back starts its chains again. */
+      const freed = [], heldUntil = clock() + REMOVED_KEEP_MS;
+      let grace = false;
+      grace = true; /* plant:removed-grace */
+      if (withdrawn.length) for (const [, m] of store.list("blob:")) if (m && withdrawn.indexOf(m.writer) > -1) (grace ? hold(m, heldUntil) : unserve(m, freed)); /* plant:devices-free */
       store.put("devrev", b.rev);
       if (from !== undefined) store.put("devfrom", { epoch: from.epoch, rev: from.rev }); /* plant:devices-from-kept */
       for (const [k, s] of store.list("ses:")) {
@@ -772,15 +784,16 @@ function createCore(deps) {
     if (store.list("chu:").length >= CHALLENGES_MAX) return false; /* plant:challenge-cap */
     return true;
   }
-  function challengeShare(inv) {
+  /* An invitation's rows by its id; a key's by the key, on a row that names no invitation. */
+  function challengeShare(inv, key) {
     let n = 0;
-    for (const [, row] of store.list("chu:")) if (row && row.inv === inv) n++;
+    for (const [, row] of store.list("chu:")) if (row && (inv ? row.inv === inv : !row.inv && row.key === key)) n++;
     return n;
   }
   function spendChallenge(nonce, inv) {
     const now = clock();
     if (!roomForChallenge(now)) return false;
-    if (is(HEX32, inv) && challengeShare(inv) >= CHALLENGE_SHARE) return false; /* plant:challenge-share */
+    if (is(HEX32, inv) && challengeShare(inv, null) >= CHALLENGE_SHARE) return false; /* plant:challenge-share */
     store.put("chu:" + nonce, { at: now, inv }); /* plant:try-spend */
     return true;
   }
@@ -808,16 +821,12 @@ function createCore(deps) {
     if (!inv && spentMarker(b.inv)) return no("token-spent");
     if (!inv) return no("not-enrolled");
     if (inv.spent) return no("token-spent"); /* plant:token-spent */
-    const tries = store.get(tryRow(b.inv, b.key));
-    if (typeof tries === "number" && tries >= TOKEN_TRIES) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); return no("token-tries"); } /* plant:token-key */
-    const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX && is(HEX64, inv.hash)
-      && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
-    if (!right) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
     /* After the end the token hello is refused, the token stays unspent and the wrap is deleted. A key already bound
-       still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live. */
+       still fetches the wrap it was served: the end bounds an unused invitation only. The instant of the end is still live.
+       The end is asked before any try is counted or challenge spent, whatever the token, so an ended id fills nothing. */
     let ended = false;
     ended = inv.until != null && clock() > inv.until; /* plant:S3-lapse */
-    if (ended) {
+    const endNow = () => {
       store.atomic(() => {
         const cur = store.get("inv:" + b.inv);
         if (!cur || cur.spent) return;
@@ -826,7 +835,16 @@ function createCore(deps) {
         store.put("inv:" + b.inv, next);
       });
       return no("invite-ended");
-    }
+    };
+    let endFirst = false;
+    endFirst = true; /* plant:ended-first */
+    if (ended && endFirst) return endNow();
+    const tries = store.get(tryRow(b.inv, b.key));
+    if (typeof tries === "number" && tries >= TOKEN_TRIES) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); return no("token-tries"); } /* plant:token-key */
+    const right = typeof b.invite === "string" && b.invite.length <= TOKEN_MAX && is(HEX64, inv.hash)
+      && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
+    if (!right) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
+    if (ended) return endNow();
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
     if (binds) {
       const gone = store.get("gone:" + b.key);
@@ -896,10 +914,19 @@ function createCore(deps) {
     if (lapsedSession) return lapsedSession; /* plant:lapse-session */
     const token = random(32), now = clock(), until = now + SESSION_MS;
     if (!roomForChallenge(now)) return no("rate");
+    let keyShare = false;
+    keyShare = !who.inv && challengeShare(null, who.key) >= CHALLENGE_SHARE; /* plant:challenge-key-share */
+    if (keyShare) return no("rate");
     store.atomic(() => {
       also && also();
-      store.put("chu:" + nonce, { at: now, inv: who.inv || null }); /* plant:challenge-use */
-      const held = store.list("ses:").filter(([k, s]) => (s.until < now ? (store.del(k), false) : true)).sort((a, b) => a[1].until - b[1].until);
+      store.put("chu:" + nonce, who.inv ? { at: now, inv: who.inv } : { at: now, inv: null, key: who.key }); /* plant:challenge-use */
+      let held = store.list("ses:").filter(([k, s]) => (s.until < now ? (store.del(k), false) : true)).sort((a, b) => a[1].until - b[1].until);
+      const holds = s => (who.inv ? s.inv === who.inv : !s.inv && s.key === who.key);
+      let mine = [];
+      mine = held.filter(([, s]) => holds(s)); /* plant:session-share */
+      const evicted = new Set(mine.slice(0, Math.max(0, mine.length - SESSION_SHARE + 1)).map(([k]) => k));
+      for (const k of evicted) store.del(k);
+      held = held.filter(([k]) => !evicted.has(k));
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
     });
@@ -1019,6 +1046,15 @@ function createCore(deps) {
     return !!(m && ANSWER_PLACE.test(String(m.place || "")) && m.id === String(m.place).slice(7));
   }
 
+  /* A removed desk's held blobs are read on the lead's own session alone. */
+  function readsHeld(s) {
+    const team = store.get("team");
+    let reader = true;
+    reader = !s.inv && !!team && !!team.lead && s.key === team.lead.keyId; /* plant:held-lead-only */
+    return reader;
+  }
+  const heldLive = (h, now) => now <= h.heldUntil && !expired(h, now);
+
   function since(token, after) {
     const s = sessionOf(token);
     if (!s.ok) return s;
@@ -1027,11 +1063,18 @@ function createCore(deps) {
     const lapsedSince = lapseGate(false);
     if (lapsedSince) return lapsedSince; /* plant:lapse-since */
     const now = clock(), items = [];
-    for (const [, id] of store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX })) {
+    const page = store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX });
+    for (const [, id] of page) {
       const m = store.get("blob:" + id);
       if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
     }
-    return { ok: true, items, lapse: told() };
+    if (!readsHeld(s)) return { ok: true, items, lapse: told() };
+    /* A removed desk's blobs hold no seq row, so they join the lead's page in seq order, and never past a full page's last row. */
+    const top = page.length >= SINCE_MAX ? Number(page[page.length - 1][0].slice(4)) : Infinity, rows = items.length;
+    for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now)) items.push({ seq: h.seq, meta: served(h) });
+    if (items.length === rows) return { ok: true, items, lapse: told() };
+    items.sort((x, y) => x.seq - y.seq);
+    return { ok: true, items: items.slice(0, SINCE_MAX), lapse: told() };
   }
 
   function blobFor(token, id) {
@@ -1054,6 +1097,8 @@ function createCore(deps) {
     }
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
+    const h = is(HEX32, id) && readsHeld(s) ? store.get("held:" + id) : undefined;
+    if (h && heldLive(h, now)) return { ok: true, meta: served(h), obj: h.obj };
     const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
     if (tomb && now <= tomb.until) return no(tomb.why);
     return no("missing");
@@ -1134,6 +1179,8 @@ function createCore(deps) {
   function chainOwner(id) {
     const m = store.get("blob:" + id);
     if (m) return m.writer;
+    const h = store.get("held:" + id);
+    if (h && clock() <= h.heldUntil) return h.writer; /* plant:held-owner */
     const tomb = store.get("tomb:" + id);
     return tomb && clock() <= tomb.until ? tomb.writer : null;
   }
@@ -1162,7 +1209,7 @@ function createCore(deps) {
       resFloor = nameFloor ? floorVal : null; /* plant:put-counter-floor */
       return resFloor !== null ? Object.assign(no("replay-counter"), { floor: resFloor }) : no("replay-counter");
     }
-    if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
+    if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined || store.get("held:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
     if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
@@ -1190,6 +1237,8 @@ function createCore(deps) {
       store.put("rate:" + m.writer, j.stamps);
       store.put("bytes", (store.get("bytes") || 0) + ct.length);
       if (j.old) bury(j.old, "superseded", now, drop); /* plant:supersede-drop */
+      const heldOld = m.supersedes === null ? undefined : store.get("held:" + m.supersedes);
+      if (heldOld) release(heldOld, drop); /* plant:held-supersede */
       if (j.a.lead && m.epoch > j.a.team.epoch) store.put("team", Object.assign({}, j.a.team, { epoch: m.epoch }));
       if (j.a.invite) {
         const next = Object.assign({}, j.a.inv, { uploaded: true });
@@ -1258,6 +1307,24 @@ function createCore(deps) {
     drop.push(m.obj);
   }
 
+  /* A removed desk's blob, counted toward nothing and served to the lead alone until heldUntil: its seq row goes, so no other
+     list pages over it, and its own expiry row deletes it then. */
+  function hold(m, until) {
+    store.del("blob:" + m.id);
+    noteBlobs(-1);
+    store.del("seq:" + pad(m.seq));
+    if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
+    store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
+    store.put("held:" + m.id, Object.assign({}, m, { heldUntil: until }));
+    store.put(expiryKey(until, m.id), "held");
+  }
+  function release(h, drop) {
+    store.del("held:" + h.id);
+    store.del(expiryKey(h.heldUntil, h.id));
+    store.put("orphan:" + h.obj, 1);
+    drop.push(h.obj);
+  }
+
   /* Deletion records past their keep, tombstones past theirs, a spent invitation's hash and times past its keep (its id and
      that it was spent stay), and every object whose delete is still to be made. */
   function prune() {
@@ -1275,6 +1342,8 @@ function createCore(deps) {
           const id = k.slice(20);
           store.del(k);
           if (kind === "tomb") { store.del("tomb:" + id); continue; }
+          const h = kind === "held" ? store.get("held:" + id) : undefined;
+          if (h) { release(h, drop); continue; } /* plant:held-expiry */
           const m = store.get("blob:" + id);
           if (m && expired(m, now)) bury(m, "expired", now, drop);
         }
@@ -1331,6 +1400,7 @@ function createCore(deps) {
   function heldObjects() {
     const objs = new Set();
     for (const [, m] of store.list("blob:")) if (m && typeof m.obj === "string") objs.add(m.obj);
+    for (const [, h] of store.list("held:")) if (h && typeof h.obj === "string") objs.add(h.obj);
     for (const [k] of store.list("put:")) objs.add(k.slice(4));
     for (const [k] of store.list("orphan:")) objs.add(k.slice(7));
     return [...objs];
@@ -1385,8 +1455,8 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
-  SESSIONS_MAX, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
+  SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

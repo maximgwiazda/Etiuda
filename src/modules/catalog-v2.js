@@ -599,6 +599,15 @@ function v2Problems(data){
     out.push("hash: "+v2Str(data.hash)+" is not the hash of what the file holds");
   return out;
 }
+/** The release a catalog's minEngine asks for where `have` is older, else "". By the release numbers alone, so a build
+ *  of 2.0.0's line (2.0.0-dev) reads a catalog that asks for 2.0.0. The shell holds the same rule (needsNewerEngine). */
+function v2NeedsEngine(data,have){
+  const want=/^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String((data&&data.minEngine)||""));
+  const own=/^([0-9]+)\.([0-9]+)\.([0-9]+)/.exec(String(have||""));
+  if(!want||!own) return "";
+  for(let i=1;i<=3;i++) if(+want[i]!==+own[i]) return +want[i]>+own[i] ? [want[1],want[2],want[3]].map(Number).join(".") : "";
+  return "";
+}
 /** A format 2 payload as the runtime holds it. Throws on a shape no reader could use; a field
  *  the runtime has no home for yet is carried untouched so that an export gives it back. */
 function catalogFromV2(data){
@@ -827,4 +836,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, v2NeedsEngine, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 453;
+const EXPECTED = 473;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -563,11 +563,15 @@ async function main() {
       "6i a removed key's hello unsigned, forged, zeroed or under a named key is a bad signature, and only a genuine one says removed");
     const v = await world();
     const firstS = await sessionOf(v, v.other);
+    /* One key keeps at most 16 live sessions, so 64 more desks of 16 each fill the team's 1024. */
+    const many = [];
+    for (let i = 0; i < 64; i++) many.push(keyPair(true));
+    await devices(v, v.devs.concat(many.map(k => ({ id: k.keyId, pub: k.pub, desk: "k-" + hex(8) }))));
     for (let i = 0; i < 1024; i++) {
       /* Spent challenges are capped at 256 while they are inside their five minutes. Step past that life every 256 hellos so those rows drop, and every session, which lasts 30 minutes, stays. */
       if (i % 256 === 255) v.R.clock.now += C.CHALLENGE_MS + 1;
       else v.R.clock.now += 1;
-      await sessionOf(v, v.other);
+      await sessionOf(v, many[i % 64]);
     }
     const liveS = v.R.stores.get(v.rt).list("ses:").length;
     const evicted = await since(v, firstS);
@@ -5514,6 +5518,277 @@ async function main() {
       check(base[leg] && p.turned && p.back, "1102" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
     }
+  }
+
+  /* ---- 1160 and 1161: the relay core's second part of Argon's relay review of 2026-11-01: an ended invitation's id and one noisy
+     key fill nothing the team shares (6), and a desk taken off gives back its blobs (4) ---- */
+  {
+    const T0R = 1800000000000, SMALL = 4112;
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const stOf = w => w.R.stores.get(w.rt);
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    const guard = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.stack || e) }; } };
+    /* Five invitations past their end, each sent 64 wrong tokens: four of them would once have filled the 256 spent challenges. */
+    async function endedScene() {
+      const R = relayEnv();
+      R.clock.now = T0R;
+      const w = await world({ R });
+      const ids = [];
+      for (let n = 0; n < 5; n++) ids.push(hex(16));
+      const added = await invites(w, ids.map(id => ({ id, hash: sha(hex(32)), until: T0R + 10 * MIN })), []);
+      R.clock.now = T0R + 11 * MIN;
+      const answers = {};
+      for (const id of ids) for (let i = 0; i < 64; i++) { const a = said(await tokenHello(w, id, "nope-" + i)); answers[a] = (answers[a] || 0) + 1; }
+      const spent = stOf(w).list("chu:").length, tries = stOf(w).list("tf:").length;
+      const lead = await helloAs(w, w.lead), desk = await helloAs(w, w.desk);
+      return {
+        ok: added.status === 200 && answers["invite-ended"] === 320 && spent === 0 && tries === 0 && lead.status === 200 && desk.status === 200,
+        detail: JSON.stringify({ added: said(added), answers, spent, tries, lead: said(lead), desk: said(desk) }),
+      };
+    }
+    /* The lead and the other desk hold a session each; the noisy desk then asks 300 hellos in each of five windows of five minutes. */
+    async function noisyScene() {
+      const R = relayEnv();
+      R.clock.now = T0R;
+      const w = await world({ R });
+      const leadSes = await sessionOf(w, w.lead), otherSes = await sessionOf(w, w.other);
+      const perWindow = [];
+      let fresh = null, last = null;
+      for (let win = 0; win < 5; win++) {
+        let ok = 0;
+        for (let i = 0; i < 300; i++) { const r = await helloAs(w, w.desk); if (r.status === 200) { ok++; last = r.json.session; } }
+        perWindow.push(ok);
+        if (win === 0) fresh = await helloAs(w, w.lead);
+        R.clock.now += C.CHALLENGE_MS + 1;
+      }
+      const live = stOf(w).list("ses:").filter(([, s]) => s && s.key === w.desk.keyId && !s.inv).length;
+      const leadReads = await since(w, leadSes), otherReads = await since(w, otherSes), deskReads = await since(w, last);
+      return {
+        share: perWindow.every(n => n === C.CHALLENGE_SHARE) && fresh.status === 200,
+        sessions: C.SESSION_SHARE === 16 && live === 16 && leadReads.status === 200 && otherReads.status === 200 && deskReads.status === 200,
+        detail: JSON.stringify({ perWindow, fresh: said(fresh), live, lead: said(leadReads), other: said(otherReads), desk: said(deskReads) }),
+      };
+    }
+    /* A team capped at four small blobs: the desk holds three, the other desk one, and the lead's upload is refused team-size until
+       the desk is taken off. The desk put back sends its file again over the id it held. */
+    async function freedScene() {
+      const w = await world({ limits: { teamMax: 4 * SMALL } });
+      const deskSes = await sessionOf(w, w.desk), otherSes = await sessionOf(w, w.other), leadSes = await sessionOf(w, w.lead);
+      const mine = [1, 2, 3].map(n => sealAs(w, w.desk, "desks/" + w.deskId + "/f" + n + ".ec", n));
+      const ups = [];
+      for (const b of mine) ups.push(said(await put(w, deskSes, b)));
+      const theirs = sealAs(w, w.other, "desks/" + w.otherId + "/g.ec", 1);
+      ups.push(said(await put(w, otherSes, theirs)));
+      const full = await put(w, leadSes, sealAs(w, w.lead, "a.ec", 1));
+      const objs = mine.map(b => (stOf(w).get("blob:" + b.id) || {}).obj);
+      const off = await devices(w, [w.devs[1]]);
+      const st = stOf(w);
+      const rows = st.list("blob:").filter(([, m]) => m.writer === w.desk.keyId).length;
+      const counts = [st.get("bytes"), st.get("blobs")];
+      const room = await put(w, leadSes, sealAs(w, w.lead, "a.ec", 2));
+      const back = await devices(w, w.devs);
+      const again = await put(w, await sessionOf(w, w.desk), sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 4, { supersedes: mine[0].id }));
+      return {
+        freed: ups.every(u => u === 200) && refused(full, "team-size") && off.status === 200 && rows === 0 && counts[0] === SMALL && counts[1] === 1
+          && objs.every(o => typeof o === "string") && room.status === 200,
+        readded: back.status === 200 && again.status === 200,
+        detail: JSON.stringify({ ups, full: said(full), off: said(off), rows, counts, room: said(room), back: said(back), again: said(again) }),
+      };
+    }
+
+    const ended = await guard(endedScene);
+    check(ended.ok === true, "1160a five invitations past their end, sent 64 wrong tokens each, are refused invite-ended every time, spend no challenge and"
+      + " count no try, and the lead's and a desk's hellos are still issued: " + (ended.detail || ended.failed));
+    const noisy = await guard(noisyScene);
+    check(noisy.share === true && noisy.sessions === true, "1160b one desk asking 300 hellos in each of five windows of five minutes is issued 64 a window,"
+      + " the lead's hello in the first window is issued, the desk keeps its 16 newest sessions, and the lead's, the other desk's and its own newest still"
+      + " read: " + (noisy.detail || noisy.failed));
+    const freed = await guard(freedScene);
+    check(freed.freed === true, "1161a a desk taken off gives back its share at once: its three blobs leave the live rows, the team's bytes and count drop"
+      + " to the other desk's one blob, and the lead's upload refused team-size before is taken: " + (freed.detail || freed.failed));
+    check(freed.readded === true, "1161b the desk put back sends its file again over the id it held before the removal, and it is taken, since no tombstone"
+      + " was kept: " + (freed.detail || freed.failed));
+
+    const LIFTS = [
+      ["ended-first", "1160a", "an ended invitation's wrong token spends a challenge and counts a try", async () => (await guard(endedScene)).ok !== true],
+      ["challenge-key-share", "1160b", "one desk's hellos fill the spent challenges and the lead's hello is refused", async () => (await guard(noisyScene)).share !== true],
+      ["session-share", "1160b", "one desk keeps every session it opens", async () => (await guard(noisyScene)).sessions !== true],
+      ["devices-free", "1161a", "a desk taken off keeps its blobs, and the lead's upload stays refused", async () => (await guard(freedScene)).freed !== true],
+    ];
+    const base = { "1160a": ended.ok === true, "1160b": noisy.share === true && noisy.sessions === true, "1161a": freed.freed === true };
+    let n = 0;
+    for (const [tag, leg, say, turns] of LIFTS) {
+      const p = await liftCore("plant:" + tag, turns);
+      check(base[leg] && p.turned && p.back, "1160" + String.fromCharCode(99 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
+        + "), and the product file is never written: " + how(p));
+    }
+  }
+
+  /* ---- 1163: a desk taken off leaves its blobs to the lead for REMOVED_KEEP_MS, counted toward nothing, and they are deleted at
+     the first list or upload after it (the test architect's question on relay finding 4) ---- */
+  {
+    const T0R = 1800000000000, GRACE = 7 * DAY;
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const stOf = w => w.R.stores.get(w.rt);
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    const guard = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.stack || e) }; } };
+    const idsOf = r => (Array.isArray(r && r.json) ? r.json.map(e => e.meta.id) : []);
+    const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+    const inBucket = (w, objs) => objs.map(o => typeof o === "string" && w.R.bucket.objects.has(o));
+    /* The desk writes two files and a newer copy of the first, the other desk one file; at T0R the desk is taken off. */
+    async function heldWorld() {
+      const R = relayEnv();
+      R.clock.now = T0R;
+      const w = await world({ R });
+      const deskSes = await sessionOf(w, w.desk), otherSes = await sessionOf(w, w.other);
+      const f1 = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 1), f2 = sealAs(w, w.desk, "desks/" + w.deskId + "/f2.ec", 2);
+      const f1b = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 3, { supersedes: f1.id });
+      const theirs = sealAs(w, w.other, "desks/" + w.otherId + "/g.ec", 1);
+      const ups = [];
+      for (const [s, b] of [[deskSes, f1], [deskSes, f2], [deskSes, f1b], [otherSes, theirs]]) ups.push(said(await put(w, s, b)));
+      const objs = [f2, f1b].map(b => (stOf(w).get("blob:" + b.id) || {}).obj);
+      const off = await devices(w, [w.devs[1]]);
+      if (!ups.every(u => u === 200) || off.status !== 200) throw new Error("the scene was not set: " + JSON.stringify({ ups, off: said(off) }));
+      return { w, f1, f2, f1b, theirs, objs };
+    }
+    async function leadScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + GRACE - MIN;
+      const leadSes = await sessionOf(w, w.lead);
+      const listed = idsOf(await since(w, leadSes)), paged = idsOf(await since(w, leadSes, 2));
+      const got = await getBlob(w, leadSes, h.f1b.id);
+      const bytesOk = got.status === 200 && Buffer.from(got.bytes).equals(Buffer.from(h.f1b.ciphertext)) && !!got.meta && got.meta.writer === w.desk.keyId;
+      const counts = [stOf(w).get("bytes"), stOf(w).get("blobs")], kept = inBucket(w, h.objs);
+      return {
+        ok: C.REMOVED_KEEP_MS === GRACE && same(listed, [h.f2.id, h.f1b.id, h.theirs.id]) && same(paged, [h.f1b.id, h.theirs.id]) && bytesOk
+          && counts[0] === h.theirs.ciphertext.length && counts[1] === 1 && kept.every(Boolean),
+        detail: JSON.stringify({ grace: C.REMOVED_KEEP_MS, listed: listed.length, paged: paged.length, got: said(got), bytesOk, counts, kept }),
+      };
+    }
+    async function otherScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + GRACE - MIN;
+      const otherSes = await sessionOf(w, w.other);
+      const listed = idsOf(await since(w, otherSes)), got = await getBlob(w, otherSes, h.f1b.id);
+      return { ok: same(listed, [h.theirs.id]) && refused(got, "missing"), detail: JSON.stringify({ listed: listed.length, got: said(got) }) };
+    }
+    /* A list inside the grace, then past it a fetch, and the first list or upload. */
+    async function pastScene(via) {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + GRACE - MIN;
+      await since(w, await sessionOf(w, w.lead));
+      const keptIn = inBucket(w, h.objs);
+      w.R.clock.now = T0R + GRACE + 1;
+      const leadSes = await sessionOf(w, w.lead);
+      const early = await getBlob(w, leadSes, h.f1b.id), keptOver = inBucket(w, h.objs);
+      const moved = via === "list" ? await since(w, leadSes)
+        : await put(w, await sessionOf(w, w.other), sealAs(w, w.other, "desks/" + w.otherId + "/h.ec", 2));
+      const gone = inBucket(w, h.objs).every(x => !x), rows = stOf(w).list("held:").length;
+      const listed = idsOf(await since(w, leadSes)), got = await getBlob(w, leadSes, h.f1b.id);
+      return {
+        ok: keptIn.every(Boolean) && refused(early, "missing") && keptOver.every(Boolean) && moved.status === 200 && gone && rows === 0
+          && listed.indexOf(h.f2.id) < 0 && listed.indexOf(h.f1b.id) < 0 && listed.indexOf(h.theirs.id) > -1 && refused(got, "missing"),
+        detail: JSON.stringify({ via, keptIn, early: said(early), keptOver, moved: said(moved), gone, rows, listed: listed.length, got: said(got) }),
+      };
+    }
+    async function pastBoth() {
+      const a = await pastScene("list"), b = await pastScene("upload");
+      return { ok: a.ok === true && b.ok === true, detail: a.detail + " " + b.detail };
+    }
+    /* The desk put back inside the grace sends a newer copy of its newest file over the held id. */
+    async function readdScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + DAY;
+      const back = await devices(w, w.devs);
+      const again = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 4, { supersedes: h.f1b.id });
+      const up = await put(w, await sessionOf(w, w.desk), again);
+      const leadSes = await sessionOf(w, w.lead);
+      const listed = idsOf(await since(w, leadSes)), old = await getBlob(w, leadSes, h.f1b.id), oldGone = inBucket(w, [h.objs[1]])[0] === false;
+      return {
+        ok: back.status === 200 && up.status === 200 && same(listed, [h.f2.id, h.theirs.id, again.id]) && refused(old, "missing") && oldGone,
+        detail: JSON.stringify({ back: said(back), up: said(up), listed: listed.length, old: said(old), oldGone }),
+      };
+    }
+    /* Inside the grace the other desk sends a file over the removed desk's held id. */
+    async function ownerScene() {
+      const h = await heldWorld(), w = h.w;
+      w.R.clock.now = T0R + DAY;
+      const over = await put(w, await sessionOf(w, w.other), sealAs(w, w.other, "desks/" + w.otherId + "/f1.ec", 2, { supersedes: h.f1b.id }));
+      const listed = idsOf(await since(w, await sessionOf(w, w.lead)));
+      return { ok: refused(over, "outside-place") && listed.indexOf(h.f1b.id) > -1, detail: JSON.stringify({ over: said(over), listed: listed.length }) };
+    }
+
+    const lead = await guard(leadScene);
+    check(lead.ok === true, "1163a inside the grace of 7 days the lead lists the removed desk's blobs beside the other desk's, in seq order and from a"
+      + " later seq too, and fetches its newest with its bytes, while the team's bytes and count hold the other desk's blob alone and the objects stay: "
+      + (lead.detail || lead.failed));
+    const other = await guard(otherScene);
+    check(other.ok === true, "1163b inside the grace the other desk lists its own blob alone, and its fetch of the removed desk's newest is missing: "
+      + (other.detail || other.failed));
+    const past = await guard(pastBoth);
+    check(past.ok === true, "1163c the removed desk's objects outlast a list inside the grace; past it the lead's fetch is missing at once, and the first"
+      + " list, or the first upload, deletes the objects and the held rows, after which the list does not name them: " + (past.detail || past.failed));
+    const readd = await guard(readdScene);
+    check(readd.ok === true, "1163d the desk put back inside the grace sends a newer copy over its held newest file, the lead then lists the new one and"
+      + " not the held one, and the held object is deleted: " + (readd.detail || readd.failed));
+    const owner = await guard(ownerScene);
+    check(owner.ok === true, "1163e inside the grace the other desk's upload over the removed desk's held file is refused outside-place, and the held"
+      + " file stays listed to the lead: " + (owner.detail || owner.failed));
+
+    const LIFTS = [
+      ["removed-grace", "1163a", "a desk taken off has its blobs deleted at once", leadScene],
+      ["held-lead-only", "1163b", "the other desk lists and fetches the removed desk's blobs", otherScene],
+      ["held-expiry", "1163c", "the removed desk's objects outlive the grace", pastBoth],
+      ["held-supersede", "1163d", "the held file stays beside the newer copy that supersedes it", readdScene],
+      ["held-owner", "1163e", "the other desk supersedes the removed desk's held file", ownerScene],
+    ];
+    const base = { "1163a": lead.ok === true, "1163b": other.ok === true, "1163c": past.ok === true, "1163d": readd.ok === true, "1163e": owner.ok === true };
+    let n = 0;
+    for (const [tag, leg, say, scene] of LIFTS) {
+      const p = await liftCore("plant:" + tag, async () => (await guard(scene)).ok !== true);
+      check(base[leg] && p.turned && p.back, "1163" + String.fromCharCode(102 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
+        + "), and the product file is never written: " + how(p));
+    }
+  }
+
+  /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, answered as before (the version policy's point
+     2, adopted 2026-11-01). Every fixture there is sent again over fresh stand-ins; the set covers every route of the table. ---- */
+  {
+    const DIR = path.join(ROOT, "relay", "test", "previous");
+    const PREV = await import(pathToFileURL(path.join(DIR, "replay.mjs")).href);
+    const files = fs.readdirSync(DIR).filter(f => /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{8}\.json$/.test(f)).sort();
+    const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
+    const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
+    const results = [];
+    for (const fx of fixtures) results.push(await PREV.replay(fx, W, freshEnv));
+    const asked = new Set();
+    for (const fx of fixtures) for (const st of fx.steps) {
+      const hit = /^\/relay\/v1\//.test(st.req.path) ? require(path.join(ROOT, "relay", "team.cjs")).routeOf(st.req.method, st.req.path) : null;
+      if (hit) asked.add(hit.what + " " + st.req.method);
+    }
+    const table = ["teams POST", "devices POST", "invites POST", "hello POST", "session POST", "grant POST", "lead POST", "socket GET", "wrap GET",
+      "states GET", "since GET", "b GET", "b PUT"];
+    const unasked = table.filter(r => !asked.has(r));
+    const steps = results.reduce((n, r) => n + r.steps, 0), differ = results.flatMap((r, i) => r.differ.map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
+    check(files.length >= 1 && steps >= 50 && differ.length === 0 && unasked.length === 0,
+      "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
+      + " are answered by this relay as they were: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
+      + (unasked.length ? ", never asked: " + unasked.join(", ") : ""));
+    /* The control: the replay sees a change. With plant:session-life lifted from a copy of the core, a session past its thirty
+       minutes still reads, and the step that recorded its refusal is answered otherwise; one recorded answer altered in a copy of
+       the fixture is found at its step. */
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const lifted = await liftCore("plant:session-life", async () => {
+      const r = await PREV.replay(fixtures[0], W, freshEnv);
+      return r.differ.some(d => /past its thirty minutes/.test(d.what));
+    });
+    const altered = JSON.parse(JSON.stringify(fixtures[0] || { steps: [] }));
+    const at = altered.steps.findIndex(st => st.res && st.res.status === 410);
+    if (at >= 0) altered.steps[at].res.status = 404;
+    const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.map(d => d.step) : [];
+    check(lifted.turned && lifted.back && at >= 0 && seen.length === 1 && seen[0] === at,
+      "1153b the replay sees a change: lifting plant:session-life is answered otherwise at the expired session's step, and one recorded answer altered is found at"
+      + " its step alone, and the product file is never written: " + how(lifted) + ", altered step " + at + " found at " + JSON.stringify(seen));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

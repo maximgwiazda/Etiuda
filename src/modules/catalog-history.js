@@ -6,7 +6,7 @@ import { openDialog } from "./dialog.js";
 import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
-import { parseCatalogFile, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
+import { parseCatalogFile, eUnreadableLine, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
 import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
@@ -76,7 +76,7 @@ function historyOpen(v){
     if(!got || !got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(name)); return; }
     let c=null;
     try{ c=parseCatalogFile(String(got.text)); }
-    catch(e){ toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(name)); return; }
+    catch(e){ toastRefusal(eUnreadableLine(e,name)); return; }
     const offTeam=!!(got && got.notOnTeam);
     const shown=eOfferCatalogDialog(c,{ file:name, force:true, asked:true, direct:!offTeam, offTeam:offTeam,
       foundHtml:esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join('<code>'+esc(name)+'</code>')

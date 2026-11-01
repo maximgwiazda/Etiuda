@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 153;
+const EXPECTED = 165;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1641,7 +1641,8 @@ try {
   /* Board 922, F1. A relay join that waits says so in the copywriter's words, and a relay invitation the relay refused as used or
      expired is said on the same card, in English and in Polish, with acts that clear it; a shared-folder join keeps its own line. */
   const escPage = (await import(MOD("esc.js"))).esc;
-  const COPY = { waitEn: "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.", waitPl: "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.", usedEn: "This invitation has already been used. Ask your lead for a new one.", usedPl: "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
+  /* Until the shell has opened the team's catalog here, the line says what it waits for (987e). */
+  const COPY = { waitEn: "Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.", waitPl: "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić: katalog zespołu otworzy się tu sam, gdy to nastąpi.", usedEn: "This invitation has already been used. Ask your lead for a new one.", usedPl: "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
     endedEn: "This invitation has expired. Ask your lead for a new one.", endedPl: "To zaproszenie wygasło. Nowe wystawi lider zespołu." };
   const SHARED_EN = "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.";
   const SHARED_PL = "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.";
@@ -2080,7 +2081,7 @@ try {
   const matchWithdrawn = !!(matchEnv.teamJoin && matchEnv.teamJoin.invite && matchEnv.teamJoin.invite.relay
     && (matchEnv.teamJoin.invite.relay.withdrawing === true || matchEnv.teamJoin.invite.relay.withdrawn === true));
   check(matchCanJoin && matchWithdrawn,
-    "15de a desk with a relay request waiting presses It does not match, staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
+    "15de a desk with a relay request waiting meets the shell's legacy forget op (a bar held from before the leave route), staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
     + matchCanJoin + ", withdrawn " + matchWithdrawn);
 
   /* Hold 2: relay link's confirm card shows disclosure and left heading for a desk that left */
@@ -2768,6 +2769,226 @@ try {
   check(!!tookFn && loadedSample && keptReal,
     "15cm a team catalog arriving opens automatically on a desk showing the sample catalog, and never over a real catalog the agent chose: sample "
     + loadedSample + ", real kept " + keptReal);
+
+  /* ---- a pilot team's first day: the test architect's conditions of 2026-11-01 on Argon's first-day review ---------- */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  /* A copy of a page module with one plant line taken out, its imports pointed back at the tree, so it shares their state. */
+  const plantedModule = async (file, tag) => {
+    const at = path.join(ROOT, "src", "modules", file), before = fs.readFileSync(at);
+    const lines = before.toString("utf8").split(/\n/), i = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (i < 0) return { mod: null, same: fs.readFileSync(at).equals(before) };
+    lines.splice(i, 1);
+    const dir = fs.mkdtempSync(path.join(LAB, "first-day-plant-"));
+    const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+    fs.writeFileSync(path.join(dir, file), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+    const mod = await import(pathToFileURL(path.join(dir, file)).href);
+    return { mod, same: fs.readFileSync(at).equals(before) };
+  };
+  const pressOn = (M, act) => { const b = elOf({ "data-join": act }); M.wireTeamJoinEmpty({ querySelectorAll: () => [b] }); return Promise.resolve(b.onclick && b.onclick()); };
+  const loadWas = HK.hooks.loadCatalogFromFolder;
+
+  /* F2: the desk opened by an etiuda: link on its first run. The tour waits while the invitation is held, starts once it is
+     answered, and takes no place while a join stands on screen. Its root is the one element the page has here. */
+  const TOUR = await import(MOD("tour.js"));
+  async function tourScene(T) {
+    const root = { hidden: true, cls: new Set(), attrs: {}, offsetWidth: 0, setAttribute(k, v) { this.attrs[k] = String(v); } };
+    root.classList = { add: c => root.cls.add(c), remove: c => root.cls.delete(c), contains: c => root.cls.has(c),
+      toggle: (c, on) => { if (on === undefined ? !root.cls.has(c) : on) root.cls.add(c); else root.cls.delete(c); } };
+    const qWas = document.querySelector, rafWas = globalThis.requestAnimationFrame, cafWas = globalThis.cancelAnimationFrame;
+    document.querySelector = sel => (sel === "#tourRoot" ? root : null);
+    globalThis.requestAnimationFrame = fn => setTimeout(fn, 0);
+    globalThis.cancelAnimationFrame = id => clearTimeout(id);
+    const out = { held: null, after: null, awayOn: false, awayOff: false };
+    try {
+      ST.lsDel("eTourDone_v3"); ST.lsDel("eTourInvite_v3"); ST.ssDel("eTourAt");
+      AS.setCards([]);
+      window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "held"
+        ? { sealed: null, join: null, leads: [], offer: { link: true, lead: "Lamp lead", team: relayTeam, relay: "relay.test" } }
+        : { sealed: null, join: null, leads: [] }) };
+      T.wireTourUi();
+      TJ.wireTeamJoin();
+      await sleep(30);
+      T.maybeStartTour();
+      await sleep(1700);
+      out.held = { mode: TJ.inviteHeld().mode, running: T.tourActive(), shown: root.hidden === false };
+      await press("back");
+      await sleep(30);
+      out.after = { running: T.tourActive(), shown: root.hidden === false };
+      TJ.openJoinPaste();
+      out.awayOn = root.cls.has("away");
+      await press("back");
+      out.awayOff = !root.cls.has("away");
+    } finally {
+      root.hidden = true;
+      try { T.endTour(true); } catch (e) { /* the scene's tour ends with it */ }
+      await sleep(400); /* a step's second placing comes 300 ms after it, and finds the tour ended */
+      ST.lsDel("eTourDone_v3"); ST.lsDel("eTourInvite_v3"); ST.ssDel("eTourAt");
+      document.querySelector = qWas;
+      if (rafWas === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = rafWas;
+      if (cafWas === undefined) delete globalThis.cancelAnimationFrame; else globalThis.cancelAnimationFrame = cafWas;
+    }
+    return out;
+  }
+  const tourSaid = s => JSON.stringify(s);
+  const toured = await tourScene(TOUR);
+  check(!!toured.held && toured.held.mode === "confirm" && !toured.held.running && !toured.held.shown
+    && !!toured.after && toured.after.running && toured.after.shown,
+    "987a an invitation link at the desk's first launch shows no tour card while the invitation is held, and the tour comes once it is answered: "
+    + tourSaid(toured));
+  check(toured.awayOn && toured.awayOff,
+    "987b a join opened while the tour runs takes the tour's place, and the tour is back once the join is gone: away "
+    + toured.awayOn + ", back " + toured.awayOff);
+  if (PLANTS_OFF) {
+    skip("987c lifting plant:tour-waits-join shows the tour card over a held invitation");
+    skip("987d lifting plant:tour-away-join leaves the tour over a join opened while it runs");
+  } else {
+    const waits = await plantedModule("tour.js", "plant:tour-waits-join");
+    const w = waits.mod ? await tourScene(waits.mod) : null;
+    check(!!w && !!w.held && w.held.mode === "confirm" && w.held.running && waits.same,
+      "987c lifting plant:tour-waits-join shows the tour card over a held invitation (FAIL 987a): " + (w ? tourSaid(w.held) : "plant line absent")
+      + ", tree " + (waits.same ? "untouched" : "changed"));
+    const away = await plantedModule("tour.js", "plant:tour-away-join");
+    const a = away.mod ? await tourScene(away.mod) : null;
+    check(!!a && !!a.after && a.after.running && !a.awayOn && away.same,
+      "987d lifting plant:tour-away-join leaves the tour over a join opened while it runs (FAIL 987b): " + (a ? "away " + a.awayOn : "plant line absent")
+      + ", tree " + (away.same ? "untouched" : "changed"));
+  }
+
+  /* F3: a relay desk waiting on its invitation, through the shell's own state. Before it holds a key it says what it waits for;
+     once the invitation's wrap gives it the key, the shell names the team's catalog in the mirror, the page opens it on the empty
+     desk with nothing pressed, and only then does the line say the catalogs are open. */
+  const OPEN_EN = "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.";
+  const WAIT_EN = "Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.";
+  const WAIT_PL = "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić: katalog zespołu otworzy się tu sam, gdy to nastąpi.";
+  const openKey = crypto.randomBytes(32);
+  async function wrapScene(name, src, M, extra) {
+    const box = {};
+    const stand = { ...RelayChannel(), createChannel: opts => { box.opts = opts; return { start: noop, stop: async () => {}, kick: noop, online: () => true }; } };
+    const D = await relayDesk(name, {}, {}, src, { relayChannel: stand });
+    D.api.relayRun();
+    const mirror = path.join(D.ud, "relay", relayHex.h32);
+    fs.mkdirSync(mirror, { recursive: true });
+    put(mirror, "board.ec", P.sealCatalog(openKey, relayTeam, 1, A1));
+    if (extra) for (const [n, txt] of extra) put(mirror, n, P.sealCatalog(openKey, relayTeam, 1, txt));
+    const loads = [];
+    HK.hooks.loadCatalogFromFolder = n => { loads.push(String(n)); };
+    try {
+      AS.setCards([]);
+      ST.lsSet("eUiLang", "en");
+      window.E_HOST = hostOver(D);
+      M.wireTeamJoin();
+      await sleep(30);
+      const before = M.teamJoinEmptyHtml();
+      ST.lsSet("eUiLang", "pl");
+      const beforePl = M.teamJoinEmptyHtml();
+      ST.lsSet("eUiLang", "en");
+      const loadsBefore = loads.slice();
+      if (box.opts && typeof box.opts.onTeamKey === "function") box.opts.onTeamKey(1, openKey);
+      /* The next view, as the mirror's watch sends one; the key the wrap gave is compared first, as at admission. */
+      M.wireTeamJoin();
+      await sleep(30);
+      const compared = M.teamJoinEmptyHtml().indexOf("You are on the team") >= 0;
+      await pressOn(M, "seen");
+      return { keyed: !!box.opts, before, beforePl, loadsBefore, loads: loads.slice(), compared, after: M.teamJoinEmptyHtml() };
+    } finally {
+      HK.hooks.loadCatalogFromFolder = loadWas;
+      if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    }
+  }
+  const wrapSaid = w => "key " + (w.keyed ? "handed" : "never handed") + ", before " + (w.before.indexOf(escPage(WAIT_EN)) >= 0 ? "waits"
+    : w.before.indexOf(escPage(OPEN_EN)) >= 0 ? "says open" : "other") + ", loads before " + JSON.stringify(w.loadsBefore)
+    + ", after " + JSON.stringify(w.loads) + " " + (w.after.indexOf(escPage(OPEN_EN)) >= 0 ? "says open" : w.after.indexOf(escPage(WAIT_EN)) >= 0 ? "waits" : "other");
+  const wrapped = await wrapScene("f3-wrap-opens", null, TJ);
+  check(wrapped.keyed && wrapped.before.indexOf(escPage(WAIT_EN)) >= 0 && wrapped.before.indexOf(escPage(OPEN_EN)) < 0
+    && wrapped.beforePl.indexOf(WAIT_PL) >= 0 && wrapped.loadsBefore.length === 0
+    && JSON.stringify(wrapped.loads) === JSON.stringify(["board.ec"]) && wrapped.compared && wrapped.after.indexOf(escPage(OPEN_EN)) >= 0,
+    "987e a relay desk waiting on its invitation says what it waits for, in English and in Polish, and once the wrap gives it the key the team's"
+    + " catalog opens on the empty desk with nothing pressed, the catalogs said open only then: " + wrapSaid(wrapped));
+  /* 987r: with an older edition of the team's catalog in the mirror under a name listed first, the shell names the newest (the
+     test architect's C1 to the desk pilot: relayOpenFile took the first it found). */
+  const olderA1 = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 0 }));
+  const newest = await wrapScene("f3-newest", null, TJ, [["a-older.ec", olderA1]]);
+  check(JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]), "987r with an older edition listed first, the shell opens the team's newest: " + JSON.stringify(newest.loads));
+  if (PLANTS_OFF) skip("987s lifting plant:relay-open-newest names no catalog");
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:relay-open-newest") >= 0);
+    let w = null;
+    if (at >= 0) { lines.splice(at, 1); w = await wrapScene("f3-plant-newest", lines.join("\n"), TJ, [["a-older.ec", olderA1]]); }
+    check(!!w && w.loads.length === 0, "987s lifting plant:relay-open-newest names no catalog (FAIL 987r): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
+  }
+  if (PLANTS_OFF) {
+    skip("987f lifting plant:relay-opens leaves the team's catalog unnamed by the shell");
+    skip("987g lifting plant:opens-load leaves the named catalog unopened on the empty desk");
+    skip("987h lifting plant:wait-not-open says the catalogs are open before they are");
+  } else {
+    const shellLines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+    const at = shellLines.findIndex(l => l.indexOf("plant:relay-opens") >= 0);
+    let w = null;
+    if (at >= 0) { shellLines.splice(at, 1); w = await wrapScene("f3-plant-shell", shellLines.join("\n"), TJ); }
+    check(!!w && w.keyed && w.loads.length === 0, "987f lifting plant:relay-opens leaves the team's catalog unnamed by the shell and unopened (FAIL 987e): "
+      + (w ? wrapSaid(w) : "plant line absent"));
+    const opens = await plantedModule("team-join.js", "plant:opens-load");
+    const o = opens.mod ? await wrapScene("f3-plant-load", null, opens.mod) : null;
+    check(!!o && o.keyed && o.loads.length === 0 && opens.same, "987g lifting plant:opens-load leaves the catalog the shell named unopened on the empty desk (FAIL 987e): "
+      + (o ? wrapSaid(o) : "plant line absent") + ", tree " + (opens.same ? "untouched" : "changed"));
+    const said = await plantedModule("team-join.js", "plant:wait-not-open");
+    const s = said.mod ? await wrapScene("f3-plant-said", null, said.mod) : null;
+    check(!!s && s.before.indexOf(escPage(OPEN_EN)) >= 0 && said.same, "987h lifting plant:wait-not-open says the catalogs are open before the desk holds a key (FAIL 987e): "
+      + (s ? wrapSaid(s) : "plant line absent") + ", tree " + (said.same ? "untouched" : "changed"));
+  }
+
+  /* F8: "It does not match" asks once, saying what it does, and the first press forgets nothing: the shell hears "leave", the
+     route Settings' Leave this team takes, only from the confirmation's own press. The copywriter's words of 01:27. */
+  const DOUBT = { title: "Leave this team on this desk?", titlePl: "Opuścić ten zespół na tym stanowisku?",
+    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.",
+    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania." };
+  async function doubtScene(M) {
+    const ops = [];
+    let leads = [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: false }];
+    window.E_HOST = { onTeamJoin: noop, teamJoin: op => { ops.push(op); if (op === "leave" || op === "forget") leads = [];
+      return Promise.resolve({ sealed: null, join: null, leads: leads.slice() }); } };
+    const gone = () => ops.filter(o => o === "leave" || o === "forget").length;
+    AS.setCards([]);
+    ST.lsSet("eUiLang", "en");
+    try {
+      M.wireTeamJoin();
+      await sleep(30);
+      const key = M.teamJoinEmptyHtml();
+      await pressOn(M, "forget");
+      const firstForgets = gone();
+      const asked = M.teamJoinEmptyHtml();
+      ST.lsSet("eUiLang", "pl");
+      const askedPl = M.teamJoinEmptyHtml();
+      ST.lsSet("eUiLang", "en");
+      await pressOn(M, "keep");
+      const back = M.teamJoinEmptyHtml();
+      await pressOn(M, "forget");
+      await pressOn(M, "forget");
+      return { key, firstForgets, asked, askedPl, back, forgets: gone(), leaves: ops.filter(o => o === "leave").length };
+    } finally {
+      if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    }
+  }
+  const doubted = await doubtScene(TJ);
+  const doubtAsks = doubted.asked.indexOf(escPage(DOUBT.title)) >= 0 && doubted.asked.indexOf(escPage(DOUBT.body)) >= 0
+    && doubted.asked.indexOf("abcd abcd abcd abcd") >= 0 && /class="btn danger" data-join="forget">Leave this team</.test(doubted.asked)
+    && /data-join="keep">Cancel</.test(doubted.asked) && doubted.asked.indexOf("You are on the team") < 0
+    && doubted.askedPl.indexOf(DOUBT.titlePl) >= 0 && doubted.askedPl.indexOf(DOUBT.bodyPl) >= 0
+    && doubted.askedPl.indexOf(">Opuść ten zespół<") >= 0 && doubted.askedPl.indexOf(">Anuluj<") >= 0;
+  check(doubted.key.indexOf("You are on the team") >= 0 && doubted.firstForgets === 0 && doubtAsks
+    && doubted.back.indexOf("You are on the team") >= 0 && doubted.forgets === 1 && doubted.leaves === 1,
+    "987j It does not match asks once, in English and in Polish, saying what leaving the team does, and the first press forgets nothing; Cancel goes back"
+    + " to the key, and only the confirmation's Leave this team reaches the shell, as a leave: first press " + doubted.firstForgets + " forget(s), asked "
+    + doubtAsks + ", back " + (doubted.back.indexOf("You are on the team") >= 0) + ", in all " + doubted.forgets + ", of them leaves " + doubted.leaves);
+  if (PLANTS_OFF) skip("987k lifting plant:doubt-asks forgets at the first press");
+  else {
+    const asks = await plantedModule("team-join.js", "plant:doubt-asks");
+    const d = asks.mod ? await doubtScene(asks.mod) : null;
+    check(!!d && d.firstForgets === 1 && asks.same, "987k lifting plant:doubt-asks forgets the team's keys at the first press (FAIL 987j): "
+      + (d ? d.firstForgets + " forget(s) at the first press" : "plant line absent") + ", tree " + (asks.same ? "untouched" : "changed"));
+  }
+  AS.setCards([]);
 
   /* Join a team in Settings, the Library and the Menu, on a desk that already has a catalog and has seen its lead. */
   const doorWas = { createElement: document.createElement, body: document.body, getElementById: document.getElementById,

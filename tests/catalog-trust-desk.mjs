@@ -41,7 +41,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
-const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
+/* A launch may read the page's modules from a copy of src/ in its lab (plan.modRoot), so a plant is lifted there, never in the tree. */
+let MOD_ROOT = ROOT;
+const MOD = n => pathToFileURL(path.join(MOD_ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The channel's own key function, so a key-format change in the channel reaches these legs too (E2). */
 const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
@@ -241,6 +243,7 @@ const safeStorage = {
    ================================================================================================ */
 async function launch(plan) {
   const LAB = plan.lab, UD = path.join(LAB, "userdata"), SHELL = path.join(LAB, "shell");
+  if (plan.modRoot) MOD_ROOT = plan.modRoot;
   const obs = { errors: [], offers: [], library: [], bars: [], read: {}, reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
   process.on("unhandledRejection", e => obs.errors.push("unhandled " + String(e && e.message || e).slice(0, 160)));
   process.on("uncaughtException", e => obs.errors.push("uncaught " + String(e && e.message || e).slice(0, 160)));
@@ -437,6 +440,8 @@ async function launch(plan) {
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
     // A colleague's file asked for by name and desk ("name,desk"), as Work from it asks once its row has been drawn.
     deskload: arg => { const [n, id] = String(arg).split(","); OFFER.loadCatalogFromFolder(n, 0, id); },
+    // A file of the catalog folder loaded by name, as a relay desk's page opens its team's catalog (team-join.js).
+    folderload: name => { OFFER.loadCatalogFromFolder(name, 0); },
     /* THE TOP BAR'S NAME is catalogFileName(), which paintCatNow writes into the bar; the stub page has no bar to draw in. */
     bar: () => { obs.bars.push(CF.catalogFileName()); },
     /* THE SHELL'S SEND OF THE LISTING, as it reaches the page: the shell's own answer to the listing, handed to the listener the preload registered. */
@@ -659,6 +664,14 @@ async function launch(plan) {
       await ipcRenderer.invoke("etiuda:branch-write", stem, "{ not valid json");
     },
     reread: async () => { await settle(); obs.rows.push(readRows()); },
+    // Past the boot's own wait for its toasts (1.4 s), and a little more.
+    wait: ms => settle(+ms || 1700),
+    // The desk's notices as the boot shows them, each by its id and its words.
+    notices: () => {
+      PACK.showDeskNotices();
+      const box = doc.getElementById("eNotices");
+      obs.notices = box ? box.children.map(n => ({ id: n.id, text: n.textContent.replace(/\s+/g, " ").trim() })) : [];
+    },
   });
   for (const a of plan.acts) {
     if (obs.reloaded) break;
@@ -691,7 +704,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 130;
+  const EXPECTED = 136;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -2041,6 +2054,79 @@ async function parent() {
     check(!!r81a && r81a.loaded && !errs78(hung81a).length,
       "81a with the host never answering about the pinned leads, the Library is still drawn once a row's wait is over, its catalog in use loaded: "
       + JSON.stringify({ rows: (hung81a.library[0] || []).map(r => [r.name, r.loaded]), errors: errs78(hung81a) }));
+
+    {
+    /* ---- updates 3: an edition for a newer Etiuda is kept and not used. The lab's engine is the tree's built file, so the
+       shell reads minEngine against the version the build wrote. The edition in use stays, nothing offers the waiting one,
+       and the agent is told in the copywriter's words which release it waits for, on every route a person reaches it by. */
+    const NEWER_LINE = "This edition needs Etiuda 99.0.0 or newer, so it is kept but not used yet, and the edition in use stays as it is."
+      + " Once a newer Etiuda is installed, the new edition is offered here.";
+    const withEngine = lab => { fs.mkdirSync(path.join(lab, "engine"), { recursive: true });
+      fs.copyFileSync(path.join(ROOT, "engine", "etiuda.html"), path.join(lab, "engine", "etiuda.html")); return lab; };
+    const edition = (rev, minEngine) => { const d = payload("2026-10-0" + rev); d.rev = rev; if (minEngine) d.minEngine = minEngine; return sign(d); };
+    const putFile = (lab, name, doc) => { const f = path.join(lab, name); fs.writeFileSync(f, JSON.stringify(doc), "utf8"); const t = Date.now() / 1000; fs.utimesSync(f, t, t); };
+    const errsU = (...os) => os.flatMap(o => o.errors || []).slice(0, 2);
+    const lab1151 = withEngine(scenario([["catalogs/lamp-1.ec", edition(1)], ["catalogs/etiuda-ring.json", ring]]));
+    const n0 = run(lab1151, ["boot", "settle", "offer", "yes", "settle"]);
+    putFile(lab1151, "catalogs/lamp-2.ec", edition(2, "99.0.0"));
+    const n1 = run(lab1151, ["boot", "settle", "offer", "wait"]);
+    check(n0.heldRev === 1 && !(n1.offers[0] || {}).shown && n1.toast === NEWER_LINE && n1.heldRev === 1 && !errsU(n0, n1).length,
+      "1151a an edition whose minEngine is above this engine is not offered at boot, the agent is told which release it needs, and the edition in use stays: "
+      + JSON.stringify({ took: n0.heldRev, offered: (n1.offers[0] || {}).shown || false, toast: n1.toast, held: n1.heldRev, errors: errsU(n0, n1) }));
+    const n2 = run(lab1151, ["dom", "boot", "settle", "openpath:catalogs/lamp-2.ec", "said"]);
+    const n3 = run(lab1151, ["dom", "import:catalogs/lamp-2.ec", "said"]);
+    check(!(n2.offers[0] || {}).shown && n2.toast === NEWER_LINE && n2.heldRev === 1 && !(n3.offers[0] || {}).shown && n3.toast === NEWER_LINE
+      && n3.heldRev === 1 && !errsU(n2, n3).length,
+      "1151b the same edition double-clicked or imported is told the same way and not offered, never as a file Etiuda cannot read, and the edition in use stays: "
+      + JSON.stringify({ opened: [(n2.offers[0] || {}).shown || false, n2.toast, n2.heldRev], imported: [(n3.offers[0] || {}).shown || false, n3.toast, n3.heldRev],
+        errors: errsU(n2, n3) }));
+    putFile(lab1151, "catalogs/lamp-3.ec", edition(3, "2.0.0"));
+    const n4 = run(lab1151, ["boot", "settle", "offer"]);
+    const o4 = n4.offers[0] || {};
+    check(o4.shown === true && (o4.files || []).includes("lamp-3.ec") && !errsU(n4).length,
+      "1151c THE CONTROL: an edition asking for 2.0.0, which this engine's line is, is offered as before: " + JSON.stringify({ shown: o4.shown, files: o4.files || null, errors: errsU(n4) }));
+    /* plant:catalog-needs-newer lifted from a copy of shell/main.js in the lab, and plant:catalog-min-engine from a copy of
+       src/ in the lab: the first brings back the boot's offer of the waiting edition, the second the import's. */
+    const liftInto = (file, tag) => {
+      const lines = fs.readFileSync(file, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at < 0) return false;
+      lines.splice(at, 1);
+      fs.writeFileSync(file, lines.join("\n"), "utf8");
+      return true;
+    };
+    const lab1151d = withEngine(scenario([["catalogs/lamp-1.ec", edition(1)], ["catalogs/etiuda-ring.json", ring]]));
+    run(lab1151d, ["boot", "settle", "offer", "yes", "settle"]);
+    putFile(lab1151d, "catalogs/lamp-2.ec", edition(2, "99.0.0"));
+    fs.copyFileSync(path.join(ROOT, "shell", "main.js"), path.join(lab1151d, "shell", "main.js"));
+    const liftedShell = liftInto(path.join(lab1151d, "shell", "main.js"), "plant:catalog-needs-newer");
+    const p1 = run(lab1151d, ["boot", "settle", "offer", "wait"]);
+    fs.unlinkSync(path.join(lab1151d, "shell", "main.js"));
+    fs.cpSync(path.join(ROOT, "src"), path.join(lab1151d, "src"), { recursive: true });
+    const liftedPage = liftInto(path.join(lab1151d, "src", "modules", "catalog.js"), "plant:catalog-min-engine");
+    const p2 = run(lab1151d, ["dom", "import:catalogs/lamp-2.ec", "said"], false, { modRoot: lab1151d });
+    check(liftedShell && (p1.offers[0] || {}).shown === true && p1.toast !== NEWER_LINE && liftedPage && (p2.offers[0] || {}).shown === true && p2.toast !== NEWER_LINE,
+      "1151d lifting plant:catalog-needs-newer offers the waiting edition at boot again, and lifting plant:catalog-min-engine offers it on import: "
+      + JSON.stringify({ shell: [liftedShell, (p1.offers[0] || {}).shown || false], page: [liftedPage, (p2.offers[0] || {}).shown || false] }));
+
+    /* ---- updates 2, the page's half: a desk a later Etiuda saved is told so, with the release it names. */
+    const lab1150 = scenario([]);
+    fs.writeFileSync(path.join(lab1150, "userdata", "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 2, app: "2.4.0",
+      keys: { eCatalogFolder: path.join(lab1150, "catalogs"), eUiLang: "en" } }), "utf8");
+    const d1 = run(lab1150, ["notices"]);
+    const shown = (d1.notices || []).find(n => n.id === "eDeskNewer") || null;
+    check(!!shown && shown.text.indexOf("This desk's settings were saved by Etiuda 2.4.0 or newer, so this version leaves them untouched and does not start over.") === 0
+      && shown.text.indexOf("Installing Etiuda 2.4.0 or newer opens them as they were.") > 0 && !(d1.notices || []).some(n => n.id === "eDeskWarn") && !errsU(d1).length,
+      "1150f the page names the release a later desk was saved by, in the copywriter's words, and does not call it a file it could not read: "
+      + JSON.stringify({ notices: d1.notices || null, errors: errsU(d1) }));
+    }
+    /* 987n: A FILE ASKED FOR BY NAME TAKES THE PLACE OF THE SAME FILE FOUND AND LEFT STANDING, where it loads at once on an empty
+       desk: as a relay desk's page opens its team's catalog (team-join.js) while the folder's watch has offered it. */
+    const lab987 = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    const b987 = run(lab987, ["wire", "watch:catalogs/lamp.ec", "settle", "offer", "folderload:lamp.ec", "settle"]);
+    const o987 = b987.offers[0] || {};
+    check(o987.shown === true && b987.reloaded && b987.askedAtRestart === 0 && !errs78(b987).length,
+      "987n the folder's own offer of a file stands until that file, asked for by name, loads at once on the empty desk, and none is left standing"
+      + " as the desk starts again with it: " + JSON.stringify({ found: o987.shown, started: b987.reloaded, standing: b987.askedAtRestart, errors: errs78(b987) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

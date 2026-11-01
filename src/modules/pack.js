@@ -1,7 +1,7 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
 import { E_KEY_RE, E_NS, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
-  eSaveTrouble, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
+  eSaveTrouble, eDeskNewer, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 import { statsOlderTouched } from "./desk-stats.js";
@@ -199,7 +199,21 @@ function showDeskRefused(){
     body.split("{FILE}").join(eHomeless(r.kept,eDeskHome())).split("{TIME}").join(fileStamp(Date.parse(r.restored)||0)),
     eDeskRefusedSeen);
 }
+/* A desk a later Etiuda saved is left as it is, and this says which Etiuda opens it. The number is the release that
+   saved it, where the file names one. */
+function showDeskNewer(){
+  const n=eDeskNewer();
+  if(!n || document.getElementById("eDeskNewer")) return;
+  const v=n.app;
+  if(v) eNotice("eDeskNewer",
+    t("This desk's settings were saved by Etiuda {VERSION} or newer, so this version leaves them untouched and does not start over.").split("{VERSION}").join(v),
+    t("Installing Etiuda {VERSION} or newer opens them as they were.").split("{VERSION}").join(v));
+  else eNotice("eDeskNewer",
+    t("This desk's settings were saved by a newer Etiuda, so this version leaves them untouched and does not start over."),
+    t("Installing the newest Etiuda opens them as they were."));
+}
 function showDeskNotices(){
+  showDeskNewer();
   showDeskRefused();
   syncSaveNotice();
 }
