@@ -10,7 +10,7 @@ import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { list, $ } from "./dom.js";
-import { whenMarkFormed } from "./empty-mark.js";
+import { whenLaunchLanded } from "./launch-mark.js";
 import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
@@ -672,7 +672,7 @@ function maybeStartTour(){
     startTour(i,true);
   };
   setTimeout(()=>{ floor=true; go(); },at ? TOUR_RESUME_MS : TOUR_AUTO_MS);
-  whenMarkFormed(()=>setTimeout(()=>{ formed=true; go(); },TOUR_BREATH_MS));
+  whenLaunchLanded(()=>setTimeout(()=>{ formed=true; go(); },TOUR_BREATH_MS)); /* plant:tour-waits-landing */
 }
 /* THE DESK STARTED AGAIN UNDER A RUNNING TOUR: a step the new desk no longer offers, the load step
    once a catalog is in, gives way to the next one that it does. */

@@ -1086,7 +1086,9 @@ const t0 = Date.now();
       const paint = (cls, tag) => { const el = document.createElement(tag); el.className = cls; document.body.appendChild(el);
         const cs = getComputedStyle(el), r = { color: px(cs.color), bg: px(cs.backgroundColor) }; el.remove(); return r; };
       out[th].fill = res("var(--accent-fill)");
-      out[th].mark = paint("e-empty-mark", "canvas").color;
+      out[th].mark = (() => { const w = document.createElement("div"), c = document.createElement("canvas");
+        w.className = "empty empty-desk"; c.className = "e-fifth"; w.appendChild(c); document.body.appendChild(w);
+        const v = px(getComputedStyle(c).color); w.remove(); return v; })();
       out[th].pill = paint("pill on", "span").bg;
     }
     if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
@@ -3467,27 +3469,22 @@ const t0 = Date.now();
   };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
   try {
-    /* first-light: THE FIRST RUN'S TOUR WAITS FOR THE LOGO TO FORM. Maxim, 2026-09-27 23:28: the logo forms
+    /* first-light: THE FIRST RUN'S TOUR WAITS FOR THE LOGO TO LAND. Maxim, 2026-09-27 23:28: the logo forms
        as smoothly on the very first launch as later, "the first impression is the most important one";
-       and the tour's first bubble comes once it has formed (tour.js, maybeStartTour: 200 ms after the
-       formation and never before 1300 ms). At ordinary speed the formation and the floor end together,
-       so waiting on the clock cannot tell a tour that waits for the mark from one that only waits
-       1300 ms. The mark's own rule makes the difference visible: a window standing over it while it
-       gathers puts the gathering back to the start, to play once the window goes. So a window is held
-       over it from 300 ms to 700 ms after the canvas arrives, shorter than the mark's 1000 ms quiet
-       release, and the tour must come up at least the gather's 1100 and the breath's 200 after the
-       window has gone. A tour on the floor alone comes up about 600 ms after it. Timed inside the page,
-       by a MutationObserver installed before the document exists. */
+       and the tour's first bubble comes once it has landed (tour.js, maybeStartTour: 200 ms after the
+       landing and never before 1300 ms). The empty desk's mark is the launch's drawing since board 952,
+       and a dialog no longer starts it again, so this reads the landing itself, through the page's own
+       whenLaunchLanded asked as the canvas arrives, and the tour must come up at least 190 ms after it.
+       The lab leg that tells a tour waiting for the landing from one on the floor alone is test.js 952f.
+       Timed inside the page, by a MutationObserver installed before the document exists. */
     huntAt = "first-light";
     const qf = await huntPage(hunt, false, q => q.evaluateOnNewDocument(() => {
-      const c = window.__firstLight = { mark: -1, held: -1, gone: -1, tour: -1, err: "" };
+      const c = window.__firstLight = { mark: -1, landed: -1, tour: -1, err: "" };
       new MutationObserver(() => {
         const now = performance.now();
-        if (c.mark < 0 && document.querySelector("canvas.e-empty-mark")) {
+        if (c.mark < 0 && document.querySelector(".empty-desk>canvas.e-fifth")) {
           c.mark = now;
-          setTimeout(() => { try { openSettings(); c.held = performance.now(); }
-            catch (x) { c.err = String(x && x.message || x); } }, 300);
-          setTimeout(() => { try { closeModal(); c.gone = performance.now(); } catch (x) { c.err = String(x && x.message || x); } }, 700);
+          try { whenLaunchLanded(() => { c.landed = performance.now(); }); } catch (x) { c.err = String(x && x.message || x); }
         }
         const r = document.getElementById("tourRoot");
         if (c.tour < 0 && r && !r.hidden) c.tour = now;
@@ -3495,11 +3492,10 @@ const t0 = Date.now();
     }));
     const lit = await upFor(qf, () => !!window.__firstLight && window.__firstLight.tour >= 0, 12000);
     const fl = await qf.evaluate(() => Object.assign({}, window.__firstLight));
-    const litAfter = fl.gone >= 0 && fl.tour >= 0 ? Math.round(fl.tour - fl.gone) : -1;
-    check(lit && fl.held >= 0 && fl.gone > fl.held && litAfter >= 1290,
-      "first-light the first run's tour waits for the logo to form: a window held " + Math.round(fl.gone - fl.held)
-      + " ms over the gathering mark starts it again, and the tour comes up " + litAfter + " ms after the window goes"
-      + " (the gather and the breath make 1300)" + (fl.err ? " - " + fl.err : ""));
+    const litAfter = fl.landed >= 0 && fl.tour >= 0 ? Math.round(fl.tour - fl.landed) : -1;
+    check(lit && fl.mark >= 0 && litAfter >= 190,
+      "first-light the first run's tour waits for the logo to land: it comes up " + litAfter + " ms after the empty desk's mark"
+      + " has landed (the breath is 200)" + (fl.err ? " - " + fl.err : ""));
 
     /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: a
        catalog loaded through the empty desk's Load beside it, Skip, or a reload. */

@@ -125,7 +125,7 @@ function render(){
       /* A sealed catalog this desk cannot open, or a request to join its team, is what the empty desk says first. */
       : (wholeThingEmpty() && teamJoinShown()) ? teamJoinEmptyHtml()
       : (wholeThingEmpty()
-        ? '<div class="empty empty-desk">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
+        ? '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
           /* A first run has no menu habits yet, and Load is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           /* No sample button, whether or not the sample is there: it is a file, and Load reaches it. */
