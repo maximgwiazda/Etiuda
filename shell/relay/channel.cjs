@@ -123,6 +123,9 @@ const PENDING_MAX = 1000;
 /* A catch-up's handovers held until it reads a short page, and the handover steps its team files showed (applyBatch). */
 const AHEAD_MAX = 16, AHEAD_STEPS_MAX = 64;
 const aheadStep = s => table(s) && s.kind === B.HANDOVER_KIND && JSON.stringify(s).length <= 4096;
+const heldOf = a => a.filter(p => table(p) && Number.isSafeInteger(p.seq) && p.seq >= 0 && HEX32.test(String(p.id)) && isCount(p.epoch)
+  && isCount(p.counter) && B.isId(p.writer) && B.isId(p.lead) && Number.isSafeInteger(p.floor) && p.floor >= 0).slice(-AHEAD_MAX)
+  .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, counter: p.counter, writer: p.writer, lead: p.lead, floor: p.floor }));
 const TAKEN_MAX = 4096;
 /* The relay keeps a deletion 30 days (relay/core.cjs KEEP_MS). A catch-up that last reached the top longer ago than a day
    short of that may have missed one, so it lists the whole team again and drops what the relay no longer lists. */
@@ -498,9 +501,7 @@ function stateOf(x) {
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
     .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor }));
   if (table(x.ahead)) {
-    if (Array.isArray(x.ahead.held)) s.ahead.held = x.ahead.held.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
-      && isCount(p.epoch) && isCount(p.counter) && B.isId(p.writer) && B.isId(p.lead) && count(p.floor)).slice(-AHEAD_MAX)
-      .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, counter: p.counter, writer: p.writer, lead: p.lead, floor: p.floor }));
+    if (Array.isArray(x.ahead.held)) s.ahead.held = heldOf(x.ahead.held); /* plant:ahead-kept */
     if (Array.isArray(x.ahead.steps)) s.ahead.steps = x.ahead.steps.filter(aheadStep).slice(-AHEAD_STEPS_MAX);
   }
   return s;
@@ -960,6 +961,10 @@ function createProgram(opts) {
     try { doc = JSON.parse(r.body.replace(/^\uFEFF/, "")); } catch { doc = null; }
     const t = teamJudged(doc);
     if (!t.ok) return t;
+    /* Read under the pin before a handover moves it: under the new lead the mirror's file judges as nobody's. */
+    let before = null;
+    before = t.handed ? heldTeam() : null; /* plant:hold-before-move */
+    if (before && t.epoch < before.epoch) return R("replay-rev");
     followHandover(t);
     const sha = sha256(Buffer.from(r.body, "utf8"));
     const prev = has(st.applied, TEAM_NAME) ? st.applied[TEAM_NAME] : null;
