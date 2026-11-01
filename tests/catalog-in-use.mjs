@@ -44,7 +44,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
-  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks"];
+  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -100,8 +100,14 @@ const put = (dir, name, t) => {
   if (b) syncMirror(b);
 };
 const touch = (file, ms) => fs.utimesSync(file, ms / 1000, ms / 1000);
-const inUsePath = (share, id) => path.join(share, "desks", id, "in-use.ec");
-const answerPath = (share, id) => path.join(share, "desks", id, "catalog-answer.ec");
+/* The desk's own files land in its folder team's mirror, and the syncer's outbox carries them to the share (board 945 stage 3
+   (b) slice 2), so they are read where the desk writes them; a share no team box knows is read itself. */
+const ownDir = (share, id) => {
+  const b = getBoxForDir(share);
+  return b && b.team && b.D ? path.join(syncerMod.folderMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
+};
+const inUsePath = (share, id) => path.join(ownDir(share, id), "in-use.ec");
+const answerPath = (share, id) => path.join(ownDir(share, id), "catalog-answer.ec");
 
 try {
   const V2 = await import(MOD("catalog-v2.js"));
@@ -116,7 +122,8 @@ try {
       folder: box.share,
       mirror: mirror,
       pin: LEAD,
-      keyFor: (epoch) => box.key,
+      /* The key this desk keeps for the epoch, as the shell's syncer is given: the mirror holds the desk's own files now. */
+      keyFor: (epoch) => box.D.api.teamKeyAt(box.team, epoch) || box.key,
       checks: box.D.api.deskTrustChecks(),
     });
     prog.syncOnce();
@@ -421,7 +428,8 @@ try {
     take(box.D, pinOf(box.D, bootedL || ""));
     const had = fs.existsSync(inUsePath(box.share, box.me.id));
     await box.D.ask("etiuda:team-join", "forget", box.team);
-    check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !box.D.envelope().inUse,
+    check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
+        && !box.D.envelope().inUse,
       "890v forgetting the lead removes in-use.ec");
 
     const drop = await arm("drop");
@@ -722,12 +730,16 @@ try {
     const hadAns = fs.existsSync(ans) && !!openSealedDoc(box.D, ans, box.key);
     box.D.api.setDown(box.share);
     box.D.sync("etiuda:catalog-eject");
-    const owed = box.D.envelope().ejectOwed;
+    /* On a folder team the eject lands in the mirror and its outbox owes the share the two removals, across a relaunch. */
+    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team), own = "desks/" + box.me.id + "/";
+    const owed = box.D.envelope().ejectOwed || (syncerMod.owedAt(mirror, own + "in-use.ec") && syncerMod.owedAt(mirror, own + "catalog-answer.ec")
+      ? { team: box.team, sha: pin } : null);
     const again = loadDesk(box.D.ud);
     again.api.catalogChanged(again.win);
     const env = again.envelope();
-    const useLeft = fs.existsSync(useFile);
-    const ansLeft = fs.existsSync(ans);
+    syncMirror(box);
+    const useLeft = fs.existsSync(useFile) || fs.existsSync(path.join(box.share, own, "in-use.ec"));
+    const ansLeft = fs.existsSync(ans) || fs.existsSync(path.join(box.share, own, "catalog-answer.ec"));
     check(hadUse && hadAns && owed && owed.team === box.team && owed.sha === pin
         && !useLeft && !ansLeft && !env.ejectOwed && !env.inUse,
       "906e an eject while the share is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
