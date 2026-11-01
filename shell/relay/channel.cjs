@@ -522,7 +522,7 @@ function createProgram(opts) {
   const teamMax = Number.isSafeInteger(o.teamMax) ? o.teamMax : B.TEAM_MAX;
   let st = stateOf(typeof o.load === "function" ? o.load() : null);
   let pin = pinOf((st && st.pin) || o.pin);
-  if (st.stranded && (!pin || pin.lead.keyId !== st.stranded.lead)) { st.stranded = null; st.behind = {}; }
+  if (st.stranded && (!pin || pin.lead.keyId !== st.stranded.lead)) { st.stranded = null; st.behind = {}; } /* plant:stranded-out-invite */
   const rates = new Map();
   /* What waits on a refusal that lifts, by path or copy, with the reason last said for it, so a wait is said once. */
   const waiting = new Map();
@@ -650,7 +650,7 @@ function createProgram(opts) {
     if (t.handed) {
       pin = { teamId: pin.teamId, rt: pin.rt, lead: { keyId: t.doc.lead.keyId, public: t.doc.lead.public } }; /* plant:team-pin-move */
       st.pin = pin; /* plant:team-pin-save */
-      st.stranded = null;
+      st.stranded = null; /* plant:stranded-out-recopy */
       st.behind = {};
     }
   }
@@ -966,7 +966,7 @@ function createProgram(opts) {
     if (!landed.ok || landed.stale) return landed;
     st.revs = lr.revs;
     keepTrust(t);
-    if (st.stranded && t.epoch >= st.stranded.above) { st.stranded = null; st.behind = {}; }
+    if (st.stranded && t.epoch >= st.stranded.above) { st.stranded = null; st.behind = {}; } /* plant:stranded-out-invite */ /* plant:stranded-out-recopy */
     persist();
     if (ctx && typeof ctx.onTeam === "function") {
       try { ctx.onTeam(); } catch (e) { say("the team file could not be heeded - " + (e && e.message)); }

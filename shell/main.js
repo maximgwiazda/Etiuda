@@ -4740,6 +4740,12 @@ function inviteSettled(team, lead) {
   const pin = teamPins[team];
   return pin && (pin.keyId !== lead.keyId || pin.public !== lead.public) ? "pinned" : "";
 }
+/* A relay invitation from another lead for the team this desk's channel holds as left behind (strandedShown) is not refused as
+   "pinned": the yes leaves the team as Leave this team does and then takes it, so the lead's key is shown to compare once
+   admitted. Every other pinned team refuses it. */
+function inviteStranded(parsed) {
+  return !!parsed.relay && inviteSettled(parsed.team, parsed.lead) === "pinned" && !!strandedShown(parsed.team); /* plant:stranded-invite */
+}
 /* "" where the folder an invitation names may take its request: it holds no team file, or one whole under the invited
    lead and for the invited team. "unreadable" where its team file cannot be read, is larger than a team file, or is not
    JSON; "foreign" for any other. */
@@ -4770,7 +4776,7 @@ function readInvite(text) {
   if (shut) return Object.assign({}, view, { refused: shut });
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
-  if (settled) return Object.assign({}, view, { refused: settled });
+  if (settled && !inviteStranded(parsed)) return Object.assign({}, view, { refused: settled });
   /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
      code and no folder, as the link's confirm offers it. */
   if (parsed.relay) {
@@ -4844,7 +4850,8 @@ async function takeInvite(text, name, check) {
   const parsed = inviteParse(text);
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
-  if (settled) return Object.assign({}, joinView(), { refused: settled });
+  const stranded = !!settled && inviteStranded(parsed);
+  if (settled && !stranded) return Object.assign({}, joinView(), { refused: settled });
   const code = inviteCode(parsed.secret, parsed.lead.public);
   if (!parsed.relay) /* plant:relay-code */ /* plant:folder-code */
   {
@@ -4852,6 +4859,16 @@ async function takeInvite(text, name, check) {
   }
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
+  if (parsed.relay && stranded) {
+    if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
+    const old = relayChannel;
+    forgetLead(parsed.team, true);
+    /* The leave stops its channel on the shell's next turn (relaySoon); the request waits for that, and for the old channel's last cycle. */
+    await new Promise(r => setTimeout(r, 0));
+    if (old && old !== relayChannel) await old.stop().catch(() => {});
+    const now = inviteDoor() || inviteSettled(parsed.team, parsed.lead);
+    if (now) return Object.assign({}, joinView(), { refused: now });
+  }
   if (parsed.relay) return takeRelayInvite(parsed, name, me);
   const previous = catalogFolder();
   const keptJoin = teamJoin;
