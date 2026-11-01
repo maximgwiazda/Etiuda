@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 304;
+const EXPECTED = 306;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -4774,6 +4774,139 @@ try {
       globalThis.removeEventListener = was.remove;
       globalThis.getComputedStyle = was.style;
     }
+  }
+
+  /* ---- 932m, board 931 (7) item 9: a synced relay desk keeps its channel when only the pin moves. The lead hands the team
+     to a new key on the relay and in a team file whose handover the pinned lead signed; the desk's channel takes that file,
+     the desk's pin follows it, and relayRun returns the same channel, never stopped, which takes the next file the new lead
+     signs. The scene runs on the shell as it stands and, for 932n, on the shell with plant:ho9-keep-channel lifted. ---- */
+  async function keptScene(source, tag) {
+    const out = { asked: false, synced: false, moved: 0, handed: false, same: false, stops: 0, after: false, pinNow: "", followed: "", notes: [] };
+    const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), NEXT = keyPair(true);
+    const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+    if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+    const docOf = (rev, roster, lead, handover) => {
+      const o = { format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"], lead: { keyId: lead.keyId, public: lead.pub },
+        sealed: true, exportsSealed: false, epoch: 1, rev, channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster };
+      if (handover) o.handover = handover;
+      o.sig = { alg: "Ed25519", keyId: lead.keyId };
+      o.sig.value = signHex(lead, C.signedBytes(o));
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    /* The lead's Studio: one channel, whose key is the new lead's once the relay has moved the team to it. */
+    let leadKey = LEAD;
+    const invs = [], sMirror = path.join(LAB, tag + "-studio"), sT = transport(tag + "-studio");
+    const studioH = C.createChannel({ rt, url: URLV1, mirror: sMirror, stateFile: path.join(LAB, tag + "-studio.json"),
+      pin: () => ({ teamId: team, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+      me: () => ({ keyId: leadKey.keyId, public: leadKey.pub, privateKey: leadKey.privateKey, place: "root" }),
+      keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1, inviteKeys: () => invs,
+      request: sT.request, connect: sT.connect, pollMs: 1e9 });
+    const ud = path.join(LAB, tag + "-desk"), share = path.join(LAB, tag + "-share");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.mkdirSync(share, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+    const Dk = loadDesk(ud, source);
+    let ch = null, counting = true;
+    try {
+      put(sMirror, "board.ec", JSON.stringify(Dk.api.sealCatalog(key, team, 1, catalogText(1))));
+      put(sMirror, C.TEAM_NAME, docOf(1, [], LEAD));
+      studioH.start();
+      await studioH.idle();
+      const inv = await relayInviteOn(rt, team);
+      invs.push({ id: inv.inv, key: C.inviteSealKey(inv.secret) });
+      await studioH.kick(); await studioH.idle();
+      const taken = await Dk.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
+      if (!taken || taken.refused) throw new Error("the invitation was refused: " + JSON.stringify(taken));
+      const me = await Dk.ask("etiuda:branch-identity", false);
+      const mirror = path.join(ud, "relay", rt);
+      const pump = async () => {
+        const c = Dk.api.relayRun();
+        if (c) { c.kick(); await c.idle(); }
+        await studioH.kick(); await studioH.idle();
+      };
+      out.asked = await until(async () => { await pump(); return !!read(sMirror, "desks/" + me.id + "/join.json"); }, 8000);
+      /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
+      const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: Dk.api.wrapTeamKey(key, me.box, team, 1, me.id) };
+      put(sMirror, C.TEAM_NAME, docOf(2, [entry], LEAD));
+      const t1 = R.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
+      await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t: t1, sig: signHex(LEAD, core.devicesBytes(rt, 1, t1, keys)) });
+      await studioH.kick(); await studioH.idle();
+      invs.length = 0;
+      out.synced = await until(async () => {
+        await pump();
+        const h = Dk.api.relayHere();
+        return factsOf(Dk.api.readCatalog() || "") === 1 && !!h && h.joining === false
+          && (Dk.envelope().teamPins || {})[team] && Dk.envelope().teamPins[team].public === LEAD.pub;
+      }, 8000);
+      if (!out.synced) return out;
+      /* The channel the synced desk runs, its stop counted from here on. */
+      ch = Dk.api.relayRun();
+      if (ch) {
+        const stop = ch.stop;
+        ch.stop = function () { if (counting) out.stops++; return stop.apply(this, arguments); };
+      }
+      /* The handover. The team file the new lead signs, carrying the step the pinned lead signed, goes up from the lead's
+         Studio while the relay still knows the old key; the desk's channel takes it and the desk's pin follows it. Then the
+         relay moves the team to the new key, signed by the old one. (Put up under the new key's own session, that file is
+         left out by the desk as from a key not on the team file it holds, so the order here is the one a desk can follow.) */
+      const step = { format: 1, kind: "etiuda-team-handover", team, from: { keyId: LEAD.keyId, public: LEAD.pub },
+        to: { keyId: NEXT.keyId, public: NEXT.pub }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      step.sig.value = signHex(LEAD, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(step)]));
+      put(sMirror, C.TEAM_NAME, docOf(3, [entry], NEXT, [step]));
+      await studioH.kick(); await studioH.idle();
+      out.handed = await until(async () => {
+        await pump();
+        const p = (Dk.envelope().teamPins || {})[team];
+        return !!p && p.public === NEXT.pub;
+      }, 8000);
+      if (!out.handed) out.notes.push("rev at the desk " + (JSON.parse(read(mirror, C.TEAM_NAME) || "{}").rev) + ", at the lead " + (JSON.parse(read(sMirror, C.TEAM_NAME) || "{}").rev)
+        + "; desk " + Dk.said.slice(-4).join(" / "));
+      R.clock.now += 1;
+      const tMove = R.clock.now;
+      const moveBytes = Buffer.from("etiuda-relay-lead\n" + rt + "\n" + NEXT.keyId + "\n" + NEXT.pub + "\n" + tMove, "utf8");
+      const moveRes = await admin("POST", "/relay/v1/t/" + rt + "/lead", { to: { keyId: NEXT.keyId, pub: NEXT.pub }, t: tMove,
+        sig: signHex(LEAD, moveBytes), grant: K.grantFor(NEXT.pub, tMove) });
+      out.moved = moveRes.status;
+      if (moveRes.status !== 200) { out.notes.push("move " + JSON.stringify(moveRes.json)); return out; }
+      leadKey = NEXT;
+      /* The next file the new lead signs, on the channel the desk runs now. */
+      const AFTER = "after the handover, " + tag + "\n";
+      put(sMirror, "after.ec", AFTER);
+      await studioH.kick(); await studioH.idle();
+      out.after = await until(async () => { await pump(); return read(mirror, "after.ec") === AFTER; }, 8000);
+      if (!out.after) out.notes.push("after.ec at the lead " + (read(sMirror, "after.ec") !== null) + "; studio " + sT.log.slice(-4).join(" ")
+        + "; desk " + Dk.said.slice(-3).join(" / "));
+      const now = Dk.api.relayRun();
+      out.same = !!ch && now === ch;
+      const pinned = now && now.program && typeof now.program.pinned === "function" ? now.program.pinned() : null;
+      out.followed = pinned && pinned.lead && pinned.lead.public === NEXT.pub ? "the new lead" : pinned && pinned.lead ? "another key" : "nothing";
+      const p = (Dk.envelope().teamPins || {})[team];
+      out.pinNow = p && p.public === NEXT.pub ? "the new lead" : p ? "another key" : "none";
+      return out;
+    } finally {
+      counting = false;
+      try { await studioH.stop(); } catch { /* stopped */ }
+      try { const c = Dk.api.relayRun(); if (c) await c.stop(); } catch { /* stopped */ }
+      try { if (ch) await ch.stop(); } catch { /* stopped */ }
+    }
+  }
+  {
+    let k = null, err = "";
+    try { k = await keptScene(SRC, "ho9-kept"); } catch (e) { err = e && e.stack ? e.stack : String(e); }
+    check(!!k && k.asked && k.synced && k.moved === 200 && k.handed && k.same && k.stops === 0 && k.after
+      && k.pinNow === "the new lead" && k.followed === "the new lead",
+      "932m a synced relay desk keeps its channel when only the pin moves: after a genuine handover the channel relayRun"
+      + " returns is " + (k && k.same ? "the same one" : "another one") + ", stopped " + (k ? k.stops : "?") + " time(s), the desk's pin "
+      + (k ? k.pinNow : "?") + ", the channel's " + (k ? k.followed : "?") + ", the next file the new lead signs "
+      + (k && k.after ? "taken" : "not taken") + (k ? ", synced " + k.synced + ", move " + k.moved + (k.notes.length ? ", " + k.notes.join("; ") : "") : "")
+      + (err ? ", " + err : ""));
+    const kept = await liftDesk("plant:ho9-keep-channel", async text => {
+      const p = await keptScene(text, "ho9-plant");
+      /* Lifted, the handover still lands and the file is still taken, so only the channel kept turns. */
+      return p.synced && p.handed && p.after && p.pinNow === "the new lead" && (!p.same || p.stops > 0);
+    });
+    check(kept.turned && kept.back, "932n lifting plant:ho9-keep-channel rebuilds the channel when only the pin moved, and the product"
+      + " file is never written: " + kept.detail + ", sha " + (kept.back ? "restored" : "differs"));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
