@@ -6,7 +6,8 @@ import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionNameOf, editionLabel, editionSaid,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
-  eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
+  eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile, eNeedsNewerLine,
+  eUnreadableLine } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
   eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
@@ -137,7 +138,7 @@ function loadCatalogFromFolder(name,mtime,desk){
     let c=null;
     try{ c=parseCatalogFile(got.text); }
     catch(e){
-      toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
+      toastRefusal(eUnreadableLine(e,got.name));
       return;
     }
     // A file whose desk is off the team's roster is asked about even on an empty desk, so its note is read first.
@@ -862,7 +863,7 @@ function eCheckWatchedFile(interactive){
         return f.text().then(text=>{
           let c=null;
           try{ c=parseCatalogFile(text); }
-          catch(e){ if(interactive) toastRefusal(t("That file is not a catalog Etiuda can read.")); return null; }
+          catch(e){ if(interactive) toastRefusal(e&&e.needsEngine ? eNeedsNewerLine(e.needsEngine) : t("That file is not a catalog Etiuda can read.")); return null; }
           const shown=eOfferCatalogDialog(c,{
             /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
                folder beside it would say it came from there. */
@@ -940,6 +941,8 @@ function offerToLooseAuthor(all){
 /* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
    refusal, "read" for a file it could not open and anything else for one it would not parse. */
 function refuseAskedFile(name,why){
+  const newer=/^newer ([0-9]+\.[0-9]+\.[0-9]+)$/.exec(String(why||""));
+  if(newer){ toastRefusal(eNeedsNewerLine(newer[1])); return; }
   toastRefusal(t(why==="read"?"{FILE} could not be read.":"{FILE} is not a catalog Etiuda can read.")
     .split("{FILE}").join(String(name||"")));
 }
@@ -953,6 +956,11 @@ function wireHostCatalogWatch(){
   const cold=eOpenedRefused()||(eCatalogRefusedNames().length?{name:eCatalogRefusedNames()[0],why:"parse"}:null);
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
   if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
+  /* AN EDITION IN THE FOLDER WAITS FOR A NEWER ETIUDA: said at boot with the same hand, and again whenever the host finds
+     another. The edition in use stays; the host has not handed the waiting one over. */
+  const newer=h.catalogNewer;
+  if(newer && newer.version) setTimeout(()=>{ try{ toastRefusal(eNeedsNewerLine(newer.version)); }catch(e){} },cold?2800:1400);
+  if(typeof h.onCatalogNewer==="function") h.onCatalogNewer(v=>{ if(v && v.version) toastRefusal(eNeedsNewerLine(v.version)); });
   eOnCatalogListing(onCatalogListing);
   h.onCatalogFile((text,name,where,asked,why,builtIn,notOnTeam)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a

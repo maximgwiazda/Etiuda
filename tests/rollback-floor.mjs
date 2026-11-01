@@ -38,7 +38,7 @@ if (!PLANTS_OFF && process.env.ETIUDA_PLANTS_COPY !== "1") {
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 77;
+const EXPECTED = 82;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1896,6 +1896,74 @@ try {
       "900i a first pin with no invitation: on the relay etiuda-ring.json vouches for nothing and neither does the signed file's own"
       + " ring, while on the folder the ring file vouches as before; the third arm, the relay's first step's allowance, is"
       + " inverted by its fourth (board 907): " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
+  }
+
+  /* ---- updates 2, the desk's half: a desk.json a later Etiuda saved (its schema above this one's) is refused whole. No
+     backup opens in its place, nothing is written over it or rotated, no key is made, and the release that saved it is
+     named for the page. The backup beside it is this version's own schema with a key only it holds, so a fall back shows. */
+  {
+    const laterDesk = (name, app) => {
+      const ud = path.join(LAB, name);
+      fs.mkdirSync(ud, { recursive: true });
+      const later = { kind: "etiuda-desk", schema: 2, saved: "2027-01-05T10:00:00.000Z", desk: "d" + "4".repeat(32),
+        keys: { eUiLang: "en", eLaterOnly: "kept" } };
+      if (app !== undefined) later.app = app;
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(later), "utf8");
+      fs.writeFileSync(path.join(ud, "desk.bak1.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en", eStale: "backup" } }), "utf8");
+      fs.writeFileSync(path.join(ud, "desk.bak2.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en", eStale: "older" } }), "utf8");
+      return ud;
+    };
+    const filesOf = ud => fs.readdirSync(ud).sort().map(f => f + ":" + crypto.createHash("sha256").update(fs.readFileSync(path.join(ud, f))).digest("hex").slice(0, 12)).join(",");
+    const drive = async (ud, src) => {
+      const D = loadDesk(ud, src);
+      const before = filesOf(ud);
+      let keys = null;
+      try { keys = JSON.parse(D.sync("etiuda:desk") || "null"); } catch { keys = null; }
+      const named = D.sync("etiuda:desk-newer");
+      const saved = D.sync("etiuda:desk-save", JSON.stringify({ eUiLang: "pl", eNew: "1" }));
+      const patched = D.sync("etiuda:desk-patch-save", JSON.stringify({ eNew2: "1" }));
+      D.sync("etiuda:desk-refused-seen");
+      let ident = null;
+      try { ident = await D.ask("etiuda:branch-identity", true); } catch (e) { ident = "threw " + e.message; }
+      return { keys, named, saved, patched, ident, before, after: filesOf(ud), said: D.said.join(" | ") };
+    };
+    const A = await drive(laterDesk("later-desk", "2.4.0"));
+    check(!!A.keys && !("eStale" in A.keys) && !("eLaterOnly" in A.keys) && A.named === JSON.stringify({ app: "2.4.0", schema: 2 }),
+      "1150a a desk.json of a later schema is refused and no backup opens in its place, and the release that saved it is named for the page: keys "
+      + JSON.stringify(A.keys) + ", named " + JSON.stringify(A.named));
+    check(A.saved === false && A.patched === false && A.before === A.after,
+      "1150b nothing is written over that desk.json or rotated, by a save or a patch, and no file is added or changed beside it: save "
+      + A.saved + ", patch " + A.patched + ", files " + (A.before === A.after ? "as they were" : A.before + " then " + A.after));
+    check(A.ident === null && A.before === A.after,
+      "1150c no desk key is made while that desk stands: identity " + JSON.stringify(A.ident));
+    const B = await drive(laterDesk("later-desk-bare"));
+    check(B.named === JSON.stringify({ app: "", schema: 2 }) && B.before === B.after,
+      "1150d a later desk that names no release is refused the same way, and says so with no number: named " + JSON.stringify(B.named));
+    /* plant:desk-newer, plant:desk-newer-write and plant:desk-newer-key: each line lifted from shell/main.js in memory, the file
+       valid script, brings back what it stops: the backup opened in its place, a write over it, a key made. */
+    if (PLANTS_OFF) {
+      skip("1150e lifting plant:desk-newer opens the backup again, plant:desk-newer-write lets a write replace desk.json, and plant:desk-newer-key makes a key");
+    } else {
+      const without = tag => {
+        const lines = SRC.split(/\n/), at = lines.findIndex(l => l.indexOf(tag) >= 0);
+        if (at < 0) return null;
+        lines.splice(at, 1);
+        return lines.join("\n");
+      };
+      const out = [];
+      const s1 = without("plant:desk-newer */"), s2 = without("plant:desk-newer-write"), s3 = without("plant:desk-newer-key");
+      const L1 = s1 ? await drive(laterDesk("later-lift-read", "2.4.0"), s1) : null;
+      const L2 = s2 ? await drive(laterDesk("later-lift-write", "2.4.0"), s2) : null;
+      const L3 = s3 ? await drive(laterDesk("later-lift-key", "2.4.0"), s3) : null;
+      out.push(L1 ? "read " + JSON.stringify(L1.keys && L1.keys.eStale) : "read plant absent");
+      out.push(L2 ? "write " + L2.saved + (L2.before === L2.after ? " unchanged" : " changed") : "write plant absent");
+      const minted = L => !!L && /branch key could not be made or kept - desk\.json was saved by a later Etiuda/.test(L.said);
+      out.push(L3 ? "key " + (minted(L3) ? "made, then refused at the write" : JSON.stringify(L3.ident)) : "key plant absent");
+      check(!!L1 && !!L1.keys && L1.keys.eStale === "backup" && !!L2 && L2.saved === true && L2.before !== L2.after
+        && minted(L3) && !minted(A),
+        "1150e lifting plant:desk-newer opens the backup again, plant:desk-newer-write lets a write replace desk.json, and plant:desk-newer-key makes a key pair (refused only at the write after it): "
+        + out.join(", "));
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
