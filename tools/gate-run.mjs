@@ -63,6 +63,8 @@ export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/machine-lock.mjs", args: [], cmd: "node tests/machine-lock.mjs" },
   { script: "nightly", file: "tests/text-scan-selftest.js", args: [], cmd: "node tests/text-scan-selftest.js" },
   { script: "nightly", file: "tests/sbom.mjs", args: [], cmd: "node tests/sbom.mjs" },
+  /* A browser leg: the carries a desk arrives with, driven in headless Chrome (the test architect, 2026-11-01 07:17). */
+  { script: "nightly", file: "tests/storage-carry.js", args: [], cmd: "node tests/storage-carry.js" },
 ];
 
 export const FLOOR = [

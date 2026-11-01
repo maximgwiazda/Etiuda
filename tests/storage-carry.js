@@ -75,8 +75,7 @@ const CATALOG_KEY = "eCatalog";
 const readStore = pg => pg.evaluate(() => {
   const out = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); out[k] = localStorage.getItem(k); }
-  const el = document.getElementById("toast");
-  return { store: out, ns: E_NS, toast: (el && el.classList.contains("show")) ? el.textContent : "" };
+  return { store: out, ns: E_NS };
 });
 /* ---- part two's fixtures ------------------------------------------------------------------ */
 /* Two editions of one invented catalog: the second carries an id per request, the first predates
@@ -230,14 +229,28 @@ const t0 = Date.now();
     pg.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) bad.push("console: " + m.text().slice(0, 160)); });
     /* Cleared as well as seeded: every file:// page in this browser shares one storage area,
        and the part above has left its keys in it. The catalog is stored, as an imported one is. */
+    /* Every toast is written down as it shows: one lives 1.7 s and the launch wait alone can outlast
+       that, so a read at the end hears nothing whatever the desk said. */
     await pg.evaluateOnNewDocument(sown => {
       try { localStorage.clear(); for (const k of Object.keys(sown)) localStorage.setItem(k, sown[k]); } catch (x) {}
+      window.__told = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        const el = document.getElementById("toast");
+        if (!el) return;
+        let shown = "";
+        new MutationObserver(() => {
+          const now = (el.classList.contains("show") && !el.classList.contains("swap")) ? el.textContent : "";
+          if (now && now !== shown) window.__told.push(now);
+          shown = now;
+        }).observe(el, { attributes: true, attributeFilter: ["class"], childList: true, characterData: true, subtree: true });
+      });
     }, Object.assign({ [CATALOG_KEY]: JSON.stringify(catalog) }, seed));
     await pg.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/storage-carry.js wake" });
     await sleep(2400);
     const got = await readStore(pg);
-    return { pg, bad, store: got.store, toast: got.toast, ns: got.ns };
+    const told = await pg.evaluate(() => window.__told.slice());
+    return { pg, bad, store: got.store, toast: told.join(" | "), ns: got.ns };
   };
 
   const tagNs = nsFor(TAGGED.id), plainNs = nsFor(PLAIN.id);

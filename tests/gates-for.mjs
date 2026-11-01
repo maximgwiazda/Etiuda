@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 19;
+const EXPECTED = 21;
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -362,6 +362,23 @@ try {
   check(scanMiss.length === 0,
     "gf19 every scan glob matches a tracked file: "
     + (scanMiss.length ? scanMiss.join("; ") : Object.keys(gfTool.SCANS).length + " legs"));
+
+
+  /* storage-carry is a browser leg, so it lives in the release profile and the nightly, not in `test`; a merge touching the
+     carries it reads runs it through gates-for (the test architect, 2026-11-01 07:17: it rotted unseen while only
+     tools/release.mjs's acceptance run called it). */
+  let namedForPack = "";
+  try { namedForPack = execFileSync(process.execPath, [path.join(ROOT, "tools", "gates-for.mjs"), "src/modules/pack.js"], { cwd: ROOT, encoding: "utf8" }); }
+  catch (e) { namedForPack = String(e && e.stdout || ""); }
+  check(/tests\/storage-carry\.js/.test(namedForPack),
+    "gf20 a change to src/modules/pack.js, whose carries storage-carry reads, names tests/storage-carry.js: "
+    + (/tests\/storage-carry\.js/.test(namedForPack) ? "named" : "not named"));
+  const grTool = await import("../tools/gate-run.mjs");
+  const pkgNow = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const relFiles = typeof grTool.profileSteps === "function" ? grTool.profileSteps(ROOT, pkgNow).map(s => s.file) : [];
+  const inTest = /tests\/storage-carry\.js/.test(String((pkgNow.scripts || {}).test || ""));
+  check(relFiles.includes("tests/storage-carry.js") && !inTest,
+    "gf21 the release profile runs tests/storage-carry.js and `test` does not: profile " + relFiles.includes("tests/storage-carry.js") + ", in test " + inTest);
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {
