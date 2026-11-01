@@ -484,7 +484,8 @@ function createFolderProgram(opts) {
   const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
   /* A refused or parked copy is held: not copied from the share again while its size and mtime stay, and, for a refusal, while
      the pin, the team file, the ring and the key for its epoch stay as they were when it was judged. The mirror's own copy is
-     never removed for it. */
+     never removed for it. The hold lives in memory, so "copied once" holds within one run: after a restart a held or parked
+     file is copied once more, and a parked file waiting for its key is read again from the share (the test architect, 18:47). */
   function refuse(item, epoch) {
     if (!item || item.size == null) return;
     const ep = Number.isInteger(epoch) ? epoch : null;
