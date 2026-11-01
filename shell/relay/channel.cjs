@@ -2075,9 +2075,12 @@ function createChannel(opts) {
       }
       prog.applyBatch(items, ctx());
       prog.setSeq(top);
-      if (r.json.length < SINCE_MAX) { judgeStranded(); return caughtUp(began, behind); }
+      /* Judged on the short page alone: a catch-up that ran out at the round cap read part of the list, and the next cycle reads on. */
+      if (r.json.length < SINCE_MAX) {
+        judgeStranded(); /* plant:stranded-whole */
+        return caughtUp(began, behind);
+      }
     }
-    judgeStranded();
     return { ok: true };
   }
 
@@ -2215,6 +2218,8 @@ function createChannel(opts) {
       /* Left behind, nothing goes under a team key; a request under a new invitation's key still does. */
       let left = false;
       left = !sealing.byInvite && !!prog.stranded(); /* plant:stranded-hold */
+      /* A left-behind desk that took a new lead's invitation holds its files until the agent says the key matches. */
+      if (!sealing.byInvite && typeof o.holdOut === "function" && o.holdOut()) left = true; /* plant:stranded-match-hold */
       if (left) continue;
       op.byInvite = !!sealing.byInvite;
       if (sealing.byInvite) op.inviteId = ctx().inviteId;

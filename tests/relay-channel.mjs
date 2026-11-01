@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 353;
+const EXPECTED = 358;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -5367,11 +5367,14 @@ try {
      again at the second key, the desk finds its copy by the invitation's box, as in 939q, and the team's row shows the new lead's key to compare (the print is leadPrint's, sha256 of the public half).
      `answer` "matches" (939s): "It matches", and the desk's two files reach the lead's mirror, opened. "differs" (939t): "It does
      not match" as the leave route sends it since Max's ruling of 06:13 (op "leave"): the team is left with no bar, and the same
-     invitation read again is offered, naming the leave. */
+     invitation read again is offered, naming the leave. From the yes until the answer the desk's files stay here (the test
+     architect, 2026-11-01 11:51, E1): every PUT the desk makes is counted from the yes and from admission, and the lead's mirror is
+     read after three more cycles once admitted. */
   const printOf = pub => sha(Buffer.from(pub, "hex")).slice(0, 16);
   async function strandedPaste(tag, answer, app) {
     const out = { synced: false, moved: 0, before: "", read: "", taken: "", key: "", upFirst: false, arrived: false,
-      epoch: null, pin: "", row: "", left: false, again: "" };
+      epoch: null, pin: "", row: "", left: false, again: "", putsYes: -1, putsAdmitted: -1, putsEnd: -1, atLeadEnd: false };
+    const putsFrom = mark => deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length;
     const s = await relayDeskScene(tag, app);
     try {
       out.synced = !!s.synced;
@@ -5386,6 +5389,7 @@ try {
       const text = await nextInvite(s, a);
       const seen = await s.Dk.ask("etiuda:team-join", "read", text);
       out.read = seen && seen.refused ? "refused " + seen.refused : seen && seen.offer ? "offered" : "neither";
+      const yesMark = deskTransport.log.length;
       const taken = await s.Dk.ask("etiuda:team-join", "invite", text, "Desk Nine", "");
       out.taken = taken && taken.refused ? "refused " + taken.refused : "taken";
       if (out.taken !== "taken") return out;
@@ -5397,7 +5401,11 @@ try {
       out.key = !row ? "no row" : !row.admitted ? "not admitted" : row.print === printOf(NEXT.pub) && row.seen === false ? "the new lead's, to compare"
         : row.print === printOf(LEAD.pub) ? "the old lead's" : "another, seen " + row.seen;
       const arrived = () => read(s.sMirror, a.own + "away.json") !== null && read(s.sMirror, a.own + "back.json") !== null;
+      const admitMark = deskTransport.log.length;
+      for (let i = 0; i < 3; i++) await s.pump();
       out.upFirst = arrived();
+      out.putsYes = putsFrom(yesMark);
+      out.putsAdmitted = putsFrom(admitMark);
       if (answer === "matches") {
         await s.Dk.ask("etiuda:team-join", "seen", s.team);
         await until(async () => { await s.pump(); return arrived(); }, 8000);
@@ -5406,6 +5414,8 @@ try {
         await s.Dk.ask("etiuda:team-join", "leave", s.team);
         await wait(50);
         for (let i = 0; i < 3; i++) await s.pump();
+        out.putsEnd = putsFrom(yesMark);
+        out.atLeadEnd = read(s.sMirror, a.own + "away.json") !== null || read(s.sMirror, a.own + "back.json") !== null;
         const env = s.Dk.envelope();
         out.left = !!(env.teamLeft && env.teamLeft[s.team]);
         const later = await s.Dk.ask("etiuda:team-join", "read", text);
@@ -5443,6 +5453,149 @@ try {
       out.row = row ? (row.stranded ? "left behind" : "not left behind") : "no row";
       return out;
     } finally {
+      await s.stop();
+    }
+  }
+  /* 939z and 939za, the test architect's point 3 on the lead box (2026-11-01 11:51): the request is written before the old pin is
+     let go. From 939l's scene the desk pastes the new lead's invitation while a folder stands where its request is written (in the
+     invitation's mirror, the desk's own place), so the write fails: the yes is refused as "silent", the desk is still left behind
+     with its notice, under the old lead, not left, its two files kept here and none put up. The folder taken away (and the request
+     the first join wrote put back), the same paste is taken. */
+  async function strandedAskFails(tag, app) {
+    const out = { synced: false, moved: 0, before: "", taken: "", row: "", pin: "", left: false, kept: false, atLead: false, puts: -1, said: -1, again: "" };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const a = await strandAway(s, false);
+      out.moved = a.moved;
+      if (out.moved !== 200) return out;
+      const rowOf = v => ((v && v.leads) || []).find(r => r.team === s.team) || null;
+      const row0 = rowOf(await s.Dk.ask("etiuda:team-join", "leads"));
+      out.before = row0 && row0.stranded ? "left behind" : "not left behind";
+      const text = await nextInvite(s, a);
+      const jf = path.join(s.mirror, "desks", s.me.id, "join.json"), aside = jf + ".lab-aside";
+      if (fs.existsSync(jf)) fs.renameSync(jf, aside);
+      fs.mkdirSync(jf);
+      const mark = deskTransport.log.length;
+      const taken = await s.Dk.ask("etiuda:team-join", "invite", text, "Desk Nine", "");
+      out.taken = taken && taken.refused ? "refused " + taken.refused : "taken";
+      await wait(50);
+      for (let i = 0; i < 3; i++) await s.pump();
+      out.puts = deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length;
+      const env = s.Dk.envelope(), p = (env.teamPins || {})[s.team];
+      out.pin = p && p.public === LEAD.pub ? "the old lead" : p && p.public === a.NEXT.pub ? "the new lead" : "none";
+      out.left = !!(env.teamLeft && env.teamLeft[s.team]);
+      const row = rowOf(await s.Dk.ask("etiuda:team-join", "leads"));
+      out.row = row ? (row.stranded ? "left behind" : "not left behind") : "no row";
+      out.kept = read(s.mirror, a.own + "away.json") !== null && read(s.mirror, a.own + "back.json") !== null;
+      out.atLead = read(s.sMirror, a.own + "away.json") !== null || read(s.sMirror, a.own + "back.json") !== null;
+      out.said = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
+      fs.rmdirSync(jf);
+      if (fs.existsSync(aside)) fs.renameSync(aside, jf);
+      const again = await s.Dk.ask("etiuda:team-join", "invite", text, "Desk Nine", "");
+      out.again = again && again.refused ? "refused " + again.refused : "taken";
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
+  /* 939zb and 939zc, the test architect's catch on the merge (2026-11-01 12:06): a desk is judged left behind only after a catch-up
+     that read the whole list, never one that ran out at the round cap. The scene of 939L (the old box kept, so a whole read follows
+     the new key), with one more copy by the new key at the second epoch for a desk not in this scene. The desk's list is served
+     through a stand-in (the hooks' fetch) that puts the new key's root files of the second epoch and that copy first, then a
+     million entries that are left out as of no size (1000 pages of 1000, the cap), then the rest in the relay's own order: the
+     handover, this desk's own copy and the files after them. Every since/ the desk asks while the stand-in is armed is counted.
+     After one cycle the desk has read exactly to the cap, has not been judged left behind and has said nothing; the cycles after
+     read on, follow the new key at the second epoch, and say nothing. */
+  async function strandCapped(tag, app) {
+    const out = { synced: false, moved: 0, extra: 0, rounds: 0, reached: -1, saidCap: -1, leftCap: "", said: -1, pin: "", epoch: null, row: "" };
+    const PAGE = 1000, CAP = PAGE * 1000;
+    const v = { armed: false, first: null, list: null, base: 0, N: 0, realTop: 0, rounds: 0, reached: 0, onCap: null, atCap: null };
+    const junk = seq => ({ seq, meta: { id: "left-out-" + seq, size: -1 } });
+    const answer = async (page, from) => {
+      const h = {};
+      if (from && from.headers.get("etiuda-lapse")) h["etiuda-lapse"] = from.headers.get("etiuda-lapse");
+      return new Response(JSON.stringify(page), { status: 200, headers: h });
+    };
+    const capFetch = (url, init) => {
+      const m = /\/t\/[0-9a-f]{32}\/since\/(\d+)$/.exec(String(url));
+      if (!v.armed || !m || !init || init.method !== "GET") return null;
+      return (async () => {
+        const at = Number(m[1]);
+        if (!v.list) {
+          const res = await relayFetch(url, init);
+          const real = await res.json();
+          v.base = at;
+          v.realTop = real.length ? real[real.length - 1].seq : at;
+          const first = real.filter(e => v.first(e.meta)), rest = real.filter(e => !v.first(e.meta));
+          v.list = { first, rest };
+          v.N = CAP + rest.length;
+        }
+        if (at < v.base) return relayFetch(url, init);
+        /* The first ask past the cap opens the next catch-up: what the capped one left is read here, before anything more is served. */
+        if (at === v.base + CAP && !v.atCap && v.onCap) v.atCap = v.onCap();
+        if (at >= v.base + v.N) {
+          const real = String(url).replace(/\/since\/\d+$/, "/since/" + (at - v.base - v.N + v.realTop));
+          const res = await relayFetch(real, init);
+          const page = (await res.json()).map(e => Object.assign({}, e, { seq: e.seq - v.realTop + v.base + v.N }));
+          return answer(page, res);
+        }
+        const page = [];
+        for (let i = at - v.base; i < v.N && page.length < PAGE; i++) {
+          const seq = v.base + i + 1;
+          if (i < v.list.first.length) page.push(Object.assign({}, v.list.first[i], { seq }));
+          else if (i < CAP) page.push(junk(seq));
+          else page.push(Object.assign({}, v.list.rest[i - CAP], { seq }));
+        }
+        v.rounds++;
+        if (page.length) v.reached = Math.max(v.reached, page[page.length - 1].seq - v.base);
+        return answer(page, null);
+      })();
+    };
+    const s = await relayDeskScene(tag, app ? { app, fetch: capFetch } : { fetch: capFetch });
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      const step = s.step(LEAD, NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      await s.studio.kick(); await s.studio.idle();
+      const key2 = crypto.randomBytes(32);
+      s.keys.set(2, key2);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 1, roster: [s.entry(key2, 2)], lead: NEXT, box: s.boxNow, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key2, s.team, 2, s.catalog(2, NEXT, "edition two"))));
+      await s.studio.kick(); await s.studio.idle();
+      const extra = hex(16);
+      const b = B.seal({ relayTeamId: s.rt, epoch: 2, teamKey: crypto.randomBytes(32), writer: { keyId: NEXT.keyId, privateKey: NEXT.privateKey },
+        path: C.TEAM_NAME, body: read(s.sMirror, C.TEAM_NAME), counter: Date.now(), place: null, kind: "file" });
+      b.place = "invite:" + extra;
+      out.extra = await putRaw(s.rt, NEXT, b);
+      const said = () => s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
+      v.first = m => !!m && m.writer === NEXT.keyId && m.epoch === 2 && (m.place === undefined || m.place === null || m.place === "root" || m.place === "invite:" + extra);
+      v.onCap = () => {
+        const c = s.Dk.api.relayRun();
+        return { rounds: v.rounds, reached: v.reached, said: said(), left: c && typeof c.stranded === "function" && c.stranded() ? "left behind" : "not left behind" };
+      };
+      v.armed = true;
+      deskTransport.down = false;
+      await until(async () => { await s.pump(); return !!v.atCap; }, 30000);
+      if (v.atCap) { out.rounds = v.atCap.rounds; out.reached = v.atCap.reached; out.saidCap = v.atCap.said; out.leftCap = v.atCap.left; }
+      const done = () => { const p = (s.Dk.envelope().teamPins || {})[s.team]; let e = null; try { e = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { e = null; } return !!p && p.public === NEXT.pub && e === 2; };
+      await until(async () => { await s.pump(); return done(); }, 8000);
+      out.said = said();
+      const p = (s.Dk.envelope().teamPins || {})[s.team];
+      out.pin = p && p.public === NEXT.pub ? "the new lead" : p && p.public === LEAD.pub ? "the old lead" : "none";
+      try { out.epoch = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { out.epoch = null; }
+      const row = ((await s.Dk.ask("etiuda:team-join", "leads")).leads || []).find(r => r.team === s.team) || null;
+      out.row = row ? (row.stranded ? "left behind" : "not left behind") : "no row";
+      return out;
+    } finally {
+      v.armed = false;
       await s.stop();
     }
   }
@@ -5609,18 +5762,21 @@ try {
       + " a handover, and a team file landed at the epoch above), keeps the desk left behind after the lead's re-copy, its files not at the"
       + " lead, and the product file is never written: " + x2.detail + ", sites " + x2.sites + ", sha " + (x2.back ? "restored" : "differs"));
     const pText = x => (x ? "synced " + x.synced + ", relay move " + x.moved + ", " + x.before + ", read " + x.read + ", yes " + x.taken
-      + (x.taken === "taken" ? ", key shown " + x.key + ", files at the lead before the answer " + x.upFirst : "")
+      + (x.taken === "taken" ? ", key shown " + x.key + ", files at the lead before the answer " + x.upFirst + ", uploads from the yes to the answer "
+        + x.putsYes + " (from admission " + x.putsAdmitted + ")" : "") + (x.putsEnd >= 0 ? ", uploads from the yes to the end " + x.putsEnd
+        + ", files at the lead at the end " + x.atLeadEnd : "")
       + (x.arrived ? ", its two files at the lead" : "") + (x.again ? ", left " + x.left + ", read again " + x.again : "")
       + ", team file epoch " + x.epoch + ", pin " + x.pin + ", row " + x.row : "");
     const pasted = x => left(x) && x.before === "left behind" && x.read === "offered" && x.taken === "taken" && x.key === "the new lead's, to compare";
     const s2 = await run(strandedPaste, "939s-match", "matches");
-    check(pasted(s2.x) && s2.x.arrived && s2.x.epoch === 2 && s2.x.pin === "the new lead" && s2.x.row === "seen",
+    check(pasted(s2.x) && !s2.x.upFirst && s2.x.putsYes === 0 && s2.x.arrived && s2.x.epoch === 2 && s2.x.pin === "the new lead" && s2.x.row === "seen",
       "939s a desk left behind pastes the new lead's invitation as it stands: offered and taken, the lead's key shown to compare once admitted,"
-      + " and on It matches it follows the new lead and its own files go up: " + pText(s2.x) + (s2.err ? ", " + s2.err : ""));
+      + " its own files kept here until It matches and only then up, and it follows the new lead: " + pText(s2.x) + (s2.err ? ", " + s2.err : ""));
     const t2 = await run(strandedPaste, "939t-differ", "differs");
-    check(pasted(t2.x) && t2.x.left && t2.x.pin === "none" && t2.x.row === "no row" && t2.x.again === "offered, the leave named",
-      "939t the same paste, and on It does not match (the leave route) the team is left with no bar, and the invitation read again is"
-      + " offered: " + pText(t2.x) + (t2.err ? ", " + t2.err : ""));
+    check(pasted(t2.x) && !t2.x.upFirst && t2.x.putsYes === 0 && t2.x.putsEnd === 0 && !t2.x.atLeadEnd && t2.x.left && t2.x.pin === "none"
+      && t2.x.row === "no row" && t2.x.again === "offered, the leave named",
+      "939t the same paste, and on It does not match (the leave route) nothing went up, the team is left with no bar, and the invitation read"
+      + " again is offered: " + pText(t2.x) + (t2.err ? ", " + t2.err : ""));
     const u2 = await run(pasteControl, "939u-control");
     check(!!u2.x && u2.x.synced && u2.x.row === "not left behind" && u2.x.read === "refused pinned" && u2.x.taken === "refused pinned"
       && u2.x.pin === "the old lead" && !u2.x.left,
@@ -5633,6 +5789,39 @@ try {
     });
     check(v2.turned && v2.back, "939v lifting plant:stranded-invite refuses the left-behind desk's paste as pinned at the read and the yes,"
       + " and the product file is never written: " + v2.detail + ", sha " + (v2.back ? "restored" : "differs"));
+    const y2 = await liftApp("plant:stranded-match-hold", async app => {
+      const x = await strandedPaste("939y", "matches", app);
+      return pasted(x) && x.upFirst === true && x.putsYes > 0;
+    });
+    check(y2.turned && y2.back, "939y lifting plant:stranded-match-hold lets the left-behind desk's files reach the new lead once admitted,"
+      + " before It matches is answered, and the product file is never written: " + y2.detail + ", sha " + (y2.back ? "restored" : "differs"));
+    const zText = x => (x ? "synced " + x.synced + ", relay move " + x.moved + ", " + x.before + ", yes " + x.taken + ", row " + x.row + ", pin "
+      + x.pin + ", left " + x.left + ", its files kept here " + x.kept + ", at the lead " + x.atLead + ", uploads " + x.puts + ", line said "
+      + x.said + ", pasted again " + x.again : "");
+    const z2 = await run(strandedAskFails, "939z-ask-fails");
+    check(!!z2.x && left(z2.x) && z2.x.before === "left behind" && z2.x.taken === "refused silent" && z2.x.row === "left behind"
+      && z2.x.pin === "the old lead" && !z2.x.left && z2.x.kept && !z2.x.atLead && z2.x.puts === 0 && z2.x.said === 1 && z2.x.again === "taken",
+      "939z a desk left behind whose request cannot be written is told nothing was written and stays as it was: left behind with its notice,"
+      + " under the old lead, its files here and none up; pasted again once the place is free, it is taken: " + zText(z2.x) + (z2.err ? ", " + z2.err : ""));
+    const za = await liftDesk("plant:stranded-ask-first", async text => {
+      const x = await strandedAskFails("939za", { source: text });
+      return left(x) && x.taken === "refused silent" && x.left && x.pin === "none";
+    });
+    check(za.turned && za.back, "939za lifting plant:stranded-ask-first lets the old lead go before the request is written, so the failed write"
+      + " leaves a desk that has left the team with no request, and the product file is never written: " + za.detail + ", sha "
+      + (za.back ? "restored" : "differs"));
+    const cText = x => (x ? "synced " + x.synced + ", relay move " + x.moved + ", the extra copy put " + x.extra + ", pages read by the capped catch-up "
+      + x.rounds + " to entry " + x.reached + ", the next catch-up opening on line said " + x.saidCap + " and " + x.leftCap + "; at the end line said " + x.said
+      + ", pin " + x.pin + ", team file epoch " + x.epoch + ", row " + x.row : "");
+    const zb = await run(strandCapped, "939zb-cap");
+    check(!!zb.x && left(zb.x) && zb.x.extra === 200 && zb.x.rounds === 1000 && zb.x.reached === 1000000 && zb.x.saidCap === 0
+      && zb.x.leftCap === "not left behind" && zb.x.said === 0 && zb.x.pin === "the new lead" && zb.x.epoch === 2 && zb.x.row === "not left behind",
+      "939zb a desk whose catch-up stops at the round cap, the new lead's handover and its own copy not yet read, is not judged left behind;"
+      + " the next cycles read on and follow the new key: " + cText(zb.x) + (zb.err ? ", " + zb.err : ""));
+    const zc = await liftApp("plant:stranded-whole", async app => { const x = await strandedScene("939zc", false, app); return left(x) && x.puts > 0 && x.said === 0 && x.row === "none"; });
+    check(zc.turned && zc.back, "939zc lifting plant:stranded-whole, the judgement on the short page, never takes 939l's desk as left behind: it"
+      + " puts its files up under the old key and says nothing, and the product file is never written: " + zc.detail + ", sha "
+      + (zc.back ? "restored" : "differs"));
     const f = await run(toFolder, "939f");
     check(!!f.x && f.x.ok === true,
       "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
