@@ -29,7 +29,7 @@ let inFlight = false;
 let folderWatcher = null;
 let kickDebounce = null;
 const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
-let owedItems = [];                // the outbox as the main thread last sent it: [{ rel, sha, del }]
+const sentNow = new Map();         // relPath -> the sha (or "del") this worker wrote, until the outbox stops owing it
 const casHeld = new Map();         // ask id -> the lock a compare and swap holds
 const CAS_HOLD_MS = 20000;
 
@@ -99,24 +99,31 @@ function walkFolder(baseDir, sub = "") {
   return out;
 }
 
-/* The outbox first, so a listing taken after it shows what landed. A record that landed leaves the list here at once;
-   the main thread clears it from the outbox when it reads the result. */
+/* The outbox first, read from the mirror at each listing, so a listing taken after it shows what landed. A record written
+   here is not written again while the main thread has yet to clear it. Answers the paths still owed. */
 function flushOutbox() {
-  if (!owedItems.length) return;
-  const results = S.flushOwed(folder, mirror, owedItems, null);
-  for (const r of results) {
-    if (r.ok && !r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+  const owed = S.owedList(mirror);
+  const rels = new Set(owed.map(it => it.rel));
+  for (const rel of Array.from(sentNow.keys())) if (!rels.has(rel)) sentNow.delete(rel);
+  const due = owed.filter(it => sentNow.get(it.rel) !== (it.del ? "del" : it.sha));
+  if (due.length) {
+    const results = S.flushOwed(folder, mirror, due, null);
+    for (const r of results) {
+      if (!r.ok) continue;
+      sentNow.set(r.rel, r.del ? "del" : r.sha);
+      if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+    }
+    if (parentPort && !stopped) parentPort.postMessage({ type: "landed", folder, results });
   }
-  owedItems = owedItems.filter(it => !results.some(r => r.ok && r.rel === it.rel && (r.del ? it.del : r.sha === it.sha)));
-  if (parentPort && !stopped) parentPort.postMessage({ type: "landed", folder, results });
+  return rels;
 }
 
 function syncOnce() {
   if (inFlight || stopped) return;
   inFlight = true;
   try {
-    try { flushOutbox(); } catch {}
-    const owedRels = new Set(owedItems.map(it => it.rel));
+    let owedRels = new Set();
+    try { owedRels = flushOutbox(); } catch {}
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
@@ -187,7 +194,6 @@ function init(data) {
   folder = data.folder;
   mirror = data.mirror;
   pollMs = data.pollMs || FOLDER_SYNC_CADENCE_MS;
-  owedItems = Array.isArray(data.owed) ? data.owed : [];
 
   try {
     folderWatcher = fs.watch(folder, { recursive: true }, (ev, filename) => {
@@ -226,8 +232,6 @@ if (parentPort) {
       init(msg.data);
     } else if (msg.type === "kick") {
       if (!stopped) { try { syncOnce(); } catch {} }
-    } else if (msg.type === "outbox") {
-      owedItems = Array.isArray(msg.items) ? msg.items : [];
     } else if (msg.type === "read") {
       let got = null;
       try { got = S.shareReadFile(folder, msg.name); } catch { got = null; }

@@ -3353,6 +3353,8 @@ try {
     let bootPin = "";
     try { bootPin = Dl.api.signedSha(JSON.parse(booted)); } catch { bootPin = ""; }
     Dl.sync("etiuda:catalog-taken", bootPin);
+    /* The note lands in the team's mirror and its outbox carries it to the folder at the next listing. */
+    syncFolder(leaveYard);
     const note = path.join("desks", meL.id, "in-use.ec"), noteKept = fs.existsSync(path.join(leaveYard, note));
     const folderBefore = snapshot(leaveYard), keysBefore = JSON.stringify(Dl.envelope().keys);
     const withoutNote = folderBefore.split("|").filter(x => x.indexOf(note + "=") !== 0).join("|");

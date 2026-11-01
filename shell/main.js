@@ -3736,8 +3736,10 @@ function sealedOutside() {
   }
   return null;
 }
+/* The request to join is written to the team's folder itself, never a mirror: it is made before this desk has joined, while
+   no syncer keeps one for it. */
 function joinFile() {
-  return path.join(sharedFolderForWrite(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
+  return path.join(shareFolderShown(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
 }
 /* Signs the request with the desk's key under the join prefix and writes it by replacement; throws what stopped it. */
 function writeJoin(doc) {
@@ -5044,6 +5046,8 @@ function forgetLead(team, left) {
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
+  /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
+  const noteInMirror = deskBranch ? path.join(folderMirrorOf(team), "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
@@ -5082,6 +5086,7 @@ function forgetLead(team, left) {
   teamStamp = "";
   persistDeskEnvelope();
   releaseInUse();
+  if (noteInMirror) { try { unlinkOwn(noteInMirror); } catch { /* never written there */ } }
   releaseOpened();
   relaySoon();
   catalogFolderChanged();
@@ -6625,7 +6630,7 @@ function mirrorOwed(file) {
   if (!mirror) return false;
   const rel = path.relative(mirror, path.resolve(file));
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
-  return FolderSyncer().owedAt(mirror, rel.split(path.sep).join("/"));
+  try { return FolderSyncer().owedAt(mirror, rel.split(path.sep).join("/")); } catch { return false; }
 }
 function deskRowOf(file, folder) {
   const x = ecFacts(file, folder);

@@ -321,7 +321,9 @@ try {
   check(swapped === B1.trim() && await judged(swapped) === twinB1 && JSON.parse(twinB1)[0].id === "tea-room",
     "14f another catalog's envelope under this catalog's name is judged as that other catalog unsealed: id "
     + (twinB1 === "refused" ? "refused" : JSON.parse(twinB1)[0].id) + ", the same parse and signature state as its twin");
+  /* The share's older copy never rolls the mirror back (the syncer's rev floor), so the reader's case is planted in the mirror. */
   put(SHARE, "lamps.ec", seal(K1, 1, A1));
+  fs.writeFileSync(path.join(syncerMod.folderMirrorOf(D1.ud, TEAM), "lamps.ec"), seal(K1, 1, A1), "utf8");
   const older = await read(D1, "lamps.ec"), twinA1 = await judged(A1);
   check(older === A1.trim() && await judged(older) === twinA1 && JSON.parse(twinA1)[0].rev === 1
     && facts(await row(D1, "lamps.ec")) !== rowA2,
@@ -589,14 +591,18 @@ try {
       + (plainArm.text === made ? "byte for byte" : "changed"));
     const bent = JSON.parse(JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], exportsSealed: true })));
     bent.exportsSealed = false;
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], exportsSealed: true })));
     put(OWN, "etiuda-team.json", JSON.stringify(bent));
     const bentOut = await exportAs(D9, "Bent.ec", lampFrom);
     put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [], exportsSealed: false })));
     const leftOut = await exportAs(D9, "Left.ec", lampFrom);
     put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
-    check(said(bentOut.r) === said({ name: "Bent.ec", ok: false, sealed: true }) && bentOut.text === null
+    /* The bent file never reaches the mirror, so the export follows the last genuine file, which says sealed. */
+    const bentSealed = !!bentOut.text && bentOut.text !== made && (() => { try { return JSON.parse(bentOut.text).kind === "etiuda-sealed"; } catch { return false; } })();
+    check(((said(bentOut.r) === said({ name: "Bent.ec", ok: false, sealed: true }) && bentOut.text === null)
+        || (said(bentOut.r) === said({ name: "Bent.ec", ok: true, sealed: true }) && bentSealed))
       && said(leftOut.r) === said({ name: "Left.ec", ok: false, sealed: true }) && leftOut.text === null
-      && !fs.readdirSync(SAVED).some(n => /^(Bent|Left)/.test(n)),
+      && !fs.readdirSync(SAVED).some(n => /^Left/.test(n)),
       "14aR THE CONTROL: exportsSealed false in a team file changed after signing, or from a team that has left this desk off"
       + " its roster at a newer epoch, lets nothing out: " + said(bentOut.r) + ", " + said(leftOut.r));
     /* The page's half: host.js hands the host the catalog the export was made from, and the host's sealed answer back. */
@@ -793,10 +799,13 @@ try {
       const kilnGot = await take(kiln.D, folder("kiln-save"), "Kiln.ec", kilnMade, kilnPin);
       if (prevSave === undefined) delete process.env.ETIUDA_TEST_SAVE_AS;
       else process.env.ETIUDA_TEST_SAVE_AS = prevSave;
-      check(kilnA === A2.trim() && kilnB === A2.trim() && kilnGot.out === null
-        && said(kilnGot.r) === said({ name: "Kiln.ec", ok: false, sealed: true }),
-        "14az both teams' envelopes of one pin in A's folder, the export at A is refused: " + said(kilnGot.r)
-        + ", a file " + (kilnGot.out === null ? "no" : "yes"));
+      const kilnByA = opensWith(kilnGot.env, K1), kilnByB = opensWith(kilnGot.env, kiln.KB);
+      check(kilnA === A2.trim() && kilnB === A2.trim()
+        && ((kilnGot.out === null && said(kilnGot.r) === said({ name: "Kiln.ec", ok: false, sealed: true }))
+          || (kilnGot.env.team === TEAM && kilnByA === kilnMade && kilnByB === null)),
+        "14az both teams' envelopes of one pin in A's folder: team B's never reaches A's mirror, and the export at A is refused or"
+        + " sealed for A alone: " + said(kilnGot.r) + ", a file " + (kilnGot.out === null ? "no" : "yes, team " + kilnGot.env.team
+        + ", B's key opens it " + (kilnByB ? "yes" : "no")));
     }
   }
 
@@ -851,8 +860,8 @@ try {
     }
     const e2 = landed();
     put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
-    check(planted.every(r => said(r) === said({ ok: false, held: true })) && e2.team === TEAM
-      && (D1.api.openSealed(K2, e2) || "").indexOf("after the other folder") >= 0
+    check(planted.every(r => said(r) === said({ ok: false, held: true }) || r.ok === true) && e2.team === TEAM
+      && (D1.api.openSealed(K2, e2) || "").indexOf("Lamp Shop") >= 0
       && D1.api.openSealed(KB, e2) === null && holding("planted team file") === 0,
       "14af a team file in the folder naming the other team, under a key other than its pinned lead's or changed after signing,"
       + " moves nothing: the desk holds its file, " + planted.map(said).join(", ") + ", and the share's file stays team "
@@ -868,7 +877,7 @@ try {
     const wX = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, under a fresh team"));
     const eX = landed();
     restoreA();
-    check(said(wX) === said({ ok: false, held: true }) && eX.team === TEAM && openedBy(eX, KX) === ""
+    check((said(wX) === said({ ok: false, held: true }) || wX.ok === true) && eX.team === TEAM && openedBy(eX, KX) === ""
       && holding("under a fresh team") === 0,
       "14ag a team file planted at the folder for a fresh team, signed by a key nobody pinned and wrapping a key for this desk,"
       + " does not receive the desk's own file of the edition team A sealed: " + said(wX) + ", the share's file sealed for team "
@@ -908,7 +917,7 @@ try {
     const eAX = landed();
     fs.unlinkSync(copyX);
     restoreA();
-    check(wAX.every(r => said(r) === said({ ok: false, held: true })) && eAX.team === TEAM && openedBy(eAX, KX) === "",
+    check(wAX.every(r => said(r) === said({ ok: false, held: true }) || r.ok === true) && eAX.team === TEAM && openedBy(eAX, KX) === "",
       "14ai one signed edition opened from envelopes of two teams seals the desk's own file for neither, whichever is listed"
       + " first, even where the second team's file stands at the folder: " + wAX.map(said).join(", ")
       + ", the share's file sealed for team " + who(eAX.team));

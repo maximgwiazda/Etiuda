@@ -1273,10 +1273,23 @@ async function run() {
     prog.syncOnce();
     const landed = fs.existsSync(shareFile) && fs.readFileSync(shareFile).equals(fs.readFileSync(mirrorFile));
     const owedAfter = owedAtOf(mirror, rel);
-    check(spied.length === 0 && inMirror && notYet && owedBefore && landed && !owedAfter,
+    /* The same through the worker thread: a second write, owed while no syncer runs, reaches the share from the worker. */
+    d.api.writeBranch("cat-44a-1e1e1e1e", JSON.stringify(branchOf(me, "1e1e1e1e")));
+    const second = path.join(share, "desks", me.id, "cat-44a-1e1e1e1e.ec");
+    let byWorker = false, ctl = null;
+    try {
+      ctl = new syncerMod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks, pollMs: 200 });
+      ctl.start();
+      for (let i = 0; i < 50 && !(byWorker = fs.existsSync(second) && !owedAtOf(mirror, "desks/" + me.id + "/cat-44a-1e1e1e1e.ec")); i++) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+    } catch { byWorker = false; }
+    finally { if (ctl) ctl.stop(); }
+    check(spied.length === 0 && inMirror && notYet && owedBefore && landed && !owedAfter && byWorker,
       "44a a desk's write on a folder team touches nothing under the share on the main thread, lands in the mirror and reaches the share from the outbox: "
       + "share calls " + spied.length + (spied.length ? " (" + spied.slice(0, 3).join("; ") + ")" : "") + ", in mirror " + inMirror
-      + ", not in share yet " + notYet + ", owed " + owedBefore + ", landed whole " + landed + ", owed after " + owedAfter);
+      + ", not in share yet " + notYet + ", owed " + owedBefore + ", landed whole " + landed + ", owed after " + owedAfter
+      + ", through the worker thread " + byWorker);
   }
 
   /* -------------------------------------------------------------------------------------------------
@@ -1312,8 +1325,9 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
-   * 44c (point 3): rev and counter floors per (scope, id): a lagging copy cannot roll an edition, a desk file or in-use's
-   * counter back in the mirror, under its own name or another
+   * 44c (point 3): rev and counter floors per (scope, id) at each path: a lagging copy cannot roll an edition, a desk file or
+   * in-use's counter back in the mirror, not even after the mirror's copy has gone, while an older edition the folder keeps
+   * under a name of its own still reaches it (an older edition opened on purpose, tests/catalog-in-use.mjs 890r)
    * ----------------------------------------------------------------------------------------------- */
   {
     const share = folder("share-44c"), mirror = folder("mirror-44c");
@@ -1347,16 +1361,24 @@ async function run() {
     put(path.join(dDir, "in-use.ec"), inUse(4));
     prog.syncOnce();
     const editionHeld = revAt(path.join(mirror, "lamp-shop.ec")) === 2;
-    const renamedOut = !fs.existsSync(path.join(mirror, "lamp-shop (1).ec"));
+    const keptOlder = revAt(path.join(mirror, "lamp-shop (1).ec")) === 1;
+    /* The edition leaves the share for two listings, so the mirror's copy goes; the lagging rev 1 then comes back. */
+    fs.unlinkSync(path.join(share, "lamp-shop.ec"));
+    prog.syncOnce();
+    prog.syncOnce();
+    const gone = !fs.existsSync(path.join(mirror, "lamp-shop.ec"));
+    put(path.join(share, "lamp-shop.ec"), CAT_A1);
+    prog.syncOnce();
+    const renamedOut = gone && !fs.existsSync(path.join(mirror, "lamp-shop.ec"));
     const deskHeld = revAt(path.join(mirror, "desks", kId, "notes-0e0e0e0e.ec")) === 3;
     const counterHeld = nAt(path.join(mirror, "desks", kId, "in-use.ec")) === 5;
     put(path.join(dDir, "notes-0e0e0e0e.ec"), deskFile(4));
     put(path.join(dDir, "in-use.ec"), inUse(6));
     prog.syncOnce();
     const forward = revAt(path.join(mirror, "desks", kId, "notes-0e0e0e0e.ec")) === 4 && nAt(path.join(mirror, "desks", kId, "in-use.ec")) === 6;
-    check(first && editionHeld && renamedOut && deskHeld && counterHeld && forward,
-      "44c a lagging copy cannot roll an edition, a desk file or in-use's counter back in the mirror, under its own name or another, and a newer one still lands: "
-      + "first landed " + first + ", edition held " + editionHeld + ", older copy under another name out " + renamedOut
+    check(first && editionHeld && keptOlder && renamedOut && deskHeld && counterHeld && forward,
+      "44c a lagging copy cannot roll an edition, a desk file or in-use's counter back in the mirror, even after the mirror's copy has gone, an older edition under a name of its own still lands, and a newer one lands: "
+      + "first landed " + first + ", edition held " + editionHeld + ", older edition under its own name kept " + keptOlder + ", lagging copy after removal out " + renamedOut
       + ", desk file held " + deskHeld + ", counter held " + counterHeld + ", newer lands " + forward);
   }
 

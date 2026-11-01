@@ -207,6 +207,10 @@ function noteOwed(mirror, rel, io) {
   writeOutbox(mirror, st, io);
   return true;
 }
+function owedList(mirror, io) {
+  const st = readOutbox(mirror, io || defaultIO);
+  return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe).map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del }));
+}
 function owedAt(mirror, rel, io) {
   const st = readOutbox(mirror, io || defaultIO);
   const rec = st.owe[normRel(rel)];
@@ -507,10 +511,7 @@ function createFolderProgram(opts) {
   /* ---- the outbox and the floors, read afresh at each use: the main thread may note a debt with noteOwed between scans */
   const saidWait = new Map(); // relPath -> the code last said for it
   function owe(rel) { return noteOwed(mirror, rel, io); }
-  function owed() {
-    const st = readOutbox(mirror, io);
-    return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe).map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del }));
-  }
+  function owed() { return owedList(mirror, io); }
   function isOwed(rel) { return owedAt(mirror, rel, io); }
   function landed(results) {
     if (!Array.isArray(results) || !results.length) return;
@@ -547,18 +548,19 @@ function createFolderProgram(opts) {
     }
     return doc && typeof doc === "object" ? doc : null;
   }
-  /* (scope, id) and the number that may only rise: a root edition's rev under its signer, a desk file's rev, in-use's n. */
+  /* (scope, id) at its path and the number that may only rise there: a root edition's rev under its signer, a desk file's
+     rev, in-use's n. Per path, so an older edition the folder keeps under a name of its own still reaches the mirror. */
   function floorKeyOf(relPath, cat) {
     if (!cat || typeof cat !== "object") return null;
     const parts = normRel(relPath).split("/");
     if (parts[0] === "desks" && parts.length === 3) {
       if (parts[2] === "in-use.ec") return Number.isSafeInteger(cat.n) ? { key: "u|" + parts[1], val: cat.n } : null;
       if (parts[2] === "catalog-answer.ec" || typeof cat.id !== "string") return null;
-      return { key: "d|" + parts[1] + "|" + cat.id, val: Number.isSafeInteger(+cat.rev) ? +cat.rev : 0 };
+      return { key: "d|" + parts[1] + "|" + cat.id + "|" + parts[2], val: Number.isSafeInteger(+cat.rev) ? +cat.rev : 0 };
     }
     if (parts.length === 1 && cat.kind === "etiuda-catalog" && typeof cat.id === "string") {
       const signer = cat.sig && typeof cat.sig.keyId === "string" ? cat.sig.keyId : "-";
-      return { key: "r|" + signer + "|" + cat.id, val: Number.isSafeInteger(+cat.rev) ? +cat.rev : 0 };
+      return { key: "r|" + signer + "|" + cat.id + "|" + parts[0], val: Number.isSafeInteger(+cat.rev) ? +cat.rev : 0 };
     }
     return null;
   }
@@ -1315,8 +1317,7 @@ class FolderSyncerController {
         data: {
           folder: this.folder,
           mirror: this.mirror,
-          pollMs: this.pollMs,
-          owed: this.program.owed()
+          pollMs: this.pollMs
         }
       });
     }
@@ -1326,7 +1327,6 @@ class FolderSyncerController {
   owe(rel) {
     if (!this.program.owe(rel)) return false;
     if (this.stopped) return true;
-    if (this.worker) this.worker.postMessage({ type: "outbox", items: this.program.owed() });
     this.kick();
     return true;
   }
@@ -1452,6 +1452,7 @@ module.exports = {
   isAllowedPath,
   noteOwed,
   owedAt,
+  owedList,
   flushOwed,
   shareReadFile,
   shareCasBegin,
