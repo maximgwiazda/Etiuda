@@ -8,13 +8,26 @@ import { syncLaunchMark } from "./launch-mark.js";
 
 function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone)"); }
 /* THE WINDOW ON SCREEN: a host says whether it was when this load asked, and once when it is; a page
-   with no host, or a host that never says, is on screen. The first ask listens, and boot asks. */
+   with no host, or a host that never says, is on screen. The first ask listens, and boot asks.
+   NOTHING WAITS ON THE WORD FOR EVER: the page counts as on screen SHOWN_BOUND_MS after its first frame, or
+   SHOWN_LATEST_MS after the ask, or when it turns visible from hidden. Not merely visible: a hidden window
+   whose page still paints reports visible, which is what the word is for. */
+const SHOWN_BOUND_MS=1500, SHOWN_LATEST_MS=3000;
 let eShown=null, shownWait=[];
+function shownNow(){
+  if(eShown) return;
+  eShown=true;
+  const w=shownWait; shownWait=[]; w.forEach(f=>f());
+}
 function windowShown(){
   if(eShown!==null) return eShown;
   const h=(typeof window!=="undefined" && window.E_HOST) || null;
   eShown=!h || typeof h.onShown!=="function" || !!h.shown;
-  if(!eShown) try{ h.onShown(()=>{ eShown=true; const w=shownWait; shownWait=[]; w.forEach(f=>f()); }); }catch(e){ eShown=true; }
+  if(eShown) return eShown;
+  try{ h.onShown(shownNow); }catch(e){ eShown=true; return eShown; }
+  try{ requestAnimationFrame(()=>setTimeout(shownNow, SHOWN_BOUND_MS)); }catch(e){} /* plant:shown-has-a-bound */
+  setTimeout(shownNow, SHOWN_LATEST_MS);
+  try{ document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") shownNow(); }); }catch(e){}
   return eShown;
 }
 // What waits for the window on screen runs once it is, at once where it already is.

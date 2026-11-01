@@ -22561,21 +22561,38 @@ What you type stays in this browser only.`;
   function dialogStanding() {
     return !!document.querySelector(".modal:not([hidden]):not(.e-gone)");
   }
+  var SHOWN_BOUND_MS = 1500;
+  var SHOWN_LATEST_MS = 3e3;
   var eShown = null;
   var shownWait = [];
+  function shownNow() {
+    if (eShown) return;
+    eShown = true;
+    const w = shownWait;
+    shownWait = [];
+    w.forEach((f) => f());
+  }
   function windowShown() {
     if (eShown !== null) return eShown;
     const h = typeof window !== "undefined" && window.E_HOST || null;
     eShown = !h || typeof h.onShown !== "function" || !!h.shown;
-    if (!eShown) try {
-      h.onShown(() => {
-        eShown = true;
-        const w = shownWait;
-        shownWait = [];
-        w.forEach((f) => f());
-      });
+    if (eShown) return eShown;
+    try {
+      h.onShown(shownNow);
     } catch (e) {
       eShown = true;
+      return eShown;
+    }
+    try {
+      requestAnimationFrame(() => setTimeout(shownNow, SHOWN_BOUND_MS));
+    } catch (e) {
+    }
+    setTimeout(shownNow, SHOWN_LATEST_MS);
+    try {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") shownNow();
+      });
+    } catch (e) {
     }
     return eShown;
   }
