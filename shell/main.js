@@ -701,7 +701,9 @@ function sameTeamLead(doc, cur) {
 }
 /* The team file this folder is read as. The canonical file wins unless a conflict sibling is a
    genuine team file at a higher epoch or rev, under the same team and lead where the canonical
-   file parses. A sibling that is not genuine, or lower, stays on disk and is not the one read.
+   file parses. A sibling under another lead of the same team is read only where its handovers run
+   from that canonical lead to the lead it names, and it is ahead. A sibling that is not genuine,
+   or lower, stays on disk and is not the one read.
    `missing` is the canonical file being absent and no sibling taken, which is still "no team file". */
 function teamTextChosen(root) {
   const file = path.join(root, TEAM_NAME);
@@ -723,7 +725,11 @@ function teamTextChosen(root) {
     } catch { continue; }
     const doc = teamParse(sibText);
     if (!doc || !teamWhole(doc)) continue;
-    if (canonDoc && !sameTeamLead(doc, canonDoc)) continue;
+    if (canonDoc && canonDoc.id && doc.id !== canonDoc.id) continue;
+    if (canonDoc && !sameTeamLead(doc, canonDoc)) {
+      if (handedTo(doc, canonDoc.lead) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-handover */
+      continue;
+    }
     if (teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:f3-team-sibling */
   }
   if (best.file !== file) missing = false;
@@ -5267,10 +5273,11 @@ function forkLast(team) {
   try { f = relayChannel && typeof relayChannel.fork === "function" ? relayChannel.fork() : null; } catch { f = null; }
   return f && (f.kind === "later" || f.kind === "two") && Array.isArray(f.to) ? { kind: f.kind, key: forkKeyOf(f.kind, f.from, f.to) } : null;
 }
-/* That fork for the team's notice, `seen` once the agent has dismissed it. */
+/* That fork for the team's notice. `key` is the fork's own, and `seen` once the agent has dismissed
+   this fork, so dismissing one does not hide a later fork of the same team and kind. */
 function forkShown(team) {
   const f = forkLast(team);
-  return f ? { kind: f.kind, seen: !!teamForks[team] && teamForks[team].seen === f.key } : null;
+  return f ? { kind: f.kind, key: f.key, seen: !!teamForks[team] && teamForks[team].seen === f.key } : null;
 }
 /* Whether the relay team this desk follows has left it behind (the channel's judgeBehind), `seen` once the agent has
    dismissed its notice; the channel keeps both. */

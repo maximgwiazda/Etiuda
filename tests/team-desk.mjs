@@ -31,13 +31,18 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 83;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const EXPECTED = 88;
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
@@ -1124,6 +1129,28 @@ try {
       + " folder read without the syncer holds the same rule: pin key 0 " + (hs.pin === hs.w.L[0].public) + ", said " + hs.said
       + ", row " + JSON.stringify(hs.row && hs.row.fork));
 
+    /* One genuine handover, stored as the conflict sibling, the canonical file still the old lead's. */
+    async function handoverSibling(plant) {
+      const w = await forkWorld(plant);
+      w.both(w.led(0, 1), w.led(1, 2, [w.step(0, 1)]));
+      const opened = await w.opens(2);
+      const canon = JSON.parse(fs.readFileSync(path.join(w.FD, "etiuda-team.json"), "utf8"));
+      const sib = JSON.parse(fs.readFileSync(path.join(w.FD, "etiuda-team (1).json"), "utf8"));
+      return { w, opened, pin: w.pin(), two: w.said(FORK_TWO), row: await w.row(),
+        canonLead: canon.lead && canon.lead.public, sibLead: sib.lead && sib.lead.public };
+    }
+    const ho = await handoverSibling(null);
+    check(ho.w.admitted && ho.canonLead === ho.w.L[0].public && ho.sibLead === ho.w.L[1].public
+      && ho.opened && ho.pin === ho.w.L[1].public && ho.two === 0,
+      "14ca a handover in the conflict sibling, the canonical file still the old lead's, and the desk follows: "
+      + "canonical the old lead " + (ho.canonLead === ho.w.L[0].public) + ", sibling the new lead " + (ho.sibLead === ho.w.L[1].public)
+      + ", epoch 2 opens " + ho.opened + ", pin the new lead " + (ho.pin === ho.w.L[1].public) + ", said two " + ho.two);
+
+    check(hs.w.admitted && hs.pin === hs.w.L[0].public && hs.said === 1 && !!hs.row && !!hs.row.fork && hs.row.fork.kind === "two",
+      "14cb THE CONTROL: two successors, the canonical file and a conflict sibling, are still refused as two and the pin stays"
+      + " the old lead: pin key 0 " + (hs.pin === hs.w.L[0].public) + ", said " + hs.said
+      + ", row " + JSON.stringify(hs.row && hs.row.fork));
+
     /* The agent dismisses the notice: the shell keeps it, a restart included, for that fork only. */
     const dz = await laterScene(null);
     await dz.w.D.ask("etiuda:team-join", "fork-seen", dz.w.T);
@@ -1191,6 +1218,90 @@ try {
         "14by the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and"
         + " two at once in Polish, and a dismissal reaches the shell: English " + JSON.stringify(shown.en) + ", Polish " + JSON.stringify(shown.pl)
         + ", dismissed " + dismissed + ", asked " + asked.filter(a => a === "fork-seen").length + ", seen " + seenAfter);
+    }
+
+    /* A dismissed fork stays dismissed. A later fork of the same kind, with its own key, is said.
+       The second file lands after a restart, which is when the shell says a new fork of a key it has
+       already followed. The page keeps the dismissal in its own memory across that restart. */
+    async function dismissedThenLater(TJ) {
+      const nodes = new Map();
+      const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
+        classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
+        setAttribute(k, v) { this.attrs[k] = String(v); },
+        appendChild(c) { c.parent = this; this.children.push(c); if (c.id) nodes.set(c.id, c); return c; },
+        remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); if (this.id && nodes.get(this.id) === this) nodes.delete(this.id); this.parent = null; },
+        get firstChild() { return this.children[0] || null; } });
+      const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
+      const pause = ms => new Promise(r => setTimeout(r, ms));
+      const hexKey = k => typeof k === "string" && /^[0-9a-f]{64}$/.test(k);
+      const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
+      const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
+      const out = { firstShown: "", downAfter: true, secondShown: "", seenFirst: null, saidSecond: 0,
+        keyFirst: "", keySecond: "", envFirst: "", envSecond: "", secondSeen: null, secondKind: "", LATER_EN, hexKey };
+      try {
+        const w = await forkWorld(null);
+        put(w.FD, "etiuda-team.json", w.led(1, 2, [w.step(0, 1)]));
+        const followed = await w.opens(2) && w.pin() === w.L[1].public;
+        put(w.FD, "etiuda-team.json", w.led(2, 3, [w.step(0, 2)]));
+        await read(w.D, "lamps.ec");
+        const rowFirst = await w.row();
+        const firstLast = ((w.D.envelope().teamForks || {})[w.T] || {}).last;
+        out.envFirst = firstLast && firstLast.key || "";
+        out.keyFirst = rowFirst && rowFirst.fork ? rowFirst.fork.key || "" : "";
+        let took = null;
+        globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
+          createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
+          querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
+        globalThis.addEventListener = () => {};
+        globalThis.removeEventListener = () => {};
+        window.E_HOST = { teamJoin: (...a) => w.D.ask("etiuda:team-join", ...a), onTeamJoin: fn => { took = fn; } };
+        const HK = await import(MOD("hooks.js"));
+        HK.hooks.render = () => {};
+        const ST = await import(MOD("storage.js"));
+        const page = TJ || await import(MOD("team-join.js"));
+        const notice = () => { const n = nodes.get("eTeamFork"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
+        ST.lsSet("eUiLang", "en");
+        page.wireTeamJoin();
+        await pause(30);
+        out.firstShown = followed && notice() === LATER_EN ? "shown" : notice();
+        const buttons = [];
+        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamFork") || { children: [] });
+        if (buttons.length) buttons[buttons.length - 1].onclick();
+        await pause(30);
+        const rowDismissed = await w.row();
+        out.seenFirst = rowDismissed && rowDismissed.fork ? rowDismissed.fork.seen : null;
+        out.downAfter = !nodes.get("eTeamFork");
+        w.restart();
+        put(w.FD, "etiuda-team.json", w.led(3, 3, [w.step(0, 3)]));
+        await read(w.D, "lamps.ec");
+        out.saidSecond = w.said(FORK_LATER);
+        const rowSecond = await w.row();
+        out.keySecond = rowSecond && rowSecond.fork ? rowSecond.fork.key || "" : "";
+        out.secondSeen = rowSecond && rowSecond.fork ? rowSecond.fork.seen : null;
+        out.secondKind = rowSecond && rowSecond.fork ? rowSecond.fork.kind : "";
+        const secondLast = ((w.D.envelope().teamForks || {})[w.T] || {}).last;
+        out.envSecond = secondLast && secondLast.key || "";
+        if (took) took(await w.D.ask("etiuda:team-join", "state"));
+        await pause(30);
+        out.secondShown = notice();
+      } finally {
+        globalThis.document = was.document;
+        window.E_HOST = was.host;
+        globalThis.addEventListener = was.add;
+        globalThis.removeEventListener = was.remove;
+      }
+      return out;
+    }
+    {
+      const d = await dismissedThenLater(null);
+      check(d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.saidSecond === 1
+        && d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond && d.secondShown === d.LATER_EN,
+        "14cd a dismissed fork stays dismissed, and a second fork with a different key is said: first " + d.firstShown
+        + ", seen " + d.seenFirst + ", down " + d.downAfter + ", said after the restart " + d.saidSecond
+        + ", row keys differ " + (d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond)
+        + ", envelope keys differ " + (d.hexKey(d.envFirst) && d.hexKey(d.envSecond) && d.envFirst !== d.envSecond)
+        + ", second kind " + d.secondKind + " seen " + d.secondSeen
+        + ", second " + JSON.stringify(d.secondShown));
     }
 
     /* The page, for a desk left behind (the test architect's E1 on the lead box): the team's row as the shell gives it
@@ -1306,6 +1417,41 @@ try {
       const r = await liftDesk(file, tag, fn);
       check(r.turned && r.back, id + " lifting plant:" + tag + " in shell/" + file + " " + what + ", and the product file is never written: "
         + r.detail + ", sha " + (r.back ? "restored" : "differs"));
+    }
+    /* A copy of a page module with one plant line taken out, its imports pointed back at the tree. */
+    async function plantedPage(file, tag) {
+      const at = path.join(ROOT, "src", "modules", file), before = fs.readFileSync(at);
+      const lines = before.toString("utf8").split(/\n/);
+      const i = lines.findIndex(l => l.indexOf("plant:" + tag) >= 0);
+      if (i < 0) return { mod: null, same: fs.readFileSync(at).equals(before), detail: "plant line absent" };
+      lines.splice(i, 1);
+      const dir = fs.mkdtempSync(path.join(LAB, "plant-" + tag + "-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, file), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      const mod = await import(pathToFileURL(path.join(dir, file)).href);
+      return { mod, same: fs.readFileSync(at).equals(before), detail: "loaded" };
+    }
+    if (PLANTS_OFF) skip("14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead");
+    else {
+      const r = await liftDesk("main.js", "sib-handover", async p => {
+        const h = await handoverSibling(p);
+        return h.pin !== h.w.L[1].public;
+      });
+      check(r.turned && r.back,
+        "14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead, and the product file is never written: "
+        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) skip("14ce lifting plant:fork-note-key in a scratch copy of src/modules/team-join.js leaves the second fork unsaid");
+    else {
+      const planted = await plantedPage("team-join.js", "fork-note-key");
+      let stayed = false;
+      if (planted.mod) {
+        const d = await dismissedThenLater(planted.mod);
+        stayed = d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.secondShown !== d.LATER_EN;
+      }
+      check(!!planted.mod && planted.same && stayed,
+        "14ce lifting plant:fork-note-key in a scratch copy of src/modules/team-join.js leaves the second fork unsaid, and the product file is never written: "
+        + planted.detail + ", sha " + (planted.same ? "restored" : "differs") + ", second stayed down " + stayed);
     }
   }
 
@@ -1537,9 +1683,9 @@ try {
 }
 
 check(regStand.held(), "rs1 every reg call was answered by the stand-in, the policy key's at least once and no other key of the machine's hive (Windows), none off it (" + regStand.said() + ")");
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

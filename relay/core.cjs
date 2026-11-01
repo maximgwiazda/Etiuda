@@ -1185,8 +1185,25 @@ function createCore(deps) {
     return tomb && clock() <= tomb.until ? tomb.writer : null;
   }
 
-  /* Every check of an upload, in order, changing nothing. The commit runs it again after the bucket's write. */
-  function judge(rt, token, m, pathId, ct) {
+  /* Uploads reserved and not yet committed or given back, held in this object's memory alone: each counts its writer's stamp, its
+     bytes past the blob it replaces and the blob it adds against every other upload judged meanwhile, so two in flight cannot both
+     take the last room. None outlives the object, as no request does. */
+  const pending = new Set();
+  function heldBesides(own) {
+    const out = { bytes: 0, adds: 0, stamps: new Map() };
+    for (const h of pending) {
+      if (h === own) continue;
+      out.bytes += h.bytes;
+      out.adds += h.adds;
+      out.stamps.set(h.writer, (out.stamps.get(h.writer) || []).concat([h.at]));
+    }
+    return out;
+  }
+  const inFlight = obj => [...pending].some(h => h.obj === obj);
+
+  /* Every check of an upload, in order, changing nothing. The commit runs it again after the bucket's write. `own` is the
+     upload's own reservation, the one hold not counted against it. */
+  function judge(rt, token, m, pathId, ct, own) {
     const a = admit(rt, token, m, pathId);
     if (!a.ok) return a;
     if (ct.length > a.max) return no("blob-size"); /* plant:put-size */
@@ -1196,7 +1213,10 @@ function createCore(deps) {
     const adding = prior ? 0 : 1;
     const heldCount = store.get("blobs");
     const liveCount = typeof heldCount === "number" ? heldCount : store.list("blob:").length;
-    if (liveCount + adding > BLOBS_MAX) return no("team-size"); /* plant:blob-cap */
+    const others = heldBesides(own);
+    let heldAdds = 0, heldBytes = 0, heldStamps = [];
+    heldAdds = others.adds; /* plant:reserve-count */
+    if (liveCount + adding + heldAdds > BLOBS_MAX) return no("team-size"); /* plant:blob-cap */
     const aad = B.aadOf({ relayTeamId: rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter });
     if (!aad || !B.verifyUpload(a.pub, aad, ct, m.sig)) return no("bad-signature"); /* plant:put-sig */
     if (!B.counterFresh(store.get("counters") || {}, m.writer, m.epoch, m.counter).ok) {
@@ -1221,14 +1241,30 @@ function createCore(deps) {
        refused. Before any lead upload the team is at epoch 1, which is where a team's files begin (F7). */
     if (!a.lead && m.epoch > (a.team.epoch > 0 ? a.team.epoch : 1)) return no("epoch"); /* plant:put-above */
     const old = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
-    if (!B.checkTeamSize((store.get("bytes") || 0) - (old ? old.size : 0), ct.length, teamMax).ok) return no("team-size"); /* plant:put-team */
-    const rate = B.checkRate(store.get("rate:" + m.writer), clock());
+    heldBytes = others.bytes; /* plant:reserve-bytes */
+    if (!B.checkTeamSize((store.get("bytes") || 0) - (old ? old.size : 0) + heldBytes, ct.length, teamMax).ok) return no("team-size"); /* plant:put-team */
+    const stamps = store.get("rate:" + m.writer);
+    const rate = B.checkRate(stamps, clock());
     if (!rate.ok) return no("rate"); /* plant:put-rate */
+    /* The stamps kept at the commit are the stored ones and this upload's: a reserved stamp is its own upload's to keep. */
+    heldStamps = others.stamps.get(m.writer) || []; /* plant:reserve-rate */
+    if (heldStamps.length && !B.checkRate((Array.isArray(stamps) ? stamps : []).concat(heldStamps), clock()).ok) return no("rate");
     return { ok: true, a, old, stamps: rate.stamps };
   }
 
-  function commit(rt, token, m, pathId, ct, obj) {
-    const j = judge(rt, token, m, pathId, ct);
+  /* Judged as the commit will judge it, and on success held against every other upload until `unreserve`, which the caller makes
+     on every path, a fault's included. Its bytes are what it adds past the blob it replaces, never less than none. */
+  function reserve(rt, token, m, pathId, ct) {
+    const j = judge(rt, token, m, pathId, ct, null);
+    if (!j.ok) return j;
+    const hold = { writer: m.writer, at: clock(), bytes: Math.max(0, ct.length - (j.old ? j.old.size : 0)), adds: j.old ? 0 : 1, obj: null };
+    pending.add(hold); /* plant:reserve-hold */
+    return Object.assign({}, j, { hold });
+  }
+  function unreserve(hold) { pending.delete(hold); }
+
+  function commit(rt, token, m, pathId, ct, obj, own) {
+    const j = judge(rt, token, m, pathId, ct, own);
     if (!j.ok) return j; /* plant:commit-judge */
     const now = clock(), seq = (store.get("seq") || 0) + 1, drop = [];
     store.atomic(() => {
@@ -1370,6 +1406,12 @@ function createCore(deps) {
         store.del(k);
         store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
+      /* A put row no upload of this object holds was left by a request that died before its commit: its object is to be deleted. */
+      for (const [k] of store.list("put:")) {
+        let live = false;
+        live = inFlight(k.slice(4)); /* plant:put-in-flight */
+        if (!live) { store.del(k); store.put("orphan:" + k.slice(4), 1); } /* plant:put-reap */
+      }
       for (const [k] of store.list("orphan:")) if (drop.indexOf(k.slice(7)) < 0) drop.push(k.slice(7));
       for (const [k] of store.list("ch:")) store.del(k); /* plant:challenge-drop */
       dropExpiredChallenges(now);
@@ -1384,7 +1426,8 @@ function createCore(deps) {
 
   /* Every object in the bucket has a row here from before its put: "put:" until the commit's blob row holds it, and "orphan:" from
      the moment it is to be deleted until a delete is made. A deleted object's rows go. */
-  function record(obj) {
+  function record(obj, hold) {
+    if (hold) hold.obj = obj;
     store.atomic(() => store.put("put:" + obj, clock()));
   }
   function forget(obj) {
@@ -1450,7 +1493,7 @@ function createCore(deps) {
   /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
   const hasTeam = rt => teamOf(rt) !== null;
 
-  return { create, renew, lead, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, commit,
+  return { create, renew, lead, devices, invites, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, reserve, unreserve, commit,
     prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 

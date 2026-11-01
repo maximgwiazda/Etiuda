@@ -120,6 +120,12 @@ const WAITING_SAID = "Waiting for the team's lead to let this desk in. Nothing m
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
+/* A catch-up's handovers held until it reads a short page, and the handover steps its team files showed (applyBatch). */
+const AHEAD_MAX = 16, AHEAD_STEPS_MAX = 64;
+const aheadStep = s => table(s) && s.kind === B.HANDOVER_KIND && JSON.stringify(s).length <= 4096;
+const heldOf = a => a.filter(p => table(p) && Number.isSafeInteger(p.seq) && p.seq >= 0 && HEX32.test(String(p.id)) && isCount(p.epoch)
+  && isCount(p.counter) && B.isId(p.writer) && B.isId(p.lead) && Number.isSafeInteger(p.floor) && p.floor >= 0).slice(-AHEAD_MAX)
+  .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, counter: p.counter, writer: p.writer, lead: p.lead, floor: p.floor }));
 const TAKEN_MAX = 4096;
 /* The relay keeps a deletion 30 days (relay/core.cjs KEEP_MS). A catch-up that last reached the top longer ago than a day
    short of that may have missed one, so it lists the whole team again and drops what the relay no longer lists. */
@@ -392,7 +398,7 @@ function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null };
+    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] } };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -494,6 +500,10 @@ function stateOf(x) {
   if (Array.isArray(x.pending)) s.pending = x.pending.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
     .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor }));
+  if (table(x.ahead)) {
+    if (Array.isArray(x.ahead.held)) s.ahead.held = heldOf(x.ahead.held); /* plant:ahead-kept */
+    if (Array.isArray(x.ahead.steps)) s.ahead.steps = x.ahead.steps.filter(aheadStep).slice(-AHEAD_STEPS_MAX);
+  }
   return s;
 }
 
@@ -951,6 +961,10 @@ function createProgram(opts) {
     try { doc = JSON.parse(r.body.replace(/^\uFEFF/, "")); } catch { doc = null; }
     const t = teamJudged(doc);
     if (!t.ok) return t;
+    /* Read under the pin before a handover moves it: under the new lead the mirror's file judges as nobody's. */
+    let before = null;
+    before = t.handed ? heldTeam() : null; /* plant:hold-before-move */
+    if (before && t.epoch < before.epoch) return R("replay-rev");
     followHandover(t);
     const sha = sha256(Buffer.from(r.body, "utf8"));
     const prev = has(st.applied, TEAM_NAME) ? st.applied[TEAM_NAME] : null;
@@ -1261,9 +1275,11 @@ function createProgram(opts) {
      root files, then the desks' files judged under the roster that team file gave. Counters are judged against the floors
      as they stood when the batch began, so the order of application cannot refuse a blob the order of upload would take;
      a path takes only its newest blob of the batch. */
-  function applyBatch(items, ctx0) {
+  function applyBatch(items, ctx0, page) {
     const out = { applied: [], team: false };
     if (!pin) return out;
+    /* A catch-up page: `whole` false where more of the list follows, true on the short page that ends the catch-up. */
+    const look = page && typeof page.whole === "boolean" ? page : null;
     const held = trustFromMirror();
     /* A desk's own copy is named once a batch, from the team file it holds as the batch begins. */
     const ctx = ctx0 ? Object.assign({}, ctx0, { own: ownCopy(held, ctx0), owned: copiesByWriter(items, held, ctx0) }) : ctx0;
@@ -1276,19 +1292,54 @@ function createProgram(opts) {
     }
     const isTeam = x => x.r.kind === "file" && x.r.path === TEAM_NAME;
     let topTeam = null;
+    /* The team files of one look, landed in turn until one lands: by epoch, a genuine handover from the pin first within one,
+       then by later(). One not tried stays pending. On a catch-up page that more of the list follows, a handover is held (holdAhead), not landed,
+       and every look's steps are kept, so the fork rule reads the whole catch-up before the pin moves. */
     const landTop = list => {
       const teams = list.filter(isTeam);
-      for (const x of teams) unpend(x.r.id);
       if (!teams.length) return;
-      if (teams.length > 1 && forkedLook(teams.map(x => { try { return JSON.parse(String(x.r.body).replace(/^\uFEFF/, "")); } catch { return null; } }))) return;
-      const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
+      const docs = teams.map(x => { try { return JSON.parse(String(x.r.body).replace(/^\uFEFF/, "")); } catch { return null; } });
+      let seen = [];
+      seen = look ? aheadSaw(docs) : []; /* plant:ahead-steps */
+      if ((teams.length > 1 || seen.length) && forkedLook(docs.concat(seen))) {
+        for (const x of teams) unpend(x.r.id);
+        st.ahead.held = [];
+        return;
+      }
+      const pinLead = pin.lead;
+      const handedOn = d => table(d) && table(d.lead) && (d.lead.keyId !== pinLead.keyId || d.lead.public !== pinLead.public) && B.handedTo(d, pinLead);
+      /* The highest epoch first: a handover older than a file the pinned lead signed at a newer epoch is stale, whoever holds the
+         old key. Within an epoch, handed on first. */
+      let tier = () => 0;
+      tier = c => c.x.r.epoch; /* plant:epoch-first */
+      let rank = () => 0;
+      rank = c => (c.on ? 1 : 0); /* plant:handed-wins */
+      const order = teams.map((x, i) => ({ x, doc: docs[i], on: handedOn(docs[i]) }))
+        .sort((a, b) => tier(b) - tier(a) || rank(b) - rank(a) || (later(b.x.r, a.x.r) ? 1 : later(a.x.r, b.x.r) ? -1 : 0));
+      let held = [];
+      held = look && !look.whole ? order.filter(c => c.on) : []; /* plant:ahead-defer */
+      for (const c of held) { holdAhead(c, floors0); unpend(c.x.r.id); }
+      let next = false;
+      next = true; /* plant:team-next */
+      let top = null, tried = false;
+      for (const c of order) {
+        if (held.indexOf(c) >= 0) continue;
+        if (tried && !next) break;
+        if (topTeam && !c.on && !later(c.x.r, topTeam.r)) continue;
+        tried = true;
+        const was = pinNow();
+        const landed = landTeam(c.x.r, ctx); /* plant:team-first */
+        unpend(c.x.r.id);
+        if (landed.ok) {
+          top = topTeam = c.x;
+          if (!landed.same && !landed.stale && !out.team) { out.team = true; out.applied.push(TEAM_NAME); }
+          break;
+        }
+        pinBack(was);
+        dropSaid(TEAM_NAME, landed);
+      }
       /* A team file passed over for a newer one still used this key's counter. */
       for (const x of teams) if (x !== top && ownOf(ctx, x.r)) noteOwn(x.r);
-      if (topTeam && !later(top.r, topTeam.r)) return;
-      topTeam = top;
-      const landed = landTeam(top.r, ctx); /* plant:team-first */
-      if (!landed.ok) dropSaid(TEAM_NAME, landed);
-      else if (!landed.same && !landed.stale && !out.team) { out.team = true; out.applied.push(TEAM_NAME); }
     };
     /* An invitation's place and a desk's own copy first: the team file either brings is landed, and its key heeded, before
        the lead's other blobs are opened, so those sealed under that key open in this pass rather than wait to be fetched again. */
@@ -1316,11 +1367,53 @@ function createProgram(opts) {
     landTop(after);
     landNewest(opened.concat(after).filter(x => !isTeam(x)), out, ctx);
     const desks = [];
-    for (const it of others) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
+    /* What a held handover's new lead wrote waits for the pin to move, then comes back through retryPending. */
+    const heldLeads = new Set(st.ahead.held.map(h => h.lead));
+    for (const it of others) {
+      if (st.ahead.held.some(h => h.id === it.meta.id)) continue;
+      if (look && !look.whole && heldLeads.has(it.meta.writer)) { pend(it, floors0); continue; } /* plant:ahead-park */
+      const x = openOne(it, floors0, ctx);
+      if (x) desks.push(x);
+    }
     landNewest(desks, out, ctx);
     noteBehind(items, ctx);
+    /* The short page ends the catch-up: what was held and not followed goes, with what its new lead wrote. */
+    if (look && look.whole) {
+      for (const h of st.ahead.held) if (!isLeadKey(h.lead)) st.pending = st.pending.filter(p => p.writer !== h.lead);
+      st.ahead = { held: [], steps: [] };
+    }
     persist();
     return out;
+  }
+
+  /* The steps the team files of a catch-up have shown so far, with `docs` added, as one look for forkIn. */
+  function aheadSaw(docs) {
+    const a = st.ahead;
+    for (const d of docs) {
+      if (!table(d) || d.id !== pin.teamId || !Array.isArray(d.handover)) continue;
+      for (const s of d.handover.slice(0, B.HANDOVER_STEPS)) {
+        if (!aheadStep(s)) continue;
+        const k = JSON.stringify(s);
+        if (!a.steps.some(x => JSON.stringify(x) === k)) a.steps.push(s);
+      }
+    }
+    a.steps = a.steps.slice(-AHEAD_STEPS_MAX);
+    return a.steps.length ? [{ id: pin.teamId, handover: a.steps.slice() }] : [];
+  }
+  function holdAhead(c, floors0) {
+    const it = c.x.it, m = it.meta;
+    if (st.ahead.held.some(h => h.id === m.id)) return;
+    st.ahead.held.push({ seq: it.seq, id: m.id, epoch: c.x.r.epoch, counter: c.x.r.counter, writer: m.writer, lead: c.doc.lead.keyId,
+      floor: it.floor !== undefined ? it.floor : floorAt(floors0, m.writer, m.epoch) });
+    st.ahead.held = st.ahead.held.slice(-AHEAD_MAX);
+  }
+  /* The pin as followHandover leaves it, put back where a team file that moved it is then refused. */
+  function pinNow() {
+    return { pin, saved: st.pin, was: st.was.slice(), chain: st.chain, stranded: st.stranded, behind: st.behind };
+  }
+  function pinBack(w) {
+    if (pin === w.pin) return;
+    pin = w.pin; st.pin = w.saved; st.was = w.was; st.chain = w.chain; st.stranded = w.stranded; st.behind = w.behind;
   }
 
   /* ---- out ---- */
@@ -1637,6 +1730,8 @@ function createProgram(opts) {
       if (far) persist();
     },
     pending: () => st.pending.slice(),
+    /* The handovers a catch-up holds until it reads a short page. */
+    ahead: () => st.ahead.held.map(h => Object.assign({}, h)),
     unpend(id) { unpend(id); persist(); },
     /* The relay's copy of the team made again under the same id, after a sweep: its sequence starts over and it holds none of
        this program's uploads. The place in the sequence goes back to the start, and every file this program last sent is owed
@@ -2066,17 +2161,30 @@ function createChannel(opts) {
           let cut = -1;
           if (r.json.some(x => table(x) && table(x.meta) && Number.isSafeInteger(x.seq) && x.seq >= e.seq && x.meta.writer === leadId))
             cut = items.findIndex(x => x.meta.writer !== leadId); /* plant:page-whole */
-          prog.applyBatch(cut < 0 ? items : items.slice(0, cut), ctx());
+          prog.applyBatch(cut < 0 ? items : items.slice(0, cut), ctx(), { whole: false });
           prog.setSeq(cut < 0 ? before : items[cut].seq - 1);
           return got.refused || refusalOf(got); /* plant:fetch-kept */
         }
         if (got.status !== 200) continue;
         items.push({ seq: e.seq, meta: table(got.meta) && got.meta.id === m.id ? got.meta : m, ct: got.bytes });
       }
-      prog.applyBatch(items, ctx());
+      /* The short page lands what the catch-up held, fetched again; at the round cap nothing held is followed, and the next
+         catch-up reads on. */
+      const whole = r.json.length < SINCE_MAX;
+      if (whole) for (const h of prog.ahead()) {
+        const got = await authed("GET", "b/" + h.id);
+        const back = got.status === 200 && table(got.meta) && got.meta.id === h.id;
+        if (back) items.unshift({ seq: h.seq, meta: got.meta, ct: got.bytes, floor: h.floor }); /* plant:ahead-land */
+        if (!back && !gone(got)) {
+          prog.applyBatch(items, ctx(), { whole: false });
+          prog.setSeq(top);
+          return got.refused || refusalOf(got);
+        }
+      }
+      prog.applyBatch(items, ctx(), { whole });
       prog.setSeq(top);
       /* Judged on the short page alone: a catch-up that ran out at the round cap read part of the list, and the next cycle reads on. */
-      if (r.json.length < SINCE_MAX) {
+      if (whole) {
         judgeStranded(); /* plant:stranded-whole */
         return caughtUp(began, behind);
       }
@@ -2122,7 +2230,8 @@ function createChannel(opts) {
      stood when it first arrived. */
   async function retryPending() {
     const c = ctx();
-    const ready = prog.pending().filter(p => c.keyFor(p.epoch));
+    const held = new Set(prog.ahead().map(h => h.lead));
+    const ready = prog.pending().filter(p => c.keyFor(p.epoch) && !held.has(p.writer));
     if (!ready.length) return;
     const items = [];
     for (const p of ready) {

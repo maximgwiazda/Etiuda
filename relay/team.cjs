@@ -338,8 +338,9 @@ function teamObject(deps) {
       "etiuda-blob": Buffer.from(JSON.stringify(r.meta), "utf8").toString("base64url") } });
   }
 
-  /* Judged before the bucket's write and judged again at the commit, since other requests run while R2 answers. Each
-     upload gets an object of its own, so a refused one is deleted without touching another's. */
+  /* Judged and reserved before the bucket's write and judged again at the commit, since other requests run while R2 answers.
+     Each upload gets an object of its own, so a refused one is deleted without touching another's. A fault gives the reservation
+     back and deletes the object the write may have left, and the request still answers fault. */
   async function putBlob(request, rt, token, id) {
     const m = c.parseMeta(request.headers.get("etiuda-blob"));
     const a = c.admit(rt, token, m, id);
@@ -347,13 +348,21 @@ function teamObject(deps) {
     const ct = await readCapped(request, a.max); /* plant:put-cap */
     if (!ct) return refusedFor("blob-size");
     useKept(request);
-    const j = c.judge(rt, token, m, id, ct);
+    const j = c.reserve(rt, token, m, id, ct);
     if (!j.ok) return refused(j);
     const obj = rt + "/" + id + "/" + crypto.randomBytes(8).toString("hex");
-    c.record(obj); /* plant:r2-record */
-    await r2.put(obj, ct);
-    useKept(request);
-    const done = c.commit(rt, token, m, id, ct, obj);
+    let done = null;
+    try {
+      c.record(obj, j.hold); /* plant:r2-record */
+      await r2.put(obj, ct);
+      useKept(request);
+      done = c.commit(rt, token, m, id, ct, obj, j.hold);
+    } catch (e) {
+      c.unreserve(j.hold); /* plant:put-fault-release */
+      await dropObjects([obj]); /* plant:put-fault-drop */
+      throw e;
+    }
+    c.unreserve(j.hold); /* plant:put-release */
     if (!done.ok) { await dropObjects([obj]); return refused(done); }
     if (done.uploadedInv) closeWhere(a => a.inv === done.uploadedInv, "not-enrolled");
     announce(done);

@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 358;
+const EXPECTED = 375;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -5669,6 +5669,271 @@ try {
       await s.stop();
     }
   }
+  /* 994, the test architect's ruling on desk trust 2 and 3 (2026-11-01 16:02). A stand-in for the desk's since/ asks (the hooks'
+     fetch), armed once the scene is set: the entries `v.first` picks are served first, then `v.pad` entries left out as of no
+     size, then the rest in the relay's own order, and past them the relay itself. A blob `v.once` names is served at its first
+     fetch and answered 404 after, as a superseded blob is. `v.padTo`: the pad that ends the left-out entries there. `v.pages`
+     counts the since/ pages served from the stand-in. */
+  function padFetch(v) {
+    const PAGE = 1000;
+    const junk = seq => ({ seq, meta: { id: "left-out-" + seq, size: -1 } });
+    const answer = (page, from) => {
+      const h = {};
+      if (from && from.headers.get("etiuda-lapse")) h["etiuda-lapse"] = from.headers.get("etiuda-lapse");
+      return new Response(JSON.stringify(page), { status: 200, headers: h });
+    };
+    return (url, init) => {
+      if (!v.armed || !init || init.method !== "GET") return null;
+      const b = /\/t\/[0-9a-f]{32}\/b\/([0-9a-f]{32})$/.exec(String(url));
+      if (b && v.once && b[1] === v.once) {
+        if (!v.served) { v.served = true; return null; }
+        return Promise.resolve(new Response("", { status: 404 }));
+      }
+      const m = /\/t\/[0-9a-f]{32}\/since\/(\d+)$/.exec(String(url));
+      if (!m) return null;
+      return (async () => {
+        const at = Number(m[1]);
+        if (!v.list) {
+          const res = await relayFetch(url, init);
+          const real = await res.json();
+          v.base = at;
+          v.realTop = real.length ? real[real.length - 1].seq : at;
+          v.list = { first: real.filter(e => v.first(e.meta)), rest: real.filter(e => !v.first(e.meta)) };
+          if (v.padTo) v.pad = v.padTo - v.list.first.length;
+          v.N = v.list.first.length + v.pad + v.list.rest.length;
+        }
+        if (at < v.base) return relayFetch(url, init);
+        if (at >= v.base + v.N) {
+          const real = String(url).replace(/\/since\/\d+$/, "/since/" + (at - v.base - v.N + v.realTop));
+          const res = await relayFetch(real, init);
+          const page = (await res.json()).map(e => Object.assign({}, e, { seq: e.seq - v.realTop + v.base + v.N }));
+          return answer(page, res);
+        }
+        const F = v.list.first.length, page = [];
+        for (let i = at - v.base; i < v.N && page.length < PAGE; i++) {
+          const seq = v.base + i + 1;
+          if (i < F) page.push(Object.assign({}, v.list.first[i], { seq }));
+          else if (i < F + v.pad) page.push(junk(seq));
+          else page.push(Object.assign({}, v.list.rest[i - F - v.pad], { seq }));
+        }
+        v.pages = (v.pages || 0) + 1;
+        return answer(page, null);
+      })();
+    };
+  }
+  const sealTeam = (s, who, body, counter) => B.seal({ relayTeamId: s.rt, epoch: 1, teamKey: s.keys.get(1), writer: { keyId: who.keyId, privateKey: who.privateKey },
+    path: C.TEAM_NAME, body, counter, place: "root", kind: "file" });
+  /* 994a, finding 2: the desk is away while the old lead puts up a team file of its own whose counter is later than the
+     handover's (its clock ahead), and the lead then hands the team to a new key, which writes the team file carrying the step
+     and the edition, head and span re-signed under it. Both team files reach the desk in one since page. 994c, the next file
+     tried (`broken`): what the old key puts up instead names the new key with the genuine step, but its own signature does not
+     verify, so it is the first handover tried and is refused. */
+  async function handoverUnderOld(tag, broken, app) {
+    const out = { synced: false, old: 0, moved: 0, now: null, notes: [] };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      let first = s.doc({ rev: 3, roster: [s.entry(key1, 1)] });
+      if (broken) {
+        const bad = JSON.parse(s.doc({ rev: 4, roster: [s.entry(key1, 1)], lead: NEXT, handover: [s.step(LEAD, NEXT)], ring: [LEAD, NEXT] }));
+        bad.sig.value = (bad.sig.value[0] === "0" ? "1" : "0") + bad.sig.value.slice(1);
+        first = JSON.stringify(bad, null, 1) + "\n";
+      }
+      out.old = await putRaw(s.rt, LEAD, sealTeam(s, LEAD, first, Date.now() + 5e6));
+      out.moved = await s.handTo(NEXT);
+      if (out.old !== 200 || out.moved !== 200) return out;
+      s.boxNow = boxPair();
+      const span = s.span(NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [s.step(LEAD, NEXT)], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 1, 3, "Handover edition"));
+      put(s.sMirror, "stats-span.json", span);
+      await s.studio.kick(); await s.studio.idle();
+      deskTransport.down = false;
+      const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      out.now = deskNow(s, NEXT, span);
+      out.ok = done(out.now);
+      if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
+  /* 994e and 994g, finding 3: someone else holding K1 puts up a team file handing K1 to K3 (939h's thief); then more than a page
+     of listings; then the team's lead moves the relay to K2 and writes K2's file under K2. The desk, away meanwhile, reads the
+     two on different pages of one catch-up. `gone`: the thief's blob is served once, then answered as superseded, so the short
+     page holds K2's file alone and only the steps the catch-up kept show the fork. */
+  async function forkAcrossPages(tag, gone, app) {
+    const out = { synced: false, thief: 0, moved: 0, pages: 0, pin: "", channelPin: "", fork: "", said: 0, rev: 0 };
+    const v = { armed: false, pad: 1500 };
+    const s = await relayDeskScene(tag, app ? { app, fetch: padFetch(v) } : { fetch: padFetch(v) });
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const K2 = keyPair(true), K3 = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      const k3 = sealTeam(s, LEAD, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: K3, handover: [s.step(LEAD, K3)], ring: [LEAD, K3] }), Date.now() + 5e6);
+      out.thief = await putRaw(s.rt, LEAD, k3);
+      out.moved = await s.handTo(K2);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: K2, handover: [s.step(LEAD, K2)], ring: [LEAD, K2] }));
+      await s.studio.kick(); await s.studio.idle();
+      v.first = m => !!m && m.id === k3.id;
+      if (gone) v.once = k3.id;
+      v.armed = true;
+      deskTransport.down = false;
+      const two = C.FORK_SAID ? C.FORK_SAID.two : null;
+      const twoSaid = () => (two ? s.Dk.said.filter(l => l.indexOf(two) >= 0).length : 0);
+      const name = k => (k && k.public === LEAD.pub ? "K1" : k && k.public === K2.pub ? "K2" : k && k.public === K3.pub ? "K3" : "none");
+      const c = () => s.Dk.api.relayRun();
+      const settled = () => { const p = (s.Dk.envelope().teamPins || {})[s.team]; return twoSaid() > 0 || (!!p && p.public !== LEAD.pub); };
+      await until(async () => { await s.pump(); return settled(); }, 8000);
+      for (let i = 0; i < 3; i++) await s.pump();
+      out.pages = v.pages || 0;
+      out.pin = name((s.Dk.envelope().teamPins || {})[s.team]);
+      const pinned = c() && c().program ? c().program.pinned() : null;
+      out.channelPin = name(pinned && pinned.lead);
+      const st = c() && c().program ? c().program.state() : null;
+      out.fork = st && st.fork ? st.fork.kind : "none";
+      out.said = twoSaid();
+      try { out.rev = JSON.parse(read(s.mirror, C.TEAM_NAME)).rev; } catch { out.rev = 0; }
+      out.ok = out.thief === 200 && out.moved === 200 && out.pages >= 2 && out.pin === "K1" && out.channelPin === "K1" && out.fork === "two"
+        && out.said === 1 && out.rev === 2;
+      return out;
+    } finally {
+      v.armed = false;
+      await s.stop();
+    }
+  }
+  /* 994i, the control: the lead hands the team to a new key, which writes the team file carrying the step and the edition, head
+     and span re-signed under it, all on the desk's first page, and then more than a page of listings. The desk, away meanwhile,
+     follows once its catch-up reads the short page, and takes what the new key wrote on the first page. */
+  async function handoverAcrossPages(tag, app) {
+    const out = { synced: false, moved: 0, pages: 0, now: null, notes: [] };
+    const v = { armed: false, pad: 1500 };
+    const s = await relayDeskScene(tag, app ? { app, fetch: padFetch(v) } : { fetch: padFetch(v) });
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      s.boxNow = boxPair();
+      const span = s.span(NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [s.step(LEAD, NEXT)], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 1, 3, "Handover edition"));
+      put(s.sMirror, "stats-span.json", span);
+      await s.studio.kick(); await s.studio.idle();
+      v.first = m => !!m && m.writer === NEXT.keyId;
+      v.armed = true;
+      deskTransport.down = false;
+      const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      out.pages = v.pages || 0;
+      out.now = deskNow(s, NEXT, span);
+      out.ok = out.pages >= 2 && done(out.now);
+      if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
+      return out;
+    } finally {
+      v.armed = false;
+      await s.stop();
+    }
+  }
+  /* 994l, the epoch hold (the test architect, 2026-11-01 16:48): someone else holding K1 puts up a team file at the first epoch
+     handing K1 to K3, and the lead then moves the team to a second key. The desk, away meanwhile, is served the second epoch's
+     files first, then a page of entries left out, then the stale handover, so its mirror holds the second epoch when the handover
+     is judged: it is refused and the pin stays. */
+  async function staleHandover(tag, app) {
+    const out = { synced: false, thief: 0, pages: 0, pin: "", channelPin: "", epoch: 0, lead: "" };
+    const v = { armed: false, pad: 1000 };
+    const s = await relayDeskScene(tag, app ? { app, fetch: padFetch(v) } : { fetch: padFetch(v) });
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const K3 = keyPair(true), key1 = s.keys.get(1), key2 = crypto.randomBytes(32);
+      deskTransport.down = true;
+      out.thief = await putRaw(s.rt, LEAD, sealTeam(s, LEAD, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: K3, handover: [s.step(LEAD, K3)], ring: [LEAD, K3] }), Date.now() + 5e6));
+      s.keys.set(2, key2);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 1, roster: [s.entry(key2, 2)] }));
+      await s.studio.kick(); await s.studio.idle();
+      v.first = m => !!m && m.writer === LEAD.keyId && m.epoch === 2;
+      v.armed = true;
+      deskTransport.down = false;
+      const name = k => (k && k.public === LEAD.pub ? "K1" : k && k.public === K3.pub ? "K3" : "none");
+      const look = () => {
+        out.pin = name((s.Dk.envelope().teamPins || {})[s.team]);
+        const c = s.Dk.api.relayRun(), pinned = c && c.program ? c.program.pinned() : null;
+        out.channelPin = name(pinned && pinned.lead);
+        try { const d = JSON.parse(read(s.mirror, C.TEAM_NAME)); out.epoch = d.epoch; out.lead = d.lead.keyId === K3.keyId ? "K3" : d.lead.keyId === LEAD.keyId ? "K1" : "another"; } catch { out.epoch = 0; }
+        out.pages = v.pages || 0;
+        return out.pages >= 2 && (out.channelPin !== "K1" || out.epoch === 2);
+      };
+      await until(async () => { await s.pump(); return look(); }, 8000);
+      for (let i = 0; i < 3; i++) await s.pump();
+      look();
+      out.ok = out.thief === 200 && out.pages >= 2 && out.pin === "K1" && out.channelPin === "K1" && out.epoch === 2 && out.lead === "K1";
+      return out;
+    } finally {
+      v.armed = false;
+      await s.stop();
+    }
+  }
+  /* 994n, a restart (the test architect, 2026-11-01 16:48): the new key's handover and what it wrote are on the desk's first page,
+     then entries left out to the round cap, so the first catch-up holds the handover and stops there. The next catch-up's first ask
+     is answered 503 until the desk is stopped and loaded again from its user data; its fresh channel, built from the saved state,
+     then reads the short page and follows. */
+  async function heldAcrossRestart(tag, app) {
+    const out = { synced: false, moved: 0, pages: 0, held: -1, now: null, notes: [] };
+    const CAP = 1000 * 1000;
+    const v = { armed: false, pad: 0, padTo: CAP, refused: false, again: false };
+    const pad = padFetch(v);
+    const hooks = Object.assign(app ? { app } : {}, { fetch: (url, init) => {
+      const m = /\/t\/[0-9a-f]{32}\/since\/(\d+)$/.exec(String(url));
+      if (v.armed && m && v.list && Number(m[1]) === v.base + CAP && !v.again) { v.refused = true; return Promise.resolve(new Response("{}", { status: 503 })); }
+      return pad(url, init);
+    } });
+    const s = await relayDeskScene(tag, hooks);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      s.boxNow = boxPair();
+      const span = s.span(NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [s.step(LEAD, NEXT)], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      put(s.sMirror, HEAD_FILE, s.head(NEXT, 1, 3, "Handover edition"));
+      put(s.sMirror, "stats-span.json", span);
+      await s.studio.kick(); await s.studio.idle();
+      v.first = m => !!m && m.writer === NEXT.keyId;
+      v.armed = true;
+      deskTransport.down = false;
+      const firstLoad = s.Dk;
+      await until(async () => { if (!v.refused) await s.pump(); return v.refused; }, 60000);
+      out.pages = v.pages || 0;
+      const c1 = firstLoad.api.relayRun();
+      out.held = c1 && c1.program ? c1.program.ahead().length : -1;
+      if (c1) await c1.stop();
+      v.again = true;
+      s.Dk = loadDesk(s.ud, hooks);
+      const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      out.now = deskNow(s, NEXT, span);
+      out.ok = v.refused && out.pages === 1000 && out.held === 1 && done(out.now);
+      if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
+      return out;
+    } finally {
+      v.armed = false;
+      await s.stop();
+    }
+  }
   const nowText = n => (n ? "pin " + n.pin + ", edition " + n.edition + ", head " + n.head + ", team file epoch " + n.epoch + ", span " + (n.span ? "taken" : "not taken") : "nothing");
   const sceneText = (x, err) => (x ? "synced " + x.synced + ", relay move " + x.moved + ", " + nowText(x.now) + (x.notes.length ? ", " + x.notes.join("; ") : "") : "") + (err ? ", " + err : "");
   async function run(fn, ...args) { try { return { x: await fn(...args), err: "" }; } catch (e) { return { x: null, err: e && e.stack ? e.stack : String(e) }; } }
@@ -5838,6 +6103,92 @@ try {
     const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
     check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
       + i.detail + ", sha " + (i.back ? "restored" : "differs"));
+  }
+  {
+    const a = await run(handoverUnderOld, "994a", false);
+    check(!!a.x && a.x.ok === true,
+      "994a a desk away while the old lead puts up a team file with a later counter and the lead then hands the team to a new key, both"
+      + " in one since page, follows the handover and opens the new key's edition, head and span: the old lead's file " + (a.x ? a.x.old : "?")
+      + ", " + sceneText(a.x, a.err));
+    if (PLANTS_OFF) skip("994b lifting plant:handed-wins lets the old lead's later counter win the page, so the desk stays on the old lead");
+    else {
+      const b = await liftApp("plant:handed-wins", async app => { const x = await handoverUnderOld("994b", false, app); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
+      check(b.turned && b.back, "994b lifting plant:handed-wins lets the old lead's later counter win the page, so the desk stays on the old lead,"
+        + " and the product file is never written: " + b.detail + ", sha " + (b.back ? "restored" : "differs"));
+    }
+    const c = await run(handoverUnderOld, "994c", true);
+    check(!!c.x && c.x.ok === true,
+      "994c a team file the old key put up naming the new key with the genuine step but not verifying, its counter later than the"
+      + " handover's in the same since page, is refused and the genuine handover is landed next: the refused file " + (c.x ? c.x.old : "?")
+      + ", " + sceneText(c.x, c.err));
+    if (PLANTS_OFF) skip("994d lifting plant:team-next stops at the refused file, so the desk stays on the old lead");
+    else {
+      const d = await liftApp("plant:team-next", async app => { const x = await handoverUnderOld("994d", true, app); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
+      check(d.turned && d.back, "994d lifting plant:team-next stops at the refused file, so the desk stays on the old lead, and the product file is"
+        + " never written: " + d.detail + ", sha " + (d.back ? "restored" : "differs"));
+    }
+    const fText = x => (x ? "synced " + x.synced + ", the K3 file by K1 " + x.thief + ", relay move to K2 " + x.moved + ", pages from the stand-in "
+      + x.pages + ", desk pin " + x.pin + ", channel pin " + x.channelPin + ", fork " + x.fork + ", said " + x.said + ", team file rev " + x.rev : "");
+    const e = await run(forkAcrossPages, "994e", false);
+    check(!!e.x && e.x.ok === true,
+      "994e a desk away while K1 is handed to K3, then more than a page of listings, then K1 to K2, reads the two on different pages of one"
+      + " catch-up, follows neither, keeps its pin and team file, and says the fork once: " + fText(e.x) + (e.err ? ", " + e.err : ""));
+    if (PLANTS_OFF) skip("994f lifting plant:ahead-defer follows K3 from the first page before the catch-up has read its short page");
+    else {
+      const f = await liftApp("plant:ahead-defer", async app => { const x = await forkAcrossPages("994f", false, app); return x.synced && x.thief === 200 && x.moved === 200 && x.pages >= 2 && x.channelPin === "K3"; });
+      check(f.turned && f.back, "994f lifting plant:ahead-defer follows K3 from the first page before the catch-up has read its short page, and the"
+        + " product file is never written: " + f.detail + ", sha " + (f.back ? "restored" : "differs"));
+    }
+    const g = await run(forkAcrossPages, "994g", true);
+    check(!!g.x && g.x.ok === true,
+      "994g the same scene with the K3 file gone from the relay by the short page: the steps the catch-up kept still show the fork, and the"
+      + " desk follows neither and says it once: " + fText(g.x) + (g.err ? ", " + g.err : ""));
+    if (PLANTS_OFF) skip("994h lifting plant:ahead-steps forgets the first page's steps, so the desk follows K2 alone from the short page");
+    else {
+      const h = await liftApp("plant:ahead-steps", async app => { const x = await forkAcrossPages("994h", true, app); return x.synced && x.thief === 200 && x.moved === 200 && x.pages >= 2 && x.channelPin === "K2"; });
+      check(h.turned && h.back, "994h lifting plant:ahead-steps forgets the first page's steps, so the desk follows K2 alone from the short page, and"
+        + " the product file is never written: " + h.detail + ", sha " + (h.back ? "restored" : "differs"));
+    }
+    const pText = x => (x ? "pages from the stand-in " + x.pages + ", " : "") + sceneText(x, "");
+    const i = await run(handoverAcrossPages, "994i");
+    check(!!i.x && i.x.ok === true,
+      "994i control: one genuine handover on the first page of a catch-up, then more than a page of listings, is followed once the short page"
+      + " is read, and what the new key wrote on the first page is taken: " + pText(i.x) + (i.err ? ", " + i.err : ""));
+    if (PLANTS_OFF) skip("994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead");
+    else {
+      const j = await liftApp("plant:ahead-land", async app => { const x = await handoverAcrossPages("994j", app); return x.synced && x.moved === 200 && x.pages >= 2 && !!x.now && x.now.pin === "the old lead"; });
+      check(j.turned && j.back, "994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead, and the product file"
+        + " is never written: " + j.detail + ", sha " + (j.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) skip("994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head");
+    else {
+      const k = await liftApp("plant:ahead-park", async app => { const x = await handoverAcrossPages("994k", app); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
+      check(k.turned && k.back, "994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head,"
+        + " and the product file is never written: " + k.detail + ", sha " + (k.back ? "restored" : "differs"));
+    }
+    const lText = x => (x ? "synced " + x.synced + ", the K3 file by K1 " + x.thief + ", pages from the stand-in " + x.pages + ", desk pin "
+      + x.pin + ", channel pin " + x.channelPin + ", the mirror's team file epoch " + x.epoch + " by " + x.lead : "");
+    const l = await run(staleHandover, "994l");
+    check(!!l.x && l.x.ok === true,
+      "994l a handover at the first epoch, judged after the desk's mirror has taken the team's second epoch, is refused by the epoch hold"
+      + " and the pin stays: " + lText(l.x) + (l.err ? ", " + l.err : ""));
+    if (PLANTS_OFF) skip("994m lifting plant:hold-before-move reads the mirror under the moved pin, so the stale handover lands and the desk follows K3");
+    else {
+      const m = await liftApp("plant:hold-before-move", async app => { const x = await staleHandover("994m", app); return x.synced && x.thief === 200 && x.pages >= 2 && x.channelPin === "K3"; });
+      check(m.turned && m.back, "994m lifting plant:hold-before-move reads the mirror under the moved pin, so the stale handover lands and the desk"
+        + " follows K3, and the product file is never written: " + m.detail + ", sha " + (m.back ? "restored" : "differs"));
+    }
+    const rText = x => (x ? "pages to the cap " + x.pages + ", held at the stop " + x.held + ", " : "") + sceneText(x, "");
+    const n = await run(heldAcrossRestart, "994n");
+    check(!!n.x && n.x.ok === true,
+      "994n a desk stopped at the round cap with a handover held, loaded again from its user data and reaching the short page, follows it and"
+      + " takes what the new key wrote: " + rText(n.x) + (n.err ? ", " + n.err : ""));
+    if (PLANTS_OFF) skip("994o lifting plant:ahead-kept loses the held handover at the restart, so the desk stays on the old lead");
+    else {
+      const o = await liftApp("plant:ahead-kept", async app => { const x = await heldAcrossRestart("994o", app); return x.synced && x.moved === 200 && x.held === 1 && !!x.now && x.now.pin === "the old lead"; });
+      check(o.turned && o.back, "994o lifting plant:ahead-kept loses the held handover at the restart, so the desk stays on the old lead, and the product"
+        + " file is never written: " + o.detail + ", sha " + (o.back ? "restored" : "differs"));
+    }
   }
   /* ---- 987t, It does not match, once confirmed, leaves the team as Settings' Leave this team does (the ruling of 2026-11-01
      06:13, the test architect's leg of 06:14): a relay desk joined by invitation, its page the engine's own team-join.js over
@@ -6405,6 +6756,84 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 952a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- 994p, the epoch order (the test architect, 2026-11-01 17:26): a desk holding both epochs' keys, its mirror on the first
+   epoch, is away while K1's holder puts up a first-epoch team file handing K1 to K3 and the lead then moves the team to the
+   second epoch. Both team files come back in one since page: the desk lands the second epoch under the pin and does not follow
+   K3. `mod` is the channel layer the desk loads; the lead keeps the product's. ---- */
+async function rawUpload(rt, who, b) {
+  const t = transport("raw-" + hex(3));
+  const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
+  const challenge = JSON.parse(h.bytes.toString()).challenge;
+  const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
+    Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+  const token = JSON.parse(ses.bytes.toString()).session;
+  const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
+    sig: b.signature, nonce: b.nonce, place: b.place };
+  const r = await t.request("PUT", URLV1 + "/t/" + rt + "/b/" + b.id,
+    { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(meta)).toString("base64url") }, b.ciphertext);
+  return r.status;
+}
+async function staleInOnePage(mod) {
+  const out = { first: 0, thief: 0, leadPin: "", pin: "", epoch: 0, lead: "", pages: 0 };
+  const k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32), keys = new Map([[1, k1], [2, k2]]);
+  const deskKey = keyPair(true), K3 = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  let sealAt = 1;
+  const lead = opened(C, "994p-lead-" + tm.rt.slice(0, 8), tm, LEAD, "root", {
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+    keyFor: e => keys.get(e) || null, sealEpoch: () => sealAt,
+  });
+  const desk = opened(mod, "994p-desk-" + tm.rt.slice(0, 8), tm, deskKey, "desk:" + deskKey.keyId, { keyFor: e => keys.get(e) || null, sealEpoch: () => 2 });
+  const name = k => (k && k.keyId === LEAD.keyId ? "K1" : k && k.keyId === K3.keyId ? "K3" : "none");
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+    lead.ch.start();
+    await settle(lead);
+    desk.ch.start();
+    await settle(desk);
+    try { out.first = JSON.parse(read(desk.mirror, C.TEAM_NAME)).epoch; } catch { out.first = 0; }
+    desk.t.down = true;
+    const step = { format: 1, kind: "etiuda-team-handover", team: tm.id, from: { keyId: LEAD.keyId, public: LEAD.pub },
+      to: { keyId: K3.keyId, public: K3.pub }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    step.sig.value = signHex(LEAD, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(step)]));
+    const doc = { format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["quay-board"], lead: { keyId: K3.keyId, public: K3.pub },
+      sealed: true, exportsSealed: false, epoch: 1, rev: 2, channel: { kind: "relay", rt: tm.rt, url: URLV1 }, ring: RING,
+      roster: [member(deskKey)], handover: [step], sig: { alg: "Ed25519", keyId: K3.keyId } };
+    doc.sig.value = signHex(K3, C.signedBytes(doc));
+    out.thief = await rawUpload(tm.rt, LEAD, B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: k1, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey },
+      path: C.TEAM_NAME, body: JSON.stringify(doc, null, 1) + "\n", counter: Date.now() + 5e6, place: "root", kind: "file" }));
+    sealAt = 2;
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 2, 1, [member(deskKey)]));
+    await settle(lead);
+    out.leadPin = name(lead.prog.pinned() && lead.prog.pinned().lead);
+    desk.t.down = false;
+    await settle(desk);
+    out.pages = desk.t.log.filter(l => /since\//.test(l)).length;
+    out.pin = name(desk.prog.pinned() && desk.prog.pinned().lead);
+    try { const d = JSON.parse(read(desk.mirror, C.TEAM_NAME)); out.epoch = d.epoch; out.lead = name(d.lead); } catch { out.epoch = 0; }
+    out.ok = out.first === 1 && out.thief === 200 && out.leadPin === "K1" && out.pin === "K1" && out.epoch === 2 && out.lead === "K1";
+    return out;
+  } finally {
+    await lead.ch.stop();
+    await desk.ch.stop();
+  }
+}
+try {
+  const pText = x => "the desk's first epoch " + x.first + ", the K3 file by K1 " + x.thief + ", the lead's own pin " + x.leadPin + ", desk pin " + x.pin
+    + ", the mirror's team file epoch " + x.epoch + " by " + x.lead;
+  const p = await staleInOnePage(C);
+  check(p.ok === true, "994p a first-epoch handover to K3 and the pinned lead's own move to the second epoch in one since page, the desk's mirror"
+    + " on the first: the desk lands the second epoch under the pin and does not follow K3: " + pText(p));
+  if (PLANTS_OFF) skip("994q lifting plant:epoch-first puts the stale handover first, so the desk follows K3");
+  else {
+    const q = await liftChannel("plant:epoch-first", async mod => { const x = await staleInOnePage(mod); return x.first === 1 && x.thief === 200 && x.leadPin === "K1" && x.pin === "K3"; });
+    check(q.turned && q.back, "994q lifting plant:epoch-first puts the stale handover first, so the desk follows K3, and the product file is never"
+      + " written: " + q.detail + ", sha " + (q.back ? "restored" : "differs"));
+  }
+} catch (e) {
+  check(false, "harness (the leg 994p): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a desk's own copy lands its team file before the lead's other blobs of the batch open (C9, board 923). A desk
