@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 37;
+const EXPECTED = 61;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -75,7 +75,7 @@ function loadDesk(ud, overrides = {}) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const srcToRun = overrides.src || getShellSrc();
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    srcToRun + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
+    srcToRun + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
@@ -2106,6 +2106,76 @@ async function run() {
       } finally { try { appSyncer().stopAllFolderSyncers(); } catch {} }
     });
     check(r.ok, "44t lifting plant:cas-off-thread swaps the shared catalog in the mirror and never on the share: " + JSON.stringify(r));
+  }
+
+  /* 42m: A DESK WHOSE SYNCER CANNOT START READS THE SHARE AND SAYS WHY (Argon's updates review of 2026-11-01, finding 1). A
+     packaged desk missing the syncer's file used to read an empty mirror in silence; now it reads the shared folder itself, as
+     before the mirror, says why once, and does not try the syncer again. */
+  function syncerGoneDesk(name, src) {
+    const ud = folder(name + "-desk");
+    const shareDir = folder(name + "-share");
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    const gone = n => {
+      if (/[\\/]folder[\\/]syncer\.cjs$/.test(String(n))) { const e = new Error("Cannot find module '" + n + "'"); e.code = "MODULE_NOT_FOUND"; throw e; }
+      return nodeRequire(n);
+    };
+    const d = loadDesk(ud, { require: gone, src });
+    const first = d.api.folderSyncerRun();
+    const second = d.api.folderSyncerRun();
+    const lines = d.said.filter(l => l.indexOf("could not be kept on this desk, so it reads the shared folder itself") >= 0);
+    return { shareDir, ud, first, second, folderNow: d.api.catalogFolder(), lines };
+  }
+  {
+    const r = syncerGoneDesk("syncer-gone");
+    const ok = r.first === null && r.second === null && r.folderNow === r.shareDir && r.lines.length === 1
+      && r.lines[0].indexOf("Cannot find module") >= 0;
+    check(ok, "42m a desk whose syncer cannot be loaded reads the shared folder itself " + (r.folderNow === r.shareDir)
+      + " and says why once (" + r.lines.length + " line(s)): " + JSON.stringify(r.lines));
+  }
+  {
+    const r = await testPlant("syncer-broken-share", mainFile, (scratchMain) => {
+      const got = syncerGoneDesk("plant-syncer-gone", fs.readFileSync(scratchMain, "utf8"));
+      return got.folderNow !== got.shareDir;
+    });
+    check(r.ok, "42m1 lifting plant:syncer-broken-share sends a desk without its syncer to the empty mirror: " + JSON.stringify(r));
+  }
+  {
+    const r = await testPlant("syncer-start-said", mainFile, (scratchMain) => {
+      const got = syncerGoneDesk("plant-syncer-said", fs.readFileSync(scratchMain, "utf8"));
+      return got.lines.length === 0;
+    });
+    check(r.ok, "42m2 lifting plant:syncer-start-said leaves a desk without its syncer silent: " + JSON.stringify(r));
+  }
+
+  /* 42n: THE WORKER STARTS FROM ITS SOURCE TEXT, so a packaged desk, whose syncer files sit inside app.asar, does not depend on
+     a Worker's loader reading a path there. A real worker syncer mirrors a genuine team file; with the line lifted it does not. */
+  const deskChecksForWorker = () => newDesk("checks-for-worker-" + crypto.randomBytes(3).toString("hex"), folder("checks-for-worker-folder")).api.deskTrustChecks();
+  async function workerMirrors(mod, name) {
+    const share = folder(name + "-share"), mirror = folder(name + "-mirror");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    let s = null;
+    try {
+      s = mod.startFolderSyncer({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: () => null, checks: deskChecksForWorker(), pollMs: 200 });
+    } catch { return false; }
+    const until = Date.now() + 8000;
+    let landed = false;
+    while (!landed && Date.now() < until) {
+      await new Promise(res => setTimeout(res, 150));
+      landed = fs.existsSync(path.join(mirror, "etiuda-team.json"));
+    }
+    try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+    return landed;
+  }
+  {
+    const live = await workerMirrors(nodeRequire(syncerFile), "worker-source");
+    const r = await testPlant("syncer-worker-source", syncerFile, async (scratchSyncer) => {
+      fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratchSyncer), "syncer-worker.cjs"));
+      return !(await workerMirrors(nodeRequire(scratchSyncer), "plant-worker-source"));
+    });
+    check(live && r.ok, "42n the syncer's worker starts from its source text and mirrors a genuine team file " + live
+      + ", and lifting plant:syncer-worker-source stops it: " + JSON.stringify(r));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

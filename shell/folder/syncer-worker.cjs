@@ -6,6 +6,10 @@
  * The worker only stages files into the mirror's .staging directory.
  * No cryptographic keys or check functions are sent to or run in the worker.
  * Checks happen exclusively on the main thread on the local staged bytes.
+ *
+ * Started from its source text (syncer.cjs, { eval: true }), so a packaged desk does not need a Worker's loader to read a
+ * path inside app.asar. That holds only while this file requires nothing but Node's own modules ("node:" names) and never
+ * uses __dirname, __filename or a relative require: tests/pick.mjs 5h refuses any of those here.
  */
 "use strict";
 
@@ -13,7 +17,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { parentPort } = require("node:worker_threads");
-const S = require("./syncer.cjs");
+/* syncer.cjs's own functions, put in front of this source when the worker starts (syncer.cjs, start), never required by path. */
+const S = __syncerLib; // eslint-disable-line no-undef
 
 /* Cadence: worker lists the shared folder every FOLDER_SYNC_CADENCE_MS (3000ms by default).
  * A folder watch event asks for a listing early via kick().
