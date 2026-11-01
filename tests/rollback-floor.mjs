@@ -1267,6 +1267,8 @@ try {
     const before = facts(await readText(B, g.stem + ".ec", me.id));
     fs.writeFileSync(file, firstBytes);
     touch(file, Date.now());
+    /* The syncer's floor keeps the share's older copy out of B's mirror, so the reader's case is planted there. */
+    fs.writeFileSync(path.join(syncerMod.folderMirrorOf(B.ud, TEAM), "desks", me.id, g.stem + ".ec"), firstBytes);
     const quietText = await readText(B, g.stem + ".ec", me.id);
     const asked = facts(((await B.ask("etiuda:catalog-read", g.stem + ".ec", me.id, true)) || {}).text || "");
     const markAfter = (B.envelope().readRevs || {})[g.doc.id];

@@ -189,7 +189,12 @@ try {
     box.D.setPage(() => pageBody(n == null ? 2 : n));
     box.D.api.catalogChanged(box.D.win);
   }
-  const statsAt = box => path.join(box.share, "desks", box.me.id, "stats.estat");
+  /* Where the desk's own files land: on a folder team the mirror, whose outbox carries them to the share (board 945 stage 3 (b)
+     slice 2), so the answer is read there, and a check that nothing was written looks in both. */
+  const ownPlace = box => path.join(syncerMod.folderMirrorOf(box.D.ud, box.team), "desks", box.me.id);
+  const statsAt = box => path.join(ownPlace(box), "stats.estat");
+  const estatOf = box => estat(box.share).concat(estat(syncerMod.folderMirrorOf(box.D.ud, box.team)));
+  const oldEstatOf = box => oldEstat(box.share).concat(oldEstat(syncerMod.folderMirrorOf(box.D.ud, box.team)));
   const openStats = (box) => {
     try {
       const raw = JSON.parse(fs.readFileSync(statsAt(box), "utf8"));
@@ -232,7 +237,7 @@ try {
         if (fs.existsSync(statsAt(box))) return false;
         put(box.share, "stats-span.json", "{");
         box.D.api.catalogChanged(box.D.win);
-        if (fs.existsSync(statsAt(box)) || oldEstat(box.share).length) return false;
+        if (fs.existsSync(statsAt(box)) || oldEstatOf(box).length) return false;
         adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
         const before = fs.readFileSync(statsAt(box));
         const day = ymd(new Date(CLOCK));
@@ -242,7 +247,7 @@ try {
         put(box.share, "stats-span.json", "{");
         box.D.api.catalogChanged(box.D.win);
         return Buffer.compare(before, fs.readFileSync(statsAt(box))) === 0 && openStats(box).cards[0].n === 2
-          && oldEstat(box.share).length === 0;
+          && oldEstatOf(box).length === 0;
       });
     check(g.ok, "891a a span signed by another key, or unsigned, or not JSON, writes nothing and leaves a good answer where it was"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
@@ -351,8 +356,8 @@ try {
         const box = await joined(true);
         adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
         const res = await box.D.ask("etiuda:stats-write", pageBody(2));
-        return !(res && res.ok) && !fs.existsSync(statsAt(box)) && oldEstat(box.share).length === 0
-          && estat(box.share).length === 0;
+        return !(res && res.ok) && !fs.existsSync(statsAt(box)) && oldEstatOf(box).length === 0
+          && estatOf(box).length === 0;
       });
     check(g.ok, "891f a desk with no team key writes no statistics file"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
@@ -389,7 +394,7 @@ try {
         const box = await joined(false);
         adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
         const at = statsAt(box);
-        return fs.existsSync(at) && path.basename(at) === "stats.estat" && oldEstat(box.share).length === 0;
+        return fs.existsSync(at) && path.basename(at) === "stats.estat" && oldEstatOf(box).length === 0;
       });
     check(g.ok, "891h the sealed answer is desks/<id>/stats.estat and the old stats/ path is never written"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
@@ -473,7 +478,7 @@ try {
           return doc;
         };
         const stem = "lamps-" + hex8;
-        const file = path.join(box.share, "desks", box.me.id, stem + ".ec");
+        const file = path.join(ownPlace(box), stem + ".ec");
         const first = await box.D.ask("etiuda:branch-write", stem, JSON.stringify(grown("North lamps, first")));
         const env1 = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
         const inner1 = env1 ? box.D.api.openSealed(box.key, env1) : null;
@@ -530,7 +535,7 @@ try {
         adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
         const again = await box.D.ask("etiuda:stats-write", pageBody(5));
         const lines = box.D.said.filter(l => l.indexOf("names no box for the lead") >= 0).length;
-        return !fs.existsSync(statsAt(box)) && estat(box.share).length === 0 && !(again && again.ok) && lines === 1;
+        return !fs.existsSync(statsAt(box)) && estatOf(box).length === 0 && !(again && again.ok) && lines === 1;
       });
     check(g.ok, "891m a team file with no lead.box writes nothing, and the desk says so once"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
