@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 163;
+const EXPECTED = 165;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -2861,7 +2861,7 @@ try {
   const WAIT_EN = "Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.";
   const WAIT_PL = "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić: katalog zespołu otworzy się tu sam, gdy to nastąpi.";
   const openKey = crypto.randomBytes(32);
-  async function wrapScene(name, src, M) {
+  async function wrapScene(name, src, M, extra) {
     const box = {};
     const stand = { ...RelayChannel(), createChannel: opts => { box.opts = opts; return { start: noop, stop: async () => {}, kick: noop, online: () => true }; } };
     const D = await relayDesk(name, {}, {}, src, { relayChannel: stand });
@@ -2869,6 +2869,7 @@ try {
     const mirror = path.join(D.ud, "relay", relayHex.h32);
     fs.mkdirSync(mirror, { recursive: true });
     put(mirror, "board.ec", P.sealCatalog(openKey, relayTeam, 1, A1));
+    if (extra) for (const [n, txt] of extra) put(mirror, n, P.sealCatalog(openKey, relayTeam, 1, txt));
     const loads = [];
     HK.hooks.loadCatalogFromFolder = n => { loads.push(String(n)); };
     try {
@@ -2903,6 +2904,19 @@ try {
     && JSON.stringify(wrapped.loads) === JSON.stringify(["board.ec"]) && wrapped.compared && wrapped.after.indexOf(escPage(OPEN_EN)) >= 0,
     "987e a relay desk waiting on its invitation says what it waits for, in English and in Polish, and once the wrap gives it the key the team's"
     + " catalog opens on the empty desk with nothing pressed, the catalogs said open only then: " + wrapSaid(wrapped));
+  /* 987r: with an older edition of the team's catalog in the mirror under a name listed first, the shell names the newest (the
+     test architect's C1 to the desk pilot: relayOpenFile took the first it found). */
+  const olderA1 = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 0 }));
+  const newest = await wrapScene("f3-newest", null, TJ, [["a-older.ec", olderA1]]);
+  check(JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]), "987r with an older edition listed first, the shell opens the team's newest: " + JSON.stringify(newest.loads));
+  if (PLANTS_OFF) skip("987s lifting plant:relay-open-newest names no catalog");
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:relay-open-newest") >= 0);
+    let w = null;
+    if (at >= 0) { lines.splice(at, 1); w = await wrapScene("f3-plant-newest", lines.join("\n"), TJ, [["a-older.ec", olderA1]]); }
+    check(!!w && w.loads.length === 0, "987s lifting plant:relay-open-newest names no catalog (FAIL 987r): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
+  }
   if (PLANTS_OFF) {
     skip("987f lifting plant:relay-opens leaves the team's catalog unnamed by the shell");
     skip("987g lifting plant:opens-load leaves the named catalog unopened on the empty desk");
@@ -2925,10 +2939,10 @@ try {
   }
 
   /* F8: "It does not match" asks once, saying what it does, and the first press forgets nothing: the shell hears "forget" only from
-     the confirmation's own press. The copywriter's words; the last sentence she wrote is held back, as it does not hold here. */
-  const DOUBT = { title: "Leave this team on this desk?", titlePl: "Opuścić ten zespół na tym stanowisku?",
-    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays.",
-    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje." };
+     the confirmation's own press. The copywriter's words, corrected for the bar (7f36d360). */
+  const DOUBT = { title: "Forget this team on this desk?", titlePl: "Zapomnieć o tym zespole na tym stanowisku?",
+    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead.",
+    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Potem stanowisko nie przyjmie już żadnego zaproszenia do tego zespołu; aby znów z nim pracować, trzeba porozmawiać z liderem zespołu." };
   async function doubtScene(M) {
     const ops = [];
     let leads = [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: false }];
@@ -2957,14 +2971,14 @@ try {
   }
   const doubted = await doubtScene(TJ);
   const doubtAsks = doubted.asked.indexOf(escPage(DOUBT.title)) >= 0 && doubted.asked.indexOf(escPage(DOUBT.body)) >= 0
-    && doubted.asked.indexOf("abcd abcd abcd abcd") >= 0 && /class="btn danger" data-join="forget">Leave this team</.test(doubted.asked)
+    && doubted.asked.indexOf("abcd abcd abcd abcd") >= 0 && /class="btn danger" data-join="forget">Forget this team</.test(doubted.asked)
     && /data-join="keep">Cancel</.test(doubted.asked) && doubted.asked.indexOf("You are on the team") < 0
     && doubted.askedPl.indexOf(DOUBT.titlePl) >= 0 && doubted.askedPl.indexOf(DOUBT.bodyPl) >= 0
-    && doubted.askedPl.indexOf(">Opuść ten zespół<") >= 0 && doubted.askedPl.indexOf(">Anuluj<") >= 0;
+    && doubted.askedPl.indexOf(">Zapomnij o tym zespole<") >= 0 && doubted.askedPl.indexOf(">Anuluj<") >= 0;
   check(doubted.key.indexOf("You are on the team") >= 0 && doubted.firstForgets === 0 && doubtAsks
     && doubted.back.indexOf("You are on the team") >= 0 && doubted.forgets === 1,
-    "987j It does not match asks once, in English and in Polish, saying what leaving forgets, and the first press forgets nothing; Cancel goes back"
-    + " to the key, and only the confirmation's Leave this team reaches the shell: first press " + doubted.firstForgets + " forget(s), asked "
+    "987j It does not match asks once, in English and in Polish, saying what forgetting the team does, and the first press forgets nothing; Cancel goes back"
+    + " to the key, and only the confirmation's Forget this team reaches the shell: first press " + doubted.firstForgets + " forget(s), asked "
     + doubtAsks + ", back " + (doubted.back.indexOf("You are on the team") >= 0) + ", in all " + doubted.forgets);
   if (PLANTS_OFF) skip("987k lifting plant:doubt-asks forgets at the first press");
   else {

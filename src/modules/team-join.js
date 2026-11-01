@@ -439,9 +439,9 @@ function leftDay(iso){
 function joinParts(){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
   /* "It does not match" forgets the lead and every key kept under it, so it asks once, saying so; the copywriter's words. */
-  if(l && joinDoubt===l.team) return {title:t("Leave this team on this desk?"),
-    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays."),
-    body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["forget",t("Leave this team"),false,"danger"],["keep",t("Cancel")]]};
+  if(l && joinDoubt===l.team) return {title:t("Forget this team on this desk?"),
+    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead."),
+    body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["forget",t("Forget this team"),false,"danger"],["keep",t("Cancel")]]};
   if(l) return {title:t("You are on the team"),
     line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
     body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};

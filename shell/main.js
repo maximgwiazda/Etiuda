@@ -3583,12 +3583,18 @@ const relayCatalogNamed = new Set();            // the relay teams whose catalog
 function relayOpenFile(team) {
   const kept = teamKeys[team] || {};
   if (!Object.keys(kept).length) return "";
+  /* The newest of the team's sealed files this desk can open: the highest key number, then the highest rev inside it (the
+     test architect's C1 to the desk pilot; a sealed envelope carries no rev outside its ciphertext). */
+  let best = "", bestEpoch = -1, bestRev = -1;
   for (const f of ecFilesIn(catalogFolder())) {
     let d = null;
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
-    if (d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch]) return path.basename(f);
+    if (!(d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch])) continue;
+    let rev = -1;
+    try { const text = openSealed(teamKeyAt(team, d.epoch), d); const doc = text ? JSON.parse(text) : null; if (doc && Number.isInteger(doc.rev)) rev = doc.rev; } catch { rev = -1; }
+    if (d.epoch > bestEpoch || (d.epoch === bestEpoch && rev > bestRev)) { best = path.basename(f); bestEpoch = d.epoch; bestRev = rev; } /* plant:relay-open-newest */
   }
-  return "";
+  return best;
 }
 function relayOpens(j) {
   const inv = j && j.invite && j.invite.relay;
