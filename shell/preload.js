@@ -123,6 +123,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   home: host.home,
   deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
+  /* A desk a later Etiuda saved, which this one leaves alone: {app, schema} as text, or "". */
+  deskNewer: () => ipcRenderer.sendSync("etiuda:desk-newer"),
   /* A refused file somebody double-clicked, {name, why}, answered once. */
   openedRefused: host.openedRefused || null,
   /* Export's dialog, then the write to what was chosen: {name} or null for a dialog closed, then

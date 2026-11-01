@@ -1485,7 +1485,7 @@ let statsClock = null;
 let statsMidnightTimer = null;
 let statsWin = null;
 function ensureDeskId() {
-  if (theDeskId) return theDeskId;
+  if (theDeskId || deskNewer) return theDeskId;
   theDeskId = mintDeskId();
   return theDeskId;
 }
@@ -2258,6 +2258,7 @@ function branchIdentity(make) {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* Asked not to make one, it answers the public halves of the pair there is, or null: nothing is opened or made. */
   if (make === false) return deskBranch ? { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub } : null;
+  if (deskNewer) return null; /* plant:desk-newer-key */
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
@@ -5982,6 +5983,14 @@ const deskRefusedSeen = new Set();
 let deskUnkept = "";                           // a live desk.json that could not even be read
 let deskRestored = "";                         // when the backup this run opened was saved
 let deskIsNew = false;                         // no desk file at all, nor a backup: a first run
+/* A DESK FILE A LATER ETIUDA WROTE stops the read: an older backup is not opened in its place, nothing is written over
+   it and no key is made, so installing that version again finds the desk as it was. {app, schema}, app "" where the
+   file names no release. */
+let deskNewer = null;
+function releaseOf(v) { return /^[1-9][0-9]*\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(String(v || "")) ? String(v) : ""; }
+function deskFromLater(doc) {
+  return !!doc && doc.kind === DESK_KIND && Number.isInteger(doc.schema) && doc.schema > DESK_SCHEMA;
+}
 function keepAside(buf) {
   const to = path.join(path.dirname(deskFile()),
     "desk.unread-" + crypto.createHash("sha256").update(buf).digest("hex").slice(0, 12) + ".json");
@@ -5992,8 +6001,10 @@ function noteRefused(kept, restored) {
   if (deskRefusedSeen.has(kept) || deskRefused.some(r => r.kept === kept)) return;
   deskRefused.push({ kept: kept, restored: restored });
 }
-/* Throws while the live file is still neither readable nor kept, so no write can replace it. */
+/* Throws while the live file is still neither readable nor kept, so no write can replace it; and while it is a later
+   Etiuda's. */
 function keepUnkept() {
+  if (deskNewer) throw new Error("desk.json was saved by a later Etiuda, so this version leaves it as it is"); /* plant:desk-newer-write */
   if (!deskUnkept) return;
   noteRefused(keepAside(fs.readFileSync(deskUnkept)), deskRestored);
   deskUnkept = "";
@@ -6014,6 +6025,7 @@ function settleRefused(refused, unread, live, doc) {
 /* The live file first, then the backups oldest-last, so a desk that will not parse costs the
    last run's state rather than all of it. A refused file is left where it is and kept aside. */
 function readDesk() {
+  deskNewer = null;
   const tried = [deskFile()];
   for (let n = 1; n <= DESK_BACKUPS; n++) tried.push(deskBackup(n));
   const refused = [];
@@ -6024,6 +6036,7 @@ function readDesk() {
     catch (e) { if (file === tried[0] && e.code !== "ENOENT") unread = true; continue; }
     let keys = null, doc = null;
     try { doc = JSON.parse(buf.toString("utf8")); keys = migrateDesk(doc, DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
+    if (!keys && deskFromLater(doc)) { deskNewer = { app: releaseOf(doc.app), schema: doc.schema }; break; } /* plant:desk-newer */
     if (!keys) {
       console.error("etiuda: " + file + " is not a desk this version can read");
       refused.push({ file: file, buf: buf });
@@ -6162,6 +6175,10 @@ function readDesk() {
   }
   deskRestored = "";
   settleRefused(refused, unread, tried[0], null);
+  if (deskNewer) {
+    console.error("etiuda: the desk was saved by a later Etiuda (schema " + deskNewer.schema + "), so it is read as empty and left as it is");
+    return {};
+  }
   if (!refused.length && !unread) {
     deskIsNew = true;
     console.log("etiuda: no desk file yet, so this run starts one");
@@ -6350,6 +6367,10 @@ function dropSessionStorage() {
 }
 ipcMain.on("etiuda:desk-refused", (e) => {
   e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
+});
+/* The later Etiuda's desk this run leaves alone, {app, schema} as text, or "". */
+ipcMain.on("etiuda:desk-newer", (e) => {
+  e.returnValue = fromEngine(e) && deskNewer ? JSON.stringify(deskNewer) : "";
 });
 ipcMain.on("etiuda:desk-refused-seen", (e) => {
   if (!fromEngine(e)) return;
