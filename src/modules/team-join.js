@@ -470,10 +470,10 @@ function leftDay(iso){
 /* The title, the line under it, and the acts, for whichever state the request is in. */
 function joinParts(){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
-  /* "It does not match" forgets the lead and every key kept under it, so it asks once, saying so; the copywriter's words. */
-  if(l && joinDoubt===l.team) return {title:t("Forget this team on this desk?"),
-    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead."),
-    body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["forget",t("Forget this team"),false,"danger"],["keep",t("Cancel")]]};
+  /* "It does not match" leaves the team as Settings' Leave this team does, so it asks once, saying so; the copywriter's words. */
+  if(l && joinDoubt===l.team) return {title:t("Leave this team on this desk?"),
+    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation."),
+    body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["forget",t("Leave this team"),false,"danger"],["keep",t("Cancel")]]};
   if(l) return {title:t("You are on the team"),
     line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
     body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
@@ -613,7 +613,7 @@ function joinAct(act){
   if(act==="seen" && l) return joinAsk("seen",l.team);
   if(act==="keep"){ joinDoubt=""; return Promise.resolve(repaintJoin()); }
   if(act==="forget" && l && joinDoubt!==l.team){ joinDoubt=l.team; return Promise.resolve(repaintJoin()); } /* plant:doubt-asks */
-  if(act==="forget" && l){ joinDoubt=""; return joinAsk("forget",l.team); }
+  if(act==="forget" && l){ joinDoubt=""; return forgetTeamLead(l.team); } /* plant:mismatch-leaves */
   if(act==="load") return Promise.resolve(hooks.importCatalogHere());
   return Promise.resolve(null);
 }
@@ -684,7 +684,7 @@ function openJoinBubble(){
   });
 }
 
-/* Leaves a team from Settings: the shell forgets its lead and every key kept under it, as "It does not match" does, and
+/* Leaves a team, from Settings and from "It does not match": the shell forgets its lead and every key kept under it, and
    remembers when it left, so a later invitation asks rather than refuses; the catalog in use stays. `then()` runs once the
    shell has answered. */
 function forgetTeamLead(team,then){
