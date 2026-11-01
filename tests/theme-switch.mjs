@@ -1,17 +1,15 @@
-/* The theme switch settles within its bound, and a press during the fade is taken.
+/* The theme switch lands at once, as Studio's does, and a second press is taken.
  *
  *   node tests/theme-switch.mjs
  *
- * No browser and no fixture. The duration is read from the sheet: the crossfade's tier and the
- * icon's tier, resolved on :root, and the switch is settled when the longer of the two is. The
- * bound is 300ms. The press is the module itself, against a document whose view transition stays
- * open and whose click lands on the document element inside the button's box, which is where a
- * real press lands while the fade runs.
- *
- * 952a and 952b take the module again under a desk host, from copies of it and its four neighbours in a scratch
- * folder: a press waits on no write to the disk and has sent the record's start before the fade begins, and the fade
- * holds real only the cards a glide moved or the browser is drawing. Each lifts its plant from a copy and goes red;
- * ETIUDA_PLANTS=off skips the lifted halves and counts them.
+ * No browser and no fixture. The sheet: the icon's turn on its tier, at most 300ms, and no rule left for a
+ * whole-window crossfade or for cutting the controls' own transitions during a flip (Max, 2026-11-01 17:50:
+ * "Yes, lets bring desk to studio method"). The press is the module itself, taken from copies of it and its
+ * four neighbours in a scratch folder, once in a browser (no host) and once under a desk host: the press
+ * puts data-theme on the root in its own task, opens no view transition, waits on no write to the disk and
+ * sends the choice without waiting, and a second press straight after flips back and stores that.
+ * 952a and 952b each lift plant:theme-lands-at-once from a copy and go red; ETIUDA_PLANTS=off skips the
+ * lifted halves and counts them.
  *
  * Exit code is the number of failed checks.
  */
@@ -24,7 +22,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const css = readFileSync(join(ROOT, "src", "template.html"), "utf8");
 
-const EXPECTED = 9;
+const EXPECTED = 7;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let fails = 0, checks = 0, skipped = 0;
 const check = (ok, what) => {
@@ -34,224 +32,98 @@ const check = (ok, what) => {
 };
 const skip = what => { skipped++; console.log("  SKIP  " + what); };
 
-function tierMs(name) {
-  const re = new RegExp("--m-" + name + ":(\\d+)ms\\b");
-  const m = css.match(re);
-  return m ? Number(m[1]) : null;
-}
-function ruleBody(re) {
-  const m = css.match(re);
-  return m ? m[1] : "";
-}
-function timeTier(body) {
-  const names = [...body.matchAll(/var\(--m-([a-z]+)\)/g)].map(m => m[1]);
-  for (const n of names) {
-    const ms = tierMs(n);
-    if (ms != null) return { name: n, ms };
-  }
-  return { name: null, ms: null };
-}
-
-const fade = timeTier(ruleBody(/::view-transition-old\(root\),::view-transition-new\(root\)\{([^}]*)\}/));
-const icon = timeTier(ruleBody(/#theme svg\{([^}]*)\}/));
-const settle = (fade.ms == null || icon.ms == null) ? null : Math.max(fade.ms, icon.ms);
-console.log("duration: crossfade " + (fade.name ? "--m-" + fade.name + " " + fade.ms + "ms" : "unread")
-  + ", icon " + (icon.name ? "--m-" + icon.name + " " + icon.ms + "ms" : "unread")
-  + ", settles " + (settle == null ? "unread" : settle + "ms"));
-check(settle != null && settle <= 300,
-  "the switch settles in at most 300ms (crossfade " + fade.ms + "ms, icon " + icon.ms + "ms, longer " + settle + "ms)");
-
-const mem = new Map();
-const box = {
-  getItem(k) { return mem.has(k) ? mem.get(k) : null; },
-  setItem(k, v) { mem.set(k, String(v)); },
-  removeItem(k) { mem.delete(k); },
-  key(i) { return [...mem.keys()][i] || null; },
-  get length() { return mem.size; }
-};
-globalThis.localStorage = box;
-globalThis.sessionStorage = box;
-globalThis.window = { localStorage: box, sessionStorage: box };
-globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+const tierOf = name => { const m = css.match(new RegExp("--m-" + name + ":(\\d+)ms\\b")); return m ? Number(m[1]) : null; };
+const iconRule = (css.match(/#theme svg\{([^}]*)\}/) || [])[1] || "";
+const iconTier = (iconRule.match(/var\(--m-([a-z]+)\)/) || [])[1] || null;
+const iconMs = iconTier ? tierOf(iconTier) : null;
+check(iconMs != null && iconMs <= 300,
+  "the icon turns on --m-" + iconTier + ", " + iconMs + "ms, within 300ms");
+const leftovers = [/::view-transition/, /theme-swap/, /theme-fade/].filter(re => re.test(css)).map(String);
+check(!leftovers.length, "the sheet holds no whole-window crossfade and nothing that cuts the controls' own transitions"
+  + (leftovers.length ? ": " + leftovers.join(", ") : ""));
 
 function cls() {
   const set = new Set();
-  return {
-    add(...cs) { for (const c of cs) set.add(c); },
-    remove(...cs) { for (const c of cs) set.delete(c); },
-    contains(c) { return set.has(c); }
-  };
+  return { add(...cs) { for (const c of cs) set.add(c); }, remove(...cs) { for (const c of cs) set.delete(c); }, contains: c => set.has(c) };
 }
-const svg = { dataset: {}, style: {}, classList: cls(), contains() { return false; } };
-const button = {
-  dataset: {}, style: {}, classList: cls(), onclick: null,
-  getBoundingClientRect() { return { left: 100, top: 20, right: 140, bottom: 60, width: 40, height: 40 }; },
-  contains(n) { return n === button || n === svg; },
-  click() { if (this.onclick) this.onclick(); }
-};
-const root = {
-  dataset: { theme: "dark" }, style: {}, classList: cls(), offsetHeight: 8,
-  contains(n) { return n === root; }
-};
-const listeners = [];
-let vtCalls = 0;
-let active = null;
-globalThis.document = {
-  documentElement: root,
-  visibilityState: "visible",
-  querySelector(sel) {
-    if (sel === "#theme") return button;
-    if (sel === "#theme svg") return svg;
-    return null;
-  },
-  addEventListener(type, fn) { listeners.push({ type, fn }); },
-  startViewTransition(cb) {
-    vtCalls++;
-    let readyRes;
-    const ready = new Promise(r => { readyRes = r; });
-    const finished = new Promise(() => {});
-    const anims = [];
-    active = { anims };
-    queueMicrotask(() => {
-      cb();
-      anims.push({
-        effect: { pseudoElement: "::view-transition-old(root)" },
-        reversed: 0,
-        reverse() { this.reversed++; }
-      });
-      readyRes();
-    });
-    return { ready, finished };
-  },
-  getAnimations() { return active ? active.anims.slice() : []; }
-};
-
-const theme = await import(pathToFileURL(join(ROOT, "src", "modules", "theme.js")).href);
-theme.wireThemeBtn();
-button.click();
-await Promise.resolve();
-await Promise.resolve();
-await new Promise(r => setTimeout(r, 0));
-
-const asked = box.getItem("eTheme");
-check(vtCalls === 1 && root.dataset.theme === "light" && asked === "light",
-  "the first press fades toward the other theme and stores it (" + vtCalls + " fade(s), on screen "
-  + root.dataset.theme + ", stored " + asked + ")");
-
-function fire(x, y) {
-  const ev = { type: "click", button: 0, target: root, clientX: x, clientY: y };
-  for (const l of listeners) if (l.type === "click") l.fn(ev);
-}
-fire(120, 40);
-const turned = box.getItem("eTheme");
-const rev = active && active.anims[0] ? active.anims[0].reversed : 0;
-check(vtCalls === 1 && root.dataset.theme === "dark" && turned === "dark" && rev === 1,
-  "a press on the button's box while the fade is open turns back at once, from the frame in flight ("
-  + vtCalls + " fade(s), on screen " + root.dataset.theme + ", stored " + turned + ", reversed " + rev + ")");
-
-const awayFrom = root.dataset.theme, awayStored = box.getItem("eTheme"), awayRev = active.anims[0].reversed;
-fire(4, 4);
-check(root.dataset.theme === awayFrom && box.getItem("eTheme") === awayStored && active.anims[0].reversed === awayRev,
-  "a press away from the button during the fade changes nothing");
-
-fire(120, 40);
-const again = box.getItem("eTheme");
-check(vtCalls === 1 && root.dataset.theme === "light" && again === "light" && active.anims[0].reversed === 2,
-  "a third press during the same fade is taken too, and the picture walks the other way ("
-  + root.dataset.theme + " stored " + again + ", reversed " + active.anims[0].reversed + ")");
-
-/* THE PRESS UNDER A DESK. The modules are copied into a folder of their own so that storage.js reads this host at its
-   load, and so a plant can be lifted from a copy; the product files are only read. */
 const LAB = mkdtempSync(join(tmpdir(), "etiuda-theme-switch-"));
 let labs = 0;
-async function deskPress(lift) {
+/* Two presses on the module's own button, the second straight after the first, read after each press in its
+   own task and again once the tasks have run. `desk`: a desk host with the patch it takes, recording each send. */
+async function presses(desk, lift) {
   const dir = join(LAB, "m" + (++labs));
   mkdirSync(dir);
   writeFileSync(join(dir, "package.json"), '{"type":"module"}');
   for (const f of ["theme.js", "storage.js", "motion.js", "dom.js", "hooks.js"]) {
     let text = readFileSync(join(ROOT, "src", "modules", f), "utf8");
-    if (lift && lift.file === f) {
-      const lines = text.split("\n"), at = lines.findIndex(l => l.indexOf(lift.tag) >= 0);
+    if (lift && f === "theme.js") {
+      const lines = text.split("\n"), at = lines.findIndex(l => l.indexOf(lift) >= 0);
       if (at < 0) return null;
       lines.splice(at, 1);
       text = lines.join("\n");
     }
     writeFileSync(join(dir, f), text);
   }
-  const sends = [];
-  let fadeOn = false, endFade = null;
-  const keysOf = t => { try { return Object.keys(JSON.parse(t)); } catch (e) { return []; } };
-  const host = {
+  const mem = new Map(), sends = [];
+  const box = { getItem: k => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k),
+    key: i => [...mem.keys()][i] || null, get length() { return mem.size; } };
+  const keysOf = t => { try { return JSON.parse(t); } catch (e) { return {}; } };
+  const host = desk ? {
     deskRead: () => "{}",
-    deskSave: t => { sends.push({ kind: "waited", fadeOn, keys: keysOf(t) }); return true; },
-    deskWrite: t => { sends.push({ kind: "sent", fadeOn, keys: keysOf(t) }); return Promise.resolve(true); },
-    deskPatch: (t, now) => { sends.push({ kind: now ? "waited" : "sent", fadeOn, keys: keysOf(t) }); return now ? true : Promise.resolve(true); }
-  };
-  const card = (i, drawn) => {
-    const at = new Set();
-    return { i, isConnected: true, setAttribute(k) { at.add(k); }, removeAttribute(k) { at.delete(k); }, hasAttribute: k => at.has(k),
-      checkVisibility() { return true; }, firstElementChild: { checkVisibility: () => drawn } };
-  };
-  const cards = [card(0, false), card(1, false), card(2, true), card(3, false), card(4, false), card(5, false)];
-  const r = { dataset: { theme: "dark" }, style: {}, classList: cls(), offsetHeight: 8 };
-  const b = { dataset: {}, style: {}, classList: cls(), onclick: null, contains: () => false,
-    getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0 }) };
-  const was = { window: globalThis.window, document: globalThis.document };
+    deskSave: t => { sends.push(["waited", keysOf(t).eTheme]); return true; },
+    deskWrite: t => { sends.push(["sent", keysOf(t).eTheme]); return Promise.resolve(true); },
+    deskPatch: (t, now) => { sends.push([now ? "waited" : "sent", keysOf(t).eTheme]); return now ? true : Promise.resolve(true); }
+  } : undefined;
+  let fades = 0;
+  const r = { dataset: { theme: "dark" }, style: {}, classList: cls() };
+  const svg = { dataset: {}, style: {} };
+  const b = { onclick: null };
+  const was = { window: globalThis.window, document: globalThis.document, localStorage: globalThis.localStorage,
+    sessionStorage: globalThis.sessionStorage, matchMedia: globalThis.matchMedia };
+  globalThis.localStorage = box; globalThis.sessionStorage = box;
+  globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   globalThis.window = { localStorage: box, sessionStorage: box, E_HOST: host };
   globalThis.document = {
     documentElement: r, visibilityState: "visible",
-    querySelector: sel => sel === "#theme" ? b : sel === "#list" ? { querySelectorAll: () => cards } : null,
+    querySelector: sel => sel === "#theme" ? b : sel === "#theme svg" ? svg : null,
     addEventListener() {},
-    startViewTransition(cb) {
-      fadeOn = true;
-      let readyRes, finRes;
-      const ready = new Promise(x => { readyRes = x; }), finished = new Promise(x => { finRes = x; });
-      endFade = finRes;
-      queueMicrotask(() => { cb(); readyRes(); });
-      return { ready, finished };
-    },
-    getAnimations: () => []
+    startViewTransition(cb) { fades++; if (cb) cb(); return { ready: Promise.resolve(), finished: Promise.resolve() }; }
   };
   try {
-    const motion = await import(pathToFileURL(join(dir, "motion.js")).href);
     const T = await import(pathToFileURL(join(dir, "theme.js")).href);
-    if (typeof motion.noteGlided === "function") { motion.noteGlided(cards[0]); motion.noteGlided(cards[1]); }
     T.wireThemeBtn();
     b.onclick();
-    const held = cards.filter(c => c.hasAttribute("data-fade-held")).map(c => c.i);
-    await Promise.resolve(); await Promise.resolve();
-    if (endFade) endFade();
+    const first = r.dataset.theme;
+    b.onclick();
+    const second = r.dataset.theme;
     await new Promise(x => setTimeout(x, 0));
-    const after = cards.filter(c => c.hasAttribute("data-fade-held")).map(c => c.i);
-    return { sends, held, after, theme: r.dataset.theme, fadeRoot: r.classList.contains("theme-fade") };
+    const stored = desk ? (sends.filter(s => s[1]).pop() || [])[1] || null : box.getItem("eTheme");
+    return { first, second, stored, fades, waited: sends.filter(s => s[0] === "waited").length, sends: sends.length,
+      turns: svg.dataset.eTurns || null };
   } finally {
-    globalThis.window = was.window;
-    globalThis.document = was.document;
+    Object.keys(was).forEach(k => { globalThis[k] = was[k]; });
   }
 }
-const sheetHold = /:root\.theme-fade #list \.card\[data-fade-held\]\{content-visibility:visible\}/.test(css)
-  && !/:root\.theme-fade #list \.card\{/.test(css);
-const startSent = d => !!d && !!d.sends && !d.sends.some(x => x.kind === "waited")
-  && d.sends.some(x => x.kind === "sent" && !x.fadeOn && x.keys.indexOf("eTrace") >= 0);
-let D = null;
-try { D = await deskPress(null); } catch (e) { D = { error: e.message }; }
-check(startSent(D) && D.theme === "light", "952a under a desk a press waits on no write to the disk, and its record's start is sent before the fade begins: "
-  + JSON.stringify(D && (D.sends || D.error)));
-if (PLANTS_OFF) skip("952a lifting plant:fade-start-sent leaves the fade begun with no start sent");
+const said = x => JSON.stringify(x);
+let B = null, D = null;
+try { B = await presses(false); } catch (e) { B = { error: e.message }; }
+check(!!B && B.first === "light" && B.fades === 0 && String(B.turns) === "2",
+  "in a browser a press puts the other theme on the root in its own task, opens no view transition, and the icon turns: " + said(B));
+try { D = await presses(true); } catch (e) { D = { error: e.message }; }
+check(!!D && D.first === "light" && D.fades === 0 && D.waited === 0 && D.sends > 0, "952a under a desk a press lands the other theme in its own task, opens no view transition, and waits on no write to the disk: " + said(D));
+if (PLANTS_OFF) skip("952a lifting plant:theme-lands-at-once leaves the root on the old theme");
 else {
   let L = null;
-  try { L = await deskPress({ file: "theme.js", tag: "plant:fade-start-sent" }); } catch (e) { L = { error: e.message }; }
-  check(!!L && !L.error && !startSent(L), "952a lifting plant:fade-start-sent leaves the fade begun with no start sent: "
-    + JSON.stringify(L && (L.sends || L.error)));
+  try { L = await presses(true, "plant:theme-lands-at-once"); } catch (e) { L = { error: e.message }; }
+  check(!!L && !L.error && L.first === "dark", "952a lifting plant:theme-lands-at-once leaves the root on the old theme: " + said(L));
 }
-check(!!D && JSON.stringify(D.held) === "[0,1,2]" && JSON.stringify(D.after) === "[]" && D.fadeRoot === false && sheetHold, "952b the fade holds real the two cards a glide moved and the one the browser draws, none of the three it skips, and lets them go as it ends; the sheet holds only those: "
-  + JSON.stringify(D && { held: D.held, after: D.after, rootAfter: D.fadeRoot, sheet: sheetHold, error: D.error }));
-if (PLANTS_OFF) skip("952b lifting plant:fade-holds-glided holds no card");
+check(!!B && !!D && B.second === "dark" && B.stored === "dark" && D.second === "dark" && D.stored === "dark", "952b a second press straight after the first, while the colours still ease, flips back at once and that choice is what is stored, in a browser and under a desk: "
+  + said({ browser: B && [B.second, B.stored], desk: D && [D.second, D.stored] }));
+if (PLANTS_OFF) skip("952b lifting plant:theme-lands-at-once leaves a second press with nothing to answer on screen");
 else {
   let L = null;
-  try { L = await deskPress({ file: "theme.js", tag: "plant:fade-holds-glided" }); } catch (e) { L = { error: e.message }; }
-  check(!!L && !L.error && JSON.stringify(L.held) === "[]", "952b lifting plant:fade-holds-glided holds no card: "
-    + JSON.stringify(L && (L.held || L.error)));
+  try { L = await presses(false, "plant:theme-lands-at-once"); } catch (e) { L = { error: e.message }; }
+  check(!!L && !L.error && L.second === "dark" && L.first === "dark", "952b lifting plant:theme-lands-at-once leaves a second press with nothing to answer on screen: " + said(L));
 }
 
 try { rmSync(LAB, { recursive: true, force: true }); } catch (e) { /* a leftover in the temp folder */ }

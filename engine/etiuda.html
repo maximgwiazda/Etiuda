@@ -3909,21 +3909,6 @@ body.e-lanes #pillsSlot{display:none}
 :root[data-theme=light] .pill:active,
 :root[data-theme=light] .modal-actions .btn.primary:active,
 :root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
-}@layer overrides{
-/* A THEME FLIP IS NOT A STATE CHANGE. Every transition above answers one control changing
-   state, and a new palette changes all of their inputs in one frame, so the screen would
-   cross-fade to itself and each control would hold its old colour over a page that had
-   already turned. theme.js carries this class through the frame the new palette lands in,
-   and everything is transitional again immediately after it. */
-:root.theme-swap *,:root.theme-swap *::before,:root.theme-swap *::after{transition:none}
-/* The crossfade paintTheme() opens around that flip: one picture, so the ground, the cards, the
-   rail and the band cannot turn at different moments. While it runs every pointer event goes to
-   <html>, whatever pointer-events says on the pseudo-elements; the keyboard is unaffected. */
-::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-surface);animation-timing-function:ease}
-/* A FADE HOLDS THE CARDS REAL that theme.js marks. Chrome's renderer dies starting a view transition
-   while cards a glide has moved rest at content-visibility:auto: a category switch, then the theme,
-   lost the page on the first press. Held visible from before the capture to the fade's end, it lives. */
-:root.theme-fade #list .card[data-fade-held]{content-visibility:visible}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
@@ -5637,7 +5622,6 @@ What you type stays in this browser only.`;
     lsDel: () => lsDel,
     lsGet: () => lsGet,
     lsKeys: () => lsKeys,
-    lsSend: () => lsSend,
     lsSet: () => lsSet,
     lyDel: () => lyDel,
     lyGet: () => lyGet,
@@ -5995,15 +5979,6 @@ What you type stays in this browser only.`;
     if (ok || !own) noteSave(ok, k);
     return ok;
   }
-  function lsSend(k, v) {
-    if (!E_DESK || eWiping || !E_DESK.write && !E_DESK.patch) return lsSet(k, v, !!E_DESK);
-    E_DESK.map[k] = String(v);
-    eDeskOwed.add(k);
-    deskArm();
-    eDeskDue = true;
-    deskSend();
-    return true;
-  }
   function lsDel(k) {
     if (E_DESK) {
       if (k in E_DESK.map || eUnsaved) {
@@ -6225,9 +6200,7 @@ What you type stays in this browser only.`;
     mgPinCard: () => mgPinCard,
     mgReduceMotion: () => mgReduceMotion,
     mgSystemStill: () => mgSystemStill,
-    noteGlided: () => noteGlided,
     syncStill: () => syncStill,
-    takeGlided: () => takeGlided,
     wireStill: () => wireStill
   });
 
@@ -6295,22 +6268,6 @@ What you type stays in this browser only.`;
   };
   var E_SPRING_MS = M_MS.travel;
   var CARD_MOVE_MAX = 40;
-  var glided = /* @__PURE__ */ new Set();
-  function noteGlided(el) {
-    if (!el) return;
-    if (glided.size > 400) glided.forEach((x) => {
-      if (!x.isConnected) glided.delete(x);
-    });
-    glided.add(el);
-  }
-  function takeGlided() {
-    const out = [];
-    glided.forEach((x) => {
-      if (x.isConnected) out.push(x);
-    });
-    glided.clear();
-    return out;
-  }
   var mgPendingH = null;
   var mgPinTimer = null;
   var M_STILL_Q = "(prefers-reduced-motion: reduce)";
@@ -6676,7 +6633,6 @@ What you type stays in this browser only.`;
     "maintenance␟this start": "to uruchomienie",
     "maintenance␟after a crash": "po awarii",
     "maintenance␟last crash": "ostatnia awaria",
-    "maintenance␟theme fades": "przejścia motywu",
     "maintenance␟ordinary": "zwykłe",
     "maintenance␟desk backup": "kopia zapasowa danych",
     "maintenance␟not needed": "niepotrzebna",
@@ -10178,7 +10134,6 @@ What you type stays in this browser only.`;
       moved.push(p);
     });
     if (!moved.length) return true;
-    noteGlided(card2);
     void list.offsetHeight;
     moved.forEach((p) => {
       p.style.transition = "transform var(--m-move) " + E_EASE;
@@ -19225,7 +19180,6 @@ What you type stays in this browser only.`;
     if (!plan.length) return;
     const glide = tier === "move" ? { duration: M_MS.move, easing: E_EASE } : { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE };
     plan.forEach(([el, dx, dy, grew]) => {
-      noteGlided(el);
       if (dx == null) {
         eSettleRuns.push(el.animate(
           [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
@@ -20718,7 +20672,6 @@ What you type stays in this browser only.`;
       return g;
     });
     const fix = copies.length ? copies[0].getBoundingClientRect() : null;
-    moved.concat(rising).forEach(noteGlided);
     moved.forEach((el, i) => {
       el.style.transition = "none";
       el.style.willChange = "transform";
@@ -26346,21 +26299,6 @@ What you type stays in this browser only.`;
     const t2 = lsGet("eTheme");
     return t2 === "light" || t2 === "dark" ? t2 : null;
   }
-  function landTheme(next) {
-    const r = document.documentElement;
-    r.classList.add("theme-swap");
-    r.dataset.theme = next;
-    void r.offsetHeight;
-    r.classList.remove("theme-swap");
-  }
-  var fading = null;
-  var themeWant = null;
-  var fadeHolds = 0;
-  var fadeLast = 0;
-  var fadeVt = null;
-  var swapHeld = false;
-  var rollsDue = 0;
-  var themePtr = false;
   var TRACE_KEY = "eTrace";
   var TRACE_MAX = 30;
   function themeTrace() {
@@ -26371,136 +26309,22 @@ What you type stays in this browser only.`;
       return [];
     }
   }
-  function traceNote(row, now) {
-    const text = JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX));
-    if (now) lsSend(TRACE_KEY, text);
-    else lsSet(TRACE_KEY, text);
-  }
-  var fadeHeld = [];
-  function holdCards() {
-    const glided2 = new Set(takeGlided()), list2 = document.querySelector("#list");
-    const drawn = (c) => {
-      const f = c.firstElementChild;
-      try {
-        return typeof c.checkVisibility !== "function" || !f || f.checkVisibility({ contentVisibilityAuto: true });
-      } catch (e) {
-        return true;
-      }
-    };
-    (list2 ? Array.prototype.slice.call(list2.querySelectorAll(".card")) : []).forEach((c) => {
-      if (!glided2.has(c) && !drawn(c)) return;
-      c.setAttribute("data-fade-held", "");
-      fadeHeld.push(c);
-    });
-  }
-  function letCardsGo() {
-    fadeHeld.forEach((c) => c.removeAttribute("data-fade-held"));
-    fadeHeld = [];
+  function traceNote(row) {
+    lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)));
   }
   function noteRoll() {
     if (mgReduceMotion()) return;
-    rollsDue++;
-    if (!swapHeld) flushRoll();
-  }
-  function flushRoll() {
-    if (!rollsDue || mgReduceMotion()) {
-      rollsDue = 0;
-      return;
-    }
     const ic = document.querySelector("#theme svg");
-    const n = rollsDue;
-    rollsDue = 0;
     if (!ic) return;
-    const turns = (+ic.dataset.eTurns || 0) + n;
+    const turns = (+ic.dataset.eTurns || 0) + 1;
     ic.dataset.eTurns = turns;
     ic.style.transform = "rotate(" + turns * 180 + "deg)";
   }
-  function turnBack(next, after) {
-    const r = document.documentElement;
-    themeWant = next;
-    fading = next;
-    r.classList.add("theme-swap");
-    r.dataset.theme = next;
-    try {
-      document.getAnimations().forEach((a) => {
-        try {
-          if (a.effect && /^::view-transition/.test(a.effect.pseudoElement || "")) a.reverse();
-        } catch (e) {
-        }
-      });
-    } catch (e) {
-    }
-    void r.offsetHeight;
-    r.classList.remove("theme-swap");
-    if (after) after();
-  }
-  function paintTheme(next, after) {
-    const r = document.documentElement, from = r.dataset.theme;
-    if (fadeVt) {
-      if ((fading || from) !== next) turnBack(next, after);
-      return;
-    }
-    themeWant = next;
-    if (!from || from === next && !fading || typeof document.startViewTransition !== "function" || document.visibilityState !== "visible" || mgReduceMotion()) {
-      landTheme(next);
-      if (after) after();
-      return;
-    }
-    const n = fadeLast = Math.max(Date.now(), fadeLast + 1);
-    traceNote(["fade", n, "start", next], true);
-    holdCards();
-    r.classList.add("theme-fade");
-    fadeHolds++;
-    let vt;
-    try {
-      vt = document.startViewTransition(() => {
-        r.classList.add("theme-swap");
-        r.dataset.theme = themeWant;
-      });
-    } catch (e) {
-      traceNote(["fade", n, "cancel"]);
-      if (!--fadeHolds) {
-        r.classList.remove("theme-fade");
-        letCardsGo();
-      }
-      landTheme(next);
-      if (after) after();
-      return;
-    }
-    fading = next;
-    fadeVt = vt;
-    swapHeld = true;
-    const done = () => {
-      if (fading === next) fading = null;
-      r.classList.remove("theme-swap");
-      if (swapHeld) {
-        swapHeld = false;
-        flushRoll();
-      }
-      if (themeWant === next && after) after();
-    };
-    vt.ready.then(() => {
-      traceNote(["fade", n, "ready"]);
-      done();
-    }, () => {
-      traceNote(["fade", n, "cancel"]);
-      done();
-    });
-    const end = () => {
-      traceNote(["fade", n, "finish"]);
-      if (fadeVt === vt) {
-        fadeVt = null;
-        fading = null;
-      }
-      if (!--fadeHolds) {
-        r.classList.remove("theme-fade", "theme-swap");
-        letCardsGo();
-      }
-    };
-    vt.finished.then(end, end);
+  function paintTheme(next) {
+    document.documentElement.dataset.theme = next;
   }
   function shownTheme() {
-    return fading || document.documentElement.dataset.theme || systemTheme();
+    return document.documentElement.dataset.theme || systemTheme();
   }
   function applyTheme() {
     paintTheme(themeChoice() || systemTheme());
@@ -26521,20 +26345,10 @@ What you type stays in this browser only.`;
     if (!btn) return;
     btn.onclick = () => {
       const nx = shownTheme() === "dark" ? "light" : "dark";
-      paintTheme(nx, () => {
-        lsSet("eTheme", nx);
-      });
+      paintTheme(nx);
+      lsSet("eTheme", nx);
       noteRoll();
     };
-    if (themePtr) return;
-    themePtr = true;
-    document.addEventListener("click", (ev) => {
-      if (!fadeVt || ev.button) return;
-      const b = document.querySelector("#theme");
-      if (!b || ev.target === b || b.contains && b.contains(ev.target)) return;
-      const box = b.getBoundingClientRect();
-      if (ev.clientX >= box.left && ev.clientX <= box.right && ev.clientY >= box.top && ev.clientY <= box.bottom && b.onclick) b.onclick();
-    }, true);
   }
 
   // src/modules/maintenance.js
@@ -26734,16 +26548,6 @@ What you type stays in this browser only.`;
     row("last crash", S(() => {
       const l = themeTrace().filter((x) => x[1] === "lost").pop();
       return l ? fileStamp(l[4] || l[0]) + ", " + l[2] + (l[3] != null ? " (" + l[3] + ")" : "") : "";
-    }));
-    row("theme fades", S(() => {
-      const rows = themeTrace().filter((x) => x[1] === "fade"), seen = [];
-      rows.forEach((x) => {
-        if (x[3] === "start") seen.push(x[2]);
-      });
-      return seen.slice(-3).reverse().map((n) => {
-        const mine = rows.filter((x) => x[2] === n), s = mine[0], d = new Date(s[0]), p = (v) => String(v).padStart(2, "0");
-        return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + " " + s[4] + ": " + mine.map((x) => x[3]).join(", ");
-      }).join("; ");
     }));
     row("desk backup", S(() => {
       const r2 = eDeskRefused()[0];

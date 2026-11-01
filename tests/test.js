@@ -5077,9 +5077,9 @@ function grownCardTests() {
   const list = { getBoundingClientRect: () => ({ top: 200 }), querySelectorAll: () => cards };
   let glide = null;
   try {
-    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump", "noteGlided",
+    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump",
       "let eSettleRuns=[];\n" + extractDecl(src, "function glideSettle(") + "\nreturn glideSettle;")(
-      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {}, () => {});
+      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {});
   } catch (e) { glide = null; }
   /* "a" stays put and grows 63px; "b" sits 20px below it and is pushed down by the growth; "c" was
      below the screen and is shorter than its estimate, which is not a growth anyone saw. */
@@ -5647,8 +5647,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1215;
-const UI_STRINGS_SHA256 = "e71a5c48097ed9942bd3ffe11ff2bc7bde250eb7ed2436b8d6c759fdbccc354b";
+const UI_STRINGS_COUNT = 1214;
+const UI_STRINGS_SHA256 = "1edc62298723e588a9572c95929ea20091b1dcea49e69c30124fc648b2f0073a";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

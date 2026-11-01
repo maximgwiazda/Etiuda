@@ -3909,21 +3909,6 @@ body.e-lanes #pillsSlot{display:none}
 :root[data-theme=light] .pill:active,
 :root[data-theme=light] .modal-actions .btn.primary:active,
 :root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
-}@layer overrides{
-/* A THEME FLIP IS NOT A STATE CHANGE. Every transition above answers one control changing
-   state, and a new palette changes all of their inputs in one frame, so the screen would
-   cross-fade to itself and each control would hold its old colour over a page that had
-   already turned. theme.js carries this class through the frame the new palette lands in,
-   and everything is transitional again immediately after it. */
-:root.theme-swap *,:root.theme-swap *::before,:root.theme-swap *::after{transition:none}
-/* The crossfade paintTheme() opens around that flip: one picture, so the ground, the cards, the
-   rail and the band cannot turn at different moments. While it runs every pointer event goes to
-   <html>, whatever pointer-events says on the pseudo-elements; the keyboard is unaffected. */
-::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-surface);animation-timing-function:ease}
-/* A FADE HOLDS THE CARDS REAL that theme.js marks. Chrome's renderer dies starting a view transition
-   while cards a glide has moved rest at content-visibility:auto: a category switch, then the theme,
-   lost the page on the first press. Held visible from before the capture to the fade's end, it lives. */
-:root.theme-fade #list .card[data-fade-held]{content-visibility:visible}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */

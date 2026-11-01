@@ -244,17 +244,6 @@ function lsSet(k,v,own){
   if(ok || !own) noteSave(ok,k);
   return ok;
 }
-/* ON ITS WAY BEFORE THE CALLER'S NEXT LINE, AND NOT WAITED ON: lsSet's send waits for the task to
-   end and `own` holds the page until the disk has it. A host with no unwaited send stores it as `own`. */
-function lsSend(k,v){
-  if(!E_DESK || eWiping || (!E_DESK.write && !E_DESK.patch)) return lsSet(k,v,!!E_DESK);
-  E_DESK.map[k]=String(v);
-  eDeskOwed.add(k);
-  deskArm();
-  eDeskDue=true;
-  deskSend();
-  return true;
-}
 function lsDel(k){
   if(E_DESK){ if((k in E_DESK.map) || eUnsaved){ delete E_DESK.map[k]; eDeskOwed.add(k); deskSoon(); } return; }
   if(!E_LS_OK){ delete E_MEM[k]; return; }
@@ -355,7 +344,6 @@ export {
   lsGet,
   eResetClear,
   lsSet,
-  lsSend,
   lsDel,
   lsKeys,
   ssGet,

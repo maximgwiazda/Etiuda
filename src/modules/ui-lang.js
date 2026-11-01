@@ -73,7 +73,6 @@ UI_STRINGS.pl={
   "maintenance␟this start":"to uruchomienie",
   "maintenance␟after a crash":"po awarii",
   "maintenance␟last crash":"ostatnia awaria",
-  "maintenance␟theme fades":"przejścia motywu",
   "maintenance␟ordinary":"zwykłe",
   "maintenance␟desk backup":"kopia zapasowa danych",
   "maintenance␟not needed":"niepotrzebna",

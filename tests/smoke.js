@@ -923,13 +923,11 @@ const t0 = Date.now();
     + " them in all four states, so the strips above were read by a leg that can see a dot");
   clean(e, "the dot field's extent");
 
-  /* THE PALETTE LANDS IN ONE FRAME, board 452. Sampled per frame through a real press with the
-     pointer resting on the tile, which is where the hold-over was loudest: every colour
-     transition in the sheet is written for a state change, and a theme flip used to run all of
-     them at once, so the tile kept its old colour for .1s over a ground that had already
-     turned. The first frame wearing the new theme is the one that has to carry the new colour.
-     The icon's own turn is asserted in the same breath, because switching a transition off is
-     one line away from switching off the one that is wanted. */
+  /* THE THEME LANDS AS STUDIO'S DOES, board 952 (Max, 2026-11-01 17:50: "Yes, lets bring desk to studio
+     method"), replacing board 452's single frame: the root wears the new theme in the press's first frame
+     and each control eases its own colour on its tier. Sampled per frame through a real press with the
+     pointer resting on the tile: the tile reaches its resting colour within 250 ms of that frame, and the
+     icon turns. */
   e = since();
   const tileR = await p.evaluate(() => document.getElementById("theme").getBoundingClientRect().toJSON());
   await p.mouse.move(tileR.x + tileR.width / 2, tileR.y + tileR.height / 2); await sleep(400);
@@ -938,41 +936,33 @@ const t0 = Date.now();
     const motion = localStorage.getItem("eMotionOff") !== "1"
       && !matchMedia("(prefers-reduced-motion:reduce)").matches;
     const read = () => {
-      f.push({ theme: document.documentElement.dataset.theme,
+      f.push({ t: performance.now() - t0, theme: document.documentElement.dataset.theme,
                bg: getComputedStyle(document.getElementById("theme")).backgroundColor,
                turn: getComputedStyle(document.querySelector("#theme svg")).transform });
       if (performance.now() - t0 < 420) requestAnimationFrame(read);
-      else res({ motion, n: f.length, first: f.filter(x => x.theme !== from)[0] || null,
-                 last: f[f.length - 1] });
+      else { const last = f[f.length - 1], first = f.filter(x => x.theme !== from)[0] || null;
+        const rest = f.filter(x => x.theme !== from && x.bg === last.bg)[0] || null;
+        res({ motion, n: f.length, first, last, eased: first && rest ? Math.round(rest.t - first.t) : null }); }
     };
     requestAnimationFrame(read);
   }));
   await p.mouse.down(); await p.mouse.up();
   const flash = await flashRun;
   await p.mouse.move(4, 900); await sleep(200);
-  check(!!flash.first && flash.first.bg === flash.last.bg
+  check(!!flash.first && flash.eased != null && flash.eased <= 250
         && (!flash.motion || flash.first.turn !== flash.last.turn),
-    "the theme lands in one frame, nothing holding the old palette: the tile reads "
-    + (flash.first || {}).bg + " in the first frame of the new theme and " + flash.last.bg
-    + " at rest, over " + flash.n + " frame(s), while the icon turns from "
+    "the theme lands at once and the tile eases to its resting colour " + flash.last.bg + " in "
+    + flash.eased + " ms from the first frame of the new theme, over " + flash.n + " frame(s), while the icon turns from "
     + (flash.first || {}).turn + " to " + flash.last.turn);
   await p.evaluate(() => document.getElementById("theme").click()); await sleep(500);
   await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
   clean(e, "the theme flip");
 
-  /* THE CROSSFADE, read in pixels: the window outside the theme button, whose icon turns only
-     with motion. Reduced motion is the reference, instant, so the pair are each other's control.
-     The fade (--m-surface, 180 ms) is held at 90 ms for one shot. captureBeyondViewport stays
-     false: the default resizes the page to capture it, and in the shell that once shed the wordmark.
-     THE HEADER MARK TURNS since the fifth (b0075b8, 140 s a turn, repainted every 50 ms), so a
-     settled shot taken under motion and the target shot taken under reduced motion differ inside
-     its box whatever the fade did: 65 pixels, all at x 18 to 34, measured 2026-10-04. The mark's
-     drawing is therefore held out of every shot of this leg (visibility only, so nothing moves),
-     which is the same treatment the theme button gets and costs the leg only the mark's own
-     colour; the rest of the band, the tile it sits on included, is still compared. The strips
-     are not cut around the mark's box instead because a box of the header that is exempt is a
-     box in which a half-faded header could hide, where a hidden path is one thin drawing. The turn
-     is painted on a canvas over that path, and the canvas is held out with it. */
+  /* NO CROSSFADE, read in pixels: the window outside the theme button, whose icon turns only with motion.
+     Reduced motion is the reference, instant. Under motion a press opens no view transition, and once the
+     controls' own colours have eased the window is pixel-identical to the same theme reached instantly.
+     THE HEADER MARK TURNS (fifth.js), so its drawing is held out of every shot (visibility only); the
+     rest of the band is compared. */
   if (WHICH === "chrome") {
     e = since();
     const isVt = a => a.effect && /^::view-transition/.test(a.effect.pseudoElement || "");
@@ -1002,28 +992,19 @@ const t0 = Date.now();
     await pressTheme(); await sleep(300);
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
     await pressTheme();
-    await p.waitForFunction(f => document.getAnimations().some(new Function("return " + f)()),
-      { timeout: 3000, polling: "raf" }, isVt.toString()).catch(() => {});
-    const held = await p.evaluate(f => { const a = document.getAnimations().filter(new Function("return " + f)());
-      a.forEach(x => { x.pause(); x.currentTime = 90; });
-      return a.filter(x => /-(old|new)\(root\)$/.test(x.effect.pseudoElement)).map(x => x.effect.getComputedTiming().duration); }, isVt.toString());
-    const mid = held.length ? await shot() : from;
-    await p.evaluate(f => document.getAnimations().filter(new Function("return " + f)()).forEach(x => x.finish()), isVt.toString());
-    await sleep(300);
+    const moving = await vtNow();
+    await sleep(700);
     const settled = await shot(), left = await vtNow();
     await pressTheme(); await sleep(700);
-    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
     await p.evaluate(k => { const h = document.getElementById("__markHold"); if (h) h.remove();
       if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
-    check(held.length > 0 && held.every(d => d === 180) && mid !== from && mid !== to && settled === to && left === 0 && from !== to,
-      "the theme crossfades the whole window and settles in its final colours: " + held.length
-      + " old and new layer animation(s) of " + held.join("/") + " ms, the frame held at 90 ms is "
-      + (mid !== from && mid !== to ? "neither end" : "one of the ends") + ", and at rest the window is "
+    check(moving === 0 && left === 0 && settled === to && from !== to,
+      "the theme opens no crossfade under motion (" + moving + " transition animation(s) at the press) and at rest the window is "
       + (settled === to ? "pixel-identical to" : "NOT identical to") + " the same theme reached instantly");
     check(instant.anims === 0 && instant.first === to,
       "and under reduced motion it switches instantly: " + instant.anims + " transition animation(s), the first"
       + " shot after the press " + (instant.first === to ? "already identical to" : "NOT yet") + " the settled theme");
-    clean(e, "the theme crossfade");
+    clean(e, "the theme without a crossfade");
   }
 
   /* Themes and glass. */
