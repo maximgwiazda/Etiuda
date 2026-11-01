@@ -109,6 +109,8 @@ const FORK_SAID = {
   two: "This team's lead key was handed to two different new keys at once, so this desk follows neither. The catalogs on it stay as they are. Tell the team's lead about it.",
 };
 const FORKS_MAX = 64, FORKS_TO_MAX = 16;
+/* The most keys a batch's invitation places are tried under for a desk's own copy (copiesByWriter). */
+const COPY_WRITERS_MAX = 8;
 /* The page shows this while a relay request waits. After the one upload the channel says the same line, once, where an
    enrolment fault would have been said. */
 const WAITING_SAID = "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.";
@@ -239,6 +241,20 @@ function answerKey(dh, f) {
     || !HEX64.test(String(f.deskBox)) || !HEX64.test(String(f.leadBox))) return null;
   const info = Buffer.from([ANSWER_INFO, f.rt, f.inv, f.deskId, f.deskBox, f.leadBox].join("\n") + "\n", "utf8");
   return Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 32));
+}
+
+/* The framed file of an envelope opened under `key` alone, its signature unchecked, or null: only for reading whom a team
+   file names as its lead before that key is trusted. Nothing it returns is taken until openBlob judges the blob. */
+function peekBlob(blob, rt, key) {
+  try {
+    const ct = toBytes(blob.ciphertext), k = toBytes(key);
+    const aad = B.aadOf({ relayTeamId: rt, epoch: blob.epoch, id: blob.id, supersedes: blob.supersedes, writerKeyId: blob.writerKeyId, counter: blob.counter });
+    if (!aad || !ct || !k || k.length !== B.KEY_BYTES || ct.length < B.TAG_BYTES || !/^[0-9a-f]{24}$/.test(String(blob.nonce))) return null;
+    const d = crypto.createDecipheriv("aes-256-gcm", k, Buffer.from(blob.nonce, "hex"), { authTagLength: B.TAG_BYTES });
+    d.setAAD(aad);
+    d.setAuthTag(ct.subarray(ct.length - B.TAG_BYTES));
+    return B.unframe(Buffer.concat([d.update(ct.subarray(0, ct.length - B.TAG_BYTES)), d.final()]));
+  } catch { return null; }
 }
 
 /* The relay team id a team file's channel names: `rt`, as the engine writes it, or `relay`, as the harness's contract
@@ -578,7 +594,9 @@ function createProgram(opts) {
   }
 
   /* A team file judged under the pin or a genuine handover: signed by the pinned lead's key or a new lead the handover
-     proves; this team. A relay pin requires its own relay and a rev. A folder pin refuses a file that names a relay. */
+     proves; this team. A relay pin requires its own relay and a rev, or a folder channel, which is the team's move to a
+     shared folder, landed as any team file is (its rev above the floor) for the shell's move to take. A folder pin
+     refuses a file that names a relay. */
   function teamJudged(doc) {
     if (!pin) return R("wrong-team");
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
@@ -596,7 +614,9 @@ function createProgram(opts) {
     if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
     const chain = B.genuineChain(doc, pin.lead) || (st && st.chain) || [{ keyId: pin.lead.keyId, public: pin.lead.public }];
     const folder = !pin.rt;
-    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (folder ? relayOf(doc) !== null : relayOf(doc) !== pin.rt)) return R("wrong-team"); /* plant:team-own */
+    let moving = false;
+    moving = !folder && relayOf(doc) === null && table(doc.channel) && doc.channel.kind === "folder"; /* plant:relay-to-folder */
+    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (folder ? relayOf(doc) !== null : relayOf(doc) !== pin.rt && !moving)) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || (folder ? (doc.rev !== undefined && (!Number.isSafeInteger(doc.rev) || doc.rev < 0)) : !isCount(doc.rev))) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
@@ -723,7 +743,10 @@ function createProgram(opts) {
         && handover.chain.some(k => k.keyId === was.writer)
         && handover.chain.some(k => k.keyId === r.writerKeyId)
         && handover.doc && handover.doc.lead && handover.doc.lead.keyId === r.writerKeyId);
-      if (was.path.toLowerCase() !== r.path.toLowerCase() || (was.writer !== r.writerKeyId && !genuineHandover)) return R("outside-place"); /* plant:chain-same */
+      /* Once a handover has landed, the lead pinned now takes on a root file of a key earlier in its chain. */
+      let handedOn = false;
+      handedOn = r.role === "lead" && r.writerKeyId === pin.lead.keyId && isLeadKey(was.writer); /* plant:chain-handed */
+      if (was.path.toLowerCase() !== r.path.toLowerCase() || (was.writer !== r.writerKeyId && !genuineHandover && !handedOn)) return R("outside-place"); /* plant:chain-same */
     }
     return r;
   }
@@ -910,10 +933,10 @@ function createProgram(opts) {
 
   /* ---- a desk's own copy of the team file (the header's EPOCH MOVE) ---- */
 
-  function copyFor(ctx, peerBox, leadBox, deskId, deskBox) {
+  function copyFor(ctx, peerBox, leadBox, deskId, deskBox, leadKeyId) {
     let dh = null;
     try { dh = ctx.agree(peerBox); } catch { dh = null; }
-    return deskCopyOf(dh, { rt: pin.rt, teamId: pin.teamId, leadKeyId: pin.lead.keyId, leadBox, deskId, deskBox });
+    return deskCopyOf(dh, { rt: pin.rt, teamId: pin.teamId, leadKeyId: leadKeyId || pin.lead.keyId, leadBox, deskId, deskBox });
   }
 
   /* On the lead's side: one copy for each desk the roster of the team file being sent names, by that entry's own box, and
@@ -937,6 +960,28 @@ function createProgram(opts) {
     let box = held && table(held.doc.lead) && HEX64.test(String(held.doc.lead.box)) ? held.doc.lead.box : null;
     if (!box && HEX64.test(String(ctx.inviteBox))) box = ctx.inviteBox; /* plant:invite-box */
     return box ? copyFor(ctx, box, box, self.place.slice(5), self.box) : null;
+  }
+
+  /* A desk back after a handover and an epoch move: its copy is placed under the new lead's key id, which only the relay's
+     list tells it. So its own copy is looked up under each key the batch shows at an invitation's place that it does not
+     follow yet, with the box it holds; one opens only where the lead kept that box, and is judged as a handed team file. */
+  function copiesByWriter(items, held, ctx) {
+    const out = [];
+    const self = ctx && ctx.self;
+    if (!pin || !self || typeof ctx.agree !== "function" || typeof self.place !== "string" || !self.place.startsWith("desk:")) return out;
+    let box = held && table(held.doc.lead) && HEX64.test(String(held.doc.lead.box)) ? held.doc.lead.box : null;
+    if (!box && HEX64.test(String(ctx.inviteBox))) box = ctx.inviteBox;
+    if (!box) return out;
+    const seen = new Set();
+    for (const it of items || []) {
+      const m = it && it.meta;
+      if (!table(m) || typeof m.place !== "string" || !m.place.startsWith("invite:") || !B.isId(m.writer) || isLeadKey(m.writer) || seen.has(m.writer)) continue;
+      if (seen.size >= COPY_WRITERS_MAX) break;
+      seen.add(m.writer);
+      const c = copyFor(ctx, box, box, self.place.slice(5), self.box, m.writer);
+      if (c) out.push(c); /* plant:copy-by-writer */
+    }
+    return out;
   }
 
   /* The epoch of the team file this program holds, or 0: nothing it sends is sealed under an older one. */
@@ -1082,10 +1127,42 @@ function createProgram(opts) {
     if (r.kind !== "file" || r.path !== TEAM_NAME) { dropSaid(seal.what, R("outside-place")); return null; }
     return { it, r };
   }
+  /* A team file from a key this program does not follow yet: the root file, or this desk's own copy, of a lead the pinned
+     key's genuine handovers lead to. The blob is opened under the team key, or the copy's, only to read whom the file names
+     as its lead; it counts only where that file passes teamJudged as handed on, names its writer as the lead, and the blob
+     then passes openBlob under that lead's key. Null for anything else. */
+  function handedOne(it, floors0, ctx) {
+    const m = it && it.meta;
+    if (!pin || !table(m) || isLeadKey(m.writer) || m.del === true || typeof m.pub === "string") return null;
+    for (const e of Object.keys(st.trust)) {
+      const row = st.trust[e];
+      if ((row.desks || []).concat(row.prior || []).some(d => d.keyId === m.writer)) return null;
+    }
+    const blob = envelopeOf(it);
+    if (!blob) return null;
+    let key = null;
+    if (typeof m.place === "string" && m.place.startsWith("invite:")) { const s = sealOf(m.place.slice(7), ctx); key = s ? s.key : null; }
+    else if (m.place === undefined || m.place === null || m.place === "root") key = ctx && typeof ctx.keyFor === "function" ? ctx.keyFor(m.epoch) : null;
+    if (!key) return null;
+    const peek = peekBlob(blob, pin.rt, key);
+    if (!peek || peek.kind !== "file" || peek.path !== TEAM_NAME) return null;
+    let doc = null;
+    try { doc = JSON.parse(peek.body.replace(/^\uFEFF/, "")); } catch { return null; }
+    const t = teamJudged(doc);
+    if (!t.ok || !t.handed || !table(doc.lead) || doc.lead.keyId !== m.writer) return null;
+    const floors = it.floor !== undefined ? floorsWith(floors0, m.writer, m.epoch, it.floor) : floors0;
+    const r = judge(blob, leadTrust([], t.chain), m.epoch, key, floors);
+    if (!r.ok || r.kind !== "file" || r.path !== TEAM_NAME) return null;
+    r.size = blob.ciphertext.length;
+    return { it, r };
+  }
+
   function sealOf(id, ctx) {
     if (!ctx) return null;
     if (ctx.inviteSeal && ctx.inviteId === id) return { key: ctx.inviteSeal, what: "a file in this desk's invitation" };
     if (ctx.own && ctx.own.id === id) return { key: ctx.own.key, what: "this desk's own copy of the team file" }; /* plant:own-copy */
+    const found = Array.isArray(ctx.owned) ? ctx.owned.find(c => c.id === id) : null;
+    if (found) return { key: found.key, what: "this desk's own copy of the team file" };
     return null;
   }
 
@@ -1122,7 +1199,7 @@ function createProgram(opts) {
     if (!pin) return out;
     const held = trustFromMirror();
     /* A desk's own copy is named once a batch, from the team file it holds as the batch begins. */
-    const ctx = ctx0 ? Object.assign({}, ctx0, { own: ownCopy(held, ctx0) }) : ctx0;
+    const ctx = ctx0 ? Object.assign({}, ctx0, { own: ownCopy(held, ctx0), owned: copiesByWriter(items, held, ctx0) }) : ctx0;
     const floors0 = Object.assign({}, st.counters);
     const lead = [], rest = [];
     for (const it of items || []) {
@@ -1155,10 +1232,24 @@ function createProgram(opts) {
     landTop(placed);
     const opened = [];
     for (const it of lead) { if (!first(it)) { const x = openOne(it, floors0, ctx); if (x) opened.push(x); } }
-    landTop(opened);
-    landNewest(opened.filter(x => !isTeam(x)), out, ctx);
+    /* A team file handed on to a key not yet followed is judged before the rest is told apart, in one look with the lead's
+       team files of the batch, so a lead key handed to two keys there is followed to neither. Once one lands, what its new
+       lead wrote is the lead's. */
+    const handed = [];
+    for (const it of rest) { const x = handedOne(it, floors0, ctx); if (x) handed.push(x); } /* plant:handed-first */
+    landTop(opened.concat(handed));
+    const after = [], others = [];
+    for (const it of rest) {
+      if (!isLeadKey(it.meta.writer)) { others.push(it); continue; }
+      if (handed.some(x => x.it === it)) continue;
+      if (signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch);
+      const x = openOne(it, floors0, ctx);
+      if (x) after.push(x);
+    }
+    landTop(after);
+    landNewest(opened.concat(after).filter(x => !isTeam(x)), out, ctx);
     const desks = [];
-    for (const it of rest) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
+    for (const it of others) { const x = openOne(it, floors0, ctx); if (x) desks.push(x); }
     landNewest(desks, out, ctx);
     persist();
     return out;
