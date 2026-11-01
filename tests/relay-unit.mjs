@@ -170,6 +170,19 @@ const since = (w, token, n) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/
 const getBlob = (w, token, id) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/b/" + id, { token });
 const socket = (w, token, o) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/socket", Object.assign({ token }, o || {}));
 const dumpText = w => JSON.stringify(w.R.stores.get(w.rt).dump());
+/* An upload whose object the bucket writes and whose request then dies with its object, before any catch can run: the write
+   never answers and the object restarts. Answers the object's name, or null where the upload was answered before its write. */
+async function diedAfterWrite(w, token, blob) {
+  const bucket = w.R.bucket, real = bucket.put;
+  let landed = null;
+  const wrote = new Promise(r => { landed = r; });
+  bucket.put = async (key, value) => { bucket.objects.set(key, Buffer.from(value)); landed(key); return new Promise(() => {}); };
+  const answered = put(w, token, blob).then(() => null, () => null);
+  const obj = await Promise.race([wrote, answered]);
+  bucket.put = real;
+  w.R.restart();
+  return obj;
+}
 const sessionRemoved = (w, keyId) => w.R.stores.get(w.rt).list("ses:").some(([, s]) => !!(s && s.removed === true && s.key === keyId));
 /* How many times the signature primitive runs during one call. Restored before the next check. */
 async function withVerifyCount(fn) {
@@ -3644,22 +3657,19 @@ async function main() {
       return { ok: sameJ(a, ["challenge,until", "bad-signature", "not-enrolled"]) && sameJ(b, ["challenge,until", "bad-signature"]), detail: JSON.stringify({ a, b }) };
     }
 
-    /* An object written by a request that died before its commit has its row from before the put, and the sweep deletes it; a
-       sweep whose delete fails keeps that object's row alone and rings again an hour on. */
+    /* An object written by a request that died with its object before its commit has its row from before the put, and the sweep
+       deletes it; a sweep whose delete fails keeps that object's row alone and rings again an hour on. */
     async function recordScene(T) {
       const w = await lapseWorld(true, { T });
       const st = w.R.stores.get(w.rt), lead = await sessionOf(w, w.lead);
       const b = sealAs(w, w.lead, "notes.ec", 2);
-      w.R.bucket.losePuts(1);
-      const lost = await put(w, lead, b);
-      const lostObjs = inBucket(w).filter(k => k.indexOf("/" + b.id + "/") > -1);
-      const rowed = lostObjs.length === 1 && st.get("put:" + lostObjs[0]) !== undefined;
-      const again = await put(w, lead, b);
+      const lostObj = await diedAfterWrite(w, lead, b);
+      const rowed = !!lostObj && w.R.bucket.objects.has(lostObj) && st.get("put:" + lostObj) !== undefined;
       const named = new Set(st.list("blob:").map(([, m]) => m.obj).concat(st.list("put:").map(([k]) => k.slice(4)), st.list("orphan:").map(([k]) => k.slice(7))));
-      const every = inBucket(w).length === 3 && inBucket(w).every(k => named.has(k));
+      const every = inBucket(w).length === 2 && inBucket(w).every(k => named.has(k));
       at(w, 91 * DAY);
       const rang = await w.R.ring(w.rt);
-      const a = lost.status === 500 && rowed && again.status === 200 && every && rang && inBucket(w).length === 0;
+      const a = rowed && every && rang && inBucket(w).length === 0;
 
       const v = await lapseWorld(true, { T });
       at(v, 91 * DAY);
@@ -3673,7 +3683,7 @@ async function main() {
       const afterSweep = v.R.stores.get(v.rt);
       const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0], "swept"]) && marked && retry && r2 && inBucket(v).length === 0
         && afterSweep.dump().length === 1 && afterSweep.get("swept") === v.lead.pub && !v.R.alarms.has(v.rt);
-      return { a, b: missed, detail: JSON.stringify({ lost: lost.status, rowed, again: again.status, every, rang, left: inBucket(w).length, r1, kept: keys.length, retry, r2 }) };
+      return { a, b: missed, detail: JSON.stringify({ lost: !!lostObj, rowed, every, rang, left: inBucket(w).length, r1, kept: keys.length, retry, r2 }) };
     }
 
     /* A team gone by the clock whose alarm has not rung is swept by the next request, and the same lead may make it afresh. */
@@ -3804,8 +3814,8 @@ async function main() {
     check(silent.ok === true, "977i hello is answered with its challenge alone at a read-only team and at a lapsed trial's, and a devices call another key signed, a"
       + " wrong token and a forged hello hear their own refusals, not the lapse: " + (silent.detail || silent.failed));
     const recorded = await held(() => recordScene());
-    check(recorded.a === true, "977j an object the bucket wrote for a request that died before its commit has a put row from before its put, every object of the team"
-      + " is named by a row, and the sweep deletes the lost one with the rest: " + (recorded.detail || recorded.failed));
+    check(recorded.a === true, "977j an object the bucket wrote for a request that died with its object before its commit has a put row from before its put, every"
+      + " object of the team is named by a row, and the sweep deletes the lost one with the rest: " + (recorded.detail || recorded.failed));
     check(recorded.b === true, "977k a sweep whose delete of one object fails keeps that object's orphan row and the lead's public key, rings again an hour on, and then leaves no object,"
       + " the lead's public key alone and no alarm");
     const lazy = await held(() => lazyScene());
