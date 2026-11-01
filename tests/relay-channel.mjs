@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 327;
+const EXPECTED = 333;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1657,7 +1657,7 @@ try {
      a copy of shell/ to load from, as a planted channel needs). */
   function loadDesk(ud, arg) {
     const hooks = arg && typeof arg === "object" ? arg : null;
-    const source = typeof arg === "string" ? arg : SRC;
+    const source = typeof arg === "string" ? arg : hooks && typeof hooks.source === "string" ? hooks.source : SRC;
     const shellDir = hooks && typeof hooks.app === "string" ? hooks.app : path.join(APP, "shell");
     const said = [], on = {}, invoke = {};
     const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -4951,7 +4951,7 @@ try {
     return r.status;
   }
   /* One relay team: its lead's Studio, whose team file names the lead's box, and a desk joined by invitation and synced to its
-     edition, head and span. `app`: the copy of shell/ the desk loads. */
+     edition, head and span. `app`: the copy of shell/ the desk loads, or loadDesk's hooks. */
   async function relayDeskScene(tag, app) {
     const rt = hex(16), team = "t-" + hex(8), keys = new Map([[1, crypto.randomBytes(32)]]);
     const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
@@ -5018,7 +5018,7 @@ try {
     fs.mkdirSync(s.ud, { recursive: true });
     fs.mkdirSync(s.share, { recursive: true });
     fs.writeFileSync(path.join(s.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: s.share, eUiLang: "en" } }), "utf8");
-    s.Dk = loadDesk(s.ud, app ? { app } : undefined);
+    s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
     s.stop = async () => {
       deskTransport.down = false;
       try { await s.studio.stop(); } catch { /* stopped */ }
@@ -5216,6 +5216,66 @@ try {
       await s.stop();
     }
   }
+  /* 939l, the test architect's condition on the lead box (2026-11-01 07:07): the scene of 939j, the desk away across a handover
+     to a key with a fresh box and the next key change, now with work of its own: a new file in its own place written while
+     away and another once back, as its writers put a branch file or its statistics there. Left behind, it puts nothing up
+     (every PUT it makes from its return on is counted), says the copywriter's line once over several cycles, and gives the
+     team's row the notice until the agent dismisses it. `keep` (939L, the control): the old box kept, the desk follows and its
+     files go up. `app`: a copy of shell/ or loadDesk's hooks, for a plant. */
+  async function strandedScene(tag, keep, app) {
+    const out = { synced: false, moved: 0, puts: 0, said: 0, epoch: null, pin: "", row: null, rowAfter: null, saidRestart: -1, putsRestart: -1 };
+    const s = await relayDeskScene(tag, app);
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const NEXT = keyPair(true), key1 = s.keys.get(1);
+      deskTransport.down = true;
+      out.moved = await s.handTo(NEXT);
+      if (out.moved !== 200) return out;
+      if (!keep) s.boxNow = boxPair();
+      const step = s.step(LEAD, NEXT);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 3, roster: [s.entry(key1, 1)], lead: NEXT, box: s.boxNow, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key1, s.team, 1, s.catalog(1, NEXT, "edition one"))));
+      await s.studio.kick(); await s.studio.idle();
+      const key2 = crypto.randomBytes(32);
+      s.keys.set(2, key2);
+      put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 1, roster: [s.entry(key2, 2)], lead: NEXT, box: s.boxNow, handover: [step], ring: [LEAD, NEXT] }));
+      put(s.sMirror, "board.ec", JSON.stringify(s.Dk.api.sealCatalog(key2, s.team, 2, s.catalog(2, NEXT, "edition two"))));
+      await s.studio.kick(); await s.studio.idle();
+      const own = "desks/" + s.me.id + "/";
+      put(s.mirror, own + "away.json", JSON.stringify({ written: "while away" }) + "\n");
+      const mark = deskTransport.log.length;
+      deskTransport.down = false;
+      for (let i = 0; i < 3; i++) await s.pump();
+      put(s.mirror, own + "back.json", JSON.stringify({ written: "once back" }) + "\n");
+      for (let i = 0; i < 3; i++) await s.pump();
+      if (keep) await until(async () => { await s.pump(); return deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length >= 2; }, 8000);
+      out.puts = deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length;
+      out.said = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
+      try { out.epoch = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { out.epoch = null; }
+      const p = (s.Dk.envelope().teamPins || {})[s.team];
+      out.pin = p && p.public === NEXT.pub ? "the new lead" : p && p.public === LEAD.pub ? "the old lead" : "none";
+      const rowOf = v => ((v && v.leads) || []).find(r => r.team === s.team) || null;
+      const row = rowOf(await s.Dk.ask("etiuda:team-join", "leads"));
+      out.row = row ? (row.stranded ? JSON.stringify(row.stranded) : "none") : "no row";
+      if (row && row.stranded) {
+        await s.Dk.ask("etiuda:team-join", "stranded-seen", s.team);
+        const after = rowOf(await s.Dk.ask("etiuda:team-join", "leads"));
+        out.rowAfter = after ? (after.stranded ? JSON.stringify(after.stranded) : "none") : "no row";
+      }
+      /* The desk started again on the same profile: the line is not said again, and still nothing goes up. */
+      const was = s.Dk.api.relayRun();
+      if (was) await was.stop();
+      s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
+      const again = deskTransport.log.length;
+      for (let i = 0; i < 3; i++) await s.pump();
+      out.saidRestart = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
+      out.putsRestart = deskTransport.log.slice(again).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length;
+      return out;
+    } finally {
+      await s.stop();
+    }
+  }
   /* 939f, finding 3 (1): the lead moves the team to a shared folder, filled with its team file at a higher rev naming a folder
      channel, and puts the same file up to the relay. The desk's catalog folder before joining is that folder, so the move
      finds it there. */
@@ -5325,6 +5385,31 @@ try {
       && k.x.now.pin === "the new lead" && k.x.now.epoch === 2,
       "939k the same scene with the old box kept: the desk follows (as 939d), and the old key's holder finds and opens the desk's copy of the"
       + " new key's file with the old box, the trade the fresh box closes: " + jText(k.x) + (k.err ? ", " + k.err : ""));
+    const lText = x => (x ? "synced " + x.synced + ", relay move " + x.moved + ", uploads from its return " + x.puts + ", line said " + x.said
+      + ", team file epoch " + x.epoch + ", pin " + x.pin + ", row " + x.row + (x.rowAfter ? ", dismissed " + x.rowAfter : "")
+      + ", after a restart said " + x.saidRestart + " and uploads " + x.putsRestart : "");
+    const left = x => !!x && x.synced && x.moved === 200;
+    const l = await run(strandedScene, "939l-left", false);
+    check(left(l.x) && l.x.puts === 0 && l.x.said === 1 && l.x.epoch === 1 && l.x.pin === "the old lead" && l.x.row === "{\"seen\":false}"
+      && l.x.rowAfter === "{\"seen\":true}" && l.x.saidRestart === 0 && l.x.putsRestart === 0,
+      "939l a desk left behind by a handover to a key with a fresh box and the key change after it puts nothing up, its own new files kept"
+      + " here, says the copywriter's line once, and shows it on the team's row until dismissed: " + lText(l.x) + (l.err ? ", " + l.err : ""));
+    const L = await run(strandedScene, "939L-kept", true);
+    check(left(L.x) && L.x.puts >= 2 && L.x.said === 0 && L.x.epoch === 2 && L.x.pin === "the new lead" && L.x.row === "none",
+      "939L control: with the old box kept the desk follows the new key, says nothing of being left behind, and both its files go up: "
+      + lText(L.x) + (L.err ? ", " + L.err : ""));
+    const m = await liftApp("plant:stranded-judge", async app => { const x = await strandedScene("939m", false, app); return left(x) && x.puts > 0 && x.said === 0 && x.row === "none"; });
+    check(m.turned && m.back, "939m lifting plant:stranded-judge never takes the desk as left behind: it puts its files up under the old key"
+      + " and says nothing, and the product file is never written: " + m.detail + ", sha " + (m.back ? "restored" : "differs"));
+    const n = await liftApp("plant:stranded-hold", async app => { const x = await strandedScene("939n", false, app); return left(x) && x.puts > 0 && x.said === 1; });
+    check(n.turned && n.back, "939n lifting plant:stranded-hold says the line but still puts the desk's files up under the old key, and the"
+      + " product file is never written: " + n.detail + ", sha " + (n.back ? "restored" : "differs"));
+    const o = await liftApp("plant:stranded-said", async app => { const x = await strandedScene("939o", false, app); return left(x) && x.puts === 0 && x.said === 0; });
+    check(o.turned && o.back, "939o lifting plant:stranded-said holds the files but never says why, and the product file is never written: "
+      + o.detail + ", sha " + (o.back ? "restored" : "differs"));
+    const p = await liftDesk("plant:stranded-row", async text => { const x = await strandedScene("939p", false, { source: text }); return left(x) && x.puts === 0 && x.said === 1 && x.row === "none"; });
+    check(p.turned && p.back, "939p lifting plant:stranded-row holds the files and says the line, but the team's row carries no notice, and the"
+      + " product file is never written: " + p.detail + ", sha " + (p.back ? "restored" : "differs"));
     const f = await run(toFolder, "939f");
     check(!!f.x && f.x.ok === true,
       "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "

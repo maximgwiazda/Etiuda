@@ -244,6 +244,25 @@ function syncForkNotice(){
     joinAsk("fork-seen", team);
   });
 }
+/* Left behind by a handover to a key with a box of its own and the key change after it, as the shell keeps it. The
+   copywriter's words, the first sentence the notice's lead. */
+let strandedUp="";
+const strandedDismissed=new Set();
+function syncStrandedNotice(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.stranded && !x.stranded.seen && !strandedDismissed.has(x.team))[0]||null;
+  const want=l?l.team:"", up=document.getElementById("eTeamStranded");
+  if(want===strandedUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  strandedUp=want;
+  if(!l) return;
+  eNotice("eTeamStranded", t("While this desk was switched off, the team moved to a new key and its keys were secured anew, so this desk cannot open what comes next."),
+    t("It sends nothing new to the team, and everything on this computer stays as it is. To join, a new invitation from the team's lead is needed."), ()=>{
+      strandedDismissed.add(want);
+      if(strandedUp===want) strandedUp="";
+      joinAsk("stranded-seen", want);
+    });
+}
 /* The relay told this desk it is no longer on the team. The notice says so, and only for that: a roster that has
    dropped the desk already has its own sentence, and this one must not promise that the catalog opens by itself,
    because the desk has stopped asking. */
@@ -282,6 +301,7 @@ function joinTook(v,changed){
              if(lapse) row.lapse=lapse;
              const fork=forkKept(l.fork);
              if(fork) row.fork=fork;
+             if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};
              return row;
            }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
@@ -293,6 +313,7 @@ function joinTook(v,changed){
   syncLapseNotice();
   syncRelayRemoved();
   syncForkNotice();
+  syncStrandedNotice();
   const refusal=s.linkRefusal;
   if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
     dropInvite();

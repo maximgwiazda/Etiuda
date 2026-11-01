@@ -5136,6 +5136,20 @@ function forkShown(team) {
   const f = forkLast(team);
   return f ? { kind: f.kind, seen: !!teamForks[team] && teamForks[team].seen === f.key } : null;
 }
+/* Whether the relay team this desk follows has left it behind (the channel's judgeBehind), `seen` once the agent has
+   dismissed its notice; the channel keeps both. */
+function strandedShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || typeof relayChannel.stranded !== "function") return null;
+  let s = null;
+  try { s = relayChannel.stranded(); } catch { s = null; }
+  return s ? { seen: s.seen === true } : null;
+}
+function strandedDismissed(team) {
+  const here = relayHere();
+  if (here && here.team === String(team || "") && relayChannel && typeof relayChannel.strandedSeen === "function") relayChannel.strandedSeen();
+  return joinView();
+}
 /* The agent dismissed the fork notice of `team`: kept for the fork it showed, so a new fork shows again. */
 function forkDismissed(team) {
   team = String(team || "");
@@ -5169,6 +5183,8 @@ function leadsView() {
     if (lapse) row.lapse = lapse;
     const fork = forkShown(t);
     if (fork) row.fork = fork; /* plant:fork-row */
+    const stranded = strandedShown(t);
+    if (stranded) row.stranded = stranded; /* plant:stranded-row */
     if (teamNeedsFolder[t]) {
       row.needsFolder = true;
       row.openFolder = shellWords().openFolder;
@@ -5591,6 +5607,8 @@ function relayRun() {
     onLapse: () => sendJoin(theWindow),
     /* The team's lead key was seen in two hands, so the page is told now. */
     onFork: () => sendJoin(theWindow),
+    /* This desk was left behind by a handover and the key change after it, so the page is told now. */
+    onStranded: () => sendJoin(theWindow),
     /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
     onInviteEnd: kind => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
@@ -7056,13 +7074,13 @@ ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyP
 ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
-// "seen", "forget", "leave", "lapse-seen" and "fork-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
+// "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file)
+  : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
   : op === "pick-moved-folder" ? pickMovedFolder(file, name)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
