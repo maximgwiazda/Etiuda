@@ -1292,8 +1292,8 @@ function createProgram(opts) {
     }
     const isTeam = x => x.r.kind === "file" && x.r.path === TEAM_NAME;
     let topTeam = null;
-    /* The team files of one look, landed in turn until one lands: a genuine handover from the pin first, then by later(). One
-       not tried stays pending. On a catch-up page that more of the list follows, a handover is held (holdAhead), not landed,
+    /* The team files of one look, landed in turn until one lands: by epoch, a genuine handover from the pin first within one,
+       then by later(). One not tried stays pending. On a catch-up page that more of the list follows, a handover is held (holdAhead), not landed,
        and every look's steps are kept, so the fork rule reads the whole catch-up before the pin moves. */
     const landTop = list => {
       const teams = list.filter(isTeam);
@@ -1308,10 +1308,14 @@ function createProgram(opts) {
       }
       const pinLead = pin.lead;
       const handedOn = d => table(d) && table(d.lead) && (d.lead.keyId !== pinLead.keyId || d.lead.public !== pinLead.public) && B.handedTo(d, pinLead);
+      /* The highest epoch first: a handover older than a file the pinned lead signed at a newer epoch is stale, whoever holds the
+         old key. Within an epoch, handed on first. */
+      let tier = () => 0;
+      tier = c => c.x.r.epoch; /* plant:epoch-first */
       let rank = () => 0;
       rank = c => (c.on ? 1 : 0); /* plant:handed-wins */
       const order = teams.map((x, i) => ({ x, doc: docs[i], on: handedOn(docs[i]) }))
-        .sort((a, b) => rank(b) - rank(a) || (later(b.x.r, a.x.r) ? 1 : later(a.x.r, b.x.r) ? -1 : 0));
+        .sort((a, b) => tier(b) - tier(a) || rank(b) - rank(a) || (later(b.x.r, a.x.r) ? 1 : later(a.x.r, b.x.r) ? -1 : 0));
       let held = [];
       held = look && !look.whole ? order.filter(c => c.on) : []; /* plant:ahead-defer */
       for (const c of held) { holdAhead(c, floors0); unpend(c.x.r.id); }

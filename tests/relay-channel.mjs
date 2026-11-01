@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 373;
+const EXPECTED = 375;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -6756,6 +6756,84 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 952a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- 994p, the epoch order (the test architect, 2026-11-01 17:26): a desk holding both epochs' keys, its mirror on the first
+   epoch, is away while K1's holder puts up a first-epoch team file handing K1 to K3 and the lead then moves the team to the
+   second epoch. Both team files come back in one since page: the desk lands the second epoch under the pin and does not follow
+   K3. `mod` is the channel layer the desk loads; the lead keeps the product's. ---- */
+async function rawUpload(rt, who, b) {
+  const t = transport("raw-" + hex(3));
+  const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
+  const challenge = JSON.parse(h.bytes.toString()).challenge;
+  const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
+    Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+  const token = JSON.parse(ses.bytes.toString()).session;
+  const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
+    sig: b.signature, nonce: b.nonce, place: b.place };
+  const r = await t.request("PUT", URLV1 + "/t/" + rt + "/b/" + b.id,
+    { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(meta)).toString("base64url") }, b.ciphertext);
+  return r.status;
+}
+async function staleInOnePage(mod) {
+  const out = { first: 0, thief: 0, leadPin: "", pin: "", epoch: 0, lead: "", pages: 0 };
+  const k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32), keys = new Map([[1, k1], [2, k2]]);
+  const deskKey = keyPair(true), K3 = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  let sealAt = 1;
+  const lead = opened(C, "994p-lead-" + tm.rt.slice(0, 8), tm, LEAD, "root", {
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
+    keyFor: e => keys.get(e) || null, sealEpoch: () => sealAt,
+  });
+  const desk = opened(mod, "994p-desk-" + tm.rt.slice(0, 8), tm, deskKey, "desk:" + deskKey.keyId, { keyFor: e => keys.get(e) || null, sealEpoch: () => 2 });
+  const name = k => (k && k.keyId === LEAD.keyId ? "K1" : k && k.keyId === K3.keyId ? "K3" : "none");
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+    lead.ch.start();
+    await settle(lead);
+    desk.ch.start();
+    await settle(desk);
+    try { out.first = JSON.parse(read(desk.mirror, C.TEAM_NAME)).epoch; } catch { out.first = 0; }
+    desk.t.down = true;
+    const step = { format: 1, kind: "etiuda-team-handover", team: tm.id, from: { keyId: LEAD.keyId, public: LEAD.pub },
+      to: { keyId: K3.keyId, public: K3.pub }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    step.sig.value = signHex(LEAD, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(step)]));
+    const doc = { format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["quay-board"], lead: { keyId: K3.keyId, public: K3.pub },
+      sealed: true, exportsSealed: false, epoch: 1, rev: 2, channel: { kind: "relay", rt: tm.rt, url: URLV1 }, ring: RING,
+      roster: [member(deskKey)], handover: [step], sig: { alg: "Ed25519", keyId: K3.keyId } };
+    doc.sig.value = signHex(K3, C.signedBytes(doc));
+    out.thief = await rawUpload(tm.rt, LEAD, B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: k1, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey },
+      path: C.TEAM_NAME, body: JSON.stringify(doc, null, 1) + "\n", counter: Date.now() + 5e6, place: "root", kind: "file" }));
+    sealAt = 2;
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 2, 1, [member(deskKey)]));
+    await settle(lead);
+    out.leadPin = name(lead.prog.pinned() && lead.prog.pinned().lead);
+    desk.t.down = false;
+    await settle(desk);
+    out.pages = desk.t.log.filter(l => /since\//.test(l)).length;
+    out.pin = name(desk.prog.pinned() && desk.prog.pinned().lead);
+    try { const d = JSON.parse(read(desk.mirror, C.TEAM_NAME)); out.epoch = d.epoch; out.lead = name(d.lead); } catch { out.epoch = 0; }
+    out.ok = out.first === 1 && out.thief === 200 && out.leadPin === "K1" && out.pin === "K1" && out.epoch === 2 && out.lead === "K1";
+    return out;
+  } finally {
+    await lead.ch.stop();
+    await desk.ch.stop();
+  }
+}
+try {
+  const pText = x => "the desk's first epoch " + x.first + ", the K3 file by K1 " + x.thief + ", the lead's own pin " + x.leadPin + ", desk pin " + x.pin
+    + ", the mirror's team file epoch " + x.epoch + " by " + x.lead;
+  const p = await staleInOnePage(C);
+  check(p.ok === true, "994p a first-epoch handover to K3 and the pinned lead's own move to the second epoch in one since page, the desk's mirror"
+    + " on the first: the desk lands the second epoch under the pin and does not follow K3: " + pText(p));
+  if (PLANTS_OFF) skip("994q lifting plant:epoch-first puts the stale handover first, so the desk follows K3");
+  else {
+    const q = await liftChannel("plant:epoch-first", async mod => { const x = await staleInOnePage(mod); return x.first === 1 && x.thief === 200 && x.leadPin === "K1" && x.pin === "K3"; });
+    check(q.turned && q.back, "994q lifting plant:epoch-first puts the stale handover first, so the desk follows K3, and the product file is never"
+      + " written: " + q.detail + ", sha " + (q.back ? "restored" : "differs"));
+  }
+} catch (e) {
+  check(false, "harness (the leg 994p): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a desk's own copy lands its team file before the lead's other blobs of the batch open (C9, board 923). A desk
