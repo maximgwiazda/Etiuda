@@ -3428,7 +3428,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     named = text.split(FOLDER_WORKER).length - 1;
     if (named === 1) fs.writeFileSync(f, text.replace(FOLDER_WORKER, () => FOLDER_WORKER_BENT), "utf8");
   });
-  const packed = asar.extractFile(ASAR, "shell/folder/syncer.cjs").toString("utf8");
+  /* path.join and not "shell/folder/syncer.cjs": @electron/asar on Windows finds a nested file only by the platform's
+     separator (measured 2026-11-01: a forward-slash nested path is "not found in this archive", a one-level one is found). */
+  const packed = asar.extractFile(ASAR, path.join("shell", "folder", "syncer.cjs")).toString("utf8");
   const bentHeld = named === 1 && packed.indexOf(FOLDER_WORKER_BENT) > -1
     && packed.split(FOLDER_WORKER_BENT).join("").indexOf(FOLDER_WORKER) < 0;
   const udB = newUserData("folder-bent");
