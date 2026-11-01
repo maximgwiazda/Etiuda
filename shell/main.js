@@ -2078,6 +2078,42 @@ function handedTo(doc, pin) {
   }
   return false;
 }
+/* The keys of the handovers' path, one genuine step at a time, from `pin` to the lead the file names, `pin` first; empty where
+   they do not lead there. */
+function handedPath(doc, pin) {
+  const list = Array.isArray(doc.handover) ? doc.handover : [];
+  let at = { keyId: pin.keyId, public: pin.public };
+  const out = [at];
+  for (let step = 0; step < HANDOVER_STEPS; step++) {
+    const s = list.find(x => handoverGenuine(x, doc.id, at));
+    if (!s) return [];
+    at = { keyId: s.to.keyId, public: s.to.public };
+    out.push(at);
+    if (at.keyId === doc.lead.keyId && at.public === doc.lead.public) return out;
+  }
+  return [];
+}
+/* Whether the team files of one look show the team's lead key in two hands (board 931 (7)); shell/relay/blob.cjs forkIn is the
+   same rule. `chain` is the leads this desk followed, oldest first, the one it is pinned to last. A step counts only where it is
+   genuine for that team and signed by that key, so a forged second successor shows nothing. "later": a key already handed on to
+   the next of the chain is shown handing to another, and the desk stays where it is. "two": the key the desk is pinned to is
+   shown handing to two different keys in this look, and it follows neither. Null where there is no such step. */
+function forkIn(docs, chain, teamId) {
+  const at = Array.isArray(chain) ? chain.filter(k => !!k && typeof k === "object" && !!k.keyId && !!k.public) : [];
+  const files = (Array.isArray(docs) ? docs : []).filter(d => !!d && typeof d === "object" && d.id === teamId);
+  for (let i = 0; i < at.length; i++) {
+    const from = at[i], next = i + 1 < at.length ? at[i + 1] : null;
+    const to = [];
+    for (const doc of files) {
+      for (const s of Array.isArray(doc.handover) ? doc.handover : []) {
+        if (handoverGenuine(s, teamId, from) && !to.some(t => t.public === s.to.public)) to.push({ keyId: s.to.keyId, public: s.to.public });
+      }
+    }
+    const others = next ? to.filter(t => t.public !== next.public) : to;
+    if (next ? others.length > 0 : others.length > 1) return { kind: next ? "later" : "two", from: { keyId: from.keyId, public: from.public }, to: others }; /* plant:fork-in-desk */
+  }
+  return null;
+}
 
 const BRANCH_PREFIX = "etiuda-desk-branch\n";
 const BRANCH_STEM_MAX = 96, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
@@ -3019,7 +3055,7 @@ function memberStateCopy(state) {
   const keys = {}, src = (state && state.keys) || {};
   Object.keys(src).forEach(t => { keys[t] = Object.assign({}, src[t]); });
   return { pins: pins, keys: keys, barred: Array.isArray(state && state.barred) ? state.barred.slice() : [],
-    join: (state && state.join) || null };
+    join: (state && state.join) || null, was: Object.assign({}, state && state.was) };
 }
 /* What heeding one team file changes for one member. `doc` is the parsed file, or null. `state` is
    {pins, keys, barred, join}: pins is a team id to {keyId, public}, keys is a team id to the epochs
@@ -3036,14 +3072,24 @@ function memberHeed(doc, state, seen) {
   const look = seen || {};
   const out = memberStateCopy(state);
   const said = [];
+  let fork = null;
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
-    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
+    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false, fork: fork, passed: [] }, extra);
   if (!teamWhole(doc)) {
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
   }
   const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = out.pins[doc.id], hadPin = !!pin;
   const handed = hadPin && (pin.keyId !== lead.keyId || pin.public !== lead.public);
+  /* A lead key shown in two hands (board 931 (7)): said, and where the key the desk holds is shown handing to two keys in
+     one look, the desk follows neither and keeps what it has. The files of the look are `seen.look`. */
+  const followed = state && state.was && typeof state.was === "object" && Array.isArray(state.was[doc.id]) ? state.was[doc.id] : [];
+  const chain = hadPin ? followed.filter(k => !!k && k.public !== pin.public).concat([pin]) : [];
+  const look = seen && Array.isArray(seen.look) && seen.look.length ? seen.look : [doc];
+  fork = hadPin ? forkIn(look, chain, doc.id) : null;
+  if (fork) said.push(file + (fork.kind === "two" ? " and another team file seen with it hand the lead key this desk trusts for team " + doc.id + " to two different keys, so this desk follows neither and keeps what it has"
+    : " hands team " + doc.id + " from a lead key this desk already followed on to a key it did not follow, so that older key is in someone else's hands too; this desk stays with the lead it follows")); /* plant:fork-said-desk */
+  if (fork && fork.kind === "two") return ret({ stop: true, team: doc.id }); /* plant:fork-two-desk */
   if (handed && !handedTo(doc, pin)) {
     said.push(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
     return ret({ stop: true, team: doc.id });

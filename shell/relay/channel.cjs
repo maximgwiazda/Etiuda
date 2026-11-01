@@ -105,6 +105,12 @@ const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
 /* The page shows this while a relay request waits. After the one upload the channel says the same line, once, where an
    enrolment fault would have been said. */
+/* A team's lead key shown in two hands (board 931 (7)): what the desk says once for each fork it sees. */
+const FORK_SAID = {
+  later: "A team file hands the lead key this desk followed from to a key this desk did not follow, so that older key is in someone else's hands too. This desk stays with the lead it follows.", /* draft words: copywriter */
+  two: "The team's lead key has been handed to two different keys at once. This desk follows neither, and keeps the lead and the catalog it has.", /* draft words: copywriter */
+};
+const FORKS_MAX = 64;
 const WAITING_SAID = "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.";
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
@@ -364,7 +370,7 @@ function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null };
+    pin: null, chain: null, was: [], forks: {}, fork: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -388,6 +394,12 @@ function stateOf(x) {
   if (Array.isArray(x.chain)) {
     s.chain = x.chain.filter(c => table(c) && B.isId(c.keyId) && HEX64.test(String(c.public)))
       .map(c => ({ keyId: c.keyId, public: c.public }));
+  }
+  const leadRows = a => Array.isArray(a) ? a.filter(c => table(c) && B.isId(c.keyId) && HEX64.test(String(c.public))).map(c => ({ keyId: c.keyId, public: c.public })) : [];
+  s.was = leadRows(x.was);
+  if (table(x.forks)) for (const k of Object.keys(x.forks).slice(-FORKS_MAX)) if (/^(later|two):/.test(k) && x.forks[k] === true) s.forks[k] = true;
+  if (table(x.fork) && (x.fork.kind === "later" || x.fork.kind === "two") && B.isId(x.fork.from) && Array.isArray(x.fork.to) && x.fork.to.length && x.fork.to.every(B.isId)) {
+    s.fork = { kind: x.fork.kind, from: x.fork.from, to: x.fork.to.slice() };
   }
   const idSet = m => {
     const out = {};
@@ -479,6 +491,7 @@ function createProgram(opts) {
   const clock = typeof o.clock === "function" ? o.clock : Date.now;
   const say = typeof o.say === "function" ? o.say : () => {};
   const save = typeof o.save === "function" ? o.save : () => {};
+  const onFork = typeof o.onFork === "function" ? o.onFork : null;
   const teamMax = Number.isSafeInteger(o.teamMax) ? o.teamMax : B.TEAM_MAX;
   let st = stateOf(typeof o.load === "function" ? o.load() : null);
   let pin = pinOf((st && st.pin) || o.pin);
@@ -528,9 +541,36 @@ function createProgram(opts) {
     return pin ? { ok: true } : R("not-enrolled");
   }
 
+  /* The leads this desk has followed, oldest first, the one it is pinned to last: what a team file's handovers are read
+     against for a fork. They are kept apart from the chain, which a later file that leaves its handovers out shortens. */
+  function followedLeads() {
+    const out = [];
+    if (!pin) return out;
+    for (const k of st.was) if (k.public !== pin.lead.public && !out.some(o => o.public === k.public)) out.push({ keyId: k.keyId, public: k.public });
+    out.push({ keyId: pin.lead.keyId, public: pin.lead.public });
+    return out;
+  }
+  const forkKey = f => f.kind + ":" + f.from + ">" + f.to.slice().sort().join(",");
+  /* A fork said once: its key, kept with the record, so a later look at the same files says nothing more. The latest fork
+     stays for the shell to show. */
+  function noteFork(f) {
+    const shown = { kind: f.kind, from: f.from.keyId, to: f.to.map(k => k.keyId) };
+    const key = forkKey(shown);
+    if (!st.fork || forkKey(st.fork) !== key) st.fork = shown;
+    if (has(st.forks, key)) return; /* plant:fork-once */
+    st.forks[key] = true;
+    for (const k of Object.keys(st.forks).slice(0, -FORKS_MAX)) delete st.forks[k];
+    persist();
+    say(FORK_SAID[f.kind]); /* plant:fork-said */
+    if (onFork) { try { onFork(); } catch (e) { say("the fork could not be shown - " + (e && e.message)); } }
+  }
+  const forkIn = docs => (pin ? B.forkIn(docs, followedLeads(), pin.teamId) : null);
   function followHandover(t) {
     if (!t) return;
-    if (t.chain) st.chain = t.chain;
+    if (t.chain) {
+      for (const k of t.chain) if (!st.was.some(w => w.public === k.public)) st.was.push({ keyId: k.keyId, public: k.public });
+      st.chain = t.chain;
+    }
     if (t.handed) {
       pin = { teamId: pin.teamId, rt: pin.rt, lead: { keyId: t.doc.lead.keyId, public: t.doc.lead.public } }; /* plant:team-pin-move */
       st.pin = pin; /* plant:team-pin-save */
@@ -546,6 +586,9 @@ function createProgram(opts) {
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
     const lead = doc.lead;
     const leadDiffers = !lead || typeof lead !== "object" || lead.keyId !== pin.lead.keyId || lead.public !== pin.lead.public;
+    /* A file that hands a key this desk already followed on to another than the one it followed proves that key is in
+       someone else's hands. It is refused as any unhanded lead is, and the fork is said once. */
+    if (leadDiffers && !B.handedTo(doc, pin.lead)) { const f = forkIn([doc]); if (f) noteFork(f); } /* plant:fork-later */
     if (leadDiffers && !B.handedTo(doc, pin.lead)) return R("bad-signature"); /* plant:team-handover */
     const signerPub = leadDiffers ? (lead && lead.public) : pin.lead.public;
     if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
@@ -596,6 +639,23 @@ function createProgram(opts) {
     keepTrust(t);
     persist();
     return { ok: true, rev: t.rev };
+  }
+
+  /* A look at several team files at once, the team file and a conflict sibling or two files of one batch. Where the key this
+     desk is pinned to is shown handing to two different keys in it, the desk follows neither: nothing in the look is loaded,
+     the pin and the catalog it has stay, and the fork is said. A key it already followed on shown handing to another is said
+     too, and the look goes on, each file judged as it always was. True where nothing is to be followed. */
+  function forkedLook(docs) {
+    const f = forkIn((docs || []).filter(table));
+    if (!f) return false;
+    noteFork(f);
+    return f.kind === "two"; /* plant:fork-two */
+  }
+  function loadTeamFiles(docs) {
+    const list = Array.isArray(docs) ? docs : [];
+    if (forkedLook(list)) return { ok: false, reason: "fork", said: FORK_SAID.two, served: false, files: [] };
+    const files = list.map(loadTeamFile);
+    return { ok: files.some(r => r.ok), files };
   }
 
   /* The newest roster this program has loaded, or null before any team file is kept. */
@@ -1074,6 +1134,7 @@ function createProgram(opts) {
       const teams = list.filter(isTeam);
       for (const x of teams) unpend(x.r.id);
       if (!teams.length) return;
+      if (teams.length > 1 && forkedLook(teams.map(x => { try { return JSON.parse(String(x.r.body).replace(/^\uFEFF/, "")); } catch { return null; } }))) return;
       const top = teams.reduce((a, b) => (later(b.r, a.r) ? b : a));
       /* A team file passed over for a newer one still used this key's counter. */
       for (const x of teams) if (x !== top && ownOf(ctx, x.r)) noteOwn(x.r);
@@ -1347,9 +1408,11 @@ function createProgram(opts) {
   }
 
   const api = {
-    setPin, pinned: () => pin, leads: () => chainLeads(), loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
+    setPin, pinned: () => pin, leads: () => chainLeads(), loadTeamFile, loadTeamFiles, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
     sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
+    /* The latest fork this desk has seen, {kind, from, to} by key ids, or null. */
+    fork: () => (st.fork ? { kind: st.fork.kind, from: st.fork.from, to: st.fork.to.slice() } : null),
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed(id) {
       st.tokenUsed = true;
@@ -1485,7 +1548,7 @@ function createChannel(opts) {
     const text = JSON.stringify(s);
     if (typeof o.write === "function") o.write(stateFile, text); else writeWhole(stateFile, text);
   };
-  const prog = createProgram({ io, clock, say, load: () => readState(stateFile), save: stateFile ? saveState : null, pin: o.pin && o.pin() });
+  const prog = createProgram({ io, clock, say, onFork: () => { if (typeof o.onFork === "function") o.onFork(); }, load: () => readState(stateFile), save: stateFile ? saveState : null, pin: o.pin && o.pin() });
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null, answerDue = null;
@@ -2300,6 +2363,7 @@ function createChannel(opts) {
     socketOpen: () => !!sock,
     writeAnswer,
     lapse: lapseView,
+    fork: () => prog.fork(),
   };
 }
 

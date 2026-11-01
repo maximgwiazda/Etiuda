@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 304;
+const EXPECTED = 312;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -8137,6 +8137,130 @@ check(retryPlant.turned && retryPlant.back,
   });
   check(pChainSame.turned && pChainSame.back, "932l lifting plant:chain-same accepts an unhanded writer change, and the product file is never written: "
     + pChainSame.detail + ", sha " + (pChainSame.back ? "restored" : "differs"));
+
+  /* ---- a lead key in two hands (board 931 (7), the test architect's condition 2 of 2026-11-01): a desk never follows a stolen
+     key into a fork, and says when it sees one. K1 handed to K2 and to K3 are two successors of one key. ---- */
+  async function liftBlobChannel(tag, fn) {
+    const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        turned = await fn(loadPlantedBlobChannel(lines.join("\n")));
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  /* A step as makeHandoverStep makes it, but signed by `by`, so one can name K1 as the signer without K1 having signed. */
+  function stepBy(teamId, from, to, by) {
+    const s = { format: 1, kind: "etiuda-team-handover", team: teamId, from: { keyId: from.keyId, public: from.pub },
+      to: { keyId: to.keyId, public: to.pub }, sig: { alg: "Ed25519", keyId: from.keyId } };
+    s.sig.value = signHex(by, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(s)]));
+    return s;
+  }
+  /* A desk pinned to K1 that has loaded the team's first file. `mod` is the channel module, the product's or a planted copy. */
+  function forkDesk(mod) {
+    const tmX = "t-" + hex(8), rtX = hex(16), k1 = keyPair(false), k2 = keyPair(false), k3 = keyPair(false);
+    const dirX = path.join(LAB, "ho-932m-" + hex(4));
+    fs.mkdirSync(dirX, { recursive: true });
+    const said = [], tolds = [];
+    let saved = null;
+    const open = () => mod.createProgram({ io: mod.diskIO(dirX, mod.writeWhole), pin: { teamId: tmX, rt: rtX, lead: { keyId: k1.keyId, public: k1.pub } },
+      save: s => { saved = JSON.parse(JSON.stringify(s)); }, load: () => saved, say: l => said.push(l), onFork: () => tolds.push(1) });
+    const prog = open();
+    const file = (lead, rev, steps) => teamDocWith(tmX, rtX, lead, 1, rev, [], steps);
+    prog.loadTeamFile(file(k1, 1));
+    return { tm: tmX, k1, k2, k3, prog, open, said, tolds, file, dir: dirX };
+  }
+  /* One after the other: the desk follows K1 to K2, then sees a genuine K1 to K3 file. */
+  function laterScene(mod) {
+    const d = forkDesk(mod);
+    const toK2 = d.prog.loadTeamFile(d.file(d.k2, 2, [makeHandoverStep(d.tm, d.k1, d.k2)]));
+    const k3File = d.file(d.k3, 3, [makeHandoverStep(d.tm, d.k1, d.k3)]);
+    const first = d.prog.loadTeamFile(k3File);
+    const saidFirst = d.said.length;
+    const again = d.prog.loadTeamFile(k3File);
+    const reopened = d.open().loadTeamFile(k3File);
+    return Object.assign(d, { toK2, first, again, reopened, saidFirst });
+  }
+  /* Two at once: both successors of K1 in one look. */
+  function twoScene(mod) {
+    const d = forkDesk(mod);
+    const docs = [d.file(d.k2, 2, [makeHandoverStep(d.tm, d.k1, d.k2)]), d.file(d.k3, 2, [makeHandoverStep(d.tm, d.k1, d.k3)])];
+    const mirrorBefore = d.prog.readMirror(C.TEAM_NAME);
+    const look = d.prog.loadTeamFiles(docs);
+    const saidFirst = d.said.length;
+    const again = d.prog.loadTeamFiles(docs.slice().reverse());
+    const reopened = d.open().loadTeamFiles(docs);
+    return Object.assign(d, { look, again, reopened, saidFirst, mirrorBefore, docs });
+  }
+  const sameIds = (v, a) => !!v && JSON.stringify(v.to.slice().sort()) === JSON.stringify(a.slice().sort());
+
+  const ls = laterScene(C);
+  check(ls.toK2.ok === true && ls.first.ok === false && ls.first.reason === "bad-signature" && ls.prog.pinned().lead.keyId === ls.k2.keyId
+    && ls.again.reason === "bad-signature" && ls.saidFirst === 1 && ls.said.length === 1 && /someone else's hands/.test(ls.said[0]) && ls.tolds.length === 1
+    && !!ls.prog.fork() && ls.prog.fork().kind === "later" && ls.prog.fork().from === ls.k1.keyId && sameIds(ls.prog.fork(), [ls.k3.keyId])
+    && ls.reopened.reason === "bad-signature" && ls.said.length === 1 && ls.tolds.length === 1,
+    "932m a desk that followed K1 to K2 and later sees a genuine K1 to K3 file stays on K2 and says the fork once, not at every look, a restart included: followed "
+    + ls.toK2.ok + ", K3 file " + ls.first.reason + ", pinned K2 " + (ls.prog.pinned().lead.keyId === ls.k2.keyId) + ", said " + ls.said.length + ", shown " + ls.tolds.length);
+
+  const ts = twoScene(C);
+  check(ts.look.ok === false && ts.look.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId && ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore
+    && ts.again.reason === "fork" && ts.reopened.reason === "fork" && ts.prog.pinned().lead.keyId === ts.k1.keyId
+    && ts.saidFirst === 1 && ts.said.length === 1 && /two different keys/.test(ts.said[0]) && ts.tolds.length === 1
+    && !!ts.prog.fork() && ts.prog.fork().kind === "two" && ts.prog.fork().from === ts.k1.keyId && sameIds(ts.prog.fork(), [ts.k2.keyId, ts.k3.keyId]),
+    "932n a desk pinned to K1 that sees K1 handed to K2 and to K3 in one look follows neither, keeps its pin and the file it has, and says so once: "
+    + ts.look.reason + ", pinned K1 " + (ts.prog.pinned().lead.keyId === ts.k1.keyId) + ", mirror kept " + (ts.prog.readMirror(C.TEAM_NAME) === ts.mirrorBefore) + ", said " + ts.said.length);
+
+  /* A forged second successor: the K1 to K3 step is not K1's signature. */
+  const fd = forkDesk(C);
+  const strangerF = keyPair(false);
+  const forged = stepBy(fd.tm, fd.k1, fd.k3, strangerF);
+  const fdK2 = fd.prog.loadTeamFile(fd.file(fd.k2, 2, [makeHandoverStep(fd.tm, fd.k1, fd.k2)]));
+  const fdForged = fd.prog.loadTeamFile(fd.file(fd.k3, 3, [forged]));
+  const fp = forkDesk(C);
+  const fpLook = fp.prog.loadTeamFiles([fp.file(fp.k2, 2, [makeHandoverStep(fp.tm, fp.k1, fp.k2)]), fp.file(fp.k3, 2, [stepBy(fp.tm, fp.k1, fp.k3, strangerF)])]);
+  check(fdK2.ok === true && fdForged.ok === false && fdForged.reason === "bad-signature" && fd.prog.pinned().lead.keyId === fd.k2.keyId
+    && fd.said.length === 0 && fd.tolds.length === 0 && fd.prog.fork() === null
+    && fpLook.ok === true && fp.prog.pinned().lead.keyId === fp.k2.keyId && fp.said.length === 0 && fp.tolds.length === 0 && fp.prog.fork() === null,
+    "932o a second successor whose step K1 did not sign shows no fork: refused as before " + fdForged.reason + ", said " + fd.said.length
+    + "; in one look with the genuine K1 to K2 file the desk follows K2 and says nothing, said " + fp.said.length);
+
+  const pForkIn = await liftBlobChannel("plant:fork-in", mod => {
+    const a = laterScene(mod), b = twoScene(mod);
+    return a.said.length === 0 && a.prog.fork() === null && b.said.length === 0 && b.prog.pinned().lead.keyId !== b.k1.keyId;
+  });
+  check(pForkIn.turned && pForkIn.back, "932p lifting plant:fork-in in blob.cjs shows no fork, so the desk says nothing of K1 handed on twice and follows one of two successors, and the product file is never written: "
+    + pForkIn.detail + ", sha " + (pForkIn.back ? "restored" : "differs"));
+  const pForkLater = await liftChannel("plant:fork-later", mod => {
+    const a = laterScene(mod);
+    return a.first.reason === "bad-signature" && a.said.length === 0 && a.prog.fork() === null;
+  });
+  check(pForkLater.turned && pForkLater.back, "932q lifting plant:fork-later leaves a genuine K1 to K3 file refused without a word, and the product file is never written: "
+    + pForkLater.detail + ", sha " + (pForkLater.back ? "restored" : "differs"));
+  const pForkSaid = await liftChannel("plant:fork-said", mod => {
+    const a = laterScene(mod);
+    return a.prog.fork() !== null && a.said.length === 0;
+  });
+  check(pForkSaid.turned && pForkSaid.back, "932r lifting plant:fork-said sees the fork and says nothing of it, and the product file is never written: "
+    + pForkSaid.detail + ", sha " + (pForkSaid.back ? "restored" : "differs"));
+  const pForkOnce = await liftChannel("plant:fork-once", mod => {
+    const a = laterScene(mod);
+    return a.said.length > 1 && a.tolds.length > 1;
+  });
+  check(pForkOnce.turned && pForkOnce.back, "932s lifting plant:fork-once says the same fork at every look, and the product file is never written: "
+    + pForkOnce.detail + ", sha " + (pForkOnce.back ? "restored" : "differs"));
+  const pForkTwo = await liftChannel("plant:fork-two", mod => {
+    const b = twoScene(mod);
+    return b.prog.pinned().lead.keyId !== b.k1.keyId;
+  });
+  check(pForkTwo.turned && pForkTwo.back, "932t lifting plant:fork-two follows one of two successors of K1 seen in one look, and the product file is never written: "
+    + pForkTwo.detail + ", sha " + (pForkTwo.back ? "restored" : "differs"));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
