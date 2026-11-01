@@ -460,16 +460,61 @@ function createFolderProgram(opts) {
   /* The pin moves to a team file's lead along its handovers, each key passed through kept for the fork rule. */
   function follow(doc) {
     for (const k of handedPath(doc, pin)) if (!followed.some(f => f.public === k.public)) followed.push({ keyId: k.keyId, public: k.public });
-    pin = { keyId: doc.lead.keyId, public: doc.lead.public };
+    setPin({ keyId: doc.lead.keyId, public: doc.lead.public });
   }
   const leadsNow = () => (pin ? followed.filter(k => k.public !== pin.public).concat([{ keyId: pin.keyId, public: pin.public }]) : []);
+  /* The lead key this program checks against, from the desk or along a handover. A new one clears every refusal judged under
+     the one before, so those files are copied and judged again. True where the pin changed. */
+  function setPin(next) {
+    if (typeof next === "function") next = next();
+    const to = next && next.public ? { keyId: next.keyId, public: next.public } : null;
+    if ((!pin && !to) || (pin && to && pin.public === to.public && pin.keyId === to.keyId)) return false;
+    pin = to;
+    judgedAt++; /* plant:syncer-pin-forgets */
+    return true;
+  }
 
   let mirrorEpoch = 0;
   let mirrorRev = -1;
-  let pending = []; // [{ kind, relPath, epoch, tmpPath, text, doc }]
+  let pending = []; // [{ kind, relPath, epoch, tmpPath, text, doc, size, mtimeMs }]
   const missingCount = new Map(); // relPath -> number of consecutive answered listings missing
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
-  const refusedMtimes = new Map(); // relPath -> { size, mtimeMs }
+  const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
+  let judgedAt = 0; // moves with what a refusal is judged against: the pin, the team file and the ring
+  const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
+  /* A refused or parked copy is held: not copied from the share again while its size and mtime stay, and, for a refusal, while
+     the pin, the team file, the ring and the key for its epoch stay as they were when it was judged. The mirror's own copy is
+     never removed for it. */
+  function refuse(item, epoch) {
+    if (!item || item.size == null) return;
+    const ep = Number.isInteger(epoch) ? epoch : null;
+    refusedMtimes.set(item.relPath, { size: item.size, mtimeMs: item.mtimeMs, at: judgedAt, epoch: ep, key: keyMark(ep) });
+  }
+  function keyMark(epoch) {
+    if (epoch === null) return "";
+    const k = typeof keyFor === "function" ? keyFor(epoch) : null;
+    return k ? sha256hex(k) : "none";
+  }
+  function heldNow() {
+    const out = [];
+    for (const [rel, r] of Array.from(refusedMtimes.entries())) {
+      if (r.at === judgedAt && r.key === keyMark(r.epoch)) { out.push({ rel, size: r.size, mtimeMs: r.mtimeMs }); continue; }
+      refusedMtimes.delete(rel);
+      knownMtimes.delete(rel);
+      dropped.add(rel);
+    }
+    for (const p of pending) {
+      if (p.size != null && !out.some(o => o.rel === p.relPath)) out.push({ rel: p.relPath, size: p.size, mtimeMs: p.mtimeMs }); /* plant:syncer-pending-held */
+    }
+    return out;
+  }
+  /* What the worker holds back from copying, and the paths whose refusals were let go since it was last told. */
+  function held() {
+    const list = heldNow();
+    const forget = Array.from(dropped);
+    dropped.clear();
+    return { held: list, forget };
+  }
 
   const fallbackKeys = new Map();
   if (opts.keys) {
@@ -594,7 +639,7 @@ function createFolderProgram(opts) {
     if (floor !== null && k.val < floor) below = true; /* plant:edition-floor */
     if (below) {
       logger("etiuda: " + path.join(folder, item.relPath) + " is an older copy (" + k.val + ", below " + floor + ") than this desk holds, so nothing in it is used");
-      refusedMtimes.set(item.relPath, { size: item.size, mtimeMs: item.mtimeMs });
+      refuse(item);
       try { io.unlink(item.tmpPath); } catch {}
       return false;
     }
@@ -753,7 +798,7 @@ function createFolderProgram(opts) {
             if (revVal === null || channelVal === null) {
               const used = path.join(folder, "etiuda-team.json");
               logger("etiuda: " + used + " names a rev or a channel this desk does not read, so nothing in it is used");
-              refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
+              refuse(teamStaged);
               try { io.unlink(teamStaged.tmpPath); } catch {}
             } else {
               const rev = revVal || 0;
@@ -779,6 +824,7 @@ function createFolderProgram(opts) {
                 ensureDir(mirrorTeamPath, io);
                 io.rename(teamStaged.tmpPath, mirrorTeamPath); /* plant:syncer-team-atomic */
                 applied.push("etiuda-team.json");
+                judgedAt++;
                 refusedMtimes.delete(teamStaged.relPath);
                 mirrorEpoch = doc.epoch;
                 mirrorRev = rev;
@@ -788,27 +834,27 @@ function createFolderProgram(opts) {
                   : "rev " + rev + ", below " + compRev + " at key number " + doc.epoch;
                 const used = path.join(folder, "etiuda-team.json");
                 logger("etiuda: " + used + " is an older file of team " + doc.id + " than one this desk has heeded (" + why + "), so nothing in it is used");
-                refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
+                refuse(teamStaged);
                 try { io.unlink(teamStaged.tmpPath); } catch {}
               }
             }
           } else {
             const used = path.join(folder, "etiuda-team.json");
             logger("etiuda: " + used + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
-            refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
+            refuse(teamStaged);
             try { io.unlink(teamStaged.tmpPath); } catch {}
           }
         } else if (doc && !teamWhole(doc)) {
           const used = path.join(folder, "etiuda-team.json");
           logger("etiuda: " + used + " is not a team file whole under its lead's key, so nothing in it is used");
-          refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
+          refuse(teamStaged);
           try { io.unlink(teamStaged.tmpPath); } catch {}
         } else {
-          refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
+          refuse(teamStaged);
           try { io.unlink(teamStaged.tmpPath); } catch {}
         }
       } else {
-        refusedMtimes.set(teamStaged.relPath, { size: teamStaged.size, mtimeMs: teamStaged.mtimeMs });
+        refuse(teamStaged);
         try { io.unlink(teamStaged.tmpPath); } catch {}
       }
     }
@@ -839,6 +885,7 @@ function createFolderProgram(opts) {
               ensureDir(target, io);
               io.rename(sibItem.tmpPath, target);
               applied.push(sibItem.relPath);
+              judgedAt++;
               if (doc.epoch > mirrorEpoch) {
                 mirrorEpoch = doc.epoch;
                 mirrorRev = rev;
@@ -939,6 +986,7 @@ function createFolderProgram(opts) {
           } else {
             if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
             try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+            refuse(item, item.epoch);
           }
         } else {
           stillPending.push(item);
@@ -975,12 +1023,7 @@ function createFolderProgram(opts) {
           let waitPending = false;
           if (doc.epoch > mirrorEpoch || !key) waitPending = true; /* plant:syncer-epoch-pending */
           if (waitPending) {
-            pushPending({ kind: "ec", relPath, epoch: doc.epoch, tmpPath, text });
-            const target = path.join(mirror, relPath);
-            if (io.exists(target)) {
-              try { io.unlink(target); } catch {}
-              applied.push(relPath);
-            }
+            pushPending({ kind: "ec", relPath, epoch: doc.epoch, tmpPath, text, size: item.size, mtimeMs: item.mtimeMs });
           } else {
             const decrypted = openSealed(key, doc);
             let genuine = false, cat = null;
@@ -1009,11 +1052,7 @@ function createFolderProgram(opts) {
             if (!genuine) sigOk = false; /* plant:syncer-edition-sig */
             if (!sigOk) {
               try { io.unlink(tmpPath); } catch {}
-              const target = path.join(mirror, relPath);
-              if (io.exists(target)) {
-                try { io.unlink(target); } catch {}
-                applied.push(relPath);
-              }
+              refuse(item, doc.epoch); /* plant:syncer-refused-held */
               continue;
             }
             if (!floorHolds(item, cat)) continue;
@@ -1028,6 +1067,7 @@ function createFolderProgram(opts) {
             const deskFolder = parts[1];
             if (!deskFileGenuine(doc, deskFolder)) {
               try { io.unlink(tmpPath); } catch {}
+              refuse(item);
               continue;
             }
             if (!floorHolds(item, doc)) continue;
@@ -1046,6 +1086,7 @@ function createFolderProgram(opts) {
             const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
             if (doc.sig && !authKeys.some(pub => catalogSigValid(doc, pub))) {
               try { io.unlink(tmpPath); } catch {}
+              refuse(item);
               continue;
             }
             if (!floorHolds(item, doc)) continue;
@@ -1057,6 +1098,7 @@ function createFolderProgram(opts) {
         } else {
           // Invalid or corrupt .ec file: drop copy
           try { io.unlink(tmpPath); } catch {}
+          refuse(item);
           continue;
         }
       } else if (relPath === "etiuda-head.json") {
@@ -1073,7 +1115,7 @@ function createFolderProgram(opts) {
             }
           }
           if (waitEditions) {
-            pushPending({ kind: "head", relPath, doc, tmpPath });
+            pushPending({ kind: "head", relPath, doc, tmpPath, size: item.size, mtimeMs: item.mtimeMs });
           } else {
             const target = path.join(mirror, relPath);
             ensureDir(target, io);
@@ -1082,6 +1124,7 @@ function createFolderProgram(opts) {
           }
         } else {
           try { io.unlink(tmpPath); } catch {}
+          refuse(item);
           const target = path.join(mirror, relPath);
           if (io.exists(target)) {
             try { io.unlink(target); } catch {}
@@ -1096,6 +1139,7 @@ function createFolderProgram(opts) {
           ensureDir(target, io);
           io.rename(tmpPath, target);
           applied.push(relPath);
+          judgedAt++;
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1234,7 +1278,7 @@ function createFolderProgram(opts) {
   }
 
   function syncOnce() {
-    if (typeof opts.pin === "function") pin = opts.pin();
+    if (typeof opts.pin === "function") setPin(opts.pin());
     const owing = owed();
     if (owing.length) landed(flushOwed(folder, mirror, owing, io));
     const stillOwed = new Set(owed().map(x => x.rel));
@@ -1250,15 +1294,15 @@ function createFolderProgram(opts) {
     try { io.mkdir(stagingDir); } catch {}
 
     const staged = [];
+    const holds = new Map(heldNow().map(h => [h.rel, h]));
     for (const [relPath, st] of foundFiles.entries()) {
       if (stillOwed.has(relPath)) continue;
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const prev = knownMtimes.get(relPath);
-      const prevRef = refusedMtimes.get(relPath);
-      if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && (io.exists(mirrorFile) || (prevRef && prevRef.size === st.size && prevRef.mtimeMs === st.mtimeMs))) {
-        alreadyInMirror = true;
-      }
+      const hold = holds.get(relPath);
+      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) alreadyInMirror = true;
+      else if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile)) alreadyInMirror = true;
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
@@ -1289,6 +1333,8 @@ function createFolderProgram(opts) {
     owed,
     isOwed,
     landed,
+    setPin,
+    held,
     noteShareStat: (rel, st) => { if (st && st.size != null) knownMtimes.set(normRel(rel), { size: st.size, mtimeMs: st.mtimeMs }); },
     state: () => ({ mirrorEpoch, mirrorRev, pendingLength: pending.length, missingCount: new Map(missingCount) })
   };
@@ -1345,6 +1391,7 @@ class FolderSyncerController {
           if (typeof this.onStatus === "function") this.onStatus(msg);
         } else if (msg.type === "scan") {
           this.program.applyScan(msg);
+          this.sendHeld();
         } else if (msg.type === "landed") {
           this.program.landed(msg.results);
         } else if (msg.type === "read" || msg.type === "cas") {
@@ -1361,6 +1408,18 @@ class FolderSyncerController {
         }
       });
     }
+  }
+
+  /* The copies the worker leaves on the share until they change, and the refusals let go since it was last told. */
+  sendHeld() {
+    if (!this.worker || this.stopped) return;
+    const h = this.program.held();
+    this.worker.postMessage({ type: "held", held: h.held, forget: h.forget }); /* plant:syncer-held-post */
+  }
+  /* The lead key the desk trusts now, taken by the running program; files refused under the one before are judged again. */
+  setPin(pin) {
+    this.pin = pin || null;
+    if (this.program.setPin(this.pin)) this.sendHeld();
   }
 
   /* A write this desk made into the mirror at `rel`, handed to the outbox and sent to the share at once. */
@@ -1452,6 +1511,7 @@ function startFolderSyncer(opts) {
   const existing = syncerInstances.get(opts.team);
   if (existing) {
     if (existing.folder === opts.folder && !existing.stopped) {
+      existing.setPin(opts.pin || null); /* plant:syncer-new-pin */
       existing.kick();
       return existing; /* plant:syncer-singleton */
     }

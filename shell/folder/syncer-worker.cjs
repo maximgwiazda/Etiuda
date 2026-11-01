@@ -34,6 +34,7 @@ let inFlight = false;
 let folderWatcher = null;
 let kickDebounce = null;
 const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
+const heldStamps = new Map();     // relPath -> { size, mtimeMs } the main thread refused or parked, not copied again while it stays
 const sentNow = new Map();         // relPath -> the sha (or "del") this worker wrote, until the outbox stops owing it
 const casHeld = new Map();         // ask id -> the lock a compare and swap holds
 const CAS_HOLD_MS = 20000;
@@ -145,6 +146,8 @@ function syncOnce() {
     const staged = [];
     for (const [relPath, st] of foundFiles.entries()) {
       if (owedRels.has(relPath)) continue;
+      const hold = heldStamps.get(relPath);
+      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) continue; /* plant:worker-held */
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const known = knownMtimes.get(relPath);
@@ -235,6 +238,10 @@ if (parentPort) {
     if (!msg) return;
     if (msg.type === "init") {
       init(msg.data);
+    } else if (msg.type === "held") {
+      for (const rel of msg.forget || []) knownMtimes.delete(rel);
+      heldStamps.clear();
+      for (const h of msg.held || []) if (h && h.rel) heldStamps.set(h.rel, { size: h.size, mtimeMs: h.mtimeMs });
     } else if (msg.type === "kick") {
       if (!stopped) { try { syncOnce(); } catch {} }
     } else if (msg.type === "read") {
