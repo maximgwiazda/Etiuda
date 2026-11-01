@@ -2081,7 +2081,7 @@ try {
   const matchWithdrawn = !!(matchEnv.teamJoin && matchEnv.teamJoin.invite && matchEnv.teamJoin.invite.relay
     && (matchEnv.teamJoin.invite.relay.withdrawing === true || matchEnv.teamJoin.invite.relay.withdrawn === true));
   check(matchCanJoin && matchWithdrawn,
-    "15de a desk with a relay request waiting presses It does not match, staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
+    "15de a desk with a relay request waiting meets the shell's legacy forget op (a bar held from before the leave route), staged from the state the real forgetLead leaves, and can join a team afterwards, its request withdrawn: can join "
     + matchCanJoin + ", withdrawn " + matchWithdrawn);
 
   /* Hold 2: relay link's confirm card shows disclosure and left heading for a desk that left */
