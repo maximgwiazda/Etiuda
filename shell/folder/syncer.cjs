@@ -454,6 +454,15 @@ function createFolderProgram(opts) {
   const branchSignedBytes = typeof checks.branchSignedBytes === "function" ? checks.branchSignedBytes : () => Buffer.alloc(0);
   const deskFileGenuine = typeof checks.deskFileGenuine === "function" ? checks.deskFileGenuine : () => false;
   const handedTo = typeof checks.handedTo === "function" ? checks.handedTo : () => false;
+  const handedPath = typeof checks.handedPath === "function" ? checks.handedPath : (doc, from) => [from];
+  const forkSeen = typeof checks.forkSeen === "function" ? checks.forkSeen : () => null;
+  const followed = []; // the leads this program moved its pin on from, oldest first
+  /* The pin moves to a team file's lead along its handovers, each key passed through kept for the fork rule. */
+  function follow(doc) {
+    for (const k of handedPath(doc, pin)) if (!followed.some(f => f.public === k.public)) followed.push({ keyId: k.keyId, public: k.public });
+    pin = { keyId: doc.lead.keyId, public: doc.lead.public };
+  }
+  const leadsNow = () => (pin ? followed.filter(k => k.public !== pin.public).concat([{ keyId: pin.keyId, public: pin.public }]) : []);
 
   let mirrorEpoch = 0;
   let mirrorRev = -1;
@@ -699,7 +708,27 @@ function createFolderProgram(opts) {
     const applied = [];
     floorsDirty = null;
     const listing = scanData.listing || [];
-    const staged = scanData.staged || [];
+    let staged = scanData.staged || [];
+
+    /* The team file and its conflict siblings staged together are one look: the desk says a lead key shown in two hands
+       there (checks.forkSeen), and where the pin is handed to two keys none of them is taken, each read again at the next scan. */
+    const teamItems = staged.filter(s => s.relPath === "etiuda-team.json" || isTeamConflict(s.relPath));
+    if (pin && teamItems.length) {
+      const docs = [];
+      for (const s of teamItems) {
+        try { const d = JSON.parse(io.readFile(s.tmpPath, "utf8")); if (d && teamWhole(d) && d.id === team) docs.push(d); } catch {}
+      }
+      const fork = docs.length ? forkSeen(docs, team, leadsNow()) : null;
+      let neither = false;
+      neither = !!fork && fork.kind === "two"; /* plant:syncer-fork-two */
+      if (neither) {
+        for (const s of teamItems) {
+          knownMtimes.delete(s.relPath);
+          try { io.unlink(s.tmpPath); } catch {}
+        }
+        staged = staged.filter(s => teamItems.indexOf(s) < 0);
+      }
+    }
 
     // Step 1: Team file check
     const teamStaged = staged.filter(s => s.relPath === "etiuda-team.json")[0];
@@ -715,7 +744,7 @@ function createFolderProgram(opts) {
           let handedMatch = false;
           if (pin && doc.lead && handedTo(doc, pin)) {
             handedMatch = true; /* plant:syncer-team-handover */
-            pin = { keyId: doc.lead.keyId, public: doc.lead.public };
+            follow(doc);
           }
           if (pin && !leadMatch && !handedMatch) pinOk = false; /* plant:syncer-team-pin */
           if (pinOk) {
@@ -798,7 +827,7 @@ function createFolderProgram(opts) {
           let handedMatch = false;
           if (pin && doc.lead && handedTo(doc, pin)) {
             handedMatch = true;
-            pin = { keyId: doc.lead.keyId, public: doc.lead.public };
+            follow(doc);
           }
           if (pin && !leadMatch && !handedMatch) pinOk = false;
           if (pinOk) {
