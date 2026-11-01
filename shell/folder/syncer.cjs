@@ -987,6 +987,7 @@ class FolderSyncerController {
     this.useWorker = opts.useWorker !== false;
     this.onStatus = opts.onStatus;
     this.onChange = opts.onChange;
+    this.onFail = opts.onFail;
     this.pollMs = opts.pollMs || FOLDER_SYNC_CADENCE_MS;
     this.worker = null;
     this.stopped = false;
@@ -1008,8 +1009,12 @@ class FolderSyncerController {
   start() {
     if (this.stopped) return;
     if (this.useWorker) {
+      /* Started from its source text, not its path: a packaged desk holds this file inside app.asar, which fs reads,
+         and a Worker's own loader need not (Argon's updates review of 2026-11-01, finding 1). The worker needs only
+         Node's own modules. */
       const workerScript = path.join(__dirname, "syncer-worker.cjs");
-      this.worker = new Worker(workerScript);
+      this.worker = new Worker(fs.readFileSync(workerScript, "utf8"), { eval: true }); /* plant:syncer-worker-source */
+      this.worker.on("error", (err) => { if (typeof this.onFail === "function") this.onFail(err); });
       this.worker.on("message", (msg) => {
         if (!msg) return;
         if (msg.type === "status") {

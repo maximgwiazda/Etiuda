@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 118;
+const EXPECTED = 119;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1000,6 +1000,47 @@ try {
   check(pasteNames === 2 && pasteAfterWrite,
     "5g the caret helper's paste is started from one place, the copy, right after its clipboard write and before the picker hides: "
     + pasteNames + " mention(s) of caretPaste, " + (pasteAfterWrite ? "after the write" : "NOT after the write"));
+
+  /* THE PACKAGE HOLDS EVERY FILE THE SHELL LOADS (Argon's updates review of 2026-11-01, finding 1: the folder mirror's syncer
+     was required by the shell and missing from the builder's `files`, so a packaged desk on a folder team had no syncer). From
+     shell/main.js, every file reached by a relative require or named as a worker script, followed through the files it reaches,
+     is in electron-builder.js's `files`; and the three hand-written allowlists (tools/release.mjs, tests/shell-smoke.js,
+     tests/reinstall.js) state that same list, sorted. */
+  const reached = [], toRead = ["shell/main.js"];
+  while (toRead.length) {
+    const rel = toRead.shift();
+    if (reached.indexOf(rel) >= 0) continue;
+    reached.push(rel);
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8"), dir = path.posix.dirname(rel);
+    const named = [...text.matchAll(/require\(\s*path\.join\(\s*__dirname\s*,((?:\s*"[\w.-]+"\s*,?)+)\)\s*\)/g)]
+      .map(m => m[1].match(/"[\w.-]+"/g).map(s => s.slice(1, -1)).join("/"))
+      .concat([...text.matchAll(/require\(\s*"(\.\/[\w./-]+)"\s*\)/g)].map(m => m[1].slice(2)))
+      .concat([...text.matchAll(/path\.join\(\s*__dirname\s*,\s*"([\w.-]+-worker\.cjs)"\s*\)/g)].map(m => m[1]));
+    for (const n of named) {
+      const at = path.posix.normalize(dir + "/" + n);
+      if (fs.existsSync(path.join(ROOT, at)) && reached.indexOf(at) < 0) toRead.push(at);
+    }
+  }
+  const filesAt = builder.indexOf("files:");
+  const filesList = filesAt < 0 ? [] : (builder.slice(filesAt, builder.indexOf("]", filesAt)).match(/"[\w./-]+"/g) || []).map(s => s.slice(1, -1));
+  const missing = reached.filter(r => filesList.indexOf(r) < 0);
+  const sortedFiles = filesList.slice().sort();
+  const releaseText = fs.readFileSync(path.join(ROOT, "tools", "release.mjs"), "utf8");
+  const expAt = releaseText.indexOf("const expected = [");
+  const releaseList = expAt < 0 ? [] : (releaseText.slice(expAt, releaseText.indexOf("]", expAt)).match(/'[\w./-]+'/g) || []).map(s => s.slice(1, -1));
+  const joined = sortedFiles.join(",");
+  const smokeOk = fs.readFileSync(path.join(ROOT, "tests", "shell-smoke.js"), "utf8").indexOf('"' + joined + '"') >= 0;
+  const reinstallOk = fs.readFileSync(path.join(ROOT, "tests", "reinstall.js"), "utf8").indexOf('"' + joined + '"') >= 0;
+  /* The worker is started from its source text, which holds only while it reaches nothing by path: Node's own modules alone. */
+  const workerCode = fs.readFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const workerReach = [...workerCode.matchAll(/require\(\s*([^)]*)\)/g)].map(m => m[1].trim()).filter(r => !/^"node:[\w/]+"$/.test(r))
+    .concat((workerCode.match(/\b__dirname\b|\b__filename\b/g) || []));
+  check(reached.indexOf("shell/folder/syncer-worker.cjs") >= 0 && missing.length === 0
+    && J(releaseList) === J(sortedFiles) && smokeOk && reinstallOk && workerReach.length === 0,
+    "5h the package holds every file the shell loads (" + reached.length + " reached from shell/main.js; missing from the builder's files: "
+    + (missing.join(", ") || "none") + "), and release.mjs " + (J(releaseList) === J(sortedFiles) ? "states" : "does NOT state")
+    + ", shell-smoke " + (smokeOk ? "states" : "does NOT state") + " and reinstall " + (reinstallOk ? "states" : "does NOT state")
+    + " the same " + sortedFiles.length + " files");
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
   console.log("\n[6/7] the most used replies first: the picker at rest, a search, and what stays as it was");
