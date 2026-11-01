@@ -472,7 +472,7 @@ function joinParts(){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
   /* "It does not match" leaves the team as Settings' Leave this team does, so it asks once, saying so; the copywriter's words. */
   if(l && joinDoubt===l.team) return {title:t("Leave this team on this desk?"),
-    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation."),
+    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more."),
     body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["forget",t("Leave this team"),false,"danger"],["keep",t("Cancel")]]};
   if(l) return {title:t("You are on the team"),
     line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),

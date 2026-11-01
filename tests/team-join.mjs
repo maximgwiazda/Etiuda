@@ -2941,8 +2941,8 @@ try {
   /* F8: "It does not match" asks once, saying what it does, and the first press forgets nothing: the shell hears "leave", the
      route Settings' Leave this team takes, only from the confirmation's own press. The copywriter's words of 01:27. */
   const DOUBT = { title: "Leave this team on this desk?", titlePl: "Opuścić ten zespół na tym stanowisku?",
-    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation.",
-    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia." };
+    body: "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.",
+    bodyPl: "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania." };
   async function doubtScene(M) {
     const ops = [];
     let leads = [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: false }];

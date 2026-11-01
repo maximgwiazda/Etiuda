@@ -1095,7 +1095,7 @@ UI_STRINGS.pl={
   "It matches":"Zgadza się",
   "It does not match":"Nie zgadza się",
   "Leave this team on this desk?":"Opuścić ten zespół na tym stanowisku?",
-  "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation.":"Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia.",
+  "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.":"Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania.",
   "{LEAD}'s team":"Zespół osoby {LEAD}",
   "Leave this team":"Opuść ten zespół",
   "This desk will leave this team.":"To stanowisko opuści ten zespół.",
