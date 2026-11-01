@@ -440,6 +440,8 @@ async function launch(plan) {
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
     // A colleague's file asked for by name and desk ("name,desk"), as Work from it asks once its row has been drawn.
     deskload: arg => { const [n, id] = String(arg).split(","); OFFER.loadCatalogFromFolder(n, 0, id); },
+    // A file of the catalog folder loaded by name, as a relay desk's page opens its team's catalog (team-join.js).
+    folderload: name => { OFFER.loadCatalogFromFolder(name, 0); },
     /* THE TOP BAR'S NAME is catalogFileName(), which paintCatNow writes into the bar; the stub page has no bar to draw in. */
     bar: () => { obs.bars.push(CF.catalogFileName()); },
     /* THE SHELL'S SEND OF THE LISTING, as it reaches the page: the shell's own answer to the listing, handed to the listener the preload registered. */
@@ -702,7 +704,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 135;
+  const EXPECTED = 136;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -2117,6 +2119,14 @@ async function parent() {
       "1150f the page names the release a later desk was saved by, in the copywriter's words, and does not call it a file it could not read: "
       + JSON.stringify({ notices: d1.notices || null, errors: errsU(d1) }));
     }
+    /* 987n: A FILE ASKED FOR BY NAME TAKES THE PLACE OF THE SAME FILE FOUND AND LEFT STANDING, where it loads at once on an empty
+       desk: as a relay desk's page opens its team's catalog (team-join.js) while the folder's watch has offered it. */
+    const lab987 = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    const b987 = run(lab987, ["wire", "watch:catalogs/lamp.ec", "settle", "offer", "folderload:lamp.ec", "settle"]);
+    const o987 = b987.offers[0] || {};
+    check(o987.shown === true && b987.reloaded && b987.askedAtRestart === 0 && !errs78(b987).length,
+      "987n the folder's own offer of a file stands until that file, asked for by name, loads at once on the empty desk, and none is left standing"
+      + " as the desk starts again with it: " + JSON.stringify({ found: o987.shown, started: b987.reloaded, standing: b987.askedAtRestart, errors: errs78(b987) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

@@ -43,6 +43,15 @@
   ${EndIf}
   !endif
 
+  # THE etiuda: LINK, so an invitation opened before the desk's first start still reaches it: the three values
+  # app.setAsDefaultProtocolClient("etiuda") writes at that start (registerEtiudaLink in shell/main.js), and under
+  # HKCU as it writes them, whatever the install mode. The desk is the build that registers the .ec type.
+  !ifmacrodef registerFileAssociations
+  WriteRegStr HKCU "Software\Classes\etiuda" "" "URL:etiuda" # plant:f6-link-name
+  WriteRegStr HKCU "Software\Classes\etiuda" "URL Protocol" "" # plant:f6-link-flag
+  WriteRegStr HKCU "Software\Classes\etiuda\shell\open\command" "" `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"` # plant:f6-link-open
+  !endif
+
   # THE UPDATER'S CACHE, which nothing here will ever spend: installApplicationFiles copies the
   # whole setup.exe into LOCALAPPDATA for electron-updater, this product has no auto-update, and
   # electron-builder offers no switch to stop the copy. So it is taken back at install rather than
@@ -107,4 +116,14 @@
     SetOutPath $TEMP
     RMDir /r $INSTDIR
   ${EndIf}
+!macroend
+
+!macro customUnInstall
+  # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
+  !ifmacrodef unregisterFileAssociations
+  ReadRegStr $0 HKCU "Software\Classes\etiuda\shell\open\command" ""
+  ${If} $0 == `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"`
+    DeleteRegKey HKCU "Software\Classes\etiuda" # plant:f6-link-gone
+  ${EndIf}
+  !endif
 !macroend

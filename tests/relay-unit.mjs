@@ -5313,6 +5313,28 @@ async function main() {
       return refused(nextC, "team-count");
     });
     check(heldLift.turned && heldLift.back, "933n lifting plant:held-lead prevents dead team reaping on lead bound: " + how(heldLift));
+
+    // 933p: after a genuine K1 to K2 move, a genuine K1-signed move to K3 is refused and the team's lead stays K2
+    // (board 931 (7), the test architect's condition 1 of 2026-11-01). The refusal is the move's signature judged under the
+    // lead the team has now, so it holds with no line of its own: plant:lead-move-sig is the guard, proved here as 933j proves it.
+    const forkMove = async () => {
+      const wFk = await world();
+      const k2 = keyPair(false), k3 = keyPair(false);
+      const toK2 = await moveLead(wFk, k2);
+      /* Later than the first move, so only the signer can refuse it; wFk.lead is K1, the key that signs by default. */
+      const toK3 = await moveLead(wFk, k3, { t: wFk.R.clock.now + 1000 });
+      const lead = wFk.R.stores.get(wFk.rt).get("team").lead;
+      return { toK2, toK3, k2, k3, lead };
+    };
+    const fk = await forkMove();
+    check(fk.toK2.status === 200 && refused(fk.toK3, "bad-signature") && fk.lead.keyId === fk.k2.keyId && fk.lead.pub === fk.k2.pub,
+      "933p after a genuine K1 to K2 move, a genuine K1-signed move to K3 is refused bad-signature and the team's lead stays K2: K1 to K2 "
+      + fk.toK2.status + ", K1 to K3 " + fk.toK3.status + " " + JSON.stringify(fk.toK3.json || null) + ", lead K2 " + (fk.lead.keyId === fk.k2.keyId));
+    const forkLift = await liftCore("plant:lead-move-sig", async () => {
+      const f = await forkMove();
+      return f.toK3.status === 200;
+    });
+    check(forkLift.turned && forkLift.back, "933q lifting plant:lead-move-sig takes a K1-signed move to K3 after K1 handed to K2: " + how(forkLift));
   }
 
   /* ---- 1101: the relay core's part of Argon's relay review of 2026-11-01: a devices list read from an older team file (1), an
