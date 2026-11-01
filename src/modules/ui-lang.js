@@ -1218,7 +1218,6 @@ UI_STRINGS.pl={
   "Work from this file":"Wczytaj ten plik do pracy",
   "A catalog of its own":"Osobny katalog",
   "Your edits are with the team":"Własne zmiany są już u zespołu",
-  "Your edits are kept on this computer and go to the team's folder the next time something in it changes or Etiuda starts. To hand them over now, Export saves them in a catalog file for the team's lead.":"Własne zmiany są zachowane na tym komputerze i trafią do folderu zespołu, gdy coś się w nim zmieni albo przy następnym uruchomieniu Etiudy. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
   "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.":"Własne zmiany są zachowane na tym komputerze i trafią do zespołu, gdy tylko będzie mógł je przyjąć. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
   "Your edits to it come back when it is loaded again":"Własne zmiany w tym katalogu wrócą po jego ponownym wczytaniu",
   "In the team's edition":"W wydaniu zespołu",
