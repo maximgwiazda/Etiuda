@@ -6704,6 +6704,7 @@ What you type stays in this browser only.`;
     "Choose the folder Etiuda reads catalogs from": "Wybierz folder, z którego Etiuda czyta katalogi",
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
     "{FILE} is not a catalog Etiuda can read.": "{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
+    "This edition needs Etiuda {VERSION} or newer, so it is kept but not used yet, and the edition in use stays as it is. Once a newer Etiuda is installed, the new edition is offered here.": "To wydanie wymaga Etiudy w wersji {VERSION} lub nowszej, więc zostało zachowane, ale nie jest jeszcze używane, a obecne wydanie działa dalej bez zmian. Po zainstalowaniu nowszej wersji Etiudy nowe wydanie pojawi się tutaj.",
     "{FILE} could not be read.": "Nie udało się odczytać pliku {FILE}.",
     "{FILE} could not be saved.": "Nie udało się zapisać pliku {FILE}.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
@@ -9062,6 +9063,7 @@ What you type stays in this browser only.`;
     v2CatKey: () => v2CatKey,
     v2ContentHash: () => v2ContentHash,
     v2Mark: () => v2Mark,
+    v2NeedsEngine: () => v2NeedsEngine,
     v2PartText: () => v2PartText,
     v2Problems: () => v2Problems,
     v2RingRead: () => v2RingRead,
@@ -9689,6 +9691,13 @@ What you type stays in this browser only.`;
     if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
       out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
     return out;
+  }
+  function v2NeedsEngine(data, have) {
+    const want = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String(data && data.minEngine || ""));
+    const own = /^([0-9]+)\.([0-9]+)\.([0-9]+)/.exec(String(have || ""));
+    if (!want || !own) return "";
+    for (let i = 1; i <= 3; i++) if (+want[i] !== +own[i]) return +want[i] > +own[i] ? [want[1], want[2], want[3]].map(Number).join(".") : "";
+    return "";
   }
   function catalogFromV2(data) {
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -13928,8 +13937,10 @@ What you type stays in this browser only.`;
     eCatalogHanded: () => eCatalogHanded,
     eCatalogRefusedNames: () => eCatalogRefusedNames,
     eCatalogSignature: () => eCatalogSignature,
+    eNeedsNewerLine: () => eNeedsNewerLine,
     eRefuseCatalogFile: () => eRefuseCatalogFile,
     eResetCatalog: () => eResetCatalog,
+    eUnreadableLine: () => eUnreadableLine,
     eWatchClear: () => eWatchClear,
     eWatchGet: () => eWatchGet,
     eWatchName: () => eWatchName,
@@ -14237,9 +14248,21 @@ What you type stays in this browser only.`;
         throw new Error("not a catalog - " + (e && e.message ? e.message : "could not parse"));
       }
     }
+    const wants = v2NeedsEngine(data, E_VERSION);
+    if (wants) {
+      const e = new Error("needs Etiuda " + wants + " or newer");
+      e.needsEngine = wants;
+      throw e;
+    }
     const c = normaliseCatalog(catalogFromV2(data));
     catalogDocKeep(c, data);
     return c;
+  }
+  function eNeedsNewerLine(v) {
+    return t("This edition needs Etiuda {VERSION} or newer, so it is kept but not used yet, and the edition in use stays as it is. Once a newer Etiuda is installed, the new edition is offered here.").split("{VERSION}").join(String(v || ""));
+  }
+  function eUnreadableLine(e, name) {
+    return e && e.needsEngine ? eNeedsNewerLine(e.needsEngine) : t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || ""));
   }
   function normaliseCatalog(data) {
     const cardsOut = parseMacrosData(data);
@@ -25871,7 +25894,7 @@ What you type stays in this browser only.`;
     try {
       return parseCatalogFile(String(text || ""));
     } catch (e) {
-      toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
+      toastRefusal(eUnreadableLine(e, fileName));
       return null;
     }
   }
@@ -28854,7 +28877,7 @@ What you type stays in this browser only.`;
       try {
         c = parseCatalogFile(got.text);
       } catch (e) {
-        toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
+        toastRefusal(eUnreadableLine(e, got.name));
         return;
       }
       const offTeam = !!got.notOnTeam;
@@ -29496,7 +29519,7 @@ What you type stays in this browser only.`;
             try {
               c = parseCatalogFile(text);
             } catch (e) {
-              if (interactive) toastRefusal(t("That file is not a catalog Etiuda can read."));
+              if (interactive) toastRefusal(e && e.needsEngine ? eNeedsNewerLine(e.needsEngine) : t("That file is not a catalog Etiuda can read."));
               return null;
             }
             const shown2 = eOfferCatalogDialog(c, {
@@ -29583,6 +29606,11 @@ What you type stays in this browser only.`;
     else go();
   }
   function refuseAskedFile(name, why) {
+    const newer = /^newer ([0-9]+\.[0-9]+\.[0-9]+)$/.exec(String(why || ""));
+    if (newer) {
+      toastRefusal(eNeedsNewerLine(newer[1]));
+      return;
+    }
     toastRefusal(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
   }
   function wireHostCatalogWatch() {
@@ -29596,6 +29624,16 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
     }, 1400);
+    const newer = h.catalogNewer;
+    if (newer && newer.version) setTimeout(() => {
+      try {
+        toastRefusal(eNeedsNewerLine(newer.version));
+      } catch (e) {
+      }
+    }, cold ? 2800 : 1400);
+    if (typeof h.onCatalogNewer === "function") h.onCatalogNewer((v) => {
+      if (v && v.version) toastRefusal(eNeedsNewerLine(v.version));
+    });
     eOnCatalogListing(onCatalogListing);
     h.onCatalogFile((text, name, where, asked, why, builtIn, notOnTeam) => {
       paintCatalogList();
@@ -29692,7 +29730,7 @@ What you type stays in this browser only.`;
       try {
         c = parseCatalogFile(String(got.text));
       } catch (e) {
-        toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(name));
+        toastRefusal(eUnreadableLine(e, name));
         return;
       }
       const offTeam = !!(got && got.notOnTeam);

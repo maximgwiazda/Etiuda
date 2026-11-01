@@ -4140,11 +4140,11 @@ function shippedFlagTests() {
     try {
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
         "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
-        "openedRefused", "recovering", "deskFile", "os", "hostAccent",
+        "openedRefused", "recovering", "deskFile", "os", "hostAccent", "catalogWaitNewer", "newerKey", "catalogNewerSaid",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
         () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
-        null, new Set(), () => "", { homedir: () => "" }, () => "");
+        null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "");
     } catch (e) { return "the host answer did not run: " + e.message; }
     const ev = { sender: { id: 1 } };
     handler(ev);
@@ -5520,8 +5520,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1205;
-const UI_STRINGS_SHA256 = "706e2bdaef09ecdb8fe4b2c33b151309690e607f19da26e5fa1085b79b31d43c";
+const UI_STRINGS_COUNT = 1206;
+const UI_STRINGS_SHA256 = "111e5a47c071e8d7caa230f4b576419962b4f1f8ba93cdd9505562af5839a56e";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

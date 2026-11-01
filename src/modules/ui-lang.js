@@ -133,6 +133,7 @@ UI_STRINGS.pl={
   "Choose the folder Etiuda reads catalogs from":"Wybierz folder, z którego Etiuda czyta katalogi",
   "That setting could not be saved.":"Nie udało się zapisać tego ustawienia.",
   "{FILE} is not a catalog Etiuda can read.":"{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
+  "This edition needs Etiuda {VERSION} or newer, so it is kept but not used yet, and the edition in use stays as it is. Once a newer Etiuda is installed, the new edition is offered here.":"To wydanie wymaga Etiudy w wersji {VERSION} lub nowszej, więc zostało zachowane, ale nie jest jeszcze używane, a obecne wydanie działa dalej bez zmian. Po zainstalowaniu nowszej wersji Etiudy nowe wydanie pojawi się tutaj.",
   "{FILE} could not be read.":"Nie udało się odczytać pliku {FILE}.",
   "{FILE} could not be saved.":"Nie udało się zapisać pliku {FILE}.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",

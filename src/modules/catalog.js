@@ -6,7 +6,8 @@ import { M, normWhoList, setCatalogFacts, setCatalogWho, resetStock } from "./st
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK, eDeskFileShown } from "./storage.js";
 import { BASE_CATS } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
-import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
+import { catalogFromV2, isV2, v2CatKey, v2NeedsEngine } from "./catalog-v2.js";
+import { E_VERSION } from "./env.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogVariables } from "./variables.js";
 import { setCatalogStop } from "./affinity.js";
@@ -173,9 +174,21 @@ function parseCatalogFile(text){
     try{ data=JSON.parse(raw); }
     catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
   }
+  const wants=v2NeedsEngine(data,E_VERSION);
+  if(wants){ const e=new Error("needs Etiuda "+wants+" or newer"); e.needsEngine=wants; throw e; } /* plant:catalog-min-engine */
   const c=normaliseCatalog(catalogFromV2(data));
   catalogDocKeep(c,data);
   return c;
+}
+/* AN EDITION FOR A NEWER ETIUDA IS NOT CALLED UNREADABLE: the agent is told which release it waits for, and that the
+   edition in use stays. Every refusal of a file somebody chose says it through here. */
+function eNeedsNewerLine(v){
+  return t("This edition needs Etiuda {VERSION} or newer, so it is kept but not used yet, and the edition in use stays as it is. Once a newer Etiuda is installed, the new edition is offered here.")
+    .split("{VERSION}").join(String(v||""));
+}
+function eUnreadableLine(e,name){
+  return e&&e.needsEngine ? eNeedsNewerLine(e.needsEngine)
+    : t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name||""));
 }
 /** The whitelist, over a catalog the runtime can already read. Every route to a catalog ends
  *  here, so two catalogs are the same exactly when this returns the same thing. */
@@ -481,6 +494,8 @@ export {
   eWatchClear,
   eWatchName,
   parseCatalogFile,
+  eNeedsNewerLine,
+  eUnreadableLine,
   catalogDocOf,
   normaliseCatalog,
   eCatalogSignature,
