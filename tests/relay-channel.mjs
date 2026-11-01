@@ -55,13 +55,18 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 326;
+const EXPECTED = 329;
 
-let asserted = 0, failed = 0;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-channel-"));
@@ -5020,7 +5025,7 @@ try {
     fs.mkdirSync(s.ud, { recursive: true });
     fs.mkdirSync(s.share, { recursive: true });
     fs.writeFileSync(path.join(s.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: s.share, eUiLang: "en" } }), "utf8");
-    s.Dk = loadDesk(s.ud, app ? { app } : undefined);
+    s.Dk = loadDesk(s.ud, app && typeof app === "object" ? app.src : app ? { app } : undefined);
     s.stop = async () => {
       deskTransport.down = false;
       try { await s.studio.stop(); } catch { /* stopped */ }
@@ -5263,6 +5268,179 @@ try {
     const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
     check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
       + i.detail + ", sha " + (i.back ? "restored" : "differs"));
+  }
+  /* ---- 987t, It does not match, once confirmed, leaves the team as Settings' Leave this team does (the ruling of 2026-11-01
+     06:13, the test architect's leg of 06:14): a relay desk joined by invitation, its page the engine's own team-join.js over
+     its shell, confirms It does not match and leaves, keys and pin forgotten and no bar; a later invitation for the same team
+     asks again and, admitted, shows the lead's key; It does not match leaves again, and It matches joins. `M` is the page
+     module, `app` what relayDeskScene loads. ---- */
+  async function leaveRouteScene(tag, M, app) {
+    const out = { synced: false };
+    const s = await relayDeskScene(tag, app);
+    globalThis.window = globalThis.window || {};
+    globalThis.document = globalThis.document || {};
+    const docWas = { querySelector: document.querySelector, querySelectorAll: document.querySelectorAll, body: document.body };
+    let hooksWas = null;
+    try {
+      out.synced = !!s.synced;
+      if (!out.synced) return out;
+      const ops = [];
+      let pasted = { value: "" };
+      document.documentElement = document.documentElement || {};
+      document.body = document.body || { classList: { contains: () => false, toggle() {}, add() {}, remove() {} }, appendChild: el => el };
+      document.querySelectorAll = () => [];
+      document.querySelector = sel => (sel === "[data-join-paste]" ? pasted : null);
+      document.addEventListener = document.addEventListener || (() => {});
+      document.removeEventListener = document.removeEventListener || (() => {});
+      window.addEventListener = window.addEventListener || (() => {});
+      window.removeEventListener = window.removeEventListener || (() => {});
+      window.E_HOST = { onTeamJoin: () => {}, teamJoin: (op, file, name, four) => { ops.push(op); return s.Dk.ask("etiuda:team-join", op, file, name, four); } };
+      const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+      const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
+      const AS = await import(pathToFileURL(path.join(ROOT, "src", "modules", "app-state.js")).href);
+      HK.hooks.render = () => {};
+      hooksWas = { load: HK.hooks.loadCatalogFromFolder, hooks: HK.hooks };
+      HK.hooks.loadCatalogFromFolder = () => {};
+      AS.setCards([]);
+      ST.lsSet("eUiLang", "en");
+      const el = (attrs, value) => ({ value: value || "", hasAttribute: a => Object.prototype.hasOwnProperty.call(attrs, a),
+        getAttribute: a => (Object.prototype.hasOwnProperty.call(attrs, a) ? attrs[a] : null) });
+      const press = act => { const b = el({ "data-join": act }); M.wireTeamJoinEmpty({ querySelectorAll: () => [b] }); return Promise.resolve(b.onclick && b.onclick()); };
+      const refresh = async () => { M.wireTeamJoin(); await wait(40); return shownText(M.teamJoinEmptyHtml()); };
+      const key1 = s.keys.get(1);
+      let rev = 2;
+      const held = () => {
+        const env = s.Dk.envelope();
+        return { pin: !!(env.teamPins || {})[s.team], keys: !!(env.teamKeys || {})[s.team], left: !!(env.teamLeft || {})[s.team],
+          barred: (env.teamBarred || []).indexOf(s.team) >= 0, seen: (env.teamSeen || []).indexOf(s.team) >= 0 };
+      };
+      const leadOf = async () => {
+        const v = await s.Dk.ask("etiuda:team-join", "leads");
+        return (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === s.team)[0] || null;
+      };
+      /* The key card: the lead's key in four groups, It matches and It does not match. */
+      const keyCard = async () => {
+        const page = await refresh(), l = await leadOf();
+        const groups = l && l.print ? M.leadKeyText(l.print) : "";
+        return !!groups && page.indexOf("You are on the team") >= 0 && page.indexOf(groups) >= 0
+          && page.indexOf('data-join="seen"') >= 0 && page.indexOf('data-join="forget"') >= 0;
+      };
+      /* It does not match, then the confirmation's Leave this team: what the shell was sent, and what the desk keeps after. */
+      const mismatch = async () => {
+        const mark = ops.length;
+        await press("forget");
+        const asked = shownText(M.teamJoinEmptyHtml()).indexOf("Leave this team on this desk?") >= 0;
+        const first = ops.slice(mark).filter(o => o === "leave" || o === "forget").length;
+        await press("forget");
+        await wait(50);
+        return { asked, first, sent: ops.slice(mark).filter(o => o === "leave" || o === "forget"), after: held() };
+      };
+      /* The same team invites the desk again: pasted, read and taken on the page, and admitted by the lead over the relay. */
+      const invite = async () => {
+        R.clock.now += 1;
+        const inv = await relayInviteOn(s.rt, s.team);
+        s.invs.push({ id: inv.inv, key: C.inviteSealKey(inv.secret) });
+        await s.studio.kick(); await s.studio.idle();
+        M.openJoinPaste();
+        pasted = el({ "data-join-paste": "" }, inv.text);
+        await press("read");
+        const offer = M.inviteHeld();
+        const confirm = shownText(M.teamJoinEmptyHtml());
+        const r = { offered: !!(offer && offer.offer), again: confirm.indexOf("Join it again?") >= 0, joined: false, card: false };
+        if (!r.offered) { await press("back"); return r; }
+        const joinRel = "desks/" + s.me.id + "/join.json", was = read(s.sMirror, joinRel);
+        await press("invite");
+        await until(async () => { await s.pump(); const now = read(s.sMirror, joinRel); return !!now && now !== was; }, 8000);
+        rev += 1;
+        put(s.sMirror, C.TEAM_NAME, s.doc({ rev, roster: [s.entry(key1, 1)] }));
+        await s.studio.kick(); await s.studio.idle();
+        r.joined = await until(async () => {
+          await s.pump();
+          const h = held(), here = s.Dk.api.relayHere();
+          return h.pin && h.keys && !!here && here.joining === false;
+        }, 8000);
+        s.invs.length = 0;
+        r.card = r.joined && await keyCard();
+        return r;
+      };
+      out.card0 = await keyCard();
+      out.leave1 = await mismatch();
+      out.invite1 = await invite();
+      out.leave2 = out.invite1.card ? await mismatch() : null;
+      out.invite2 = out.leave2 ? await invite() : null;
+      if (out.invite2 && out.invite2.card) {
+        const mark = ops.length;
+        await press("seen");
+        const page = await refresh();
+        out.match = { sent: ops.slice(mark).filter(o => o !== "state" && o !== "held"), after: held(),
+          card: page.indexOf("You are on the team") >= 0, catalog: factsOf(s.Dk.api.readCatalog() || "") === 1 };
+      }
+      const left = x => !!x && x.asked && x.first === 0 && x.sent.length === 1 && x.sent[0] === "leave"
+        && !x.after.pin && !x.after.keys && x.after.left;
+      const back = x => !!x && x.offered && x.again && x.joined && x.card;
+      out.ok = out.card0 && left(out.leave1) && back(out.invite1) && left(out.leave2) && back(out.invite2)
+        && !!out.match && out.match.sent.join() === "seen" && out.match.after.pin && out.match.after.keys && out.match.after.seen
+        && !out.match.after.barred && !out.match.after.left && !out.match.card && out.match.catalog;
+      return out;
+    } finally {
+      document.querySelector = docWas.querySelector;
+      document.querySelectorAll = docWas.querySelectorAll;
+      document.body = docWas.body;
+      if (hooksWas) hooksWas.hooks.loadCatalogFromFolder = hooksWas.load;
+      await s.stop();
+    }
+  }
+  const leaveText = x => {
+    if (!x) return "no scene";
+    const lv = v => (v ? "asked " + v.asked + ", at the first press " + v.first + ", sent " + (v.sent.join("+") || "nothing")
+      + ", pin " + (v.after.pin ? "kept" : "gone") + ", keys " + (v.after.keys ? "kept" : "gone") + ", leave " + (v.after.left ? "kept" : "none")
+      + ", bar " + (v.after.barred ? (v.after.left ? "with a leave" : "with no leave") : "none") : "not reached");
+    const iv = v => (v ? (v.offered ? "offered" + (v.again ? " as Join it again" : " without Join it again") : "refused") + ", admitted " + v.joined
+      + ", key shown " + v.card : "not reached");
+    return "synced " + x.synced + "; key shown " + x.card0 + "; first leave: " + lv(x.leave1) + "; invited again: " + iv(x.invite1)
+      + "; second leave: " + lv(x.leave2) + "; invited a third time: " + iv(x.invite2) + "; It matches: "
+      + (x.match ? "sent " + x.match.sent.join("+") + ", pin " + x.match.after.pin + ", seen " + x.match.after.seen + ", bar " + x.match.after.barred
+        + ", key card " + (x.match.card ? "still shown" : "gone") + ", catalog " + (x.match.catalog ? "reads" : "does not read") : "not reached");
+  };
+  {
+    const TJm = await import(pathToFileURL(path.join(ROOT, "src", "modules", "team-join.js")).href + "?leave-route");
+    const t = await run(leaveRouteScene, "987t", TJm);
+    check(!!t.x && t.x.ok === true,
+      "987t It does not match, once confirmed, leaves the team as Settings' Leave this team does: keys and pin forgotten, no bar; a later"
+      + " invitation for the same team asks again and, admitted, shows the lead's key; It does not match leaves again, and It matches joins: "
+      + leaveText(t.x) + (t.err ? ", " + t.err : ""));
+    if (PLANTS_OFF) skip("987u lifting plant:mismatch-leaves leaves the team on the desk after the confirmation");
+    else {
+      const file = path.join(ROOT, "src", "modules", "team-join.js"), before = fs.readFileSync(file);
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = before.toString("utf8").split(/\n/), at = lines.findIndex(l => l.indexOf("plant:mismatch-leaves") >= 0);
+        if (at >= 0) {
+          lines.splice(at, 1);
+          const dir = fs.mkdtempSync(path.join(LAB, "leave-route-plant-"));
+          const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+          fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+          const planted = await import(pathToFileURL(path.join(dir, "team-join.js")).href);
+          const u = await run(leaveRouteScene, "987u", planted);
+          turned = !!u.x && u.x.synced && !!u.x.leave1 && u.x.leave1.sent.length === 0 && u.x.leave1.after.pin;
+          detail = leaveText(u.x) + (u.err ? ", " + u.err : "");
+        }
+      } catch (e) {
+        detail = e && e.stack ? e.stack : String(e);
+      }
+      check(turned && fs.readFileSync(file).equals(before), "987u lifting plant:mismatch-leaves, the confirmation's Leave this team sends nothing"
+        + " and the team stays on the desk (FAIL 987t), and the product file is never written: " + detail);
+    }
+    if (PLANTS_OFF) skip("987v lifting plant:leave-remembers bars the team, so a later invitation is refused");
+    else {
+      const v = await liftDesk("plant:leave-remembers", async next => {
+        const x = await run(leaveRouteScene, "987v", TJm, { src: next });
+        return !!x.x && x.x.synced && !!x.x.leave1 && x.x.leave1.sent.join() === "leave" && x.x.leave1.after.barred
+          && !x.x.leave1.after.left && !!x.x.invite1 && !x.x.invite1.offered;
+      });
+      check(v.turned && v.back, "987v lifting plant:leave-remembers, the leave keeps no date, so the team stays barred and a later invitation"
+        + " is refused (FAIL 987t), and the product file is never written: " + v.detail + ", sha " + (v.back ? "restored" : "differs"));
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
@@ -8827,9 +9005,9 @@ check(retryPlant.turned && retryPlant.back,
   }
   check(productWrites.length === 0 && changed.length === 0, "943b no leg wrote a product file: " + productWrites.length + " write(s) into the repository" + (productWrites.length ? " (" + [...new Set(productWrites)].join(" ") + ")" : "") + ", and every file under shell/relay/, shell/main.js and src/modules/settings.js ends with the sha256 it began with" + (changed.length ? "; changed: " + changed.join(" ") : ""));
 }
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
