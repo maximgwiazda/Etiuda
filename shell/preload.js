@@ -52,6 +52,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onAskClose: (fn) => ipcRenderer.on("etiuda:ask-close", () => fn()),
   closeAnswer: (a) => ipcRenderer.send("etiuda:close-answer", String(a || "")),
   onMaximized: (fn) => ipcRenderer.on("etiuda:maximized", (_e, v) => fn(!!v)),
+  /* Whether the window was on screen when this load asked, and the word that it is now. */
+  shown: !!host.shown,
+  onShown: (fn) => ipcRenderer.on("etiuda:shown", () => fn()),
   /* Ctrl+Tab, forwarded by the shell because the page keydown may not see it. shift is the previous tab. */
   onTabChord: (fn) => ipcRenderer.on("etiuda:tab-chord", (_e, v) => fn(!!(v && v.shift))),
   /* The Windows accent, or "" where the desk does not ask for accented title bars. Both the

@@ -1259,7 +1259,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     return Object.assign({ tourAt }, await p.evaluate(() => {
       const box = el => { if (!el) return null; const r = el.getBoundingClientRect();
         return r.width ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null; };
-      const mark = box(document.querySelector(".e-empty-mark")), bub = box(document.getElementById("tourCard"));
+      const mark = box(document.querySelector(".empty-desk>.e-fifth-spot")), bub = box(document.getElementById("tourCard"));
       const apart = !!mark && !!bub && (bub[2] <= mark[0] || bub[0] >= mark[2] || bub[3] <= mark[1] || bub[1] >= mark[3]);
       return { cards: document.querySelectorAll("#list .card").length, offer: !!document.querySelector("#eCatalogOffer"),
         window: !!document.querySelector("body > .modal:not([hidden])"), mark: !!mark, tour: !!bub, apart,

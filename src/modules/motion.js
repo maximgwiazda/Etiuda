@@ -11,10 +11,9 @@ const E_EASE="cubic-bezier(.2,.7,.3,1)";
 const E_SPRING="linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,"
   +"1.0169,1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)";
 /* THE TIERS, by what moves rather than how far. The sheet's :root carries the same numbers as
-   --m-* for everything CSS runs, and tests/motion-tokens.js holds the two equal; gather and
-   twinkle are the empty mark's, timed here alone because a canvas has no rule to read. */
+   --m-* for everything CSS runs, and tests/motion-tokens.js holds the two equal. */
 const M_MS={tone:100, reveal:120, move:180, surface:180, scrim:160, resize:200, dismiss:80,
-  travel:371, celebrate:420, wash:500, roll:300, nudge:2000, gather:1100, twinkle:66};
+  travel:371, celebrate:420, wash:500, roll:300, nudge:2000};
 const E_SPRING_MS=M_MS.travel;
 
 /* How many cards a FLIP may transform at once. Here beside the curve because two surfaces

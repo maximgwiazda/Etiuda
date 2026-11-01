@@ -1,41 +1,37 @@
-/* THE THEME'S FADE AFTER THE CATEGORIES HAVE MOVED THE CARDS. Chrome, no fixtures.
+/* THE THEME AFTER THE CATEGORIES HAVE MOVED THE CARDS. Chrome, no fixtures.
  *
  *   node tests/theme-fade.mjs
  *
  * The case is the one Maxim met on the desk: switch categories, then press the theme button, and
  * the window went grey, came back on the old theme, and the second time asked to Restart or Close.
- * That is the page's renderer dying. Measured in headless Chrome against the build of engine
- * dab2272 and against ec8228e: a category's glide leaves its cards in a state in which the fade's
- * view transition kills the renderer, on the first press, for 15 of the sample's 17 categories.
- * A bare document.startViewTransition() does the same and a theme landed without a fade does not.
+ * That was the page's renderer dying inside the theme's whole-window fade: a category's glide left
+ * its cards in a state in which a view transition killed the renderer. The theme now lands as
+ * Studio's does (Max, 2026-11-01 17:50: "Yes, lets bring desk to studio method"): the attribute at
+ * once, each control easing its own colours, no view transition. The file keeps its name, which the
+ * release's acceptance run calls.
+ *
+ * WHAT IT READS. Landing is read from the pixels, by area: each theme's palette is taken from a
+ * screenshot of a fresh start in that theme (every colour, quantised to 32 levels a channel, that
+ * covers at least 3 per cent of the window and under 1 per cent of the other's), and a press has
+ * landed when, 600 ms after it (past the colours' longest tier), the window's own screenshot is
+ * at least half the asked theme's palette by area and at most 2 per cent the other's. The stored
+ * choice is read from storage, and tf2 counts calls and classes, which no picture shows.
  *
  * LEGS
- *   tf0  THE CONTROL, in a page of its own: with the hold switched off by a stylesheet, categories then
- *        the theme must still kill the page. tf1's red rests on this Chrome still carrying the fault;
- *        where it no longer does, tf0 fails and says so, rather than tf1 passing on unfixed code
  *   tf1  every category in turn, pressed by a real click, then the theme button by a real click:
- *        the page lives and lands on the theme asked for, and the choice is stored
- *   tf2  the fades ran as fades: one view transition per press, so a run that never fades (reduced
- *        motion, a browser without the API) cannot pass tf1 by never reaching the case
- *   tf3  the hold is let go: after two presses inside one fade, every card is content-visibility
- *        auto again and the class is off the root, or every card would be laid out for ever
- *   tf4  the record Maintenance shows, read after tf1: every press it still holds wrote its start,
- *        its ready and its finish in that order, the newest press among them, within its cap
- *   tf5  across reloads: on a fresh load one fade, then a second the page leaves at its start
- *        (reloaded inside it), then two fades on the next load, so the second load's fades fall in
- *        the same places as the first's; Maintenance's "theme fades" row shows the newest two whole
- *        and the lost one as a start alone, which is the sign of a page lost inside a fade
- *   tf6  a press, then the page hidden and returned within 90 ms, 40 times: the hiding skips the fade
- *        and its update callback still runs, so nothing may be left on the root that turns every
- *        transition off, and the theme asked for must be landed and stored
- *   tf7  the control of tf6: the hiding rejected the fade in at least 10 of the 40, so a Chrome that
- *        no longer skips a hidden fade cannot pass tf6 by never reaching the case
+ *        the page lives and its window is painted in the theme asked for, by area, and the choice
+ *        is stored
+ *   tf2  no press opened a view transition, and nothing on the root cuts the controls' transitions
+ *   tf3  two presses 60 ms apart, the second while the first's colours still ease: the second is
+ *        taken, the window is painted back in the theme it started from, by area, and that is
+ *        what is stored
  *
  * The catalog is the shipped sample beside the page, so nothing here is content. Exit code is the
  * number of failed checks; 78 when the run could not complete.
  */
 import fs from "node:fs";
 import os from "node:os";
+import zlib from "node:zlib";
 import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
@@ -45,8 +41,47 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 8;
+const EXPECTED = 3;
 const t0 = Date.now();
+/* 8-bit RGB or RGBA, as tests/smoke.js pngPixels reads it; anything else throws, so it cannot pass unread. */
+const pngPixels = b64 => {
+  const buf = Buffer.from(b64, "base64"), idat = []; let at = 8, w = 0, h = 0, bpp = 0;
+  while (at < buf.length) {
+    const n = buf.readUInt32BE(at), t = buf.toString("latin1", at + 4, at + 8);
+    if (t === "IHDR") {
+      w = buf.readUInt32BE(at + 8); h = buf.readUInt32BE(at + 12);
+      if (buf[at + 16] !== 8 || (buf[at + 17] !== 2 && buf[at + 17] !== 6) || buf[at + 20] !== 0) throw new Error("png: not 8-bit RGB or RGBA, or interlaced");
+      bpp = buf[at + 17] === 6 ? 4 : 3;
+    }
+    if (t === "IDAT") idat.push(buf.subarray(at + 8, at + 8 + n));
+    at += 12 + n;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat)), stride = w * bpp, out = Buffer.alloc(stride * h);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? out[y * stride + x - bpp] : 0, b = y ? out[(y - 1) * stride + x] : 0,
+        c = x >= bpp && y ? out[(y - 1) * stride + x - bpp] : 0;
+      let p = 0;
+      if (f === 1) p = a; else if (f === 2) p = b; else if (f === 3) p = (a + b) >> 1;
+      else if (f === 4) { const q = a + b - c, pa = Math.abs(q - a), pb = Math.abs(q - b), pc = Math.abs(q - c); p = pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      else if (f !== 0) throw new Error("png: filter " + f);
+      out[y * stride + x] = (raw[y * (stride + 1) + 1 + x] + p) & 255;
+    }
+  }
+  return { w: w, h: h, bpp: bpp, px: out };
+};
+// Share of the window's area in each colour, quantised to 32 levels a channel.
+const areas = b64 => {
+  const P = pngPixels(b64), m = new Map(), n = P.w * P.h;
+  for (let i = 0; i < P.px.length; i += P.bpp) {
+    const k = (P.px[i] >> 3) << 10 | (P.px[i + 1] >> 3) << 5 | (P.px[i + 2] >> 3);
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  m.forEach((v, k) => m.set(k, v / n));
+  return m;
+};
+const shareIn = (m, set) => { let s = 0; m.forEach((v, k) => { if (set.has(k)) s += v; }); return s; };
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-theme-fade-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
@@ -58,7 +93,7 @@ let browser = null;
 try {
   browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true,
     args: ["--hide-scrollbars"], protocolTimeout: 120000 });
-  const FADE_WAIT = 1600;     // past the fade's longest tier
+  const FADE_WAIT = 600;      // past the colours' longest tier
   const errs = [];
   const centreOf = (p, sel) => p.$eval(sel, b => { const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
   const pillAt = (p, k) => p.$$eval("#pills .pill[data-k]", (ps, k) => {
@@ -73,54 +108,35 @@ try {
     await sleep(1500);
   };
 
-  /* tf0, THE CONTROL. Its own context, so its death touches nothing tf1 reads. The stylesheet is the
-     sheet's hold undone: unlayered, so it outranks the layered rule, and not important, so the glides'
-     own inline holds still act as they do without the fix. That it took is read before a press. */
-  {
+  /* EACH THEME'S PALETTE, from a fresh start in it, each in its own context, before the page under test opens. */
+  const palette = {};
+  for (const th of ["light", "dark"]) {
     const ctx = await browser.createBrowserContext();
-    const c = await ctx.newPage();
-    await c.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
-    let died = false;
-    c.on("error", () => { died = true; });
-    await c.evaluateOnNewDocument(() => {
+    const r = await ctx.newPage();
+    await r.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
+    await r.evaluateOnNewDocument(t => {
       try {
         localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
-        localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1");
+        localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1"); localStorage.setItem("eTheme", t);
       } catch (x) {}
-      document.addEventListener("DOMContentLoaded", () => {
-        const st = document.createElement("style");
-        st.textContent = ":root.theme-fade #list .card{content-visibility:auto}";
-        document.head.appendChild(st);
-      });
-    });
-    await c.goto(url, { waitUntil: "load", timeout: 60000 });
-    await require("./launch-wait.js").waitLaunchGone(c, { who: "tests/theme-fade.mjs tf0" });
-    await settled(c);
-    const off = await c.evaluate(() => {
-      const r = document.documentElement; r.classList.add("theme-fade");
-      const v = getComputedStyle(document.querySelector("#list .card")).contentVisibility;
-      r.classList.remove("theme-fade"); return v === "auto";
-    });
-    let tries = 0;
-    for (let k = 0; off && k < 6 && !died; k++) {
-      const at = await pillAt(c, k);
-      await c.mouse.click(at[0], at[1]);
-      await sleep(1200);
-      const tb = await centreOf(c, "#theme");
-      await c.mouse.click(tb[0], tb[1]).catch(() => {});
-      tries++;
-      await sleep(FADE_WAIT);
-    }
-    const ver = await browser.version();
-    check(off && died,
-      "tf0 THE CONTROL: with the hold switched off the page dies, so tf1 can go red in this Chrome ("
-      + (!off ? "the switch did not take: the hold still reads visible, so this control proved nothing"
-        : died ? "died at press " + tries + ", " + ver
-        : "THE FAULT NO LONGER REPRODUCES IN THIS CHROME, " + ver + ": the page lived through " + tries
-          + " presses with the hold off, so tf1 passing says nothing about the fix; the gate wants a new control or retiring")
-      + ")");
+    }, th);
+    await r.goto(url, { waitUntil: "load", timeout: 60000 });
+    await require("./launch-wait.js").waitLaunchGone(r, { who: "tests/theme-fade.mjs palette" });
+    await settled(r);
+    await r.mouse.move(4, 990);
+    await sleep(FADE_WAIT);
+    palette[th] = areas(await r.screenshot({ encoding: "base64", captureBeyondViewport: false }));
     await ctx.close().catch(() => {});
   }
+  const own = (a, b) => new Set([...a.entries()].filter(([k, v]) => v >= 0.03 && (b.get(k) || 0) < 0.01).map(([k]) => k));
+  const sets = { light: own(palette.light, palette.dark), dark: own(palette.dark, palette.light) };
+  if (!sets.light.size || !sets.dark.size) throw new Error("a theme's palette came out empty: " + sets.light.size + " light, " + sets.dark.size + " dark colour(s)");
+  const LANDED_MIN = 0.5, OTHER_MAX = 0.02;
+  const painted = async (pg, want) => {
+    const m = areas(await pg.screenshot({ encoding: "base64", captureBeyondViewport: false }));
+    const mine = shareIn(m, sets[want]), other = shareIn(m, sets[want === "dark" ? "light" : "dark"]);
+    return { ok: mine >= LANDED_MIN && other <= OTHER_MAX, mine: Math.round(mine * 100), other: Math.round(other * 1000) / 10 };
+  };
 
   const q = await browser.newPage();
   await q.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
@@ -132,9 +148,12 @@ try {
       localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
       localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1");
     } catch (x) {}
-    window.__fades = 0;
+    window.__fades = 0; window.__cut = 0;
     const vt = document.startViewTransition;
     if (typeof vt === "function") document.startViewTransition = function () { window.__fades++; return vt.apply(this, arguments); };
+    document.addEventListener("DOMContentLoaded", () => new MutationObserver(() => {
+      const c = document.documentElement.classList; if (c.contains("theme-swap") || c.contains("theme-fade")) window.__cut++;
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] }));
   });
   await q.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/theme-fade.mjs tf1" });
@@ -143,7 +162,7 @@ try {
   const centre = sel => centreOf(q, sel);
   // Every category pill; "All" and the add button carry no category.
   const nPills = await q.$$eval("#pills .pill[data-k]", ps => ps.filter(p => p.dataset.k).length);
-  let pressed = 0, landed = 0, stored = 0, firstDeath = "";
+  let pressed = 0, landed = 0, stored = 0, firstDeath = "", least = 100, most = 0;
   for (let k = 0; k < nPills && !crashed; k++) {
     const at = await pillAt(q, k);
     await q.mouse.click(at[0], at[1]);
@@ -154,126 +173,35 @@ try {
     pressed++;
     await sleep(FADE_WAIT);
     if (crashed) { firstDeath = "category " + (k + 1) + " of " + nPills; break; }
-    const got = await Promise.race([q.evaluate(() => [document.documentElement.dataset.theme, localStorage.getItem("eTheme")]),
-      sleep(8000).then(() => null)]);
-    if (!got) { firstDeath = "category " + (k + 1) + " of " + nPills + " (no answer in 8 s)"; crashed = true; break; }
-    if (got[0] === want) landed++;
-    if (got[1] === want) stored++;
+    const got = await Promise.race([q.evaluate(() => localStorage.getItem("eTheme")), sleep(8000).then(() => false)]);
+    if (got === false) { firstDeath = "category " + (k + 1) + " of " + nPills + " (no answer in 8 s)"; crashed = true; break; }
+    await q.mouse.move(4, 990);
+    const seen = await painted(q, want);
+    least = Math.min(least, seen.mine); most = Math.max(most, seen.other);
+    if (seen.ok) landed++;
+    if (got === want) stored++;
   }
   check(!crashed && nPills >= 10 && landed === nPills && stored === nPills,
-    "tf1 a category pressed, then the theme: the page lives through every fade and lands on the theme asked for, stored ("
-    + JSON.stringify({ categories: nPills, pressed, landed, stored, died: firstDeath || "no" }) + ")");
-  if (crashed) throw new Error("the page died, so tf2 to tf5 have nothing to read");
+    "tf1 a category pressed, then the theme: the page lives through every press, its window painted in the theme asked for by area, and stored ("
+    + JSON.stringify({ categories: nPills, pressed, landed, stored, died: firstDeath || "no", leastOwnPct: least, mostOtherPct: most,
+      palette: [sets.light.size, sets.dark.size] }) + ")");
+  if (crashed) throw new Error("the page died, so tf2 and tf3 have nothing to read");
 
-  const rec = await q.evaluate(() => { try { return JSON.parse(localStorage.getItem("eTrace") || "null"); } catch (x) { return "unreadable"; } });
-  const fades = await q.evaluate(() => window.__fades);
-  check(fades === pressed, "tf2 every press faded through a view transition (" + fades + " of " + pressed + ")");
+  const seen = await q.evaluate(() => [window.__fades, window.__cut]);
+  check(seen[0] === 0 && seen[1] === 0, "tf2 no press opened a view transition and nothing on the root cut the controls' transitions ("
+    + seen[0] + " transition(s) over " + pressed + " presses, " + seen[1] + " cut(s))");
 
-  // Two presses inside one fade, then the hold must be gone.
+  const from = await q.evaluate(() => document.documentElement.dataset.theme);
   const tb = await centre("#theme");
   await q.mouse.click(tb[0], tb[1]);
   await sleep(60);
   await q.mouse.click(tb[0], tb[1]);
   await sleep(FADE_WAIT);
-  const held = await q.evaluate(() => ({
-    cls: document.documentElement.classList.contains("theme-fade"),
-    real: [...document.querySelectorAll("#list .card")].filter(c => getComputedStyle(c).contentVisibility !== "auto").length,
-    cards: document.querySelectorAll("#list .card").length }));
-  check(!crashed && !held.cls && held.real === 0 && held.cards > 0,
-    "tf3 after two presses inside one fade the hold is let go: no class on the root, no card held real (" + JSON.stringify(held) + ")");
-
-  // Per press: start <theme>, then ready, then finish, under one key; the cap may have dropped the oldest.
-  const fadeRows = Array.isArray(rec) ? rec.filter(r => Array.isArray(r) && r[1] === "fade") : [];
-  const starts = fadeRows.filter(r => r[3] === "start").map(r => r[2]);
-  const kept = [...new Set(starts)];
-  const newest = kept[kept.length - 1];
-  const whole = kept.filter(n => {
-    const mine = fadeRows.filter(r => r[2] === n).map(r => r[3] + (r[4] ? " " + r[4] : ""));
-    return mine.length === 3 && /^start (light|dark)$/.test(mine[0]) && mine[1] === "ready" && mine[2] === "finish";
-  });
-  check(Array.isArray(rec) && rec.length <= 30 && kept.length >= 8 && kept.length === starts.length
-      && whole.length === kept.length && whole.indexOf(newest) > -1,
-    "tf4 the record holds each press's start, ready and finish in order, one key per press (" + whole.length + " whole of "
-    + kept.length + " presses kept, " + starts.length + " starts, " + (Array.isArray(rec) ? rec.length : rec) + " rows)");
-
-  /* tf5. A fresh load, one fade; then a press and a reload in one task, so the start is written in
-     the click and the page goes before the fade's ready can, as a lost page does; then two fades on
-     the next load. */
-  const press = async () => { const t = await centre("#theme"); await q.mouse.click(t[0], t[1]); await sleep(FADE_WAIT); };
-  await q.reload({ waitUntil: "load", timeout: 60000 });
-  await settled(q);
-  await press();
-  const asked = await q.evaluate(() => {
-    const was = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    document.querySelector("#theme").click(); location.reload(); return was;
-  });
-  await q.waitForNavigation({ waitUntil: "load", timeout: 60000 }).catch(() => {});
-  await settled(q);
-  await press();
-  await press();
-  await q.evaluate(() => openMaintenance(() => {}));
-  await sleep(600);
-  const row = await q.evaluate(() => {
-    const r = [...document.querySelectorAll(".mt-grid .mt-row")].find(x => /^(theme fades|przej)/.test((x.querySelector(".k") || {}).textContent || ""));
-    return r ? r.querySelector(".v").textContent : null;
-  });
-  // Each fade on the row is "HH:MM:SS <theme>: <stages>", newest first, whatever joins them.
-  const fadesShown = [];
-  const re = /([0-9]{2}:[0-9]{2}:[0-9]{2}) (light|dark): ([a-z, ]+?)(?=[,;] [0-9]{2}:[0-9]{2}:[0-9]{2} |$)/g;
-  for (let m; row && (m = re.exec(row));) fadesShown.push({ theme: m[2], stages: m[3] });
-  const WHOLE = "start, ready, finish";
-  check(!crashed && fadesShown.length === 3 && fadesShown[0].stages === WHOLE && fadesShown[1].stages === WHOLE
-      && fadesShown[2].stages === "start" && fadesShown[2].theme === asked,
-    "tf5 a fade lost to a reload, then two fades on the next load: Maintenance shows the two whole and the lost one a start alone ("
-    + JSON.stringify(row) + ")");
-  /* tf6 and tf7. A press, then the page hidden within 90 ms and brought back, 40 times, hide and
-     return times drawn from a seeded sequence. A page hidden before the fade's ready rejects it, and
-     the update callback still runs after: what that run leaves on the root is read once it settles.
-     Its own context and its own pair of pages, so hiding one is the other coming to the front. */
-  {
-    const ctx = await browser.createBrowserContext();
-    const h = await ctx.newPage(), other = await ctx.newPage();
-    h.on("pageerror", x => errs.push(String(x.message || x)));
-    await h.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
-    await h.evaluateOnNewDocument(() => {
-      try {
-        localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
-        localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1");
-      } catch (x) {}
-      window.__rejected = 0;
-      const vt = document.startViewTransition;
-      if (typeof vt === "function") document.startViewTransition = function () {
-        const t = vt.apply(this, arguments); t.ready.catch(() => { window.__rejected++; }); return t;
-      };
-    });
-    await h.bringToFront();
-    await h.goto(url, { waitUntil: "load", timeout: 60000 });
-    await require("./launch-wait.js").waitLaunchGone(h, { who: "tests/theme-fade.mjs tf6" });
-    await settled(h);
-    const TRIALS = 40;
-    let seed = 20261006;
-    const draw = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return Math.floor(seed / 0x7fffffff * n); };
-    let stuck = 0, reached = 0, wrong = 0;
-    for (let t = 0; t < TRIALS; t++) {
-      const hideAfter = draw(90), backAfter = draw(120);
-      const before = await h.evaluate(() => [window.__rejected, document.documentElement.dataset.theme]);
-      await h.evaluate(() => document.querySelector("#theme").click());
-      await sleep(hideAfter); await other.bringToFront(); await sleep(backAfter); await h.bringToFront();
-      await sleep(900);
-      const after = await h.evaluate(() => [window.__rejected, document.documentElement.dataset.theme,
-        localStorage.getItem("eTheme"), document.documentElement.classList.contains("theme-swap")]);
-      if (after[3]) stuck++;
-      if (after[0] > before[0]) reached++;
-      if (after[1] === before[1] || after[2] !== after[1]) wrong++;
-    }
-    check(stuck === 0 && wrong === 0,
-      "tf6 a fade the page's hiding skipped leaves no animation-off setting on the root, and the theme asked for is landed and stored ("
-      + JSON.stringify({ trials: TRIALS, themeSwapLeft: stuck, notAsked: wrong }) + ")");
-    check(reached >= 10,
-      "tf7 tf6 reached its case: the hiding rejected the fade's ready in " + reached + " of " + TRIALS
-      + " trials, so a run in which hiding skips nothing cannot pass tf6");
-    await ctx.close().catch(() => {});
-  }
+  await q.mouse.move(4, 990);
+  const backSeen = await painted(q, from), backStored = await q.evaluate(() => localStorage.getItem("eTheme"));
+  check(!crashed && backSeen.ok && backStored === from,
+    "tf3 two presses 60 ms apart: the second is taken, the window is painted back in " + from + " by area, and that is stored ("
+    + JSON.stringify({ ownPct: backSeen.mine, otherPct: backSeen.other, stored: backStored }) + ")");
   check(errs.length === 0, "no page errors" + (errs.length ? ": " + errs.slice(0, 3).join(" | ") : ""));
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e).split("\n")[0]);

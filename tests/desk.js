@@ -426,30 +426,13 @@ async function startOn(appDir, ud) {
   check(seen.lsKeys === 0 && seen.lsEKeys === 0,
     "the renderer's own localStorage is empty, " + seen.lsKeys + " keys, so the file is the whole desk");
 
-  /* THE THEME IS STORED BEFORE THE FADE ENDS, BY ORDER AND NOT BY A CLOCK (board 820). theme.js
-     promises "stored as the fade begins", because under the shell the write turns the window's
-     material and the material cannot fade. A window nobody sees paints about once a second, so no
-     time bound here could tell a slow product from a slow paint; the order can. The page's own
-     startViewTransition is wrapped before the press, and when the fade's `finished` settles the
-     desk FILE is read at that moment: through the host's synchronous deskRead, which main answers
-     with a fresh read of desk.json, and which is ordered after every message the page sent before
-     it, so a write sent before the fade ended is on the disk by the time the read is answered.
-     The reload leg below reads through the same call. A write moved to `finished`, or delayed past
-     the frame on which this window ends the fade, about a second here, reads the old theme here while the leg after this one, which
-     waits for the file, still goes green. */
+  /* THE THEME LANDS AS STUDIO'S DOES (board 952; Max, 2026-11-01 17:50: "Yes, lets bring desk to studio
+     method"): the attribute at once and no view transition. The page's own startViewTransition is wrapped
+     before the press and counts any that open; the file is read below for the stored choice. */
   await s.p.evaluate(() => {
-    const o = window.__deskThemeOrder = { fades: 0, atFinished: [], err: "" };
+    const o = window.__deskThemeOrder = { fades: 0, err: "" };
     const start = document.startViewTransition;
-    if (typeof start !== "function") { o.err = "this page has no startViewTransition"; return; }
-    document.startViewTransition = function (cb) {
-      const vt = start.call(document, cb);
-      o.fades++;
-      vt.finished.then(() => {
-        try { o.atFinished.push(JSON.parse(window.E_HOST.deskRead() || "{}").eTheme || null); }
-        catch (e) { o.err = "the desk could not be read at finished: " + String(e && e.message || e); }
-      }, e => { o.err = "finished rejected: " + String(e && e.message || e); });
-      return vt;
-    };
+    if (typeof start === "function") document.startViewTransition = function (cb) { o.fades++; return start.call(document, cb); };
   });
 
   /* A write driven through the engine's own button rather than through storage.js, so what is
@@ -465,8 +448,7 @@ async function startOn(appDir, ud) {
   const afterWrite = deskOnDisk().keys || {};
   check(afterWrite.eDeskProbe === "v19",
     "a value written through lsSet is on the disk by the time lsSet returns (eDeskProbe " + afterWrite.eDeskProbe + ")");
-  /* The flip is a view transition and a window nobody sees paints about once a second, so the
-     palette lands and eTheme is stored one to two seconds after the press: wait on the file. */
+  /* eTheme is sent without waiting, so the file is waited on rather than read once. */
   let themed = afterWrite;
   for (let i = 0; i < 40 && themed.eTheme === "dark"; i++) {
     await sleep(250);
@@ -475,19 +457,9 @@ async function startOn(appDir, ud) {
   const shown = await s.p.evaluate(() => document.documentElement.dataset.theme);
   check(timing.clicked && themed.eTheme === shown && shown !== "dark",
     "the theme button's own write reached the file too (" + themed.eTheme + " on disk, " + shown + " on screen)");
-  /* The fade's end is waited for, not timed: 15 s is only how long a run waits before saying the
-     fade never ended, and the verdict is the value read at that end. */
-  let order = null;
-  for (let i = 0; i < 60; i++) {
-    order = await s.p.evaluate(() => JSON.parse(JSON.stringify(window.__deskThemeOrder || null)));
-    if (!order || order.err || order.atFinished.length) break;
-    await sleep(250);
-  }
-  check(!!order && !order.err && order.fades === 1 && order.atFinished.length === 1
-    && order.atFinished[0] === shown && shown !== "dark",
-    "and it was on the disk BEFORE the fade finished: the file read when `finished` settled held eTheme "
-    + JSON.stringify(order && order.atFinished[0]) + " against " + JSON.stringify(shown) + " on screen, over "
-    + (order ? order.fades : 0) + " fade(s)" + (order && order.err ? "; " + order.err : ""));
+  const order = await s.p.evaluate(() => JSON.parse(JSON.stringify(window.__deskThemeOrder || null)));
+  check(!!order && !order.err && order.fades === 0 && shown !== "dark",
+    "and it landed with no view transition: " + (order ? order.fades : "no record of") + " transition(s) opened by the press");
   console.log("       a synchronous desk save costs " + timing.ms.toFixed(2)
     + " ms per key, mean of 20 writes over a " + Buffer.byteLength(JSON.stringify(afterWrite), "utf8") + " byte desk");
 
