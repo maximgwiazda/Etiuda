@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 61;
+const EXPECTED = 63;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2176,6 +2176,31 @@ async function run() {
     });
     check(live && r.ok, "42n the syncer's worker starts from its source text and mirrors a genuine team file " + live
       + ", and lifting plant:syncer-worker-source stops it: " + JSON.stringify(r));
+  }
+
+
+  /* 44u: A SHARE'S TEAM FILE THAT IS NOT THE LEAD'S IS SAID, ONCE (the test architect's C1 to slice 2). The desk leaves it aside
+     and works on the last genuine one, so the line is the only alarm a tampered share gives: it goes through teamSay, once. */
+  async function forgedShareSaid(name, src) {
+    const ud = folder(name + "-desk");
+    const shareDir = folder(name + "-share");
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 2, signer: forger.privateKey, keyId: FORGER.keyId, public: FORGER.public })), "utf8");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    const d = loadDesk(ud, src ? { src } : {});
+    const s = d.api.folderSyncerRun();
+    const lines = () => d.said.filter(l => l.indexOf("ERR etiuda: ") === 0 && l.indexOf("etiuda-team.json is signed by a key other than the lead's") >= 0);
+    const until = Date.now() + 8000;
+    while (!lines().length && Date.now() < until) await new Promise(res => setTimeout(res, 150));
+    if (s && typeof s.kick === "function") { s.kick(); await new Promise(res => setTimeout(res, 1200)); }
+    try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+    return lines().length;
+  }
+  {
+    const n = await forgedShareSaid("forged-said");
+    check(n === 1, "44u a share's team file that is not the lead's is said through teamSay once, across two listings: " + n + " line(s)");
+    const r = await testPlant("syncer-team-said", mainFile, async (scratchMain) => (await forgedShareSaid("plant-forged-said", fs.readFileSync(scratchMain, "utf8"))) === 0);
+    check(r.ok, "44v lifting plant:syncer-team-said leaves a tampered share's team file unsaid: " + JSON.stringify(r));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

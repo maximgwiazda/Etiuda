@@ -867,6 +867,16 @@ function folderSyncerRun(win) {
     pin: pin ? { keyId: pin.keyId, public: pin.public } : null,
     keyFor: (epoch) => teamKeyAt(ft.team, epoch),
     checks: deskTrustChecks(), /* plant:syncer-checks */
+    /* A team file in the share that is not the lead's is left aside and the desk works on the last genuine one, so it says
+       so through teamSay, once a line (the test architect's C1 to slice 2): the old refusal of a write was the only alarm a
+       tampered share gave. The syncer's other lines go to the log as before. */
+    logger: (line) => {
+      const said = String(line || "");
+      let toTeam = false;
+      toTeam = /etiuda-team\.json is .*so nothing in it is used$/.test(said); /* plant:syncer-team-said */
+      if (toTeam) teamSay(said.replace(/^etiuda: /, ""));
+      else console.log(said);
+    },
     onStatus: (status) => {
       settleFolder(status.folder, status.answers);
     },
