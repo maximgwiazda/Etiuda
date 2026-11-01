@@ -25,7 +25,7 @@
  *        (reloaded inside it), then two fades on the next load, so the second load's fades fall in
  *        the same places as the first's; Maintenance's "theme fades" row shows the newest two whole
  *        and the lost one as a start alone, which is the sign of a page lost inside a fade
- *   tf6  a press, then the page hidden and returned within 90 ms, 40 times: the hiding skips the fade
+ *   tf6  a press, then the page hidden and returned within 30 ms, 40 times: the hiding skips the fade
  *        and its update callback still runs, so nothing may be left on the root that turns every
  *        transition off, and the theme asked for must be landed and stored
  *   tf7  the control of tf6: the hiding rejected the fade in at least 10 of the 40, so a Chrome that
@@ -226,8 +226,8 @@ try {
       && fadesShown[2].stages === "start" && fadesShown[2].theme === asked,
     "tf5 a fade lost to a reload, then two fades on the next load: Maintenance shows the two whole and the lost one a start alone ("
     + JSON.stringify(row) + ")");
-  /* tf6 and tf7. A press, then the page hidden within 90 ms and brought back, 40 times, hide and
-     return times drawn from a seeded sequence. A page hidden before the fade's ready rejects it, and
+  /* tf6 and tf7. A press, then the page hidden within 30 ms, inside the time a fade takes to be ready, and
+     brought back, 40 times, hide and return times drawn from a seeded sequence. A page hidden before the fade's ready rejects it, and
      the update callback still runs after: what that run leaves on the root is read once it settles.
      Its own context and its own pair of pages, so hiding one is the other coming to the front. */
   {
@@ -255,7 +255,7 @@ try {
     const draw = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return Math.floor(seed / 0x7fffffff * n); };
     let stuck = 0, reached = 0, wrong = 0;
     for (let t = 0; t < TRIALS; t++) {
-      const hideAfter = draw(90), backAfter = draw(120);
+      const hideAfter = draw(30), backAfter = draw(120);
       const before = await h.evaluate(() => [window.__rejected, document.documentElement.dataset.theme]);
       await h.evaluate(() => document.querySelector("#theme").click());
       await sleep(hideAfter); await other.bringToFront(); await sleep(backAfter); await h.bringToFront();

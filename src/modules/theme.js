@@ -1,5 +1,5 @@
-import { lsGet, lsSet } from "./storage.js";
-import { mgReduceMotion } from "./motion.js";
+import { lsGet, lsSet, lsSend } from "./storage.js";
+import { mgReduceMotion, takeGlided } from "./motion.js";
 
 /* Theme follows the SYSTEM until the user says otherwise; a stored choice always wins
    and is never overwritten - someone who picked light on a dark machine meant it. While
@@ -38,8 +38,31 @@ function themeTrace(){
   try{ const a=JSON.parse(lsGet(TRACE_KEY)||"[]"); return Array.isArray(a) ? a : []; }
   catch(e){ return []; }
 }
+// `now`: sent before the caller's next line, so a page lost on that line has already sent it.
 function traceNote(row, now){
-  lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)), !!now);
+  const text=JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX));
+  if(now) lsSend(TRACE_KEY, text); else lsSet(TRACE_KEY, text);
+}
+/* THE CARDS A FADE HOLDS REAL (the sheet's note on theme-fade): each a glide has moved since the last
+   fade, and each the browser is drawing now, which costs nothing. A card it skips stays skipped, since
+   laying out every card was the whole of a press's wait under a large catalog. */
+let fadeHeld=[];
+function holdCards(){
+  const glided=new Set(takeGlided()), list=document.querySelector("#list");
+  const drawn=c=>{
+    const f=c.firstElementChild;
+    try{ return typeof c.checkVisibility!=="function" || !f || f.checkVisibility({contentVisibilityAuto:true}); }
+    catch(e){ return true; }
+  };
+  (list ? Array.prototype.slice.call(list.querySelectorAll(".card")) : []).forEach(c=>{
+    if(!glided.has(c) && !drawn(c)) return;
+    c.setAttribute("data-fade-held","");
+    fadeHeld.push(c);
+  });
+}
+function letCardsGo(){
+  fadeHeld.forEach(c=>c.removeAttribute("data-fade-held"));
+  fadeHeld=[];
 }
 /* Half a revolution per press, accumulating. Held while theme-swap is on: that class cuts every
    transition, and the disc would snap instead of turn. */
@@ -87,12 +110,13 @@ function paintTheme(next, after){
   if(!from || (from===next && !fading) || typeof document.startViewTransition!=="function"
      || document.visibilityState!=="visible" || mgReduceMotion()){ landTheme(next); if(after) after(); return; }
   const n=fadeLast=Math.max(Date.now(), fadeLast+1);
-  traceNote(["fade",n,"start",next], true);
-  /* theme-fade holds every card real until the last fade ends: see the sheet's note on it. */
+  traceNote(["fade",n,"start",next], true); /* plant:fade-start-sent */
+  /* theme-fade holds the cards real until the last fade ends: see the sheet's note on it. */
+  holdCards(); /* plant:fade-holds-glided */
   r.classList.add("theme-fade"); fadeHolds++;
   let vt;
   try{ vt=document.startViewTransition(()=>{ r.classList.add("theme-swap"); r.dataset.theme=themeWant; }); }
-  catch(e){ traceNote(["fade",n,"cancel"]); if(!--fadeHolds) r.classList.remove("theme-fade"); landTheme(next); if(after) after(); return; }
+  catch(e){ traceNote(["fade",n,"cancel"]); if(!--fadeHolds){ r.classList.remove("theme-fade"); letCardsGo(); } landTheme(next); if(after) after(); return; }
   fading=next;
   fadeVt=vt;
   swapHeld=true;
@@ -109,7 +133,7 @@ function paintTheme(next, after){
   const end=()=>{
     traceNote(["fade",n,"finish"]);
     if(fadeVt===vt){ fadeVt=null; fading=null; }
-    if(!--fadeHolds) r.classList.remove("theme-fade","theme-swap");
+    if(!--fadeHolds){ r.classList.remove("theme-fade","theme-swap"); letCardsGo(); }
   };
   vt.finished.then(end, end);
 }

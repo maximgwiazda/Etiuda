@@ -3,7 +3,7 @@ import { cardCommits, cardLang, cardTitle, findCard, parts } from "./card-model.
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
-import { mgReduceMotion, E_EASE, CARD_MOVE_MAX, M_MS } from "./motion.js";
+import { mgReduceMotion, noteGlided, E_EASE, CARD_MOVE_MAX, M_MS } from "./motion.js";
 import { pack, savePack, saveStats } from "./pack.js";
 import { bumpLang, bumpPair, bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
@@ -128,6 +128,7 @@ function flipCardsAround(mutate,opts){
     return g;
   });
   const fix=copies.length ? copies[0].getBoundingClientRect() : null;
+  moved.concat(rising).forEach(noteGlided);
   moved.forEach((el,i)=>{ el.style.transition="none"; el.style.willChange="transform";
                           el.style.transform=offs[i]; });
   if(fix){

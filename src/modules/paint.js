@@ -1,5 +1,5 @@
 import { findCard } from "./card-model.js";
-import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, M_MS, CARD_MOVE_MAX } from "./motion.js";
+import { mgReduceMotion, noteGlided, E_EASE, E_SPRING, E_SPRING_MS, M_MS, CARD_MOVE_MAX } from "./motion.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";
@@ -235,6 +235,7 @@ function glideSettle(before,tier){
   const glide=tier==="move" ? {duration:M_MS.move,easing:E_EASE}
     : {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE};
   plan.forEach(([el,dx,dy,grew])=>{
+    noteGlided(el);
     if(dx==null){
       eSettleRuns.push(el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
         {duration:M_MS.surface,easing:E_EASE}));

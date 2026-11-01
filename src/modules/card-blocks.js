@@ -1,5 +1,5 @@
 import { reorderMacroBlocks, reverseBlockIndex } from "./card-model.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, noteGlided, E_EASE } from "./motion.js";
 import { cssEsc } from "./css-esc.js";
 import { list } from "./dom.js";
 
@@ -42,6 +42,7 @@ function animateTxtReorder(mid, fromVi, toVi, dragging){
     moved.push(p);
   });
   if(!moved.length) return true;
+  noteGlided(card2);
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */

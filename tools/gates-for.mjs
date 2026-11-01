@@ -158,7 +158,7 @@ export const SCANS = {
   "tests/motion-tokens.js": ["src/template.html", "src/modules/*.js", "src/main.js", "src/modules/motion.js"],
   "tests/kin-contrast.mjs": ["src/template.html", "shell/*.js"],
   "tests/modal-select.mjs": ["src/template.html", "engine/etiuda.html"],
-  "tests/theme-switch.mjs": ["src/template.html"],
+  "tests/theme-switch.mjs": ["src/template.html", "src/modules/{theme,storage,motion,dom,hooks}.js"],
   "tools/split-guard/boot-order.mjs": ["src/main.js", "tools/split-guard/boot-order.list"],
   "tools/split-guard/hooks-guard.mjs": ["src/modules/hooks.js", "src/main.js", "src/modules/*.js"],
   "tools/split-guard/bridge.mjs": ["src/main.js", "src/modules/*.js"],

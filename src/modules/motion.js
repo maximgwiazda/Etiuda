@@ -22,6 +22,21 @@ const E_SPRING_MS=M_MS.travel;
    at flipCardsAround() in list-pointer.js. */
 const CARD_MOVE_MAX=40;
 
+/* THE CARDS A GLIDE HAS MOVED since the theme last faded, which the fade holds real (theme.js
+   holdCards; the sheet's note on theme-fade says why). Taken once, by the next fade. */
+const glided=new Set();
+function noteGlided(el){
+  if(!el) return;
+  if(glided.size>400) glided.forEach(x=>{ if(!x.isConnected) glided.delete(x); });
+  glided.add(el);
+}
+function takeGlided(){
+  const out=[];
+  glided.forEach(x=>{ if(x.isConnected) out.push(x); });
+  glided.clear();
+  return out;
+}
+
 /* The Manage dialog grows and shrinks as sections open, and jumping straight to the new size is
    the jarring part - the eye loses its place because nothing connects the two states.
    Animating the CARD, not the section, is deliberate: the two disclosure mechanisms differ (the
@@ -298,6 +313,8 @@ export {
   M_MS,
   M_STILL_Q,
   CARD_MOVE_MAX,
+  noteGlided,
+  takeGlided,
   mgSystemStill,
   mgReduceMotion,
   syncStill,

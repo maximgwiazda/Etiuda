@@ -5017,9 +5017,9 @@ function grownCardTests() {
   const list = { getBoundingClientRect: () => ({ top: 200 }), querySelectorAll: () => cards };
   let glide = null;
   try {
-    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump",
+    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump", "noteGlided",
       "let eSettleRuns=[];\n" + extractDecl(src, "function glideSettle(") + "\nreturn glideSettle;")(
-      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {});
+      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {}, () => {});
   } catch (e) { glide = null; }
   /* "a" stays put and grows 63px; "b" sits 20px below it and is pushed down by the growth; "c" was
      below the screen and is shorter than its estimate, which is not a growth anyone saw. */
