@@ -66,7 +66,9 @@ function canon(v) {
 const createBytes = (rt, keyId, t) => Buffer.from("etiuda-relay-create\n" + rt + "\n" + keyId + "\n" + t, "utf8");
 /* A create is signed over the hash of the grant it carries, so a grant lifted from another create does not fit. */
 const create2Bytes = (rt, keyId, t, grant) => Buffer.from("etiuda-relay-create-2\n" + rt + "\n" + keyId + "\n" + t + "\n" + sha256(grantBytes(grant)), "utf8");
-const devicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
+/* `from` left out when the caller does not pass it, so a list signed without the team file it was read from still matches. */
+const devicesBytes = (rt, rev, t, keys, from) => Buffer.from("etiuda-relay-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys)
+  + (from === undefined ? "" : "\n" + canon({ from })), "utf8");
 /* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
 const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
   + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
@@ -381,16 +383,39 @@ function createCore(deps) {
     const paidApart = kept.paidUntil !== undefined ? { paidUntil: kept.paidUntil } : {};
     /* `made` stamps this copy of the team: kept by a repeat create, new once a sweep has emptied the store, and told at each session. */
     const made = team && typeof team.made === "string" ? team.made : random(8);
+    /* A repeat create keeps the team's state: its row (the handover's time among it), its team file and its one move. Its grant
+       is taken by renew's rule, and one not taken leaves the grant in force as it was. */
+    let held = {};
+    held = team || {}; /* plant:create-row */
+    let made1st = true;
+    made1st = !team; /* plant:create-keeps */
+    let takes = true;
+    takes = !team || advances(team, kept) || grantRefused() !== null || signerOf(b.grant) === heldSigner(); /* plant:create-older */
     store.atomic(() => {
-      const row = Object.assign({ rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made }, paidApart);
-      if (typeof row.secret !== "string") row.secret = team && typeof team.secret === "string" ? team.secret : random(32);
+      const row = Object.assign({}, held, { rt, lead: { keyId: lead.keyId, pub: lead.pub }, epoch: team ? team.epoch : 0, until, paid, made });
+      delete row.paidUntil;
+      Object.assign(row, paidApart);
+      if (typeof row.secret !== "string") row.secret = random(32);
       store.put("team", row);
       store.del("swept");
-      store.del("moved");
-      store.del("teamFile");
-      remember(b.grant);
+      if (made1st) { store.del("moved"); store.del("teamFile"); }
+      if (takes) remember(b.grant);
     });
     return { ok: true, rt };
+  }
+
+  /* Whether a grant kept by keptGrant moves the team on: a later until, a paid end it did not hold, or a later paid end. */
+  function advances(team, next) {
+    return next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil;
+  }
+  /* The service key a grant was signed under, or null for the root; and the one in force. */
+  function signerOf(grant) {
+    const via = grant && plain(grant.via) && plain(grant.via.key) ? grant.via.key.pub : null;
+    return is(HEX64, via) ? via : null;
+  }
+  function heldSigner() {
+    const key = store.get("grantKey");
+    return is(HEX64, key) ? key : null;
   }
 
   /* A renewal: a grant for the team's own lead, unsigned beyond itself, kept by the create's rule, so an earlier grant changes
@@ -403,16 +428,22 @@ function createCore(deps) {
     if (why === "revoked") return no("revoked"); /* plant:renew-revoked */
     if (why !== null) return no("bad-grant"); /* plant:renew-grant */
     const next = keptGrant(team, b.grant);
+    /* A grant that does not move the team on is taken only where it would change nothing, or where the grant in force was
+       signed by a key now revoked; otherwise it is refused, and nothing is cleared for it. */
+    const moves = advances(team, next);
+    if (!moves && grantRefused() === null && signerOf(b.grant) !== heldSigner()) return no("bad-grant"); /* plant:renew-older */
     const needsMade = typeof team.made !== "string" || !team.made;
     const made = needsMade ? random(8) : team.made; /* plant:renew-made */
+    let clears = true;
+    clears = moves; /* plant:renew-moved */
     store.atomic(() => {
-      if (needsMade || next.until !== team.until || next.paid !== team.paid || next.paidUntil !== team.paidUntil) {
+      if (needsMade || moves) {
         const row = Object.assign({}, team, { until: next.until, paid: next.paid, made });
         delete row.paidUntil;
         if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
         store.put("team", row);
       }
-      store.del("moved");
+      if (clears) store.del("moved");
       remember(b.grant);
     });
     return { ok: true, lapse: told() };
@@ -486,6 +517,9 @@ function createCore(deps) {
     if (blocked) return blocked; /* plant:revoked-devices */
     const b = bodyOf(body);
     if (!Array.isArray(b.keys) || !Number.isSafeInteger(b.rev) || b.rev < 0 || !Number.isSafeInteger(b.t)) return no("bad-signature");
+    /* `from` is the epoch and rev of the signed team file the lead read the list from. */
+    const from = b.from;
+    if (from !== undefined && !(plain(from) && exactly(from, ["epoch", "rev"]) && isCount(from.epoch) && isCount(from.rev))) return no("bad-signature");
     const next = new Map();
     for (const k of b.keys) {
       /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
@@ -496,8 +530,13 @@ function createCore(deps) {
     }
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
-    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */
+    if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys, from), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */
     if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
+    /* A list read from an older team file than the last list taken, or naming none once one was named, changes nothing, whatever
+       its rev. */
+    const heldFrom = store.get("devfrom");
+    if (plain(heldFrom) && from === undefined) return no("replay-rev"); /* plant:devices-unversioned */
+    if (plain(heldFrom) && from !== undefined && olderFile(from, heldFrom)) return no("replay-rev"); /* plant:devices-behind */
     /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved.
        The lapse is asked after the signature: a key that signed nothing is not told the team has lapsed. */
     const lapsedDevices = lapseGate(true);
@@ -517,6 +556,7 @@ function createCore(deps) {
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       store.put("devrev", b.rev);
+      if (from !== undefined) store.put("devfrom", { epoch: from.epoch, rev: from.rev }); /* plant:devices-from-kept */
       for (const [k, s] of store.list("ses:")) {
         if (s.key && withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
         /* A key put back is on the team again. The session marked removed while it was off does not stay, so that bearer is no hello. */
@@ -531,6 +571,11 @@ function createCore(deps) {
       }
     });
     return { ok: true, rev: b.rev, withdrawn };
+  }
+
+  /* Whether team file `a` is older than `b`: an earlier epoch, or an earlier rev of the same epoch. */
+  function olderFile(a, b) {
+    return a.epoch < b.epoch || (a.epoch === b.epoch && a.rev < b.rev);
   }
 
   /* Whether the request a token hello bound to this key was withdrawn by its desk and not asked again. */
@@ -1024,11 +1069,12 @@ function createCore(deps) {
     const lapsedPut = lapseGate(true, folderMove ? m.channel : null);
     if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
     const state = lapseOf(team, clock()).state;
-    if (state === "read-only" && folderMove) {
+    /* A read-only team's one move to a folder. Admitting it writes nothing: the commit marks the move made. */
+    const lapseMove = state === "read-only" && folderMove;
+    if (lapseMove) {
       const moved = store.get("moved");
       const teamFile = store.get("teamFile") || team.teamFile;
       if ((moved && moved !== m.id) || (teamFile && m.supersedes !== teamFile)) return no("team-lapsed"); /* plant:lapse-folder-once */
-      if (m.id === pathId && s.key === m.writer) store.put("moved", m.id);
     }
     if (!m || m.id !== pathId) return no("bad-signature");
     if (s.inv) return admitInvite(team, s, m);
@@ -1042,7 +1088,7 @@ function createCore(deps) {
       return { ok: true, team, s, max: B.BLOB_MAX, pub: team.lead.pub, lead: true, invite: null };
     }
     if (m.place !== (lead ? "root" : "desk:" + dev.desk) && !(lead && INVITE_PLACE.test(m.place))) return no("outside-place"); /* plant:put-place */
-    return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null };
+    return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null, lapseMove };
   }
 
   /* An invitation's one upload: a writer on no list, at a desk place nobody holds, small, signed by the key its id names,
@@ -1171,6 +1217,7 @@ function createCore(deps) {
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
       if (j.a.lead && m.place === "root" && m.channel) store.put("teamFile", m.id);
+      if (j.a.lapseMove) store.put("moved", m.id); /* plant:moved-commit */
       noteBlobs(1);
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);

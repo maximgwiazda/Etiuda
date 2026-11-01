@@ -21,6 +21,7 @@ const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
 const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 const REAL_CORE = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
+const REAL_BLOB = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
 const EXPECTED = 19;
@@ -718,16 +719,21 @@ async function main() {
       channel: { kind: "folder" },
     };
 
-    const admFirst = core.admit(rt, token, folderMeta, folderMeta.id);
+    /* The first move is committed, sealed and signed by the lead: admitting an upload marks nothing, its commit marks the move. */
+    const first = REAL_BLOB.seal({ relayTeamId: rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: leadK.keyId, privateKey: leadK.privateKey },
+      path: "etiuda-team.json", body: "{}", counter: 1, place: "root" });
+    const firstMeta = Object.assign({}, folderMeta, { id: first.id, sig: first.signature, nonce: first.nonce });
+    const admFirst = core.admit(rt, token, firstMeta, firstMeta.id);
+    const committed = core.commit(rt, token, firstMeta, firstMeta.id, first.ciphertext, rt + "/" + first.id + "/obj");
     const admSecond = core.admit(rt, token, editionFolderMeta, editionFolderMeta.id);
 
-    const secondRefused = admFirst.ok === true
+    const secondRefused = admFirst.ok === true && committed.ok === true
       && admSecond.ok === false && (admSecond.reason === "team-lapsed" || admSecond.error === "team-lapsed");
 
     check(
       secondRefused,
       "945f17 in read-only, a second folder-tagged root upload, an edition, is refused: "
-      + JSON.stringify({ first: admFirst.ok, second: admSecond.reason || admSecond.error || admSecond.ok })
+      + JSON.stringify({ first: admFirst.ok, committed: committed.ok || committed.reason, second: admSecond.reason || admSecond.error || admSecond.ok })
     );
   }
 
@@ -1027,9 +1033,12 @@ async function main() {
         pub: null,
         channel: { kind: "folder" },
       };
-      const adm1 = core.admit(rt, token, folderMeta, folderMeta.id);
+      const first = REAL_BLOB.seal({ relayTeamId: rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: leadK.keyId, privateKey: leadK.privateKey },
+        path: "etiuda-team.json", body: "{}", counter: 1, place: "root" });
+      const firstMeta = Object.assign({}, folderMeta, { id: first.id, sig: first.signature, nonce: first.nonce });
+      const committed = core.commit(rt, token, firstMeta, firstMeta.id, first.ciphertext, rt + "/" + first.id + "/obj");
       const adm2 = core.admit(rt, token, editionFolderMeta, editionFolderMeta.id);
-      turned = adm1.ok === true && adm2.ok === true;
+      turned = committed.ok === true && adm2.ok === true;
       try { fs.unlinkSync(scratchPath); } catch {}
     }
     const shaSame = fs.readFileSync(corePath, "utf8") === origCore;
