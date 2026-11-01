@@ -732,20 +732,28 @@ async function main() {
 
   /* The guarding lines, each lifted in a copy of the page module: the leg it guards goes red. */
   const pagePlants = [
-    { id: "945g5", file: "team-join.js", tag: "plant:needs-folder-kept", line: "             /* plant:needs-folder-kept */", turns: r => !g1(r.p), guards: "945g1" },
-    { id: "945g6", file: "settings.js", tag: "plant:needs-folder-button", line: "    /* plant:needs-folder-button */", turns: r => !g1(r.p), guards: "945g1" },
-    { id: "945g7", file: "settings.js", tag: "plant:needs-folder-press", line: "    /* plant:needs-folder-press */", turns: r => !g2(r.p, r.s, r.folder), guards: "945g2" },
-    { id: "945g8", file: "team-join.js", tag: "plant:pick-moved-call", line: "    try{ asked=Promise.resolve(null); } /* plant:pick-moved-call */", turns: r => !g3(r.p, r.folder), guards: "945g3" },
+    { file: "team-join.js", tag: "plant:needs-folder-kept", line: "             /* plant:needs-folder-kept */", turns: r => !g1(r.p),
+      name:
+        "945g5 lifting plant:needs-folder-kept in a copy of team-join.js turns 945g1 red, and team-join.js is untouched: " },
+    { file: "settings.js", tag: "plant:needs-folder-button", line: "    /* plant:needs-folder-button */", turns: r => !g1(r.p),
+      name:
+        "945g6 lifting plant:needs-folder-button in a copy of settings.js turns 945g1 red, and settings.js is untouched: " },
+    { file: "settings.js", tag: "plant:needs-folder-press", line: "    /* plant:needs-folder-press */", turns: r => !g2(r.p, r.s, r.folder),
+      name:
+        "945g7 lifting plant:needs-folder-press in a copy of settings.js turns 945g2 red, and settings.js is untouched: " },
+    { file: "team-join.js", tag: "plant:pick-moved-call", line: "    try{ asked=Promise.resolve(null); } /* plant:pick-moved-call */", turns: r => !g3(r.p, r.folder),
+      name:
+        "945g8 lifting plant:pick-moved-call in a copy of team-join.js turns 945g3 red, and team-join.js is untouched: " },
   ];
   const plantSaw = [];
   for (const pl of pagePlants) {
-    if (PLANTS_OFF) { skip(pl.id + " lifting " + pl.tag + " (ETIUDA_PLANTS=off)"); continue; }
+    if (PLANTS_OFF) { skip(pl.name.replace(/: $/, " (ETIUDA_PLANTS=off)")); continue; }
     const src = fs.readFileSync(path.join(ROOT, "src", "modules", pl.file), "utf8");
     let r = null, err = "";
     try { r = pageScenario({ file: pl.file, tag: pl.tag, line: pl.line }); } catch (e) { err = String(e.message || e).slice(0, 200); }
     if (r) plantSaw.push(r.s);
     const same = fs.readFileSync(path.join(ROOT, "src", "modules", pl.file), "utf8") === src;
-    check(!!r && pl.turns(r) && same, pl.id + " lifting " + pl.tag + " in a copy of " + pl.file + " turns " + pl.guards + " red, and " + pl.file + " is untouched: "
+    check(!!r && pl.turns(r) && same, pl.name
       + JSON.stringify({ turned: !!r && pl.turns(r), same, err }));
   }
 
