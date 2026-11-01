@@ -3,7 +3,8 @@
  *   node tests/relay-desk-to-folder.mjs
  *
  * Driven through the app's own whenReady path with stubbed electron and mocked relay channel,
- * as tests/relay-desk-follow.mjs is.
+ * as tests/relay-desk-follow.mjs is. 945g is the page's half end to end: the engine's own team-join.js and settings.js
+ * over the real preload and these handlers, the dialog a stand-in, from the move to the catalog listed to the page.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -14,7 +15,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
@@ -24,7 +25,8 @@ const REAL_CORE = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
 const REAL_BLOB = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
-const EXPECTED = 19;
+const EXPECTED = 27;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 const safeStorage = {
   isEncryptionAvailable: () => true,
@@ -98,6 +100,8 @@ async function launch(plan) {
   const onHandlers = {}, invokeHandlers = {};
   const openedDirs = [];
   const said = [];
+  const pageListeners = {};
+  const dialogAsked = [];
 
   const pageWin = {
     isDestroyed: () => false,
@@ -117,7 +121,7 @@ async function launch(plan) {
       id: 1,
       once: noop,
       on: noop,
-      send: noop,
+      send: (ch, ...args) => { (pageListeners[ch] || []).forEach(fn => fn({}, ...args)); },
       setWindowOpenHandler: noop,
       getZoomLevel: () => 0,
       setZoomLevel: noop,
@@ -160,7 +164,12 @@ async function launch(plan) {
     }),
     Menu: new Proxy(function () {}, { get: () => electron.Menu, set: () => true, apply: () => undefined }),
     dialog: {
-      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showOpenDialog: async (...args) => {
+        const opts = args[args.length - 1] || {};
+        dialogAsked.push(String(opts.title || ""));
+        const pick = plan.dialogPicks && plan.dialogPicks.shift();
+        return pick ? { canceled: false, filePaths: [pick] } : { canceled: true, filePaths: [] };
+      },
       showSaveDialog: async () => ({ canceled: true }),
     },
     net: new Proxy(function () {}, { get: () => electron.net, set: () => true, apply: () => undefined }),
@@ -259,6 +268,8 @@ async function launch(plan) {
     }
   }
 
+  const page = plan.page ? await pageAfterMove(plan, { invokeHandlers, onHandlers, pageListeners, dialogAsked, FRAME, UD }) : null;
+
   // Handle picked folder test actions
   let pickResults = [];
   if (plan.pickActions && Array.isArray(plan.pickActions)) {
@@ -300,6 +311,108 @@ async function launch(plan) {
     inUseReachable: currentFolderDeskFiles.includes("in-use.ec"),
     heldBranchReached: plan.holdBranch ? currentFolderDeskFiles.includes(plan.holdBranch.stem + ".ec") : false,
     said,
+    page,
+  };
+}
+
+/* THE PAGE AFTER THE MOVE. The real preload over these handlers, with what the shell sends delivered to what the page put
+   on the pipe; team-join.js and settings.js as the engine imports them, or copies with one plant lifted (plan.pagePlant).
+   Settings is drawn, its Open a folder pressed, and what the page then sees is read back. */
+async function pageAfterMove(plan, w) {
+  const ev = () => ({ sender: { id: 1, once: noop }, senderFrame: w.FRAME, returnValue: undefined });
+  const invoked = [];
+  const ipcRenderer = {
+    sendSync: (ch, ...args) => {
+      if (ch === "etiuda:catalog") return null;
+      const e = ev();
+      if (w.onHandlers[ch]) w.onHandlers[ch](e, ...args);
+      return e.returnValue;
+    },
+    send: (ch, ...args) => { if (w.onHandlers[ch]) w.onHandlers[ch](ev(), ...args); },
+    invoke: (ch, ...args) => {
+      invoked.push([ch].concat(args));
+      return new Promise(r => setImmediate(() => r(w.invokeHandlers[ch] ? w.invokeHandlers[ch](ev(), ...args) : undefined)));
+    },
+    on: (ch, fn) => { (w.pageListeners[ch] = w.pageListeners[ch] || []).push(fn); },
+  };
+  globalThis.window = { addEventListener: noop, removeEventListener: noop };
+  globalThis.document = { addEventListener: noop, removeEventListener: noop, getElementById: () => null,
+    querySelector: () => null, querySelectorAll: () => [],
+    body: { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el } };
+  globalThis.addEventListener = noop;
+  globalThis.removeEventListener = noop;
+  globalThis.innerWidth = 1280;
+  globalThis.innerHeight = 800;
+  document.documentElement = {};
+  globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+  globalThis.matchMedia = () => ({ matches: false, addEventListener: noop, removeEventListener: noop });
+  const contextBridge = { exposeInMainWorld: (k, v) => { window[k] = v; }, executeInMainWorld: noop };
+  new Function("require", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(
+    n => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
+  const listings = [];
+  window.E_HOST.onCatalogListing(rows => listings.push(rows));
+
+  const MODS = path.join(ROOT, "src", "modules");
+  const modUrl = n => pathToFileURL(path.join(MODS, n)).href;
+  let tjUrl = modUrl("team-join.js"), setUrl = modUrl("settings.js");
+  if (plan.pagePlant) {
+    /* Copies beside each other, every other import pointed back at src/modules, so the planted settings.js reads the
+       planted team-join.js. */
+    const dir = fs.mkdtempSync(path.join(plan.lab, "page-plant-"));
+    const base = pathToFileURL(MODS).href;
+    const copy = (name, lift) => {
+      let code = fs.readFileSync(path.join(MODS, name), "utf8");
+      if (lift) {
+        const lines = code.split("\n"), at = lines.findIndex(l => l.includes(lift.tag));
+        if (at < 0) throw new Error("no line carries " + lift.tag);
+        lines[at] = lift.line;
+        code = lines.join("\n");
+      }
+      code = code.replace(/from "\.\/(?!team-join\.js")/g, 'from "' + base + '/');
+      fs.writeFileSync(path.join(dir, name), code, "utf8");
+      return pathToFileURL(path.join(dir, name)).href;
+    };
+    tjUrl = copy("team-join.js", plan.pagePlant.file === "team-join.js" ? plan.pagePlant : null);
+    setUrl = copy("settings.js", plan.pagePlant.file === "settings.js" ? plan.pagePlant : null);
+  }
+  const HK = await import(modUrl("hooks.js"));
+  HK.hooks.render = noop;
+  const ST = await import(modUrl("storage.js"));
+  ST.lsSet("eUiLang", "en");
+  const TJ = await import(tjUrl);
+  const SET = await import(setUrl);
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 200));
+
+  const LINE = "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.";
+  const before = SET.settingsBodyHtml();
+  const listedBefore = ((await window.E_HOST.catalogFiles()) || []).map(r => r.name);
+  const drawn = new RegExp('<button[^>]*data-team-pick-folder="' + plan.teamId + '"[^>]*>Open a folder<').exec(before);
+  const btn = { getAttribute: a => (a === "data-team-pick-folder" && drawn ? plan.teamId : null), onclick: null };
+  SET.wireTeamRows({ querySelectorAll: sel => (sel === "[data-team-pick-folder]" && drawn ? [btn] : []) });
+  const pressed = typeof btn.onclick === "function";
+  if (pressed) await btn.onclick();
+  /* The syncer's first scan of the folder, and the listing it sends, within a few seconds. */
+  const wanted = rows => rows.some(r => r && r.name === plan.folderCatalog && !r.desk);
+  for (let i = 0; i < 80 && !listings.some(wanted); i++) await new Promise(r => setTimeout(r, 100));
+  const after = SET.settingsBodyHtml();
+  const leadsNow = ((await w.invokeHandlers["etiuda:team-join"](ev(), "leads")) || {}).leads || [];
+  const row = leadsNow.find(l => l.team === plan.teamId) || {};
+  const mirrorHas = (() => { try { return fs.readdirSync(path.join(w.UD, "folder-mirror")).some(d =>
+    fs.existsSync(path.join(w.UD, "folder-mirror", d, plan.folderCatalog))); } catch { return false; } })();
+  return {
+    lineBefore: before.indexOf(LINE.replace(/'/g, "&#39;")) >= 0,
+    buttonBefore: !!drawn,
+    pressed,
+    dialogAsked: w.dialogAsked.slice(),
+    pickCalls: invoked.filter(c => c[0] === "etiuda:team-join" && c[1] === "pick-moved-folder").map(c => c.slice(1, 4)),
+    lineAfter: after.indexOf(LINE.replace(/'/g, "&#39;")) >= 0,
+    buttonAfter: after.indexOf("data-team-pick-folder") >= 0,
+    folderShown: after.indexOf("Folder: " + path.resolve(plan.dialogPicks0 || ".")) >= 0,
+    rowAfter: { folder: row.folder || "", relay: row.relay || "", needsFolder: row.needsFolder === true },
+    listed: listings.some(wanted),
+    listedBefore,
+    mirrorHas,
   };
 }
 
@@ -417,7 +530,11 @@ function runScenario(plan) {
   return JSON.parse(line.slice(8));
 }
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
+function skip(line) {
+  skipped++;
+  process.stdout.write("  SKIP " + line + "\n");
+}
 function check(cond, line) {
   asserted++;
   if (cond) process.stdout.write("  ok   " + line + "\n");
@@ -579,6 +696,66 @@ async function main() {
     "945f8 a picked matching folder is taken: "
     + JSON.stringify({ res: r5.pickResults[0], openedDir: r5.openedDir, branchReachable: r5.branchReachable })
   );
+
+  /* Scenario 5p: the page's half, end to end (945g1 to 945g4). A relay desk after the move, its folder outside the known
+     roots: Settings shows the line and Open a folder, the press asks the shell's dialog (a stand-in answering the folder)
+     and sends pick-moved-folder through the preload, and the desk follows: the row names the folder, and the catalog
+     the folder holds is listed to the page from the folder's mirror. */
+  const pageScenario = pagePlant => {
+    const s = makeScenario();
+    const folder = path.join(s.lab, "team-share", "deep", "below", "roots");
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s.movedTeamDoc, s.lead), null, 2));
+    fs.writeFileSync(path.join(folder, "lamp-folder.ec"), JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "lamp", rev: 1, cards: [] }));
+    const r = runScenario(Object.assign({}, s, {
+      deliverTeamDoc: signTeamDoc(s.movedTeamDoc, s.lead),
+      page: true, pagePlant: pagePlant || null, dialogPicks: [folder], dialogPicks0: folder, folderCatalog: "lamp-folder.ec",
+    }));
+    return { s, folder, p: Object.assign({}, r.page || {}, { relayStopped: r.channelStopped === true && r.channelStarted === false }) };
+  };
+  const pageSaw = pageScenario();
+  const pg = pageSaw.p, s5p = pageSaw.s;
+  const g1 = pg => pg.lineBefore === true && pg.buttonBefore === true;
+  const g2 = (pg, sc, folder) => pg.pressed === true && pg.dialogAsked.indexOf("Choose the team's shared folder") >= 0
+    && pg.pickCalls.length === 1 && pg.pickCalls[0][1] === sc.teamId && path.resolve(pg.pickCalls[0][2]) === path.resolve(folder);
+  const g3 = (pg, folder) => !!pg.rowAfter && path.resolve(pg.rowAfter.folder || ".") === path.resolve(folder) && !pg.rowAfter.relay
+    && pg.rowAfter.needsFolder === false && pg.lineAfter === false && pg.buttonAfter === false && pg.folderShown === true && pg.relayStopped === true;
+  const g4 = pg => pg.listed === true && pg.mirrorHas === true && pg.listedBefore.indexOf("lamp-folder.ec") < 0;
+  check(g1(pg), "945g1 after the move, with its folder outside the known roots, the desk's Settings shows the team's line and Open a folder: "
+    + JSON.stringify({ line: pg.lineBefore, button: pg.buttonBefore }));
+  check(g2(pg, s5p, pageSaw.folder), "945g2 the press asks the shell's folder dialog under the team's caption and sends pick-moved-folder for this team and the folder chosen, through the preload: "
+    + JSON.stringify({ pressed: pg.pressed, dialog: pg.dialogAsked, calls: (pg.pickCalls || []).length }));
+  check(g3(pg, pageSaw.folder), "945g3 the desk follows the folder: the relay channel stays stopped, its team row names the folder and no relay, and Settings shows the folder and no longer the line or the button: "
+    + JSON.stringify({ row: pg.rowAfter, shown: pg.folderShown, relayStopped: pg.relayStopped, line: pg.lineAfter, button: pg.buttonAfter }));
+  check(g4(pg), "945g4 the catalog the folder holds reaches the desk's mirror of it and is listed to the page, where before the press it was not: "
+    + JSON.stringify({ listed: pg.listed, mirror: pg.mirrorHas, before: pg.listedBefore }));
+
+  /* The guarding lines, each lifted in a copy of the page module: the leg it guards goes red. */
+  const pagePlants = [
+    { file: "team-join.js", tag: "plant:needs-folder-kept", line: "             /* plant:needs-folder-kept */", turns: r => !g1(r.p),
+      name:
+        "945g5 lifting plant:needs-folder-kept in a copy of team-join.js turns 945g1 red, and team-join.js is untouched: " },
+    { file: "settings.js", tag: "plant:needs-folder-button", line: "    /* plant:needs-folder-button */", turns: r => !g1(r.p),
+      name:
+        "945g6 lifting plant:needs-folder-button in a copy of settings.js turns 945g1 red, and settings.js is untouched: " },
+    { file: "settings.js", tag: "plant:needs-folder-press", line: "    /* plant:needs-folder-press */", turns: r => !g2(r.p, r.s, r.folder),
+      name:
+        "945g7 lifting plant:needs-folder-press in a copy of settings.js turns 945g2 red, and settings.js is untouched: " },
+    { file: "team-join.js", tag: "plant:pick-moved-call", line: "    try{ asked=Promise.resolve(null); } /* plant:pick-moved-call */", turns: r => !g3(r.p, r.folder),
+      name:
+        "945g8 lifting plant:pick-moved-call in a copy of team-join.js turns 945g3 red, and team-join.js is untouched: " },
+  ];
+  const plantSaw = [];
+  for (const pl of pagePlants) {
+    if (PLANTS_OFF) { skip(pl.name.replace(/: $/, " (ETIUDA_PLANTS=off)")); continue; }
+    const src = fs.readFileSync(path.join(ROOT, "src", "modules", pl.file), "utf8");
+    let r = null, err = "";
+    try { r = pageScenario({ file: pl.file, tag: pl.tag, line: pl.line }); } catch (e) { err = String(e.message || e).slice(0, 200); }
+    if (r) plantSaw.push(r.s);
+    const same = fs.readFileSync(path.join(ROOT, "src", "modules", pl.file), "utf8") === src;
+    check(!!r && pl.turns(r) && same, pl.name
+      + JSON.stringify({ turned: !!r && pl.turns(r), same, err }));
+  }
 
   /* Scenario 6: Team file from stranger changes nothing (945f9) */
   const s6 = makeScenario();
@@ -1049,13 +1226,13 @@ async function main() {
   }
 
   // Cleanup scenario directories
-  [s1, s2, s3, s4, s5, s6].forEach(s => {
+  [s1, s2, s3, s4, s5, s5p, s6].concat(plantSaw).forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 
-  process.stdout.write("#counts checks=" + asserted + " failed=" + failed + "\n");
-  if (asserted !== EXPECTED) {
-    process.stderr.write("checks count differs from EXPECTED " + EXPECTED + ": " + asserted + "\n");
+  process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + "\n");
+  if (asserted + skipped !== EXPECTED) {
+    process.stderr.write("checks count differs from EXPECTED " + EXPECTED + ": " + (asserted + skipped) + "\n");
     process.exit(78);
   }
   if (failed > 0) process.exit(Math.min(failed, 63));
