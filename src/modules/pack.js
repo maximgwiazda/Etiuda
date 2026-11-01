@@ -210,7 +210,7 @@ function showDeskNewer(){
     t("Installing Etiuda {VERSION} or newer opens them as they were.").split("{VERSION}").join(v));
   else eNotice("eDeskNewer",
     t("This desk's settings were saved by a newer Etiuda, so this version leaves them untouched and does not start over."),
-    t("Installing that newer Etiuda opens them as they were."));
+    t("Installing the newest Etiuda opens them as they were."));
 }
 function showDeskNotices(){
   showDeskNewer();

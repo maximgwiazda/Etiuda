@@ -3597,8 +3597,8 @@ function installerUpdateTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   const tpl = n => fs.readFileSync(path.join(lib, "templates", "nsis", n), "utf8");
   const macro = (text, name) => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
-  const EN = "Etiuda is still open, so the installer is asking it to close. The installation carries on once it has closed. If it stays open, close it by hand and press Retry.";
-  const PL = "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Instalacja będzie kontynuowana, gdy Etiuda się zamknie. Jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę.";
+  const EN = "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: while a conversation is in progress, Etiuda asks first. The installation carries on once it has closed; if it stays open, close it by hand and press Retry.";
+  const PL = "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: jeśli trwa rozmowa, Etiuda najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę.";
   const asks = text => {
     const m = macro(text, "customCheckAppRunning");
     return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
@@ -5588,7 +5588,7 @@ function checkCatalogRoundTrip() {
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 1214;
-const UI_STRINGS_SHA256 = "7df06852707257b199a98d8cbf536d99b5bf6cbedb6908639bb8a19b9d4ff629";
+const UI_STRINGS_SHA256 = "6793a916026a927daaf7ada61608629d51d8551f679c930eb13c212820f4902b";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

@@ -75,9 +75,9 @@
   Push $R8
   Push $R9
   ${If} $LANGUAGE == 1045
-    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Instalacja będzie kontynuowana, gdy Etiuda się zamknie. Jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
+    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: jeśli trwa rozmowa, Etiuda najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
   ${Else}
-    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. The installation carries on once it has closed. If it stays open, close it by hand and press Retry."
+    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: while a conversation is in progress, Etiuda asks first. The installation carries on once it has closed; if it stays open, close it by hand and press Retry."
   ${EndIf}
   StrCpy $R7 0
   ${Do}
