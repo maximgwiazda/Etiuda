@@ -118,6 +118,9 @@ const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
 const TAKEN_MAX = 4096;
+/* The relay keeps a deletion 30 days (relay/core.cjs KEEP_MS). A catch-up that last reached the top longer ago than a day
+   short of that may have missed one, so it lists the whole team again and drops what the relay no longer lists. */
+const LISTED_KEEP_MS = 29 * 24 * 60 * 60 * 1000;
 const SESSION_KEEP_MS = 25 * 60 * 1000;
 const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
@@ -386,7 +389,7 @@ function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null, was: [], forks: {}, fork: null };
+    pin: null, chain: null, was: [], forks: {}, fork: null, listed: null };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -399,6 +402,7 @@ function stateOf(x) {
   if (count(x.bytes)) s.bytes = x.bytes;
   if (count(x.leadEpoch)) s.leadEpoch = x.leadEpoch;
   if (Number.isFinite(x.headT)) s.headT = x.headT;
+  if (Number.isSafeInteger(x.listed)) s.listed = x.listed;
   s.lapse = lapseKept(x.lapse);
   if (Number.isSafeInteger(x.skew)) s.skew = x.skew;
   if (typeof x.made === "string" && MADE_RE.test(x.made)) s.made = x.made;
@@ -1613,6 +1617,53 @@ function createProgram(opts) {
         persist();
       }
     },
+    /* Whether a catch-up starting at `now`, the relay's clock, is to list the whole team again: this program has been here, and
+       its last catch-up to reach the top began longer ago than LISTED_KEEP_MS. A record from before the stamp is not. */
+    listedBefore(now) {
+      let behind = false;
+      behind = st.seq > 0 && Number.isSafeInteger(st.listed) && now - st.listed > LISTED_KEEP_MS; /* plant:listed-behind */
+      return behind;
+    },
+    /* A catch-up that began at `t` reached the top. Kept on disk only once it moves by more than an hour, as the skew is. */
+    noteListed(t) {
+      if (!Number.isSafeInteger(t)) return;
+      const far = !Number.isSafeInteger(st.listed) || t - st.listed > ECHO_MS;
+      st.listed = Math.max(t, Number.isSafeInteger(st.listed) ? st.listed : t);
+      if (far) persist();
+    },
+    /* The relay's whole list, `items`, after a catch-up past the deletion keep: a file this program took or sent whose blob the
+       list no longer names is dropped from the mirror, as a deletion would have dropped it. The team file stays, and so does
+       a file of this program's own place whose bytes are an edit not yet sent. A sent record dropped with its file is owed no
+       more, so no deletion goes back. The paths dropped. */
+    reconcile(items) {
+      const listed = new Set();
+      for (const e of Array.isArray(items) ? items : []) if (table(e) && table(e.meta) && HEX32.test(String(e.meta.id))) listed.add(e.meta.id);
+      const here = new Map();
+      for (const rel of io.list()) here.set(pathKey(rel), rel);
+      const dropped = [];
+      for (const key of new Set(Object.keys(st.applied).concat(Object.keys(st.sent)))) {
+        let kept = false;
+        kept = key === pathKey(TEAM_NAME); /* plant:reconcile-team */
+        if (kept) continue;
+        const a = has(st.applied, key) ? st.applied[key] : null, s = has(st.sent, key) ? st.sent[key] : null;
+        const live = [a, s].filter(r => r && !r.del);
+        if (!live.length || (s && s.owe === true) || live.some(r => listed.has(r.id))) continue;
+        const rel = here.get(key) || null, bytes = rel ? io.read(rel) : null;
+        let edited = false;
+        edited = bytes != null && !live.some(r => r.sha === sha256(bytes)); /* plant:reconcile-edit */
+        if (edited) continue;
+        try { if (rel) io.remove(rel); } catch (e) { say(rel + " could not be removed from the mirror - " + (e && e.message)); continue; }
+        if (a) st.applied[key] = Object.assign({}, a, { del: true, sha: null, at: clock() });
+        if (s) {
+          st.bytes = Math.max(0, st.bytes - (s.size || 0));
+          delete st.sent[key]; /* plant:reconcile-sent */
+          delete st.refused[key];
+        }
+        dropped.push(rel || key);
+      }
+      if (dropped.length) persist();
+      return dropped;
+    },
   };
   return api;
 }
@@ -1911,6 +1962,7 @@ function createChannel(opts) {
      the record does not show is fetched, and the program judges it as it judges anyone's (board 932 (2)). */
   async function catchUp() {
     const who = me();
+    const began = relayNow(), behind = prog.listedBefore(began);
     for (let round = 0; round < 1000; round++) {
       const st = prog.state();
       const wrote = prog.wroteIds();
@@ -1955,9 +2007,37 @@ function createChannel(opts) {
       }
       prog.applyBatch(items, ctx());
       prog.setSeq(top);
-      if (r.json.length < SINCE_MAX) return { ok: true };
+      if (r.json.length < SINCE_MAX) return caughtUp(began, behind);
     }
     return { ok: true };
+  }
+
+  /* The top reached on this computer's own key: past the deletion keep, the whole list first, and what it no longer names
+     dropped; then the stamp. A list that does not come whole leaves both for the next cycle. */
+  async function caughtUp(began, behind) {
+    if (!session || session.by !== "key") return { ok: true };
+    if (behind && !prog.suspect()) {
+      const all = await listedWhole();
+      if (!all) return { ok: true };
+      const dropped = prog.reconcile(all);
+      if (dropped.length) say("the relay no longer holds " + dropped.length + " file(s) this computer kept while it was away, so they were removed");
+    }
+    prog.noteListed(began);
+    return { ok: true };
+  }
+  async function listedWhole() {
+    const out = [];
+    let after = 0;
+    for (let round = 0; round < 1000; round++) {
+      const r = await authed("GET", "since/" + after);
+      if (r.status !== 200 || !Array.isArray(r.json)) return null;
+      let top = after;
+      for (const e of r.json) if (table(e) && Number.isSafeInteger(e.seq) && e.seq > top && table(e.meta)) { top = e.seq; out.push(e); }
+      if (r.json.length < SINCE_MAX) return out;
+      if (top === after) return null;
+      after = top;
+    }
+    return null;
   }
 
   /* Blobs left for want of a key, fetched again once a key for their epoch is held, each judged against the floor that

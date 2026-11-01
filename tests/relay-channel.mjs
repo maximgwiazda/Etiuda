@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 326;
+const EXPECTED = 334;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -7913,15 +7913,15 @@ function relay9() {
   };
   const liveBy = keyId => { const s = store9(); return s ? s.dump().filter(([k, v]) => k.startsWith("blob:") && JSON.parse(v).writer === keyId && !JSON.parse(v).del).length : 0; };
   const progs = [];
-  const lead9 = (mod, name) => {
+  const lead9 = (mod, name, more) => {
     const log = [];
-    const p = program(name, LEAD, "root", { mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
-      keyFor: e => K9.get(e) || null, sealEpoch: () => Math.max(...K9.keys()), agree: agreeWith(LB9) });
+    const p = program(name, LEAD, "root", Object.assign({ mod, rt: tm.rt, pin: pin9, request: way(log), connect: () => null, watch: false,
+      keyFor: e => K9.get(e) || null, sealEpoch: () => Math.max(...K9.keys()), agree: agreeWith(LB9) }, more || {}));
     progs.push(p);
     return Object.assign(p, { log });
   };
   /* `cut`, where given: once armed, the first call after a session opens throws, as a computer shut down there would leave it. */
-  const desk9 = (mod, name, d, cut) => {
+  const desk9 = (mod, name, d, cut, more) => {
     const held = new Map([[1, K9.get(1)]]), mirror = path.join(LAB, name), log = [], base9 = way(log);
     const request = async (...a) => {
       if (cut && cut.armed && cut.seen) { cut.done = true; throw new Error("this computer was shut down"); }
@@ -7929,7 +7929,7 @@ function relay9() {
       if (cut && cut.armed && a[0] === "POST" && /\/session$/.test(String(a[1])) && res.status === 200) cut.seen = true;
       return res;
     };
-    const p = program(name, d.k, "desk:" + d.k.keyId, { mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
+    const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({ mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
       onTeam: () => {
@@ -7938,7 +7938,7 @@ function relay9() {
         const mine = (doc && Array.isArray(doc.roster) ? doc.roster : []).find(r => r && r.desk && r.desk.id === d.k.keyId);
         const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, doc.epoch, d.k.keyId) : null;
         if (key) held.set(doc.epoch, key);
-      } });
+      } }, more || {}));
     progs.push(p);
     return Object.assign(p, { held, log });
   };
@@ -8043,6 +8043,10 @@ async function scene991(mod, swept, noStamp) {
     if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
     if (noStamp) X.unstamp();
     const first = X.lead9(mod, "991-first-" + X.tag), second = X.lead9(mod, "991-second-" + X.tag);
+    /* A start over is the program forgetting the relay; a whole list after a long absence (1162) is not one. */
+    let over = 0;
+    const forget = second.prog.forgetRelay;
+    second.prog.forgetRelay = () => { over += 1; return forget(); };
     put(first.mirror, C.TEAM_NAME, X.doc9(1, []));
     put(first.mirror, "lane.ec", ED9[0]);
     first.ch.start();
@@ -8073,7 +8077,7 @@ async function scene991(mod, swept, noStamp) {
     const calls = second.log.slice(from);
     const since0 = calls.filter(c => c === "GET since/0").length, puts = calls.filter(c => c.indexOf("PUT ") === 0).length;
     const kept = X.leadFiles()["lane.ec"] === ED9[1] && read(first.mirror, "lane.ec") === ED9[1] && read(second.mirror, "lane.ec") === ED9[1];
-    return { both, published, kept, since0, puts, swept: !!swept };
+    return { both, published, kept, since0, puts, over, swept: !!swept };
   } finally {
     await X.done();
   }
@@ -8169,19 +8173,19 @@ try {
     + ", sha " + (gone.back ? "restored" : "differs"));
 
   const r1 = await scene991(C, false);
-  check(r1.both && r1.published && r1.kept && r1.since0 === 0 && r1.puts === 0,
+  check(r1.both && r1.published && r1.kept && r1.over === 0 && r1.since0 === 1 && r1.puts === 0,
     "991a the lead's second computer, back after the old sweep day of a team renewed and never swept, hears the copy's stamp unchanged, does not start over and"
     + " takes the newer edition: both had edition one " + r1.both + ", the first published edition two " + r1.published + ", edition two on the relay"
-    + " and on both computers " + r1.kept + ", lists from the start " + r1.since0 + ", uploads " + r1.puts);
+    + " and on both computers " + r1.kept + ", starts over " + r1.over + ", lists from the start " + r1.since0 + " (the whole list after its absence), uploads " + r1.puts);
   const r2 = await scene991(C, true);
-  check(r2.both && r2.published && r2.kept && r2.since0 === 1 && r2.puts === 0,
+  check(r2.both && r2.published && r2.kept && r2.over === 1 && r2.since0 === 1 && r2.puts === 0,
     "991b the lead's second computer, back after a sweep and the first's renewal, starts over with the new copy and still takes the newer edition,"
     + " sending nothing older: both had edition one " + r2.both + ", the first published edition two " + r2.published + ", edition two on the relay"
-    + " and on both computers " + r2.kept + ", lists from the start " + r2.since0 + ", uploads " + r2.puts);
+    + " and on both computers " + r2.kept + ", starts over " + r2.over + ", lists from the start " + r2.since0 + ", uploads " + r2.puts);
   const r3 = await scene991(C, false, true);
-  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false, true); return x.since0 !== 1; });
-  check(r3.kept && r3.since0 === 1 && r3.puts === 0 && known.turned && known.back, "991c with a relay from before the copy's stamp, the second computer"
-    + " asks the relay's list once and keeps its place (edition two everywhere " + r3.kept + ", lists from the start " + r3.since0 + ", uploads " + r3.puts
+  const known = await liftChannel("plant:remade-known", async mod => { const x = await scene991(mod, false, true); return x.over !== 0; });
+  check(r3.kept && r3.over === 0 && r3.since0 === 2 && r3.puts === 0 && known.turned && known.back, "991c with a relay from before the copy's stamp, the second computer"
+    + " asks the relay's list once and keeps its place (edition two everywhere " + r3.kept + ", starts over " + r3.over + ", lists from the start " + r3.since0 + ", the question and the whole list after its absence, uploads " + r3.puts
     + "); lifting plant:remade-known, it starts over with a copy the relay kept: " + known.detail + ", sha " + (known.back ? "restored" : "differs"));
   const owe = await swapChannel("plant:remade-owe",
     "      const owedAgain = m => { for (const k of Object.keys(m)) if (!m[k].del) m[k] = Object.assign({}, m[k], { sha: null }); };",
@@ -8792,6 +8796,126 @@ check(retryPlant.turned && retryPlant.back,
   });
   check(pForkTwo.turned && pForkTwo.back, "938t lifting plant:fork-two follows one of two successors of K1 seen in one look, and the product file is never written: "
     + pForkTwo.detail + ", sha " + (pForkTwo.back ? "restored" : "differs"));
+}
+
+/* ---- 1162: a computer back after the relay's deletion keep (Argon's relay review of 2026-11-01, finding 5, the test architect's
+   condition). The relay keeps a deletion 30 days, then lists neither the file nor its deletion. On day 1 the lead retracts two
+   catalogs and a joining desk withdraws its ask; the second computer of the lead has edited one of those catalogs while off. A
+   desk back on day 11 learns by the deletion records, as it always has, with no whole list. A desk and the lead's second computer
+   back on day 32 list the whole team and drop what it no longer names: the desk keeps the live catalog and its own note, and the
+   second computer keeps its edit, which goes up, and sends no deletion back. ---- */
+async function scene1162(mod) {
+  const X = relay9(), { tm, BASE, DAYMS } = X;
+  const DK = { k: keyPair(true), box: boxPair() }, DW = { k: keyPair(true), box: boxPair() }, NEW = { k: keyPair(true), box: boxPair() };
+  const inv = hex(16), token = hex(32), seal = mod.inviteSealKey(hex(16));
+  const RETIRED = "{\"note\":\"Lane Board retired\"}\n", NOTES = "{\"note\":\"Lane Board notes\"}\n";
+  const EDIT = "{\"note\":\"Lane Board notes, edited on the second computer\"}\n", ASK = "{\"kind\":\"etiuda-join-request\"}\n";
+  const MINE = "A note of the desk's own.\n", askRel = "desks/" + NEW.k.keyId + "/join.json", mineRel = "desks/" + DK.k.keyId + "/note.ec";
+  /* The lead's deletions the relay still serves: a deletion past its 30 days stays a row until a list buries it, and is served no more. */
+  const leadDels = () => { const s = X.store9(); return s ? s.dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k, m]) => k.startsWith("blob:") && m.writer === LEAD.keyId && m.del
+    && X.RS.clock.now - m.at <= 30 * DAYMS).length : 0; };
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    const enrolled = await X.enrol9(1, DK, DW);
+    const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }], at = X.RS.clock.now;
+    const reg = await X.admin9("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t: at, sig: signHex(LEAD, core.invitesBytes(tm.rt, at, add, [])) });
+    if (made.status !== 200 || enrolled.status !== 200 || reg.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json, reg.json]));
+    const inviteKeys = () => [{ id: inv, key: seal }];
+    const lead = X.lead9(mod, "1162-lead-" + X.tag, { inviteKeys }), second = X.lead9(mod, "1162-second-" + X.tag, { inviteKeys });
+    const dk = X.desk9(mod, "1162-away-" + X.tag, DK), dw = X.desk9(mod, "1162-week-" + X.tag, DW);
+    const nd = X.desk9(mod, "1162-new-" + X.tag, NEW, null, { invite: () => ({ inv, token, seal }) });
+    put(lead.mirror, C.TEAM_NAME, X.doc9(1, [DK, DW]));
+    put(lead.mirror, "lane.ec", ED9[0]);
+    put(lead.mirror, "retired.ec", RETIRED);
+    put(lead.mirror, "notes.ec", NOTES);
+    lead.ch.start();
+    await settle(lead);
+    put(nd.mirror, askRel, ASK);
+    for (const p of [second, dk, dw, nd]) p.ch.start();
+    await settle(nd, lead, second, dk, dw);
+    put(dk.mirror, mineRel, MINE);
+    await settle(dk, lead, second, dw);
+    const before = read(second.mirror, askRel) === ASK && read(second.mirror, "retired.ec") === RETIRED && read(second.mirror, "notes.ec") === NOTES
+      && read(dk.mirror, "retired.ec") === RETIRED && read(dw.mirror, "retired.ec") === RETIRED && read(lead.mirror, askRel) === ASK;
+    await second.ch.stop();
+    await dk.ch.stop();
+    await dw.ch.stop();
+
+    X.at(BASE + DAYMS);
+    fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
+    fs.unlinkSync(path.join(lead.mirror, "notes.ec"));
+    fs.unlinkSync(path.join(nd.mirror, ...askRel.split("/")));
+    await settle(nd, lead);
+    await settle(nd, lead);
+    const retracted = read(lead.mirror, askRel) === null && !X.leadFiles()["retired.ec"] && !X.leadFiles()["notes.ec"];
+    put(second.mirror, "notes.ec", EDIT);
+
+    X.at(BASE + 11 * DAYMS);
+    const wFrom = dw.log.length;
+    dw.ch.start();
+    await settle(dw);
+    const week = { retired: read(dw.mirror, "retired.ec"), lane: read(dw.mirror, "lane.ec") === ED9[0],
+      whole: dw.log.slice(wFrom).filter(c => c === "GET since/0").length };
+
+    X.at(BASE + 32 * DAYMS);
+    const delsBefore = leadDels(), kFrom = dk.log.length;
+    dk.ch.start();
+    second.ch.start();
+    await settle(dk, second);
+    await settle(dk, second);
+    const desk = { retired: read(dk.mirror, "retired.ec"), lane: read(dk.mirror, "lane.ec") === ED9[0], mine: read(dk.mirror, mineRel) === MINE,
+      whole: dk.log.slice(kFrom).filter(c => c === "GET since/0").length };
+    const files = X.leadFiles();
+    const two = { retired: read(second.mirror, "retired.ec"), ask: read(second.mirror, askRel), notes: read(second.mirror, "notes.ec") === EDIT,
+      lane: read(second.mirror, "lane.ec") === ED9[0], up: files["notes.ec"] === EDIT, back: !files["retired.ec"], dels: leadDels() - delsBefore };
+    return {
+      setup: before && retracted,
+      week: week.retired === null && week.lane && week.whole === 0,
+      desk: desk.retired === null && desk.lane && desk.mine && desk.whole >= 1,
+      two: two.retired === null && two.ask === null && two.notes && two.lane && two.up && two.back && two.dels === 0,
+      detail: JSON.stringify({ before, retracted, week, desk, two }),
+    };
+  } finally {
+    await X.done();
+  }
+}
+/* The team file is never dropped by that list: a program whose record names a team file and a catalog the list does not name
+   drops the catalog alone. */
+function teamKept(mod) {
+  const TEXT = "{\"kind\":\"etiuda-team\"}\n", LANE = "{\"note\":\"Lane Board\"}\n";
+  const files = new Map([[C.TEAM_NAME, Buffer.from(TEXT)], ["lane.ec", Buffer.from(LANE)]]);
+  const io = { read: r => (files.has(r) ? files.get(r) : null), write: (r, t) => files.set(r, Buffer.from(t)), remove: r => files.delete(r), list: () => [...files.keys()] };
+  const row = (body, counter) => ({ writer: LEAD.keyId, epoch: 1, counter, id: hex(16), at: 1, sha: sha(Buffer.from(body)) });
+  const state = { kind: "etiuda-relay-channel", v: 1, seq: 9, applied: { [C.TEAM_NAME]: row(TEXT, 1), "lane.ec": row(LANE, 2) } };
+  const prog = mod.createProgram({ io, load: () => state });
+  const dropped = prog.reconcile([]);
+  return { ok: dropped.length === 1 && dropped[0] === "lane.ec" && files.has(C.TEAM_NAME) && !files.has("lane.ec"), dropped };
+}
+try {
+  const s = await scene1162(C);
+  check(s.setup && s.desk, "1162a a desk back on day 32 lists the whole team and drops the catalog the lead retracted on day 1, whose deletion the relay"
+    + " has let go, and keeps the live catalog and its own note: " + s.detail);
+  check(s.setup && s.two, "1162b the lead's second computer back on day 32 drops the retracted catalog and the ask a joining desk withdrew, keeps the"
+    + " catalog it edited while off, which goes up, and sends no deletion back: " + s.detail);
+  check(s.setup && s.week, "1162c a desk back on day 11, inside the keep, learns of the retraction by its deletion record and lists nothing whole: " + s.detail);
+  const t = teamKept(C);
+  check(t.ok, "1162d that list never drops the team file: a record naming a team file and a catalog the list does not name drops the catalog alone: "
+    + JSON.stringify(t.dropped));
+  const lifts = [
+    ["plant:listed-behind", "1162a", "the desk back on day 32 keeps the retracted catalog", async mod => !(await scene1162(mod)).desk],
+    ["plant:reconcile-edit", "1162b", "the second computer's edit is dropped with the retracted catalogs", async mod => !(await scene1162(mod)).two],
+    ["plant:reconcile-sent", "1162b", "the second computer sends a deletion of the retracted catalog back", async mod => !(await scene1162(mod)).two],
+    ["plant:reconcile-team", "1162d", "the team file is dropped", async mod => !teamKept(mod).ok],
+  ];
+  let n = 0;
+  for (const [tag, leg, say, turns] of lifts) {
+    const p = await liftChannel(tag, turns);
+    check(p.turned && p.back, "1162" + String.fromCharCode(101 + n++) + " lifting " + tag + " turns " + leg + " red (" + say + "), and the product file is never written: "
+      + p.detail.split("\n")[0] + ", sha " + (p.back ? "restored" : "differs"));
+  }
+} catch (e) {
+  check(false, "harness (the leg 1162a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
