@@ -993,14 +993,27 @@ const t0 = Date.now();
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
     await pressTheme();
     const moving = await vtNow();
-    await sleep(700);
-    const settled = await shot(), left = await vtNow();
+    /* SETTLED IS TWO EQUAL SHOTS IN A ROW, inside a ceiling of 3 s, and not a fixed wait (the test architect, 2026-11-01 20:23):
+       on 2026-11-01 one card's edges were still easing at 700 ms (26 pixels, a delta of 5) and gone by 2.2 s. Equal shots alone
+       would pass a theme stuck halfway, so the settled window is still held to the instant reference below; and two equal
+       shots that never come within the ceiling are the fault, named by clip. */
+    const settleBy = Date.now() + 3000;
+    let settled = await shot(), steady = false;
+    while (Date.now() < settleBy) {
+      await sleep(150);
+      const next = await shot();
+      if (next === settled) { steady = true; break; }
+      settled = next;
+    }
+    const left = await vtNow();
+    const clipsOff = settled.split("|").map((x, i) => (x === to.split("|")[i] ? 0 : 1));
     await pressTheme(); await sleep(700);
     await p.evaluate(k => { const h = document.getElementById("__markHold"); if (h) h.remove();
       if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
-    check(moving === 0 && left === 0 && settled === to && from !== to,
+    check(moving === 0 && left === 0 && steady && settled === to && from !== to,
       "the theme opens no crossfade under motion (" + moving + " transition animation(s) at the press) and at rest the window is "
-      + (settled === to ? "pixel-identical to" : "NOT identical to") + " the same theme reached instantly");
+      + (!steady ? "still changing at the 3 s ceiling" : settled === to ? "pixel-identical to" : "NOT identical to")
+      + " the same theme reached instantly" + (settled === to ? "" : " (clips off " + JSON.stringify(clipsOff) + ")"));
     check(instant.anims === 0 && instant.first === to,
       "and under reduced motion it switches instantly: " + instant.anims + " transition animation(s), the first"
       + " shot after the press " + (instant.first === to ? "already identical to" : "NOT yet") + " the settled theme");
