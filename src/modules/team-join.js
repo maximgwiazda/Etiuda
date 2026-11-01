@@ -229,7 +229,10 @@ function syncLapseNotice(){
 /* The team's lead key seen in two hands, as the shell keeps it: "two" where the desk follows neither successor, "later"
    where a key it followed on was handed on again. Claudette's words, 2026-11-01 01:04, the first sentence the notice's lead. */
 function forkKept(v){
-  return v && typeof v==="object" && (v.kind==="two" || v.kind==="later") ? {kind:v.kind, seen:v.seen===true} : null;
+  if(!v||typeof v!=="object"||(v.kind!=="two"&&v.kind!=="later")) return null;
+  const o={kind:v.kind,seen:v.seen===true};
+  if(typeof v.key==="string"&&/^[0-9a-f]{64}$/.test(v.key)) o.key=v.key;
+  return o;
 }
 function forkWords(kind){
   if(kind==="two") return {title:t("This team's lead key was handed to two different new keys at once, so this desk follows neither."),
@@ -239,11 +242,17 @@ function forkWords(kind){
 }
 let forkUp="";
 const forkDismissed=new Set();
-/* One notice per fork the shell keeps, up until the agent dismisses it. */
+/* The notice is one per fork key. Without a key it stays one per team and kind, as a row that names none still can. */
+function forkNoteKey(x){
+  let k=x.team+"|"+(x.fork&&x.fork.kind);
+  if(x.fork&&typeof x.fork.key==="string"&&/^[0-9a-f]{64}$/.test(x.fork.key)) k=x.fork.key; /* plant:fork-note-key */
+  return k;
+}
+/* One notice per fork the shell keeps, up until the agent dismisses that fork. */
 function syncForkNotice(){
   if(typeof document==="undefined" || typeof document.getElementById!=="function") return;
-  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.fork && !x.fork.seen && !forkDismissed.has(x.team+"|"+x.fork.kind))[0]||null;
-  const want=l?l.team+"|"+l.fork.kind:"", up=document.getElementById("eTeamFork");
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.fork && !x.fork.seen && !forkDismissed.has(forkNoteKey(x)))[0]||null;
+  const want=l?forkNoteKey(l):"", up=document.getElementById("eTeamFork");
   if(want===forkUp && (!want || up)) return;
   if(up) dropNotice(up);
   forkUp=want;
