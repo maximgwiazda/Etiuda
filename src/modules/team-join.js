@@ -22,6 +22,7 @@ let joinOffer=null;               // {folder, lead, code, host, cloud, local, le
 let joinBlob="";                  // the paste box's text while it is open, so a repaint keeps it
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
 let joinTyped="";                 // the check code the agent typed on the confirm
+let joinDoubt="";                 // the team whose "It does not match" is being asked about once before its keys go
 let joinWhy="";                   // the refusal's word, as the shell said it
 let askWhy="";                    // why ask to join did nothing ("no-identity" | "folder-not-answering" | "folder-not-writable")
 let askPlatform="";               // platform reported with the refusal ("win32" | "darwin" | "linux")
@@ -55,7 +56,7 @@ function joinAsk(op,file,name,check,before){
 }
 /* Lets go of every copy of an invitation the page holds; a read still in flight is then answered to nobody. */
 function dropInvite(){
-  joinMode=""; joinOffer=null; joinBlob=""; joinRead=""; joinTyped=""; joinWhy=""; joinLinkSaid=null; joinReads++;
+  joinMode=""; joinOffer=null; joinBlob=""; joinRead=""; joinTyped=""; joinWhy=""; joinLinkSaid=null; joinDoubt=""; joinReads++;
 }
 /* Whether the agent typed this invitation's check code, which the shell made at read and checks again at yes. */
 function typedOk(){
@@ -70,6 +71,15 @@ function typedWrong(){ return joinTyped.replace(/\s+/g,"").length>=5 && !typedOk
 function inviteHeld(){
   return {mode:joinMode, draft:joinBlob, read:joinRead, typed:joinTyped, offer:joinOffer?Object.assign({},joinOffer):null};
 }
+/* Whether an invitation is held, or the join stands on screen as the empty desk's form or the bubble: what the tour gives way to. */
+function joinStands(){
+  if(joinMode!=="") return true;
+  try{ return !!document.querySelector(".empty.e-join, #eTeamJoin:not(.e-gone)"); }catch(e){ return false; }
+}
+/* What follows the join on screen, told after each paint: the tour (tour.js), which steps behind it and starts only once it is gone. */
+const joinHeard=[];
+function onJoinPainted(fn){ if(joinHeard.indexOf(fn)<0) joinHeard.push(fn); }
+function joinPainted(){ joinHeard.slice().forEach(fn=>{ try{ fn(); }catch(e){} }); }
 /* What the empty desk and the bubble show: a lead's key not yet shown, a sealed catalog, or a request under way. */
 function teamJoinShown(){
   return joinMode!=="" || (!!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed));
@@ -141,7 +151,8 @@ function joinShown(j){
   if(!j || !(j.file||j.state)) return null;
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
-  if(j.invite && typeof j.invite==="object") row.invite=Object.assign({lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")}, j.invite.wrapped ? {wrapped:true} : {});
+  if(j.invite && typeof j.invite==="object") row.invite=Object.assign({lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")}, j.invite.wrapped ? {wrapped:true} : {},
+    j.invite.open===true ? {open:true} : {});
   if(j.withdrawn===true) row.withdrawn=true;
   if(j.withdrawing===true) row.withdrawing=true;
   if(j.unkept===true) row.unkept=true;
@@ -289,6 +300,9 @@ function joinTook(v,changed){
     closeJoinBubble();
     if(wholeThingEmpty() || nsGet("Sample")==="1") hooks.loadCatalogFromFolder(String(s.joined.file),0);
   }
+  /* A relay team's catalog the shell can now open, from the invitation's wrap or at admission, opens the same way. */
+  else if(s.opens && typeof s.opens.file==="string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample")==="1"))
+    hooks.loadCatalogFromFolder(s.opens.file,0); /* plant:opens-load */
   syncJoinDoor();
   syncLapseNotice();
   syncRelayRemoved();
@@ -331,9 +345,10 @@ function wireTeamJoin(){
   joinAsk("held");
 }
 function paintJoin(){
-  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); return; }
+  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); joinPainted(); return; }
   if(teamJoinShown() && JSON.stringify(joinNow)!==joinShut) openJoinBubble();
   else if(!teamJoinShown()) closeJoinBubble();
+  joinPainted();
 }
 function joinTime(ms){
   const d=new Date(ms||Date.now());
@@ -352,7 +367,7 @@ function pastedText(){
   return joinBlob;
 }
 function repaintJoin(){
-  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); return; }
+  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); joinPainted(); return; }
   paintJoin();
 }
 function clearJoinAsk(){
@@ -455,6 +470,10 @@ function leftDay(iso){
 /* The title, the line under it, and the acts, for whichever state the request is in. */
 function joinParts(){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
+  /* "It does not match" forgets the lead and every key kept under it, so it asks once, saying so; the copywriter's words. */
+  if(l && joinDoubt===l.team) return {title:t("Forget this team on this desk?"),
+    line:t("If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. After this, the desk takes no invitation to this team; to work with it again, speak to the team's lead."),
+    body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["forget",t("Forget this team"),false,"danger"],["keep",t("Cancel")]]};
   if(l) return {title:t("You are on the team"),
     line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
     body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
@@ -500,9 +519,13 @@ function joinParts(){
     if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
       body:meta, acts:[]}; /* plant:g2-card */
+    /* The catalogs are said to be open only once the shell has opened the team's here; until then the line says what it
+       waits for, the copywriter's words. */
+    let relayWait=t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.");
+    if(j.invite.open!==true) relayWait=t("Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is."); /* plant:wait-not-open */
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.paused?t("The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
-        :(j.invite.relay || j.invite.wrapped)?t("Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.")
+        :(j.invite.relay || j.invite.wrapped)?relayWait
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
@@ -588,7 +611,9 @@ function joinAct(act){
   if(act==="cancel") return joinAsk("cancel");
   const l=leadToShow();
   if(act==="seen" && l) return joinAsk("seen",l.team);
-  if(act==="forget" && l) return joinAsk("forget",l.team);
+  if(act==="keep"){ joinDoubt=""; return Promise.resolve(repaintJoin()); }
+  if(act==="forget" && l && joinDoubt!==l.team){ joinDoubt=l.team; return Promise.resolve(repaintJoin()); } /* plant:doubt-asks */
+  if(act==="forget" && l){ joinDoubt=""; return joinAsk("forget",l.team); }
   if(act==="load") return Promise.resolve(hooks.importCatalogHere());
   return Promise.resolve(null);
 }
@@ -598,7 +623,7 @@ function teamJoinEmptyHtml(){
   const p=joinParts();
   return '<div class="empty e-join"><div class="e-join-t">'+ICON_LOCK+esc(p.title)+'</div>'
     +'<p>'+esc(p.line)+'</p>'+p.body
-    +'<div class="e-join-acts">'+p.acts.map(a=>'<button type="button" class="btn" data-join="'+a[0]+'"'+(a[2]?' disabled':'')+'>'
+    +'<div class="e-join-acts">'+p.acts.map(a=>'<button type="button" class="btn'+(a[3]?' '+a[3]:'')+'" data-join="'+a[0]+'"'+(a[2]?' disabled':'')+'>'
       +esc(a[1])+'</button>').join("")
     +'</div></div>';
 }
@@ -634,7 +659,7 @@ function openJoinBubble(){
   wrap.setAttribute("aria-labelledby","ejTitle");
   wrap.innerHTML='<h3 id="ejTitle">'+esc(p.title)+'</h3><p class="ec-sub">'+esc(p.line)+'</p>'+p.body
     +'<div class="tour-actions"><button type="button" class="btn" data-join="hide">'+esc(t("Hide"))+'</button>'
-    +p.acts.map((a,i)=>'<button type="button" class="btn'+(i?'':' primary')+'" data-join="'+a[0]+'"'+(a[2]?' disabled':'')+'>'
+    +p.acts.map((a,i)=>'<button type="button" class="btn'+(a[3]?' '+a[3]:i?'':' primary')+'" data-join="'+a[0]+'"'+(a[2]?' disabled':'')+'>'
       +esc(a[1])+'</button>').join("")
     +'</div>';
   cutLeaves();
@@ -649,7 +674,7 @@ function openJoinBubble(){
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(joinBubbleClose===close) joinBubbleClose=null; };
   joinBubbleClose=close;
   // Hiding the lead's key counts as having been shown it; the key stays in Settings. Hiding an invitation lets it go.
-  const hide=()=>{ joinShut=JSON.stringify(joinNow); dropInvite(); close(); if(p.lead) joinAsk("seen",p.lead); };
+  const hide=()=>{ joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead); };
   wrap.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; e.preventDefault(); e.stopPropagation(); hide(); });
   wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach(el=>{
     if(el.hasAttribute("data-join-paste")){ el.oninput=()=>{ joinBlob=String(el.value||""); }; return; }
@@ -666,4 +691,4 @@ function forgetTeamLead(team,then){
   return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { lapseNote, wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

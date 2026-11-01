@@ -32,7 +32,7 @@ if (process.env.ETIUDA_PLANTS_COPY !== "1") {
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 28;
+const EXPECTED = 30;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -509,6 +509,46 @@ try {
   check(protocolsNow && protocolsPlant.turned && protocolsPlant.back,
     "3h9 electron-builder.js protocols deep-compare to [{name:\"Etiuda\", schemes:[\"etiuda\"]}], and lifting plant:link-protocols drops the compare: "
     + protocolsPlant.detail + ", sha " + (protocolsPlant.back ? "restored" : "differs"));
+
+  /* The first day's F6: the Windows installer registers etiuda: per user at install, the three values
+     app.setAsDefaultProtocolClient("etiuda") writes at the desk's first start, and takes the key away at uninstall while it still
+     opens this desk; nothing it does about the link reaches outside HKCU. Read from the NSIS script, as makensis takes it. */
+  const NSH = path.join(ROOT, "shell", "installer.nsh");
+  const OPEN_CMD = "`\"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\" \"%1\"`";
+  const LINK_WRITES = ["WriteRegStr HKCU \"Software\\Classes\\etiuda\" \"\" \"URL:etiuda\"",
+    "WriteRegStr HKCU \"Software\\Classes\\etiuda\" \"URL Protocol\" \"\"",
+    "WriteRegStr HKCU \"Software\\Classes\\etiuda\\shell\\open\\command\" \"\" " + OPEN_CMD];
+  function linkInNsh(src, mainSrc) {
+    const body = name => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(src) || [])[1] || "";
+    const bare = l => l.trim().replace(/\s+[#;][^"'`]*$/, "");
+    const regLines = s => s.split(/\r?\n/).map(bare).filter(l => /^(Write|Delete|Read)Reg/.test(l));
+    const ins = body("customInstall"), un = body("customUnInstall");
+    const deskOnly = (s, macro) => Array.from(s.matchAll(new RegExp("!ifmacrodef " + macro + "\\r?\\n([\\s\\S]*?)!endif", "g")), m => m[1]).join("\n");
+    const wrote = regLines(deskOnly(ins, "registerFileAssociations")).filter(l => /\\etiuda/.test(l));
+    const unBody = deskOnly(un, "unregisterFileAssociations").split(/\r?\n/).map(bare);
+    const read = unBody.indexOf("ReadRegStr $0 HKCU \"Software\\Classes\\etiuda\\shell\\open\\command\" \"\"");
+    const when = unBody.indexOf("${If} $0 == " + OPEN_CMD);
+    const del = unBody.indexOf("DeleteRegKey HKCU \"Software\\Classes\\etiuda\"");
+    const end = unBody.indexOf("${EndIf}", when);
+    const everyLink = regLines(src).filter(l => /Classes\\etiuda(\\|")/.test(l));
+    return {
+      install: JSON.stringify(wrote) === JSON.stringify(LINK_WRITES),
+      uninstall: read >= 0 && when > read && del > when && end > del,
+      hkcu: everyLink.length >= 5 && everyLink.every(l => /^\w+ (\$\d+ )?HKCU "/.test(l)),
+      sameAsDesk: /app\.setAsDefaultProtocolClient\("etiuda"\)/.test(mainSrc),
+    };
+  }
+  const nshNow = linkInNsh(fs.readFileSync(NSH, "utf8"), fs.readFileSync(MAIN, "utf8"));
+  check(nshNow.install && nshNow.uninstall && nshNow.hkcu && nshNow.sameAsDesk,
+    "987p the desk's installer writes etiuda: under HKCU at install, the three values registerEtiudaLink's call writes, and takes the key at"
+    + " uninstall only while it opens this desk, every line of it in HKCU and in the desk's build alone: " + JSON.stringify(nshNow));
+  const nshPlants = ["plant:f6-link-name", "plant:f6-link-flag", "plant:f6-link-open", "plant:f6-link-gone"].map(tag => {
+    const r = lift(tag, src => { const v = linkInNsh(src, fs.readFileSync(MAIN, "utf8")); return !(v.install && v.uninstall); }, NSH);
+    return tag + " " + (r.turned ? "turned" : r.detail) + (r.back ? "" : ", sha differs");
+  });
+  check(nshPlants.every(p => / turned$/.test(p)),
+    "987q lifting any of the installer's link lines, plant:f6-link-name, -flag, -open or -gone, turns 987p red, and the script is put back: "
+    + nshPlants.join("; "));
 
   const legsFile = path.join(ROOT, "tools", "ci-legs.mjs");
   const legLine = '{ id: "link-handler", args: ["tests/link-handler.mjs"], where: "linux-ok" }';
