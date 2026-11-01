@@ -20,6 +20,7 @@ import { eHost, eCatalogFolderShort, eHotkey, eHotkeyLabel, eOpenPicker } from "
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
+import { joinStands, onJoinPainted } from "./team-join.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
@@ -648,13 +649,28 @@ const TOUR_AUTO_MS=1300, TOUR_BREATH_MS=200, TOUR_RESUME_MS=300;
 const TOUR_AT="eTourAt";
 /** Whether this launch belongs to the tour: a first run, or a reload in the middle of one. */
 function tourDueAtBoot(){ return !!ssGet(TOUR_AT) || (!tourSeen() && !tourInviteDismissed()); }
+/* AN INVITATION HELD, OR THE TEAM'S JOIN ON SCREEN, COMES FIRST: the tour that would start by itself waits until it is gone,
+   and one already running steps behind it (syncTourBehind). Told by team-join.js after each paint. */
+let tourAfterJoin=null, joinHeeded=false;
+function heedJoin(){
+  if(joinHeeded) return;
+  joinHeeded=true;
+  onJoinPainted(()=>{
+    if(tourRunning){ syncTourBehind(); return; }
+    if(tourAfterJoin && !joinStands()){ const go=tourAfterJoin; tourAfterJoin=null; go(); }
+  });
+}
 function maybeStartTour(){
   const at=ssGet(TOUR_AT);
   if(!at && (tourSeen()||tourInviteDismissed())) return;
   const i=at ? Math.max(0,TOUR_STEPS.findIndex(x=>x.id===at)) : 0;
   const due=()=>!tourRunning && (!!at || (!tourSeen() && !tourInviteDismissed()));
   let floor=false, formed=false;
-  const go=()=>{ if(floor && formed && due()) startTour(i,true); };
+  const go=()=>{
+    if(!(floor && formed && due())) return;
+    if(joinStands()){ heedJoin(); tourAfterJoin=go; return; } /* plant:tour-waits-join */
+    startTour(i,true);
+  };
   setTimeout(()=>{ floor=true; go(); },at ? TOUR_RESUME_MS : TOUR_AUTO_MS);
   whenMarkFormed(()=>setTimeout(()=>{ formed=true; go(); },TOUR_BREATH_MS));
 }
@@ -697,7 +713,7 @@ function endTour(completed){
   if(completed) markTourDone();
   else markTourInviteDismissed();
   ssDel(TOUR_AT);
-  if(els.root) els.root.classList.remove("behind");
+  if(els.root){ els.root.classList.remove("behind"); els.root.classList.remove("away"); }
   if(!completed) toast("The tour waits in the Menu, under Show tour…");
   focusFirstEntryOnOpen();
   const later=tourAfter; tourAfter=[];
@@ -722,6 +738,9 @@ function syncTourBehind(){
   const covered=!!document.querySelector("body > .modal:not([hidden]):not(.e-gone)");
   const asked=!!document.querySelector("body > .bub-ask:not(.e-gone)");
   els.root.classList.toggle("behind", tourRunning && (asked || (covered && !(step && step.modal))));
+  let away=false;
+  away=tourRunning && joinStands(); /* plant:tour-away-join */
+  els.root.classList.toggle("away", away);
 }
 function tourHasFocus(){
   const card=$("#tourCard");
@@ -807,6 +826,7 @@ function tourPrev(){
   if(n>=0) showTourStep(n);
 }
 function wireTourUi(){
+  heedJoin();
   const els=tourEls();
   if(els.next) els.next.onclick=()=>tourNext();
   if(els.prev) els.prev.onclick=()=>tourPrev();

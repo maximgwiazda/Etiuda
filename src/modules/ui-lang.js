@@ -1075,6 +1075,7 @@ UI_STRINGS.pl={
   "The team's lead cannot let desks in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.":"Lider zespołu nie może na razie wpuszczać stanowisk, bo jego licencja jest wstrzymana. Tutaj nic nie trzeba robić: gdy licencja znów będzie aktywna, stanowisko zostanie wpuszczone samo.", /* copywriter, 2026-10-30 00:20 */
   "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.":"Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
   "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.":"Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.",
+  "Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.":"Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić: katalog zespołu otworzy się tu sam, gdy to nastąpi.",
   "This invitation has already been used. Ask your lead for a new one.":"To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
   "This invitation has expired. Ask your lead for a new one.":"To zaproszenie wygasło. Nowe wystawi lider zespołu.",
   "Team":"Zespół",
@@ -1093,6 +1094,8 @@ UI_STRINGS.pl={
   "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.":"Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
   "It matches":"Zgadza się",
   "It does not match":"Nie zgadza się",
+  "Leave this team on this desk?":"Opuścić ten zespół na tym stanowisku?",
+  "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays.":"Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje.",
   "{LEAD}'s team":"Zespół osoby {LEAD}",
   "Leave this team":"Opuść ten zespół",
   "This desk will leave this team.":"To stanowisko opuści ten zespół.",

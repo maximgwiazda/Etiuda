@@ -3575,6 +3575,32 @@ let teamJoin = null;                            // {team, file, nonce, commit, a
 let joinSent = "";
 let joinDone = null;                            // {team, file}: a request admitted, for the next joinView to say once
 let joinTold = false;                           // the lead's answer already queued joined, so a later admission does not say it again
+/* A RELAY TEAM'S CATALOG OPENS BY ITSELF once this desk holds a key for it, from the invitation's wrap or at admission: a view
+   names the newest file in the catalog folder sealed for the team at an epoch whose key is kept, once a run, and the page
+   loads it where nothing else is open. */
+let relayCatalogOwed = "";                      // a relay team admitted, whose catalog no view has named yet
+const relayCatalogNamed = new Set();            // the relay teams whose catalog a view has named this run
+function relayOpenFile(team) {
+  const kept = teamKeys[team] || {};
+  if (!Object.keys(kept).length) return "";
+  for (const f of ecFilesIn(catalogFolder())) {
+    let d = null;
+    try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
+    if (d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch]) return path.basename(f);
+  }
+  return "";
+}
+function relayOpens(j) {
+  const inv = j && j.invite && j.invite.relay;
+  const team = inv && inv.withdrawn !== true && inv.withdrawing !== true && j.refused !== true ? String(j.team) : relayCatalogOwed;
+  if (!team || !teamPins[team]) return null;
+  if (relayCatalogNamed.has(team)) { if (relayCatalogOwed === team) relayCatalogOwed = ""; return null; }
+  const file = relayOpenFile(team);
+  if (!file) return null;
+  relayCatalogNamed.add(team);
+  if (relayCatalogOwed === team) relayCatalogOwed = "";
+  return { team: team, file: file };
+}
 /* Admitted once this desk keeps a newer key for the team than when it asked, whether or not the Team cover is read: the
    request goes, which the relay carries to the lead as its signed deletion, and the invitation's address is no longer
    followed. The next joinView says so once, as it did when it was the one to find it. */
@@ -3596,6 +3622,7 @@ function finishJoin(admitted) {
   if (takenBack && !(relayChannel && relayChannel.enrolled && relayChannel.enrolled())) return false; /* plant:e4-not-joined */
   try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
+  if (j.invite && j.invite.relay) relayCatalogOwed = j.team;
   if (!joinTold) joinDone = { team: j.team, file: j.file };
   joinTold = false;
   persistDeskEnvelope();
@@ -4459,6 +4486,8 @@ function joinView() {
     view.joined = joinDone;
     joinDone = null;
   }
+  const opens = relayOpens(j);
+  if (opens) view.opens = opens; /* plant:relay-opens */
   if (j && me) {
     const paused = pauseJudge(j.team, root);
     if (!j.file) {
@@ -4485,6 +4514,7 @@ function joinView() {
     if (j.invite) view.join.invite = Object.assign({ lead: String(j.invite.lead && j.invite.lead.name || "") }, (j.invite.wrapped && j.invite.wrapped.length) ? { wrapped: true } : {});
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
+    if (j.invite && j.invite.relay && relayCatalogNamed.has(j.team)) view.join.invite.open = true;
     const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
     const doubted = !!(j.invite && j.invite.relay && teamBarred.has(j.team) && !teamLeft[j.team]);
     if (j.invite && j.invite.relay) {
@@ -4847,6 +4877,7 @@ function takeRelayInvite(parsed, name, me) {
   }
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
   delete teamRelayGone[parsed.team];
+  relayCatalogNamed.delete(parsed.team);
   teamStamp = "";
   joinTold = false;
   persistDeskEnvelope();
@@ -5027,6 +5058,8 @@ function forgetLead(team, left) {
   delete teamPauseSeen[team];
   delete teamRelayGone[team];
   delete teamHeadT[team];
+  relayCatalogNamed.delete(team);
+  if (relayCatalogOwed === team) relayCatalogOwed = "";
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
   // A request already withdrawn waits nowhere, so it goes with the keys; a waiting relay request is withdrawn.

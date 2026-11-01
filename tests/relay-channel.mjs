@@ -55,7 +55,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 306;
+const EXPECTED = 307;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2824,6 +2824,14 @@ try {
       + (boxKept ? "kept" : "not kept") + ", request " + (asked ? "sent" : "not sent") + " holding " + (heldNone ? "no team file" : "a team file")
       + ", at the lead " + atLead + ", the invitation's copy " + (copyGone ? "let go" : "still served") + ", then "
       + (joined ? "edition 1 loaded" : "nothing loaded: " + G.said.filter(l => l.indexOf("relay") >= 0).slice(-2).join(" / ")));
+    /* The first day's F3 at admission: the same desk, the invitation's copy never read, names the team's catalog to its page once
+       it holds the key, so an empty desk opens it with nothing pressed (the page's half is tests/team-join.mjs 987e). */
+    let namedG = null;
+    await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
+      const v = await G.ask("etiuda:team-join", "view"); if (v && v.opens) namedG = v; return !!namedG; }, 8000);
+    check(!!namedG && namedG.opens.team === TEAM4 && namedG.opens.file === "board.ec",
+      "987m admitted with no invitation's copy, the relay desk's view names the team's catalog for its page to open: "
+      + (namedG ? JSON.stringify(namedG.opens) : "nothing named"));
     const g = G.api.relayRun();
     if (g) await g.stop();
     await studio4.stop();

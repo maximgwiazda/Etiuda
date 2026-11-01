@@ -546,7 +546,12 @@ function eOfferCatalogDialog(c,src){
   catalogTrust(c);
   /* A CATALOG SOMEBODY CHOSE LOADS AT ONCE ON AN EMPTY DESK: nothing is put down, so there is
      nothing to ask. Over a loaded catalog the question stands. */
-  if(src.direct && !active){ whenTrusted(c).then(()=>src.accept(sig)); return true; }
+  if(src.direct && !active){
+    // A file somebody chose takes the place of one found and left standing, as below.
+    if(src.asked && offerStanding) offerStanding(); /* plant:direct-takes-place */
+    whenTrusted(c).then(()=>src.accept(sig));
+    return true;
+  }
   /* NOT OVER THE LIBRARY, and only a file somebody pointed at gets past this. That screen lists
      every catalog in the folder, marks the one loaded and offers Load on each row, so a question
      about the folder argues with a person already looking at the answer. Ruled 2026-09-17. */
