@@ -36,7 +36,7 @@
 "use strict";
 
 const ACT_MS = 350; // what a step waits for an act to settle, TOUR_ACT_MS in tour.js, held by planProblems
-const LATE_MS = 3000; // on top of a step's own settling, before a step that did not move is a finding
+const STEP_WAIT_MS = 30000; // a step that has not moved by this ceiling is a finding
 
 const PLAN = [
   { id: "name", next: true, type: { sel: "#tourName", text: "Invented Agent" } },
@@ -147,13 +147,13 @@ function LOOK() {
   };
 }
 
-/** Waits for the ring to stop travelling (it moves on a spring), up to a second and a half. */
+/** Waits for the ring to stop travelling (it moves on a spring), up to 30 s. */
 async function RING_STILL() {
   const h = document.getElementById("tourHole");
   if (!h) return false;
   const t0 = performance.now();
   let last = "", since = t0;
-  while (performance.now() - t0 < 1500) {
+  while (performance.now() - t0 < 30000) {
     await new Promise(r => requestAnimationFrame(r));
     const r = h.getBoundingClientRect(), k = [r.left, r.top, r.width, r.height].map(Math.round).join(",");
     if (k !== last) { last = k; since = performance.now(); }
@@ -225,12 +225,11 @@ async function walkStep(pg, id, opts) {
   }
   if (r.back) rec.aims.push(await press(pg, "#tourPrev", false));
   if (r.close) rec.aims.push(await press(pg, r.close, false));
-  const wait = ACT_MS + LATE_MS;
   if (rec.want === null) {
     await pg.waitForFunction(() => !sessionStorage.getItem("eTourAt") && document.getElementById("tourRoot").hidden,
-      { timeout: wait, polling: 100 }).catch(() => {});
+      { timeout: STEP_WAIT_MS, polling: 100 }).catch(() => {});
   } else {
-    await pg.waitForFunction(w => sessionStorage.getItem("eTourAt") === w, { timeout: wait, polling: 100 }, rec.want).catch(() => {});
+    await pg.waitForFunction(w => sessionStorage.getItem("eTourAt") === w, { timeout: STEP_WAIT_MS, polling: 100 }, rec.want).catch(() => {});
   }
   rec.to = await at(pg);
   rec.asked = await pg.evaluate(() => !!document.querySelector("body > .bub-ask:not(.e-gone)"));

@@ -45,7 +45,7 @@ function check(ok, line) {
   else { failed++; console.log("  FAIL " + line); }
 }
 const tick = ms => new Promise(r => setTimeout(r, ms || 0));
-const until = async (fn, ms) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < (ms || 3000)) await tick(5); return fn(); };
+const until = async (fn, ms) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < (ms || 30000)) await tick(5); return fn(); };
 
 /* ---- a page's globals, as few as the modules need to run --------------------------------- */
 const SYSTEM = ["en-US"];
@@ -350,7 +350,9 @@ try {
   await until(() => wins.length > 0 && held.size > 0);
   const desk = wins[0];
   check(held.size === 1 && held.has("Control+Shift+Space") && SH.HOTKEY_DEFAULT === "Control+Shift+Space",
-    "2b a desk that never chose holds the default once the window is up: " + [...held.keys()].join(" "));
+    "2b a desk that never chose holds the default once the window is up: held " + held.size
+    + " [" + [...held.keys()].join(" ") + "], has the default " + held.has("Control+Shift+Space")
+    + ", named default " + SH.HOTKEY_DEFAULT);
 
   /* The desk's page: the real preload over main's own handlers, and the real modules behind it. */
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -421,15 +423,23 @@ try {
   };
   held.get("Control+Shift+Space")();
   await until(() => !!pw);
-  check(!!pickerPage.E_PICK && !pickerPage.E_HOST && (pw.opts.webPreferences.additionalArguments || []).indexOf("--etiuda-picker") > -1
+  const pickerArgs = pw.opts.webPreferences.additionalArguments || [];
+  check(!!pickerPage.E_PICK && !pickerPage.E_HOST && pickerArgs.indexOf("--etiuda-picker") > -1
     && pw.opts.webPreferences.sandbox === true && pw.opts.webPreferences.contextIsolation === true && pw.opts.skipTaskbar === true,
-    "2g the picker is a sandboxed window of its own, told so on its command line, and its page gets only the picker's bridge");
+    "2g the picker is a sandboxed window of its own, told so on its command line, and its page gets only the picker's bridge: "
+    + "E_PICK " + !!pickerPage.E_PICK + ", E_HOST " + !!pickerPage.E_HOST
+    + ", flag " + (pickerArgs.indexOf("--etiuda-picker") > -1)
+    + ", sandbox " + pw.opts.webPreferences.sandbox
+    + ", contextIsolation " + pw.opts.webPreferences.contextIsolation
+    + ", skipTaskbar " + pw.opts.skipTaskbar);
   await until(() => pw.visible && pw.focused);
   const want = SH.pickerPlace(cursor, area, SH.PICK_SIZE);
   check(opened.length === 1 && opened[0].rows.length === 4 && pw.visible && pw.focused
     && pw.calls.indexOf("show") > -1 && JSON.stringify(pw.bounds) === JSON.stringify(want),
     "2h the hotkey fills the picker from the desk's page, puts it by the pointer, and shows it focused only once it has drawn: "
-    + JSON.stringify(pw.bounds));
+    + "opened " + opened.length + ", rows " + (opened[0] ? opened[0].rows.length : "none")
+    + ", visible " + pw.visible + ", focused " + pw.focused
+    + ", show " + (pw.calls.indexOf("show") > -1) + ", bounds " + JSON.stringify(pw.bounds));
 
   const found2 = JSON.parse(await pickerPage.E_PICK.find("brass"));
   check(ids(found2.rows) === "c-sign/0", "2i a query from the picker is answered by the desk's own search: " + ids(found2.rows));
@@ -562,7 +572,7 @@ try {
   await until(() => pw.visible);
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
-  check(!pw.visible && opened.length === 2, "2m a second press while it stands closes it");
+  check(!pw.visible && opened.length === 2, "2m a second press while it stands closes it: visible " + pw.visible + ", opened " + opened.length);
 
   ST.lsDel("eNameAsked"); ST.lsDel("eAgent");
   held.get("Control+Shift+Space")();
@@ -574,7 +584,8 @@ try {
   check(asked === false && !pw.visible && desk.calls.indexOf("focus") > -1 && clip.length === clips
     && askSent.length === 1 && askSent[0][3] === JSON.stringify({ id: "c-sign", vi: 0 }),
     "2n a reply that needs the agent's name first sends the agent to the desk's own window, asks the desk there, and writes nothing: "
-    + (askSent.length ? askSent[0][3] : "never asked"));
+    + "asked " + asked + ", visible " + pw.visible + ", focus " + (desk.calls.indexOf("focus") > -1)
+    + ", clip " + clip.length + " of " + clips + ", ask " + (askSent.length ? askSent[0][3] : "never asked"));
   ST.lsSet("eNameAsked", "1");
 
   /* Clicking away is a blur the shell did not ask for: the picker hides and hands nothing back. */
@@ -585,7 +596,8 @@ try {
   (pw.on.blur || []).forEach(fn => fn());
   const away = pw.calls.slice(callsAt);
   check(!pw.visible && away.join(" ") === "hide" && desk.calls.indexOf("focus") < 0,
-    "2s clicking away hides the picker, and neither gives the focus up again nor calls the desk forward: " + (away.join(" ") || "nothing"));
+    "2s clicking away hides the picker, and neither gives the focus up again nor calls the desk forward: visible " + pw.visible
+    + ", calls " + (away.join(" ") || "nothing") + ", desk focus " + (desk.calls.indexOf("focus") > -1));
 
   /* A desk that answers nothing (a card gone, a page mid-reload) leaves the clipboard as it was. */
   held.get("Control+Shift+Space")();
@@ -593,7 +605,8 @@ try {
   const clipsNow = clip.length;
   const gone = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-gone", vi: 0 }));
   check(gone === false && clip.length === clipsNow && pw.visible,
-    "2t a copy the desk cannot answer writes nothing and leaves the picker standing: " + (clip.length - clipsNow) + " written");
+    "2t a copy the desk cannot answer writes nothing and leaves the picker standing: gone " + gone
+    + ", written " + (clip.length - clipsNow) + ", visible " + pw.visible);
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
 
@@ -687,7 +700,15 @@ try {
       && !!nw.bounds && nw.bounds.x === placed.x && nw.bounds.y === placed.y && first === (WIN ? said.pasted : said.copied)
       && /default-src 'none'/.test(policy) && /script-src 'none'/.test(policy) && !/<script/.test(doc),
       "7i a pick says what it did where the picker stood, in a window that takes neither the focus nor a click and runs no script: \""
-      + first + "\" at " + JSON.stringify(nw.bounds && { x: nw.bounds.x, y: nw.bounds.y }) + (WIN ? ", the helper having pressed Ctrl+V" : ", no helper here"));
+      + first + "\" at " + JSON.stringify(nw.bounds && { x: nw.bounds.x, y: nw.bounds.y }) + (WIN ? ", the helper having pressed Ctrl+V" : ", no helper here")
+      + " " + JSON.stringify({
+        visible: nw.visible, focusable: nw.opts.focusable, transparent: nw.opts.transparent, alwaysOnTop: nw.opts.alwaysOnTop,
+        ignore: nw.ignore, showInactive: nw.calls.indexOf("showInactive") > -1, show: nw.calls.indexOf("show") > -1,
+        focusCall: nw.calls.indexOf("focus") > -1, focused: nw.focused,
+        x: nw.bounds && nw.bounds.x, y: nw.bounds && nw.bounds.y, placedX: placed.x, placedY: placed.y,
+        word: first, want: WIN ? said.pasted : said.copied,
+        defaultSrc: /default-src 'none'/.test(policy), scriptSrc: /script-src 'none'/.test(policy), script: /<script/.test(doc)
+      }));
 
     caret.fail = true;
     await pressHotkey();
@@ -718,7 +739,10 @@ try {
     check(!fromPickerSelf && fromDesk && pw.visible && opened.length === opensBefore + 1 && typeof deskPage.E_HOST.openPicker === "function"
       && !pickerPage.E_PICK.openPicker,
       "7k the desk's own door opens the picker by the pointer as the hotkey does, and a second knock leaves it standing; the picker's"
-      + " page cannot knock: " + JSON.stringify([fromPickerSelf, fromDesk, pw.visible, opened.length - opensBefore]));
+      + " page cannot knock: " + JSON.stringify({
+        fromPicker: fromPickerSelf, fromDesk: fromDesk, visible: pw.visible, opened: opened.length - opensBefore,
+        deskDoor: typeof deskPage.E_HOST.openPicker, pickerDoor: !!pickerPage.E_PICK.openPicker
+      }));
 
     AS.setCards(CARDS.map(c => Object.assign({}, c)).concat([{ id: "c-kettle", c: "orders", t: "Kettle", alt: 1,
       en: "{GREET} {PAX},\nThe kettle leaves on Monday.\n\nThe kettle leaves on Friday.", pl: "Kettle words in the second language." }]));

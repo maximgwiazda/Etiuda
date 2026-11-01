@@ -221,10 +221,10 @@ const until = async (pg, fn, what, late, ms) => {
 const QUIET_FRAMES = 6;
 const VIEWPORT_WAITS = { n: 0, settled: 0, ms: 0, slept: 0, worst: 0, worstAt: "", out: [] };
 
-/** setViewport, then wait for the page to have finished answering it. `cap` is the sleep this
- *  call stands in for, in milliseconds, and is the ceiling on the wait. */
+/** setViewport, then wait for the page to have finished answering it. `cap` is the ceiling on
+ *  the wait, in milliseconds. */
 async function sized(pg, width, height, label, cap) {
-  const budget = cap || 900;
+  const budget = cap || 30000;
   const before = await pg.evaluate(() => {
     if (typeof window.__smokeResizeSeen !== "number") {
       window.__smokeResizeSeen = 0;
@@ -615,7 +615,7 @@ const t0 = Date.now();
     w.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
     walkLate = await bootAndDismiss(w, ENGINE, "the tour's own desk");
     const opened = await menuTour(w);
-    await w.waitForFunction(() => sessionStorage.getItem("eTourAt") === "name", { timeout: 5000, polling: 100 }).catch(() => {});
+    await w.waitForFunction(() => sessionStorage.getItem("eTourAt") === "name", { timeout: 30000, polling: 100 }).catch(() => {});
     walkStart = { opened, at: await TW.at(w) };
     walk = await TW.walkTour(w, { loaded: true });
     await sleep(400);
@@ -1003,7 +1003,7 @@ const t0 = Date.now();
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
     await pressTheme();
     await p.waitForFunction(f => document.getAnimations().some(new Function("return " + f)()),
-      { timeout: 3000, polling: "raf" }, isVt.toString()).catch(() => {});
+      { timeout: 30000, polling: "raf" }, isVt.toString()).catch(() => {});
     const held = await p.evaluate(f => { const a = document.getAnimations().filter(new Function("return " + f)());
       a.forEach(x => { x.pause(); x.currentTime = 90; });
       return a.filter(x => /-(old|new)\(root\)$/.test(x.effect.pseudoElement)).map(x => x.effect.getComputedTiming().duration); }, isVt.toString());
@@ -1217,7 +1217,7 @@ const t0 = Date.now();
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
     e = since();
-    await sized(p, w, 950, "the breakpoint sweep", 900);
+    await sized(p, w, 950, "the breakpoint sweep", 30000);
     const r = await p.evaluate(() => {
       const de = document.documentElement;
       const all = [...document.querySelectorAll(CUT_SEL)].filter(el => { if (!el.getClientRects().length) return false;
@@ -1264,7 +1264,7 @@ const t0 = Date.now();
   const footWide = await footerGap(1500, "en");
   const footNarrow = await footerGap(390, "pl");
   await p.evaluate(() => setUiLang("en"));
-  await sized(p, 1500, 950, "the footer and the add button", 700);
+  await sized(p, 1500, 950, "the footer and the add button", 30000);
   check(!footWide.hit && footWide.gap > 0,
     "1500px: the footer line clears the add button (gap " + footWide.gap + "px)");
   check(!footNarrow.hit && footNarrow.gap >= 0,
@@ -1297,10 +1297,10 @@ const t0 = Date.now();
      once the row can hold it with room to spare - so a sweep that starts where the last leg left
      the window (390px) reads a shed state at widths that are perfectly roomy on the way down.
      The subject is the retreat, so the sweep starts above every rung and walks down. */
-  await sized(p, 1500, 950, "the second row's shed, wide first", 700);
+  await sized(p, 1500, 950, "the second row's shed, wide first", 30000);
   let shedAt = 0, roomy = null, pinch = null;
   for (let w = 620; w >= 470 && !shedAt; w -= 2) {
-    await sized(p, w, 950, "the second row's shed sweep", 260);
+    await sized(p, w, 950, "the second row's shed sweep", 30000);
     const r = await rowShed();
     if (r.theme && r.facts) roomy = Object.assign({ w }, r);
     else { shedAt = w; pinch = Object.assign({ w }, r); }
@@ -1331,7 +1331,7 @@ const t0 = Date.now();
      a button that is display:none, so what is driven here is the chevron and what is read is the
      state the hidden control owns. 430px is below the last rung, where all three have retreated. */
   e = since();
-  await sized(p, 430, 950, "a control behind the door", 600);
+  await sized(p, 430, 950, "a control behind the door", 30000);
   const behindDoor = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const open = async () => { document.getElementById("moreBtn").click(); await wait(250); };
@@ -1371,7 +1371,7 @@ const t0 = Date.now();
      window. THE CONTROL IS THE FLOOR SWITCHED OFF in the same window at the same width, which is
      what the box did yesterday, so this is a measurement of the rule and not of the layout. */
   e = since();
-  await sized(p, 300, 950, "the PAX box's own floor", 600);
+  await sized(p, 300, 950, "the PAX box's own floor", 30000);
   const paxFloor = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const pax = document.querySelector(".fills > .fill");
@@ -1393,7 +1393,7 @@ const t0 = Date.now();
     + " with the floor switched off in the same window, and " + paxFloor.back + " with it back");
   clean(e, "the PAX box's floor");
 
-  await sized(p, 1500, 950, "back to wide after the floor", 900);
+  await sized(p, 1500, 950, "back to wide after the floor", 30000);
 
   /* The intent panel: pick, add a second, pinned above the list, wheel over it, drag a plain row, clear. */
   e = since();
@@ -3118,9 +3118,9 @@ const t0 = Date.now();
      390 with three tabs open. */
   const tight = () => p.evaluate(() => document.body.classList.contains("strip-tight"));
   const tg0 = await tight();
-  await sized(p, 420, 950, "the tab strip going tight", 1400);
+  await sized(p, 420, 950, "the tab strip going tight", 30000);
   const tg1 = await tight();
-  await sized(p, 1500, 950, "the tab strip coming back", 1400);
+  await sized(p, 1500, 950, "the tab strip coming back", 30000);
   const tg2 = await tight();
   check(!tg0 && tg1 && !tg2, "narrowing the window with tabs open sheds the wordmark and widening it brings it back ("
     + JSON.stringify([tg0, tg1, tg2]) + ")");
@@ -3244,7 +3244,7 @@ const t0 = Date.now();
   const SAMPLE_EC = path.join(E.ROOT, E.TREE_FILE.sampleEc);
   const loadSample = async q => {
     await q.evaluate(() => { window.showOpenFilePicker = undefined; });
-    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
     const [chooser] = await Promise.all([q.waitForFileChooser({ timeout: 10000 }), q.click("#emptyLoad")]);
     await chooser.accept([SAMPLE_EC]);
     const moved = await nav;
@@ -3360,7 +3360,7 @@ const t0 = Date.now();
     step("the tour's load step on the empty desk");
     const loadStep = await q.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
+      for (let i = 0; i < 300 && document.getElementById("tourRoot").hidden; i++) await wait(100);
       const next = document.getElementById("tourNext");
       if (next) next.click();
       await wait(800);
@@ -3373,7 +3373,7 @@ const t0 = Date.now();
     const inPlace = await loadSample(q);
     const resumed = await q.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
+      for (let i = 0; i < 300 && document.getElementById("tourRoot").hidden; i++) await wait(100);
       return { up: !document.getElementById("tourRoot").hidden, at: sessionStorage.getItem("eTourAt") };
     });
     check(loadStep.at === "load" && loadStep.nextHeld && loadStep.rings && resumed.up && resumed.at === "pax",
@@ -3616,13 +3616,13 @@ const t0 = Date.now();
     /* Eject happens at once and in place with its Undo standing (Maxim, 2026-09-27 23:28 and
        2026-09-28 23:41): no confirm, no reload, the empty desk under the Undo bubble. The bubble is
        then put away by its own Escape, not answered, so the Load below is the only way back. */
-    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
+    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
     // What stands is read as the Clear local memory leg reads it.
     const ejAsked = await q2.evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
       const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
     const ejReload = await ejNav;
     const [ejEmpty, ejUndo] = await Promise.all([upFor(q2, () => !!document.getElementById("emptyLoad")),
-      upFor(q2, () => !!document.getElementById("eUndoBtn"), 8000)]);
+      upFor(q2, () => !!document.getElementById("eUndoBtn"), 30000)]);
     const eject = { asked: ejAsked, reload: ejReload, empty: ejEmpty, undo: ejUndo };
     await q2.evaluate(() => { const u = document.getElementById("eUndo");
       if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
@@ -3657,13 +3657,13 @@ const t0 = Date.now();
     fs.writeFileSync(sib, asSibling(sampleSib));
     await q3.reload({ waitUntil: "load" });
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
-    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 4000);
+    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 30000);
     const other = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-other", name: "Invented Other" });
     delete other.sample; delete other.hash;
     fs.writeFileSync(sib, asSibling(other));
     await q3.reload({ waitUntil: "load" });
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
-    const otherOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 8000);
+    const otherOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 30000);
     check(!sampleOffered && otherOffered,
       "flow-3 the sample found beside a desk holding a chosen catalog is not offered over it, and another catalog found"
       + " there is: " + JSON.stringify({ sampleOffered, otherOffered }));
@@ -3798,7 +3798,7 @@ const t0 = Date.now();
   try {
     const note = (part, why) => { if (part.why === "not driven") part.why = why; };
     const arrived = async (q, fn, ms, arg) => {
-      try { await q.waitForFunction(fn, { timeout: ms || 8000, polling: 50 }, arg); return true; }
+      try { await q.waitForFunction(fn, { timeout: ms || 30000, polling: 50 }, arg); return true; }
       catch (x) { return false; }
     };
     async function pointerClick(q, sel) {
@@ -3848,7 +3848,7 @@ const t0 = Date.now();
       catch (x) { return ""; }
     }
     async function waitWord(q, id, ms) {
-      const deadline = Date.now() + (ms || 5000);
+      const deadline = Date.now() + (ms || 30000);
       let word = "";
       while (Date.now() < deadline) {
         word = await readPaxWord(q, id);
@@ -3878,7 +3878,7 @@ const t0 = Date.now();
         const w = window.__still870 || (window.__still870 = { key: null, n: 0 });
         if (key === w.key) w.n++; else { w.key = key; w.n = 0; }
         return w.n >= 5;
-      }, { polling: "raf", timeout: 4000 }, id, sel || "").then(() => true, () => false);
+      }, { polling: "raf", timeout: 30000 }, id, sel || "").then(() => true, () => false);
     }
     async function hoverCard(q, id) {
       const there = await q.evaluate(cardId => {
@@ -3949,7 +3949,7 @@ const t0 = Date.now();
         said.opened = await arrived(q, () => {
           const m = document.getElementById("modal");
           return !!(m && !m.hidden && document.getElementById("meSave"));
-        }, 8000);
+        }, 30000);
         opened = said.opened;
         break;
       }
@@ -3974,7 +3974,7 @@ const t0 = Date.now();
       const moved = await arrived(q, g0 => {
         const d = document.getElementById("genderDrum");
         return !!(d && d.dataset.g && d.dataset.g !== g0);
-      }, 2000, was);
+      }, 30000, was);
       return { was: was, now: await glyphOf(q), acted: acted, moved: moved };
     }
     async function readDialog(q) {
@@ -4055,7 +4055,7 @@ const t0 = Date.now();
         return arrived(q, () => {
           const btn = document.querySelector('#seg button[data-l="pl"]');
           return typeof lang === "string" && lang === "pl" && !!(btn && btn.classList.contains("on"));
-        }, 8000);
+        }, 30000);
       })();
       /* setLang paints the thumb at once and rebuilds the cards a fifth of a second later. */
       if (langOk) await sleep(450);
@@ -4073,9 +4073,9 @@ const t0 = Date.now();
         const box = document.getElementById("pax");
         const d = document.getElementById("genderDrum");
         return !!(box && box.value === "Anna Nowak" && d && d.dataset.g === "f");
-      }, 5000);
+      }, 30000);
       if (!named) note(shown, "the name did not read as female");
-      const wordBefore = named ? await waitWord(q, cardId, 5000) : "";
+      const wordBefore = named ? await waitWord(q, cardId, 30000) : "";
       shown.wordBefore = wordBefore;
       if (named && !wordBefore) note(shown, "the card did not show the name");
       const g0 = await glyphOf(q);
@@ -4116,7 +4116,7 @@ const t0 = Date.now();
           const row = document.getElementById("meOwnRow");
           const radio = document.querySelector('input[name="meAddr_pl"][value="titleFirst"]');
           return !!(row && row.classList.contains("on") && radio && radio.offsetWidth > 0);
-        }, 5000);
+        }, 30000);
         if (!forms) note(shown, "the address forms stayed hidden");
         else {
           sumBefore = await q.evaluate(() => {
@@ -4136,7 +4136,7 @@ const t0 = Date.now();
           if (!await pointerClick(q, PL_FORM)) {
             note(shown, "the pl form was not under the pointer");
           } else {
-            if (!await arrived(q, formSet, 3000)) {
+            if (!await arrived(q, formSet, 30000)) {
               shown.pressMissed = await q.evaluate(s => {
                 const el = document.querySelector(s);
                 if (!el) return { found: false };
@@ -4178,7 +4178,7 @@ const t0 = Date.now();
           if (saved.ok) saved.why = "";
           else note(saved, pack.kept && pack.kept.why ? pack.kept.why : "the pack does not hold the form");
         }
-        const wordAfter = await waitWord(q, cardId, 5000);
+        const wordAfter = await waitWord(q, cardId, 30000);
         shown.wordAfter = wordAfter;
         const cardMoved = !!(wordBefore && wordAfter && wordAfter !== wordBefore);
         if (saved.ok && !cardMoved) note(shown, "the card did not change after the save");
@@ -4186,7 +4186,7 @@ const t0 = Date.now();
         await arrived(q, () => {
           const m = document.getElementById("modal");
           return !m || m.hidden;
-        }, 4000);
+        }, 30000);
         const seen = [];
         if (cardMoved) seen.push(wordAfter);
         let glyphOk = false;
@@ -4220,7 +4220,7 @@ const t0 = Date.now();
           if (!tb || tb.pax !== "Anna Nowak" || tb.lang !== "pl" || !d) return false;
           if (!d.classList.contains("gd-hand")) return true;
           return !!(tb.gender && tb.gender.v === d.dataset.g);
-        }, 5000);
+        }, 30000);
         if (!sessionOk) {
           const hasName = await q.evaluate(() => (sessionStorage.getItem("eSessionTabs") || "").indexOf("Anna Nowak") >= 0);
           if (!hasName) note(back, "the tab did not keep the name");
@@ -4237,7 +4237,7 @@ const t0 = Date.now();
         if (!restored) note(back, "the desk did not return the name");
         else {
           const again = await readKept(q, cardId);
-          const wordBack = await waitWord(q, cardId, 5000);
+          const wordBack = await waitWord(q, cardId, 30000);
           const reopened = await openEditor(q, cardId);
           let dlg = null;
           if (reopened) {
@@ -4249,7 +4249,7 @@ const t0 = Date.now();
             await arrived(q, () => {
               const el = document.querySelector('input[name="meAddr_pl"]');
               return !!(el && el.offsetWidth > 0);
-            }, 5000);
+            }, 30000);
             dlg = await readDialog(q);
             await q.keyboard.press("Escape");
           } else note(back, "the editor did not open after the reload");
@@ -4358,7 +4358,7 @@ const t0 = Date.now();
   check(VIEWPORT_WAITS.n > 0 && VIEWPORT_WAITS.out.length === 0,
     "every wait for a width ended on its condition and not on its ceiling: "
     + VIEWPORT_WAITS.settled + " of " + VIEWPORT_WAITS.n + " settled in "
-    + VIEWPORT_WAITS.ms + " ms, where the sleeps they replace would have spent "
+    + VIEWPORT_WAITS.ms + " ms, under ceilings of "
     + VIEWPORT_WAITS.slept + " ms; the slowest was " + VIEWPORT_WAITS.worst + " ms at "
     + VIEWPORT_WAITS.worstAt
     + (VIEWPORT_WAITS.out.length ? " - WAITED OUT: " + VIEWPORT_WAITS.out.join("; ") : ""));

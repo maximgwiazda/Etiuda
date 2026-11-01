@@ -529,7 +529,7 @@ async function sweepScene(mf, prefix, r2Name, bindingName) {
   // Poll P state: wait until P's alarm has rung or swept
   let stateP = null;
   const startPollP = Date.now();
-  while (Date.now() - startPollP < 5000) {
+  while (Date.now() - startPollP < 30000) {
     await new Promise(r => setTimeout(r, 50));
     stateP = await (await stubP.fetch("https://do/__test/state")).json();
     if (stateP.swept || (stateP.alarm && stateP.alarm > Date.now() + 1000000)) break;

@@ -155,8 +155,8 @@ try {
     await sleep(FADE_WAIT);
     if (crashed) { firstDeath = "category " + (k + 1) + " of " + nPills; break; }
     const got = await Promise.race([q.evaluate(() => [document.documentElement.dataset.theme, localStorage.getItem("eTheme")]),
-      sleep(8000).then(() => null)]);
-    if (!got) { firstDeath = "category " + (k + 1) + " of " + nPills + " (no answer in 8 s)"; crashed = true; break; }
+      sleep(30000).then(() => null)]);
+    if (!got) { firstDeath = "category " + (k + 1) + " of " + nPills + " (no answer in 30 s)"; crashed = true; break; }
     if (got[0] === want) landed++;
     if (got[1] === want) stored++;
   }

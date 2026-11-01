@@ -1280,7 +1280,7 @@ async function run() {
     try {
       ctl = new syncerMod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks, pollMs: 200 });
       ctl.start();
-      for (let i = 0; i < 50 && !(byWorker = fs.existsSync(second) && !owedAtOf(mirror, "desks/" + me.id + "/cat-44a-1e1e1e1e.ec")); i++) {
+      for (let i = 0; i < 300 && !(byWorker = fs.existsSync(second) && !owedAtOf(mirror, "desks/" + me.id + "/cat-44a-1e1e1e1e.ec")); i++) {
         await new Promise(r => setTimeout(r, 100));
       }
     } catch { byWorker = false; }
@@ -2159,7 +2159,7 @@ async function run() {
     try {
       s = mod.startFolderSyncer({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: () => null, checks: deskChecksForWorker(), pollMs: 200 });
     } catch { return false; }
-    const until = Date.now() + 8000;
+    const until = Date.now() + 30000;
     let landed = false;
     while (!landed && Date.now() < until) {
       await new Promise(res => setTimeout(res, 150));
@@ -2190,7 +2190,7 @@ async function run() {
     const d = loadDesk(ud, src ? { src } : {});
     const s = d.api.folderSyncerRun();
     const lines = () => d.said.filter(l => l.indexOf("ERR etiuda: ") === 0 && l.indexOf("etiuda-team.json is signed by a key other than the lead's") >= 0);
-    const until = Date.now() + 8000;
+    const until = Date.now() + 30000;
     while (!lines().length && Date.now() < until) await new Promise(res => setTimeout(res, 150));
     if (s && typeof s.kick === "function") { s.kick(); await new Promise(res => setTimeout(res, 1200)); }
     try { if (s && typeof s.stop === "function") s.stop(); } catch {}

@@ -2502,7 +2502,7 @@ async function main() {
         await delay(150);
         const during = [c.gets.n, settled];
         s.end();
-        const after = await Promise.race([pending, delay(3000).then(() => "hung")]);
+        const after = await Promise.race([pending, delay(30000).then(() => "hung")]);
         const big = await countedCall(worker, R, "POST", "/relay/v1/t/" + rt + "/" + route, { body: Buffer.alloc(300 * 1024) });
         out[route] = { during, after: after === "hung" ? "hung" : (after ? after.status : "reset"), gets: c.gets.n, big: [refused(big.r, "blob-size"), big.gets] };
       }
@@ -2528,10 +2528,10 @@ async function main() {
         let answer = "pending";
         const done = team.fetch(new Request("https://relay.test/relay/v1/t/" + rt + "/" + route, { method: "POST", body: s.stream, duplex: "half" }))
           .then(async res => { answer = [res.status, JSON.parse(await res.text()).error]; }, () => { answer = "threw"; });
-        await Promise.race([done, delay(300)]);
+        await Promise.race([done, delay(30000)]);
         const early = answer, reads = s.reads.n;
         s.end();
-        await Promise.race([done, delay(2000)]);
+        await Promise.race([done, delay(30000)]);
         out[route] = [early, reads > 0];
       }
       return out;

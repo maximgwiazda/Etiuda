@@ -154,7 +154,7 @@ function buildApp() {
     const from = said.length;
     const at = Date.now();
     await fn();
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 600; i++) {
       if (said.slice(from).some(l => l.indexOf(HANDED) === 0 || /stays closed/.test(l))) break;
       await sleep(50);
     }

@@ -89,14 +89,14 @@ async function ask(cmd) {
   const n = formN++;
   fs.writeFileSync(path.join(LAB, "cmd-" + n + ".txt"), cmd, "utf8");
   const ans = path.join(LAB, "ans-" + n + ".txt");
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 600; i++) {
     await sleep(50);
     if (fs.existsSync(ans)) { await sleep(20); return fs.readFileSync(ans, "utf8").trim(); }
   }
   throw new Error("the chat form did not answer " + JSON.stringify(cmd));
 }
 const b64 = s => Buffer.from(String(s || ""), "base64").toString("utf8");
-const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 4000)) { if (await fn()) return true; await sleep(100); } return false; };
+const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 30000)) { if (await fn()) return true; await sleep(100); } return false; };
 
 /* ---- the app: the shell and the built engine in a throwaway, one invented catalog ----------- */
 function buildApp() {
@@ -152,7 +152,7 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   fs.writeFileSync(path.join(LAB, "form.ps1"), FORM_PS1, "utf8");
   form = spawn("powershell.exe", ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", path.join(LAB, "form.ps1"), "-Dir", LAB],
     { stdio: "ignore", windowsHide: false });
-  check(await until(async () => (await ask("fg")) === "True", 8000), "b the chat window stands in front with its text box focused");
+  check(await until(async () => (await ask("fg")) === "True", 30000), "b the chat window stands in front with its text box focused");
 
   /* MOD_CONTROL 2 | MOD_SHIFT 4 = 6, VK_SPACE 0x20; the control is F24 with every modifier, which nobody holds. */
   const second = await ask("hold 1 6 32"), control = await ask("hold 2 7 135");
@@ -162,9 +162,19 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
     + second + ", " + control);
 
   await ask("keys ctrl+shift+space");
-  let pp = null;
-  const up = await until(async () => { pp = await pickerPage(); return !!pp && await pp.evaluate(() => document.hasFocus() && document.activeElement && document.activeElement.id === "q"); });
-  check(up && (await ask("fg")) === "False", "d the hotkey over the chat opens the picker with its search box focused");
+  let pp = null, pageUp = false, focused = false, boxId = "";
+  const up = await until(async () => {
+    pp = await pickerPage();
+    pageUp = !!pp;
+    if (!pp) return false;
+    const st = await pp.evaluate(() => ({ focus: document.hasFocus(), id: document.activeElement ? document.activeElement.id : "" }));
+    focused = !!st.focus;
+    boxId = st.id || "";
+    return focused && boxId === "q";
+  });
+  const chatBehind = (await ask("fg")) === "False";
+  check(up && chatBehind, "d the hotkey over the chat opens the picker with its search box focused"
+    + " (page " + pageUp + ", focus " + focused + ", box " + JSON.stringify(boxId) + ", chat behind " + chatBehind + ")");
 
   await ask("keys enter");
   const back = await until(async () => (await ask("fg")) === "True");

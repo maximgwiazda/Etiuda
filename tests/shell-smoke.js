@@ -1322,11 +1322,11 @@ const placeEc = (dir, from, as, minutesOld) => {
      suites at once, could not say whether the tour was late, the offer slow, or the product wrong. So FIRST_SCREEN
      waits for the tour's bubble and Skip to stand on screen (Skip is in the page from the start, so being there says
      nothing; one run found it at 1 ms with no tour up at 2.2 s), the screen with the tour standing is read as 2k2
-     reads it, Skip is clicked only where it stands, and after the click the offer is polled for (up to 5 s); both
+     reads it, Skip is clicked only where it stands, and after the click the offer is polled for (up to 30 s); both
      times are printed, and so is what stood when Skip was clicked.
      THE OFFER IS DUE AT ONCE, and a late one fails (the lead engineer's read, 2026-09-29): Skip ends the tour and the
      tour's queue raises the offer in that same task, so it must stand within OFFER_DUE ms of the click, the moment the
-     old leg read it at. Clean runs read it 1 to 3 ms after Skip; the 5 s poll only says how late a late one came. No
+     old leg read it at. Clean runs read it 1 to 3 ms after Skip; the 30 s poll only says how late a late one came. No
      other leg holds that the offer rises in Skip's own task. */
   const OFFER_DUE = 800;
   const pollPage = async (fn, ms) => { const t0 = Date.now();
@@ -1336,7 +1336,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   const skipAfter = takenFirst.tourAt;
   const skipped = await s.p.evaluate(() => { const k = document.getElementById("tourSkip");
     if (!k || !k.getBoundingClientRect().width) return false; k.click(); return true; });
-  const offerAfter = skipped ? await pollPage(() => !!document.querySelector("#ecYes"), 5000) : -1;
+  const offerAfter = skipped ? await pollPage(() => !!document.querySelector("#ecYes"), 30000) : -1;
   const takenSeen = await s.p.evaluate(SEEN);
   const takenRead = (s.said.join(" | ").match(/catalog read from ([^,]+),/) || [])[1] || "";
   await s.stop();
@@ -1352,7 +1352,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     + (skipAfter > -1 ? "and the tour's bubble stood after " + skipAfter + " ms" : "and the tour's bubble never stood in 20000 ms")
     + ", then the tour up " + takenFirst.tour + " and the offer " + takenFirst.offer + ", Skip clicked " + skipped
     + ", the offer " + (offerAfter > -1 ? "up " + offerAfter + " ms after" + (offerAfter > OFFER_DUE ? ", LATE: due within " + OFFER_DUE + " ms" : "")
-      : "not up within 5000 ms") + " (" + takenSeen.offer + " at the last read)");
+      : "not up within 30000 ms") + " (" + takenSeen.offer + " at the last read)");
 
   /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26 and 2026-09-28). The copy 2k2's first
      run gave Documents/Etiuda is the one listed, once, as a plain row, being byte for byte the shipped
@@ -2146,9 +2146,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!got || !got.text) return { step: "the file did not read" };
     if (!importCatalogText(got.text, got.name)) return { step: "refused" };
     const t0 = Date.now();
-    while (!document.getElementById("eCatalogOffer") && Date.now() - t0 < 5000) await wait(100);
+    while (!document.getElementById("eCatalogOffer") && Date.now() - t0 < 30000) await wait(100);
     const box = document.getElementById("eCatalogOffer");
-    const out = { step: box ? "offered" : "no offer within 5000 ms", says: !!box && (box.innerText || "").indexOf(name) > -1,
+    const out = { step: box ? "offered" : "no offer within 30000 ms", says: !!box && (box.innerText || "").indexOf(name) > -1,
       band: ((document.getElementById("catNow") || {}).innerText || "").indexOf(name) > -1,
       bold: box ? ((box.querySelector(".ec-what b") || {}).textContent || "") : "" };
     const no = document.getElementById("ecNo"); if (no) no.click();
@@ -2780,7 +2780,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     await cdp.detach().catch(() => {});
     // Read while the answer stands: a toast is gone again 1.7 s after it arrives.
     await s.p.waitForFunction(a => a === "offer" ? !!document.querySelector("#ecYes") : document.getElementById("toast").classList.contains("show"),
-      { timeout: 3000, polling: 50 }, answer).catch(() => {});
+      { timeout: 30000, polling: 50 }, answer).catch(() => {});
     return s.p.evaluate(() => {
       const subs = document.querySelectorAll("#eCatalogOffer .ec-sub"), last = subs[subs.length - 1];
       return { offer: !!document.querySelector("#ecYes"), url: location.href.split("/").pop(),

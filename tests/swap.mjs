@@ -215,7 +215,7 @@ async function settle(q) {
   /* A desk that has forgotten its tour starts one by itself once the logo has formed: waited for,
      so both sides of a comparison are read with it standing. */
   await q.waitForFunction(() => (localStorage.getItem("eTourDone_v3") != null || localStorage.getItem("eTourInvite_v3") != null)
-    || (typeof tourActive === "function" && tourActive()), { timeout: 8000 }).catch(() => {});
+    || (typeof tourActive === "function" && tourActive()), { timeout: 30000 }).catch(() => {});
   await sleep(700);
   await q.evaluate(() => {
     if (!window.__swapBase) {

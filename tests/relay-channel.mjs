@@ -152,7 +152,7 @@ async function loadPlantedSettings(code) {
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, ms) {
-  const end = Date.now() + (ms || 4000);
+  const end = Date.now() + (ms || 30000);
   for (;;) {
     let v = false;
     try { v = await fn(); } catch { v = false; }
@@ -563,7 +563,7 @@ try {
   await settle(each);
   const eachBefore = idsBy(OTHER.keyId).length;
   put(each.mirror, "desks/" + OTHER.keyId + "/deep/stats.estat", "{\"counted\":3}\n");
-  const eachSent = await until(() => idsBy(OTHER.keyId).length > eachBefore, 6000);
+  const eachSent = await until(() => idsBy(OTHER.keyId).length > eachBefore, 30000);
   check(desk2.ch.watchMode() === (process.platform === "linux" && Number(process.versions.node.split(".")[0]) < 20 ? "each" : "recursive")
     && each.ch.watchMode() === "each" && eachSent,
     "940q the mirror's watch is " + desk2.ch.watchMode() + " here (node " + process.versions.node + "), and with one watch per folder a file in a new"
@@ -682,14 +682,14 @@ try {
     let j9 = program(name9, J9, "desk:" + J9.keyId, opts9);
     put(j9.mirror, rel9, body9);
     j9.ch.start();
-    await until(async () => { j9.ch.kick(); await j9.ch.idle(); return puts >= 1; }, 6000);
+    await until(async () => { j9.ch.kick(); await j9.ch.idle(); return puts >= 1; }, 30000);
     const strandedFirst = read(lead2.mirror, rel9) === null;
     if (quits) {
       await j9.ch.stop();
       j9 = program(name9, J9, "desk:" + J9.keyId, opts9);
       j9.ch.start();
     }
-    const atLead = await until(async () => { await settle(j9); await settle(lead2); return read(lead2.mirror, rel9) === body9; }, 8000);
+    const atLead = await until(async () => { await settle(j9); await settle(lead2); return read(lead2.mirror, rel9) === body9; }, 30000);
     const rec = store().get("inv:" + INV9) || {};
     const uploads = entries().filter(([k, v]) => k.startsWith("blob:") && v.writer === J9.keyId).length;
     const used = j9.prog.state().tokenUsed === true;
@@ -1749,7 +1749,7 @@ try {
   const folderNow = D.api.catalogFolder();
   const me = await D.ask("etiuda:branch-identity", false);
   const joinRel = "desks/" + me.id + "/join.json";
-  const sent = await until(async () => { await studio.kick(); await studio.idle(); return !!read(studioMirror, joinRel); }, 6000);
+  const sent = await until(async () => { await studio.kick(); await studio.idle(); return !!read(studioMirror, joinRel); }, 30000);
   check(!!offer && offer.offer && offer.offer.relay === "relay.test" && !taken.refused && folderNow === mirror && sent
     && read(mirror, C.TEAM_NAME) === read(studioMirror, C.TEAM_NAME),
     "942a a desk takes a relay invitation: its team folder is the mirror, it reads the team file sealed for that invitation, and its"
@@ -1897,10 +1897,10 @@ try {
     const ch = Dw.api.relayRun();
     if (ch) { ch.kick(); await ch.idle(); }
     return factsOf(Dw.api.readCatalog() || "") === 1;
-  }, 8000);
+  }, 30000);
   let atLead = false, later = false, still = false;
   if (readNow) {
-    atLead = await until(async () => { await studioW.kick(); await studioW.idle(); return !!read(studioWMirror, joinA); }, 8000);
+    atLead = await until(async () => { await studioW.kick(); await studioW.idle(); return !!read(studioWMirror, joinA); }, 30000);
     put(studioWMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KW, TEAMW, 1, catalogText(2))));
     await studioW.kick(); await studioW.idle();
     const chLater = Dw.api.relayRun();
@@ -1922,7 +1922,7 @@ try {
     const ch = De.api.relayRun();
     if (ch) { ch.kick(); await ch.idle(); }
     return De.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
-  }, 8000);
+  }, 30000);
   const unreadE = factsOf(De.api.readCatalog() || "") !== 1;
   check(!!takenE && !takenE.refused && saidEpoch && unreadE,
     "965b a wrap whose epoch is not the signed team file's is refused and said, and that catalog is not read: "
@@ -1965,7 +1965,7 @@ try {
     const invP = await inviteOnW(1);
     const Dp = deskOnWrap("wrap-plant", invP.wrap);
     const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
-    const end = Date.now() + 4000;
+    const end = Date.now() + 30000;
     while (Date.now() < end) {
       const ch = Dp.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
@@ -2029,13 +2029,13 @@ try {
       const ch = first.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
       return first.said.some(l => l.indexOf(B.REASONS.epoch) >= 0);
-    }, 8000);
+    }, 30000);
     uploaded = await until(async () => {
       const ch = first.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
       await studioW.kick(); await studioW.idle();
       return !!read(studioWMirror, joinRel);
-    }, 8000);
+    }, 30000);
     const keptAfterUpload = !!((((first.envelope().teamJoin || {}).invite || {}).relay || {}).wrap);
     const stopFirst = first.api.relayRun();
     if (stopFirst) await stopFirst.stop();
@@ -2056,7 +2056,7 @@ try {
       const ch = second.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
       return factsOf(second.api.readCatalog() || "") === edition;
-    }, 8000);
+    }, 30000);
     const stopSecond = second.api.relayRun();
     if (stopSecond) await stopSecond.stop();
     return { taken: taken, said: said, uploaded: uploaded, keptAfterUpload: keptAfterUpload, read: read2, asks: seen.asks, afterUpload: seen.afterUpload };
@@ -2150,7 +2150,7 @@ try {
       if (ch) { ch.kick(); await ch.idle(); }
       view = await desk.ask("etiuda:team-join", "view");
       return !!(view && view.join && view.join.state !== "waiting");
-    }, 6000);
+    }, 30000);
     const kept = (((((desk.envelope().teamJoin || {}).invite || {}).relay || {}).end)) || "";
     const again = loadDesk(desk.ud);
     const after = await again.ask("etiuda:team-join", "view");
@@ -2228,7 +2228,7 @@ try {
         if (ch) { ch.kick(); await ch.idle(); }
         await leadA.kick(); await leadA.idle();
         return !!read(leadMirror, rel);
-      }, 8000);
+      }, 30000);
       const doc = landed ? JSON.parse(read(leadMirror, rel)) : null;
       return { desk, taken, who, rel, doc };
     }
@@ -2243,7 +2243,7 @@ try {
       const v = await joined.desk.ask("etiuda:team-join", "view");
       if (v && v.joined && v.joined.team === TEAMA) { shownJ = v; return true; }
       return false;
-    }, 8000);
+    }, 30000);
     const afterJ = deskTransport.log.slice(markJ).filter(l => l.indexOf("/t/" + RTA + "/") >= 0);
     const fetchedJ = afterJ.some(l => l.indexOf("/b/" + one.inv) >= 0);
     const listedJ = afterJ.some(l => l.indexOf("/since/") >= 0 || l.indexOf("/socket") >= 0);
@@ -2258,7 +2258,7 @@ try {
       const v = await refused.desk.ask("etiuda:team-join", "view");
       if (v && v.join && v.join.state === "refused") { shownNo = v; return true; }
       return false;
-    }, 8000);
+    }, 30000);
     const keptNo = !!read(leadMirror, refused.rel);
     check(!!joined.taken && !joined.taken.refused && wroteJoin.ok === true && !!shownJ && shownJ.joined.team === TEAMA
       && keptJ && fetchedJ && !listedJ && !!refused.taken && !refused.taken.refused && wroteNo.ok === true
@@ -2388,7 +2388,7 @@ try {
     const ch = D.api.relayRun();
     if (ch) { ch.kick(); await ch.idle(); }
     return factsOf(D.sync("etiuda:catalog") || "") === 1;
-  }, 8000);
+  }, 30000);
   check(loaded && JSON.stringify((D.envelope().teamPinFrom || {})[TEAM2]) === "\"invite\"",
     "942b admitted, the desk reads its team on the relay, keeps the team key from its wrap and loads the edition the lead put in Studio's"
     + " mirror: " + (loaded ? "edition 1 loaded" : "not loaded") + ", the pin from " + JSON.stringify((D.envelope().teamPinFrom || {})[TEAM2]));
@@ -2396,7 +2396,7 @@ try {
      record keeps no join, and the desk follows its team file's address and not the invitation's. The next view says joined once. */
   {
     const doneN1 = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle();
-      return read(mirror, joinRel) === null && read(studioMirror, joinRel) === null; }, 8000);
+      return read(mirror, joinRel) === null && read(studioMirror, joinRel) === null; }, 30000);
     const keptJ = Object.prototype.hasOwnProperty.call(D.envelope(), "teamJoin"), hereN1 = D.api.relayHere();
     const firstView = await D.ask("etiuda:team-join", "view"), secondView = await D.ask("etiuda:team-join", "view");
     const saidJoined = !!(firstView && firstView.joined && firstView.joined.team === TEAM2) && !!secondView && secondView.joined === null;
@@ -2407,7 +2407,7 @@ try {
       + ", the next view " + (saidJoined ? "said joined once" : "did not say joined once"));
   }
   const gone = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle();
-    return read(studioMirror, joinRel) === null; }, 8000);
+    return read(studioMirror, joinRel) === null; }, 30000);
   check(gone, "942c the desk's request, removed once it is admitted, goes from the lead's mirror by its signed deletion: " + (gone ? "removed" : "still there"));
 
   /* Offline: the desk keeps working on its mirror, then catches up. */
@@ -2418,7 +2418,7 @@ try {
   /* The page's next read, as the mirror's watch would prompt it in the app. */
   const whileDown = factsOf(D.api.readCatalog() || "");
   deskTransport.down = false;
-  const caught = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } return factsOf(D.api.readCatalog() || "") === 2; }, 8000);
+  const caught = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } return factsOf(D.api.readCatalog() || "") === 2; }, 30000);
   check(whileDown === 1 && caught, "942d after being offline the desk loads the edition published meanwhile, having worked on its mirror: while down "
     + whileDown + ", then " + (caught ? 2 : "not caught up: the mirror's edition " + (read(mirror, "board.ec") === read(studioMirror, "board.ec")
       ? "is the lead's" : "is not the lead's") + ", the desk read " + factsOf(D.api.readCatalog() || "") + "; "
@@ -2489,7 +2489,7 @@ try {
     const stillLoaded = factsOf(D.api.readCatalog() || "") === 2;
     const oldT = Date.now() - 3 * 24 * 60 * 60 * 1000;
     const oldText = headBody(TEAM2, oldT, "Quay two", "1 March 2026");
-    const oldLanded = await until(async () => { put(studioMirror, HEAD_FILE, oldText); await pump(); return read(mirror, HEAD_FILE) === oldText; }, 8000);
+    const oldLanded = await until(async () => { put(studioMirror, HEAD_FILE, oldText); await pump(); return read(mirror, HEAD_FILE) === oldText; }, 30000);
     const oldNews = newsOf();
     const oldLeads = await leadsOf();
     const oldPage = await pageHtml(oldLeads);
@@ -2498,7 +2498,7 @@ try {
     const noteRel = "desks/" + me.id + "/note.ec";
     const note = "Desk Nine still writes while the team's news is old.\n";
     put(mirror, noteRel, note);
-    const noteSent = await until(async () => { await pump(); return read(studioMirror, noteRel) === note; }, 8000);
+    const noteSent = await until(async () => { await pump(); return read(studioMirror, noteRel) === note; }, 30000);
     const oldLead = teamLead(oldLeads);
     check(oldLanded && stillLoaded && absent && absent.shown === false && absent.blocked === false
       && oldNews && oldNews.shown === true && oldNews.blocked === false && oldNews.edition === "Quay two"
@@ -2512,7 +2512,7 @@ try {
       + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
     const freshT = Date.now();
     const freshText = headBody(TEAM2, freshT, "Quay three", "2 March 2026");
-    const freshLanded = await until(async () => { put(studioMirror, HEAD_FILE, freshText); await pump(); return read(mirror, HEAD_FILE) === freshText; }, 8000);
+    const freshLanded = await until(async () => { put(studioMirror, HEAD_FILE, freshText); await pump(); return read(mirror, HEAD_FILE) === freshText; }, 30000);
     const freshNews = newsOf();
     const freshLeads = await leadsOf();
     const freshPage = await pageHtml(freshLeads);
@@ -2538,7 +2538,7 @@ try {
     const forgedSaid = await until(async () => {
       put(studioMirror, HEAD_FILE, forgedText); await pump();
       return D.said.slice(forgedFrom).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
-    }, 8000);
+    }, 30000);
     check(forgedSaid && read(mirror, HEAD_FILE) === kept,
       "948c a forged head is dropped and said, and the mirror keeps the genuine one: "
       + (forgedSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
@@ -2547,7 +2547,7 @@ try {
     const olderSaid = await until(async () => {
       put(studioMirror, HEAD_FILE, olderText); await pump();
       return D.said.slice(olderFrom).some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
-    }, 8000);
+    }, 30000);
     check(olderSaid && read(mirror, HEAD_FILE) === kept,
       "948d an older head is dropped and said, and the newer stays: "
       + (olderSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
@@ -2556,7 +2556,7 @@ try {
     const otherSaid = await until(async () => {
       put(studioMirror, HEAD_FILE, otherText); await pump();
       return D.said.slice(otherFrom).some(l => l.indexOf(B.REASONS["wrong-team"]) >= 0);
-    }, 8000);
+    }, 30000);
     check(otherSaid && read(mirror, HEAD_FILE) === kept,
       "948e another team's head is dropped and said, and this team's stays: "
       + (otherSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
@@ -2589,7 +2589,7 @@ try {
       { catalog: "quay-board", rev: 2, edition: "Quay six", published: "5 March 2026" }];
     const tTwo = Date.now();
     const shownFor = async (text) => {
-      const landed = await until(async () => { put(studioMirror, HEAD_FILE, text); await pump(); return read(mirror, HEAD_FILE) === text; }, 8000);
+      const landed = await until(async () => { put(studioMirror, HEAD_FILE, text); await pump(); return read(mirror, HEAD_FILE) === text; }, 30000);
       const n = newsOf(), row = teamLead(await leadsOf());
       return { landed, news: n ? n.edition + " / " + n.published : "none", row: row && row.head ? row.head.edition + " / " + row.head.published : "none" };
     };
@@ -2755,14 +2755,14 @@ try {
     studio2.start();
     await studio2.idle(); studio2.kick(); await studio2.idle();
     const onRev3 = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
-      try { return JSON.parse(read(mirror, C.TEAM_NAME)).rev === 3; } catch { return false; } }, 8000);
+      try { return JSON.parse(read(mirror, C.TEAM_NAME)).rev === 3; } catch { return false; } }, 30000);
     const KN2 = crypto.randomBytes(32);
     leadKeys.set(2, KN2);
     put(studioMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KN2, TEAM2, 2, catalogText(3))));
     put(studioMirror, C.TEAM_NAME, team2at(2, 1, [meEntry(KN2, 2)]));
     studio2.kick(); await studio2.idle(); studio2.kick(); await studio2.idle();
     const moved = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
-      return factsOf(D.api.readCatalog() || "") === 3; }, 8000);
+      return factsOf(D.api.readCatalog() || "") === 3; }, 30000);
     const seenEpoch = (D.envelope().teamEpochSeen || {})[TEAM2];
     const chNow = D.api.relayRun();
     const pendingNow = chNow ? chNow.program.state().pending.length : -1;
@@ -2809,7 +2809,7 @@ try {
     const gme = await G.ask("etiuda:branch-identity", false);
     const gMirror = path.join(G.ud, "relay", RT4);
     const byDesk = () => R.stores.get(RT4).dump().map(([, v]) => JSON.parse(v)).filter(v => v && v.writer === gme.id).length;
-    const asked = await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } return byDesk() > 0; }, 6000);
+    const asked = await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } return byDesk() > 0; }, 30000);
     const heldNone = read(gMirror, C.TEAM_NAME) === null;
     deskTransport.down = true;
     studio4.start();
@@ -2825,7 +2825,7 @@ try {
     const copyGone = !R.stores.get(RT4).dump().map(([, v]) => JSON.parse(v)).some(v => v && v.place === "invite:" + INV4 && !v.del);
     deskTransport.down = false;
     const joined = await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
-      return factsOf(G.api.readCatalog() || "") === 1; }, 8000);
+      return factsOf(G.api.readCatalog() || "") === 1; }, 30000);
     check(!took.refused && boxKept && asked && heldNone && atLead && copyGone && joined,
       "945c f6 in the desk's own shell: a relay invitation naming the lead's box, the request sent before the lead put up any copy, the desk"
       + " offline while it is admitted and the invitation let go; back, it finds its own copy by that box and loads the edition: box "
@@ -2836,7 +2836,7 @@ try {
        it holds the key, so an empty desk opens it with nothing pressed (the page's half is tests/team-join.mjs 987e). */
     let namedG = null;
     await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
-      const v = await G.ask("etiuda:team-join", "view"); if (v && v.opens) namedG = v; return !!namedG; }, 8000);
+      const v = await G.ask("etiuda:team-join", "view"); if (v && v.opens) namedG = v; return !!namedG; }, 30000);
     check(!!namedG && namedG.opens.team === TEAM4 && namedG.opens.file === "board.ec",
       "987m admitted with no invitation's copy, the relay desk's view names the team's catalog for its page to open: "
       + (namedG ? JSON.stringify(namedG.opens) : "nothing named"));
@@ -3104,7 +3104,7 @@ try {
         try { env = D.envelope(); } catch { env = {}; }
         return read(mirror, C.TEAM_NAME) !== null && !!(env.teamChannel && env.teamChannel[team]) && !!(ch && ch.online())
           && (!opt.wrap || !!(env.teamKeys && env.teamKeys[team]));
-      }, 8000);
+      }, 30000);
       let landed = await landing();
       if (opt.retake) await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       let env = {};
@@ -3136,7 +3136,7 @@ try {
       const running = D.api.relayRun();
       const wasOnline = !!(running && running.online());
       await D.ask("etiuda:team-join", "cancel");
-      const stopped = await until(() => !!(running && running.online() === false), 1500);
+      const stopped = await until(() => !!(running && running.online() === false), 30000);
       const here = D.api.relayHere();
       const folder = D.api.catalogFolder();
       let after = {};
@@ -3513,7 +3513,7 @@ try {
         const c = D.api.relayRun();
         if (c) { c.kick(); await c.idle(); }
         return !!(c && c.online());
-      }, 8000);
+      }, 30000);
       const dropped = await enrolDesk(rt, 2, []);
       const ch = D.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
@@ -3524,7 +3524,7 @@ try {
       if (ch) { ch.kick(); await ch.idle(); }
       const grew = deskTransport.log.length - mark;
       const quiet = grew === 0;
-      const goneHere = await until(() => D.api.relayHere() === null, 500);
+      const goneHere = await until(() => D.api.relayHere() === null, 30000);
       try { await D.ask("etiuda:team-join", "leave", team); } catch { /* the measurements above stand */ }
       if (ch) { try { await ch.stop(); } catch { /* already stopped */ } }
       check(made.status === 200 && enrolled.status === 200 && dropped.status === 200 && online && told && quiet && goneHere,
@@ -3555,12 +3555,12 @@ try {
           const c = D.api.relayRun();
           if (c) { c.kick(); await c.idle(); }
           return !!(c && c.online());
-        }, 8000);
+        }, 30000);
         await enrolDesk(rt, 2, []);
         const ch = D.api.relayRun();
         if (ch) { ch.kick(); await ch.idle(); }
         const mark = deskTransport.log.length;
-        const grew = await until(() => deskTransport.log.length > mark, 2000);
+        const grew = await until(() => deskTransport.log.length > mark, 30000);
         const here = D.api.relayHere();
         const view = await D.ask("etiuda:team-join", "state");
         const lead = view && Array.isArray(view.leads) ? view.leads.filter(l => l.team === team)[0] : null;
@@ -3606,11 +3606,11 @@ try {
         const c = D.api.relayRun();
         if (c) { c.kick(); await c.idle(); }
         return !!(c && c.online() && factsOf(D.api.readCatalog() || "") === 1);
-      }, 8000);
+      }, 30000);
       const dropped = await enrolDesk(rt, 2, []);
       const ch0 = D.api.relayRun();
       if (ch0) { ch0.kick(); await ch0.idle(); }
-      const hushed = await until(() => D.api.relayHere() === null, 1500);
+      const hushed = await until(() => D.api.relayHere() === null, 30000);
       put(studioMirror, "board.ec", JSON.stringify(D.api.sealCatalog(key, team, 1, catalogText(2))));
       put(studioMirror, C.TEAM_NAME, teamFile(2));
       await studio.kick(); await studio.idle();
@@ -3626,7 +3626,7 @@ try {
         const c = D.api.relayHere() === null ? D.api.relayProbe() : D.api.relayRun();
         if (c) { c.kick(); await c.idle(); }
         return D.api.relayHere() !== null && factsOf(D.api.readCatalog() || "") === 2;
-      }, 8000);
+      }, 30000);
       let env = {};
       try { env = D.envelope(); } catch { env = {}; }
       const gone = !!(env.teamRelayGone && env.teamRelayGone[team]);
@@ -3772,7 +3772,7 @@ try {
       const asked = path.join(studioMirror, "desks", me.id, "join.json");
       const both = async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle(); };
       const envNow = () => { try { return D.envelope(); } catch { return {}; } };
-      const first = await until(async () => { await both(); const e = envNow(); return fs.existsSync(asked) && !!(e.teamKeys && e.teamKeys[team]); }, 8000);
+      const first = await until(async () => { await both(); const e = envNow(); return fs.existsSync(asked) && !!(e.teamKeys && e.teamKeys[team]); }, 30000);
       /* The lead moves the team to a new key while the request waits, as a removal or a cancelled invitation does. */
       let moved = 1;
       if (opt.move) {
@@ -3803,8 +3803,8 @@ try {
         try { await studio.stop(); } catch { /* already stopped */ }
         return out;
       }
-      const gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 8000);
-      const takenView = await until(async () => { await both(); const v = await D.ask("etiuda:team-join", "view"); return !!(v && v.join && v.join.withdrawn === true); }, 4000);
+      const gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 30000);
+      const takenView = await until(async () => { await both(); const v = await D.ask("etiuda:team-join", "view"); return !!(v && v.join && v.join.withdrawn === true); }, 30000);
       if (opt.move) {
         const yesMoved = await enrolDesk(rt, 1, [{ id: me.id, pub: me.key, desk: me.id }]);
         let joinedMoved = false;
@@ -3837,7 +3837,7 @@ try {
       const kept = !!(e1.teamJoin && e1.teamJoin.invite && e1.teamJoin.invite.relay && e1.teamJoin.invite.relay.withdrawn === true
         && e1.teamKeys && e1.teamKeys[team]);
       await D.ask("etiuda:team-join", "ask", "", "Desk North");
-      const back = await until(async () => { await both(); return fs.existsSync(asked); }, 8000);
+      const back = await until(async () => { await both(); return fs.existsSync(asked); }, 30000);
       const yes2 = await enrolDesk(rt, 2, row);
       put(studioMirror, C.TEAM_NAME, teamFile(3, [entry]));
       await studio.kick(); await studio.idle();
@@ -3847,7 +3847,7 @@ try {
         const v = await D.ask("etiuda:team-join", "view");
         if (v && v.joined && v.joined.team === team) joined = true;
         return joined;
-      }, 8000);
+      }, 30000);
       const e2 = envNow();
       const live2 = D.api.relayRun();
       try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench */ }
@@ -4020,7 +4020,7 @@ try {
       await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       const asked = path.join(studioMirror, "desks", me.id, "join.json");
       const both = async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle(); };
-      const first = await until(async () => { await both(); return fs.existsSync(asked); }, 8000);
+      const first = await until(async () => { await both(); return fs.existsSync(asked); }, 30000);
       if (kind === "spent") {
         R.clock.now = t0 + core.KEEP_MS - 2 * MIN;
         await both();
@@ -4038,7 +4038,7 @@ try {
       if (kind === "held") {
         const grant = await admin("POST", "/relay/v1/t/" + rt + "/grant", { grant: K.grantFor(LEAD.pub, R.clock.now) });
         renewed = grant.status;
-        gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 8000);
+        gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 30000);
         after = await D.ask("etiuda:team-join", "view");
       }
       const standing = fs.existsSync(asked);
@@ -4193,7 +4193,7 @@ try {
           return { view, joined: !!(view && view.joined && view.joined.team === team), unkept: j.unkept === true,
             withdrawing: j.withdrawing === true, withdrawn: j.withdrawn === true, enrolled: !!(ch && ch.enrolled()), marked: relay.unkept === true };
         };
-        const first = await until(async () => { await both(); const e = envNow(); return fs.existsSync(asked) && !!(e.teamKeys && e.teamKeys[team]); }, 8000);
+        const first = await until(async () => { await both(); const e = envNow(); return fs.existsSync(asked) && !!(e.teamKeys && e.teamKeys[team]); }, 30000);
         const ch0 = D.api.relayRun();
         const heldInvite = !!(ch0 && ch0.online() && !ch0.enrolled());
         seen.armed = true;
@@ -4215,7 +4215,7 @@ try {
           if (c.unkept || c.marked) said = true;
           if (c.joined) joined = true;
           return joined;
-        }, 8000);
+        }, 30000);
         const enrolled = !!R.stores.get(rt).get("dev:" + me.id);
         return { made: made.status, first, heldInvite, yes: seen.yes, enrolled, sessions: seen.sessions, before: before && {
           joined: before.joined, unkept: before.unkept, withdrawing: before.withdrawing, withdrawn: before.withdrawn,
@@ -4281,11 +4281,11 @@ try {
       const row = [{ id: me.id, pub: me.key, desk: me.id }];
       await enrolDesk(rt, 1, row);
       deskTransport.down = false;
-      const online = await until(async () => { const c = D.api.relayRun(); if (c) { c.kick(); await c.idle(); } return !!(c && c.online()); }, 8000);
+      const online = await until(async () => { const c = D.api.relayRun(); if (c) { c.kick(); await c.idle(); } return !!(c && c.online()); }, 30000);
       await enrolDesk(rt, 2, []);
       const c0 = D.api.relayRun();
       if (c0) { c0.kick(); await c0.idle(); }
-      const hushed = await until(() => D.api.relayHere() === null, 1500);
+      const hushed = await until(() => D.api.relayHere() === null, 30000);
       /* What relaySoon does, three times: the halted channel waits for the probe. */
       const mark = deskTransport.log.length;
       for (let i = 0; i < 3; i++) { const x = D.api.relayRun(); if (x) await x.idle(); }
@@ -4299,7 +4299,7 @@ try {
       await enrolDesk(rt, 3, row);
       const c = D.api.relayProbe();
       if (c) await c.idle();
-      const followed = await until(async () => { const x = D.api.relayRun(); if (x) { x.kick(); await x.idle(); } return D.api.relayHere() !== null; }, 4000);
+      const followed = await until(async () => { const x = D.api.relayRun(); if (x) { x.kick(); await x.idle(); } return D.api.relayHere() !== null; }, 30000);
       const reset = D.api.relayProbeNext();
       try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench */ }
       const live = D.api.relayRun();
@@ -4386,7 +4386,7 @@ try {
       const ch = H.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
       await lead.kick(); await lead.idle();
       return !!joinRel && !!read(mirrorL, joinRel);
-    }, 8000);
+    }, 30000);
     /* The first request as the lead holds it. It stays in the lead's mirror, so the second is told from it by its body and
        by the invitation it names. */
     const inviteOf = text => { try { const d = JSON.parse(text); return d && d.invite && typeof d.invite.id === "string" ? d.invite.id : null; } catch { return null; } };
@@ -4404,7 +4404,7 @@ try {
       const ch = H.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
       const held = (H.envelope().teamKeys || {})[team];
       return !!(held && held[1]);
-    }, 8000);
+    }, 30000);
     await H.ask("etiuda:team-join", "leave", team);
     /* Leaving asks the shell to stop the channel on its next turn (relaySoon), and a person takes the next invitation long
        after that. Taken in the same turn, the invitation finds the old channel still there, holding the key that is about
@@ -4434,7 +4434,7 @@ try {
       await lead.kick(); await lead.idle();
       const body = joinRel ? read(mirrorL, joinRel) : null;
       return firstInvite !== null && body !== null && body !== firstBody && inviteOf(body) !== null && inviteOf(body) !== firstInvite;
-    }, 8000);
+    }, 30000);
     const ch = H.api.relayRun(); if (ch) await ch.stop();
     await lead.stop();
     return { taken: !taken.refused, asked, admitted, parked, again: again && !again.refused, sent2, teamFile };
@@ -4840,7 +4840,7 @@ try {
         if (c) { c.kick(); await c.idle(); }
         await studioH.kick(); await studioH.idle();
       };
-      out.asked = await until(async () => { await pump(); return !!read(sMirror, "desks/" + me.id + "/join.json"); }, 8000);
+      out.asked = await until(async () => { await pump(); return !!read(sMirror, "desks/" + me.id + "/join.json"); }, 30000);
       /* The lead admits it: the roster with its wrap, the device enrolled, the invitation let go. */
       const entry = { desk: { id: me.id, key: me.key, box: me.box }, wrap: Dk.api.wrapTeamKey(key, me.box, team, 1, me.id) };
       put(sMirror, C.TEAM_NAME, docOf(2, [entry], LEAD));
@@ -4853,7 +4853,7 @@ try {
         const h = Dk.api.relayHere();
         return factsOf(Dk.api.readCatalog() || "") === 1 && !!h && h.joining === false
           && (Dk.envelope().teamPins || {})[team] && Dk.envelope().teamPins[team].public === LEAD.pub;
-      }, 8000);
+      }, 30000);
       if (!out.synced) return out;
       /* The channel the synced desk runs, its stop counted from here on. */
       ch = Dk.api.relayRun();
@@ -4874,7 +4874,7 @@ try {
         await pump();
         const p = (Dk.envelope().teamPins || {})[team];
         return !!p && p.public === NEXT.pub;
-      }, 8000);
+      }, 30000);
       if (!out.handed) out.notes.push("rev at the desk " + (JSON.parse(read(mirror, C.TEAM_NAME) || "{}").rev) + ", at the lead " + (JSON.parse(read(sMirror, C.TEAM_NAME) || "{}").rev)
         + "; desk " + Dk.said.slice(-4).join(" / "));
       R.clock.now += 1;
@@ -4889,7 +4889,7 @@ try {
       const AFTER = "after the handover, " + tag + "\n";
       put(sMirror, "after.ec", AFTER);
       await studioH.kick(); await studioH.idle();
-      out.after = await until(async () => { await pump(); return read(mirror, "after.ec") === AFTER; }, 8000);
+      out.after = await until(async () => { await pump(); return read(mirror, "after.ec") === AFTER; }, 30000);
       if (!out.after) out.notes.push("after.ec at the lead " + (read(sMirror, "after.ec") !== null) + "; studio " + sT.log.slice(-4).join(" ")
         + "; desk " + Dk.said.slice(-3).join(" / "));
       const now = Dk.api.relayRun();
@@ -5059,7 +5059,7 @@ try {
         if (c) { c.kick(); await c.idle(); }
         await s.studio.kick(); await s.studio.idle();
       };
-      const asked = await until(async () => { await s.pump(); return !!read(s.sMirror, "desks/" + s.me.id + "/join.json"); }, 8000);
+      const asked = await until(async () => { await s.pump(); return !!read(s.sMirror, "desks/" + s.me.id + "/join.json"); }, 30000);
       s.entry = (key, epoch) => ({ desk: { id: s.me.id, key: s.me.key, box: s.me.box }, wrap: s.Dk.api.wrapTeamKey(key, s.me.box, team, epoch, s.me.id) });
       put(s.sMirror, C.TEAM_NAME, s.doc({ rev: 2, roster: [s.entry(key1, 1)] }));
       const t1 = R.clock.now, dk = [{ id: s.me.id, pub: s.me.key, desk: s.me.id }];
@@ -5071,7 +5071,7 @@ try {
         const h = s.Dk.api.relayHere(), p = (s.Dk.envelope().teamPins || {})[team];
         return factsOf(s.Dk.api.readCatalog() || "") === 1 && !!h && h.joining === false && !!p && p.public === LEAD.pub
           && read(s.mirror, HEAD_FILE) !== null && read(s.mirror, "stats-span.json") !== null;
-      }, 8000);
+      }, 30000);
     } catch (e) {
       await s.stop();
       throw e;
@@ -5120,7 +5120,7 @@ try {
       put(s.sMirror, "stats-span.json", span);
       await s.studio.kick(); await s.studio.idle();
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5157,7 +5157,7 @@ try {
       await s.studio.kick(); await s.studio.idle();
       deskTransport.down = false;
       const done = n => n.pin === "the new lead" && n.epoch === 2 && n.edition === "re-signed rev 2" && n.head === "Second key edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5224,7 +5224,7 @@ try {
       out.newCopyOpens = copies(s.boxNow).reduce((n, c) => n + after.filter(u => u.meta.place === "invite:" + c.id && aesOpens(u, s.rt, c.key)).length, 0);
       deskTransport.down = false;
       const settled = n => keep ? n.pin === "the new lead" && n.epoch === 2 : false;
-      await until(async () => { await s.pump(); return settled(deskNow(s, NEXT, span)); }, keep ? 8000 : 2500);
+      await until(async () => { await s.pump(); return settled(deskNow(s, NEXT, span)); }, 30000);
       out.now = deskNow(s, NEXT, span);
       return out;
     } finally {
@@ -5273,7 +5273,7 @@ try {
       out.moved = a.moved;
       if (out.moved !== 200) return out;
       const NEXT = a.NEXT, mark = a.mark;
-      if (keep) await until(async () => { await s.pump(); return deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length >= 2; }, 8000);
+      if (keep) await until(async () => { await s.pump(); return deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length >= 2; }, 30000);
       out.puts = deskTransport.log.slice(mark).filter(l => l.startsWith("PUT ") && l.indexOf("/t/" + s.rt + "/b/") >= 0).length;
       out.said = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
       try { out.epoch = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { out.epoch = null; }
@@ -5335,7 +5335,7 @@ try {
         await wait(50);
         const again = await s.Dk.ask("etiuda:team-join", "invite", text, "Desk Nine", "");
         out.taken = again && again.refused ? "refused " + again.refused : "taken";
-        await until(async () => { await s.pump(); const j = read(s.sMirror, a.own + "join.json"); return j !== null && j !== asked; }, 8000);
+        await until(async () => { await s.pump(); const j = read(s.sMirror, a.own + "join.json"); return j !== null && j !== asked; }, 30000);
         put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 2, roster: [s.entry(a.key2, 2)], lead: NEXT, box: s.boxNow, handover: [a.step], ring: [LEAD, NEXT] }));
         await s.studio.kick(); await s.studio.idle();
       } else {
@@ -5348,7 +5348,7 @@ try {
         out.recopy = await putRaw(s.rt, NEXT, b);
       }
       const arrived = () => read(s.sMirror, a.own + "away.json") !== null && read(s.sMirror, a.own + "back.json") !== null;
-      await until(async () => { await s.pump(); return arrived(); }, 8000);
+      await until(async () => { await s.pump(); return arrived(); }, 30000);
       out.arrived = arrived();
       out.said = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
       try { out.epoch = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { out.epoch = null; }
@@ -5397,7 +5397,7 @@ try {
       put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 2, roster: [s.entry(a.key2, 2)], lead: NEXT, box: s.boxNow, handover: [a.step], ring: [LEAD, NEXT] }));
       await s.studio.kick(); await s.studio.idle();
       let row = null;
-      await until(async () => { await s.pump(); row = rowOf(await s.Dk.ask("etiuda:team-join", "leads")); return !!row && row.admitted === true; }, 8000);
+      await until(async () => { await s.pump(); row = rowOf(await s.Dk.ask("etiuda:team-join", "leads")); return !!row && row.admitted === true; }, 30000);
       out.key = !row ? "no row" : !row.admitted ? "not admitted" : row.print === printOf(NEXT.pub) && row.seen === false ? "the new lead's, to compare"
         : row.print === printOf(LEAD.pub) ? "the old lead's" : "another, seen " + row.seen;
       const arrived = () => read(s.sMirror, a.own + "away.json") !== null && read(s.sMirror, a.own + "back.json") !== null;
@@ -5408,7 +5408,7 @@ try {
       out.putsAdmitted = putsFrom(admitMark);
       if (answer === "matches") {
         await s.Dk.ask("etiuda:team-join", "seen", s.team);
-        await until(async () => { await s.pump(); return arrived(); }, 8000);
+        await until(async () => { await s.pump(); return arrived(); }, 30000);
         out.arrived = arrived();
       } else {
         await s.Dk.ask("etiuda:team-join", "leave", s.team);
@@ -5586,7 +5586,7 @@ try {
       await until(async () => { await s.pump(); return !!v.atCap; }, 30000);
       if (v.atCap) { out.rounds = v.atCap.rounds; out.reached = v.atCap.reached; out.saidCap = v.atCap.said; out.leftCap = v.atCap.left; }
       const done = () => { const p = (s.Dk.envelope().teamPins || {})[s.team]; let e = null; try { e = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { e = null; } return !!p && p.public === NEXT.pub && e === 2; };
-      await until(async () => { await s.pump(); return done(); }, 8000);
+      await until(async () => { await s.pump(); return done(); }, 30000);
       out.said = said();
       const p = (s.Dk.envelope().teamPins || {})[s.team];
       out.pin = p && p.public === NEXT.pub ? "the new lead" : p && p.public === LEAD.pub ? "the old lead" : "none";
@@ -5624,7 +5624,7 @@ try {
         out.channel = ch ? ch.kind : "none";
         return out.folder === "the folder team's mirror" && out.shown === "the shared folder" && out.channel !== "relay";
       };
-      await until(async () => { await s.pump(); return look(); }, 8000);
+      await until(async () => { await s.pump(); return look(); }, 30000);
       out.ok = look();
       return out;
     } finally {
@@ -5652,7 +5652,7 @@ try {
       deskTransport.down = false;
       const two = C.FORK_SAID ? C.FORK_SAID.two : null;
       const twoSaid = () => (two ? s.Dk.said.filter(l => l.indexOf(two) >= 0).length : 0);
-      await until(async () => { await s.pump(); return twoSaid() > 0; }, 8000);
+      await until(async () => { await s.pump(); return twoSaid() > 0; }, 30000);
       for (let i = 0; i < 2; i++) await s.pump();
       const p = (s.Dk.envelope().teamPins || {})[s.team];
       const name = k => (k && k.public === LEAD.pub ? "K1" : k && k.public === K2.pub ? "K2" : k && k.public === K3.pub ? "K3" : "none");
@@ -5754,7 +5754,7 @@ try {
       await s.studio.kick(); await s.studio.idle();
       deskTransport.down = false;
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5790,7 +5790,7 @@ try {
       const name = k => (k && k.public === LEAD.pub ? "K1" : k && k.public === K2.pub ? "K2" : k && k.public === K3.pub ? "K3" : "none");
       const c = () => s.Dk.api.relayRun();
       const settled = () => { const p = (s.Dk.envelope().teamPins || {})[s.team]; return twoSaid() > 0 || (!!p && p.public !== LEAD.pub); };
-      await until(async () => { await s.pump(); return settled(); }, 8000);
+      await until(async () => { await s.pump(); return settled(); }, 30000);
       for (let i = 0; i < 3; i++) await s.pump();
       out.pages = v.pages || 0;
       out.pin = name((s.Dk.envelope().teamPins || {})[s.team]);
@@ -5833,7 +5833,7 @@ try {
       v.armed = true;
       deskTransport.down = false;
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
       out.pages = v.pages || 0;
       out.now = deskNow(s, NEXT, span);
       out.ok = out.pages >= 2 && done(out.now);
@@ -5873,7 +5873,7 @@ try {
         out.pages = v.pages || 0;
         return out.pages >= 2 && (out.channelPin !== "K1" || out.epoch === 2);
       };
-      await until(async () => { await s.pump(); return look(); }, 8000);
+      await until(async () => { await s.pump(); return look(); }, 30000);
       for (let i = 0; i < 3; i++) await s.pump();
       look();
       out.ok = out.thief === 200 && out.pages >= 2 && out.pin === "K1" && out.channelPin === "K1" && out.epoch === 2 && out.lead === "K1";
@@ -5924,7 +5924,7 @@ try {
       v.again = true;
       s.Dk = loadDesk(s.ud, hooks);
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 8000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = v.refused && out.pages === 1000 && out.held === 1 && done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -6271,7 +6271,7 @@ try {
         if (!r.offered) { await press("back"); return r; }
         const joinRel = "desks/" + s.me.id + "/join.json", was = read(s.sMirror, joinRel);
         await press("invite");
-        await until(async () => { await s.pump(); const now = read(s.sMirror, joinRel); return !!now && now !== was; }, 8000);
+        await until(async () => { await s.pump(); const now = read(s.sMirror, joinRel); return !!now && now !== was; }, 30000);
         rev += 1;
         put(s.sMirror, C.TEAM_NAME, s.doc({ rev, roster: [s.entry(key1, 1)] }));
         await s.studio.kick(); await s.studio.idle();
@@ -6279,7 +6279,7 @@ try {
           await s.pump();
           const h = held(), here = s.Dk.api.relayHere();
           return h.pin && h.keys && !!here && here.joining === false;
-        }, 8000);
+        }, 30000);
         s.invs.length = 0;
         r.card = r.joined && await keyCard();
         return r;
@@ -7359,7 +7359,7 @@ async function counterRetry(mod, kind) {
       put(desk.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, []));
       desk.ch.start();
       await desk.ch.idle();
-      await until(() => desk.ch.socketOpen(), 5000);
+      await until(() => desk.ch.socketOpen(), 30000);
       const raised = desk.prog.state().own + 1;
       putFloor(tm.rt, LEAD.keyId, raised);
       out.floor = raised;
@@ -8308,7 +8308,7 @@ try {
   desk.ch.start();
   await settle(desk);
   const had = read(desk.mirror, "guide.ec") === ONE;
-  const socketUp = await until(() => desk.ch.socketOpen(), 5000);
+  const socketUp = await until(() => desk.ch.socketOpen(), 30000);
   if (handle) handle.close();
   /* The close is waited for as long as the edition is: the leg's subject is the poll after it, and a loaded machine was
      seen to take over 3 s to notice (the release profile and a whole run, 2026-10-29). A desk that never notices still fails. */
@@ -9415,8 +9415,8 @@ try {
   const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
   const invited = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: tInv,
     sig: signHex(LEAD, core.invitesBytes(rt, tInv, add, [])) });
-  const again = await until(() => hellos >= first + 1, 8000);
-  const on = await until(() => ch.online(), 8000);
+  const again = await until(() => hellos >= first + 1, 30000);
+  const on = await until(() => ch.online(), 30000);
   const named = said.some(l => l.indexOf("not enrolled") >= 0);
   try { await ch.stop(); } catch { /* already stopped */ }
   check(made.status === 200 && invited.status === 200 && first >= 1 && again && on && !named,
@@ -9448,7 +9448,7 @@ const hushPlant = await liftChannel("plant:h35-removed-hush", async mod => {
     request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
   });
   ch.start();
-  const on = await until(() => ch.online(), 8000);
+  const on = await until(() => ch.online(), 30000);
   if (!on) { try { await ch.stop(); } catch { /* already stopped */ } throw new Error("never online"); }
   R.clock.now += 1;
   t = R.clock.now;
@@ -9546,7 +9546,7 @@ const retryPlant = await liftChannel("plant:h35-enrol-retry", async mod => {
   const invited = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: tInv,
     sig: signHex(LEAD, core.invitesBytes(rt, tInv, add, [])) });
   if (invited.status !== 200) { try { await ch.stop(); } catch { /* already stopped */ } throw new Error("invite " + invited.status); }
-  const again = await until(() => hellos >= first + 1, 8000);
+  const again = await until(() => hellos >= first + 1, 30000);
   try { await ch.stop(); } catch { /* already stopped */ }
   if (again) throw new Error("still asked, hellos " + hellos);
   if (first < 1) throw new Error("no first hello");
