@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 451;
+const EXPECTED = 453;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5492,6 +5492,46 @@ async function main() {
       check(base[leg] && p.turned && p.back, "1102" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
     }
+  }
+
+  /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, answered as before (the version policy's point
+     2, adopted 2026-11-01). Every fixture there is sent again over fresh stand-ins; the set covers every route of the table. ---- */
+  {
+    const DIR = path.join(ROOT, "relay", "test", "previous");
+    const PREV = await import(pathToFileURL(path.join(DIR, "replay.mjs")).href);
+    const files = fs.readdirSync(DIR).filter(f => /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{8}\.json$/.test(f)).sort();
+    const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
+    const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
+    const results = [];
+    for (const fx of fixtures) results.push(await PREV.replay(fx, W, freshEnv));
+    const asked = new Set();
+    for (const fx of fixtures) for (const st of fx.steps) {
+      const hit = /^\/relay\/v1\//.test(st.req.path) ? require(path.join(ROOT, "relay", "team.cjs")).routeOf(st.req.method, st.req.path) : null;
+      if (hit) asked.add(hit.what + " " + st.req.method);
+    }
+    const table = ["teams POST", "devices POST", "invites POST", "hello POST", "session POST", "grant POST", "lead POST", "socket GET", "wrap GET",
+      "states GET", "since GET", "b GET", "b PUT"];
+    const unasked = table.filter(r => !asked.has(r));
+    const steps = results.reduce((n, r) => n + r.steps, 0), differ = results.flatMap((r, i) => r.differ.map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
+    check(files.length >= 1 && steps >= 50 && differ.length === 0 && unasked.length === 0,
+      "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
+      + " are answered by this relay as they were: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
+      + (unasked.length ? ", never asked: " + unasked.join(", ") : ""));
+    /* The control: the replay sees a change. With plant:session-life lifted from a copy of the core, a session past its thirty
+       minutes still reads, and the step that recorded its refusal is answered otherwise; one recorded answer altered in a copy of
+       the fixture is found at its step. */
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const lifted = await liftCore("plant:session-life", async () => {
+      const r = await PREV.replay(fixtures[0], W, freshEnv);
+      return r.differ.some(d => /past its thirty minutes/.test(d.what));
+    });
+    const altered = JSON.parse(JSON.stringify(fixtures[0] || { steps: [] }));
+    const at = altered.steps.findIndex(st => st.res && st.res.status === 410);
+    if (at >= 0) altered.steps[at].res.status = 404;
+    const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.map(d => d.step) : [];
+    check(lifted.turned && lifted.back && at >= 0 && seen.length === 1 && seen[0] === at,
+      "1153b the replay sees a change: lifting plant:session-life is answered otherwise at the expired session's step, and one recorded answer altered is found at"
+      + " its step alone, and the product file is never written: " + how(lifted) + ", altered step " + at + " found at " + JSON.stringify(seen));
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */
