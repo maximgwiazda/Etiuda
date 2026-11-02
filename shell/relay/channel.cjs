@@ -130,6 +130,8 @@ const TAKEN_MAX = 4096;
 /* The relay keeps a deletion 30 days (relay/core.cjs KEEP_MS). A catch-up that last reached the top longer ago than a day
    short of that may have missed one, so it lists the whole team again and drops what the relay no longer lists. */
 const LISTED_KEEP_MS = 29 * 24 * 60 * 60 * 1000;
+/* The relay holds a removed desk's blobs for the lead this long (relay/core.cjs REMOVED_KEEP_MS). */
+const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_KEEP_MS = 25 * 60 * 1000;
 const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
@@ -396,7 +398,7 @@ function readState(file) {
 
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
-    refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], tokenUsed: false, invited: false,
+    refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
     pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] } };
 }
@@ -497,6 +499,7 @@ function stateOf(x) {
       if (!s.refused[key]) s.refused[key] = { sha: r.sha, why: r.why }; /* plant:refused-kept */
     }
   }
+  if (table(x.gone)) for (const k of Object.keys(x.gone)) if (B.isId(k) && count(x.gone[k])) s.gone[k] = x.gone[k];
   if (Array.isArray(x.pending)) s.pending = x.pending.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
     .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor }));
@@ -724,6 +727,33 @@ function createProgram(opts) {
     const prior = had && Array.isArray(had.prior) ? had.prior.slice() : [];
     if (had && t.rev > had.rev) for (const d of had.desks || []) if (!prior.some(p => p.keyId === d.keyId)) prior.push(d);
     st.trust[t.epoch] = { rev: t.rev, desks, prior };
+    noteGone();
+  }
+
+  /* The moment this program first held a roster that leaves a key off, by its own clock, for each key an older roster named:
+     the lead takes that key's blobs sealed before it, for as long as the relay holds them (leadGrace). A key put back loses it. */
+  function noteGone() {
+    const top = newestRoster();
+    if (!top) return;
+    const named = new Set(top.desks.map(d => d.keyId));
+    let changed = false;
+    for (const e of Object.keys(st.trust)) for (const d of (st.trust[e].desks || []).concat(st.trust[e].prior || [])) {
+      if (named.has(d.keyId) || isLeadKey(d.keyId) || has(st.gone, d.keyId)) continue;
+      st.gone[d.keyId] = Math.floor(clock());
+      changed = true;
+    }
+    for (const k of Object.keys(st.gone)) if (named.has(k)) { delete st.gone[k]; changed = true; }
+    if (changed) persist();
+  }
+
+  /* On the pinned lead's own program, inside REMOVED_KEEP_MS of the key's removal: the row a roster of this epoch named the
+     removed key under, so its blob of that epoch opens. Null for a desk's program, a key never named at this epoch, or past it. */
+  function leadGrace(writer, epoch, ctx) {
+    if (!pin || !ctx || ctx.mine !== pin.lead.keyId) return null; /* plant:lead-grace-only */
+    if (!has(st.gone, writer)) return null;
+    if (clock() > st.gone[writer] + REMOVED_KEEP_MS) return null; /* plant:lead-grace-window */
+    const row = st.trust[String(epoch)];
+    return row ? (row.desks || []).concat(row.prior || []).find(d => d.keyId === writer) || null : null;
   }
 
   /* The contract's load: a team file above the rev floor for its team, lead key and epoch, the floor then raised. */
@@ -799,8 +829,9 @@ function createProgram(opts) {
 
   /* One blob judged: blob.cjs's first line under `trust` at `epoch` with `key`, against `floors`; a key the newest
      loaded epoch leaves off its roster is then removed, at an older epoch and at the newest where an older roster named
-     it; then a supersedes that names a blob this program took must name one of the same path and writer. */
-  function judge(blob, trust, epoch, key, floors, asked) {
+     it, but for a blob the lead takes inside the grace (leadGrace); then a supersedes that names a blob this program took
+     must name one of the same path and writer. */
+  function judge(blob, trust, epoch, key, floors, asked, grace) {
     const r = B.openBlob({ blob, relayTeamId: pin.rt, epoch, teamKey: key, trust, counters: floors });
     if (r.ok || r.reason === "not-roster") {
       const writer = r.ok ? r.writerKeyId : (blob && blob.writerKeyId);
@@ -809,6 +840,10 @@ function createProgram(opts) {
         && r.path.toLowerCase() === ("desks/" + writer + "/join.json").toLowerCase();
       let gone = removedAfterMove(writer, at, r.ok);
       if (ask) gone = null; /* plant:ask-rejoin */
+      /* Sealed by the removed key no later than the lead saw its removal: the counter is the writer's clock, signed. */
+      let before = true;
+      before = r.ok && has(st.gone, writer) && r.counter <= st.gone[writer]; /* plant:lead-grace-before */
+      if (gone && grace === true && r.ok && before) gone = null;
       if (gone) return gone;
     }
     if (!r.ok) return r;
@@ -1144,7 +1179,10 @@ function createProgram(opts) {
       && branchIdOf(m.pub) === m.writer) {
       for (const k of ctx.inviteKeys) out.push({ key: k.key, trust: leadTrust([{ deskId: m.writer, keyId: m.writer, public: m.pub }]), asked: true });
     }
-    if (key && (lead || known)) out.push({ key, trust: leadTrust(known ? st.trust[m.epoch].desks : []) });
+    const grace = lead ? null : leadGrace(m.writer, m.epoch, ctx);
+    const desks = known ? st.trust[m.epoch].desks : [];
+    if (key && grace) out.push({ key, trust: leadTrust(desks.some(d => d.keyId === m.writer) ? desks : desks.concat([grace])), grace: true });
+    else if (key && (lead || known)) out.push({ key, trust: leadTrust(desks) });
     else if (key) out.push({ key, refuse: "epoch" });
     return { tries: out, missing: !key };
   }
@@ -1174,7 +1212,7 @@ function createProgram(opts) {
     let last = null;
     for (const x of t.tries) {
       if (x.refuse) { last = R(x.refuse); break; }
-      const r = judge(blob, x.trust, m.epoch, x.key, floors, x.asked === true);
+      const r = judge(blob, x.trust, m.epoch, x.key, floors, x.asked === true, x.grace === true);
       /* The request, or its own deletion when the desk that asked withdraws it. */
       if (r.ok && x.asked && !((r.kind === "delete" || (r.kind === "file" && Buffer.byteLength(r.body, "utf8") <= INVITE_UPLOAD_MAX)) /* plant:e4-lead-withdraw */
         && r.path.toLowerCase() === ("desks/" + m.writer + "/join.json").toLowerCase())) { last = R("outside-place"); break; }
@@ -2737,7 +2775,7 @@ function createChannel(opts) {
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
-  SESSION_KEEP_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
+  SESSION_KEEP_MS, REMOVED_KEEP_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
   pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,

@@ -25,6 +25,8 @@
  * and, older than the last sent, changes nothing (970f). A clock behind the relay still uploads once a superseded own
  * blob has raised the counter (970o). An answer the list does not serve can raise the same floor, and a second program
  * whose clock never reaches that counter stays refused: the known limit until the relay names the floor (970r).
+ * The lead's own channel takes, inside the relay's grace for a removed desk, what that desk sealed before the lead held the
+ * roster that leaves it off, and refuses removed what it sealed after or what comes past the grace (1165a to 1165d).
  * A replay-counter refusal is tried again within a minute, an outbox file (970s) and an invitation's answer (970u). An invitation
  * upload whose reply was lost is counted as sent when the retry is
  * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
@@ -55,7 +57,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 375;
+const EXPECTED = 382;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -10093,6 +10095,109 @@ try {
   }
 } catch (e) {
   check(false, "harness (the leg 1162a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- relay triage 5, the relay half (the test architect, 2026-11-01 13:26): the relay holds a removed desk's blobs for the
+   lead for REMOVED_KEEP_MS, and the lead's own channel takes, through createChannel and catchUp, what that desk sealed before
+   the lead held the roster that leaves it off, inside that grace (1165a). A file the desk seals after it is refused removed
+   (1165b), and so is the earlier file once the lead's clock is past the grace while the relay still serves it (1165c). A
+   hostile relay serving the same held blob to another desk does not get it taken there (1165d). ---- */
+async function removedGrace(mod, arm) {
+  const k1 = crypto.randomBytes(32), gone = keyPair(true), stay = keyPair(true);
+  const tm = await freshTeam([gone, stay]);
+  const tag = arm + "-" + tm.rt.slice(0, 8);
+  const keyFor = e => (e === 1 ? k1 : null);
+  let ahead = 0;
+  const lead = opened(mod, "1165-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock: () => Date.now() + ahead });
+  const desk = opened(mod, "1165-desk-" + tag, tm, gone, "desk:" + gone.keyId, { keyFor, sealEpoch: () => 1 });
+  const other = opened(mod, "1165-other-" + tag, tm, stay, "desk:" + stay.keyId, { keyFor, sealEpoch: () => 1 });
+  const doc1 = teamBody(tm, 1, 1, [member(gone), member(stay)]), doc2 = teamBody(tm, 1, 2, [member(stay)]);
+  put(lead.mirror, C.TEAM_NAME, doc1);
+  lead.prog.loadTeamFile(JSON.parse(doc1));
+  lead.ch.start();
+  desk.ch.start();
+  other.ch.start();
+  await settle(lead, desk, other);
+  /* Neither the lead nor the other desk runs a cycle of its own until the relay has taken the removal. */
+  await lead.ch.stop();
+  await other.ch.stop();
+  const stats = "desks/" + gone.keyId + "/stats.estat", late = "desks/" + gone.keyId + "/late.ec";
+  const BEFORE = "sealed-before\n", AFTER = "sealed-after\n";
+  put(desk.mirror, stats, BEFORE);
+  await once(desk);
+  await wait(5);
+  /* Studio's removal: the team file without the desk, in the lead's mirror and held by its channel. */
+  put(lead.mirror, C.TEAM_NAME, doc2);
+  lead.prog.loadTeamFile(JSON.parse(doc2));
+  await wait(5);
+  put(desk.mirror, late, AFTER);
+  await once(desk);
+  await desk.ch.stop();
+  const t = R.clock.now, keep = [{ id: stay.keyId, pub: stay.pub, desk: stay.keyId }];
+  const dropped = await admin("POST", "/relay/v1/t/" + tm.rt + "/devices", { keys: keep, rev: 2, t,
+    sig: signHex(LEAD, core.devicesBytes(tm.rt, 2, t, keep)) });
+  const s = relayStore(tm.rt);
+  const held = s.dump().filter(([k]) => k.startsWith("held:")).map(([, v]) => JSON.parse(v));
+  if (arm === "past") ahead = core.REMOVED_KEEP_MS + 60 * 60 * 1000;
+  const from = lead.said.length;
+  lead.ch.start();
+  await once(lead);
+  const leadSaid = lead.said.slice(from).filter(l => l.indexOf(B.REASONS.removed) >= 0).length;
+  /* The hostile relay: each held blob put back on the list every desk reads, then the other desk catches up. */
+  for (const h of held) {
+    const seq = (s.get("seq") || 0) + 1, rec = Object.assign({}, h, { seq });
+    delete rec.heldUntil;
+    s.put("blob:" + h.id, rec);
+    s.put("seq:" + String(seq).padStart(16, "0"), h.id);
+    s.put("seq", seq);
+  }
+  const otherFrom = other.said.length;
+  other.ch.start();
+  await once(other);
+  const otherSaid = other.said.slice(otherFrom).filter(l => l.indexOf(B.REASONS.removed) >= 0).length;
+  const out = { dropped: dropped.status === 200, held: held.length, before: read(lead.mirror, stats), after: read(lead.mirror, late),
+    leadSaid, otherTeam: read(other.mirror, C.TEAM_NAME) === doc2, otherBefore: read(other.mirror, stats), otherSaid,
+    keepSame: C.REMOVED_KEEP_MS === core.REMOVED_KEEP_MS };
+  await lead.ch.stop();
+  await other.ch.stop();
+  out.line = "relay removal " + (out.dropped ? "taken" : "refused") + ", held on the relay " + out.held + ", the lead's mirror: sealed before "
+    + JSON.stringify(out.before) + ", sealed after " + JSON.stringify(out.after) + ", said removed " + out.leadSaid
+    + "; the other desk: team file " + (out.otherTeam ? "the removal's" : "not the removal's") + ", sealed before " + JSON.stringify(out.otherBefore)
+    + ", said removed " + out.otherSaid + "; grace " + (out.keepSame ? "the relay's" : "differs from the relay's");
+  return out;
+}
+const graceTaken = x => x.dropped && x.held === 2 && x.keepSame && x.before === "sealed-before\n";
+const graceAfter = x => x.dropped && x.held === 2 && x.after === null && x.leadSaid >= 1;
+const gracePast = x => x.dropped && x.held === 2 && x.keepSame && x.before === null && x.after === null && x.leadSaid >= 2;
+const graceOnly = x => x.otherTeam && x.otherBefore === null && x.otherSaid >= 1;
+try {
+  const g = await removedGrace(C, "within");
+  check(graceTaken(g), "1165a the lead's channel takes, in its catch-up inside the grace, the file a removed desk sealed before the lead held"
+    + " the roster that leaves it off, which the relay holds for the lead alone: " + g.line);
+  check(graceAfter(g), "1165b the same catch-up refuses removed the file that desk sealed after the lead held that roster: " + g.line);
+  const p = await removedGrace(C, "past");
+  check(gracePast(p), "1165c past the grace by the lead's clock, the relay still serving both, the lead's catch-up refuses removed the file"
+    + " sealed before as well: " + p.line);
+  check(graceOnly(g), "1165d a hostile relay serving the held file to another desk on the list it reads: that desk's catch-up refuses it"
+    + " removed: " + g.line);
+  const lifts = [
+    ["plant:lead-grace-before",
+      "1165e lifting plant:lead-grace-before turns 1165b red (the file sealed after the removal is taken)",
+      async mod => !graceAfter(await removedGrace(mod, "lift-before"))],
+    ["plant:lead-grace-window",
+      "1165f lifting plant:lead-grace-window turns 1165c red (the file sealed before is taken past the grace)",
+      async mod => !gracePast(await removedGrace(mod, "lift-window"))],
+    ["plant:lead-grace-only",
+      "1165g lifting plant:lead-grace-only turns 1165d red (the other desk takes the held file)",
+      async mod => !graceOnly(await removedGrace(mod, "lift-only"))],
+  ];
+  for (const [tagName, name, turns] of lifts) {
+    if (PLANTS_OFF) { skip(name); continue; }
+    const q = await liftChannel(tagName, turns);
+    check(q.turned && q.back, name + ", and the product file is never written: " + q.detail.split("\n")[0] + ", sha " + (q.back ? "restored" : "differs"));
+  }
+} catch (e) {
+  check(false, "harness (the leg 1165a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
