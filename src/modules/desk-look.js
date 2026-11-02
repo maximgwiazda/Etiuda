@@ -3,7 +3,7 @@
    desk's own edits at once, since no load follows a look. */
 import { editionChanges, editionFieldKeys } from "./edition-changes.js";
 import { openEditionPanel, editionCountWords } from "./edition-panel.js";
-import { parseCatalogFile, storedCatalog } from "./catalog.js";
+import { parseCatalogFile, storedCatalog, fileReadCode, fileReadLine } from "./catalog.js";
 import { eReadCatalogFile } from "./host.js";
 import { pack, savePack } from "./pack.js";
 import { baseCard, cardTitle, overrideAgainstBase } from "./card-model.js";
@@ -44,11 +44,13 @@ function deskBase(f,files,held){
 }
 // Each file read and parsed once per date: the rows' lines and the Look ask for the same two.
 const deskReads=new Map();
+const deskFail=new Map();
 function readParsed(name,desk,mtime){
   const at=(desk||"")+"/"+name+"|"+mtime;
   if(!deskReads.has(at)) deskReads.set(at, eReadCatalogFile(name,desk).then(got=>{
-    try{ return got && got.text ? parseCatalogFile(got.text) : null; }catch(e){ return null; }
-  }).catch(()=>null));
+    if(!got || !got.text){ deskFail.set(at, fileReadCode(got || {why:"read"})); return null; }
+    try{ const c=parseCatalogFile(got.text); deskFail.delete(at); return c; }catch(e){ deskFail.set(at, ""); return null; }
+  }).catch(()=>{ deskFail.set(at, ""); return null; }));
   return deskReads.get(at);
 }
 /* Both sides, or null where either would not read. A file that grew from nothing here is compared with no cards. */
@@ -299,7 +301,11 @@ function wireDeskPlace(pane,it,hers,done){
  *  the panel's two ways out. Resolves to whether the panel stood. */
 function openDeskLook(f,base,name,work,back){
   return deskSides(f,base).then(s=>{
-    if(!s){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(f.name||""))); return false; }
+    if(!s){
+      const at=(f.desk&&f.desk.id||"")+"/"+String(f.name||"")+"|"+f.mtime;
+      toastRefusal(fileReadLine(String(f.name||""), deskFail.has(at)?deskFail.get(at):""));
+      return false;
+    }
     const inUse=!!(base && base.held), changes=editionChanges(s.team,s.hers,inUse?pack:null,true);
     if(!changes.items.length){ toast(t("That desk's cards match the team's edition.")); return false; }
     const who=deskName(f);

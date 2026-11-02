@@ -2449,12 +2449,12 @@ async function run() {
       /* The copywriter's final words (2026-11-02 03:58), no longer marked as a draft on either language's line. */
       const marked = getShellSrc().split(String.fromCharCode(10)).filter(l => l.indexOf("stillReading:") >= 0)
         .every(l => l.indexOf("/* draft words: copywriter */") < 0);
-      const quiet = before === 0 && opened === false && early == null && !slate && reading && polish && marked;
+      const quiet = before === 0 && !!opened && opened.ok === false && opened.why === "not-answering" && early == null && !slate && reading && polish && marked;
       const landed = waited === true && shown === CAT_A1.trim();
       check(!!s && held !== null && quiet && landed,
         "46a a desk whose share's first listing is held reads nothing under that share on the main thread before the prime (" + before
         + (before ? ": " + hits.slice(0, before).join("; ") : "") + "), says it is still reading, and once the listing lands the catalog shows (wait " + waited
-        + ", opened the share early " + opened + ", shown " + (shown === CAT_A1.trim()) + ", polish " + polish + ")");
+        + ", opened the share early " + JSON.stringify(opened) + ", shown " + (shown === CAT_A1.trim()) + ", polish " + polish + ")");
     } catch (e) {
       err = String(e && e.stack || e);
       check(false, "46a a desk whose share's first listing is held reads nothing under that share on the main thread: " + err);

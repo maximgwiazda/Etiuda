@@ -70,6 +70,10 @@ function migratePackKeys(p){
   let did=false;
   if(!Array.isArray(p.cardOrder) && Array.isArray(p.macroOrder)){ p.cardOrder=p.macroOrder; did=true; }
   if(p.baseCards===undefined && p.baseMacros!==undefined){ p.baseCards=p.baseMacros; did=true; }
+  /* A stored arrangement that is present and is not a list cannot be carried across. A real list is left as it is. */
+  if(Object.prototype.hasOwnProperty.call(p,"macroOrder") && p.macroOrder!=null && !Array.isArray(p.macroOrder) && !Array.isArray(p.cardOrder)){
+    throw new Error("the saved card arrangement is not a list");
+  }
   return did;
 }
 let packMigrationFailed=false;
@@ -86,25 +90,32 @@ function showPackMigrationWarning(){
   d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#78350f;"
     +"color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
     +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
-  d.innerHTML='<b>Your saved card arrangement could not be read.</b> This version renamed how that '
-    +'arrangement is stored, and the existing copy could not be converted. Etiuda is running '
-    +'normally and your catalog is untouched - only the personal ordering, hidden cards and '
-    +'favourites in this browser are affected.'
-    +'<div style="margin-top:10px">'
-    +'<button id="eMigrateReset" style="font:600 13px system-ui;padding:7px 14px;border:0;'
-    +'border-radius:7px;background:#fff;color:#78350f">Reset personal data</button>'
-    +'<button id="eMigrateHide" style="font:600 13px system-ui;padding:7px 14px;border:0;'
-    +'border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px">Dismiss</button>'
-    +'</div>';
+  const lead=document.createElement("b");
+  lead.textContent=t("The saved card arrangement could not be read."); /* plant:pack-migrate-why */
+  const body=document.createElement("span");
+  body.textContent=" "+t("This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh.");
+  const row=document.createElement("div");
+  row.style.marginTop="10px";
+  const reset=document.createElement("button");
+  reset.id="eMigrateReset";
+  reset.textContent=t("Reset personal data");
+  reset.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#78350f";
+  const hide=document.createElement("button");
+  hide.id="eMigrateHide";
+  hide.textContent=t("Dismiss");
+  hide.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px";
+  row.appendChild(reset);
+  row.appendChild(hide);
+  d.appendChild(lead);
+  d.appendChild(body);
+  d.appendChild(row);
   (document.body||document.documentElement).appendChild(d);
-  const r=document.getElementById("eMigrateReset");
-  if(r) r.onclick=()=>{
+  reset.onclick=()=>{
     try{ lsKeys().filter(k=>E_KEY_RE.test(k)).forEach(k=>lsDel(k)); }catch(e){}
     try{ ssDel("eSessionTabs"); }catch(e){}
     location.replace(location.href.split("#")[0]);
   };
-  const h=document.getElementById("eMigrateHide");
-  if(h) h.onclick=()=>d.remove();
+  hide.onclick=()=>d.remove();
 }
 /* THE LASTING NOTICES, in the rescue's dress (the family's bubble) and stacked under one another
    UNDER THE BAND: the band holds the window's own controls and is its drag handle, and a person

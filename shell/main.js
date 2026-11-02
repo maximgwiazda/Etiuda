@@ -1301,13 +1301,14 @@ function catalogChanged(win) {
 /* A REFUSAL IS ANSWERED TOO, as an empty text with the reason in the fifth argument: the page
    owns the words, and a double-click that only brings the window forward reads as nothing. */
 function offerFile(win, file) {
-  const refuse = (why) => {
+  const refuse = (why, code) => {
     if (win && !win.isDestroyed())
-      win.webContents.send("etiuda:catalog-file", "", path.basename(file), path.dirname(file), true, why);
+      win.webContents.send("etiuda:catalog-file", "", path.basename(file), path.dirname(file), true, why, false, "", code || "");
   };
   let text;
   try { text = fs.readFileSync(file, "utf8"); }
-  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read"); return; }
+  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read", readOsCode(e)); return; }
+  if (!text) { refuse("read", "empty"); return; }
   try {
     const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -5164,7 +5165,7 @@ function relayAsk(parsed, name, me) {
     wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
   } catch { return { refused: "unread" }; }
   try { fs.mkdirSync(relayMirrorOf(parsed.relay.rt), { recursive: true }); }
-  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return { refused: "silent" }; }
+  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return { refused: "relay-mirror" }; } /* plant:relay-mirror-why */
   const asked = Date.now(), cut = String(name || "").trim().slice(0, 120);
   const doc = memberRequestDoc({ team: parsed.team, name: cut, asked: asked, commit: commit }, null, me, { id: incomingId, proof: proof });
   const file = path.join(relayMirrorOf(parsed.relay.rt), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
@@ -6142,7 +6143,13 @@ function historyOpen(sha, file) {
     const note = rosterNoteOf(opened.data);
     return note ? { name: name, text: opened.json, notOnTeam: note } : { name: name, text: opened.json };
   }
-  catch (e) { console.error("etiuda: an earlier version of " + (v.path || v.sha) + " could not be opened - " + e.message); return { name: name, text: "" }; }
+  catch (e) {
+    console.error("etiuda: an earlier version of " + (v.path || v.sha) + " could not be opened - " + e.message);
+    const code = readOsCode(e);
+    const out = { name: name, text: "", why: "unreadable" };
+    if (code) out.code = code;
+    return out;
+  }
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. */
@@ -7240,6 +7247,29 @@ function readRevFloor(text, who, look) {
   keepReadRev(id, rev);
   return "kept";
 }
+/* Why an asked read of a sealed file stops, or "" where the file is not a blocked envelope. An unasked read stays the text catalogTextOf hands on. */
+function sealBlockedWhy(text) {
+  let data = null;
+  try { data = catalogPayload(text).data; } catch { return ""; }
+  if (!data || data.kind !== SEALED_KIND) return "";
+  if (teamKeys[data.team] && teamKeys[data.team][data.epoch]) return "";
+  return sealVerdict(data) === "wait" ? "sealed-wait" : "sealed";
+}
+/* A stable reason for the page, never the raw message and never a path. */
+function readFailWhy(err) {
+  const m = String(err && err.message || "");
+  if (m === "the catalog folder is not answering") return "not-answering";
+  if (m === "not a desk's own file") return "not-desk-file";
+  if (m === "its desk is not on the team's roster") return "off-roster";
+  if (err && err.sealWait) return "sealed-wait";
+  if (m.indexOf("sealed for team ") === 0 || m === "an envelope sealed inside another") return "sealed";
+  return "unreadable";
+}
+/* The operating system's own code, where the read named one. A message is never copied: it can hold a path. */
+function readOsCode(err) {
+  const c = err && typeof err.code === "string" ? err.code : "";
+  return /^[A-Z][A-Z0-9]{1,15}$/.test(c) ? c : "";
+}
 /* A read the page means to offer unasked hands on, once a lead is pinned, only a file that lead signed. */
 function unsolicitedLeadText(text) {
   if (!pinnedLeadPubs().length) return true;
@@ -7258,7 +7288,15 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const offTeam = !!who && !deskRoster()(who);
     if (offTeam && !asked) throw new Error("its desk is not on the team's roster");
-    const text = catalogTextOf(fs.readFileSync(file, "utf8"));
+    const raw = fs.readFileSync(file, "utf8");
+    if (asked) {
+      const blocked = sealBlockedWhy(raw);
+      if (blocked) {
+        console.error("etiuda: " + file + " could not be read - " + blocked);
+        return { name: base, text: "", why: blocked };
+      }
+    }
+    const text = catalogTextOf(raw);
     if (who) {
       if (readRevFloor(text, who, !!asked) === "below" && !asked) return { name: base, text: "" };
     } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
@@ -7271,7 +7309,10 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
-    return { name: base, text: "" };
+    const code = readOsCode(err);
+    const out = { name: base, text: "", why: readFailWhy(err) };
+    if (code) out.code = code;
+    return out; /* plant:catalog-read-why */
   }
 });
 /* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page
@@ -7379,7 +7420,10 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
-    return { name: name, text: "" };
+    const code = readOsCode(err);
+    const out = { name: name, text: "", why: "unreadable" };
+    if (code) out.code = code;
+    return out;
   }
 });
 
@@ -7460,15 +7504,17 @@ ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
   const dir = shareFolderShown(); /* plant:open-catalog-shared */
   // A folder that is not answering cannot be shown to be a folder, so it is not opened either.
-  let isDir = false;
-  if (folderAnswers(dir)) {
-    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
-    try { isDir = fs.statSync(dir).isDirectory(); } catch { /* gone, or a share that is down */ }
+  if (!folderAnswers(dir)) {
+    console.error("etiuda: " + dir + " is not answering, so it is not opened");
+    return { ok: false, why: "not-answering" }; /* plant:open-folder-why */
   }
-  if (!isDir) { console.error("etiuda: " + dir + " is not a folder, so it is not opened"); return false; }
+  let isDir = false;
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  try { isDir = fs.statSync(dir).isDirectory(); } catch { /* gone, or a share that is down */ }
+  if (!isDir) { console.error("etiuda: " + dir + " is not a folder, so it is not opened"); return { ok: false, why: "not-a-folder" }; }
   const why = await shell.openPath(dir);
-  if (why) console.error("etiuda: " + dir + " could not be opened - " + why);
-  return !why;
+  if (why) { console.error("etiuda: " + dir + " could not be opened - " + why); return { ok: false, why: "could-not-open" }; }
+  return true;
 });
 
 /* THE HASHES ARE THE BUILD'S, NOT THIS FILE'S READING OF WHAT IT IS ABOUT TO SERVE. Hashing the
