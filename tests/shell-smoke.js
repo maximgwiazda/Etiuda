@@ -422,7 +422,15 @@ async function launch(ud, args, env, assocExe, realCatalogFolder, waitOpts) {
     try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
   }
   if (!b) { killPid(child.pid); throw new Error("the packaged app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
-  const p = (await b.pages())[0];
+  /* The debugging port answers before the window's page is attached, so the page is waited for (2026-11-02,
+     [8/8] threw on p.on). A page that is not about:blank is preferred for up to 5 s: 5f2's decoy is one. */
+  let p = null;
+  for (let i = 0; i < 40 && !p; i++) {
+    const pages = await b.pages();
+    p = pages.find(pg => pg.url().indexOf("about:blank") !== 0) || (i >= 20 ? pages[0] : null) || null;
+    if (!p) await sleep(250);
+  }
+  if (!p) { killPid(child.pid); throw new Error("the packaged app answered on the debugging port but opened no page within 10 s: " + said.join(" | ")); }
   const errs = [];
   p.on("console", m => { if (m.type() === "error") errs.push(m.text()); });
   p.on("pageerror", e => errs.push("pageerror " + String(e && e.message || e)));
@@ -3281,13 +3289,18 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " measurement so that a change to it reddens");
   await s.stop();
 
+  /* The document the shell serves when the pin will not read boots nothing, so the launches that
+     meet it wait for its words, as 5a waits for its banner. */
+  const REFUSAL_WAIT = { unbooted: true, boundMs: 12000,
+    ready: "!!document.body && /could not start/.test(document.body.innerText || '')" };
+
   /* A pin that will not parse. Both this and the one below used to be answered by serving the
      engine under script-src 'none', which is a window with nothing in it: the policy was right
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
   /* SHOWN AND ON NO DISPLAY: this launch serves 5d and 5f, and 5f measures the refusal window's
      caption, which board item 384 put there. */
-  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
+  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "2" }, null, null, REFUSAL_WAIT);
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
@@ -3358,7 +3371,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   /* SHOWN AND ON NO DISPLAY: this control's whole subject is which of two windows is measured,
      and it is the only launch here that puts two windows up. */
-  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
+  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "2" }, null, null, REFUSAL_WAIT);
   const twoPages = await s.b.pages();
   const subjectPage = twoPages.filter(pg => pg.url().indexOf("about:blank") !== 0)[0] || twoPages[0];
   const twoSeen = await subjectPage.evaluate(SEEN);
@@ -3383,7 +3396,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* The second branch of the same read: a document that parses and is not a pin this version
      knows. It reached the same dead end and now reaches the same refusal. */
   await variant(w => putPin(w, { kind: "something-else", hashes: [] }));
-  s = await launch(newUserData("notapin"));
+  s = await launch(newUserData("notapin"), [], null, null, null, REFUSAL_WAIT);
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const wrongpin = await s.p.evaluate(SEEN);
