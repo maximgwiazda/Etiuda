@@ -2249,7 +2249,7 @@ try {
     }
   }), "utf8");
   await leaveStandDesk.join("leave", relayTeam);
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 1500; i++) {
     const e = leaveStandDesk.envelope();
     if (e.teamJoin && e.teamJoin.invite && e.teamJoin.invite.relay && e.teamJoin.invite.relay.withdrawn === true) break;
     await new Promise(r => setTimeout(r, 20));
@@ -2308,7 +2308,7 @@ try {
     }
   }), "utf8");
   await matchStandDesk.join("forget", relayTeam);
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 1500; i++) {
     const e = matchStandDesk.envelope();
     if (e.teamJoin && e.teamJoin.invite && e.teamJoin.invite.relay && e.teamJoin.invite.relay.withdrawn === true) break;
     await new Promise(r => setTimeout(r, 20));

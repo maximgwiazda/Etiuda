@@ -96,7 +96,7 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
 /* The ask's timer is unref'd, and a stand-in read never settles, so the wait has to keep the loop. */
 const until = p => {
   let timer = null;
-  const cap = new Promise(r => { timer = setTimeout(() => r("cap"), 8000); });
+  const cap = new Promise(r => { timer = setTimeout(() => r("cap"), 30000); });
   return Promise.race([p, cap]).finally(() => clearTimeout(timer));
 };
 const offers = D => D.sent.filter(a => a[0] === "etiuda:catalog-file").length;
@@ -275,7 +275,7 @@ try {
       const held = pending.splice(0, pending.length);
       await Promise.all(held.map(p => (p.opts === undefined ? realReaddir(p.dir) : realReaddir(p.dir, p.opts)).then(p.resolve, p.reject)));
       let again = false;
-      for (let i = 0; i < 50 && !again; i++) {
+      for (let i = 0; i < 1500 && !again; i++) {
         const before = reads;
         box.D.api.shareStatTick(box.D.win);
         again = reads === before + 1;

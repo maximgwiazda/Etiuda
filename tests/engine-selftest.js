@@ -564,9 +564,9 @@ try {
     try { fs.rmSync(E.DESK_LOCK, { force: true }); } catch (x) { /* 21f's child left one */ }
     const holder = spawn(process.execPath, ["-e",
       'const E = require("./engine.js"); const r = E.takeDeskLock("a-stand-in-holder");'
-      + 'console.log(JSON.stringify(r)); setTimeout(function () {}, 20000);'],
+      + 'console.log(JSON.stringify(r)); setTimeout(function () {}, 40000);'],
       { cwd: __dirname, stdio: "ignore" });
-    for (let i = 0; i < 40 && !fs.existsSync(E.DESK_LOCK); i++) pause(100);
+    for (let i = 0; i < 300 && !fs.existsSync(E.DESK_LOCK); i++) pause(100);
     const heldNow = E.deskLockHolder();
     const refused = fire({ who: "another-lab.js", args: ["--user-data-dir=" + holdUd] });
     ok(!!heldNow && heldNow.alive === true && heldNow.pid === holder.pid

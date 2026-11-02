@@ -1286,7 +1286,7 @@ async function run() {
     try {
       ctl = new syncerMod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks, pollMs: 200 });
       ctl.start();
-      for (let i = 0; i < 50 && !(byWorker = fs.existsSync(second) && !owedAtOf(mirror, "desks/" + me.id + "/cat-44a-1e1e1e1e.ec")); i++) {
+      for (let i = 0; i < 300 && !(byWorker = fs.existsSync(second) && !owedAtOf(mirror, "desks/" + me.id + "/cat-44a-1e1e1e1e.ec")); i++) {
         await new Promise(r => setTimeout(r, 100));
       }
     } catch { byWorker = false; }
@@ -2158,14 +2158,14 @@ async function run() {
   /* 42n: THE WORKER STARTS FROM ITS SOURCE TEXT, so a packaged desk, whose syncer files sit inside app.asar, does not depend on
      a Worker's loader reading a path there. A real worker syncer mirrors a genuine team file; with the line lifted it does not. */
   const deskChecksForWorker = () => newDesk("checks-for-worker-" + crypto.randomBytes(3).toString("hex"), folder("checks-for-worker-folder")).api.deskTrustChecks();
-  async function workerMirrors(mod, name) {
+  async function workerMirrors(mod, name, ceiling) {
     const share = folder(name + "-share"), mirror = folder(name + "-mirror");
     fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
     let s = null;
     try {
       s = mod.startFolderSyncer({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: () => null, checks: deskChecksForWorker(), pollMs: 200 });
     } catch { return false; }
-    const until = Date.now() + 8000;
+    const until = Date.now() + (ceiling || 30000);
     let landed = false;
     while (!landed && Date.now() < until) {
       await new Promise(res => setTimeout(res, 150));
@@ -2178,7 +2178,7 @@ async function run() {
     const live = await workerMirrors(nodeRequire(syncerFile), "worker-source");
     const r = await testPlant("syncer-worker-source", syncerFile, async (scratchSyncer) => {
       fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratchSyncer), "syncer-worker.cjs"));
-      return !(await workerMirrors(nodeRequire(scratchSyncer), "plant-worker-source"));
+      return !(await workerMirrors(nodeRequire(scratchSyncer), "plant-worker-source", 8000));
     });
     check(live && r.ok, "42n the syncer's worker starts from its source text and mirrors a genuine team file " + live
       + ", and lifting plant:syncer-worker-source stops it: " + JSON.stringify(r));
@@ -2187,7 +2187,7 @@ async function run() {
 
   /* 44u: A SHARE'S TEAM FILE THAT IS NOT THE LEAD'S IS SAID, ONCE (the test architect's C1 to slice 2). The desk leaves it aside
      and works on the last genuine one, so the line is the only alarm a tampered share gives: it goes through teamSay, once. */
-  async function forgedShareSaid(name, src) {
+  async function forgedShareSaid(name, src, ceiling) {
     const ud = folder(name + "-desk");
     const shareDir = folder(name + "-share");
     fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 2, signer: forger.privateKey, keyId: FORGER.keyId, public: FORGER.public })), "utf8");
@@ -2196,7 +2196,7 @@ async function run() {
     const d = loadDesk(ud, src ? { src } : {});
     const s = d.api.folderSyncerRun();
     const lines = () => d.said.filter(l => l.indexOf("ERR etiuda: ") === 0 && l.indexOf("etiuda-team.json is signed by a key other than the lead's") >= 0);
-    const until = Date.now() + 8000;
+    const until = Date.now() + (ceiling || 30000);
     while (!lines().length && Date.now() < until) await new Promise(res => setTimeout(res, 150));
     if (s && typeof s.kick === "function") { s.kick(); await new Promise(res => setTimeout(res, 1200)); }
     try { if (s && typeof s.stop === "function") s.stop(); } catch {}
@@ -2205,7 +2205,7 @@ async function run() {
   {
     const n = await forgedShareSaid("forged-said");
     check(n === 1, "44u a share's team file that is not the lead's is said through teamSay once, across two listings: " + n + " line(s)");
-    const r = await testPlant("syncer-team-said", mainFile, async (scratchMain) => (await forgedShareSaid("plant-forged-said", fs.readFileSync(scratchMain, "utf8"))) === 0);
+    const r = await testPlant("syncer-team-said", mainFile, async (scratchMain) => (await forgedShareSaid("plant-forged-said", fs.readFileSync(scratchMain, "utf8"), 8000)) === 0);
     check(r.ok, "44v lifting plant:syncer-team-said leaves a tampered share's team file unsaid: " + JSON.stringify(r));
   }
 

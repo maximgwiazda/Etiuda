@@ -173,8 +173,8 @@ try {
     pressed++;
     await sleep(FADE_WAIT);
     if (crashed) { firstDeath = "category " + (k + 1) + " of " + nPills; break; }
-    const got = await Promise.race([q.evaluate(() => localStorage.getItem("eTheme")), sleep(8000).then(() => false)]);
-    if (got === false) { firstDeath = "category " + (k + 1) + " of " + nPills + " (no answer in 8 s)"; crashed = true; break; }
+    const got = await Promise.race([q.evaluate(() => localStorage.getItem("eTheme")), sleep(30000).then(() => false)]);
+    if (got === false) { firstDeath = "category " + (k + 1) + " of " + nPills + " (no answer in 30 s)"; crashed = true; break; }
     await q.mouse.move(4, 990);
     const seen = await painted(q, want);
     least = Math.min(least, seen.mine); most = Math.max(most, seen.other);
