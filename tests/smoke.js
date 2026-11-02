@@ -3284,7 +3284,7 @@ const t0 = Date.now();
   const SAMPLE_EC = path.join(E.ROOT, E.TREE_FILE.sampleEc);
   const loadSample = async q => {
     await q.evaluate(() => { window.showOpenFilePicker = undefined; });
-    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
     const [chooser] = await Promise.all([q.waitForFileChooser({ timeout: 10000 }), q.click("#emptyLoad")]);
     await chooser.accept([SAMPLE_EC]);
     const moved = await nav;
@@ -3650,7 +3650,7 @@ const t0 = Date.now();
     /* Eject happens at once and in place with its Undo standing (Maxim, 2026-09-27 23:28 and
        2026-09-28 23:41): no confirm, no reload, the empty desk under the Undo bubble. The bubble is
        then put away by its own Escape, not answered, so the Load below is the only way back. */
-    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
     // What stands is read as the Clear local memory leg reads it.
     const ejAsked = await q2.evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
       const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
