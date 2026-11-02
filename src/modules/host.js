@@ -39,13 +39,24 @@ function eCatalogFolderShort(dir){
   if(parts.length<2) return full;
   return parts.slice(-2).join(full.indexOf("\\")>-1?"\\":"/");
 }
-/* Opens that folder in the desk's own file manager. Answers false in a browser and false where
-   the host could not open it, which is the caller's to speak about. */
+/* Opens that folder in the desk's own file manager. Answers true when it opened. Answers false
+   in a browser, and false where it did not open, having said the reason in one line. A browser
+   says nothing, because there is no folder there. */
 function eOpenCatalogFolder(){
   const h=eHost();
   if(!h || typeof h.openCatalogFolder!=="function") return Promise.resolve(false);
-  try{ return Promise.resolve(h.openCatalogFolder()).then(v=>!!v).catch(()=>false); }
-  catch(e){ return Promise.resolve(false); }
+  const say=why=>{
+    if(why==="not-answering") toastRefusal(t("The team's folder is not answering just now, so it stays closed. The same link opens it once this computer can reach it."));
+    else if(why==="not-a-folder") toastRefusal(t("Settings names a file where the team's folder should be, so nothing is opened. The Library can choose the folder again."));
+    else if(why==="could-not-open") toastRefusal(t("This computer did not open the team's folder just now. The same link tries again."));
+  };
+  try{
+    return Promise.resolve(h.openCatalogFolder()).then(v=>{
+      if(v===true) return true;
+      if(v && typeof v==="object" && v.ok===false){ say(String(v.why||"")); return false; }
+      return false;
+    }).catch(()=>false);
+  }catch(e){ return Promise.resolve(false); }
 }
 /* A link to that folder answers a click, Enter and Space alike. */
 function wireFolderLink(el){

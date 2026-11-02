@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 20;
+const EXPECTED = 22;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -54,7 +54,8 @@ const electron = {
 const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
-new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
+const shellApi = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+  shellSrc("main.js") + "\nreturn { setDown: d => { folderDown = d; } };")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
 
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -238,9 +239,9 @@ try {
   fs.writeFileSync(plant, "rem planted\r\n", "utf8");
   onHandlers["etiuda:desk-save"](eventFor(ENGINE_FRAME), JSON.stringify({ eCatalogFolder: plant }));
   const onFile = await open(eventFor(ENGINE_FRAME));
-  check(onFile === false && opened.length === 0,
+  check(!!onFile && onFile.ok === false && onFile.why === "not-a-folder" && opened.length === 0,
     "3a a catalog folder setting that names a file is not handed to openPath, which would launch it: answered "
-    + onFile + ", " + opened.length + " path(s) opened");
+    + JSON.stringify(onFile) + ", " + opened.length + " path(s) opened");
   onHandlers["etiuda:desk-save"](eventFor(ENGINE_FRAME), JSON.stringify({ eCatalogFolder: CF }));
   const onDir = await open(eventFor(ENGINE_FRAME));
   check(onDir === true && opened.length === 1 && opened[0] === CF,
@@ -251,6 +252,78 @@ try {
   const errs = said.filter(l => /^ERR /.test(l) && !/is not a folder|larger than any ring/.test(l));
   check(!errs.length, "5a main logged no error beyond the refusals it was asked for"
     + (errs.length ? ": " + errs.length + ", first " + errs[0] : ""));
+
+  /* 15w7: the folder link, through the page, says why the shell did not open it. */
+  const cls = () => {
+    const s = new Set();
+    return { contains: c => s.has(c), add: (...c) => c.forEach(x => s.add(x)),
+      remove: (...c) => c.forEach(x => s.delete(x)),
+      toggle: (c, on) => { const next = on === undefined ? !s.has(c) : !!on; if (next) s.add(c); else s.delete(c); return next; } };
+  };
+  const toastEl = { classList: cls(), textContent: "", innerHTML: "", style: {},
+    getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) };
+  globalThis.innerHeight = 800;
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0",
+    fontStyle: "normal", fontWeight: "400", fontSize: "14px", fontFamily: "sans-serif", letterSpacing: "normal" });
+  document.getElementById = id => (id === "toast" ? toastEl : null);
+  document.querySelector = sel => (sel === "#toast" ? toastEl : null);
+  const H = await import(MOD("host.js"));
+  const link = {};
+  H.wireFolderLink(link);
+  const shown = async () => {
+    toastEl.innerHTML = "";
+    toastEl.textContent = "";
+    await Promise.resolve(link.onclick && link.onclick());
+    return String(toastEl.innerHTML || toastEl.textContent || "");
+  };
+  const atOpen = opened.length;
+  /* A toast that arrives while one is showing waits out the dismiss tier before its words land.
+     Still motion writes them in this turn, which is the path this leg reads. */
+  ST.lsSet("eMotionOff", "1");
+  shellApi.setDown(CF);
+  const downEn = await shown();
+  shellApi.setDown("");
+  ST.lsSet("eUiLang", "pl");
+  shellApi.setDown(CF);
+  const downPl = await shown();
+  shellApi.setDown("");
+  ST.lsSet("eUiLang", "en");
+  onHandlers["etiuda:desk-save"](eventFor(ENGINE_FRAME), JSON.stringify({ eCatalogFolder: plant }));
+  const fileEn = await shown();
+  onHandlers["etiuda:desk-save"](eventFor(ENGINE_FRAME), JSON.stringify({ eCatalogFolder: CF }));
+  const realOpen = electron.shell.openPath;
+  electron.shell.openPath = async p => { opened.push(p); return "denied"; };
+  const refusedEn = await shown();
+  electron.shell.openPath = realOpen;
+  check(downEn.indexOf("not answering just now") >= 0 && downPl.indexOf("nie odpowiada") >= 0
+      && fileEn.indexOf("names a file") >= 0 && refusedEn.indexOf("did not open") >= 0
+      && opened.length === atOpen + 1,
+    "15w7 opening the team's folder says why it did not, in the desk's language, and a refusal from the file manager is its own line: "
+    + "down " + (downEn.indexOf("not answering just now") >= 0) + ", polish " + (downPl.indexOf("nie odpowiada") >= 0)
+    + ", file " + (fileEn.indexOf("names a file") >= 0) + ", refused " + (refusedEn.indexOf("did not open") >= 0)
+    + ", opened " + opened.length);
+
+  {
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:open-folder-why") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines[at] = "    return false; /* plant:open-folder-why */";
+      const planted = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+        lines.join("\n") + "\nreturn { setDown: d => { folderDown = d; } };")(
+        fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
+      planted.setDown(CF);
+      const again = await shown();
+      planted.setDown("");
+      turned = again.indexOf("not answering just now") < 0;
+      detail = turned ? "the line was gone" : "the line was still said";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    check(turned && same, "15wa lifting plant:open-folder-why turns 15w7 red (the folder link says nothing): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

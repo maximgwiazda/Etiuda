@@ -7460,15 +7460,17 @@ ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
   const dir = shareFolderShown(); /* plant:open-catalog-shared */
   // A folder that is not answering cannot be shown to be a folder, so it is not opened either.
-  let isDir = false;
-  if (folderAnswers(dir)) {
-    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
-    try { isDir = fs.statSync(dir).isDirectory(); } catch { /* gone, or a share that is down */ }
+  if (!folderAnswers(dir)) {
+    console.error("etiuda: " + dir + " is not answering, so it is not opened");
+    return { ok: false, why: "not-answering" }; /* plant:open-folder-why */
   }
-  if (!isDir) { console.error("etiuda: " + dir + " is not a folder, so it is not opened"); return false; }
+  let isDir = false;
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  try { isDir = fs.statSync(dir).isDirectory(); } catch { /* gone, or a share that is down */ }
+  if (!isDir) { console.error("etiuda: " + dir + " is not a folder, so it is not opened"); return { ok: false, why: "not-a-folder" }; }
   const why = await shell.openPath(dir);
-  if (why) console.error("etiuda: " + dir + " could not be opened - " + why);
-  return !why;
+  if (why) { console.error("etiuda: " + dir + " could not be opened - " + why); return { ok: false, why: "could-not-open" }; }
+  return true;
 });
 
 /* THE HASHES ARE THE BUILD'S, NOT THIS FILE'S READING OF WHAT IT IS ABOUT TO SERVE. Hashing the
