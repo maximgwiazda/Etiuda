@@ -5164,7 +5164,7 @@ function relayAsk(parsed, name, me) {
     wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
   } catch { return { refused: "unread" }; }
   try { fs.mkdirSync(relayMirrorOf(parsed.relay.rt), { recursive: true }); }
-  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return { refused: "silent" }; }
+  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return { refused: "relay-mirror" }; } /* plant:relay-mirror-why */
   const asked = Date.now(), cut = String(name || "").trim().slice(0, 120);
   const doc = memberRequestDoc({ team: parsed.team, name: cut, asked: asked, commit: commit }, null, me, { id: incomingId, proof: proof });
   const file = path.join(relayMirrorOf(parsed.relay.rt), "desks", branchIdOf(deskBranch.sign.pub), "join.json");

@@ -1057,6 +1057,8 @@ UI_STRINGS.pl={
   "This invitation cannot be read, so nothing was changed.":"Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
   "This folder is on the computer {HOST}.":"Ten folder znajduje się na komputerze {HOST}.",
   "This folder could not be reached, so nothing was written.":"Ten folder jest teraz niedostępny, więc nic nie zapisano.",
+  /* draft words: copywriter */
+  "This computer could not keep the team's local copy, so the invitation was not taken. Free space, or leave to write here, lets the same invitation go through.":"Na tym komputerze nie udało się zachować lokalnej kopii zespołu, więc zaproszenie nie zostało przyjęte. Wolne miejsce albo prawo zapisu pozwala temu samemu zaproszeniu przejść.",
   "Desks on other computers read this folder only if it is shared with them.":"Stanowiska na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
   "OneDrive keeps this folder in sync.":"Ten folder jest synchronizowany przez OneDrive.",
   "This folder is a SharePoint library that OneDrive keeps in sync.":"Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
