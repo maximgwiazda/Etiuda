@@ -171,7 +171,7 @@ function folderTeamHere() {
 const mirrorsMade = new Set();
 function folderMirrorHere() {
   const ft = folderTeamHere();
-  if (!ft || ft.joining) return "";
+  if (!ft) return "";
   const mirror = folderMirrorOf(ft.team);
   if (sayJoinPolicy().folder && !fs.existsSync(path.join(mirror, FolderSyncer().PRIMED_NAME))) return ""; /* plant:policy-primed */
   if (!mirrorsMade.has(mirror)) { try { fs.mkdirSync(mirror, { recursive: true }); mirrorsMade.add(mirror); } catch { /* made by the syncer */ } }
@@ -206,7 +206,7 @@ function catalogFolder() {
   const ft = folderTeamHere();
   if (ft && !ft.joining && folderSyncerBroken) return ft.folder; /* plant:syncer-broken-share */
   if (ft && !ft.joining) return folderMirrorOf(ft.team); /* plant:catalog-folder-mirror */
-  if (ft && ft.joining) return ft.folder;
+  if (ft && ft.joining) return folderMirrorOf(ft.team); /* plant:mirror-while-joining */
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -3852,7 +3852,12 @@ function relayOpenFile(team) {
   /* The newest of the team's sealed files this desk can open: the highest key number, then the highest rev inside it (the
      test architect's C1 to the desk pilot; a sealed envelope carries no rev outside its ciphertext). */
   let best = "", bestEpoch = -1, bestRev = -1;
-  for (const f of ecFilesIn(catalogFolder())) {
+  let files = ecFilesIn(catalogFolder());
+  if (!files.length) {
+    const raw = shareFolderShown();
+    if (raw && raw !== catalogFolder()) files = ecFilesIn(raw);
+  }
+  for (const f of files) {
     let d = null;
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
     if (!(d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch])) continue;
@@ -3864,7 +3869,8 @@ function relayOpenFile(team) {
 }
 function relayOpens(j) {
   const inv = j && j.invite && j.invite.relay;
-  const team = inv && inv.withdrawn !== true && inv.withdrawing !== true && j.refused !== true ? String(j.team) : relayCatalogOwed;
+  let team = inv && inv.withdrawn !== true && inv.withdrawing !== true && j.refused !== true ? String(j.team) : relayCatalogOwed;
+  if (!team && j && j.invite && j.invite.folder && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length && j.refused !== true) team = String(j.team); /* plant:folder-invite-opens */
   if (!team || !teamPins[team]) return null;
   if (relayCatalogNamed.has(team)) { if (relayCatalogOwed === team) relayCatalogOwed = ""; return null; }
   const file = relayOpenFile(team);
@@ -3899,6 +3905,8 @@ function finishJoin(admitted) {
   joinTold = false;
   persistDeskEnvelope();
   if (j.invite && j.invite.relay) relaySoon();
+  catalogFolderChanged(); /* plant:finish-join-watched */
+  if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
   return true;
 }
 /* The newest epoch this desk keeps a key for, leaving out the epochs in `skip` where it is given. */
@@ -4796,6 +4804,7 @@ function joinView() {
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
     if (j.invite && j.invite.relay && relayCatalogNamed.has(j.team)) view.join.invite.open = true;
+    if (j.invite && !j.invite.relay && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length) view.join.invite.open = true; /* plant:folder-join-open */
     const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
     const doubted = !!(j.invite && j.invite.relay && teamBarred.has(j.team) && !teamLeft[j.team]);
     if (j.invite && j.invite.relay) {
@@ -5130,8 +5139,11 @@ async function takeInvite(text, name, check) {
   teamShown[parsed.team] = Object.assign({ folder: parsed.folder }, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
   teamStamp = "";
   persistDeskEnvelope();
+  relayCatalogNamed.delete(parsed.team);
+  const view = joinView();
   catalogFolderChanged();
-  return joinView();
+  if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
+  return view;
 }
 /* Everything a yes to a relay invitation makes before it changes anything, so whatever can fail fails first: the request's nonce,
    commitment and proof, the time it is dated, the token and the two keys sealed by safeStorage, the invitation's mirror made, and
