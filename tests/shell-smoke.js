@@ -167,6 +167,8 @@ const step = async (label, body, opts) => {
  *     read for everywhere it could show (board 817). The same anchored grep returns 126 here.
  *   - 131: 8a and 8A are the two sites added, the packaged desk on a folder team and the bent
  *     worker that does not prime. The same anchored grep returns 131 here.
+ *   - 132 SINCE 2026-11-02: 2s9w is the site added, the Library's bar at 600px wide (the test
+ *     architect's edit). The same anchored grep returns 132 here.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -185,12 +187,12 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7", "8"];
-const EXPECTED = KEEP ? null : 131;
+const EXPECTED = KEEP ? null : 132;
 /* 1g3 may record NOT RUN instead of calling its check (board 655). NOT RUN only when an early
    sample, taken straight after connect, was on a display and not iconic, and the late sample
    is iconic. iconic is the window pickWindow chose. Already iconic at the early sample is a
    FAIL, and so is every other wrong window. The verdict below subtracts notRun.length from
-   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 131:
+   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 132:
    the call is still in the file and still runs whenever the reading is not not-run. */
 /* COUNTS:PREDICATES
    Members that must be there, in order where the order is the claim.
@@ -395,7 +397,7 @@ async function escOffer(p) {
   await p.keyboard.press("Escape");
 }
 
-async function launch(ud, args, env, assocExe, realCatalogFolder) {
+async function launch(ud, args, env, assocExe, realCatalogFolder, waitOpts) {
   port++;
   /* OFF SCREEN BY DEFAULT, board item 385: E.offscreenEnv() writes ETIUDA_TEST_OFFSCREEN=1 over
      whatever the ambient environment says, and a caller's own value wins over that. The five
@@ -422,7 +424,15 @@ async function launch(ud, args, env, assocExe, realCatalogFolder) {
     try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
   }
   if (!b) { killPid(child.pid); throw new Error("the packaged app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
-  const p = (await b.pages())[0];
+  /* The debugging port answers before the window's page is attached, so the page is waited for (2026-11-02,
+     [8/8] threw on p.on). A page that is not about:blank is preferred for up to 5 s: 5f2's decoy is one. */
+  let p = null;
+  for (let i = 0; i < 40 && !p; i++) {
+    const pages = await b.pages();
+    p = pages.find(pg => pg.url().indexOf("about:blank") !== 0) || (i >= 20 ? pages[0] : null) || null;
+    if (!p) await sleep(250);
+  }
+  if (!p) { killPid(child.pid); throw new Error("the packaged app answered on the debugging port but opened no page within 10 s: " + said.join(" | ")); }
   const errs = [];
   p.on("console", m => { if (m.type() === "error") errs.push(m.text()); });
   p.on("pageerror", e => errs.push("pageerror " + String(e && e.message || e)));
@@ -430,9 +440,14 @@ async function launch(ud, args, env, assocExe, realCatalogFolder) {
      launches are placed aside and do not ask this question. */
   let earlyFacts = null;
   if (env && env.ETIUDA_TEST_OFFSCREEN === "") earlyFacts = windowFacts(child.pid);
+  /* waitOpts.unbooted is a page that will not boot: the stale app-script pin. It waits for
+     the inline banner instead of E_VERSION, and its bound has to cover that banner's 8 s. */
+  const w = waitOpts || {};
   await LW.waitLaunchGone(p, {
     who: "tests/shell-smoke.js launch",
-    ready: "typeof window.E_VERSION === \"string\"",
+    ready: w.ready || "typeof window.E_VERSION === \"string\"",
+    boundMs: w.boundMs,
+    unbooted: !!w.unbooted,
   });
   await sleep(3500);
   return {
@@ -546,6 +561,20 @@ const BAR_ENDS = (leftId, rightId) => {
     topDelta: round(ra.top - rb.top),
     between: round(rb.left - ra.right),
   };
+};
+/* The rev a folder row is labelled with. The host sends `+rev || 0` (shell/main.js, ecFacts),
+   so a file with no rev field still arrives as 0, and 0 is a rev. */
+function hostRevOf(file) {
+  const d = JSON.parse(fs.readFileSync(file, "utf8"));
+  return +d.rev || 0;
+}
+/* The line catalogStamp leads with, as the page renders it. t("rev {R}") is the page's own
+   wording, so this leg does not write the English. A dated edition and no rev is that edition
+   alone. Neither returns "", and the row then has to read the file's write time. */
+const REV_LINE = (rev, edition) => {
+  const n = editionNameOf({ version: edition, rev: rev });
+  if (n.r != null) return t("rev {R}").split("{R}").join(String(n.r) + (n.e ? " (" + n.e + ")" : ""));
+  return n.e ? String(n.e) : "";
 };
 
 const SEEN = () => ({
@@ -1760,6 +1789,14 @@ const placeEc = (dir, from, as, minutesOld) => {
       && has(new RegExp("^[0-9]+" + NBSP + "intents?$")) === 1
       && has(new RegExp("^[0-9]+" + NBSP + "(categories|category)$")) === 1;
   };
+  /* The first part is the rev line wherever the file has a rev or a dated edition, and the
+     file's write time only where it has neither. The write time is what the Newer tag measures,
+     and nothing else on this line. */
+  const stampLeads = (meta, rendered) => {
+    const first = metaParts(meta)[0];
+    if (rendered) return first === rendered && !DATE_RE.test(String(meta || ""));
+    return DATE_RE.test(String(meta || ""));
+  };
   check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
         && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
         && bareEmpty.says.indexOf("Etiuda is ready for its first replies.") === 0
@@ -1805,22 +1842,32 @@ const placeEc = (dir, from, as, minutesOld) => {
   lib = await s.p.evaluate(OPEN_LIB);
   const edRow = (lib.rows || []).filter(r => r.name === "one-edition.ec")[0] || {};
   const noEdRow = (lib.rows || []).filter(r => r.name === "another.ec")[0] || {};
+  const edLine = await s.p.evaluate(REV_LINE, hostRevOf(FIX), FIX_EDITION);
+  const noLine = await s.p.evaluate(REV_LINE, hostRevOf(SAMPLE_NOED), "");
+  const emptyLine = await s.p.evaluate(REV_LINE, "", "");
+  const stamped = await s.p.evaluate((rev, edition) => catalogStamp(edition, Date.now(), rev),
+    hostRevOf(FIX), FIX_EDITION);
+  const neitherTime = await s.p.evaluate(() => catalogStamp("", Date.now(), ""));
   check(lib.step === "open" && lib.rows.length === 2
         && lib.rows.filter(r => r.name === "one-edition.ec").length === 1
         && lib.rows.filter(r => r.name === "another.ec").length === 1
         && lib.rows.every(r => r.act === "Load" && r.box[0] > 0 && r.box[1] > 0 && !r.loaded)
-        && (edRow.meta || "").indexOf(FIX_EDITION) === 0 && !DATE_RE.test(edRow.meta || "")
-        && DATE_RE.test(noEdRow.meta || "")
+        && edLine !== "" && noLine !== "" && emptyLine === ""
+        && stamped === edLine && DATE_RE.test(neitherTime)
+        && stampLeads(edRow.meta, edLine) && stampLeads(noEdRow.meta, noLine)
         && lib.path && lib.change,
-    "2q the Library lists every .ec in the folder, each with the catalog\'s OWN EDITION where the"
-    + " file names one (" + JSON.stringify(edRow.meta) + ", the fixture\'s being "
-    + JSON.stringify(FIX_EDITION) + ") and the file\'s date on disk where it does not ("
-    + JSON.stringify(noEdRow.meta) + "), its size and a Load button, and the folder\'s own two"
-    + " controls beside them: " + JSON.stringify(lib));
+    "2q the Library lists every .ec in the folder, each with the rev line the page renders"
+    + " wherever the file has a rev or a dated edition (" + JSON.stringify(edRow.meta)
+    + ", the page's line for the fixture being " + JSON.stringify(edLine)
+    + ") and the file's write time only where it has neither (" + JSON.stringify(noEdRow.meta)
+    + "; a file with neither reads " + JSON.stringify(neitherTime)
+    + "), its size and a Load button, and the folder's own two controls beside them: "
+    + JSON.stringify(lib));
   check(fiveCounts(edRow.meta) && fiveCounts(noEdRow.meta)
-        && metaParts(edRow.meta)[0] === FIX_EDITION
+        && metaParts(edRow.meta)[0] === edLine
+        && metaParts(noEdRow.meta)[0] === noLine
         && metaParts(edRow.meta)[1] === FIXTURE_CARDS + NBSP + "cards",
-    "2q1 and every row reads the five values the loaded row reads, board 425: the edition and then"
+    "2q1 and every row reads the five values the loaded row reads, board 425: the rev line and then"
     + " cards, macros, intents and categories, counted off the file by the host - "
     + JSON.stringify(edRow.meta) + " and " + JSON.stringify(noEdRow.meta));
 
@@ -2126,14 +2173,18 @@ const placeEc = (dir, from, as, minutesOld) => {
   const onRow = (libL.rows || []).filter(r => r.loaded)[0] || {};
   const offRow = (libL.rows || []).filter(r => !r.loaded)[0] || {};
   const onParts = metaParts(onRow.meta);
+  const rowPage = (await s.b.pages())[0];
+  const onLine = await rowPage.evaluate(REV_LINE, hostRevOf(FIX), FIX_EDITION);
+  const offLine = await rowPage.evaluate(REV_LINE, hostRevOf(SAMPLE_NOED), "");
   check(tookRow && libL.step === "open" && onRow.name === "one-edition.ec"
-        && fiveCounts(onRow.meta) && onParts[0] === FIX_EDITION
+        && fiveCounts(onRow.meta) && onParts[0] === onLine
         && onParts[1] === FIXTURE_CARDS + NBSP + "cards"
-        && !DATE_RE.test(onRow.meta || ""),
-    "2q7 the loaded row's small print is the catalog's own edition and then the four counts the"
-    + " summary line above used to carry, and no disk time: " + JSON.stringify(onRow.meta)
-    + " in " + onParts.length + " parts split on the middot, against the fixture's edition "
-    + JSON.stringify(FIX_EDITION) + " and its " + FIXTURE_CARDS + " cards");
+        && stampLeads(onRow.meta, onLine),
+    "2q7 the loaded row's small print is the rev line the page renders for that catalog's rev"
+    + " and edition, and then the four counts the summary line above used to carry, and no"
+    + " disk time: " + JSON.stringify(onRow.meta)
+    + " in " + onParts.length + " parts split on the middot, against the page's line "
+    + JSON.stringify(onLine) + " and the fixture's " + FIXTURE_CARDS + " cards");
   /* A SUBSTRING IS NOT A COUNT. This read `indexOf(String(SAMPLE_CARDS)) > -1` over the whole
      line, which on a two-digit count matches the day of the month, the minutes, or the macro
      count standing beside it - the leg would have passed with the cards figure wrong or absent.
@@ -2141,11 +2192,13 @@ const placeEc = (dir, from, as, minutesOld) => {
      cards part compared whole. */
   const offParts = metaParts(offRow.meta);
   check(libL.rows.length === 2 && offRow.name === "another.ec"
-        && DATE_RE.test(offRow.meta || "")
+        && offLine !== "" && stampLeads(offRow.meta, offLine)
         && offParts.indexOf(SAMPLE_CARDS + NBSP + "cards") > -1,
-    "2q8 and the row beside it, whose file names no edition, still reads its date on disk and its"
-    + " size: " + JSON.stringify(offRow.meta) + " in " + offParts.length
-    + " parts split on the middot, against the sample's " + SAMPLE_CARDS + " cards");
+    "2q8 and the row beside it, which keeps its rev and names no edition, reads that rev line"
+    + " and its size, not a write time: " + JSON.stringify(offRow.meta) + " in " + offParts.length
+    + " parts split on the middot, against the page's line " + JSON.stringify(offLine)
+    + " and the sample's " + SAMPLE_CARDS + " cards. The write time is what the Newer tag"
+    + " measures, and nothing else");
   check(!!edRow.meta && edRow.meta === onRow.meta,
     "2q10 and that is the SAME line, character for character, that the same file read UNLOADED in"
     + " the Library at 2q above, which is what says the host's counts and the page's have not"
@@ -2429,6 +2482,33 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2s9 Clear local memory sits in the Library's actions bar before Close, at its left edge with"
     + " Close at the right, still danger, and not in the Catalog & data fold: "
     + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
+  /* The one-row bar holds only on a window wide enough for it (template.html, the Library's
+     bar). At 600px wide the bar wraps instead, and every button stays inside the card and is the
+     element under its own centre, so a person can press it. Read by hit test, never by a click:
+     Clear local memory restarts the app. */
+  await s.p.setViewport({ width: 600, height: 880 });
+  await sleep(400);
+  const narrowBar = await s.p.evaluate(() => {
+    const card = document.getElementById("modalCard");
+    const acts = card && card.querySelector(".modal-actions");
+    if (!card || !acts) return { step: "missing" };
+    const c = card.getBoundingClientRect();
+    const btns = Array.from(acts.querySelectorAll("button")).filter(b => b.offsetParent);
+    const out = btns.map(b => {
+      const r = b.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { id: b.id, inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5
+        && r.top >= c.top - 0.5 && r.bottom <= c.bottom + 0.5,
+        hit: !!(hit && (hit === b || b.contains(hit))) };
+    });
+    return { step: "read", width: innerWidth, n: out.length, out };
+  });
+  await s.p.setViewport(null);
+  await sleep(400);
+  check(narrowBar.step === "read" && narrowBar.width === 600 && narrowBar.n >= 3
+        && narrowBar.out.every(b => b.inside && b.hit),
+    "2s9w at 600px wide the Library's bar wraps, and every button lies inside the card and is"
+    + " the element under its own centre: " + JSON.stringify(narrowBar));
 
   /* Eject from that row: the Library is still there over the desk started again in place, showing
      the folder rather than being replaced by a dialog about one file in it, and the section says in
@@ -3153,19 +3233,49 @@ const placeEc = (dir, from, as, minutesOld) => {
     return h.slice(0, i) + (h[i] === "A" ? "B" : "A") + h.slice(i + 1); };
   putPin = (w, doc) => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), JSON.stringify(doc), "utf8");
 
-  /* The BUNDLE's hash. This is the blank window the lead engineer's report called open. */
+  /* The BUNDLE's hash. The app script is refused, so the page never boots and the launch
+     class is never painted. The inline boot guard, which this pin still allows, shows its
+     banner after 8 s. The person sees that banner, "Startup did not finish.", and nothing
+     else of a start. The leg waits for the banner, not for E_VERSION. */
+  const STUCK_BANNER = "(() => {"
+    + " const el = document.getElementById('eRescue');"
+    + " if (!el || !document.body) return false;"
+    + " const r = el.getBoundingClientRect();"
+    + " const text = el.innerText || '';"
+    + " const stuck = text.indexOf('Startup did not finish.') > -1"
+    + " || text.indexOf('Uruchamianie nie dobiegło końca.') > -1;"
+    + " const veil = document.body.classList.contains('e-launch')"
+    + " || document.body.classList.contains('e-launch-out');"
+    + " return !veil && r.width > 0 && r.height > 0 && stuck && typeof window.E_VERSION !== 'string';"
+    + " })()";
   await variant(w => { const d = pinOf(w); d.hashes[1] = staleHash(d.hashes[1]); putPin(w, d); });
-  s = await launch(newUserData("stalebundle"));
-  await s.p.reload({ waitUntil: "load" });
-  await sleep(3000);
+  s = await launch(newUserData("stalebundle"), [], null, null, null, {
+    unbooted: true,
+    boundMs: 12000,
+    ready: STUCK_BANNER,
+  });
   const stale = await s.p.evaluate(SEEN);
-  check(!stale.booted && !stale.eHost && s.inline().length >= 1,
+  const banner = await s.p.evaluate(() => {
+    const el = document.getElementById("eRescue");
+    const r = el ? el.getBoundingClientRect() : null;
+    const text = el ? (el.innerText || "") : "";
+    return {
+      up: !!(el && r && r.width > 0 && r.height > 0),
+      stuck: text.indexOf("Startup did not finish.") > -1
+        || text.indexOf("Uruchamianie nie dobiegło końca.") > -1,
+      veil: document.body.classList.contains("e-launch") || document.body.classList.contains("e-launch-out"),
+    };
+  });
+  await sleep(500);
+  const still = await s.p.evaluate(SEEN);
+  check(!stale.booted && !still.booted && !stale.eHost && banner.up && banner.stuck && !banner.veil,
     "5a a stale hash for the app script refuses it: the engine does not boot (E_VERSION "
-    + stale.booted + "), and Chromium logged " + s.inline().length + " inline refusal(s)");
+    + stale.booted + ", and still " + still.booted + "), and the startup banner is what the page"
+    + " shows (" + banner.up + ", the stuck line " + banner.stuck + ", launch class " + banner.veil + ")");
   check(!s.said.some(l => /pin|hash/i.test(l)),
     "5b and the shell itself says nothing about it: " + s.said.filter(l => /pin|hash/i.test(l)).length
     + " line(s) on its own output name the pin. The window shows " + stale.visibleChars
-    + " characters of the template's own text and no message, so a person sees a broken app and no reason");
+    + " characters, and the banner 5a reads is the reason a person is given");
   await s.stop();
 
   /* The BOOT GUARD's hash, which is the first of the two, and a different failure entirely. */
@@ -3181,13 +3291,18 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " measurement so that a change to it reddens");
   await s.stop();
 
+  /* The document the shell serves when the pin will not read boots nothing, so the launches that
+     meet it wait for its words, as 5a waits for its banner. */
+  const REFUSAL_WAIT = { unbooted: true, boundMs: 12000,
+    ready: "!!document.body && /could not start/.test(document.body.innerText || '')" };
+
   /* A pin that will not parse. Both this and the one below used to be answered by serving the
      engine under script-src 'none', which is a window with nothing in it: the policy was right
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
   /* SHOWN AND ON NO DISPLAY: this launch serves 5d and 5f, and 5f measures the refusal window's
      caption, which board item 384 put there. */
-  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
+  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "2" }, null, null, REFUSAL_WAIT);
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
@@ -3258,7 +3373,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   /* SHOWN AND ON NO DISPLAY: this control's whole subject is which of two windows is measured,
      and it is the only launch here that puts two windows up. */
-  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
+  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "2" }, null, null, REFUSAL_WAIT);
   const twoPages = await s.b.pages();
   const subjectPage = twoPages.filter(pg => pg.url().indexOf("about:blank") !== 0)[0] || twoPages[0];
   const twoSeen = await subjectPage.evaluate(SEEN);
@@ -3283,7 +3398,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* The second branch of the same read: a document that parses and is not a pin this version
      knows. It reached the same dead end and now reaches the same refusal. */
   await variant(w => putPin(w, { kind: "something-else", hashes: [] }));
-  s = await launch(newUserData("notapin"));
+  s = await launch(newUserData("notapin"), [], null, null, null, REFUSAL_WAIT);
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const wrongpin = await s.p.evaluate(SEEN);

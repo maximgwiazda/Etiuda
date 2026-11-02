@@ -2802,6 +2802,16 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
+/* THE LIBRARY'S BAR HOLDS EVERY BUTTON ON ONE ROW at the default window, 1280 by 880: the
+   Polish labels need about 645px inside the padding, so the card is 720px, nowrap, and 2s9
+   reads the gap between the ends. Only from 760px wide: below it the bar and its left group
+   wrap rather than push a button off the card (2s9w, at 600px). Other dialogs stay at 560. */
+.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:wrap}
+@media (min-width:760px){
+.modal-card.lib-modal{max-width:720px}
+.modal-card.lib-modal .modal-actions,
+.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:nowrap}
+}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
