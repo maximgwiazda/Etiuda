@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 57;
+const EXPECTED = 61;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -50,7 +50,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-function loadDesk(ud) {
+function loadDesk(ud, src) {
   const said = [];
   const on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -68,7 +68,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
+    (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -1257,6 +1257,399 @@ try {
         "890ap lifting plant:f9-ask-withdrawn answers the resurrected ask (FAIL 890ao withdrawn ask ignored): "
         + (turned ? "turned" : "did not turn") + ", sha " + (same ? "restored" : "differs"));
     }
+  }
+
+  /* 15w8: Load of a file says the reason the read gave. A sealed file this desk cannot open is not left on Load the new edition.
+     The same #ecYes reads that absence, and a newer edition that is not sealed, which paints the button. */
+  {
+    const ST = await import(MOD("storage.js"));
+    const Offer = await import(MOD("catalog-offer.js"));
+    ST.lsSet("eMotionOff", "1");
+    ST.lsSet("eUiLang", "en");
+    /* Brackets, so this line does not declare a catalog payload: the commit scan refuses that shape. */
+    window["E_CATALOG"] = null;
+    const w8dir = folder("w8-catalogs");
+    const sealedName = "sealed.ec";
+    const quietName = "quiet.ec";
+    fs.writeFileSync(path.join(w8dir, sealedName), JSON.stringify({
+      format: 2, kind: "etiuda-sealed", team: "t-0123456789abcdef", epoch: 1, nonce: "ab", ct: "cd" }));
+    fs.writeFileSync(path.join(w8dir, quietName), "{not a catalog");
+    const w8 = newDesk("w8desk", w8dir);
+    const buttonsOf = (html) => {
+      const out = [];
+      const re = /<button\b([^>]*)>/gi;
+      let m;
+      while ((m = re.exec(String(html)))) {
+        const attrs = {};
+        const ar = /([\w:-]+)="([^"]*)"/g;
+        let a;
+        while ((a = ar.exec(m[1]))) attrs[a[1]] = a[2];
+        out.push({ getAttribute: (k) => (Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null), onclick: null });
+      }
+      return out;
+    };
+    let html = "";
+    let buttons = [];
+    const box = {
+      isConnected: true,
+      innerHTML: "",
+      querySelectorAll(sel) {
+        if (sel === "button[data-ec-load]") return buttons.filter(b => b.getAttribute("data-ec-load") != null);
+        return [];
+      },
+      querySelector() { return null; },
+    };
+    Object.defineProperty(box, "innerHTML", {
+      get() { return html; },
+      set(v) { html = String(v); buttons = buttonsOf(html); },
+    });
+    const made = [];
+    const cls = () => {
+      const s = new Set();
+      return { contains: c => s.has(c), add: (...c) => c.forEach(x => s.add(x)),
+        remove: (...c) => c.forEach(x => s.delete(x)),
+        toggle: (c, on) => { const next = on === undefined ? !s.has(c) : !!on; if (next) s.add(c); else s.delete(c); return next; } };
+    };
+    const toastEl = { classList: cls(), textContent: "", innerHTML: "", style: {},
+      getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) };
+    globalThis.innerHeight = 800;
+    globalThis.innerWidth = 1280;
+    globalThis.addEventListener = noop;
+    globalThis.removeEventListener = noop;
+    globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0",
+      fontStyle: "normal", fontWeight: "400", fontSize: "14px", fontFamily: "sans-serif", letterSpacing: "normal" });
+    /* Enough of a document for the offer bubble to paint #ecYes, which is what both readings below ask for. */
+    const VOID = { br: 1, img: 1, hr: 1, input: 1, meta: 1, link: 1, source: 1, wbr: 1, area: 1, base: 1, col: 1, embed: 1, track: 1 };
+    function selMatch(node, sel) {
+      const s = String(sel || "").trim();
+      if (!s || !node || node.tagName === "#TEXT") return false;
+      if (s.charAt(0) === "#") return node.id === s.slice(1);
+      if (s.charAt(0) === ".") return node.className.split(/\s+/).indexOf(s.slice(1)) >= 0;
+      const onlyAttr = s.match(/^\[([\w:-]+)\]$/);
+      if (onlyAttr) return node.getAttribute(onlyAttr[1]) != null;
+      const tagAttr = s.match(/^([A-Za-z][\w:-]*)\[([\w:-]+)\]$/);
+      if (tagAttr) return node.tagName.toLowerCase() === tagAttr[1].toLowerCase() && node.getAttribute(tagAttr[2]) != null;
+      return node.tagName.toLowerCase() === s.toLowerCase();
+    }
+    function collect(node, sel) {
+      const child = String(sel).match(/^:scope\s*>\s*(.+)$/);
+      if (child) return (node.children || []).filter(c => selMatch(c, child[1]));
+      const out = [];
+      const walk = (n) => {
+        (n.children || []).forEach(c => {
+          if (selMatch(c, sel)) out.push(c);
+          walk(c);
+        });
+      };
+      walk(node);
+      return out;
+    }
+    function parseInto(html, parent) {
+      const re = /<!--[\s\S]*?-->|<\/([A-Za-z][\w:-]*)>|<([A-Za-z][\w:-]*)([^>]*)>|([^<]+)/g;
+      const stack = [parent];
+      let m;
+      while ((m = re.exec(html))) {
+        const top = stack[stack.length - 1];
+        if (m[1]) {
+          const name = m[1].toLowerCase();
+          for (let i = stack.length - 1; i > 0; i--) {
+            if (stack[i].tagName.toLowerCase() === name) { stack.length = i; break; }
+          }
+          continue;
+        }
+        if (m[2]) {
+          const name = m[2].toLowerCase();
+          const node = pageEl(name);
+          const attr = /([\w:-]+)(?:="([^"]*)")?/g;
+          let a;
+          while ((a = attr.exec(m[3] || ""))) node.setAttribute(a[1], a[2] == null ? "" : a[2]);
+          top.appendChild(node);
+          if (!(VOID[name] || /\/\s*$/.test(m[3] || ""))) stack.push(node);
+          continue;
+        }
+        if (m[4] && m[4].trim()) {
+          const tn = pageEl("#text");
+          tn.textContent = m[4];
+          top.appendChild(tn);
+        }
+      }
+    }
+    function pageEl(tag) {
+      const attrs = {};
+      const children = [];
+      let html = "";
+      let ownText = "";
+      let className = "";
+      const extra = new Set();
+      const node = {
+        tagName: String(tag || "div").toUpperCase(),
+        id: "",
+        children,
+        parentNode: null,
+        style: {},
+        isConnected: false,
+        hidden: false,
+        onclick: null,
+        onkeydown: null,
+        offsetWidth: 0,
+        offsetHeight: 0,
+        classList: {
+          contains: c => extra.has(c) || className.split(/\s+/).indexOf(c) >= 0,
+          add: (...c) => c.forEach(x => extra.add(x)),
+          remove: (...c) => c.forEach(x => extra.delete(x)),
+          toggle: (c, on) => {
+            const has = extra.has(c) || className.split(/\s+/).indexOf(c) >= 0;
+            const next = on === undefined ? !has : !!on;
+            if (next) extra.add(c); else extra.delete(c);
+            return next;
+          },
+        },
+        get className() { return className; },
+        set className(v) { className = String(v == null ? "" : v); },
+        getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
+        setAttribute(k, v) {
+          attrs[k] = String(v);
+          if (k === "id") node.id = String(v);
+          if (k === "class") className = String(v);
+        },
+        removeAttribute(k) {
+          delete attrs[k];
+          if (k === "id") node.id = "";
+          if (k === "class") className = "";
+        },
+        appendChild(c) { if (c) { children.push(c); c.parentNode = node; } return c; },
+        remove() {
+          node.isConnected = false;
+          const p = node.parentNode;
+          if (p && p.children) {
+            const i = p.children.indexOf(node);
+            if (i >= 0) p.children.splice(i, 1);
+          }
+          const at = made.indexOf(node);
+          if (at >= 0) made.splice(at, 1);
+        },
+        focus() {},
+        addEventListener() {},
+        removeEventListener() {},
+        insertAdjacentHTML(where, frag) {
+          const holder = pageEl("div");
+          holder.innerHTML = frag;
+          const kids = holder.children.splice(0, holder.children.length);
+          const p = node.parentNode;
+          if (!p || !p.children) { kids.forEach(c => node.appendChild(c)); return; }
+          const i = p.children.indexOf(node);
+          const at = where === "afterend" ? i + 1 : i;
+          kids.forEach(c => { c.parentNode = p; });
+          p.children.splice(at < 0 ? p.children.length : at, 0, ...kids);
+        },
+        getBoundingClientRect() { return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }; },
+        querySelector(sel) { return collect(node, sel)[0] || null; },
+        querySelectorAll(sel) { return collect(node, sel); },
+        get textContent() {
+          if (node.tagName === "#TEXT") return ownText;
+          if (children.length) return children.map(c => c.textContent || "").join("");
+          return ownText;
+        },
+        set textContent(v) { ownText = String(v == null ? "" : v); children.length = 0; html = ownText; },
+      };
+      Object.defineProperty(node, "innerHTML", {
+        get() { return html; },
+        set(v) { html = String(v == null ? "" : v); ownText = ""; children.length = 0; parseInto(html, node); },
+      });
+      return node;
+    }
+    function findPainted(sel) {
+      for (let i = 0; i < made.length; i++) {
+        const n = made[i];
+        if (!n) continue;
+        if (n.id && sel === "#" + n.id) return n;
+        if (n.querySelector) {
+          const hit = n.querySelector(sel);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    }
+    globalThis.document = {
+      addEventListener: noop, removeEventListener: noop,
+      getElementById: (id) => (id === "mgCatList" ? box : id === "toast" ? toastEl : findPainted("#" + id)),
+      querySelector: (sel) => (sel === "#toast" ? toastEl : findPainted(sel)),
+      querySelectorAll: () => [],
+      createElement: (tag) => pageEl(tag),
+      body: { classList: cls(), appendChild: (n) => { made.push(n); if (n) n.isConnected = true; return n; } },
+      documentElement: { classList: cls() },
+    };
+    /* One selector for the sealed file and for a newer edition that is not sealed. */
+    const EDITION_SEL = "#ecYes";
+    const editionWords = () => {
+      const yes = document.querySelector(EDITION_SEL);
+      return yes ? String(yes.textContent || "").replace(/\s+/g, " ").trim() : "";
+    };
+    const host = {
+      readCatalogFile: (name, desk, asked, offer) => w8.ask("etiuda:catalog-read", name, desk, asked, offer),
+      catalogFiles: () => w8.ask("etiuda:catalog-files"),
+    };
+    globalThis.window = { addEventListener: noop, removeEventListener: noop, E_CATALOG: null, E_HOST: host };
+    let painted = "paint";
+    try { Offer.paintCatalogList(); }
+    catch (e) { painted = "threw " + String(e && e.message || e).slice(0, 80); }
+    const until = Date.now() + 1500;
+    while (!buttons.some(b => b.getAttribute("data-ec-load") === sealedName) && Date.now() < until) await tick();
+    const click = async (name) => {
+      toastEl.innerHTML = "";
+      toastEl.textContent = "";
+      made.length = 0;
+      const b = buttons.find(x => x.getAttribute("data-ec-load") === name);
+      if (b && b.onclick) await Promise.resolve(b.onclick());
+      else await Promise.resolve(Offer.loadCatalogFromFolder(name, 0));
+      await tick();
+      return { said: String(toastEl.innerHTML || toastEl.textContent || ""),
+        edition: editionWords(),
+        wired: !!(b && b.onclick) };
+    };
+    const sealedEn = await click(sealedName);
+    w8.api.setDown(w8dir);
+    const downEn = await click(quietName);
+    ST.lsSet("eUiLang", "pl");
+    const downPl = await click(quietName);
+    ST.lsSet("eUiLang", "en");
+    w8.api.setDown("");
+    const disk = "could not be read from the disk,";
+    const diskPl = "nie udało się odczytać z dysku,";
+    const held = sealedEn.said.indexOf(disk) >= 0 && !sealedEn.edition
+      && downEn.said.indexOf(disk) >= 0 && downPl.said.indexOf(diskPl) >= 0;
+    check(held,
+      "15w8 a Load says why the file was not read, in the desk's language, and a sealed file this desk cannot open is not left on Load the new edition: "
+      + "sealed " + (sealedEn.said.indexOf(disk) >= 0) + ", edition " + (sealedEn.edition ? "shown" : "absent")
+      + ", down " + (downEn.said.indexOf(disk) >= 0) + ", polish " + (downPl.said.indexOf(diskPl) >= 0)
+      + ", " + painted + (sealedEn.wired ? ", painted button" : ", direct Load")
+      + (held ? "" : " sealed-said " + sealedEn.said.slice(0, 160) + " down-said " + downEn.said.slice(0, 120)));
+
+    /* A newer edition of the same catalog, not sealed. The held file is the newest on disk, so the
+       list marks that row loaded and the later rev keeps Load, the same button the sealed file used. */
+    const nextName = "next.ec";
+    const heldName = "held.ec";
+    fs.writeFileSync(path.join(w8dir, heldName), textOf(catalog(1, { id: "w8-lamps", name: "W8 lamps" })));
+    fs.writeFileSync(path.join(w8dir, nextName), textOf(catalog(2, { id: "w8-lamps", name: "W8 lamps", card: CARD + " revised" })));
+    touch(path.join(w8dir, heldName), Date.now());
+    touch(path.join(w8dir, nextName), Date.now() - 120000);
+    ST.lsSet("eCatalog", JSON.stringify({
+      id: "w8-lamps", rev: 1, langs: [{ code: "en", label: "EN" }],
+      cards: [{ id: "c-warm", c: "open", t: "Warm opening", en: CARD }],
+    }));
+    /* The list's own settle runs inside the paint. The held signature is written after that, or the settle
+       marks it unknown and the offer says Load it. */
+    Offer.paintCatalogList();
+    const untilNext = Date.now() + 1500;
+    while (!buttons.some(b => b.getAttribute("data-ec-load") === nextName) && Date.now() < untilNext) await tick();
+    ST.lsSet("eCatalogTrust", "valid");
+    ST.lsSet("eCatalogSigner", LEAD.keyId);
+    ST.lsSet("eCatalogSignerPub", LEAD.public);
+    host.catalogLeads = () => [{ keyId: LEAD.keyId, public: LEAD.public }];
+    let openEn = { edition: "", wired: false, said: "" };
+    let stayed = "";
+    let openErr = "";
+    try {
+      openEn = await click(nextName);
+      await tick();
+      await tick();
+      await tick();
+      stayed = editionWords();
+    } catch (e) {
+      openErr = String(e && e.message ? e.message : e).slice(0, 180);
+    }
+    const oldMissed = !(made.some(n => n.id === "ecYes") || String(toastEl.innerHTML || "").indexOf("Load the new edition") >= 0);
+    const sameSel = openEn.edition === "Load the new edition" && stayed === "Load the new edition" && sealedEn.edition !== "Load the new edition";
+    const titleEl = document.querySelector("#ecTitle");
+    const trustEl = document.querySelector(".ec-trust");
+    check(sameSel && openEn.wired && oldMissed && !openErr,
+      "15w8 a newer edition that is not sealed paints Load the new edition, read by the same #ecYes the sealed file left empty: "
+      + "open " + JSON.stringify(openEn.edition) + ", stayed " + JSON.stringify(stayed)
+      + ", sealed " + JSON.stringify(sealedEn.edition)
+      + ", selector #ecYes"
+      + (openEn.wired ? ", painted button" : ", direct Load")
+      + (oldMissed ? ", body id and toast missed it" : ", old reading saw it")
+      + (openErr ? ", " + openErr : "")
+      + (sameSel ? "" : " title " + JSON.stringify(titleEl ? titleEl.textContent : "")
+        + " trust " + JSON.stringify(trustEl ? String(trustEl.textContent || "").slice(0, 80) : "")
+        + " held " + JSON.stringify(ST.lsGet("eCatalogTrust"))
+        + " said " + String(openEn.said || "").slice(0, 120)));
+    ST.lsSet("eCatalog", "");
+    ST.lsSet("eCatalogTrust", "");
+    ST.lsSet("eCatalogSigner", "");
+    ST.lsSet("eCatalogSignerPub", "");
+    host.catalogLeads = undefined;
+
+    fs.writeFileSync(path.join(w8dir, "access.ec"), "x");
+    fs.writeFileSync(path.join(w8dir, "gone.ec"), "x");
+    fs.writeFileSync(path.join(w8dir, "held.ec"), "x");
+    fs.writeFileSync(path.join(w8dir, "blank.ec"), "");
+    const origRead = fs.readFileSync;
+    const bomb = { code: "", name: "" };
+    fs.readFileSync = function (p, enc) {
+      if (bomb.code && String(p).endsWith(path.sep + bomb.name)) {
+        const err = new Error("planted");
+        err.code = bomb.code;
+        throw err;
+      }
+      return origRead.call(fs, p, enc);
+    };
+    const say = async (name, code) => {
+      bomb.code = code;
+      bomb.name = name;
+      const got = await click(name);
+      bomb.code = "";
+      bomb.name = "";
+      return got.said;
+    };
+    let access = "", perm = "", gone = "", busy = "", other = "", blank = "", busyPl = "";
+    try {
+      access = await say("access.ec", "EACCES");
+      perm = await say("access.ec", "EPERM");
+      gone = await say("gone.ec", "ENOENT");
+      busy = await say("held.ec", "EBUSY");
+      other = await say("access.ec", "EIO");
+      blank = (await click("blank.ec")).said;
+      ST.lsSet("eUiLang", "pl");
+      busyPl = await say("held.ec", "EBUSY");
+      ST.lsSet("eUiLang", "en");
+    } finally {
+      fs.readFileSync = origRead;
+      bomb.code = "";
+    }
+    const coded = access.indexOf("may not read") >= 0 && perm.indexOf("may not read") >= 0
+      && gone.indexOf("no longer where it was") >= 0 && busy.indexOf("Another program holds") >= 0
+      && other.indexOf("(EIO)") >= 0 && blank.indexOf("is empty") >= 0
+      && busyPl.indexOf("otwarty w innym programie") >= 0;
+    check(coded,
+      "15w8 one line per reason the read gave: access " + (access.indexOf("may not read") >= 0)
+      + ", perm " + (perm.indexOf("may not read") >= 0) + ", gone " + (gone.indexOf("no longer where it was") >= 0)
+      + ", held " + (busy.indexOf("Another program holds") >= 0) + ", other " + (other.indexOf("(EIO)") >= 0)
+      + ", empty " + (blank.indexOf("is empty") >= 0) + ", polish " + (busyPl.indexOf("otwarty w innym programie") >= 0)
+      + (coded ? "" : " access-said " + access.slice(0, 120) + " blank-said " + blank.slice(0, 80)));
+
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:catalog-read-why") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines[at] = "    return { name: base, text: \"\" }; /* plant:catalog-read-why */";
+      const plantUd = path.join(LAB, "w8plant");
+      fs.mkdirSync(plantUd, { recursive: true });
+      fs.writeFileSync(path.join(plantUd, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: w8dir, eUiLang: "en" } }), "utf8");
+      const planted = loadDesk(plantUd, lines.join("\n"));
+      host.readCatalogFile = (name, desk, asked, offer) => planted.ask("etiuda:catalog-read", name, desk, asked, offer);
+      planted.api.setDown(w8dir);
+      ST.lsSet("eUiLang", "en");
+      const again = await click(quietName);
+      turned = again.said.indexOf("could not be read from the disk") < 0;
+      detail = turned ? "the line was gone" : "the line was still said";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    check(turned && same, "15wc lifting plant:catalog-read-why turns 15w8 red (a Load that failed says nothing of the folder): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

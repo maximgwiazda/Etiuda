@@ -22,13 +22,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 16;
+const EXPECTED = 18;
+/* The plant of 15we is skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 const tick = ms => new Promise(r => setTimeout(r, ms || 0));
 const settle = async () => { await tick(); await tick(); await tick(); };
@@ -285,6 +291,92 @@ try {
   const errs = said.filter(l => /^ERR /.test(l));
   check(errs.length === 1 && /could not be written/.test(errs[0]),
     "9b main logged one error, the refusal planted above, and no other" + (errs.length !== 1 ? ": " + errs.length + ", first " + errs[0] : ""));
+
+  /* 15wb: boot's two calls, loadPack then showPackMigrationWarning, for an arrangement stored under the old name as
+     something other than a list. The notice is read off the page. main.js is not imported: this file's shell is already
+     up, and importing main would boot the page a second time. */
+  {
+    const byId = {};
+    const makeEl = (tag) => {
+      const node = { tag: tag, style: {}, childNodes: [], onclick: null, _id: "", _text: "" };
+      Object.defineProperty(node, "id", {
+        get() { return node._id; },
+        set(v) {
+          if (node._id && byId[node._id] === node) delete byId[node._id];
+          node._id = String(v || "");
+          if (node._id) byId[node._id] = node;
+        }
+      });
+      Object.defineProperty(node, "textContent", {
+        get() { return node._text; },
+        set(v) { node._text = String(v); }
+      });
+      node.appendChild = (ch) => { node.childNodes.push(ch); return ch; };
+      node.remove = () => { if (node._id && byId[node._id] === node) delete byId[node._id]; };
+      return node;
+    };
+    const textOf = (n) => n ? (n.textContent || "") + (n.childNodes || []).map(textOf).join("") : "";
+    document.createElement = makeEl;
+    document.createTextNode = (s) => { const n = makeEl("#text"); n.textContent = String(s); return n; };
+    document.body.appendChild = (ch) => { document.body.childNodes = document.body.childNodes || []; document.body.childNodes.push(ch); return ch; };
+    document.getElementById = (id) => byId[id] || null;
+    const dropBanner = () => { delete byId.eMigrateWarn; delete byId.eMigrateReset; delete byId.eMigrateHide; };
+    S.lsSet("ePack", JSON.stringify({ macroOrder: "nope" }));
+    P.loadPack();
+    const shown = () => { dropBanner(); P.showPackMigrationWarning(); return textOf(byId.eMigrateWarn); };
+    S.lsSet("eUiLang", "en");
+    const en = shown();
+    S.lsSet("eUiLang", "pl");
+    const pl = shown();
+    const enLead = en.indexOf("The saved card arrangement could not be read.") >= 0;
+    const enBody = en.indexOf("the copy kept here could not be converted") >= 0 && en.indexOf("runs as usual") >= 0;
+    const enReset = en.indexOf("Reset personal data") >= 0;
+    const enDismiss = en.indexOf("Dismiss") >= 0;
+    const enOld = en.indexOf("still stored under its old name") >= 0;
+    const plLead = pl.indexOf("Nie udało się odczytać zapisanego układu kart.") >= 0;
+    const plBody = pl.indexOf("zapisanej tutaj kopii nie dało się przekształcić") >= 0 && pl.indexOf("działa normalnie") >= 0;
+    const plReset = pl.indexOf("Wyczyść dane własne") >= 0;
+    const plDismiss = pl.indexOf("Zamknij") >= 0;
+    const plEnglish = pl.indexOf("The saved card arrangement could not be read.") >= 0;
+    check(enLead && enBody && enReset && enDismiss && !enOld && plLead && plBody && plReset && plDismiss && !plEnglish,
+      "15wb the card-arrangement warning is the desk's language, through the interface strings: "
+      + "en lead " + enLead + " body " + enBody + " reset " + enReset + " dismiss " + enDismiss + " old " + enOld
+      + ", pl lead " + plLead + " body " + plBody + " reset " + plReset + " dismiss " + plDismiss + " english " + plEnglish);
+    const packPath = path.join(ROOT, "src", "modules", "pack.js");
+    const before = fs.readFileSync(packPath);
+    if (PLANTS_OFF) {
+      skip("15we lifting plant:pack-migrate-why turns 15wb red (ETIUDA_PLANTS=off)");
+    } else {
+      let turned = false, detail = "plant line absent";
+      const lines = before.toString("utf8").split(/\r?\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:pack-migrate-why") >= 0);
+      if (at >= 0) {
+        const next = lines[at].replace(
+          't("The saved card arrangement could not be read.")',
+          '"The saved card arrangement could not be read."');
+        if (next === lines[at]) detail = "the plant line did not name the sentence";
+        else {
+          lines[at] = next;
+          const planted = lines.join("\n").replace(/from "\.\/([^"]+)"/g, (_, n) => "from " + JSON.stringify(MOD(n)));
+          const file = path.join(UD, "pack-plant.mjs");
+          fs.writeFileSync(file, planted);
+          const Q = await import(pathToFileURL(file).href);
+          S.lsSet("eUiLang", "pl");
+          dropBanner();
+          Q.loadPack();
+          Q.showPackMigrationWarning();
+          const said = textOf(byId.eMigrateWarn);
+          const english = said.indexOf("The saved card arrangement could not be read.") >= 0;
+          const polish = said.indexOf("Nie udało się odczytać zapisanego układu kart.") >= 0;
+          turned = english && !polish;
+          detail = turned ? "the line was gone" : "the line was still said";
+        }
+      }
+      const same = fs.readFileSync(packPath).equals(before);
+      check(turned && same, "15we lifting plant:pack-migrate-why turns 15wb red (a Polish desk sees the English lead): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
@@ -294,9 +386,9 @@ try {
   check(!fs.existsSync(UD), "10a the temp desk folder is gone");
 }
 
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

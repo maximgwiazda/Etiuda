@@ -547,10 +547,10 @@ try {
     const atDoors = d.st.touched.length;
     const ring = await d.S.ask("etiuda:catalog-ring");
     const door = await d.S.ask("etiuda:open-catalog-folder");
-    check(d.st.touched.length === atDoors && ring === "" && door === false,
+    check(d.st.touched.length === atDoors && ring === "" && !!door && door.ok === false && door.why === "not-answering",
       "4j nor do the ring's door and the folder's: " + (d.st.touched.length - atDoors) + " call(s)"
       + (d.st.touched.length > atDoors ? " (" + d.st.touched.slice(atDoors).join(", ") + ")" : "")
-      + ", ring " + JSON.stringify(ring) + ", folder opened " + door);
+      + ", ring " + JSON.stringify(ring) + ", folder opened " + JSON.stringify(door));
     const warned = d.S.said.filter(l => /catalog folder .* did not answer/.test(l)).length;
     check(warned === 1 && d.clock.due(30000).length === 1,
       "4d it is said once in the log, and asked again on a timer: " + warned + " line(s), "
