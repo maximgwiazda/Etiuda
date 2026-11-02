@@ -1197,7 +1197,9 @@ function createFolderProgram(opts) {
       } else if (relPath.startsWith("catalog-asks/") && relPath.endsWith(".json")) {
         let doc = null;
         try { doc = JSON.parse(text); } catch {}
-        if (doc && +doc.format === 1 && (doc.kind === "etiuda-catalog-ask" || doc.kind === "etiuda-catalog-ask-withdrawn")) {
+        let kindOk = doc && doc.kind === "etiuda-catalog-ask";
+        if (doc && doc.kind === "etiuda-catalog-ask-withdrawn") kindOk = true; /* plant:syncer-ask-withdrawn */
+        if (doc && +doc.format === 1 && kindOk) {
           const target = path.join(mirror, relPath);
           ensureDir(target, io);
           io.rename(tmpPath, target);
@@ -1252,7 +1254,7 @@ function createFolderProgram(opts) {
         let eligibleForRemoval = true;
         if (count < 2) eligibleForRemoval = false; /* plant:syncer-two-absent-remove */
         if (eligibleForRemoval) {
-          try { io.unlink(path.join(mirror, relPath)); } catch {}
+          try { io.unlink(path.join(mirror, relPath)); /* plant:syncer-unlink */ } catch {}
           missingCount.delete(relPath);
           applied.push(relPath);
         }
