@@ -26,7 +26,8 @@
  * blob has raised the counter (970o). An answer the list does not serve can raise the same floor, and a second program
  * whose clock never reaches that counter stays refused: the known limit until the relay names the floor (970r).
  * The lead's own channel takes, inside the relay's grace for a removed desk, what that desk sealed before the lead held the
- * roster that leaves it off, and refuses removed what it sealed after or what comes past the grace (1165a to 1165d).
+ * roster that leaves it off, and refuses removed what it sealed after or what comes past the grace (1165a to 1165d); a desk clock
+ * running a few minutes ahead still has its last file before the removal taken (1165h).
  * A replay-counter refusal is tried again within a minute, an outbox file (970s) and an invitation's answer (970u). An invitation
  * upload whose reply was lost is counted as sent when the retry is
  * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
@@ -57,7 +58,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 382;
+const EXPECTED = 384;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -10100,16 +10101,17 @@ try {
 /* ---- relay triage 5, the relay half (the test architect, 2026-11-01 13:26): the relay holds a removed desk's blobs for the
    lead for REMOVED_KEEP_MS, and the lead's own channel takes, through createChannel and catchUp, what that desk sealed before
    the lead held the roster that leaves it off, inside that grace (1165a). A file the desk seals after it is refused removed
-   (1165b), and so is the earlier file once the lead's clock is past the grace while the relay still serves it (1165c). A
-   hostile relay serving the same held blob to another desk does not get it taken there (1165d). ---- */
+   (1165b, fifteen minutes after, past the ten a desk clock may run ahead), and so is the earlier file once the lead's clock is
+   past the grace while the relay still serves it (1165c). A hostile relay serving the same held blob to another desk does not
+   get it taken there (1165d). A desk whose clock runs three minutes ahead has its file before the removal taken (1165h). ---- */
 async function removedGrace(mod, arm) {
   const k1 = crypto.randomBytes(32), gone = keyPair(true), stay = keyPair(true);
   const tm = await freshTeam([gone, stay]);
   const tag = arm + "-" + tm.rt.slice(0, 8);
   const keyFor = e => (e === 1 ? k1 : null);
-  let ahead = 0;
+  let ahead = 0, deskAhead = arm === "fast" || arm === "lift-ahead" ? 3 * 60 * 1000 : 0;
   const lead = opened(mod, "1165-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock: () => Date.now() + ahead });
-  const desk = opened(mod, "1165-desk-" + tag, tm, gone, "desk:" + gone.keyId, { keyFor, sealEpoch: () => 1 });
+  const desk = opened(mod, "1165-desk-" + tag, tm, gone, "desk:" + gone.keyId, { keyFor, sealEpoch: () => 1, clock: () => Date.now() + deskAhead });
   const other = opened(mod, "1165-other-" + tag, tm, stay, "desk:" + stay.keyId, { keyFor, sealEpoch: () => 1 });
   const doc1 = teamBody(tm, 1, 1, [member(gone), member(stay)]), doc2 = teamBody(tm, 1, 2, [member(stay)]);
   put(lead.mirror, C.TEAM_NAME, doc1);
@@ -10130,6 +10132,8 @@ async function removedGrace(mod, arm) {
   put(lead.mirror, C.TEAM_NAME, doc2);
   lead.prog.loadTeamFile(JSON.parse(doc2));
   await wait(5);
+  /* Fifteen minutes after the removal by the lead's clock, as the desk's clock reads it. */
+  deskAhead = 15 * 60 * 1000;
   put(desk.mirror, late, AFTER);
   await once(desk);
   await desk.ch.stop();
@@ -10169,6 +10173,7 @@ async function removedGrace(mod, arm) {
 const graceTaken = x => x.dropped && x.held === 2 && x.keepSame && x.before === "sealed-before\n";
 const graceAfter = x => x.dropped && x.held === 2 && x.after === null && x.leadSaid >= 1;
 const gracePast = x => x.dropped && x.held === 2 && x.keepSame && x.before === null && x.after === null && x.leadSaid >= 2;
+const graceFast = x => graceTaken(x) && graceAfter(x);
 const graceOnly = x => x.otherTeam && x.otherBefore === null && x.otherSaid >= 1;
 try {
   const g = await removedGrace(C, "within");
@@ -10180,6 +10185,9 @@ try {
     + " sealed before as well: " + p.line);
   check(graceOnly(g), "1165d a hostile relay serving the held file to another desk on the list it reads: that desk's catch-up refuses it"
     + " removed: " + g.line);
+  const f = await removedGrace(C, "fast");
+  check(graceFast(f), "1165h a desk whose clock runs three minutes ahead of the lead's has the file it sealed before the removal taken, and"
+    + " its file sealed fifteen minutes after is still refused removed: " + f.line);
   const lifts = [
     ["plant:lead-grace-before",
       "1165e lifting plant:lead-grace-before turns 1165b red (the file sealed after the removal is taken)",
@@ -10190,6 +10198,9 @@ try {
     ["plant:lead-grace-only",
       "1165g lifting plant:lead-grace-only turns 1165d red (the other desk takes the held file)",
       async mod => !graceOnly(await removedGrace(mod, "lift-only"))],
+    ["plant:lead-grace-ahead",
+      "1165i lifting plant:lead-grace-ahead turns 1165h red (the file sealed three minutes ahead before the removal is refused)",
+      async mod => !graceTaken(await removedGrace(mod, "lift-ahead"))],
   ];
   for (const [tagName, name, turns] of lifts) {
     if (PLANTS_OFF) { skip(name); continue; }

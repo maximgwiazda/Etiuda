@@ -132,6 +132,8 @@ const TAKEN_MAX = 4096;
 const LISTED_KEEP_MS = 29 * 24 * 60 * 60 * 1000;
 /* The relay holds a removed desk's blobs for the lead this long (relay/core.cjs REMOVED_KEEP_MS). */
 const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+/* How far a removed desk's clock may run ahead of the lead's and its last file sealed before the removal still be taken. */
+const REMOVED_CLOCK_AHEAD_MS = 10 * 60 * 1000;
 const SESSION_KEEP_MS = 25 * 60 * 1000;
 const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
@@ -840,9 +842,11 @@ function createProgram(opts) {
         && r.path.toLowerCase() === ("desks/" + writer + "/join.json").toLowerCase();
       let gone = removedAfterMove(writer, at, r.ok);
       if (ask) gone = null; /* plant:ask-rejoin */
-      /* Sealed by the removed key no later than the lead saw its removal: the counter is the writer's clock, signed. */
-      let before = true;
-      before = r.ok && has(st.gone, writer) && r.counter <= st.gone[writer]; /* plant:lead-grace-before */
+      /* Sealed by the removed key no later than the lead saw its removal, give or take a clock running ahead: the counter is
+         the writer's clock, signed. */
+      let before = true, ahead = 0;
+      ahead = REMOVED_CLOCK_AHEAD_MS; /* plant:lead-grace-ahead */
+      before = r.ok && has(st.gone, writer) && r.counter <= st.gone[writer] + ahead; /* plant:lead-grace-before */
       if (gone && grace === true && r.ok && before) gone = null;
       if (gone) return gone;
     }
@@ -2775,7 +2779,7 @@ function createChannel(opts) {
 
 module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
-  SESSION_KEEP_MS, REMOVED_KEEP_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
+  SESSION_KEEP_MS, REMOVED_KEEP_MS, REMOVED_CLOCK_AHEAD_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
   pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
