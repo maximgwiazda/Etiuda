@@ -59,7 +59,7 @@ function readsLikeMessage(text) {
   return messageWords(text).length >= MESSAGE_WORD_MIN && letterShare(text) >= MESSAGE_LETTER_SHARE;
 }
 
-function editDistance1(a, b) {
+function suggestEditDistance1(a, b) {
   if (a === b) return false;
   const la = a.length, lb = b.length;
   if (Math.abs(la - lb) > 1) return false;
@@ -105,14 +105,14 @@ function buildCatalogVocab(catalog) {
   return vocab;
 }
 
-function correctTerm(term, vocab, cache) {
+function suggestCorrectTerm(term, vocab, cache) {
   if (term.length < 5) return term;
   if (vocab.has(term)) return term;
   if (cache.has(term)) return cache.get(term);
   let bestW = term, bestN = 0;
   for (const [w, n] of vocab.entries()) {
     if (w.length < 5) continue;
-    if (editDistance1(term, w) && n > bestN) { bestN = n; bestW = w; }
+    if (suggestEditDistance1(term, w) && n > bestN) { bestN = n; bestW = w; }
   }
   cache.set(term, bestW);
   return bestW;
@@ -355,7 +355,7 @@ function profilesFrom(model) {
 }
 
 function scoreSegment(segText, profiles, vocab, weightOf, cache) {
-  const corrected = splitWords(segText).filter(w => !isStopWord(w)).map(w => correctTerm(w, vocab, cache));
+  const corrected = splitWords(segText).filter(w => !isStopWord(w)).map(w => suggestCorrectTerm(w, vocab, cache));
   const results = [];
   for (const [id, p] of profiles.entries()) {
     const termMatches = [];
