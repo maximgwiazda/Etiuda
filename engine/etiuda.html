@@ -3911,6 +3911,11 @@ body.e-lanes #pillsSlot{display:none}
 .pill,.btn,.seg button,.tab,.menu button,
 .tab-x,.field-clear,.combo-clear{
   transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
+/* THE REPEATING ROWS EASE ON HOVER, NEVER ON THE FLIP: hundreds of them, so a theme press that started
+   a colour transition on each cost the press its frame. The sheet #eFlipHold, after this one, holds
+   them still for the flip's own two frames (theme.js), so hover keeps the tone tier. */
+.rail-item,.cacts button,.cat-chip{
+  transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
 /* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
    be the general reason: a CSS box snaps to device pixels and the vector inside it does not,
    so half a pixel lands differently in two places. A press RECEDES toward the surface behind
@@ -4011,6 +4016,10 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 .txt{padding-right:max(44px,calc(100% - 105ch - 41px))}
 }
 </style>
+<!-- THE FLIP'S HOLD: enabled by theme.js for a theme press's own two frames and disabled otherwise.
+     A sheet toggled through the CSSOM touches no element and wakes no observer, and the browser
+     restyles only what its one rule matches. Unlayered, so it outranks the tone tier. -->
+<style id="eFlipHold">.rail-item,.cacts button,.cat-chip{transition:none}</style>
 
 <header>
   <div class="row">
@@ -26271,7 +26280,22 @@ What you type stays in this browser only.`;
     ic.dataset.eTurns = turns;
     ic.style.transform = "rotate(" + turns * 180 + "deg)";
   }
+  var flipHeld = 0;
+  function flipHoldSheet() {
+    const el = typeof document.getElementById === "function" ? document.getElementById("eFlipHold") : null;
+    return el && el.sheet ? el.sheet : null;
+  }
+  function holdFlip() {
+    const sh = flipHoldSheet();
+    if (!sh || typeof requestAnimationFrame !== "function") return;
+    const n = ++flipHeld;
+    sh.disabled = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (n === flipHeld) sh.disabled = true;
+    }));
+  }
   function paintTheme(next) {
+    holdFlip();
     document.documentElement.dataset.theme = next;
   }
   function shownTheme() {
@@ -26292,6 +26316,8 @@ What you type stays in this browser only.`;
     }
   }
   function wireThemeBtn() {
+    const sh = flipHoldSheet();
+    if (sh) sh.disabled = true;
     const btn = document.querySelector("#theme");
     if (!btn) return;
     btn.onclick = () => {
