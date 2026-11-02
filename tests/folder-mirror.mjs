@@ -89,7 +89,7 @@ function loadDesk(ud, overrides = {}) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const srcToRun = overrides.src || getShellSrc();
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    srcToRun + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
+    srcToRun + "\nreturn { " + EXPOSE.map(n => "get " + n + "() { return typeof " + n + " === 'undefined' ? undefined : " + n + "; }").join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
@@ -2445,12 +2445,12 @@ async function run() {
     else skip("45j lifting plant:folder-invite-opens leaves opens unset on taking a folder invitation");
   }
   {
-    const r = PLANTS_OFF ? null : await testPlant("folder-invite-open", mainFile, async (scratchMain) => {
+    const r = PLANTS_OFF ? null : await testPlant("folder-join-open", mainFile, async (scratchMain) => {
       const { res } = await seamBScene("plant-open", fs.readFileSync(scratchMain, "utf8"));
       return !res || !res.join || !res.join.invite || res.join.invite.open !== true;
     });
-    if (r) check(r.ok, "45k lifting plant:folder-invite-open leaves join invite open unset for a folder invitation: " + JSON.stringify(r));
-    else skip("45k lifting plant:folder-invite-open leaves join invite open unset for a folder invitation");
+    if (r) check(r.ok, "45k lifting plant:folder-join-open leaves join invite open unset for a folder invitation: " + JSON.stringify(r));
+    else skip("45k lifting plant:folder-join-open leaves join invite open unset for a folder invitation");
   }
 
   /* Finding 3 (Seam C): while joining, the desk writes its proposals into the local mirror and outbox,
@@ -2499,11 +2499,14 @@ async function run() {
     const branchInShare = fs.existsSync(path.join(share, "desks", me.id, stem + ".ec"));
 
     // Admit the desk on the roster
+    const wrap1 = d.api.wrapTeamKey(K1, me.box, T, 1, me.id);
     const admittedTeam = sign({
       format: 1, kind: "etiuda-team", id: T, catalogs: ["lamp-shop"],
-      lead: LEAD, sealed: true, epoch: 1, rev: 2, roster: [{ id: me.id, name: "Lamp Desk" }]
+      lead: LEAD, sealed: true, epoch: 1, rev: 2,
+      roster: [{ desk: { id: me.id, key: me.key, box: me.box }, wrap: wrap1 }]
     }, lead.privateKey, LEAD.keyId);
     fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
 
     // Trigger finishJoin via joinView
     await d.ask("etiuda:team-join");
