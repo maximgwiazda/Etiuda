@@ -48,9 +48,20 @@ function restoreLine(dir) {
   return "";
 }
 
+/** What a failure file says, on one line, or "" when there is none. */
+function failedText(dir, name) {
+  const p = dir ? path.join(dir, name) : "";
+  if (!p || !fs.existsSync(p)) return "";
+  return String(fs.readFileSync(p, "utf8")).replace(/\s+/g, " ").trim();
+}
+
 /* The lines a leg prints at the end. The restore note, when there is one, is last. */
 function closingLines(lines, dir) {
   const out = (lines || []).slice();
+  const freed = failedText(dir, "free-failed.txt");
+  if (freed) out.push("pick-desk: a held key could not be freed: " + freed);
+  const why = failedText(dir, "restore-failed.txt");
+  if (why) out.push("pick-desk: restore-failed.txt says: " + why);
   const note = restoreLine(dir);
   if (note) out.push(note);
   return out;
@@ -118,11 +129,15 @@ const HELPER = [
   "function Send-Key([byte]$k, [uint32]$flags) {",
   "  if ($Lab) {",
   "    Add-Content -Path (Join-Path $Dir 'lab-keys.log') -Value ($k.ToString() + ' ' + $flags.ToString())",
+  "    $boom = Join-Path $Dir 'lab-throw-after-down.txt'",
+  "    if ($flags -eq 0 -and (Test-Path $boom)) { Remove-Item -LiteralPath $boom; throw 'lab: a throw after a key-down' }",
   "    return",
   "  }",
   "  Set-Content -Path (Join-Path $Dir 'real-key.txt') -Value '1'",
   "  [PickU]::keybd_event($k, 0, $flags, [UIntPtr]::Zero)",
   "}",
+  "<# A key-up for ctrl, shift and alt: harmless for a key that is not down, and the end of a modifier left held by a throw between its down and its up. #>",
+  "function Release-Mods { foreach ($m in @(0x11, 0x10, 0x12)) { Send-Key ([byte]$m) 2 } }",
   "function Press([string]$spec) {",
   "  <# plant:desk-focus #>",
   "  $fg = Read-Fg",
@@ -218,7 +233,10 @@ const HELPER = [
   "  $script:held.Clear()",
   "}",
   "function Finish {",
-  "  try { Free-Holds } catch { Set-Content -Path (Join-Path $Dir 'free-failed.txt') -Value $_.Exception.Message }",
+  "  <# plant:desk-mods #>",
+  "  try { Release-Mods } catch { Add-Content -Path (Join-Path $Dir 'free-failed.txt') -Value ('modifiers: ' + $_.Exception.Message) }",
+  "  <# plant:desk-mods-end #>",
+  "  try { Free-Holds } catch { Add-Content -Path (Join-Path $Dir 'free-failed.txt') -Value $_.Exception.Message }",
   "  try { Restore-Clip } catch { Set-Content -Path (Join-Path $Dir 'restore-failed.txt') -Value $_.Exception.Message }",
   "}",
   "function Answer([string]$c) {",
@@ -556,6 +574,23 @@ async function scenarioFocus(script) {
   return Object.assign({ restored: run.restored, markers: run.markers, err: run.err, errText: run.errText }, run.body || {});
 }
 
+async function scenarioThrow(script) {
+  const dir = makeDir();
+  fs.writeFileSync(path.join(dir, "lab-fg.txt"), "1001", "utf8");
+  fs.writeFileSync(path.join(dir, "lab-tick.txt"), "5000", "utf8");
+  const run = await withHelper(dir, script, clipJson("desk-guard sentinel"), async api => {
+    await api.ask("activate");
+    fs.writeFileSync(path.join(dir, "lab-throw-after-down.txt"), "1", "utf8");
+    let ans = null;
+    try { ans = await api.ask("keys ctrl+shift+v"); } catch (e) { ans = "no answer"; }
+    return { ans: ans };
+  });
+  const p = path.join(dir, "lab-keys.log");
+  const keys = fs.existsSync(p) ? fs.readFileSync(p, "utf8").split(/\r?\n/).map(l => l.trim()).filter(Boolean) : [];
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* lab */ }
+  return Object.assign({ keys: keys, restored: run.restored, markers: run.markers }, run.body || {});
+}
+
 async function scenarioFull(script) {
   const dir = makeDir();
   const sentinel = clipJson("desk-guard sentinel " + process.pid);
@@ -661,6 +696,12 @@ async function knownPositives(impl, live) {
     + focus.bad + ", keys " + focus.n1 + " then " + focus.n2
     + (detail(focus) ? " (" + detail(focus) + ")" : ""));
 
+  const thrown = await scenarioThrow(impl.helperScript());
+  const downAt = thrown.keys.indexOf("17 0");
+  const ups = ["17 2", "16 2", "18 2"].every(u => thrown.keys.indexOf(u, downAt + 1) > downAt);
+  check(downAt === 0 && ups && thrown.keys.indexOf("86 0") < 0 && thrown.markers === false,
+    "15pd a press that throws after its first key-down still ends with the key-ups of ctrl, shift and alt: " + JSON.stringify(thrown.keys));
+
   const full = await scenarioFull(impl.helperScript());
   const stopped = await scenarioStopped(impl.helperScript());
   const refused = live ? spawnIdle("0") : { status: block && block.exit, clipSame: true };
@@ -683,11 +724,11 @@ async function knownPositives(impl, live) {
 async function runBefore() {
   asserted = 0; failed = 0; skipped = 0;
   const dir = makeDir();
-  const impl = loadPlanted(dir, ["desk-idle", "desk-touched", "desk-focus", "desk-clip-foreign", "desk-clip-restore"]);
+  const impl = loadPlanted(dir, ["desk-idle", "desk-touched", "desk-focus", "desk-clip-foreign", "desk-clip-restore", "desk-mods"]);
   await knownPositives(impl, false);
-  console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=5");
+  console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=6");
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* lab */ }
-  if (asserted + skipped !== 5) return 78;
+  if (asserted + skipped !== 6) return 78;
   return failed > 63 ? 63 : failed;
 }
 
@@ -751,6 +792,7 @@ async function runSuite() {
       skip("12pd lifting plant:desk-touched sends the key and turns 5pd red (ETIUDA_PLANTS=off)");
       skip("13pd lifting plant:desk-focus sends the key and turns 6pd red (ETIUDA_PLANTS=off)");
       skip("14pd lifting plant:desk-clip writes over the clipboard and turns 7pd and 8pd red (ETIUDA_PLANTS=off)");
+      skip("16pd lifting plant:desk-mods leaves a modifier down after a throw and turns 15pd red (ETIUDA_PLANTS=off)");
     } else {
       const plantDir = makeDir();
       dirs.push(plantDir);
@@ -779,12 +821,18 @@ async function runSuite() {
       check(!!clipPlant && fullRed && foreignRed,
         "14pd lifting plant:desk-clip writes over the clipboard and turns 7pd and 8pd red: full restored "
         + fullRun.restored + ", foreign answer " + foreignRun.answer + " writes " + foreignRun.writes);
+      let modsPlant = null, modsErr = "";
+      try { modsPlant = loadPlanted(plantDir, ["desk-mods"]); } catch (e) { modsErr = e.message; }
+      const modsRun = modsPlant ? await scenarioThrow(modsPlant.helperScript()) : { keys: [] };
+      const modsUp = ["17 2", "16 2", "18 2"].every(u => modsRun.keys.indexOf(u) >= 0);
+      check(modsPlant && modsRun.keys.indexOf("17 0") === 0 && !modsUp,
+        "16pd lifting plant:desk-mods leaves a modifier down after a throw and turns 15pd red: " + JSON.stringify(modsRun.keys) + (modsErr ? " (" + modsErr + ")" : ""));
     }
   } finally {
     for (const d of dirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) { /* lab */ } }
   }
-  console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=14");
-  if (asserted + skipped !== 14) {
+  console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=16");
+  if (asserted + skipped !== 16) {
     console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of 14 checks ran");
     return 78;
   }
