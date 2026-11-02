@@ -166,8 +166,8 @@ function folderTeamHere() {
   }
   return null;
 }
-/* The mirror a joined folder team reads from, or "". Under machine policy only once its syncer has taken one answered
-   listing, so a first boot reads the named folder until then rather than an empty mirror. */
+/* The mirror a joined folder team reads from, or "". Under machine policy, not until one answered listing has been
+   taken, so the named folder is not swapped for an empty mirror before that. The catalog itself waits for the mirror. */
 const mirrorsMade = new Set();
 function folderMirrorHere() {
   const ft = folderTeamHere();
@@ -844,6 +844,13 @@ function readCatalog() {
   const chosen = pickEdition(found);
   if (!chosen) {
     if (sealAnyWaiting() || catalogWaitNewer) return typeof catalogJson === "string" ? catalogJson : null;
+    /* An unprimed folder team is still being read. A clean slate here would tell the person there is no team. */
+    let waiting = false;
+    waiting = folderStillReading(); /* plant:prime-no-slate */
+    if (waiting) {
+      teamSay(shellWords().stillReading);
+      return typeof catalogJson === "string" ? catalogJson : null;
+    }
     console.log(found.length ? "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for"
       : "etiuda: no catalog found, so Etiuda starts as a clean slate");
     catalogFrom = "";
@@ -927,6 +934,7 @@ function folderSyncerRun(win) {
       settleFolder(status.folder, status.answers);
     },
     onChange: (change) => {
+      if (change && change.primed) noteFolderPrimed(true);
       if (theWindow && !theWindow.isDestroyed()) {
         if (change && change.primed && catalogFolder() !== watchedFolder) catalogFolderChanged();
         else catalogChanged(theWindow);
@@ -936,6 +944,7 @@ function folderSyncerRun(win) {
   opts.onFail = (err) => {
     if (folderSyncer) { try { folderSyncer.stop(); } catch { /* already gone */ } folderSyncer = null; }
     folderSyncerFailed(err);
+    noteFolderPrimed(false);
     if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
   };
   try {
@@ -943,6 +952,7 @@ function folderSyncerRun(win) {
   } catch (e) {
     folderSyncer = null;
     folderSyncerFailed(e); /* plant:syncer-start-said */
+    noteFolderPrimed(false);
   }
   return folderSyncer;
 }
@@ -1114,9 +1124,49 @@ function watchDesks(win) {
    window and the page frozen behind it. So it is asked first by an asynchronous stat with a time
    limit, and read as empty and left unwatched until one comes back. One ask in flight at a time.
    A watch that stops and a resume from sleep both leave it unread until it has answered again. */
-const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000;
+const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000, FOLDER_PRIME_MS = 4000;
 let folderDown = "", folderAsking = null, folderRetry = null, folderSaidDown = "";
-function folderAnswers(dir) { return !folderDown || dir !== folderDown; }
+let folderPrimeResolve = null;
+/* A known folder team's share stays quiet on this thread until the mirror has taken one answered listing.
+   Callers then read the mirror, or nothing. A join still reads the invitation folder: nothing is joined yet.
+   The syncer that cannot start keeps the share as its fallback, the read folderSyncerFailed already chooses. */
+function shareUnread(dir) {
+  if (!dir || folderSyncerBroken) return false;
+  const ft = folderTeamHere();
+  if (!ft || ft.joining) return false;
+  if (path.resolve(String(dir)) !== path.resolve(ft.folder)) return false;
+  let primed = false;
+  try { primed = fs.existsSync(path.join(folderMirrorOf(ft.team), FolderSyncer().PRIMED_NAME)); } catch { primed = false; }
+  return !primed; /* plant:prime-share-quiet */
+}
+function folderStillReading() {
+  if (folderSyncerBroken) return false;
+  const ft = folderTeamHere();
+  if (!ft || ft.joining) return false;
+  try { if (fs.existsSync(path.join(folderMirrorOf(ft.team), FolderSyncer().PRIMED_NAME))) return false; } catch { return false; }
+  return true;
+}
+function folderAnswers(dir) {
+  if (shareUnread(dir)) return false;
+  return !folderDown || dir !== folderDown;
+}
+function noteFolderPrimed(done) {
+  const settle = folderPrimeResolve;
+  folderPrimeResolve = null;
+  if (settle) settle(done === true);
+}
+/* The boot waits out the first listing. A press does not start a syncer from here: only this wait, and the looks that
+   already start one, do. Past the bound the desk says it is still reading and the listing arrives when it can. */
+function awaitFolderPrime() {
+  const ft = folderTeamHere();
+  if (!ft || ft.joining || folderSyncerBroken || !folderStillReading()) return Promise.resolve(false);
+  folderSyncerRun(theWindow);
+  return new Promise(resolve => {
+    const timer = setTimeout(() => { folderPrimeResolve = null; resolve(false); }, FOLDER_PRIME_MS);
+    if (timer.unref) timer.unref();
+    folderPrimeResolve = (ok) => { clearTimeout(timer); resolve(ok === true); };
+  });
+}
 function fileAnswers(file) { return folderAnswers(path.dirname(file)); }
 /* ONLY A STAT THAT SUCCEEDS ANSWERS. A share that has just timed out fails every call at once for
    a while and then waits out the timeout again, so a failure is no proof that a read will return.
@@ -7566,7 +7616,8 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
         folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
         folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
-        pickTeamFolder: "Choose the team's shared folder" },
+        pickTeamFolder: "Choose the team's shared folder",
+        stillReading: "Etiuda is still reading the team's shared folder. The catalog opens here once that is done." /* draft words: copywriter */ },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
@@ -7575,7 +7626,8 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
         folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
         folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
-        pickTeamFolder: "Wybierz wspólny folder zespołu" },
+        pickTeamFolder: "Wybierz wspólny folder zespołu",
+        stillReading: "Etiuda wciąż wczytuje wspólny folder zespołu. Katalog otworzy się tutaj, gdy to się skończy." /* draft words: copywriter */ },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -8600,17 +8652,23 @@ if (!theOnlyOne) {
     if (got && got.text) pendingLinkArg = link; /* plant:link-hold */
   }
   openedWith = ecFromArgv(process.argv);
-  /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
-     synchronous read of a share that is not there. */
+  /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, and on a folder team's first
+     listing, FOLDER_PRIME_MS at most, rather than on a synchronous read of a share that is not there.
+     A policy folder names no team until its team file is read, which is the one share read the syncer
+     cannot start without. The catalog waits for the mirror. */
   app.whenReady().then(() => {
     dropSessionStorage(); hardenSession(); applyThemeSource();
     const dir = catalogFolder();
     return askFolder(dir).then(ok => {
       settleFolder(dir, ok);
-      ensureCatalogFolder(); createWindow();
-      hotkeyReady = true; syncHotkey();
-      // Asked for here: powerMonitor is not to be used before the app is ready.
-      require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
+      ensureCatalogFolder();
+      if (!folderTeamHere() && sayJoinPolicy().folder && folderAnswers(sayJoinPolicy().folder)) heedTeam();
+      return awaitFolderPrime().then(() => {
+        createWindow();
+        hotkeyReady = true; syncHotkey();
+        // Asked for here: powerMonitor is not to be used before the app is ready.
+        require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
+      });
     });
   });
 }

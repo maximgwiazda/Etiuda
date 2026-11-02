@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 88;
+const EXPECTED = 89;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -49,7 +49,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "deskTrustChecks"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "deskTrustChecks", "folderAnswers", "catalogFolder", "folderSyncerRun"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -1680,6 +1680,61 @@ try {
       + " was on the roster: sealed " + (view && view.sealed ? view.sealed.file : "nothing")
       + ", the words " + (keyMiss(DG) ? "said" : "absent") + ", the older edition "
       + (oldOpens === A2.trim() ? "opens" : "shut") + ", the new one " + neuKind + " at epoch " + neuEpoch);
+  }
+
+  /* A cold start, with no sync pass before the read: the first listing is held, the share is not read on this thread,
+     and the catalog shows once that listing lands. */
+  {
+    const share = folder("prime-14ch-share");
+    const ud = path.join(LAB, "prime-14ch-desk");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "lamp-shop.ec"), A1, "utf8");
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+      teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: share } } }), "utf8");
+    const d = loadDesk(ud);
+    const hits = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) hits.push(n + " " + path.basename(String(p)));
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
+    const s = d.api.folderSyncerRun(null);
+    const held = [];
+    let release = false;
+    const apply = s && s.program ? s.program.applyScan.bind(s.program) : null;
+    if (s && s.program) s.program.applyScan = (msg) => { if (!release) { held.push(msg); return { answers: true, applied: [] }; } return apply(msg); };
+    let early = null, shown = null, err = "";
+    try {
+      const until = Date.now() + 4000;
+      while (!held.length && Date.now() < until) await new Promise(res => setTimeout(res, 25));
+      early = d.api.readCatalog();
+      const shareClosed = d.api.folderAnswers(share) === false;
+      const before = hits.length;
+      release = true;
+      for (const msg of held.splice(0)) apply(msg);
+      shown = d.api.readCatalog();
+      const reading = d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0);
+      const slate = d.said.some(l => l.indexOf("no catalog found") >= 0);
+      check(!!s && before === 0 && early == null && shareClosed && reading && !slate && shown === A1.trim(),
+        "14ch a desk started on a folder team reads nothing under the share before the first listing lands (" + before
+        + (before ? ": " + hits.slice(0, before).join("; ") : "") + "), says it is still reading, and then the catalog shows (shown "
+        + (shown === A1.trim()) + ", share closed " + shareClosed + ")");
+    } catch (e) {
+      err = String(e && e.stack || e);
+      check(false, "14ch a desk started on a folder team reads nothing under the share before the first listing lands: " + err);
+    } finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 71;
+const EXPECTED = 74;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -55,7 +55,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -984,6 +984,9 @@ async function run() {
     fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
 
     const d = loadDesk(deskZ.ud);
+    /* A desk whose mirror has already taken a listing. Before that mark, the share is not opened on this thread. */
+    fs.mkdirSync(path.join(deskZ.ud, "folder-mirror", TEAM_Z), { recursive: true });
+    fs.writeFileSync(path.join(deskZ.ud, "folder-mirror", TEAM_Z, ".primed"), "");
     await d.ask("etiuda:open-catalog-folder");
     const opened = d.openedPaths[0] || "";
 
@@ -1469,8 +1472,8 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
-   * 44f (point 5, F5): a first boot under machine policy (TeamFolder and LeadKey, no pin yet) reads the named folder and
-   * never flips to an empty mirror before its syncer has run once; after that it reads the mirror
+   * 44f (point 5, F5): a first boot under machine policy (TeamFolder and LeadKey, no pin yet) learns the team from
+   * the team file and does not take the catalog from the share before the syncer has run; after that it reads the mirror
    * ----------------------------------------------------------------------------------------------- */
   {
     const share = folder("share-44f");
@@ -1482,26 +1485,47 @@ async function run() {
     const mirror = path.join(ud, "folder-mirror", team);
     let out = {};
     REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+    const spied = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) spied.push(n + " " + p);
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
     try {
       const d = loadDesk(ud);
       const before = d.api.catalogFolder();
       const read = d.api.readCatalog();
       const after = d.api.catalogFolder();
       const ft = d.api.folderTeamHere();
+      for (const n of spyNames) fs[n] = spyOrig[n];
       const prog = syncerMod.createFolderProgram({ team, folder: share, mirror, pin: LEAD, keys: {}, checks });
       prog.syncOnce();
       const primed = d.api.catalogFolder();
       const read2 = d.api.readCatalog();
+      const waiting = read == null && d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0)
+        && !d.said.some(l => l.indexOf("no catalog found") >= 0)
+        && !spied.some(line => /lamp-shop\.ec/i.test(line));
       out = {
         policyWin: process.platform !== "win32" ? "skipped" : true,
-        namedFirst: path.resolve(before) === path.resolve(share), readNamed: read === CAT_A1.trim(),
+        namedFirst: path.resolve(before) === path.resolve(share), waiting: waiting,
         noFlip: path.resolve(after) === path.resolve(share), pinned: !!ft && ft.team === team,
         mirrorAfterSync: path.resolve(primed) === path.resolve(mirror), readMirror: read2 === CAT_A1.trim()
       };
     } catch (e) { out.error = String(e && e.message); }
-    finally { REG.policy = null; }
-    const ok = process.platform !== "win32" || (!out.error && out.namedFirst && out.readNamed && out.noFlip && out.pinned && out.mirrorAfterSync && out.readMirror);
-    check(ok, "44f a first boot under machine policy reads the named folder and never flips to an empty mirror before its syncer has run once, then reads the mirror: " + JSON.stringify(out));
+    finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      REG.policy = null;
+    }
+    const ok = process.platform !== "win32" || (!out.error && out.namedFirst && out.waiting && out.noFlip && out.pinned && out.mirrorAfterSync && out.readMirror);
+    check(ok, "44f a first boot under machine policy pins the team from its team file, does not take the catalog from the share before the syncer has run, and then reads the mirror: " + JSON.stringify(out));
   }
 
   /* -------------------------------------------------------------------------------------------------
@@ -2020,6 +2044,7 @@ async function run() {
     const r = await testPlant("mirror-write-root", mainFile, (scratchMain) => {
       const share = folder("plant-root-share");
       const { ud, mirror } = scratchDesk("plant-root-desk", share);
+      fs.writeFileSync(path.join(mirror, ".primed"), "");
       const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
       const me = d.api.branchIdentity(true);
       d.api.writeBranch("cat-44o-4a4b4c4d", JSON.stringify(branchOf(me, "4a4b4c4d")));
@@ -2366,6 +2391,106 @@ async function run() {
     : testPlant(tag, syncerFile, async scratch => { const got = await pinScene("plant-" + tag, syncerCopy(scratch, "syncer.cjs")); return got.s && got.joinedHead !== LEAD.keyId; }));
   { const r = await pinPlant("syncer-new-pin"); if (r) check(r.ok, "45g lifting plant:syncer-new-pin leaves a joined desk's running syncer on no pin, so the lead's head never reaches the mirror: " + JSON.stringify(r)); else skip("45g lifting plant:syncer-new-pin leaves a joined desk's running syncer on no pin, so the lead's head never reaches the mirror"); }
   { const r = await pinPlant("syncer-pin-forgets"); if (r) check(r.ok, "45h lifting plant:syncer-pin-forgets keeps the head refused under no pin held after the pin arrives, so it is never copied again: " + JSON.stringify(r)); else skip("45h lifting plant:syncer-pin-forgets keeps the head refused under no pin held after the pin arrives, so it is never copied again"); }
+
+  /* 46a: a cold start on a folder team whose first listing is held (finding 9, rule 17). The desk reads nothing under the
+     share on this thread, says it is still reading, and shows the catalog once that listing lands. */
+  {
+    const share = folder("share-46a");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (f, t) => { const tmp = path.join(share, f + ".tmp"); fs.writeFileSync(tmp, t, "utf8"); fs.renameSync(tmp, path.join(share, f)); };
+    putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })));
+    putAt("lamp-shop.ec", CAT_A1);
+    const env = { teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } } };
+    const d = deskOver("prime46", share, env);
+    const pl = deskOver("prime46pl", share, Object.assign({}, env, { keys: { eCatalogFolder: share, eUiLang: "pl" } }));
+    const hits = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) hits.push(n + " " + path.basename(String(p)));
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
+    let opened = null, shown = null, waited = false, err = "";
+    const s = d.api.folderSyncerRun(null);
+    const held = [];
+    let release = false;
+    const apply = s && s.program ? s.program.applyScan.bind(s.program) : null;
+    if (s && s.program) s.program.applyScan = (msg) => { if (!release) { held.push(msg); return { answers: true, applied: [] }; } return apply(msg); };
+    try {
+      const until = Date.now() + 4000;
+      while (!held.length && Date.now() < until) await sleep(25);
+      const early = d.api.readCatalog();
+      opened = await d.ask("etiuda:open-catalog-folder");
+      const before = hits.length;
+      const pending = d.api.awaitFolderPrime();
+      release = true;
+      for (const msg of held.splice(0)) apply(msg);
+      waited = await pending;
+      shown = d.api.readCatalog();
+      const plRead = pl.api.readCatalog();
+      const reading = d.said.some(l => l.indexOf("Etiuda is still reading the team's shared folder. The catalog opens here once that is done.") >= 0);
+      const polish = pl.said.some(l => l.indexOf("Etiuda wciąż wczytuje wspólny folder zespołu. Katalog otworzy się tutaj, gdy to się skończy.") >= 0);
+      const slate = d.said.some(l => l.indexOf("no catalog found") >= 0) || pl.said.some(l => l.indexOf("no catalog found") >= 0);
+      const marked = getShellSrc().indexOf("/* draft words: copywriter */") >= 0;
+      const quiet = before === 0 && opened === false && early == null && !slate && reading && polish && marked;
+      const landed = waited === true && shown === CAT_A1.trim();
+      check(!!s && held !== null && quiet && landed,
+        "46a a desk whose share's first listing is held reads nothing under that share on the main thread before the prime (" + before
+        + (before ? ": " + hits.slice(0, before).join("; ") : "") + "), says it is still reading, and once the listing lands the catalog shows (wait " + waited
+        + ", opened the share early " + opened + ", shown " + (shown === CAT_A1.trim()) + ", polish " + polish + ")");
+    } catch (e) {
+      err = String(e && e.stack || e);
+      check(false, "46a a desk whose share's first listing is held reads nothing under that share on the main thread: " + err);
+    } finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+      try { appSyncer().stopAllFolderSyncers(); } catch {}
+    }
+  }
+  {
+    if (PLANTS_OFF || process.platform !== "win32") skip("46b lifting plant:prime-share-quiet lets a policy desk read the catalog from the share before the mirror is primed");
+    else {
+      const r = await testPlant("prime-share-quiet", mainFile, (scratchMain) => {
+        const share = folder("plant-quiet-share");
+        const team = "t-" + crypto.randomBytes(8).toString("hex");
+        fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team, sealed: false, epoch: 1, rev: 1 })), "utf8");
+        fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+        const ud = folder("plant-quiet-desk");
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }), "utf8");
+        REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+        try {
+          const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+          return d.api.readCatalog() === CAT_A1.trim();
+        } finally { REG.policy = null; }
+      });
+      check(r.ok, "46b lifting plant:prime-share-quiet lets a policy desk read the catalog from the share before the mirror is primed: " + JSON.stringify(r));
+    }
+  }
+  {
+    if (PLANTS_OFF) skip("46c lifting plant:prime-no-slate says there is no catalog while the team's mirror is still unprimed");
+    else {
+      const r = await testPlant("prime-no-slate", mainFile, (scratchMain) => {
+        const share = folder("plant-slate-share");
+        const team = "t-" + crypto.randomBytes(8).toString("hex");
+        fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team, epoch: 1, rev: 1 })), "utf8");
+        fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+        const ud = folder("plant-slate-desk");
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+          teamPins: { [team]: LEAD }, teamShown: { [team]: { folder: share } } }), "utf8");
+        const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+        const read = d.api.readCatalog();
+        return read == null && d.said.some(l => l.indexOf("no catalog found") >= 0);
+      });
+      check(r.ok, "46c lifting plant:prime-no-slate says there is no catalog while the team's mirror is still unprimed: " + JSON.stringify(r));
+    }
+  }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();
