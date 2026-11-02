@@ -2802,13 +2802,10 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
-/* THE LIBRARY'S BAR HOLDS EVERY BUTTON ON ONE ROW at the default window, 1280 by 880.
-   At 560px, Clear local memory, Load catalog, Join a team and Earlier versions left Close
-   on the row below: the Polish labels need about 645px inside the padding, measured on
-   the built page. 720px leaves a gap between the two ends, which is the gap 2s9 reads.
-   nowrap, so a spare pixel cannot drop Close. Other dialogs stay at 560. Only on a window
-   wide enough to hold the 720px card: below 760px the bar wraps, so no button is pushed
-   off the card's edge on a narrow window (2s9w reads it at 600px). */
+/* THE LIBRARY'S BAR HOLDS EVERY BUTTON ON ONE ROW at the default window, 1280 by 880: the
+   Polish labels need about 645px inside the padding, so the card is 720px, nowrap, and 2s9
+   reads the gap between the ends. Only from 760px wide: below it the bar wraps rather than
+   push a button off the card (2s9w, at 600px). Other dialogs stay at 560. */
 @media (min-width:760px){
 .modal-card.lib-modal{max-width:720px}
 .modal-card.lib-modal .modal-actions,
