@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 57;
+const EXPECTED = 59;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -50,7 +50,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-function loadDesk(ud) {
+function loadDesk(ud, src) {
   const said = [];
   const on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -68,7 +68,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
+    (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -1257,6 +1257,133 @@ try {
         "890ap lifting plant:f9-ask-withdrawn answers the resurrected ask (FAIL 890ao withdrawn ask ignored): "
         + (turned ? "turned" : "did not turn") + ", sha " + (same ? "restored" : "differs"));
     }
+  }
+
+  /* 15w8: Load of a file says the reason the read gave. A sealed file this desk cannot open is not left on Load the new edition. */
+  {
+    const ST = await import(MOD("storage.js"));
+    const Offer = await import(MOD("catalog-offer.js"));
+    ST.lsSet("eMotionOff", "1");
+    ST.lsSet("eUiLang", "en");
+    /* Brackets, so this line does not declare a catalog payload: the commit scan refuses that shape. */
+    window["E_CATALOG"] = null;
+    const w8dir = folder("w8-catalogs");
+    const sealedName = "sealed.ec";
+    const quietName = "quiet.ec";
+    fs.writeFileSync(path.join(w8dir, sealedName), JSON.stringify({
+      format: 2, kind: "etiuda-sealed", team: "t-0123456789abcdef", epoch: 1, nonce: "ab", ct: "cd" }));
+    fs.writeFileSync(path.join(w8dir, quietName), "{not a catalog");
+    const w8 = newDesk("w8desk", w8dir);
+    const buttonsOf = (html) => {
+      const out = [];
+      const re = /<button\b([^>]*)>/gi;
+      let m;
+      while ((m = re.exec(String(html)))) {
+        const attrs = {};
+        const ar = /([\w:-]+)="([^"]*)"/g;
+        let a;
+        while ((a = ar.exec(m[1]))) attrs[a[1]] = a[2];
+        out.push({ getAttribute: (k) => (Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null), onclick: null });
+      }
+      return out;
+    };
+    let html = "";
+    let buttons = [];
+    const box = {
+      isConnected: true,
+      innerHTML: "",
+      querySelectorAll(sel) {
+        if (sel === "button[data-ec-load]") return buttons.filter(b => b.getAttribute("data-ec-load") != null);
+        return [];
+      },
+      querySelector() { return null; },
+    };
+    Object.defineProperty(box, "innerHTML", {
+      get() { return html; },
+      set(v) { html = String(v); buttons = buttonsOf(html); },
+    });
+    const made = [];
+    const cls = () => {
+      const s = new Set();
+      return { contains: c => s.has(c), add: (...c) => c.forEach(x => s.add(x)),
+        remove: (...c) => c.forEach(x => s.delete(x)),
+        toggle: (c, on) => { const next = on === undefined ? !s.has(c) : !!on; if (next) s.add(c); else s.delete(c); return next; } };
+    };
+    const toastEl = { classList: cls(), textContent: "", innerHTML: "", style: {},
+      getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) };
+    globalThis.innerHeight = 800;
+    globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0",
+      fontStyle: "normal", fontWeight: "400", fontSize: "14px", fontFamily: "sans-serif", letterSpacing: "normal" });
+    globalThis.document = {
+      addEventListener: noop, removeEventListener: noop,
+      getElementById: (id) => (id === "mgCatList" ? box : id === "toast" ? toastEl : (made.find(n => n.id === id) || null)),
+      querySelector: (sel) => (sel === "#toast" ? toastEl : null),
+      querySelectorAll: () => [],
+      createElement: (tag) => ({ tagName: tag, id: "", innerHTML: "", textContent: "", style: {}, children: [], classList: cls(),
+        setAttribute() {}, appendChild(c) { this.children.push(c); return c; }, querySelector() { return null; }, querySelectorAll() { return []; } }),
+      body: { classList: cls(), appendChild: (n) => { made.push(n); } },
+      documentElement: { classList: cls() },
+    };
+    const host = {
+      readCatalogFile: (name, desk, asked, offer) => w8.ask("etiuda:catalog-read", name, desk, asked, offer),
+      catalogFiles: () => w8.ask("etiuda:catalog-files"),
+    };
+    globalThis.window = { addEventListener: noop, removeEventListener: noop, E_CATALOG: null, E_HOST: host };
+    let painted = "paint";
+    try { Offer.paintCatalogList(); }
+    catch (e) { painted = "threw " + String(e && e.message || e).slice(0, 80); }
+    const until = Date.now() + 1500;
+    while (!buttons.some(b => b.getAttribute("data-ec-load") === sealedName) && Date.now() < until) await tick();
+    const click = async (name) => {
+      toastEl.innerHTML = "";
+      toastEl.textContent = "";
+      made.length = 0;
+      const b = buttons.find(x => x.getAttribute("data-ec-load") === name);
+      if (b && b.onclick) await Promise.resolve(b.onclick());
+      else await Promise.resolve(Offer.loadCatalogFromFolder(name, 0));
+      await tick();
+      return { said: String(toastEl.innerHTML || toastEl.textContent || ""),
+        edition: made.some(n => n.id === "ecYes") || String(toastEl.innerHTML || "").indexOf("Load the new edition") >= 0,
+        wired: !!(b && b.onclick) };
+    };
+    const sealedEn = await click(sealedName);
+    w8.api.setDown(w8dir);
+    const downEn = await click(quietName);
+    ST.lsSet("eUiLang", "pl");
+    const downPl = await click(quietName);
+    ST.lsSet("eUiLang", "en");
+    w8.api.setDown("");
+    const held = sealedEn.said.indexOf("holds no key") >= 0 && !sealedEn.edition
+      && downEn.said.indexOf("not answering just now") >= 0 && downPl.said.indexOf("nie odpowiada") >= 0;
+    check(held,
+      "15w8 a Load says why the file was not read, in the desk's language, and a sealed file this desk cannot open is not left on Load the new edition: "
+      + "sealed " + (sealedEn.said.indexOf("holds no key") >= 0) + ", edition " + (sealedEn.edition ? "shown" : "absent")
+      + ", down " + (downEn.said.indexOf("not answering just now") >= 0) + ", polish " + (downPl.said.indexOf("nie odpowiada") >= 0)
+      + ", " + painted + (sealedEn.wired ? ", painted button" : ", direct Load")
+      + (held ? "" : " sealed-said " + sealedEn.said.slice(0, 160) + " down-said " + downEn.said.slice(0, 120)));
+
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(mainPath);
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:catalog-read-why") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) {
+      lines[at] = "    return { name: base, text: \"\" }; /* plant:catalog-read-why */";
+      const plantUd = path.join(LAB, "w8plant");
+      fs.mkdirSync(plantUd, { recursive: true });
+      fs.writeFileSync(path.join(plantUd, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: w8dir, eUiLang: "en" } }), "utf8");
+      const planted = loadDesk(plantUd, lines.join("\n"));
+      host.readCatalogFile = (name, desk, asked, offer) => planted.ask("etiuda:catalog-read", name, desk, asked, offer);
+      planted.api.setDown(w8dir);
+      ST.lsSet("eUiLang", "en");
+      const again = await click(quietName);
+      turned = again.said.indexOf("not answering just now") < 0;
+      detail = turned ? "the line was gone" : "the line was still said";
+    }
+    const same = fs.readFileSync(mainPath).equals(before);
+    check(turned && same, "15wc lifting plant:catalog-read-why turns 15w8 red (a Load that failed says nothing of the folder): "
+      + detail + ", sha " + (same ? "restored" : "differs"));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

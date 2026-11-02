@@ -134,7 +134,7 @@ function toastIfSameCatalog(c){
 function loadCatalogFromFolder(name,mtime,desk){
   eReadCatalogFile(name,desk,true).then(got=>{
     if(!got) return;
-    if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
+    if(!got.text){ toastRefusal(fileReadLine(name, got.why)); return; }
     let c=null;
     try{ c=parseCatalogFile(got.text); }
     catch(e){
@@ -940,11 +940,24 @@ function offerToLooseAuthor(all){
 }
 /* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
    refusal, "read" for a file it could not open and anything else for one it would not parse. */
+/* The one line a Load says when the file did not come back. `why` is the shell's code, "read" for a file it could not open. */
+function fileReadLine(name, why){
+  const code=why==="read"?"unreadable":String(why||"");
+  const en=code==="not-answering"?t("{FILE} was not read, because the team's folder is not answering just now. The same Load tries again once this computer can reach it.")
+    :code==="not-desk-file"?t("{FILE} is not this desk's own file, so it was left unread.")
+    :code==="sealed"?t("{FILE} is sealed for a team this desk holds no key for, so it stays unopened.")
+    :code==="sealed-wait"?t("{FILE} is sealed with a newer key this desk does not hold yet, so it waits unopened.")
+    :code==="off-roster"?t("{FILE} belongs to a desk that is off this team's roster, so it was left unread.")
+    :t("{FILE} could not be read just now. The same Load tries again.");
+  return en.split("{FILE}").join(String(name||""));
+}
 function refuseAskedFile(name,why){
   const newer=/^newer ([0-9]+\.[0-9]+\.[0-9]+)$/.exec(String(why||""));
   if(newer){ toastRefusal(eNeedsNewerLine(newer[1])); return; }
-  toastRefusal(t(why==="read"?"{FILE} could not be read.":"{FILE} is not a catalog Etiuda can read.")
-    .split("{FILE}").join(String(name||"")));
+  if(why==="read"||why==="not-answering"||why==="not-desk-file"||why==="sealed"||why==="sealed-wait"||why==="unreadable"||why==="off-roster"){
+    toastRefusal(fileReadLine(name, why)); return;
+  }
+  toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name||"")));
 }
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;

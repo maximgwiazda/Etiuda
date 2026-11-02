@@ -7240,6 +7240,24 @@ function readRevFloor(text, who, look) {
   keepReadRev(id, rev);
   return "kept";
 }
+/* Why an asked read of a sealed file stops, or "" where the file is not a blocked envelope. An unasked read stays the text catalogTextOf hands on. */
+function sealBlockedWhy(text) {
+  let data = null;
+  try { data = catalogPayload(text).data; } catch { return ""; }
+  if (!data || data.kind !== SEALED_KIND) return "";
+  if (teamKeys[data.team] && teamKeys[data.team][data.epoch]) return "";
+  return sealVerdict(data) === "wait" ? "sealed-wait" : "sealed";
+}
+/* A stable reason for the page, never the raw message and never a path. */
+function readFailWhy(err) {
+  const m = String(err && err.message || "");
+  if (m === "the catalog folder is not answering") return "not-answering";
+  if (m === "not a desk's own file") return "not-desk-file";
+  if (m === "its desk is not on the team's roster") return "off-roster";
+  if (err && err.sealWait) return "sealed-wait";
+  if (m.indexOf("sealed for team ") === 0 || m === "an envelope sealed inside another") return "sealed";
+  return "unreadable";
+}
 /* A read the page means to offer unasked hands on, once a lead is pinned, only a file that lead signed. */
 function unsolicitedLeadText(text) {
   if (!pinnedLeadPubs().length) return true;
@@ -7258,7 +7276,15 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const offTeam = !!who && !deskRoster()(who);
     if (offTeam && !asked) throw new Error("its desk is not on the team's roster");
-    const text = catalogTextOf(fs.readFileSync(file, "utf8"));
+    const raw = fs.readFileSync(file, "utf8");
+    if (asked) {
+      const blocked = sealBlockedWhy(raw);
+      if (blocked) {
+        console.error("etiuda: " + file + " could not be read - " + blocked);
+        return { name: base, text: "", why: blocked };
+      }
+    }
+    const text = catalogTextOf(raw);
     if (who) {
       if (readRevFloor(text, who, !!asked) === "below" && !asked) return { name: base, text: "" };
     } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
@@ -7271,7 +7297,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
-    return { name: base, text: "" };
+    return { name: base, text: "", why: readFailWhy(err) }; /* plant:catalog-read-why */
   }
 });
 /* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page

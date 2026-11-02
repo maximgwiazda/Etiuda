@@ -177,6 +177,7 @@ function eReadCatalogFile(name,desk,asked,offer){
         if(!v || typeof v!=="object") return null;
         const got={name:String(v.name||""),text:String(v.text||"")};
         if(typeof v.notOnTeam==="string" && v.notOnTeam) got.notOnTeam=v.notOnTeam;
+        if(v.why==="not-answering"||v.why==="not-desk-file"||v.why==="sealed"||v.why==="sealed-wait"||v.why==="unreadable"||v.why==="off-roster") got.why=v.why;
         return got;
       })
       .catch(()=>null);

@@ -135,6 +135,18 @@ UI_STRINGS.pl={
   "This edition needs Etiuda {VERSION} or newer, so it is kept but not used yet, and the edition in use stays as it is. Once a newer Etiuda is installed, the new edition is offered here.":"To wydanie wymaga Etiudy w wersji {VERSION} lub nowszej, więc zostało zachowane, ale nie jest jeszcze używane, a obecne wydanie działa dalej bez zmian. Po zainstalowaniu nowszej wersji Etiudy nowe wydanie pojawi się tutaj.",
   "{FILE} could not be read.":"Nie udało się odczytać pliku {FILE}.",
   /* draft words: copywriter */
+  "{FILE} was not read, because the team's folder is not answering just now. The same Load tries again once this computer can reach it.":"Plik {FILE} nie został odczytany, bo folder zespołu w tej chwili nie odpowiada. To samo Wczytaj spróbuje ponownie, gdy komputer znów będzie mógł do niego sięgnąć.",
+  /* draft words: copywriter */
+  "{FILE} is not this desk's own file, so it was left unread.":"Plik {FILE} nie jest własnym plikiem tego stanowiska, więc pozostał nieodczytany.",
+  /* draft words: copywriter */
+  "{FILE} is sealed for a team this desk holds no key for, so it stays unopened.":"Plik {FILE} jest zapieczętowany dla zespołu, do którego to stanowisko nie ma klucza, więc pozostaje nieotwarty.",
+  /* draft words: copywriter */
+  "{FILE} is sealed with a newer key this desk does not hold yet, so it waits unopened.":"Plik {FILE} jest zapieczętowany nowszym kluczem, którego to stanowisko jeszcze nie ma, więc czeka nieotwarty.",
+  /* draft words: copywriter */
+  "{FILE} belongs to a desk that is off this team's roster, so it was left unread.":"Plik {FILE} należy do stanowiska spoza listy tego zespołu, więc pozostał nieodczytany.",
+  /* draft words: copywriter */
+  "{FILE} could not be read just now. The same Load tries again.":"Pliku {FILE} nie udało się teraz odczytać. To samo Wczytaj spróbuje ponownie.",
+  /* draft words: copywriter */
   "The team's folder is not answering just now, so it stays closed. The same link opens it once this computer can reach it.":"Folder zespołu w tej chwili nie odpowiada, więc zostaje zamknięty. Ten sam odnośnik otwiera go, gdy komputer znów może do niego sięgnąć.",
   /* draft words: copywriter */
   "Settings names a file where the team's folder should be, so nothing is opened. The Library can choose the folder again.":"W ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc nic się nie otwiera. W Bibliotece można wybrać folder ponownie.",
