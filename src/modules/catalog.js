@@ -190,6 +190,35 @@ function eUnreadableLine(e,name){
   return e&&e.needsEngine ? eNeedsNewerLine(e.needsEngine)
     : t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name||""));
 }
+/* The code a failed read may carry: "empty" where the read came back with no text, an operating
+   system's short code where it named one, and "" where it named none. Anything else is dropped,
+   so a path never reaches the sentence. */
+function fileReadCode(got){
+  if(!got || typeof got!=="object") return "";
+  const c=String(got.code||"");
+  if(c==="empty") return "empty";
+  if(/^[A-Z][A-Z0-9]{1,15}$/.test(c)) return c;
+  if(!got.text && !got.why) return "empty";
+  return "";
+}
+/* One line per reason the read gave. Access, gone and held open are that code. Empty is a read
+   that came back with no text. Anything else keeps the code, and the parenthesis goes where
+   there is none. */
+function fileReadLine(name, code){
+  const c=String(code||"");
+  const en=c==="EACCES"||c==="EPERM"
+    ? t("This computer may not read {FILE}, so nothing was loaded. A copy saved where it may read, such as Documents, can be picked instead.")
+    : c==="ENOENT"
+    ? t("{FILE} is no longer where it was, so nothing was loaded. Pick it again from where it is now.")
+    : c==="EBUSY"
+    ? t("Another program holds {FILE} open, so nothing was loaded. Once it is closed there, pick it again.")
+    : c==="empty"
+    ? t("{FILE} is empty, so nothing was loaded.")
+    : t("{FILE} could not be read from the disk ({CODE}), so nothing was loaded. Try again once the disk answers, or pick a copy from elsewhere.");
+  const said=(c && c!=="EACCES" && c!=="EPERM" && c!=="ENOENT" && c!=="EBUSY" && c!=="empty")
+    ? en.split("{CODE}").join(c) : en.split(" ({CODE})").join("");
+  return said.split("{FILE}").join(String(name||""));
+}
 /** The whitelist, over a catalog the runtime can already read. Every route to a catalog ends
  *  here, so two catalogs are the same exactly when this returns the same thing. */
 function normaliseCatalog(data){
@@ -496,6 +525,8 @@ export {
   parseCatalogFile,
   eNeedsNewerLine,
   eUnreadableLine,
+  fileReadCode,
+  fileReadLine,
   catalogDocOf,
   normaliseCatalog,
   eCatalogSignature,

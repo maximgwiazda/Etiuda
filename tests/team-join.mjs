@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 165;
+const EXPECTED = 167;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -4384,6 +4384,74 @@ try {
       }
       const same = fs.readFileSync(mainPath).equals(before);
       check(turned && same, "15et lifting plant:w2-not-writable-codes turns 15es red (FAIL 15es: ENOENT write failure not folder-not-answering): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  /* 15w9: a relay invitation whose local mirror cannot be made says so, and does not blame a folder. */
+  {
+    const EN_MIRROR = "own copy of the team";
+    const PL_MIRROR = "własnej kopii plików zespołu";
+    const EN_STILL = "the invitation still works";
+    const PL_STILL = "zaproszenie nadal działa";
+    const FOLDER_BLAME = "This folder could not be reached";
+    const relayFailCard = async (D) => {
+      const teamId = "t-" + crypto.randomBytes(8).toString("hex");
+      const blob = inviteBlob({ team: teamId, relay: { rt: crypto.randomBytes(16).toString("hex"),
+        url: "https://relay.test/relay/v1", token: crypto.randomBytes(32).toString("hex"),
+        inv: crypto.randomBytes(16).toString("hex") }, lead: lampLead, secret: newSecret() });
+      await pageOn(D);
+      document.querySelector = (sel) => sel === "[data-join-paste]" ? pasted : null;
+      TJ.openJoinPaste();
+      pasted = elOf({ "data-join-paste": "" }, blob);
+      await press("read");
+      const origMk = fs.mkdirSync;
+      fs.mkdirSync = function (p, opts) {
+        if (String(p).indexOf(path.sep + "relay" + path.sep) >= 0) {
+          const err = new Error("no space");
+          err.code = "ENOSPC";
+          throw err;
+        }
+        return origMk.call(this, p, opts);
+      };
+      try {
+        await press("invite");
+        const en = TJ.teamJoinEmptyHtml();
+        ST.lsSet("eUiLang", "pl");
+        const pl = TJ.teamJoinEmptyHtml();
+        ST.lsSet("eUiLang", "en");
+        return { en: en, pl: pl };
+      } finally {
+        fs.mkdirSync = origMk;
+      }
+    };
+    const Dw9 = await deskWith("relay-mirror", folder("relay-mirror-own"));
+    const card = await relayFailCard(Dw9);
+    check(card.en.indexOf(EN_MIRROR) >= 0 && card.pl.indexOf(PL_MIRROR) >= 0
+      && card.en.indexOf(EN_STILL) >= 0 && card.pl.indexOf(PL_STILL) >= 0 && card.en.indexOf(FOLDER_BLAME) < 0,
+      "15w9 a relay invitation whose local copy could not be kept says so, and does not blame a folder: "
+      + "en " + (card.en.indexOf(EN_MIRROR) >= 0) + ", pl " + (card.pl.indexOf(PL_MIRROR) >= 0)
+      + ", still " + (card.en.indexOf(EN_STILL) >= 0) + ", polish still " + (card.pl.indexOf(PL_STILL) >= 0)
+      + ", folder " + (card.en.indexOf(FOLDER_BLAME) >= 0)
+      + (card.en.indexOf(EN_MIRROR) >= 0 ? "" : " en-card " + card.en.slice(0, 220)));
+
+    if (PLANTS_OFF) {
+      skip("15wd lifting plant:relay-mirror-why turns 15w9 red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:relay-mirror-why") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = lines[at].replace('refused: "relay-mirror"', 'refused: "silent"');
+        const planted = await deskWith("relay-mirror-plant", folder("relay-mirror-plant-own"), null, lines.join("\n"));
+        const again = await relayFailCard(planted);
+        turned = again.en.indexOf(EN_MIRROR) < 0;
+        detail = turned ? "the line was gone" : "the line was still said";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15wd lifting plant:relay-mirror-why turns 15w9 red (the card blames a folder): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
