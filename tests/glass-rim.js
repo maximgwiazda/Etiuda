@@ -85,7 +85,7 @@ async function bootAndDismiss(pg, url) {
   for (const [sc, rx, n] of [["#tourRoot", "skip|not now|close|pomi", 1],
                              ["#eCatalogOffer", "^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update", 4],
                              ["#tourRoot", "skip|not now|close|pomi", 3]]) {
-    if (sc === "#eCatalogOffer") await pg.waitForSelector(sc, { timeout: 30000 }).catch(() => {});
+    if (sc === "#eCatalogOffer") await pg.waitForSelector(sc, { timeout: 2500 }).catch(() => {});
     for (let i = 0; i < n; i++) { if (!(await press(rx, sc))) break; await sleep(1200); }
   }
   await pg.keyboard.press("Escape");
