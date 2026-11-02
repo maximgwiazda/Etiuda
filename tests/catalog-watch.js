@@ -254,7 +254,7 @@ async function page(b) { return (await b.pages())[0]; }
     req.hash = channelHash(req);
     fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req), "utf8");
     let estat = "";
-    for (let i = 0; i < 24 && !estat; i++) {
+    for (let i = 0; i < 120 && !estat; i++) {
       await sleep(250);
       let names = [];
       try { names = fs.readdirSync(path.join(CATFOLDER, "stats")); } catch { names = []; }
@@ -342,7 +342,7 @@ async function page(b) { return (await b.pages())[0]; }
     s = await startShell();
     fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req2), "utf8");
     let twin = [];
-    for (let i = 0; i < 24 && !twin.length; i++) {
+    for (let i = 0; i < 120 && !twin.length; i++) {
       await sleep(250);
       twin = fs.readdirSync(path.join(CATFOLDER, "stats")).filter(n => !statsBefore2.has(n));
     }

@@ -323,6 +323,8 @@ function joinTook(v,changed){
              if(fork) row.fork=fork;
              if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};
              if(l.needsFolder===true) row.needsFolder=true; /* plant:needs-folder-kept */
+             /* The shell's still-reading sentence, as text. The page prints it; it is not a translation of its own. */
+             if(typeof l.reading==="string" && l.reading) row.reading=String(l.reading);
              return row;
            }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
@@ -648,6 +650,17 @@ function joinAct(act){
   if(act==="load") return Promise.resolve(hooks.importCatalogHere());
   return Promise.resolve(null);
 }
+/* The shell's sentence while this folder team's mirror has no listing yet, or "". */
+function teamReadingLine(){
+  const row=((joinNow&&joinNow.leads)||[]).filter(l=>typeof l.reading==="string" && l.reading)[0];
+  return row?String(row.reading):"";
+}
+/* The empty desk's block for that wait, or "" once the listing has landed. */
+function teamReadingEmptyHtml(){
+  const line=teamReadingLine();
+  if(!line) return "";
+  return '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>'+esc(line)+'</div>';
+}
 /* The empty desk's block, or "" where there is nothing sealed to say. */
 function teamJoinEmptyHtml(){
   if(!teamJoinShown()) return "";
@@ -736,4 +749,4 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

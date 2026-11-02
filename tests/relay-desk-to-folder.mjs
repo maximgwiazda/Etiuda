@@ -420,8 +420,10 @@ async function pageAfterMove(plan, w) {
 /* ================================================================================================
    SCENARIOS SETUP
    ================================================================================================ */
+let RUN_PARENT = null;
+
 function makeScenario(extra = {}) {
-  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "to-folder-desk-"));
+  const lab = fs.mkdtempSync(path.join(RUN_PARENT || os.tmpdir(), "to-folder-desk-"));
   const ud = path.join(lab, "userdata");
   const docs = path.join(lab, "documents");
   const shell = path.join(lab, "shell");
@@ -556,7 +558,11 @@ async function main() {
     }
   }
 
-  /* Scenario 1: Folder team file from pinned lead stops channel (945f1) */
+  const runParent = fs.mkdtempSync(path.join(os.tmpdir(), "to-folder-desk-run-"));
+  RUN_PARENT = runParent;
+  let exitCode = 0;
+  try {
+    /* Scenario 1: Folder team file from pinned lead stops channel (945f1) */
   const s1 = makeScenario();
   const plan1 = Object.assign({}, s1, {
     deliverTeamDoc: signTeamDoc(s1.movedTeamDoc, s1.lead),
@@ -995,7 +1001,9 @@ async function main() {
   }
 
   // 945f11: lifting plant:folder-stop-relay turns 945f1 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f11 lifting plant:folder-stop-relay turns 945f1 red (ETIUDA_PLANTS=off)");
+  } else {
     const sc = makeScenario();
     const p = testMainPlant("plant:folder-stop-relay", (lines, at) => {
       lines[at] = "        /* plant:folder-stop-relay */";
@@ -1009,7 +1017,9 @@ async function main() {
   }
 
   // 945f12: lifting plant:folder-known-root turns 945f2 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f12 lifting plant:folder-known-root turns 945f2 red (ETIUDA_PLANTS=off)");
+  } else {
     const sc = makeScenario();
     const kf = path.join(sc.lab, "known-folder");
     fs.mkdirSync(kf, { recursive: true });
@@ -1045,7 +1055,9 @@ async function main() {
   }
 
   // 945f13: lifting plant:folder-not-found-offer turns 945f4 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f13 lifting plant:folder-not-found-offer turns 945f4 red (ETIUDA_PLANTS=off)");
+  } else {
     const sc = makeScenario();
     const p = testMainPlant("plant:folder-not-found-offer", (lines, at) => {
       lines[at] = "        /* plant:folder-not-found-offer */";
@@ -1060,7 +1072,9 @@ async function main() {
   }
 
   // 945f14: lifting plant:folder-picked-validate turns 945f5 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f14 lifting plant:folder-picked-validate turns 945f5 red (ETIUDA_PLANTS=off)");
+  } else {
     const sc = makeScenario();
     const wt = path.join(sc.lab, "wrong-team");
     fs.mkdirSync(wt, { recursive: true });
@@ -1083,7 +1097,9 @@ async function main() {
   }
 
   // 945f15: lifting plant:folder-picked-match turns 945f8 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f15 lifting plant:folder-picked-match turns 945f8 red (ETIUDA_PLANTS=off)");
+  } else {
     const sc = makeScenario();
     const vf = path.join(sc.lab, "valid-folder");
     fs.mkdirSync(vf, { recursive: true });
@@ -1104,7 +1120,9 @@ async function main() {
   }
 
   // 945f16: lifting plant:lapse-folder turns 945f10 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f16 lifting plant:lapse-folder turns 945f10 red (ETIUDA_PLANTS=off)");
+  } else {
     const corePath = path.join(ROOT, "relay", "core.cjs");
     const origCore = fs.readFileSync(corePath, "utf8");
     const lines = origCore.split(/\n/);
@@ -1157,7 +1175,9 @@ async function main() {
   }
 
   // 945f19: lifting plant:lapse-folder-once turns 945f17 red
-  {
+  if (PLANTS_OFF) {
+    skip("945f19 lifting plant:lapse-folder-once turns 945f17 red (ETIUDA_PLANTS=off)");
+  } else {
     const corePath = path.join(ROOT, "relay", "core.cjs");
     const origCore = fs.readFileSync(corePath, "utf8");
     const lines = origCore.split(/\n/);
@@ -1234,9 +1254,21 @@ async function main() {
   process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + "\n");
   if (asserted + skipped !== EXPECTED) {
     process.stderr.write("checks count differs from EXPECTED " + EXPECTED + ": " + (asserted + skipped) + "\n");
-    process.exit(78);
+    exitCode = 78;
+  } else if (failed > 0) {
+    exitCode = Math.min(failed, 63);
   }
-  if (failed > 0) process.exit(Math.min(failed, 63));
+} finally {
+  RUN_PARENT = null;
+  if (runParent) {
+    for (let i = 0; i < 10; i++) {
+      try { fs.rmSync(runParent, { recursive: true, force: true }); } catch {}
+      if (!fs.existsSync(runParent)) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+    }
+  }
+}
+if (exitCode !== 0) process.exit(exitCode);
 }
 
 main().catch(err => {

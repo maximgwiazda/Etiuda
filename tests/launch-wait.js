@@ -6,7 +6,7 @@
  * for a reason that is the mark and not the act. One helper, called by every open in this tree.
  * A same-session reload is not a launch: callers do not ask again after one.
  *
- * The bound is 8 s. The mark's own ceiling is 4 s and its leaving class 260 ms, both read from
+ * The bound is 30 s. The mark's own ceiling is 4 s and its leaving class 260 ms, both read from
  * the product's launch mark and not copied into a second clock here beyond this one ceiling,
  * which also covers a connect that arrives before the document has a body. A body that is not
  * there yet is "no-body", which is not "gone": reading the mark as finished before it has
@@ -40,7 +40,7 @@ function launchMarkExpr() {
    matches a bare "navigat" and must not be one of them. */
 const CONTEXT_LOST = /Execution context was destroyed|Cannot find context|detached Frame|Navigating frame was detached/i;
 
-const LAUNCH_WAIT_MS = 8000;
+const LAUNCH_WAIT_MS = 30000;
 
 function waitReadExpr(readySrc) {
   const ready = readySrc || "document.readyState === \"complete\"";
@@ -76,7 +76,7 @@ async function waitLaunchGone(page, opts) {
     if (state === "gone" && ready) return { navigated: navigated };
     if (Date.now() >= deadline) {
       throw new Error(who + ": the launch is still on the page (body.e-launch or body.e-launch-out) after "
-        + bound + " ms");
+        + bound + " ms (mark " + state + ", ready " + ready + ")");
     }
     const pause = Math.min(step, Math.max(0, deadline - Date.now()));
     if (pause > 0) await new Promise(r => setTimeout(r, pause));

@@ -35,7 +35,7 @@ import { closeNotePane } from "./note-pane.js";
 import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, wireFolderLink } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
+import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
@@ -122,6 +122,8 @@ function render(){
     list.innerHTML=terms.length
       ? '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
         +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
+      /* While the folder team's mirror has no listing yet, the empty desk says so, and not that there is no team. */
+      : (wholeThingEmpty() && teamReadingEmptyHtml()) ? teamReadingEmptyHtml()
       /* A sealed catalog this desk cannot open, or a request to join its team, is what the empty desk says first. */
       : (wholeThingEmpty() && teamJoinShown()) ? teamJoinEmptyHtml()
       : (wholeThingEmpty()
