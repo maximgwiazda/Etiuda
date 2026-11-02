@@ -11,6 +11,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
+const { WINDOWS_VAR } = require(path.join(__dirname, "..", "tests", "engine.js")); /* the wall's one name, engine.js's (engine-selftest 22e) */
 
 const ROOT = path.resolve(__dirname, "..");
 const PICK = path.join(ROOT, "tests", "pick-desk.js");
@@ -338,7 +339,7 @@ function helperScript() { return HELPER.join("\n"); }
 
 function childEnv(extra) {
   const env = Object.assign({}, process.env);
-  delete env.ETIUDA_WINDOWS;
+  delete env[WINDOWS_VAR];
   delete env.ETIUDA_LOCK_PATH;
   delete env.ETIUDA_TEST_IDLE_MINUTES;
   return Object.assign(env, extra || {});
@@ -506,6 +507,9 @@ function lift(src, name) {
 function loadPlanted(dir, names) {
   let src = fs.readFileSync(SELF, "utf8");
   for (const name of names) src = lift(src, name);
+  /* The copy lives outside the tree, so engine.js is named to it by its absolute path. */
+  const ENGINE_AT = 'path.join(__dirname, "..", "tests", "engine.js")';
+  src = src.split(ENGINE_AT).join(JSON.stringify(path.join(__dirname, "..", "tests", "engine.js")));
   const dest = path.join(dir, "plant-" + names.join("-") + ".js");
   fs.writeFileSync(dest, src, "utf8");
   delete require.cache[require.resolve(dest)];
