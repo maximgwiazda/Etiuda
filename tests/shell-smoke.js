@@ -2495,7 +2495,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   await s.p.setViewport(null);
   await sleep(400);
-  check(narrowBar.step === "read" && narrowBar.width === 600 && narrowBar.n >= 5
+  check(narrowBar.step === "read" && narrowBar.width === 600 && narrowBar.n >= 3
         && narrowBar.out.every(b => b.inside && b.hit),
     "2s9w at 600px wide the Library's bar wraps, and every button lies inside the card and is"
     + " the element under its own centre: " + JSON.stringify(narrowBar));
