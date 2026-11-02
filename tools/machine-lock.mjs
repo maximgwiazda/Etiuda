@@ -55,17 +55,26 @@ function isLabEnv() {
   return resolved !== path.resolve(DEFAULT_LOCK_PATH).toLowerCase() && !resolved.startsWith(defDir);
 }
 
+export function formatWaitCeiling(waitMs) {
+  if (waitMs === Infinity || !Number.isFinite(waitMs)) return "with no ceiling";
+  const ceiling = waitMs >= 3600 * 1000 ? Math.round(waitMs / 3600000) + " h"
+    : (waitMs >= 60000 ? Math.round(waitMs / 60000) + " min" : Math.round(waitMs / 1000) + " s");
+  return "up to " + ceiling;
+}
+
 /** The laptop idle minutes read through GetLastInputInfo, or null if unreadable or timed out (10 s). */
 export function readIdleMinutes(opts = {}) {
+  if (typeof opts.onIdleRead === "function") opts.onIdleRead();
   if (isLabEnv() && (opts.testIdleMinutes !== undefined || process.env.ETIUDA_TEST_IDLE_MINUTES !== undefined)) {
     const raw = opts.testIdleMinutes !== undefined ? opts.testIdleMinutes : process.env.ETIUDA_TEST_IDLE_MINUTES;
-    if (raw === "fail" || raw === null) return null;
+    if (raw === "fail" || raw === "session0" || raw === null) return null;
     const n = Number(raw);
     return Number.isFinite(n) && n >= 0 ? n : null;
   }
   if (process.platform === "win32") {
     try {
       const script = `
+if ([System.Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) { "session0"; exit 0 }
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -98,7 +107,7 @@ public class UserInput {
   return null;
 }
 
-function resolveLanePolicy(paths, opts) {
+function resolveLanePolicy(paths, opts = {}) {
   const baseDir = path.dirname(paths[0]);
   const lanesFile = path.join(baseDir, "lanes");
   try {
@@ -111,7 +120,7 @@ function resolveLanePolicy(paths, opts) {
   } catch (e) {
     /* unreadable */
   }
-  const idle = readIdleMinutes(opts);
+  const idle = opts.idleMinutes !== undefined ? opts.idleMinutes : readIdleMinutes(opts);
   if (idle !== null && idle >= 20) {
     return { count: 3, reason: "idle for " + Math.floor(idle) + " minutes" };
   }
@@ -205,7 +214,8 @@ function liveExclusive(paths) {
  * {ok, takenOver, heldBy, reason}. `say` receives the lines a waiter or a takeover prints.
  */
 export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false, what = "run", tree = process.cwd(),
-  waitMs = Infinity, holder = null, testIdleMinutes = undefined, pollMs = undefined, say = (l) => console.log(l) } = {}) {
+  waitMs = Infinity, holder = null, testIdleMinutes = undefined, pollMs = undefined, idleTtlMs = 60000,
+  onIdleRead = undefined, now = () => Date.now(), say = (l) => console.log(l) } = {}) {
   const paths = slotPaths(lockPath, slots);
   for (const p of paths) { try { fs.mkdirSync(path.dirname(p), { recursive: true }); } catch (e) { /* refused below */ } }
   const me = holder || { pid: process.pid, started: processStart(process.pid) };
@@ -215,6 +225,8 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
   const began = Date.now();
   let reported = false, warned = false, waitAnnounced = false, takenOver = null;
   let lastWaitReport = began;
+  let cachedIdleMinutes = null;
+  let lastIdleReadAt = -Infinity;
   const WAIT_REPORT_INTERVAL_MS = 15 * 60 * 1000;
   const pollInterval = (typeof pollMs === "number" && pollMs > 0) ? pollMs : POLL_MS;
   const mine = [];
@@ -224,7 +236,37 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
       + "): no process has that pid with that creation time; the old record is " + aside);
   };
   for (;;) {
-    const policy = paths.length > 1 ? lanePolicy(paths, { testIdleMinutes }) : { count: 1, reason: "single" };
+    let policy;
+    if (paths.length <= 1) {
+      policy = { count: 1, reason: "single" };
+    } else {
+      const baseDir = path.dirname(paths[0]);
+      const lanesFile = path.join(baseDir, "lanes");
+      let hasLaneFile = false;
+      try {
+        if (fs.existsSync(lanesFile)) {
+          const val = fs.readFileSync(lanesFile, "utf8").trim();
+          if (val === "2" || val === "3") hasLaneFile = true;
+        }
+      } catch (e) {}
+
+      if (hasLaneFile) {
+        policy = lanePolicy(paths, { testIdleMinutes, onIdleRead });
+      } else {
+        const hasSlot1 = fs.existsSync(paths[0]);
+        const hasSlot2 = fs.existsSync(paths[1]);
+        if (!hasSlot1 || !hasSlot2) {
+          policy = lanePolicy(paths, { idleMinutes: null, testIdleMinutes, onIdleRead });
+        } else {
+          const t = now();
+          if (cachedIdleMinutes === null || (t - lastIdleReadAt) >= idleTtlMs) {
+            cachedIdleMinutes = readIdleMinutes({ testIdleMinutes, onIdleRead });
+            lastIdleReadAt = t;
+          }
+          policy = lanePolicy(paths, { idleMinutes: cachedIdleMinutes, testIdleMinutes, onIdleRead });
+        }
+      }
+    }
     const activePaths = paths.slice(0, policy.count);
     let held = null;
     if (exclusive) {
@@ -260,10 +302,7 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
         if (r && r.pid) holders.push("pid " + r.pid + " (" + (r.what || "?") + ")");
       }
       const whoEach = holders.length ? holders.join(", ") : (held ? "pid " + held.pid + " (" + (held.what || "?") + ")" : "held");
-      const ceilingStr = (waitMs >= 4 * 3600 * 1000 || waitMs === Infinity) ? "4 h"
-        : (waitMs >= 3600 * 1000 ? Math.round(waitMs / 3600000) + " h"
-        : (waitMs >= 60000 ? Math.round(waitMs / 60000) + " min" : Math.round(waitMs / 1000) + " s"));
-      say("machine-lock: every lane is held (" + whoEach + "); waiting for one, up to " + ceilingStr);
+      say("machine-lock: every lane is held (" + whoEach + "); waiting for one, " + formatWaitCeiling(waitMs));
     }
     if (waited >= WAIT_REPORT_INTERVAL_MS && waited - lastWaitReport >= WAIT_REPORT_INTERVAL_MS) {
       lastWaitReport = waited;

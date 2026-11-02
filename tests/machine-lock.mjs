@@ -26,7 +26,10 @@
  *   ml20 idle and active: 25 minutes gives 3, 1 minute gives 2, honoured only in lab
  *   ml21 a failed idle read gives 2
  *   ml22 lifting plant:lane-count gives 3 lanes always and turns count-2 red
- *   ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red */
+ *   ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red
+ *   ml24 session0 idle reading gives count 2 in lab and SessionId 0 check is present
+ *   ml25 waiter idle reads cached for 60 s, and none while a lane is free or lane file stands
+ *   ml26 wait line ceiling: actual ceiling for finite waitMs and with no ceiling for Infinity */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -38,7 +41,7 @@ const TOOL = path.join(ROOT, "tools", "machine-lock.mjs");
 const GATE_RUN = path.join(ROOT, "tools", "gate-run.mjs");
 const L = await import(pathToFileURL(TOOL).href);
 const G = await import(pathToFileURL(GATE_RUN).href);
-const EXPECTED = 23;
+const EXPECTED = 26;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "machine-lock-legs-"));
 let asserted = 0, failed = 0, skipped = 0;
@@ -323,6 +326,7 @@ const rec = (h, extra) => Object.assign({ pid: h.pid, started: h.started, what: 
 }
 
 /* ml17 */
+let assertMl17WaitLine = (s) => /every lane is held.*waiting for one, up to 4 h/i.test(s);
 {
   const slots = pair("ml17");
   const h1 = await live(), h2 = await live(), h3 = await live();
@@ -352,10 +356,10 @@ process.exit(r.ok ? 0 : 1);
 
   await new Promise((r) => setTimeout(r, 3000));
   const waitingAt3s = childWaiter.exitCode === null;
-  const hasWaitLine = /every lane is held.*waiting for one, up to 4 h/i.test(waiterOut);
 
   free(slots, h1);
   const exitCode = await new Promise((r) => childWaiter.once("exit", r));
+  const hasWaitLine = assertMl17WaitLine(waiterOut);
   let report = null;
   try {
     const lastLine = waiterOut.trim().split(/\r?\n/).pop();
@@ -480,9 +484,124 @@ process.exit(r.ok ? 0 : 1);
     const plantedGateRun = path.join(labDir, "gate-run-planted.mjs");
     fs.writeFileSync(plantedGateRun, plantedSrc);
     const PG = await import(pathToFileURL(plantedGateRun).href);
-    const restored5m = PG.DEFAULT_LOCK_TIMEOUT_MS === 300000;
-    check(restored5m, "ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red: default ms " + PG.DEFAULT_LOCK_TIMEOUT_MS);
+    const slots = [path.join(labDir, "slot-1.lock"), path.join(labDir, "slot-2.lock")];
+    const h1 = await live(), h2 = await live(), h3 = await live();
+    take(slots, h1);
+    take(slots, h2);
+    let plantedWaitLine = "";
+    const say = (l) => {
+      if (!plantedWaitLine) {
+        plantedWaitLine = l;
+        free(slots, h1);
+      }
+    };
+    PG.acquireLock(slots[0], "planted-waiter", ROOT, undefined, { slots, holder: h3, pollMs: 50, say });
+    const ml17AssertionPassed = assertMl17WaitLine(plantedWaitLine);
+    const has5min = /waiting for one, up to 5 min/i.test(plantedWaitLine);
+    const turnedRed = !ml17AssertionPassed && has5min;
+    check(turnedRed, "ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red: wait line had 5 min not 4 h (" + plantedWaitLine.trim() + ")");
+    h1.kill(); h2.kill(); h3.kill();
   }
+}
+
+/* ml24 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml24-"));
+  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock")];
+  const oldEnv = process.env.ETIUDA_LOCK_PATH;
+  try {
+    process.env.ETIUDA_LOCK_PATH = slots[0];
+    const pSession0 = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: "session0" }) : { count: 0, reason: "" };
+    const src = fs.readFileSync(TOOL, "utf8");
+    const hasSession0Check = src.includes("[System.Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0");
+    check(pSession0.count === 2 && pSession0.reason === "in use" && hasSession0Check,
+      "ml24 session0 idle reading gives count 2 and PowerShell checks SessionId 0: count=" + pSession0.count
+      + " (" + pSession0.reason + "), SessionId check in script: " + hasSession0Check);
+  } finally {
+    if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
+    else delete process.env.ETIUDA_LOCK_PATH;
+  }
+}
+
+/* ml25 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml25-"));
+  const slots = [path.join(labDir, "slot-1.lock"), path.join(labDir, "slot-2.lock"), path.join(labDir, "machine-3.lock")];
+  const h1 = await live(), h2 = await live(), h3 = await live();
+  let idleReads = 0;
+  const onIdleRead = () => { idleReads++; };
+
+  /* 1. None while a lane file stands */
+  const lanesFile = path.join(labDir, "lanes");
+  fs.writeFileSync(lanesFile, "2\n");
+  take(slots, h1);
+  take(slots, h2);
+  idleReads = 0;
+  take(slots, h3, { waitMs: 300, pollMs: 50, testIdleMinutes: 25, onIdleRead });
+  const noneWithLaneFile = idleReads === 0;
+
+  /* 2. None while a lane is free */
+  fs.unlinkSync(lanesFile);
+  free(slots, h2);
+  idleReads = 0;
+  const rFree = take(slots, h3, { waitMs: 0, testIdleMinutes: 25, onIdleRead });
+  const noneWhileLaneFree = idleReads === 0 && rFree.ok;
+  free(slots, h3);
+
+  /* 3. Shows one read per 60 s within a waiter when slots 1 and 2 both held */
+  take(slots, h2);
+  take(slots, h3);
+  const h4 = await live();
+  idleReads = 0;
+  take(slots, h4, { waitMs: 300, pollMs: 50, testIdleMinutes: 25, onIdleRead });
+  const oneReadWithin60s = idleReads === 1;
+
+  /* 4. Shows second read once 60 s TTL expires (using idleTtlMs) */
+  take(slots, h1); // re-hold slot 1
+  idleReads = 0;
+  take(slots, h4, {
+    waitMs: 8000,
+    pollMs: 50,
+    idleTtlMs: 100,
+    testIdleMinutes: 25,
+    onIdleRead: () => {
+      idleReads++;
+      if (idleReads >= 2) free(slots, h1);
+    }
+  });
+  const expiresAndRereads = idleReads >= 2;
+
+  check(noneWithLaneFile && noneWhileLaneFree && oneReadWithin60s && expiresAndRereads,
+    "ml25 waiter reads idle at most once per 60 s, and none while a lane is free or lane file stands: "
+    + "noneWithLaneFile=" + noneWithLaneFile + ", noneWhileLaneFree=" + noneWhileLaneFree
+    + ", oneReadWithin60s=" + oneReadWithin60s + " (reads=" + idleReads + "), expiresAndRereads=" + expiresAndRereads);
+
+  h1.kill(); h2.kill(); h3.kill(); h4.kill();
+}
+
+/* ml26 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml26-"));
+  const slots = [path.join(labDir, "slot-1.lock"), path.join(labDir, "slot-2.lock")];
+  const h1 = await live(), h2 = await live(), h3 = await live();
+  take(slots, h1);
+  take(slots, h2);
+
+  let infLine = "";
+  take(slots, h3, { waitMs: Infinity, pollMs: 50, say: (l) => { if (!infLine) { infLine = l; free(slots, h1); } } });
+  take(slots, h1);
+
+  let fiveHLine = "";
+  take(slots, h3, { waitMs: 5 * 3600 * 1000, pollMs: 50, say: (l) => { if (!fiveHLine) { fiveHLine = l; free(slots, h1); } } });
+
+  const infCorrect = /waiting for one, with no ceiling$/i.test(infLine.trim());
+  const fiveHCorrect = /waiting for one, up to 5 h$/i.test(fiveHLine.trim());
+
+  check(infCorrect && fiveHCorrect,
+    "ml26 wait line ceiling prints with no ceiling for Infinity and actual ceiling for >= 4 h: inf="
+    + infCorrect + " (" + infLine.trim() + "), 5h=" + fiveHCorrect + " (" + fiveHLine.trim() + ")");
+
+  h1.kill(); h2.kill(); h3.kill();
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* the system's to clear */ }
