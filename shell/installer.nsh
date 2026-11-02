@@ -328,23 +328,56 @@ Var TurnReady
   !undef TURN_PFX
 !macroend
 
+# One LangString per language the installer loads, app-builder-lib's bundledLanguages.
+# 1045 is Polish. Every other language gets the English, as the licence page does.
+# A language added upstream and missing here is warning 6030, and -WX fails the build.
+!macro TurnLang ID
+  !if ${ID} == 1045
+    LangString TurnWelcomeTitle ${ID} "Witamy w Etiudzie"
+    LangString TurnWelcomeText ${ID} "Etiuda trzyma odpowiedzi zespołu pod ręką, gotowe do skopiowania do każdej rozmowy z klientem.$\r$\n$\r$\nInstalacja dotyczy tylko tego konta Windows, więc nie są potrzebne uprawnienia administratora dla proponowanego folderu. Jeśli Etiuda jest otwarta, instalator poprosi o jej zamknięcie.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
+    LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda"
+    LangString TurnUnWelcomeText ${ID} "Program Etiuda zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
+  !else
+    LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
+    LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nSetup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
+    LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda"
+    LangString TurnUnWelcomeText ${ID} "This removes Etiuda from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
+  !endif
+!macroend
+!insertmacro TurnLang 1033
+!insertmacro TurnLang 1031
+!insertmacro TurnLang 1036
+!insertmacro TurnLang 3082
+!insertmacro TurnLang 2052
+!insertmacro TurnLang 1028
+!insertmacro TurnLang 1041
+!insertmacro TurnLang 1042
+!insertmacro TurnLang 1040
+!insertmacro TurnLang 1043
+!insertmacro TurnLang 1030
+!insertmacro TurnLang 1053
+!insertmacro TurnLang 1044
+!insertmacro TurnLang 1035
+!insertmacro TurnLang 1049
+!insertmacro TurnLang 2070
+!insertmacro TurnLang 1046
+!insertmacro TurnLang 1045
+!insertmacro TurnLang 1058
+!insertmacro TurnLang 1029
+!insertmacro TurnLang 1051
+!insertmacro TurnLang 1038
+!insertmacro TurnLang 1025
+!insertmacro TurnLang 1055
+!insertmacro TurnLang 1054
+!insertmacro TurnLang 1066
+
 !macro customWelcomePage
   !insertmacro TurnEmit "x"
   !define MUI_PAGE_CUSTOMFUNCTION_SHOW TurnWelcomeShow
   !insertmacro MUI_PAGE_WELCOME
   Function TurnWelcomeShow
-    /* draft words: copywriter */
-    ${If} $LANGUAGE == 1045
-      /* draft words: copywriter */
-      SendMessage $mui.WelcomePage.Title ${WM_SETTEXT} 0 "STR:Witamy w instalatorze $(^NameDA)"
-      /* draft words: copywriter */
-      SendMessage $mui.WelcomePage.Text ${WM_SETTEXT} 0 "STR:Instalator przeprowadzi instalację programu $(^NameDA).$\r$\n$\r$\nPrzed rozpoczęciem warto zamknąć inne programy. Dzięki temu pliki systemowe można zaktualizować bez ponownego uruchamiania komputera.$\r$\n$\r$\nNaciśnij Dalej, aby kontynuować."
-    ${Else}
-      /* draft words: copywriter */
-      SendMessage $mui.WelcomePage.Title ${WM_SETTEXT} 0 "STR:Welcome to $(^NameDA) Setup"
-      /* draft words: copywriter */
-      SendMessage $mui.WelcomePage.Text ${WM_SETTEXT} 0 "STR:Setup will guide you through the installation of $(^NameDA).$\r$\n$\r$\nIt is recommended that you close all other applications before starting Setup. This will make it possible to update relevant system files without having to reboot your computer.$\r$\n$\r$\nClick Next to continue."
-    ${EndIf}
+    SendMessage $mui.WelcomePage.Title ${WM_SETTEXT} 0 "STR:$(TurnWelcomeTitle)"
+    SendMessage $mui.WelcomePage.Text ${WM_SETTEXT} 0 "STR:$(TurnWelcomeText)"
   FunctionEnd
 !macroend
 
@@ -353,5 +386,10 @@ Var TurnReady
     Call un.TurnPrepare
   FunctionEnd
   !insertmacro TurnEmit "un."
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.TurnUnWelcomeShow
   !insertmacro MUI_UNPAGE_WELCOME
+  Function un.TurnUnWelcomeShow
+    SendMessage $mui.WelcomePage.Title ${WM_SETTEXT} 0 "STR:$(TurnUnWelcomeTitle)"
+    SendMessage $mui.WelcomePage.Text ${WM_SETTEXT} 0 "STR:$(TurnUnWelcomeText)"
+  FunctionEnd
 !macroend
