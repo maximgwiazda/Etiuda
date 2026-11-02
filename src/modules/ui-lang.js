@@ -612,6 +612,10 @@ UI_STRINGS.pl={
   "Save everything loaded now as a catalog file, your edits merged in":"Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
   "Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.":"Wczytuje plik katalogu z dysku jako same dane, bez uruchamiania czegokolwiek. Zastępuje obecny katalog, a pliki na dysku zostają bez zmian.",
   "Reset personal data":"Wyczyść dane własne",
+  /* draft words: copywriter */
+  "The saved card arrangement is still stored under its old name.":"Zapisany układ kart nadal leży pod dawną nazwą.",
+  /* draft words: copywriter */
+  "This version looks for it under a new name, so that copy was left as it was. Etiuda is running as usual and the catalog is untouched. Only the personal order, the hidden cards and the favourites on this desk are waiting.":"Ta wersja szuka go pod nową nazwą, więc tamta kopia została tak, jak była. Etiuda działa normalnie, a katalog pozostaje nietknięty. Czeka tylko osobisty porządek, ukryte karty i ulubione na tym stanowisku.",
   "Reset Etiuda":"Zresetuj Etiudę",
   "Edit card":"Edytuj kartę",
   "Edit this intent":"Edytuj tę intencję",

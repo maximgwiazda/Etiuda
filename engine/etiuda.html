@@ -7185,6 +7185,10 @@ What you type stays in this browser only.`;
     "Save everything loaded now as a catalog file, your edits merged in": "Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
     "Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.": "Wczytuje plik katalogu z dysku jako same dane, bez uruchamiania czegokolwiek. Zastępuje obecny katalog, a pliki na dysku zostają bez zmian.",
     "Reset personal data": "Wyczyść dane własne",
+    /* draft words: copywriter */
+    "The saved card arrangement is still stored under its old name.": "Zapisany układ kart nadal leży pod dawną nazwą.",
+    /* draft words: copywriter */
+    "This version looks for it under a new name, so that copy was left as it was. Etiuda is running as usual and the catalog is untouched. Only the personal order, the hidden cards and the favourites on this desk are waiting.": "Ta wersja szuka go pod nową nazwą, więc tamta kopia została tak, jak była. Etiuda działa normalnie, a katalog pozostaje nietknięty. Czeka tylko osobisty porządek, ukryte karty i ulubione na tym stanowisku.",
     "Reset Etiuda": "Zresetuj Etiudę",
     "Edit card": "Edytuj kartę",
     "Edit this intent": "Edytuj tę intencję",
@@ -8428,6 +8432,9 @@ What you type stays in this browser only.`;
       p.baseCards = p.baseMacros;
       did = true;
     }
+    if (Object.prototype.hasOwnProperty.call(p, "macroOrder") && p.macroOrder != null && !Array.isArray(p.macroOrder) && !Array.isArray(p.cardOrder)) {
+      throw new Error("the saved card arrangement is not a list");
+    }
     return did;
   }
   var packMigrationFailed = false;
@@ -8441,10 +8448,27 @@ What you type stays in this browser only.`;
     const d = document.createElement("div");
     d.id = "eMigrateWarn";
     d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
-    d.innerHTML = '<b>Your saved card arrangement could not be read.</b> This version renamed how that arrangement is stored, and the existing copy could not be converted. Etiuda is running normally and your catalog is untouched - only the personal ordering, hidden cards and favourites in this browser are affected.<div style="margin-top:10px"><button id="eMigrateReset" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#78350f">Reset personal data</button><button id="eMigrateHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px">Dismiss</button></div>';
+    const lead = document.createElement("b");
+    lead.textContent = t("The saved card arrangement is still stored under its old name.");
+    const body = document.createElement("span");
+    body.textContent = " " + t("This version looks for it under a new name, so that copy was left as it was. Etiuda is running as usual and the catalog is untouched. Only the personal order, the hidden cards and the favourites on this desk are waiting.");
+    const row = document.createElement("div");
+    row.style.marginTop = "10px";
+    const reset = document.createElement("button");
+    reset.id = "eMigrateReset";
+    reset.textContent = t("Reset personal data");
+    reset.style.cssText = "font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#78350f";
+    const hide = document.createElement("button");
+    hide.id = "eMigrateHide";
+    hide.textContent = t("Dismiss");
+    hide.style.cssText = "font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px";
+    row.appendChild(reset);
+    row.appendChild(hide);
+    d.appendChild(lead);
+    d.appendChild(body);
+    d.appendChild(row);
     (document.body || document.documentElement).appendChild(d);
-    const r = document.getElementById("eMigrateReset");
-    if (r) r.onclick = () => {
+    reset.onclick = () => {
       try {
         lsKeys().filter((k) => E_KEY_RE.test(k)).forEach((k) => lsDel(k));
       } catch (e) {
@@ -8455,8 +8479,7 @@ What you type stays in this browser only.`;
       }
       location.replace(location.href.split("#")[0]);
     };
-    const h = document.getElementById("eMigrateHide");
-    if (h) h.onclick = () => d.remove();
+    hide.onclick = () => d.remove();
   }
   var noticeRO = null;
   function placeNotices() {
