@@ -82,7 +82,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 303 };
+const EXPECTED = { chrome: 304 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1580,6 +1580,50 @@ const t0 = Date.now();
     + " rows and no folder on the title line ("
     + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
+
+  /* 2s9x: THE LIBRARY'S BAR ON A NARROW WINDOW, the desk's whole bar in Polish, its longest. A
+     browser has no host, so Join a team and Earlier versions are added as the desk draws them.
+     At 600 by 880 every button lies inside the card and is the element under its own centre (a
+     hit test: Clear local memory restarts the app); at 1280 the bar is still one row. */
+  const libBar = async (width) => {
+    await p.setViewport({ width, height: 880 }); await sleep(500);
+    return p.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      dismissModal(); await wait(300);
+      setUiLang("pl"); await wait(400);
+      document.querySelector('[data-act="manage"]').click(); await wait(800);
+      const card = document.getElementById("modalCard"), load = document.getElementById("mgImportCatalog");
+      const acts = card && card.querySelector(".modal-actions");
+      if (!acts || !load) return { step: "missing" };
+      for (const [id, label] of [["mgJoinTeam", "Dołącz do zespołu"], ["mgHistory", "Historia wersji…"]]) {
+        if (document.getElementById(id)) continue;
+        const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.id = id; b.textContent = label;
+        load.parentNode.appendChild(b);
+      }
+      await wait(100);
+      const c = card.getBoundingClientRect();
+      const btns = [...acts.querySelectorAll("button")].filter(b => b.offsetParent);
+      const out = btns.map(b => {
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { id: b.id, inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5
+          && r.top >= c.top - 0.5 && r.bottom <= c.bottom + 0.5, hit: !!(hit && (hit === b || b.contains(hit))) };
+      });
+      const rows = new Set(btns.map(b => Math.round(b.getBoundingClientRect().top))).size;
+      const res = { step: "read", width: innerWidth, lang: document.documentElement.lang, n: out.length, rows, out };
+      dismissModal(); await wait(300);
+      setUiLang("en"); await wait(400);
+      return res;
+    });
+  };
+  const bar600 = await libBar(600), bar1280 = await libBar(1280);
+  await p.setViewport({ width: 1500, height: 950 }); await sleep(500);
+  check(bar600.step === "read" && bar600.width === 600 && bar600.lang === "pl" && bar600.n === 5
+        && bar600.out.every(b => b.inside && b.hit)
+        && bar1280.step === "read" && bar1280.width === 1280 && bar1280.n === 5 && bar1280.rows === 1,
+    "2s9x the Library's whole bar in Polish: at 600px every button lies inside the card and is the"
+    + " element under its own centre, and at 1280px it is one row: "
+    + JSON.stringify({ bar600, bar1280: { rows: bar1280.rows, n: bar1280.n } }));
 
   /* THE AWAITING MARK ON THE LIBRARY ROW, board 571. A whole catalog never draws it. The
      catalog is the invented sample with every key named pl taken off, langs still declaring
