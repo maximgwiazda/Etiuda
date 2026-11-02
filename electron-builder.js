@@ -178,6 +178,11 @@ module.exports = {
     // key, and take back the copy of the installer it caches for an updater this product does not
     // have. Named rather than left to the buildResources convention, so a move fails the build.
     include: "installer.nsh",
+    // Frame 0 of the turning sidebar and header. The uninstaller's sidebar is the same still.
+    // No icon key is set in this block.
+    installerSidebar: "installer/installerSidebar.bmp",
+    uninstallerSidebar: "installer/installerSidebar.bmp",
+    installerHeader: "installer/installerHeader.bmp",
     artifactName: "etiuda-${version}-setup.${ext}",
     shortcutName: "Etiuda",
     uninstallDisplayName: "Etiuda",

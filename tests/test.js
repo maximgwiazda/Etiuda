@@ -6951,7 +6951,8 @@ function lintCatalog(c, at) {
  * define names; the press is the SendMessage of 0x408 to $HWNDPARENT inside that function; and it
  * must sit under a positive test of UAC_IsInnerInstance and under nothing else. LogicLib's
  * negations are ${IfNot}, ${Unless} and the ${Else} of a positive test, so polarity is a stack
- * rather than a word. Returns { ok, why, presses, hook }.
+ * rather than a word. How many presses the page order needs is the caller's: one when the
+ * licence is first, two when the welcome page is before it. Returns { ok, why, presses, hook }.
  */
 function readSkipHook(nsh) {
   const src = nsh.split(/\r?\n/).map(l => (/^\s*[#;]/.test(l) ? "" : l.trim()));
@@ -6993,10 +6994,7 @@ function readSkipHook(nsh) {
     + JSON.stringify(wrong[0] || "nothing at all") + " rather than by " + WANT
     + ", so the page it consumes is taken from the wrong run of the wizard", presses: presses.length,
     hook: hook };
-  if (presses.length !== 1) return { ok: false, why: hook + " presses the next button "
-    + presses.length + " times, which consumes " + presses.length + " pages", presses: presses.length,
-    hook: hook };
-  return { ok: true, why: "", presses: 1, hook: hook };
+  return { ok: true, why: "", presses: presses.length, hook: hook };
 }
 
 /* ---- main --------------------------------------------------------------------------------- */
@@ -7175,9 +7173,16 @@ if (require.main === module) {
       if (ins && isPageMacro(ins[1])) { pages.push(ins[1]); return; }
       if (/^(PageEx|Page|UninstPage)\b/i.test(t)) pages.push(t.split(/\s+/)[0]);
     });
+    const welcomeAt = pages.indexOf("customWelcomePage");
     const licenseAt = pages.indexOf("licensePage");
     const modeAt = pages.indexOf("PAGE_INSTALL_MODE");
     const licenseBeforeMode = licenseAt >= 0 && modeAt >= 0 && licenseAt < modeAt;
+    /* customWelcomePage is the macro that inserts MUI_PAGE_WELCOME and nothing before it, so the
+       walker counting that name at 0 is the welcome page sitting in front of the licence. One
+       press then skips the licence only when the licence is still first; two skip the welcome
+       page and then the licence. */
+    const layout = (welcomeAt === 0 && licenseAt === 1) ? "welcome" : (licenseAt === 0 ? "licence" : "");
+    const wantPresses = layout === "welcome" ? 2 : (layout === "licence" ? 1 : 0);
     /* readSkipHook walks the include rather than reading tokens out of it; the four mutants that
        proved the token reading blind are named at its definition. */
     const skip = readSkipHook(nsh);
@@ -7198,9 +7203,13 @@ if (require.main === module) {
     const bad = [];
     if (licenseAt < 0) bad.push("assistedInstaller.nsh has no licence page");
     if (modeAt < 0) bad.push("assistedInstaller.nsh has no install-mode page");
-    if (licenseAt > 0)
-      bad.push("licence is not the first page (" + pages.join(", ")
+    if (!layout)
+      bad.push("licence is not the first page, nor the page after the welcome (" + pages.join(", ")
         + "), so 0x408 skips the wrong page");
+    if (layout && skip.presses !== wantPresses)
+      bad.push((skip.hook || "the hook") + " presses next " + skip.presses
+        + " time(s), and this page order needs " + wantPresses + " so the elevated inner copy skips "
+        + (layout === "welcome" ? "the welcome page and the licence" : "the licence"));
     if (licenseBeforeMode && !skipsInner)
       bad.push("licence page sits before install-mode (" + pages.join(", ")
         + ") and shell/installer.nsh does not skip it in the elevated inner copy: " + skip.why);
@@ -7208,8 +7217,10 @@ if (require.main === module) {
     if (bad.length) hardFail++;
     else console.log("  page order " + pages.join(", ")
       + (licenseBeforeMode ? "; " + skip.hook + " presses next " + skip.presses
-        + " time, under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips"
-        + " the licence" : "; licence is not before install-mode")
+        + (skip.presses === 1 ? " time" : " times")
+        + ", under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips "
+        + (layout === "welcome" ? "the welcome page and the licence" : "the licence")
+        : "; licence is not before install-mode")
       + (debugPages ? "; " + debugPages + " agrees" : ""));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
