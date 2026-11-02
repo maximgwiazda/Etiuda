@@ -15,10 +15,16 @@
  * arrives on about:blank passes opts.ready "typeof window.E_VERSION === \"string\"", because
  * that blank page is already complete and has a body with no launch class.
  *
+ * A page that will not boot passes opts.unbooted. ready is then the startup banner, not
+ * E_VERSION, and the bound has to cover that banner's own 8 s. The class is never painted,
+ * so "gone" is not the thing being waited for.
+ *
  * A navigation during the wait throws one of four phrases (the context was destroyed, the
  * context cannot be found, a detached frame, a frame detached while navigating). That costs
  * one read and the wait goes on. A disconnect is not one of those, and it is rethrown.
- * Anything else is a real throw. Past the bound, the error names the launch.
+ * Anything else is a real throw. Past the bound, a launch class that is still up is named
+ * as the launch. A class that is already gone is named as the page not being ready, and an
+ * unbooted page is named as its banner not being there.
  */
 "use strict";
 
@@ -52,6 +58,7 @@ async function waitLaunchGone(page, opts) {
   const who = o.who || "a window leg";
   const bound = o.boundMs == null ? LAUNCH_WAIT_MS : o.boundMs;
   const step = o.stepMs == null ? 50 : o.stepMs;
+  const unbooted = !!o.unbooted;
   const deadline = Date.now() + bound;
   let current = page;
   let navigated = 0;
@@ -73,10 +80,12 @@ async function waitLaunchGone(page, opts) {
         if (next) current = next;
       }
     }
-    if (state === "gone" && ready) return { navigated: navigated };
+    if (unbooted ? (state !== "no-body" && ready) : (state === "gone" && ready)) return { navigated: navigated };
     if (Date.now() >= deadline) {
-      throw new Error(who + ": the launch is still on the page (body.e-launch or body.e-launch-out) after "
-        + bound + " ms (mark " + state + ", ready " + ready + ")");
+      let why = "the launch is still on the page (body.e-launch or body.e-launch-out)";
+      if (unbooted) why = "the startup banner is not on the page";
+      else if (state === "gone") why = "the launch class is gone and the page is not ready";
+      throw new Error(who + ": " + why + " after " + bound + " ms (mark " + state + ", ready " + ready + ")");
     }
     const pause = Math.min(step, Math.max(0, deadline - Date.now()));
     if (pause > 0) await new Promise(r => setTimeout(r, pause));

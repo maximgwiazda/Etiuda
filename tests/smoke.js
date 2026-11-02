@@ -4190,9 +4190,13 @@ const t0 = Date.now();
           if (wClick && seen.indexOf(wClick) < 0) seen.push(wClick);
           if (wDown && seen.indexOf(wDown) < 0) seen.push(wDown);
           if (wUp && seen.indexOf(wUp) < 0) seen.push(wUp);
+          /* A nonbinary Polish title is the vocative first name with no Pan or Pani, and the
+             vocative follows the name, not the glyph. For Anna that word is the one the card
+             showed before any form was picked, so equality with wordBefore is the form moving.
+             Which step lands on it depends on the glyph the idle turns left behind. The three
+             distinct words and the change from one step to the next say the glyph moved it. */
           glyphOk = !!(click.moved && down.moved && up.moved && wClick && wDown && wUp
             && wClick !== wordAfter && wDown !== wClick && wUp !== wDown
-            && wClick !== wordBefore && wDown !== wordBefore && wUp !== wordBefore
             && seen.length === 3);
           shown.glyph = { click: click.now, down: down.now, up: up.now, words: seen.length };
           if (!glyphOk) note(shown, "the glyph did not move the saved form");
