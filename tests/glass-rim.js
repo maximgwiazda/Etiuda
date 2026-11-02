@@ -14,7 +14,7 @@
  * the bottom (30 px in from each corner): an edge's dimmer end must hold at least 60 per cent of its brighter
  * end, and the top must read as the bottom does, end for end (the bottom-right as the top-left, the bottom-left
  * as the top-right) within 8 per cent. The row profile is read on the same slab as the 1.25 case, at a device
- * pixel ratio of 1 and of 2: one row, no second line under the rim.
+ * pixel ratio of 1 and of 2, each with the top on a whole CSS pixel: one row, no second line under the rim.
  *
  * THE FRACTIONAL RATIOS (125 and 150 per cent displays). A masked ring is not snapped to device pixels, so it split
  * the line over two rows, differently at the top and the bottom, and only where an edge lands between device pixels.
@@ -25,7 +25,8 @@
  * own peak at the top and the bottom, and the equivalent width (the rows' brightness above the card, over the peak
  * row, in CSS pixels) within 0.1 of a pixel between them. The control is the previous pass's masked ring injected in
  * the same launch, which must read the two apart. It centres the lone slab whose top or bottom, times the ratio, has
- * a fractional part nearest one half. At 1.25 that same read is also taken at ratios 1 and 2.
+ * a fractional part nearest one half. At 1.25 and 1.5 the box stays at that centred position, since those
+ * reads are about an edge between device pixels. At 1.25 that same slab is also read at ratios 1 and 2, after the top has been moved onto a whole CSS pixel.
  *
  * THE OTHER RAISED SURFACES. The menus, Quick facts, the opened pill bar and the peeking intent panel wear the same ring
  * inside their border and their bevel is off, in dark; in light none of them does. Each is opened in a launch of its own
@@ -201,6 +202,37 @@ async function markSlab(pg, ord) {
   if (!ok) throw new Error("the marked slab is not on the page");
 }
 
+/* Ratios 1 and 2 read an on-grid box. A centred top can fall on a half pixel, which is not a claim the rim
+   makes, so the top is moved by that fractional part until it is a whole CSS pixel. The scroller is asked
+   first. At a ratio of 2 a half pixel is one device pixel and the scroll keeps it. At a ratio of 1 the
+   scroller rounds a half pixel away, so the scroll is put back and the same part is taken off the card's
+   top margin, which moves the box and the painted line together. The top is printed either way. */
+async function sitWhole(pg) {
+  const moved = await pg.evaluate(async () => {
+    const el = document.querySelector("[data-rim-probe]");
+    const sc = document.getElementById("pageScroll") || document.scrollingElement;
+    const before = el.getBoundingClientRect().top;
+    const frac = before - Math.floor(before);
+    if (frac < 0.01) return { top: before, how: "already" };
+    const s0 = sc.scrollTop;
+    sc.scrollTop = s0 + frac;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const stuck = Math.abs(sc.scrollTop - (s0 + frac)) < 0.02;
+    let top = el.getBoundingClientRect().top;
+    if (stuck && Math.abs(top - Math.round(top)) < 0.01) return { top: top, how: "scroll", from: before };
+    sc.scrollTop = s0;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const card = el.closest(".card") || el;
+    const had = parseFloat(getComputedStyle(card).marginTop) || 0;
+    card.style.marginTop = (had - frac) + "px";
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+    top = el.getBoundingClientRect().top;
+    return { top: top, how: "margin", from: before };
+  });
+  console.log("       top after the nudge " + moved.top.toFixed(3) + (moved.how === "already" ? "" : ", " + moved.how));
+  return moved.top;
+}
+
 /* The list lays out lazily, so one scroll can land short: bring the marked slab to the middle again until it is
    wholly in the window and its box has held still for ten frames. */
 async function settle(pg) {
@@ -228,10 +260,11 @@ async function settle(pg) {
    under the very rectangle it was asked for.
 
    Edge-row brightness, 1:1: the red channel of the border row at D px along the top, and of the border
-   column at D px down the left side, each less the resting level read at the left edge's middle. The box is
-   whole pixels (the macro is laid on the pixel grid) and the read says if it was not. */
+   column at D px down the left side, each less the resting level read at the left edge's middle. Ratios 1 and 2
+   sit the box on a whole CSS pixel first, and the read says if the top was not one. */
 async function lift(pg) {
   await settle(pg);
+  await sitWhole(pg);
   const r = await pg.evaluate(() => {
     const el = document.querySelector("[data-rim-probe]");
     const q = el.getBoundingClientRect();
@@ -266,8 +299,9 @@ async function lift(pg) {
    the red channel is read from outside to inside (top) and inside to outside (bottom). The card's own level inside is
    the rest; the page outside is darker than it, so only brightness above the rest counts. rows: those above half the
    line's peak; width: all of it over the peak row, in CSS pixels (a device pixel is 1 / ratio of one). */
-async function edgeRows(pg, ratio) {
+async function edgeRows(pg, ratio, onGrid) {
   await settle(pg);
+  if (onGrid) await sitWhole(pg);
   const r = await pg.evaluate(() => {
     const q = document.querySelector("[data-rim-probe]").getBoundingClientRect();
     return { t: q.top, b: q.bottom, l: q.left, r: q.right };
@@ -324,7 +358,7 @@ async function atRatio(ratio, mode) {
       + pickAt + ": " + best.h + " px, " + best.which + " fractional part " + best.frac.toFixed(3) + " (distance " + best.dist.toFixed(3) + ")");
     await markSlab(q, best.ord);
     const dpr = await q.evaluate(() => devicePixelRatio);
-    const now = await edgeRows(q, dpr);
+    const now = await edgeRows(q, dpr, mode === "real");
     const photo = await q.evaluate(() => {
       const r = document.querySelector("[data-rim-probe]").getBoundingClientRect();
       return { top: r.top, bottom: r.bottom, h: r.height };
@@ -336,7 +370,7 @@ async function atRatio(ratio, mode) {
     if (mode !== "real") {
       await q.addStyleTag({ content: MASKED });
       await setTheme(q, "dark");
-      old = await edgeRows(q, dpr);
+      old = await edgeRows(q, dpr, false);
     }
     return { dpr, now, old, best, photoFrac, photoH: photo.h };
   } finally {
