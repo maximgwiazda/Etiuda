@@ -167,6 +167,8 @@ const step = async (label, body, opts) => {
  *     read for everywhere it could show (board 817). The same anchored grep returns 126 here.
  *   - 131: 8a and 8A are the two sites added, the packaged desk on a folder team and the bent
  *     worker that does not prime. The same anchored grep returns 131 here.
+ *   - 132 SINCE 2026-11-02: 2s9w is the site added, the Library's bar at 600px wide (the test
+ *     architect's edit). The same anchored grep returns 132 here.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -185,12 +187,12 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7", "8"];
-const EXPECTED = KEEP ? null : 131;
+const EXPECTED = KEEP ? null : 132;
 /* 1g3 may record NOT RUN instead of calling its check (board 655). NOT RUN only when an early
    sample, taken straight after connect, was on a display and not iconic, and the late sample
    is iconic. iconic is the window pickWindow chose. Already iconic at the early sample is a
    FAIL, and so is every other wrong window. The verdict below subtracts notRun.length from
-   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 131:
+   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 132:
    the call is still in the file and still runs whenever the reading is not not-run. */
 /* COUNTS:PREDICATES
    Members that must be there, in order where the order is the claim.
