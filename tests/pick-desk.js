@@ -7,6 +7,8 @@
  * window opens the picker focused, that Enter puts on the clipboard what the desk's own page puts
  * there for the same text, that the focus goes back to that other window and a Ctrl+V there
  * pastes the reply, and that Escape, a second press and a repeat do what they say.
+ * A message on the clipboard draws suggested intents above those rows; a click on one picks
+ * that intent the way a hand pick does. A booking code leaves the rows as they are.
  *
  * WHAT IT COSTS. It TAKES THE FOREGROUND AND SENDS REAL KEYS for about twenty seconds, so it is
  * run by hand with nobody at the keyboard, never in a chain: tests/engine-selftest.js names it
@@ -32,7 +34,7 @@ const PORT = E.portBlock("pick-desk");
 E.windowWall("tests/pick-desk.js");
 const LEASED = E.takeLeases(["ports:" + PORT, "desk:foreground"], 10, "tests/pick-desk.js");
 console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
-const EXPECTED = 11;
+const EXPECTED = 14;
 let checks = 0, fails = 0, reachedEnd = false, child = null, form = null, b = null;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-desk-"));
@@ -102,12 +104,13 @@ const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 
 function buildApp() {
   const dir = path.join(LAB, "app");
   for (const d of ["shell", "engine", "userdata", "catalogs", "documents"]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-  for (const f of ["main.js", "preload.js", "win-proxy.cjs", "page-watch.cjs"]) fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
+  for (const f of ["main.js", "preload.js", "win-proxy.cjs", "page-watch.cjs", "clip-suggest.cjs"]) fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
   for (const f of ["etiuda.html", "etiuda.csp.json"]) fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(dir, "engine", f));
   fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "etiuda-pick-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   fs.writeFileSync(path.join(dir, "catalogs", "lamps.ec"), JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1,
     name: "Lamp Shop", date: "2026-01-09", langs: [{ code: "en", label: "EN" }],
-    tags: [{ id: "t-ord", kind: "shelf", label: { en: "Orders" } }],
+    tags: [{ id: "t-ord", kind: "shelf", label: { en: "Orders" } },
+           { id: "t-wick", kind: "request", topic: { en: "lantern" }, clause: { en: "trimming a wick" }, action: { en: "trimmed" } }],
     cards: [{ id: "c-lamp", shelf: "t-ord", bodyShape: "plain", title: { en: "Lamp delivery" },
               body: { en: "{GREET},\nYour lamp leaves the workshop on Monday.\nKind regards,\n{AGENT}" } },
             { id: "c-brass", shelf: "t-ord", bodyShape: "plain", title: { en: "Care of brass" }, body: { en: "Brass wants a dry cloth." } }] }), "utf8");
@@ -245,6 +248,67 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   await ask("free 3");
   check(heldByForm === "True" && refused && refused.ok === false && refused.why === "taken",
     "k Settings is told when Windows refuses a combination another program holds: " + JSON.stringify(refused));
+
+  /* The open key, with a code and then with a message. The strip is drawn only for the message,
+     above the same rows, and a click takes that intent the way a hand pick does. */
+  const rowTexts = async () => pp.evaluate(() => [...document.querySelectorAll("#rows li")].map(li => li.textContent));
+  await ask("setclip " + Buffer.from("X7K2P9", "utf8").toString("base64"));
+  await ask("keys ctrl+shift+space");
+  const codeOpen = await until(async () => {
+    pp = await pickerPage();
+    return !!pp && await pp.evaluate(() => document.hasFocus() && !document.getElementById("sg"));
+  });
+  const baseline = codeOpen ? await rowTexts() : [];
+  await ask("keys escape");
+  await until(async () => (await ask("fg")) === "True");
+  const MSG = "Please mend lantern today";
+  await ask("setclip " + Buffer.from(MSG, "utf8").toString("base64"));
+  await ask("keys ctrl+shift+space");
+  const msgOpen = await until(async () => {
+    pp = await pickerPage();
+    if (!pp) return false;
+    return pp.evaluate(() => {
+      const sg = document.getElementById("sg");
+      return !!(sg && /lantern/i.test(sg.textContent) && document.hasFocus());
+    });
+  });
+  const withStrip = msgOpen ? await rowTexts() : [];
+  check(codeOpen && baseline.length > 0 && msgOpen && JSON.stringify(withStrip) === JSON.stringify(baseline),
+    "l a booking code leaves no strip, and a message draws the suggested intent above the same rows: code "
+    + codeOpen + " (" + baseline.length + " row(s)), message " + msgOpen + ", rows unchanged "
+    + (JSON.stringify(withStrip) === JSON.stringify(baseline)) + ")");
+
+  let taken = null;
+  if (msgOpen && pp) {
+    await pp.click("#sg button");
+    const saw = await until(async () => desk.evaluate(() => intentIdxs.length === 1));
+    if (saw) {
+      taken = await desk.evaluate(() => {
+        const idx = intentIdxs[0];
+        const name = intentNavName(idx);
+        clearIntents();
+        pickIntent(idx, false);
+        const again = intentIdxs.slice();
+        clearIntents();
+        return { idx: idx, name: name, again: again };
+      });
+    }
+  }
+  check(!!taken && taken.name === "lantern" && taken.again.length === 1 && taken.again[0] === taken.idx,
+    "m a click on the suggestion picks that intent as a hand pick does: " + JSON.stringify(taken));
+
+  await ask("keys escape");
+  await until(async () => (await ask("fg")) === "True");
+  await ask("setclip " + Buffer.from("X7K2P9", "utf8").toString("base64"));
+  await ask("keys ctrl+shift+space");
+  const againCode = await until(async () => {
+    pp = await pickerPage();
+    return !!pp && await pp.evaluate(() => document.hasFocus() && !document.getElementById("sg"));
+  });
+  const againRows = againCode ? await rowTexts() : [];
+  check(againCode && JSON.stringify(againRows) === JSON.stringify(baseline),
+    "n the same code again leaves the picker as it was: " + againRows.length + " row(s), unchanged "
+    + (JSON.stringify(againRows) === JSON.stringify(baseline)));
 
   reachedEnd = true;
 })().catch(e => {

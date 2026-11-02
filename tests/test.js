@@ -2119,10 +2119,11 @@ function deskStatsFns() {
                  "function statsDayBefore(", "function statsDay(", "const STATS_TOUCHED=", "function statsTouch(",
                  "function statsCompact(", "function statsIdAt(", "const STATS_FORGOT=",
                  "function bumpUse(", "function bumpIntent(", "function bumpMiss(",
-                 "function bumpLang(", "function statsForgetCards(", "function statsDoc("]
+                 "function bumpLang(", "function bumpSuggest(", "function bumpSuggestOpen(",
+                 "function statsForgetCards(", "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");
   return new Function(decls
-    + "\nreturn {STATS_DAYS_KEPT,statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsForgetCards,"
+    + "\nreturn {STATS_DAYS_KEPT,statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,bumpSuggest,bumpSuggestOpen,statsForgetCards,"
     + "statsDoc};")();
 }
 function deskStatsTests() {
@@ -2198,6 +2199,21 @@ function deskStatsTests() {
   const kept = S.statsDoc(old, { engine: "x", period: { from: "2020-01-01", to: "2026-12-31" } });
   eq("a day older than the kept window is dropped and the first day moves to the window's start",
      [kept.cards.map(c => c.id), kept.since, S.STATS_DAYS_KEPT], [["c-new"], "2025-08-18", 400]);
+  const bare = { useCounts: {}, useAt: {} };
+  const bareDoc = S.statsDoc(bare, { engine: "x" });
+  eq("a desk that has taken no suggestion omits both counts",
+     ["suggestTaken" in bareDoc, "suggestOpen" in bareDoc], [false, false]);
+  const sg = { useCounts: {}, useAt: {} };
+  S.bumpSuggest(sg, "2026-09-22");
+  S.bumpSuggest(sg, "2026-08-01");
+  S.bumpSuggestOpen(sg, "2026-09-22");
+  const sgLife = S.statsDoc(sg, { engine: "x" });
+  const sgSep = S.statsDoc(sg, { engine: "x", period: { from: "2026-09-01", to: "2026-09-30" } });
+  const sgOld = S.statsDoc(sg, { engine: "x", period: { from: "2020-01-01", to: "2020-01-31" } });
+  eq("suggestions taken and openings with them are counts: the lifetime, September's days, and a quiet span that omits both",
+     [sgLife.suggestTaken, sgLife.suggestOpen, sgSep.suggestTaken, sgSep.suggestOpen,
+      "suggestTaken" in sgOld, "suggestOpen" in sgOld],
+     [2, 1, 1, 1, false, false]);
 }
 
 function catalogIdentityTests() {
@@ -5532,8 +5548,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1225;
-const UI_STRINGS_SHA256 = "3ab74574c2e7a138a73b4acba44b037ccd890bc58b0b7060cae378c544858d47";
+const UI_STRINGS_COUNT = 1230;
+const UI_STRINGS_SHA256 = "df496f034649ad89109aa63cc4ec7dd57b0d106a9363dd2be92299e4229efe4e";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

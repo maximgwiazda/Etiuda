@@ -22,6 +22,7 @@ import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared } from "./host.js";
 import { hooks } from "./hooks.js";
 import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
+import { pack } from "./pack.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -73,6 +74,10 @@ function hotkeyWhy(why,accel){
     : t("Etiuda takes a letter, a digit, Space or a function key, with Ctrl, Alt or Shift.");
   return says.split("{KEYS}").join(k);
 }
+function suggestCountLine(){
+  return t("Suggestions taken: {N}").split("{N}").join(String(pack.suggestTaken|0))
+    +"  "+t("Openings with suggestions: {N}").split("{N}").join(String(pack.suggestOpen|0));
+}
 function hotkeyRowHtml(){
   if(!hotkeyHost()) return "";
   const st=hotkeyState();
@@ -81,6 +86,8 @@ function hotkeyRowHtml(){
     +'<small id="setHotkeyNote">'+esc(st.taken
       ? t("Another program uses this combination just now; a different one will do.")
       : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'
+    +'<small id="setSuggestNote">'+esc(t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent."))+'</small>'
+    +'<small id="setSuggestCounts">'+esc(suggestCountLine())+'</small>'
     +'</div><div class="sc-binds"><button type="button" class="sc-bind sc-long'+(st.accel?"":" sc-empty")+'" id="setHotkey"'
     +' style="flex-basis:100%" title="'+esc(t("Click, then press the new key combo"))+'">'
     +esc(hotkeyLabel(st.accel))+'</button></div></div></div>';
@@ -96,6 +103,9 @@ function syncHotkeyRow(box,now){
   if(note) note.textContent=st.taken
     ? t("Another program uses this combination just now; a different one will do.")
     : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
+  const help=box.querySelector("#setSuggestNote"), counts=box.querySelector("#setSuggestCounts");
+  if(help) help.textContent=t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent.");
+  if(counts) counts.textContent=suggestCountLine();
 }
 function hotkeyListen(box,on,now){
   hkListening=!!on;

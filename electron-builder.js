@@ -85,7 +85,7 @@ module.exports = {
   copyright: "Copyright (c) 2026 Maxim Gwiazda",
   extraMetadata: { version },
   directories: { output, buildResources: "shell" },
-  // An allowlist, the same discipline as .gitignore's blocklist in reverse: twelve files go in
+  // An allowlist, the same discipline as .gitignore's blocklist in reverse: thirteen files go in
   // and the src tree, the harness and the tools stay out of a customer's machine. The pin
   // travels with the artefact it describes, or the shell serves script-src 'none' and the
   // packaged app opens on a blank window. The last is the sample catalog the shell puts in the
@@ -93,7 +93,7 @@ module.exports = {
   // under shell/relay/ are the relay's channel layer and its blob rules, which the shell requires only
   // for a team on the relay (board 900). The two under shell/folder/ are the folder mirror's syncer and
   // its worker, which the shell requires only for a team in a shared folder (board 945 stage 3 (b)).
-  files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs",
+  files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs", "shell/clip-suggest.cjs",
           "shell/relay/channel.cjs", "shell/relay/blob.cjs", "shell/folder/syncer.cjs", "shell/folder/syncer-worker.cjs",
           "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec"],
   asar: true,

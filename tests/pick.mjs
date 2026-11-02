@@ -17,7 +17,7 @@
  *
  * WHAT THE SHELL MAY NOT DO (section 5) is read from its text with the comments blanked: no API that
  * reads another window, the screen or the clipboard, or presses keys itself; no key bound to the clipboard;
- * one clipboard write; no module or program it did not have. Its one program that presses a key, the
+ * one clipboard write, and one clipboard read, at the picker's open; no module or program it did not have. Its one program that presses a key, the
  * caret helper, is read too (5f): Ctrl+V into the window in front at the press, and nothing it reads. Those are the brief's "must hold", and a scan is the only node form of
  * an absence. Strings are NOT blanked, so a name in a command line counts.
  *
@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 119;
+const EXPECTED = 125;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -303,7 +303,7 @@ try {
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
       args && args[0] === "which" ? caret.front : "", ""));
   } });
-  let suspended = null, clipReads = 0;
+  let suspended = null, clipReads = 0, clipHeld = "";
   const onH = {}, invH = {};
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
   let cursor = { x: 300, y: 200 };
@@ -314,7 +314,7 @@ try {
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
     BrowserWindow: BW, Menu: anything(), dialog: anything(), net: anything(), protocol: anything(), session: anything(),
-    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return ""; } },
+    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipHeld; } },
     globalShortcut: { register: (a, fn) => { if (taken.has(a)) return false; held.set(a, fn); return true; },
       unregister: a => { held.delete(a); }, unregisterAll: () => held.clear(), setSuspended: v => { suspended = !!v; } },
     screen: { getCursorScreenPoint: () => cursor, getDisplayNearestPoint: () => ({ workArea: area }),
@@ -327,6 +327,10 @@ try {
   const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
   const listed = [];
   const shellFs = Object.create(fs);
+  const written = [];
+  const noteWrite = data => { try { written.push(Buffer.isBuffer(data) ? data.toString("utf8") : String(data == null ? "" : data)); } catch (e) { written.push(""); } };
+  shellFs.writeFileSync = (p, data, ...rest) => { noteWrite(data); return fs.writeFileSync(p, data, ...rest); };
+  shellFs.appendFileSync = (p, data, ...rest) => { noteWrite(data); return fs.appendFileSync(p, data, ...rest); };
   shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
   shellFs.existsSync = p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : fs.existsSync(p);
   const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
@@ -440,6 +444,35 @@ try {
     + "opened " + opened.length + ", rows " + (opened[0] ? opened[0].rows.length : "none")
     + ", visible " + pw.visible + ", focused " + pw.focused
     + ", show " + (pw.calls.indexOf("show") > -1) + ", bounds " + JSON.stringify(pw.bounds));
+  check(clipReads === 1, "2h2 that one opening reads the clipboard once: " + clipReads);
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  const secret = "zebraquill please mend the lantern glass today";
+  const writesAtSecret = written.length, saidAtSecret = said.length, sentAtSecret = desk.sent.length, readsAtSecret = clipReads;
+  clipHeld = secret;
+  held.get("Control+Shift+Space")();
+  await until(() => opened.length >= 2 && pw.visible);
+  const openAsks = desk.sent.slice(sentAtSecret).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "open").map(a => String(a[3] || ""));
+  const askedBlob = desk.sent.slice(sentAtSecret).map(a => JSON.stringify(a)).join("\n");
+  const openObj = opened[opened.length - 1];
+  const kept = written.slice(writesAtSecret).join("\n") + "\n" + said.slice(saidAtSecret).join("\n") + "\n"
+    + JSON.stringify(openObj) + "\n" + askedBlob + "\n" + openAsks.join("\n") + "\n" + pw.sent.map(a => JSON.stringify(a)).join("\n");
+  check(clipReads === readsAtSecret + 1 && openAsks.indexOf('{"profiles":1}') > -1 && !("profiles" in openObj) && !("suggest" in openObj)
+    && kept.indexOf(secret) < 0,
+    "2h3 a message is asked for as profiles only, and its text reaches neither the page, a log nor the disk: reads "
+    + (clipReads - readsAtSecret) + ", profiles key " + ("profiles" in openObj) + ", suggest key " + ("suggest" in openObj)
+    + ", text kept " + (kept.indexOf(secret) > -1));
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  clipHeld = "X7K2P9";
+  const sentCode = desk.sent.length, openedCode = opened.length;
+  held.get("Control+Shift+Space")();
+  await until(() => opened.length > openedCode && pw.visible);
+  const codeAsks = desk.sent.slice(sentCode).filter(a => a[0] === "etiuda:pick-ask").map(a => String(a[3] || ""));
+  const codeOpen = opened[opened.length - 1];
+  check(codeAsks.indexOf("{}") > -1 && !("suggest" in codeOpen) && Object.keys(codeOpen).join(",") === Object.keys(opened[0]).join(","),
+    "2h4 a booking code leaves the picker the same shape as the empty open: " + Object.keys(codeOpen).join(","));
+  clipHeld = "";
 
   const found2 = JSON.parse(await pickerPage.E_PICK.find("brass"));
   check(ids(found2.rows) === "c-sign/0", "2i a query from the picker is answered by the desk's own search: " + ids(found2.rows));
@@ -568,11 +601,12 @@ try {
   onH["etiuda:pick-answer"](pickerEvent(), 1, JSON.stringify({ text: "planted" }));
   check(fromDesk === false && clip.length === clips, "2l the picker's channels answer the picker's window alone");
 
+  const openedAtSecond = opened.length;
   held.get("Control+Shift+Space")();
   await until(() => pw.visible);
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
-  check(!pw.visible && opened.length === 2, "2m a second press while it stands closes it: visible " + pw.visible + ", opened " + opened.length);
+  check(!pw.visible && opened.length === openedAtSecond + 1, "2m a second press while it stands closes it: visible " + pw.visible + ", opened " + (opened.length - openedAtSecond));
 
   ST.lsDel("eNameAsked"); ST.lsDel("eAgent");
   held.get("Control+Shift+Space")();
@@ -662,7 +696,9 @@ try {
   caret.there = true;
 
   /* NO KEY READS THE CLIPBOARD. Alt+V is pressed on both windows as Electron delivers a key: nothing is read,
-     no channel the shell opens is the clipboard's, and neither page's bridge offers a read. */
+     no channel the shell opens is the clipboard's, and neither page's bridge offers a read. Openings read once
+     each, above; this sweep must not add another. */
+  const readsAtSweep = clipReads;
   const ALT_V = { type: "keyDown", alt: true, control: false, meta: false, shift: false, code: "KeyV", isAutoRepeat: false };
   desk.fire("before-input-event", {}, ALT_V);
   pw.fire("before-input-event", {}, ALT_V);
@@ -672,7 +708,7 @@ try {
     await Promise.race([Promise.resolve().then(() => invH[ch](ev)).catch(() => {}), tick(40)]);
   const clipDoors = Object.keys(invH).concat(Object.keys(onH)).filter(ch => /clip/i.test(ch));
   const clipVerbs = Object.keys(deskPage.E_HOST).concat(Object.keys(pickerPage.E_PICK)).filter(k => /clip/i.test(k));
-  check(clipReads === 0 && clipDoors.length === 0 && clipVerbs.length === 0,
+  check(clipReads === readsAtSweep && clipDoors.length === 0 && clipVerbs.length === 0,
     "2v Alt+V on the desk's window and in the picker reads nothing, no channel is the clipboard's, and neither page is given a read: "
     + JSON.stringify({ reads: clipReads, channels: clipDoors, verbs: clipVerbs }));
 
@@ -865,6 +901,25 @@ try {
     "4o a row of a reply that commits the firm wears the stamp straight after its title, the desk's words as its tooltip: " + JSON.stringify((lis[0] || "").slice(0, 160)));
   check(lis.length === 2 && lis[1].indexOf('class="st"') < 0,
     "4p control: the row beside it, not marked, wears none: " + lis.length + " row(s), " + (lis[1] || "").indexOf('class="st"'));
+  const sgHost = { el: null, insertBefore(el) { this.el = el; } };
+  boxEl.parentNode = sgHost;
+  pDoc.createElement = tag => {
+    const el = { tagName: tag, id: "", className: "", title: "", textContent: "", type: "", children: [], attrs: {},
+      setAttribute(k, v) { this.attrs[k] = String(v); if (k === "id") this.id = String(v); },
+      getAttribute(k) { return this.attrs[k] || ""; },
+      appendChild(c) { this.children.push(c); return c; },
+      remove() {}, addEventListener() {} };
+    return el;
+  };
+  pWin.E_PICK.takeSuggest = (id, multi) => { pcalls.push("take " + id + " " + (multi ? 1 : 0)); return Promise.resolve("null"); };
+  pcalls.length = 0;
+  pOpen(JSON.stringify({ rows: pRows, suggest: [{ id: "t:wick", name: "lantern", score: 4 }], words: { suggest: "Suggested", suggestTip: "tip" } }));
+  const sgText = sgHost.el ? sgHost.el.children.map(c => c.textContent).join(" ") : "";
+  check(!!sgHost.el && sgHost.el.id === "sg" && /lantern/.test(sgText),
+    "4q suggestions are drawn above the rows, by name: " + JSON.stringify(sgText));
+  press("ArrowUp", "ArrowUp");
+  press("Enter", "Enter");
+  check(lastCall() === "take t:wick 0", "4r a step up from the first row marks a suggestion, and Enter takes it: " + lastCall());
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
   console.log("\n[5/7] what the shell may not do, read from its text with the comments taken out");
@@ -893,7 +948,13 @@ try {
     .concat(blank(fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8"))).join("\n");
   const engineBare = mask(engineCode);
   const FORBID = /desktopCapturer|capturePage|getSources|getDisplayMedia|getUserMedia|clipboard\s*\.\s*read|clipboard-read|readText|readHTML|readImage|readRTF|readBookmark|readBuffer|readFindText|availableFormats|sendInputEvent|SendKeys|SendInput|keybd_event|mouse_event|SetWindowsHookEx|GetForegroundWindow|GetWindowText|WindowFromPoint|AttachThreadInput|uiohook|iohook|robotjs|nut-js|UIAutomation/g;
-  const reach = (shellCode + "\n" + engineCode).match(FORBID) || [];
+  /* The one read is the picker's open. A second site still matches once that one is hidden. */
+  const clipSites = shellCode.match(/clipboard\s*\.\s*readText\s*\(\s*\)/g) || [];
+  const planted = shellCode.replace("clipboard.readText()", "clipboard.readText();clipboard.readText()");
+  const plantedSites = (planted.match(/clipboard\s*\.\s*readText\s*\(\s*\)/g) || []).length;
+  const plantedReach = (planted.replace("clipboard.readText()", "clipboard.kept()").match(FORBID) || []).length;
+  const scored = shellCode.replace("clipboard.readText()", "clipboard.kept()");
+  const reach = (scored + "\n" + engineCode).match(FORBID) || [];
   /* EVERY HANDLE ON THE CLIPBOARD IS ONE OF THE KNOWN ONES (board 818): a read through another name, as
      `const { clipboard: cb } = require("electron")` then `cb.read(...)`, names no API the list above knows. In the
      shell the name stands only as a member of a `require("electron")` destructure, taken whole, and before its one
@@ -907,6 +968,7 @@ try {
   const inSpan = i => spans.some(s => i >= s[0] && i < s[1]);
   const oddHandles = at(shellBare, /\bclipboard\b(?!-)/g).filter(i => {
     if (shellCode.startsWith("clipboard.writeText(", i)) return false;
+    if (shellCode.startsWith("clipboard.readText(", i)) return false;
     return !(inSpan(i) && /[{,]\s*$/.test(shellCode.slice(i - 2, i)) && /^clipboard\s*[,}]/.test(shellCode.slice(i, i + 11)));
   }).map(i => shellCode.slice(i, i + 24))
     .concat(at(shellBare, /\brequire\s*\(/g).filter(i => /^require\(\s*"electron"\s*\)/.test(shellCode.slice(i, i + 22)) && !inSpan(i)
@@ -917,6 +979,9 @@ try {
   check(reach.length === 0 && oddHandles.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
     "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key itself, and the clipboard is"
     + " reached through no other name: " + (reach.concat(oddHandles).join(", ") || "none"));
+  check(clipSites.length === 1 && plantedSites === 2 && plantedReach > 0,
+    "5aa the shell reads the clipboard at one place, the picker's open, and a second read is refused: "
+    + clipSites.length + " site(s), planted " + plantedSites + ", forbid hits " + plantedReach);
   const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
   check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
@@ -924,7 +989,7 @@ try {
   /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
     "node:worker_threads", "./folder/syncer.cjs",
-    "./win-proxy.cjs", "./page-watch.cjs", "./relay/channel.cjs", "./blob.cjs"];
+    "./win-proxy.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./relay/channel.cjs", "./blob.cjs"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
     .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
   const strange = reqs.filter(r => MODS.indexOf(r) < 0);

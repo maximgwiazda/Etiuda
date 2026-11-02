@@ -24,6 +24,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
+const { readsLikeMessage, scoreSuggestions } = require(path.join(__dirname, "clip-suggest.cjs"));
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
 function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
@@ -1928,6 +1929,8 @@ function writeStatsAnswer(text, askId, forced) {
     });
     if (pairs.length) out.pairs = pairs;
   }
+  if ((data.suggestTaken | 0) > 0) out.suggestTaken = data.suggestTaken | 0;
+  if ((data.suggestOpen | 0) > 0) out.suggestOpen = data.suggestOpen | 0;
   const key = statsContentKey(out);
   if (key === statsWroteKey) { statsHeld = null; return { ok: true, unchanged: true }; }
   const bypass = why === "span" || why === "midnight" || why === "close";
@@ -7837,6 +7840,7 @@ function pickPage() {
   if (!P || !q || !box) return;
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
+  let suggest = [], sgAt = -1;
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
@@ -7849,6 +7853,70 @@ function pickPage() {
   /* A CARD OF SEVERAL REPLIES IS ONE GROUP: its title once, over its replies, each named by its tag. The first nine
      rows after the reply copied last carry Ctrl and their digit, and that one Ctrl+0. */
   const same = (a, b) => !!a && !!b && !a.again && !b.again && a.id === b.id;
+  function takeSuggest(id, multi) {
+    if (typeof P.takeSuggest !== "function") return;
+    const mine = ++asked;
+    Promise.resolve(P.takeSuggest(id, !!multi)).then(text => {
+      if (mine !== asked) return;
+      let o = {};
+      try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+      if (!Array.isArray(o.rows)) return;
+      rows = o.rows;
+      said = o.count || "";
+      if ("last" in o) last = o.last || null;
+      paintLang(o);
+      if (who) {
+        if (o.who != null) who.hidden = !o.who;
+        if (o.name != null) { who.value = o.name; sent = who.value; }
+      }
+      paint(false);
+    });
+  }
+  /* Drawn only while suggestions are on and the query is empty, so a quiet clipboard adds no element. */
+  function paintStrip() {
+    const on = suggest.length > 0 && !String(q.value || "").trim();
+    const host = document.getElementById ? document.getElementById("sg") : null;
+    if (!on) {
+      if (host && host.remove) host.remove();
+      return;
+    }
+    let el = host;
+    if (!el) {
+      if (!document.createElement || !box.parentNode) return;
+      el = document.createElement("div");
+      el.id = "sg";
+      el.setAttribute("role", "group");
+      if (words.suggestTip) { el.setAttribute("aria-label", words.suggestTip); el.title = words.suggestTip; }
+      const lab = document.createElement("div");
+      lab.className = "sg-lab";
+      lab.textContent = words.suggest || "";
+      el.appendChild(lab);
+      el.addEventListener("mousedown", ev => {
+        const b = ev.target && ev.target.closest && ev.target.closest("button");
+        if (b) ev.preventDefault();
+      });
+      el.addEventListener("click", ev => {
+        const b = ev.target && ev.target.closest && ev.target.closest("button");
+        const id = b && b.getAttribute ? b.getAttribute("data-id") : "";
+        if (id) takeSuggest(id, !!(ev.ctrlKey || ev.metaKey));
+      });
+      box.parentNode.insertBefore(el, box);
+    }
+    const lab = el.querySelector ? el.querySelector(".sg-lab") : (el.children && el.children[0]);
+    if (lab) lab.textContent = words.suggest || "";
+    const old = el.querySelectorAll ? [...el.querySelectorAll("button")] : [];
+    old.forEach(b => { if (b.remove) b.remove(); });
+    suggest.forEach((s, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = "s" + i;
+      b.className = i === sgAt ? "on" : "";
+      b.textContent = s.name || "";
+      b.setAttribute("data-id", String(s.id));
+      b.setAttribute("aria-selected", i === sgAt ? "true" : "false");
+      el.appendChild(b);
+    });
+  }
   const paint = keyed => {
     const all = list();
     if (at >= all.length) at = all.length ? all.length - 1 : 0;
@@ -7858,9 +7926,10 @@ function pickPage() {
       const head = grouped && !same(all[i - 1], r)
         ? '<li class="grp" role="presentation"><span class="t">' + esc(r.t) + '</span>' + (r.commits ? stamp() : '') + '</li>' : '';
       const key = r.again ? "Ctrl+0" : (++n <= 9 ? "Ctrl+" + n : "");
-      const cls = (grouped ? ["in"] : []).concat(i === at ? ["on"] : []);
+      const replyOn = sgAt < 0 && i === at;
+      const cls = (grouped ? ["in"] : []).concat(replyOn ? ["on"] : []);
       return head + '<li role="option" id="r' + i + '" data-i="' + i + '"' + (cls.length ? ' class="' + cls.join(" ") + '"' : '')
-        + (i === at ? ' aria-selected="true"' : ' aria-selected="false"')
+        + (replyOn ? ' aria-selected="true"' : ' aria-selected="false"')
         + (r.again ? ' title="' + esc(words.again) + '"' : '') + '>'
         + '<span class="n">' + (key ? '<kbd>' + key + '</kbd>' : '') + '</span>'
         + (grouped ? (r.tag ? '<span class="g">' + esc(r.tag) + '</span>' : '') + '<span class="x">' + esc(r.x) + '</span>'
@@ -7872,7 +7941,8 @@ function pickPage() {
     box.innerHTML = all.length ? html
       : '<li class="none" role="presentation">' + esc(q.value.trim() ? words.none : words.empty) + '</li>';
     box.scrollTop = keep;
-    q.setAttribute("aria-activedescendant", all.length ? "r" + at : "");
+    q.setAttribute("aria-activedescendant", sgAt >= 0 ? "s" + sgAt : (all.length ? "r" + at : ""));
+    paintStrip();
     box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
     if (count) count.textContent = all.length ? said : "";
     /* A key that moved the mark brings it into view, and its group's title with it at the top; the pointer's mark
@@ -7940,6 +8010,8 @@ function pickPage() {
     rows = Array.isArray(o.rows) ? o.rows : [];
     said = o.count || "";
     last = o.last || null;
+    suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
+    sgAt = -1;
     q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
     box.scrollTop = 0;
     paint(false);
@@ -7982,6 +8054,7 @@ function pickPage() {
     P.ready();
   });
   q.addEventListener("input", () => {
+    paintStrip();
     const mine = ++asked;
     P.find(q.value).then(text => {
       if (mine !== asked) return;
@@ -8007,13 +8080,37 @@ function pickPage() {
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
     if (step) {
       e.preventDefault();
+      const stripOn = suggest.length > 0 && !q.value.trim();
+      if (sgAt >= 0 && stripOn) {
+        if (Math.abs(step) === 1 && step < 0) {
+          sgAt = sgAt <= 0 ? suggest.length - 1 : sgAt - 1;
+          paint(true);
+          return;
+        }
+        if (Math.abs(step) === 1 && sgAt < suggest.length - 1) {
+          sgAt++;
+          paint(true);
+          return;
+        }
+        sgAt = -1;
+        if (Math.abs(step) === 1) { paint(true); return; }
+      } else if (stripOn && step === -1 && at === 0) {
+        sgAt = suggest.length - 1;
+        paint(true);
+        return;
+      }
       if (!all.length) return;
       /* The arrows go round; a page stops at either end. */
       at = Math.abs(step) === 1 ? (at + step + all.length) % all.length : Math.min(Math.max(at + step, 0), all.length - 1);
       paint(true);
       return;
     }
-    if (e.key === "Enter") { e.preventDefault(); take(all[at], e.shiftKey); return; }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (sgAt >= 0 && suggest[sgAt] && !q.value.trim()) { takeSuggest(suggest[sgAt].id, !!(e.ctrlKey || e.metaKey)); return; }
+      take(all[at], e.shiftKey);
+      return;
+    }
     const d = /^(Digit|Numpad)([0-9])$/.exec(e.code || "");
     if (d && e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
@@ -8066,7 +8163,7 @@ function pickPage() {
   }
   box.addEventListener("mousemove", e => {
     const li = e.target.closest && e.target.closest("li[data-i]");
-    if (li && +li.dataset.i !== at) { at = +li.dataset.i; paint(false); }
+    if (li && (+li.dataset.i !== at || sgAt >= 0)) { at = +li.dataset.i; sgAt = -1; paint(false); }
   });
   box.addEventListener("mousedown", e => e.preventDefault());
   box.addEventListener("click", e => {
@@ -8106,6 +8203,11 @@ function pickerDoc() {
     + '#lang:hover{color:var(--ink);border-color:var(--line-strong)}\n'
     + '#lang:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
     + '#lang[hidden]{display:none}\n'
+    + '#sg{flex:0 0 auto;display:flex;flex-direction:column;gap:2px;min-width:0}\n'
+    + '#sg .sg-lab{padding:0 10px 2px;color:var(--dim);font-size:12px}\n'
+    + '#sg button{box-sizing:border-box;display:block;width:100%;height:32px;margin:0;padding:0 10px;border:0;'
+    + 'border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:600 14px var(--sans);text-align:left;cursor:default}\n'
+    + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -8283,6 +8385,11 @@ function focusDesk() {
   win.show();
   win.focus();
 }
+/* The clipboard, read once when the picker opens and kept in this function only. */
+function readClipText() {
+  try { return String(clipboard.readText() || ""); }
+  catch (e) { return ""; }
+}
 /* THE HOTKEY. A second press while the picker stands closes it; otherwise the desk's page is asked
    for what to show, the picker is filled while hidden and shown only once its page says it has
    drawn, so no opening shows the last one's rows. */
@@ -8296,8 +8403,31 @@ function pickToggle() {
   const press = ++pickPress;
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
-  askDesk("open").then(open => {
+  let clip = "";
+  try { clip = readClipText(); } catch (e) { clip = ""; }
+  const want = readsLikeMessage(clip);
+  askDesk("open", want ? { profiles: 1 } : {}).then(open => {
     if (!open) { focusDesk(); return null; }
+    let showed = false;
+    if (open.profiles) {
+      if (want) {
+        try {
+          const scored = scoreSuggestions(clip, open.profiles);
+          if (scored.length) {
+            open.suggest = scored.map(r => ({ id: String(r.id), name: String(r.name || ""), score: r.score }));
+            const labels = open.profiles.labels || {};
+            open.words = Object.assign({}, open.words || {}, {
+              suggest: String(labels.suggest || ""),
+              suggestTip: String(labels.suggestTip || "")
+            });
+            showed = true;
+          }
+        } catch (err) { console.error("etiuda: suggestions could not be scored"); }
+      }
+      delete open.profiles;
+    }
+    clip = "";
+    if (showed) askDesk("suggest-open", {}).catch(() => {});
     if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
     pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
     return ensurePicker().then(() => {
@@ -8345,6 +8475,10 @@ ipcMain.handle("etiuda:pick-tab", (e, id) => {
 ipcMain.handle("etiuda:pick-lang", (e) => {
   if (!fromPicker(e)) return "null";
   return askDesk("lang", {}).then(v => JSON.stringify(v));
+});
+ipcMain.handle("etiuda:pick-intent", (e, id, multi) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("suggest-take", { id: String(id || "").slice(0, 80), multi: multi ? 1 : 0 }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and

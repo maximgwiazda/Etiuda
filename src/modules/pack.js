@@ -371,7 +371,7 @@ function migrateIntentKeys(){
   savePack();
   return "done";
 }
-const STATS_FIELDS=["useCounts","useAt","intentCounts","searchMisses","langs","dayIds","daysSince"];
+const STATS_FIELDS=["useCounts","useAt","intentCounts","searchMisses","langs","dayIds","daysSince","suggestTaken","suggestOpen"];
 /* The counts from their own keys where the desk has them (see writePack); a desk written before them
    keeps its counts inside the pack, and they are read from there until the first save moves them. */
 function withCounts(p){
@@ -431,6 +431,9 @@ function loadPack(){
   if(!pack.days||typeof pack.days!=="object"||Array.isArray(pack.days)) pack.days={};
   if(!Array.isArray(pack.dayIds)) pack.dayIds=[];
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(pack.daysSince||""))) pack.daysSince="";
+  /* Present only once a suggestion has been counted, so an older pack keeps the keys it had. */
+  if(Object.prototype.hasOwnProperty.call(pack,"suggestTaken")) pack.suggestTaken=pack.suggestTaken|0;
+  if(Object.prototype.hasOwnProperty.call(pack,"suggestOpen")) pack.suggestOpen=pack.suggestOpen|0;
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
   // null = follow the catalog; an array = the user has edited the list, [] included
   if(pack.who!=null){ if(!Array.isArray(pack.who)) pack.who=null; else pack.who=normWhoList(pack.who); }

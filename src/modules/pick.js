@@ -1,20 +1,23 @@
 import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
-import { lang, wholeThingEmpty } from "./app-state.js";
+import { cards, intentIdxs, lang, wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms } from "./spell.js";
 import { rankedCards } from "./render.js";
-import { pack } from "./pack.js";
-import { statsRecentUse } from "./desk-stats.js";
+import { eNotice, pack, saveStats } from "./pack.js";
+import { bumpSuggest, bumpSuggestOpen, statsRecentUse } from "./desk-stats.js";
 import { cardInActiveCats } from "./card-counts.js";
-import { altLabelAt, cardCommits, cardLang, cardTitle, findCard, parts } from "./card-model.js";
-import { fill } from "./intent-text.js";
+import { cardIntentLinks } from "./card-intent.js";
+import { altLabelAt, cardCommits, cardLang, cardText, cardTitle, findCard, parts } from "./card-model.js";
+import { fill, intentFieldAt, intentNavName } from "./intent-text.js";
 import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eLastRecent, eNoteRecent } from "./recency.js";
 import { wantsAgentName, withAgentName } from "./agent.js";
 import { copy, noteCopy } from "./mark.js";
 import { counted, t, uiLang } from "./ui-lang.js";
-import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
+import { CONTENT_LANGS, intentCount, nextContentLang } from "./content-model.js";
+import { intentIdAt, intentIdxOfId, isIntentHiddenIdx } from "./intent-id.js";
+import { pickIntent } from "./intent-pick.js";
+import { buildSuggestModel } from "./clip-suggest.js";
 import { activeTabName } from "./tabs.js";
-import { eNotice } from "./pack.js";
 import { tourHeardPick } from "./tour.js";
 import { hooks } from "./hooks.js";
 import { dockNow } from "./next-dock.js";
@@ -205,13 +208,82 @@ function pickChords(){
   const both=id=>[Object.assign({}, scChord(id)), Object.assign({}, scChord2(id))];
   return { tabNext:both("tabNext"), tabPrev:both("tabPrev"), tabNew:both("tabNew") };
 }
+/* The catalog the scorer reads, built when an opening asks for it and not kept. Hidden intents
+   are left out. A card's links are ids, and a numeric link is the slot it names. */
+function suggestCatalog(){
+  const tags=[];
+  const n=intentCount();
+  for(let i=0;i<n;i++){
+    if(isIntentHiddenIdx(i)) continue;
+    const id=intentIdAt(i);
+    const topic={}, clause={}, action={};
+    for(const code of CONTENT_LANGS){
+      const top=intentFieldAt(i,"topic",code);
+      const cls=intentFieldAt(i,"clause",code);
+      const act=intentFieldAt(i,"cmt",code);
+      if(top) topic[code]=top;
+      if(cls) clause[code]=cls;
+      if(act) action[code]=act;
+    }
+    const tag={kind:"request", id:id, name:intentNavName(i)};
+    if(Object.keys(topic).length) tag.topic=topic;
+    if(Object.keys(clause).length) tag.clause=clause;
+    if(Object.keys(action).length) tag.action=action;
+    tags.push(tag);
+  }
+  const visible=tags.map(tag=>tag.id);
+  const outCards=[];
+  for(const m of cards){
+    if(!m||m._hidden) continue;
+    const title={}, body={};
+    for(const code of CONTENT_LANGS){
+      const ti=cardText(m,"t",code), bo=cardText(m,"body",code);
+      if(ti) title[code]=ti;
+      if(bo) body[code]=bo;
+    }
+    const reqs=[];
+    const links=cardIntentLinks(m);
+    if(links===true){ for(const id of visible) reqs.push(id); }
+    else if(Array.isArray(links)){ for(const id of links) if(id) reqs.push(id); }
+    const card={requests:reqs};
+    if(m.k) card.k=String(m.k);
+    if(Object.keys(title).length) card.title=title;
+    if(Object.keys(body).length) card.body=body;
+    outCards.push(card);
+  }
+  return {cards:outCards, tags:tags};
+}
+function suggestModel(){
+  return buildSuggestModel(suggestCatalog(), {
+    suggest:t("Suggested from the copied message"),
+    suggestTip:t("Intents suggested from the message on the clipboard. None is chosen until one is clicked.")
+  });
+}
 function answerPick(op,argText){
   let a={};
   try{ a=JSON.parse(String(argText||"{}"))||{}; }catch(e){ a={}; }
   if(op==="open"){
     try{ tourHeardPick(); }catch(e){}
     const paxVal=pickDeskPax();
-    return Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
+    const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
+    if(a.profiles){ try{ out.profiles=suggestModel(); }catch(e){} }
+    return out;
+  }
+  if(op==="suggest-open"){
+    bumpSuggestOpen(pack);
+    saveStats();
+    return {ok:1};
+  }
+  if(op==="suggest-take"){
+    const id=String(a.id||"").slice(0,80);
+    const idx=intentIdxOfId(id);
+    if(!id||idx<0||isIntentHiddenIdx(idx)) return null;
+    const multi=!!a.multi||intentIdxs.indexOf(idx)>-1;
+    pickIntent(idx, multi);
+    bumpSuggest(pack);
+    saveStats();
+    const paxVal=pickDeskPax();
+    return Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow()}, pickFound(""));
   }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;

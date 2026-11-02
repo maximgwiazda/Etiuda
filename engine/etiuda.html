@@ -7507,6 +7507,16 @@ What you type stays in this browser only.`;
     "Replies over any window": "Odpowiedzi nad dowolnym oknem",
     "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
+    /* draft words: copywriter */
+    "Suggested from the copied message": "Propozycje na podstawie skopiowanej wiadomości",
+    /* draft words: copywriter */
+    "Intents suggested from the message on the clipboard. None is chosen until one is clicked.": "Intencje zaproponowane na podstawie wiadomości ze schowka. Żadna nie jest wybrana, dopóki się jej nie kliknie.",
+    /* draft words: copywriter */
+    "Suggestions taken: {N}": "Wybrane propozycje: {N}",
+    /* draft words: copywriter */
+    "Openings with suggestions: {N}": "Otwarcia z propozycjami: {N}",
+    /* draft words: copywriter */
+    "When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent.": "Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta, nad listą pojawia się do pięciu intencji, których może ona dotyczyć. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko w tej chwili i nigdy nie jest zapisywana ani wysyłana.",
     "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
     "{KEYS} already belongs to another program; a different combination will do.": "{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",
@@ -8170,6 +8180,16 @@ What you type stays in this browser only.`;
     const b = statsDay(pack2, at);
     b.l[code] = (b.l[code] | 0) + 1;
   }
+  function bumpSuggest(pack2, at) {
+    pack2.suggestTaken = (pack2.suggestTaken | 0) + 1;
+    const b = statsDay(pack2, at);
+    b.g = (b.g | 0) + 1;
+  }
+  function bumpSuggestOpen(pack2, at) {
+    pack2.suggestOpen = (pack2.suggestOpen | 0) + 1;
+    const b = statsDay(pack2, at);
+    b.o = (b.o | 0) + 1;
+  }
   var STATS_FORGOT = /* @__PURE__ */ new WeakMap();
   function statsForgetCards(pack2, keep) {
     const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [], gone = [];
@@ -8265,6 +8285,7 @@ What you type stays in this browser only.`;
     let uc = pack2 && pack2.useCounts || {}, at = pack2 && pack2.useAt || {}, ic = pack2 && pack2.intentCounts || {};
     let misses = (pack2 && pack2.searchMisses) | 0;
     let lc = pack2 && pack2.langs && typeof pack2.langs === "object" && !Array.isArray(pack2.langs) ? pack2.langs : {};
+    let suggestTaken = (pack2 && pack2.suggestTaken) | 0, suggestOpen = (pack2 && pack2.suggestOpen) | 0;
     let since = "";
     const pr = /* @__PURE__ */ new Map();
     if (spanned) {
@@ -8275,8 +8296,12 @@ What you type stays in this browser only.`;
       ic = {};
       lc = {};
       misses = 0;
+      suggestTaken = 0;
+      suggestOpen = 0;
       Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to).sort().forEach((d) => {
         const b = days[d] || {};
+        suggestTaken += b.g | 0;
+        suggestOpen += b.o | 0;
         Object.keys(b.c || {}).forEach((k) => {
           const id = ids[k], n = b.c[k] | 0;
           if (id != null && n) {
@@ -8333,6 +8358,8 @@ What you type stays in this browser only.`;
     if (spanned) doc.since = since;
     Object.assign(doc, { cards: cards2, intents, misses, langs });
     if (pr.size) doc.pairs = [...pr.values()].sort((x, y) => y.n - x.n || (x.from < y.from ? -1 : x.from > y.from ? 1 : 0) || (x.to < y.to ? -1 : x.to > y.to ? 1 : 0));
+    if (suggestTaken > 0) doc.suggestTaken = suggestTaken;
+    if (suggestOpen > 0) doc.suggestOpen = suggestOpen;
     if (info && info.catalog && info.catalog.id) {
       doc.catalog = { id: String(info.catalog.id), rev: +info.catalog.rev || 0 };
     }
@@ -8755,7 +8782,7 @@ What you type stays in this browser only.`;
     savePack();
     return "done";
   }
-  var STATS_FIELDS = ["useCounts", "useAt", "intentCounts", "searchMisses", "langs", "dayIds", "daysSince"];
+  var STATS_FIELDS = ["useCounts", "useAt", "intentCounts", "searchMisses", "langs", "dayIds", "daysSince", "suggestTaken", "suggestOpen"];
   function withCounts(p) {
     const map = (v) => !!v && typeof v === "object" && !Array.isArray(v);
     let st = null, older = null;
@@ -8825,6 +8852,8 @@ What you type stays in this browser only.`;
     if (!pack.days || typeof pack.days !== "object" || Array.isArray(pack.days)) pack.days = {};
     if (!Array.isArray(pack.dayIds)) pack.dayIds = [];
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(pack.daysSince || ""))) pack.daysSince = "";
+    if (Object.prototype.hasOwnProperty.call(pack, "suggestTaken")) pack.suggestTaken = pack.suggestTaken | 0;
+    if (Object.prototype.hasOwnProperty.call(pack, "suggestOpen")) pack.suggestOpen = pack.suggestOpen | 0;
     if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
     if (pack.who != null) {
       if (!Array.isArray(pack.who)) pack.who = null;
@@ -30472,10 +30501,13 @@ What you type stays in this browser only.`;
     const says = why === "taken" ? t("{KEYS} already belongs to another program; a different combination will do.") : why === "used" ? t("Browsers and chat tools already answer most combinations like {KEYS}; Ctrl+Shift with Space or a function key stays free.") : why === "altgr" ? t("{KEYS} types accented letters on many keyboards; Ctrl+Shift with Space or a function key stays free.") : why === "bare" ? t("{KEYS} alone would stop that key typing; with Ctrl or Alt it will do.") : why === "system" ? t("Windows keeps {KEYS} for itself; Ctrl+Shift with Space or a function key stays free.") : t("Etiuda takes a letter, a digit, Space or a function key, with Ctrl, Alt or Shift.");
     return says.split("{KEYS}").join(k);
   }
+  function suggestCountLine() {
+    return t("Suggestions taken: {N}").split("{N}").join(String(pack.suggestTaken | 0)) + "  " + t("Openings with suggestions: {N}").split("{N}").join(String(pack.suggestOpen | 0));
+  }
   function hotkeyRowHtml() {
     if (!hotkeyHost()) return "";
     const st = hotkeyState();
-    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
+    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent.")) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
   }
   function syncHotkeyRow(box, now) {
     const b = box.querySelector("#setHotkey"), note = box.querySelector("#setHotkeyNote");
@@ -30485,6 +30517,9 @@ What you type stays in this browser only.`;
     b.classList.toggle("sc-empty", !hkListening && !st.accel);
     b.textContent = hkListening ? t("Press keys…") : hotkeyLabel(st.accel);
     if (note) note.textContent = st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
+    const help = box.querySelector("#setSuggestNote"), counts2 = box.querySelector("#setSuggestCounts");
+    if (help) help.textContent = t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent.");
+    if (counts2) counts2.textContent = suggestCountLine();
   }
   function hotkeyListen(box, on, now) {
     hkListening = !!on;
@@ -33174,6 +33209,189 @@ What you type stays in this browser only.`;
     pickRows: () => pickRows,
     wirePick: () => wirePick
   });
+
+  // src/modules/clip-suggest.js
+  function cardTexts(m) {
+    return [m && m.title && m.title.en, m && m.title && m.title.pl, m && m.k, m && m.body && m.body.en, m && m.body && m.body.pl];
+  }
+  function tagTexts(t2) {
+    return [
+      t2 && t2.topic && t2.topic.en,
+      t2 && t2.topic && t2.topic.pl,
+      t2 && t2.clause && t2.clause.en,
+      t2 && t2.clause && t2.clause.pl,
+      t2 && t2.action && t2.action.en,
+      t2 && t2.action && t2.action.pl
+    ];
+  }
+  function buildCatalogVocab(catalog) {
+    const vocab = /* @__PURE__ */ new Map();
+    const cards2 = Array.isArray(catalog && catalog.cards) ? catalog.cards : [];
+    for (const m of cards2) {
+      const seen = /* @__PURE__ */ new Set();
+      for (const t2 of cardTexts(m)) {
+        if (!t2) continue;
+        for (const w of splitWords(t2)) if (w.length >= 4) seen.add(w);
+      }
+      for (const w of seen) vocab.set(w, (vocab.get(w) || 0) + 1);
+    }
+    const tags = Array.isArray(catalog && catalog.tags) ? catalog.tags : [];
+    for (const t2 of tags) {
+      if (!t2 || t2.kind !== "request") continue;
+      const seen = /* @__PURE__ */ new Set();
+      for (const txt of tagTexts(t2)) {
+        if (!txt) continue;
+        for (const w of splitWords(txt)) if (w.length >= 4) seen.add(w);
+      }
+      for (const w of seen) vocab.set(w, (vocab.get(w) || 0) + 1);
+    }
+    return vocab;
+  }
+  function buildAffinityWordWeights(catalog) {
+    const cards2 = Array.isArray(catalog && catalog.cards) ? catalog.cards : [];
+    const total = Math.max(cards2.length, 1);
+    const cardDf = /* @__PURE__ */ new Map();
+    for (const m of cards2) {
+      const seen = /* @__PURE__ */ new Set();
+      for (const t2 of cardTexts(m)) {
+        if (!t2) continue;
+        for (const w of splitWords(t2)) seen.add(w);
+      }
+      for (const w of seen) cardDf.set(w, (cardDf.get(w) || 0) + 1);
+    }
+    const weights = /* @__PURE__ */ new Map();
+    for (const [w, n] of cardDf) {
+      const share = n / total;
+      weights.set(w, share > 0.15 ? 0 : share > 0.08 ? 0.5 : 1);
+    }
+    return weights;
+  }
+  function intentName(tag) {
+    if (!tag) return "";
+    if (typeof tag.name === "string") return tag.name;
+    const n = tag.name || {};
+    return String(n.en || n.pl || "");
+  }
+  function buildProfiles(catalog) {
+    const cards2 = Array.isArray(catalog && catalog.cards) ? catalog.cards : [];
+    const tags = (Array.isArray(catalog && catalog.tags) ? catalog.tags : []).filter((t2) => t2 && t2.kind === "request");
+    const kwIntents = /* @__PURE__ */ new Map();
+    const titleIntents = /* @__PURE__ */ new Map();
+    for (const m of cards2) {
+      const reqs = Array.isArray(m.requests) ? m.requests.map(String) : [];
+      if (!reqs.length) continue;
+      if (m.k) {
+        for (const w of splitWords(m.k)) {
+          let s = kwIntents.get(w);
+          if (!s) {
+            s = /* @__PURE__ */ new Set();
+            kwIntents.set(w, s);
+          }
+          for (const id of reqs) s.add(id);
+        }
+      }
+      for (const code of ["en", "pl"]) {
+        const title = m.title && m.title[code];
+        if (!title) continue;
+        for (const w of splitWords(title)) {
+          let s = titleIntents.get(w);
+          if (!s) {
+            s = /* @__PURE__ */ new Set();
+            titleIntents.set(w, s);
+          }
+          for (const id of reqs) s.add(id);
+        }
+      }
+    }
+    const profiles = [];
+    for (const req of tags) {
+      const id = String(req.id || "");
+      if (!id) continue;
+      const tier1 = /* @__PURE__ */ new Set();
+      const tier2 = /* @__PURE__ */ new Set();
+      const tier3 = /* @__PURE__ */ new Map();
+      const topicWords = [];
+      const clauseWords = [];
+      for (const code of ["en", "pl"]) {
+        const top = req.topic && req.topic[code];
+        if (top) for (const w of splitWords(top)) {
+          tier1.add(w);
+          topicWords.push(w);
+        }
+        const cls = req.clause && req.clause[code];
+        if (cls) for (const w of splitWords(cls)) {
+          tier1.add(w);
+          clauseWords.push(w);
+        }
+        const act = req.action && req.action[code];
+        if (act) for (const w of splitWords(act)) tier1.add(w);
+      }
+      const linked = cards2.filter((m) => (m.requests || []).map(String).indexOf(id) > -1);
+      for (const m of linked) {
+        if (m.k) {
+          for (const w of splitWords(m.k)) {
+            const reach = kwIntents.get(w) ? kwIntents.get(w).size : 0;
+            if (reach <= 2 && !tier1.has(w)) tier2.add(w);
+          }
+        }
+        for (const code of ["en", "pl"]) {
+          const title = m.title && m.title[code];
+          if (!title) continue;
+          for (const w of splitWords(title)) {
+            const reach = titleIntents.get(w) ? titleIntents.get(w).size : 0;
+            if (reach <= 3 && !tier1.has(w)) tier2.add(w);
+          }
+        }
+        if ((m.requests || []).length <= 2) {
+          for (const code of ["en", "pl"]) {
+            const body = m.body && m.body[code];
+            if (!body) continue;
+            for (const w of splitWords(body)) {
+              if (tier1.has(w) || tier2.has(w)) continue;
+              tier3.set(w, Math.max(tier3.get(w) || 0, 1));
+            }
+          }
+        }
+      }
+      profiles.push({ id, name: intentName(req), tier1, tier2, tier3, topicWords, clauseWords });
+    }
+    return profiles;
+  }
+  function applyBodyFilter(profiles, weights) {
+    for (const p of profiles) {
+      const next = /* @__PURE__ */ new Map();
+      for (const [w] of p.tier3) {
+        const mult = weights.has(w) ? weights.get(w) : 1;
+        if (mult > 0) next.set(w, mult);
+      }
+      p.tier3 = next;
+    }
+  }
+  function buildSuggestModel(catalog, labels) {
+    const weights = buildAffinityWordWeights(catalog || {});
+    const profiles = buildProfiles(catalog || {});
+    applyBodyFilter(profiles, weights);
+    const vocab = buildCatalogVocab(catalog || {});
+    return {
+      vocab: [...vocab.entries()],
+      weights: [...weights.entries()],
+      intents: profiles.map((p) => ({
+        id: p.id,
+        name: p.name,
+        tier1: [...p.tier1],
+        tier2: [...p.tier2],
+        tier3: [...p.tier3.entries()],
+        topic: p.topicWords,
+        clause: p.clauseWords
+      })),
+      labels: {
+        suggest: String(labels && labels.suggest || ""),
+        suggestTip: String(labels && labels.suggestTip || "")
+      }
+    };
+  }
+
+  // src/modules/pick.js
   var PICK_ROWS = 50;
   var PICK_LOOK = [
     "--panel",
@@ -33368,6 +33586,58 @@ What you type stays in this browser only.`;
     const both = (id) => [Object.assign({}, scChord(id)), Object.assign({}, scChord2(id))];
     return { tabNext: both("tabNext"), tabPrev: both("tabPrev"), tabNew: both("tabNew") };
   }
+  function suggestCatalog() {
+    const tags = [];
+    const n = intentCount();
+    for (let i = 0; i < n; i++) {
+      if (isIntentHiddenIdx(i)) continue;
+      const id = intentIdAt(i);
+      const topic = {}, clause = {}, action = {};
+      for (const code of CONTENT_LANGS) {
+        const top = intentFieldAt(i, "topic", code);
+        const cls = intentFieldAt(i, "clause", code);
+        const act = intentFieldAt(i, "cmt", code);
+        if (top) topic[code] = top;
+        if (cls) clause[code] = cls;
+        if (act) action[code] = act;
+      }
+      const tag = { kind: "request", id, name: intentNavName(i) };
+      if (Object.keys(topic).length) tag.topic = topic;
+      if (Object.keys(clause).length) tag.clause = clause;
+      if (Object.keys(action).length) tag.action = action;
+      tags.push(tag);
+    }
+    const visible = tags.map((tag) => tag.id);
+    const outCards = [];
+    for (const m of cards) {
+      if (!m || m._hidden) continue;
+      const title = {}, body = {};
+      for (const code of CONTENT_LANGS) {
+        const ti = cardText(m, "t", code), bo = cardText(m, "body", code);
+        if (ti) title[code] = ti;
+        if (bo) body[code] = bo;
+      }
+      const reqs = [];
+      const links = cardIntentLinks(m);
+      if (links === true) {
+        for (const id of visible) reqs.push(id);
+      } else if (Array.isArray(links)) {
+        for (const id of links) if (id) reqs.push(id);
+      }
+      const card = { requests: reqs };
+      if (m.k) card.k = String(m.k);
+      if (Object.keys(title).length) card.title = title;
+      if (Object.keys(body).length) card.body = body;
+      outCards.push(card);
+    }
+    return { cards: outCards, tags };
+  }
+  function suggestModel() {
+    return buildSuggestModel(suggestCatalog(), {
+      suggest: t("Suggested from the copied message"),
+      suggestTip: t("Intents suggested from the message on the clipboard. None is chosen until one is clicked.")
+    });
+  }
   function answerPick(op, argText) {
     let a = {};
     try {
@@ -33381,7 +33651,30 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
       const paxVal = pickDeskPax();
-      return Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound(""));
+      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound(""));
+      if (a.profiles) {
+        try {
+          out.profiles = suggestModel();
+        } catch (e) {
+        }
+      }
+      return out;
+    }
+    if (op === "suggest-open") {
+      bumpSuggestOpen(pack);
+      saveStats();
+      return { ok: 1 };
+    }
+    if (op === "suggest-take") {
+      const id = String(a.id || "").slice(0, 80);
+      const idx = intentIdxOfId(id);
+      if (!id || idx < 0 || isIntentHiddenIdx(idx)) return null;
+      const multi = !!a.multi || intentIdxs.indexOf(idx) > -1;
+      pickIntent(idx, multi);
+      bumpSuggest(pack);
+      saveStats();
+      const paxVal = pickDeskPax();
+      return Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, last: pickLastRow() }, pickFound(""));
     }
     if (op === "tab") {
       if (a.id !== "tabNext" && a.id !== "tabPrev" && a.id !== "tabNew") return null;
