@@ -6,24 +6,28 @@
  * The page is the engine beside the fixtures folder's format 2 catalog, in headless Chrome.
  *
  * WHAT IS MEASURED. Computed style says the ring is painted and the old bevel is off, per theme, on every
- * macro and on the panel and a dialog. The eye's part is pixels: the macro is photographed whole at 1:1
- * and the brightness of its edge row at 30 px from the top-left corner along the top is read against the same
+ * macro and on the panel and a dialog. The eye's part is pixels: three lone slabs are photographed whole at 1:1
+ * and the brightness of each edge row at 30 px from the top-left corner along the top is read against the same
  * distance down the left edge, and the bottom-right corner likewise, each less the edge's resting level.
  * A lit top and bottom and a dark side is the claim, and so is a peak below the first pass's (bdf6120).
  * A 1px line reads thicker the brighter it is, so thickness is read as brightness at both ends of the top and of
  * the bottom (30 px in from each corner): an edge's dimmer end must hold at least 60 per cent of its brighter
  * end, and the top must read as the bottom does, end for end (the bottom-right as the top-left, the bottom-left
- * as the top-right) within 8 per cent. The row profile across the edge was measured separately: one row, no
- * second line under the rim, at a device pixel ratio of 1 and 2.
+ * as the top-right) within 8 per cent. The row profile is read on the same slab as the 1.25 case, at a device
+ * pixel ratio of 1 and of 2, each with the top on a whole CSS pixel: one row, no second line under the rim.
  *
  * THE FRACTIONAL RATIOS (125 and 150 per cent displays). A masked ring is not snapped to device pixels, so it split
- * the line over two rows, differently at the top and the bottom; the ring is now a real 1px border, which is. Each
- * ratio gets its own headless Chrome with --force-device-scale-factor (the emulated ratio does not snap borders the way
- * a real display does, so it would prove nothing), the macro is photographed whole at the device's own pixels, and
- * at three places along the top and the bottom (30 px in from each end and the middle) the rows are read: the same
- * number of rows above half of the line's own peak at the top and the bottom, and the equivalent width (the rows'
- * brightness above the card, over the peak row, in CSS pixels) within 0.1 of a pixel between them. The control is
- * the previous pass's masked ring injected in the same launch, which must read the two apart.
+ * the line over two rows, differently at the top and the bottom, and only where an edge lands between device pixels.
+ * The ring is now a real 1px border, which is snapped. Each ratio gets its own headless Chrome with
+ * --force-device-scale-factor (the emulated ratio does not snap borders the way a real display does, so it would prove
+ * nothing). The slab is photographed whole at the device's own pixels, and at three places along the top and the
+ * bottom (30 px in from each end and the middle) the rows are read: one CSS pixel is one row (the device rows at or
+ * above half of the line's own peak; two device pixels of a 1px border at a ratio of 2 are one row), and the
+ * equivalent width (that light over the peak, in CSS pixels) within 0.1 of a pixel between them. Light below half
+ * the peak is not the line. The control is the previous pass's masked ring injected in
+ * the same launch, which must read the two apart. It centres the lone slab whose top or bottom, times the ratio, has
+ * a fractional part nearest one half. At 1.25 and 1.5 the box stays at that centred position, since those
+ * reads are about an edge between device pixels. At 1.25 that same slab is also read at ratios 1 and 2, after the top has been moved onto a whole CSS pixel.
  *
  * THE OTHER RAISED SURFACES. The menus, Quick facts, the opened pill bar and the peeking intent panel wear the same ring
  * inside their border and their bevel is off, in dark; in light none of them does. Each is opened in a launch of its own
@@ -115,25 +119,127 @@ const styles = (pg, sel) => pg.evaluate(s => [...document.querySelectorAll(s)].m
            bg: a.backgroundImage, shadow: c.boxShadow };
 }), sel);
 
-/* The macro with room: the tallest on the page, brought to the middle of the window. Never a reply tucked behind its
-   deck's front, whose layout box is whole while its paint is moved, narrowed and cut. */
-const pickMacro = pg => pg.evaluate(() => {
-  const all = [...document.querySelectorAll(".txt:not(.deck-back)")].filter(e => e.offsetWidth > 300);
-  all.sort((x, y) => y.offsetHeight - x.offsetHeight);
-  const el = all[0];
-  if (!el) return null;
-  document.querySelectorAll("[data-rim-probe]").forEach(x => x.removeAttribute("data-rim-probe"));
-  el.scrollIntoView({ block: "center" });
-  el.setAttribute("data-rim-probe", "1");
-  return true;
-});
+/* A lone slab is the only macro on its card, the first reply, not a tucked deck reply, and in the first column.
+   The first column is the column box at the list's left edge. A list that has no columns is that one column.
+   The height floor is the pixel leg's own (at least 70). Off-screen cards report a stand-in size until measured. */
+async function loneSlabs(pg) {
+  return pg.evaluate(async () => {
+    document.querySelectorAll("[data-rim-ord]").forEach(x => x.removeAttribute("data-rim-ord"));
+    for (const e of document.querySelectorAll(".txt")) void e.offsetHeight;
+    const cols = [...document.querySelectorAll("#list > .col")];
+    const left0 = cols.length ? Math.min(...cols.map(c => c.offsetLeft)) : 0;
+    let otherCol = 0, otherTall = 0;
+    const found = [...document.querySelectorAll("#list .txt")].filter(e => {
+      if (e.classList.contains("deck-back") || e.getAttribute("data-v") !== "0") return false;
+      const card = e.closest(".card");
+      if (!card || card.querySelectorAll(".txt").length !== 1) return false;
+      if (e.offsetHeight < 70) return false;
+      if (!cols.length) return true;
+      const col = card.closest(".col");
+      const inFirst = !!col && Math.abs(col.offsetLeft - left0) <= 1;
+      if (!inFirst) { otherCol++; if (e.offsetHeight > otherTall) otherTall = e.offsetHeight; return false; }
+      return true;
+    });
+    const placed = [];
+    for (let i = 0; i < found.length; i++) {
+      const el = found[i];
+      let q = null, h = 0, wholly = false;
+      for (let go = 0; go < 4 && !wholly; go++) {
+        el.scrollIntoView({ block: "center" });
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        q = el.getBoundingClientRect();
+        h = el.offsetHeight;
+        wholly = h >= 70 && q.top > 60 && q.bottom < innerHeight - 40;
+      }
+      if (!wholly) continue;
+      el.setAttribute("data-rim-ord", String(i));
+      placed.push({ ord: i, h: h, top: q.top, bottom: q.bottom, w: Math.round(q.width) });
+    }
+    placed.sort((a, b) => (a.h - b.h) || (a.ord - b.ord));
+    return { seen: found.length, placed: placed, otherCol: otherCol, otherTall: otherTall };
+  });
+}
 
-/* The list lays out lazily, so one scroll can land short: bring the probe macro to the middle again until it is
+/* Shortest, lower median, tallest. The lower median is the earlier of the two central slabs when the count is even. */
+function threeSlabs(packed) {
+  const rows = packed && packed.placed;
+  if (!rows || rows.length < 3) return null;
+  const mid = Math.floor((rows.length - 1) / 2);
+  return [rows[0], rows[mid], rows[rows.length - 1]];
+}
+
+/* Fractional part of an edge in device pixels, and how near it is to the half pixel where a masked ring splits. */
+function fracPart(edge, ratio) {
+  const x = edge * ratio;
+  return x - Math.floor(x);
+}
+function halfEdge(row, ratio) {
+  let best = null;
+  for (const which of ["top", "bottom"]) {
+    const frac = fracPart(row[which], ratio);
+    const dist = Math.abs(frac - 0.5);
+    if (!best || dist < best.dist) best = { which: which, frac: frac, dist: dist };
+  }
+  return best;
+}
+function splitSlab(rows, ratio) {
+  let best = null;
+  for (const row of rows) {
+    const edge = halfEdge(row, ratio);
+    const cand = { ord: row.ord, h: row.h, which: edge.which, frac: edge.frac, dist: edge.dist };
+    if (!best || cand.dist < best.dist - 1e-9 || (Math.abs(cand.dist - best.dist) <= 1e-9 && cand.ord < best.ord)) best = cand;
+  }
+  return best;
+}
+
+async function markSlab(pg, ord) {
+  const ok = await pg.evaluate(ord => {
+    document.querySelectorAll("[data-rim-probe]").forEach(x => x.removeAttribute("data-rim-probe"));
+    const el = document.querySelector('#list .txt[data-rim-ord="' + ord + '"]');
+    if (!el) return false;
+    el.setAttribute("data-rim-probe", "1");
+    return true;
+  }, ord);
+  if (!ok) throw new Error("the marked slab is not on the page");
+}
+
+/* Ratios 1 and 2 read an on-grid box. A centred top can fall on a half pixel, which is not a claim the rim
+   makes, so the top is moved by that fractional part until it is a whole CSS pixel. The scroller is asked
+   first. At a ratio of 2 a half pixel is one device pixel and the scroll keeps it. At a ratio of 1 the
+   scroller rounds a half pixel away, so the scroll is put back and the same part is taken off the card's
+   top margin, which moves the box and the painted line together. The top is printed either way. */
+async function sitWhole(pg) {
+  const moved = await pg.evaluate(async () => {
+    const el = document.querySelector("[data-rim-probe]");
+    const sc = document.getElementById("pageScroll") || document.scrollingElement;
+    const before = el.getBoundingClientRect().top;
+    const frac = before - Math.floor(before);
+    if (frac < 0.01) return { top: before, how: "already" };
+    const s0 = sc.scrollTop;
+    sc.scrollTop = s0 + frac;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const stuck = Math.abs(sc.scrollTop - (s0 + frac)) < 0.02;
+    let top = el.getBoundingClientRect().top;
+    if (stuck && Math.abs(top - Math.round(top)) < 0.01) return { top: top, how: "scroll", from: before };
+    sc.scrollTop = s0;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const card = el.closest(".card") || el;
+    const had = parseFloat(getComputedStyle(card).marginTop) || 0;
+    card.style.marginTop = (had - frac) + "px";
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+    top = el.getBoundingClientRect().top;
+    return { top: top, how: "margin", from: before };
+  });
+  console.log("       top after the nudge " + moved.top.toFixed(3) + (moved.how === "already" ? "" : ", " + moved.how));
+  return moved.top;
+}
+
+/* The list lays out lazily, so one scroll can land short: bring the marked slab to the middle again until it is
    wholly in the window and its box has held still for ten frames. */
 async function settle(pg) {
-  await pickMacro(pg);
   const inView = await pg.evaluate(async () => {
     const el = document.querySelector("[data-rim-probe]");
+    if (!el) return false;
     for (let go = 0; go < 8; go++) {
       el.scrollIntoView({ block: "center" });
       let last = "", same = 0;
@@ -155,10 +261,11 @@ async function settle(pg) {
    under the very rectangle it was asked for.
 
    Edge-row brightness, 1:1: the red channel of the border row at D px along the top, and of the border
-   column at D px down the left side, each less the resting level read at the left edge's middle. The box is
-   whole pixels (the macro is laid on the pixel grid) and the read says if it was not. */
+   column at D px down the left side, each less the resting level read at the left edge's middle. Ratios 1 and 2
+   sit the box on a whole CSS pixel first, and the read says if the top was not one. */
 async function lift(pg) {
   await settle(pg);
+  await sitWhole(pg);
   const r = await pg.evaluate(() => {
     const el = document.querySelector("[data-rim-probe]");
     const q = el.getBoundingClientRect();
@@ -185,16 +292,19 @@ async function lift(pg) {
   const L = k => read[k] - read.rest;
   return { top: L("top"), side: L("side"), rest: read.rest, peak: L("peak"), far: L("far"), mid: L("mid"),
            bot: L("bot"), bside: L("bside"), tr: L("tr"), bl: L("bl"),
-           whole: Math.abs(r.x - x0) < 0.01 && Math.abs(r.y - y0) < 0.01, h: r.h };
+           whole: Math.abs(r.x - x0) < 0.01 && Math.abs(r.y - y0) < 0.01, h: r.h, y: r.y };
 }
 
 /* The rows across the top edge and the bottom edge of the probe macro at the device's own pixels: the whole window is
    photographed (no clip to round), the edge rows are the box's rounded top and bottom, and at three places along each
    the red channel is read from outside to inside (top) and inside to outside (bottom). The card's own level inside is
-   the rest; the page outside is darker than it, so only brightness above the rest counts. rows: those above half the
-   line's peak; width: all of it over the peak row, in CSS pixels (a device pixel is 1 / ratio of one). */
-async function edgeRows(pg, ratio) {
+   the rest; the page outside is darker than it, so only brightness above the rest counts. A row is one CSS pixel of
+   the line: the device rows at or above half the line's own peak, and the two device pixels of a 1px border at a
+   ratio of 2 share one. The width is that light over the peak, in CSS pixels. Light below half the peak is not the
+   line, so dividing the whole window by the peak is not a width. */
+async function edgeRows(pg, ratio, onGrid) {
   await settle(pg);
+  if (onGrid) await sitWhole(pg);
   const r = await pg.evaluate(() => {
     const q = document.querySelector("[data-rim-probe]").getBoundingClientRect();
     return { t: q.top, b: q.bottom, l: q.left, r: q.right };
@@ -217,7 +327,11 @@ async function edgeRows(pg, ratio) {
       const rest = a[a.length - 1];
       const e = a.map(v => Math.max(0, v - rest));
       const peak = Math.max(...e);
-      return { peak, rows: e.filter(v => v > 0 && v >= peak / 2).length, width: e.reduce((p, q) => p + q, 0) / Math.max(peak, 1) / d };
+      const on = [];
+      for (let i = 0; i < e.length; i++) if (e[i] > 0 && e[i] >= peak / 2) on.push(i);
+      const css = new Set(on.map(i => Math.floor((y0 + dy * (i - span)) / d)));
+      const sum = on.reduce((p, i) => p + e[i], 0);
+      return { peak, rows: css.size, width: sum / Math.max(peak, 1) / d };
     };
     return { ratio: d, top: xs.map(x => read(x, topRow, 1)), bot: xs.map(x => read(x, botRow, -1)) };
   }, png, r, ratio, D);
@@ -230,8 +344,10 @@ const sameRows = e => e.top.every((t, i) => t.peak >= 30 && e.bot[i].peak >= 30 
 /* The previous ring is seen apart when any place has a different number of rows or a width gap past two tenths. */
 const seenApart = e => e.top.some((t, i) => t.rows !== e.bot[i].rows || Math.abs(t.width - e.bot[i].width) > 0.2);
 
-/* A launch of its own at a real device pixel ratio, the page booted the way the main read is. */
-async function atRatio(ratio) {
+/* A launch of its own at a real device pixel ratio, the page booted the way the main read is.
+   "masked" photographs the real ring and then the masked ring, on the slab whose edge at this ratio is nearest a half pixel.
+   "real" photographs the real ring only, on the slab chosen by that same rule at 1.25, which is the control's slab. */
+async function atRatio(ratio, mode) {
   const RUN2 = E.runFolder("catalogV2", "sampleV2");
   let b2;
   try {
@@ -240,13 +356,30 @@ async function atRatio(ratio) {
     const q = await b2.newPage();
     q.on("dialog", d => d.accept());
     await bootAndDismiss(q, RUN2.url);
+    await setTheme(q, "dark");
+    const packed = await loneSlabs(q);
+    const pickAt = mode === "real" ? 1.25 : ratio;
+    const best = splitSlab(packed.placed, pickAt);
+    if (!best) throw new Error("no lone slab wholly in the window at ratio " + ratio);
+    console.log("       ratio " + ratio + ", " + packed.placed.length + " lone slabs wholly in the window (" + packed.seen + " centred), pick at "
+      + pickAt + ": " + best.h + " px, " + best.which + " fractional part " + best.frac.toFixed(3) + " (distance " + best.dist.toFixed(3) + ")");
+    await markSlab(q, best.ord);
     const dpr = await q.evaluate(() => devicePixelRatio);
-    await setTheme(q, "dark");
-    const now = await edgeRows(q, dpr);
-    await q.addStyleTag({ content: MASKED });
-    await setTheme(q, "dark");
-    const old = await edgeRows(q, dpr);
-    return { dpr, now, old };
+    const now = await edgeRows(q, dpr, mode === "real");
+    const photo = await q.evaluate(() => {
+      const r = document.querySelector("[data-rim-probe]").getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, h: r.height };
+    });
+    const photoFrac = fracPart(photo[best.which], pickAt);
+    console.log("       ratio " + ratio + " photographed " + Math.round(photo.h) + " px, " + best.which + " times " + pickAt
+      + " fractional part " + photoFrac.toFixed(3));
+    let old = null;
+    if (mode !== "real") {
+      await q.addStyleTag({ content: MASKED });
+      await setTheme(q, "dark");
+      old = await edgeRows(q, dpr, false);
+    }
+    return { dpr, now, old, best, photoFrac, photoH: photo.h };
   } finally {
     try { if (b2) await b2.close(); } catch (x) {}
     RUN2.drop();
@@ -362,6 +495,25 @@ const ends = m => ({
   tbGap: Math.max(Math.abs(m.top - m.bot) / Math.max(m.top, m.bot, 1), Math.abs(m.tr - m.bl) / Math.max(m.tr, m.bl, 1)) });
 const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topRatio.toFixed(2) + "), bottom " + m.bot + " and " + m.bl
   + " (ratio " + e.botRatio.toFixed(2) + "), top against bottom end for end differ by " + (100 * e.tbGap).toFixed(1) + " per cent";
+const liftLog = (label, m) => console.log("       " + label + ", " + D + " px from the corner, less the edge at rest (" + m.rest + "): top " + m.top + ", side " + m.side
+  + ", peak (best of 10, 20, 30 px) " + m.peak + ", top at 120 px " + m.far + ", top at the middle " + m.mid
+  + ", bottom " + m.bot + ", right side " + m.bside + ", macro " + Math.round(m.h) + " px high, top edge " + m.y.toFixed(3) + ", grid " + m.whole);
+const slabVerdict = (ms, pred) => ms.length === 3
+  ? ms.map(m => Math.round(m.h) + " px " + (pred(m) ? "held" : "red")).join(", ")
+  : "no three slabs";
+const pairVerdict = (darks, others, pred) => (darks.length === 3 && others.length === 3)
+  ? darks.map((m, i) => Math.round(m.h) + " px " + (pred(m, others[i]) ? "held" : "red")).join(", ")
+  : "no three slabs";
+async function readMarked(pg, three, label) {
+  const out = [];
+  for (const s of three) {
+    await markSlab(pg, s.ord);
+    const m = await lift(pg);
+    out.push(m);
+    liftLog(label + ", slab " + Math.round(m.h) + " px", m);
+  }
+  return out;
+}
 
 (async () => {
   const RUN = E.runFolder("catalogV2", "sampleV2");
@@ -404,57 +556,78 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
     check(!!dlg && dlg.rim && dlg.pos === "absolute" && dlg.w > 200 && dlg.h > 100,
       "9gr4 dark: a dialog, open (" + (dlg && dlg.w) + " x " + (dlg && dlg.h) + "), paints the rim");
 
-    const mine = await lift(p);
-    console.log("       dark, " + D + " px from the corner, less the edge at rest (" + mine.rest + "): top " + mine.top + ", side " + mine.side
-      + ", peak (best of 10, 20, 30 px) " + mine.peak + ", top at 120 px " + mine.far + ", top at the middle " + mine.mid
-      + ", bottom " + mine.bot + ", right side " + mine.bside + ", macro " + Math.round(mine.h) + " px high");
-    check(mine.whole && mine.h >= 70 && mine.top >= 50 && mine.top >= 4 * Math.max(mine.side, 1),
-      "9gr5 dark: along the top the rim is at least 50 and at least four times its brightness down the side, at " + D + " px");
-    check(mine.bot >= 40 && mine.bot >= 4 * Math.max(mine.bside, 1) && mine.far >= 10 && mine.mid >= 4,
-      "9gr10 dark: the bottom's right is lit and its side dark likewise, and the line holds along the top (120 px, middle)");
-
-    const eMine = ends(mine);
-    console.log("       the line's ends, brightness above rest: " + endsLine(mine, eMine));
-    check(mine.whole && eMine.topRatio >= 0.6 && eMine.botRatio >= 0.6,
-      "9gr12 dark: along the top and along the bottom the dimmer end holds at least 60 per cent of the brighter, so the line reads as one thickness");
-    check(mine.whole && eMine.tbGap <= 0.08,
-      "9gr13 dark: the top line reads as the bottom line does, end for end, within 8 per cent");
+    const packed = await loneSlabs(p);
+    const three = threeSlabs(packed);
+    console.log("       lone slabs in the first column, at least 70 px, wholly in the window after centring: "
+      + packed.placed.length + " of " + packed.seen + "; other columns " + packed.otherCol + ", tallest there " + packed.otherTall + " px");
+    console.log("       picks, shortest, lower median, tallest: " + (three ? three.map(s => s.h + " px (top " + s.top.toFixed(3) + ")").join(", ") : "fewer than three"));
+    let darks = [];
+    if (three) darks = await readMarked(p, three, "dark");
+    for (const m of darks) console.log("       the line's ends, slab " + Math.round(m.h) + " px, brightness above rest: " + endsLine(m, ends(m)));
+    const mine = darks[1] || { top: 0, side: 1, peak: 0 };
+    const pred5 = m => m.whole && m.h >= 70 && m.top >= 50 && m.top >= 4 * Math.max(m.side, 1);
+    const pred10 = m => m.bot >= 40 && m.bot >= 4 * Math.max(m.bside, 1) && m.far >= 10 && m.mid >= 4;
+    const pred12 = m => { const e = ends(m); return m.whole && e.topRatio >= 0.6 && e.botRatio >= 0.6; };
+    const pred13 = m => { const e = ends(m); return m.whole && e.tbGap <= 0.08; };
+    check(darks.length === 3 && darks.every(pred5),
+      "9gr5 dark: along the top the rim is at least 50 and at least four times its brightness down the side, at " + D + " px, on " + slabVerdict(darks, pred5));
+    check(darks.length === 3 && darks.every(pred10),
+      "9gr10 dark: the bottom's right is lit and its side dark likewise, and the line holds along the top (120 px, middle), on " + slabVerdict(darks, pred10));
+    check(darks.length === 3 && darks.every(pred12),
+      "9gr12 dark: along the top and along the bottom the dimmer end holds at least 60 per cent of the brighter, so the line reads as one thickness, on " + slabVerdict(darks, pred12));
+    check(darks.length === 3 && darks.every(pred13),
+      "9gr13 dark: the top line reads as the bottom line does, end for end, within 8 per cent, on " + slabVerdict(darks, pred13));
 
     await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + PASS1 + "!important}" });
     await setTheme(p, "dark");
-    const pass1 = await lift(p);
-    console.log("       dark with the first pass's gradient (bdf6120): top " + pass1.top + ", side " + pass1.side + ", peak " + pass1.peak);
-    check(pass1.peak > 100 && mine.peak <= 0.75 * pass1.peak && mine.peak >= 0.25 * pass1.peak,
-      "9gr11 dark: the peak (" + mine.peak + ") is quieter than the first pass's (" + pass1.peak + "), at most three quarters of it, and still a line");
+    let pass1 = null;
+    if (three) {
+      await markSlab(p, three[1].ord);
+      pass1 = await lift(p);
+      console.log("       dark with the first pass's gradient (bdf6120), slab " + Math.round(pass1.h) + " px: top " + pass1.top + ", side " + pass1.side + ", peak " + pass1.peak);
+    }
+    check(!!pass1 && pass1.peak > 100 && mine.peak <= 0.75 * pass1.peak && mine.peak >= 0.25 * pass1.peak,
+      "9gr11 dark: the peak (" + mine.peak + ") is quieter than the first pass's (" + (pass1 ? pass1.peak : "none") + "), at most three quarters of it, and still a line");
     await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + ROUND + "!important}" });
     await setTheme(p, "dark");
-    const round = await lift(p);
-    console.log("       dark with the first draft's 240 x 96 catch: top " + round.top + ", side " + round.side);
-    check(round.top > 0 && mine.top / Math.max(mine.side, 1) >= 1.5 * (round.top / Math.max(round.side, 1)),
-      "9GR5 control: the first draft's round catch gives a ratio at most two thirds of the tilted one's");
+    const rounds = three ? await readMarked(p, three, "dark with the first draft's 240 x 96 catch") : [];
+    const predGR5 = (mine, round) => round.top > 0 && mine.top / Math.max(mine.side, 1) >= 1.5 * (round.top / Math.max(round.side, 1));
+    check(darks.length === 3 && rounds.length === 3 && darks.every((m, i) => predGR5(m, rounds[i])),
+      "9GR5 control: the first draft's round catch gives a ratio at most two thirds of the tilted one's, on " + pairVerdict(darks, rounds, predGR5));
 
     await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + PASS2 + "!important}" });
     await setTheme(p, "dark");
-    const pass2 = await lift(p);
-    const e2 = ends(pass2);
-    console.log("       dark with the previous pass's gradient (9e44127): " + endsLine(pass2, e2));
-    check(e2.topRatio < 0.5 && e2.botRatio < 0.5 && e2.tbGap > 0.08 && eMine.tbGap < e2.tbGap,
-      "9GR12 control: the previous pass's gradient fails both reads (ends under half, top and bottom apart), so they can tell it from this one");
+    const pass2s = three ? await readMarked(p, three, "dark with the previous pass's gradient (9e44127)") : [];
+    for (const m of pass2s) console.log("       previous pass, slab " + Math.round(m.h) + " px: " + endsLine(m, ends(m)));
+    const predGR12 = (mine, pass2) => {
+      const e2 = ends(pass2), eMine = ends(mine);
+      return e2.topRatio < 0.5 && e2.botRatio < 0.5 && e2.tbGap > 0.08 && eMine.tbGap < e2.tbGap;
+    };
+    check(darks.length === 3 && pass2s.length === 3 && darks.every((m, i) => predGR12(m, pass2s[i])),
+      "9GR12 control: the previous pass's gradient fails both reads (ends under half, top and bottom apart), so they can tell it from this one, on " + pairVerdict(darks, pass2s, predGR12));
 
-    const f125 = await atRatio(1.25);
+    const f125 = await atRatio(1.25, "masked");
+    const f1 = await atRatio(1, "real");
+    const f2 = await atRatio(2, "real");
     console.log("       ratio " + f125.dpr + ", this ring: " + edgeLine(f125.now));
     console.log("       ratio " + f125.dpr + ", the masked ring (eacc361): " + edgeLine(f125.old));
-    check(f125.dpr === 1.25 && sameRows(f125.now),
-      "9gr14 dark at a device pixel ratio of 1.25: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle");
+    console.log("       ratio " + f1.dpr + ", this ring: " + edgeLine(f1.now));
+    console.log("       ratio " + f2.dpr + ", this ring: " + edgeLine(f2.now));
+    check(f125.dpr === 1.25 && sameRows(f125.now) && f1.dpr === 1 && sameRows(f1.now) && f2.dpr === 2 && sameRows(f2.now),
+      "9gr14 dark at a device pixel ratio of 1.25: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle, on the "
+      + Math.round(f125.photoH) + " px slab (fractional part " + f125.photoFrac.toFixed(3) + "), and at ratios 1 (" + Math.round(f1.photoH) + " px) and 2 (" + Math.round(f2.photoH) + " px)");
     check(f125.dpr === 1.25 && seenApart(f125.old),
-      "9GR14 control at 1.25: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one");
-    const f150 = await atRatio(1.5);
+      "9GR14 control at 1.25: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one, on the "
+      + Math.round(f125.photoH) + " px slab whose " + f125.best.which + " times 1.25 has fractional part " + f125.photoFrac.toFixed(3));
+    const f150 = await atRatio(1.5, "masked");
     console.log("       ratio " + f150.dpr + ", this ring: " + edgeLine(f150.now));
     console.log("       ratio " + f150.dpr + ", the masked ring (eacc361): " + edgeLine(f150.old));
     check(f150.dpr === 1.5 && sameRows(f150.now),
-      "9gr15 dark at a device pixel ratio of 1.5: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle");
+      "9gr15 dark at a device pixel ratio of 1.5: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle, on the "
+      + Math.round(f150.photoH) + " px slab");
     check(f150.dpr === 1.5 && seenApart(f150.old),
-      "9GR15 control at 1.5: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one");
+      "9GR15 control at 1.5: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one, on the "
+      + Math.round(f150.photoH) + " px slab whose " + f150.best.which + " times 1.5 has fractional part " + f150.photoFrac.toFixed(3));
 
     const sf = await surfaces();
     const names = RAISED.map(([n]) => n);
@@ -481,7 +654,8 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
     const lrail = (await styles(p, "#intentRail"))[0];
     check(lt.length >= 10 && lt.every(s => !s.rim && s.shadow !== OFF) && !!lrail && !lrail.rim && /255, 255, 255\)/.test(lrail.shadow),
       "9gr6 light: no macro and no panel paints the rim, and their bevel and lift stand as before");
-    const lit = await lift(p);
+    let lit = { top: 99, side: 99 };
+    if (three) { await markSlab(p, three[1].ord); lit = await lift(p); }
     console.log("       light: top " + lit.top + ", side " + lit.side);
     check(lit.top < 10 && lit.side < 10,
       "9gr7 light: no lift along the top or the side, the read that saw " + mine.top + " in dark");
