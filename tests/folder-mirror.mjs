@@ -2552,9 +2552,7 @@ async function run() {
 
   console.log("#counts checks=" + asserted + " skipped=" + skipped + " failures=" + failed + " expected=" + EXPECTED);
   if (asserted + skipped < EXPECTED) console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
-  if (failed > 0) {
-    process.exit(Math.min(failed, 63));
-  }
+  process.exit(Math.min(failed, 63));
 }
 
 run().catch(e => {
