@@ -1,4 +1,4 @@
-/* CLAIM: 10 of 10 presses reach the screen at 80 ms, and the worst press-to-frame under 100 ms
+/* CLAIM: 10 of 10 presses reach the screen at 80 and 150 ms, and worst press-to-frame under 50 ms
  *
  *   ETIUDA_FIXTURES=<folder> node tests/theme-presses.mjs
  *
@@ -302,10 +302,11 @@ try {
   });
 
   // Verify the pass line claim
-  // Claim: "10 of 10 presses reach the screen at 80 ms, and the worst press-to-frame under 100 ms"
+  // Claim: "10 of 10 presses reach the screen at 80 and 150 ms, and worst press-to-frame under 50 ms"
   const b80 = baseline[80];
-  const passedClaim = (b80.reachedCount === 10 && b80.worst < 100);
-  check(passedClaim, "10 of 10 presses reach the screen at 80 ms, and the worst press-to-frame under 100 ms");
+  const b150 = baseline[150];
+  const passedClaim = (b80.reachedCount === 10 && b150.reachedCount === 10 && b80.worst < 50 && b150.worst < 50);
+  check(passedClaim, "10 of 10 presses reach the screen at 80 and 150 ms, and worst press-to-frame under 50 ms");
 
 } catch (e) {
   console.log("  FAIL run threw: " + (e && e.message ? e.message : String(e)));
