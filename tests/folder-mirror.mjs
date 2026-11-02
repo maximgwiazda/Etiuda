@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 71;
+const EXPECTED = 78;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -55,7 +55,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -984,6 +984,9 @@ async function run() {
     fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
 
     const d = loadDesk(deskZ.ud);
+    /* A desk whose mirror has already taken a listing. Before that mark, the share is not opened on this thread. */
+    fs.mkdirSync(path.join(deskZ.ud, "folder-mirror", TEAM_Z), { recursive: true });
+    fs.writeFileSync(path.join(deskZ.ud, "folder-mirror", TEAM_Z, ".primed"), "");
     await d.ask("etiuda:open-catalog-folder");
     const opened = d.openedPaths[0] || "";
 
@@ -1469,8 +1472,8 @@ async function run() {
   }
 
   /* -------------------------------------------------------------------------------------------------
-   * 44f (point 5, F5): a first boot under machine policy (TeamFolder and LeadKey, no pin yet) reads the named folder and
-   * never flips to an empty mirror before its syncer has run once; after that it reads the mirror
+   * 44f (point 5, F5): a first boot under machine policy (TeamFolder and LeadKey, no pin yet) learns the team from
+   * the team file and does not take the catalog from the share before the syncer has run; after that it reads the mirror
    * ----------------------------------------------------------------------------------------------- */
   {
     const share = folder("share-44f");
@@ -1482,26 +1485,47 @@ async function run() {
     const mirror = path.join(ud, "folder-mirror", team);
     let out = {};
     REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+    const spied = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) spied.push(n + " " + p);
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
     try {
       const d = loadDesk(ud);
       const before = d.api.catalogFolder();
       const read = d.api.readCatalog();
       const after = d.api.catalogFolder();
       const ft = d.api.folderTeamHere();
+      for (const n of spyNames) fs[n] = spyOrig[n];
       const prog = syncerMod.createFolderProgram({ team, folder: share, mirror, pin: LEAD, keys: {}, checks });
       prog.syncOnce();
       const primed = d.api.catalogFolder();
       const read2 = d.api.readCatalog();
+      const waiting = read == null && d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0)
+        && !d.said.some(l => l.indexOf("no catalog found") >= 0)
+        && !spied.some(line => /lamp-shop\.ec/i.test(line));
       out = {
         policyWin: process.platform !== "win32" ? "skipped" : true,
-        namedFirst: path.resolve(before) === path.resolve(share), readNamed: read === CAT_A1.trim(),
+        namedFirst: path.resolve(before) === path.resolve(share), waiting: waiting,
         noFlip: path.resolve(after) === path.resolve(share), pinned: !!ft && ft.team === team,
         mirrorAfterSync: path.resolve(primed) === path.resolve(mirror), readMirror: read2 === CAT_A1.trim()
       };
     } catch (e) { out.error = String(e && e.message); }
-    finally { REG.policy = null; }
-    const ok = process.platform !== "win32" || (!out.error && out.namedFirst && out.readNamed && out.noFlip && out.pinned && out.mirrorAfterSync && out.readMirror);
-    check(ok, "44f a first boot under machine policy reads the named folder and never flips to an empty mirror before its syncer has run once, then reads the mirror: " + JSON.stringify(out));
+    finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      REG.policy = null;
+    }
+    const ok = process.platform !== "win32" || (!out.error && out.namedFirst && out.waiting && out.noFlip && out.pinned && out.mirrorAfterSync && out.readMirror);
+    check(ok, "44f a first boot under machine policy pins the team from its team file, does not take the catalog from the share before the syncer has run, and then reads the mirror: " + JSON.stringify(out));
   }
 
   /* -------------------------------------------------------------------------------------------------
@@ -2020,6 +2044,7 @@ async function run() {
     const r = await testPlant("mirror-write-root", mainFile, (scratchMain) => {
       const share = folder("plant-root-share");
       const { ud, mirror } = scratchDesk("plant-root-desk", share);
+      fs.writeFileSync(path.join(mirror, ".primed"), "");
       const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
       const me = d.api.branchIdentity(true);
       d.api.writeBranch("cat-44o-4a4b4c4d", JSON.stringify(branchOf(me, "4a4b4c4d")));
@@ -2366,6 +2391,390 @@ async function run() {
     : testPlant(tag, syncerFile, async scratch => { const got = await pinScene("plant-" + tag, syncerCopy(scratch, "syncer.cjs")); return got.s && got.joinedHead !== LEAD.keyId; }));
   { const r = await pinPlant("syncer-new-pin"); if (r) check(r.ok, "45g lifting plant:syncer-new-pin leaves a joined desk's running syncer on no pin, so the lead's head never reaches the mirror: " + JSON.stringify(r)); else skip("45g lifting plant:syncer-new-pin leaves a joined desk's running syncer on no pin, so the lead's head never reaches the mirror"); }
   { const r = await pinPlant("syncer-pin-forgets"); if (r) check(r.ok, "45h lifting plant:syncer-pin-forgets keeps the head refused under no pin held after the pin arrives, so it is never copied again: " + JSON.stringify(r)); else skip("45h lifting plant:syncer-pin-forgets keeps the head refused under no pin held after the pin arrives, so it is never copied again"); }
+
+  /* 46a: a cold start on a folder team whose first listing is held (finding 9, rule 17). The desk reads nothing under the
+     share on this thread, says it is still reading, and shows the catalog once that listing lands. */
+  {
+    const share = folder("share-46a");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (f, t) => { const tmp = path.join(share, f + ".tmp"); fs.writeFileSync(tmp, t, "utf8"); fs.renameSync(tmp, path.join(share, f)); };
+    putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })));
+    putAt("lamp-shop.ec", CAT_A1);
+    const env = { teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } } };
+    const d = deskOver("prime46", share, env);
+    const pl = deskOver("prime46pl", share, Object.assign({}, env, { keys: { eCatalogFolder: share, eUiLang: "pl" } }));
+    const hits = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) hits.push(n + " " + path.basename(String(p)));
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
+    let opened = null, shown = null, waited = false, err = "";
+    const s = d.api.folderSyncerRun(null);
+    const held = [];
+    let release = false;
+    const apply = s && s.program ? s.program.applyScan.bind(s.program) : null;
+    if (s && s.program) s.program.applyScan = (msg) => { if (!release) { held.push(msg); return { answers: true, applied: [] }; } return apply(msg); };
+    try {
+      const until = Date.now() + 4000;
+      while (!held.length && Date.now() < until) await sleep(25);
+      const early = d.api.readCatalog();
+      opened = await d.ask("etiuda:open-catalog-folder");
+      const before = hits.length;
+      const pending = d.api.awaitFolderPrime();
+      release = true;
+      for (const msg of held.splice(0)) apply(msg);
+      waited = await pending;
+      shown = d.api.readCatalog();
+      const plRead = pl.api.readCatalog();
+      const reading = d.said.some(l => l.indexOf("Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.") >= 0);
+      const polish = pl.said.some(l => l.indexOf("Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.") >= 0);
+      const slate = d.said.some(l => l.indexOf("no catalog found") >= 0) || pl.said.some(l => l.indexOf("no catalog found") >= 0);
+      /* The copywriter's final words (2026-11-02 03:58), no longer marked as a draft on either language's line. */
+      const marked = getShellSrc().split(String.fromCharCode(10)).filter(l => l.indexOf("stillReading:") >= 0)
+        .every(l => l.indexOf("/* draft words: copywriter */") < 0);
+      const quiet = before === 0 && opened === false && early == null && !slate && reading && polish && marked;
+      const landed = waited === true && shown === CAT_A1.trim();
+      check(!!s && held !== null && quiet && landed,
+        "46a a desk whose share's first listing is held reads nothing under that share on the main thread before the prime (" + before
+        + (before ? ": " + hits.slice(0, before).join("; ") : "") + "), says it is still reading, and once the listing lands the catalog shows (wait " + waited
+        + ", opened the share early " + opened + ", shown " + (shown === CAT_A1.trim()) + ", polish " + polish + ")");
+    } catch (e) {
+      err = String(e && e.stack || e);
+      check(false, "46a a desk whose share's first listing is held reads nothing under that share on the main thread: " + err);
+    } finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+      try { appSyncer().stopAllFolderSyncers(); } catch {}
+    }
+  }
+  {
+    if (PLANTS_OFF || process.platform !== "win32") skip("46b lifting plant:prime-share-quiet lets a policy desk read the catalog from the share before the mirror is primed");
+    else {
+      const r = await testPlant("prime-share-quiet", mainFile, (scratchMain) => {
+        const share = folder("plant-quiet-share");
+        const team = "t-" + crypto.randomBytes(8).toString("hex");
+        fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team, sealed: false, epoch: 1, rev: 1 })), "utf8");
+        fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+        const ud = folder("plant-quiet-desk");
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }), "utf8");
+        REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+        try {
+          const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+          return d.api.readCatalog() === CAT_A1.trim();
+        } finally { REG.policy = null; }
+      });
+      check(r.ok, "46b lifting plant:prime-share-quiet lets a policy desk read the catalog from the share before the mirror is primed: " + JSON.stringify(r));
+    }
+  }
+  {
+    if (PLANTS_OFF) skip("46c lifting plant:prime-no-slate says there is no catalog while the team's mirror is still unprimed");
+    else {
+      const r = await testPlant("prime-no-slate", mainFile, (scratchMain) => {
+        const share = folder("plant-slate-share");
+        const team = "t-" + crypto.randomBytes(8).toString("hex");
+        fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team, epoch: 1, rev: 1 })), "utf8");
+        fs.writeFileSync(path.join(share, "lamp-shop.ec"), CAT_A1, "utf8");
+        const ud = folder("plant-slate-desk");
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+          teamPins: { [team]: LEAD }, teamShown: { [team]: { folder: share } } }), "utf8");
+        const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
+        const read = d.api.readCatalog();
+        return read == null && d.said.some(l => l.indexOf("no catalog found") >= 0);
+      });
+      check(r.ok, "46c lifting plant:prime-no-slate says there is no catalog while the team's mirror is still unprimed: " + JSON.stringify(r));
+    }
+  }
+
+  /* 46d: a folder desk whose worker failed, and whose mirror was never primed, reads the share and does not say it is
+     still reading. 46e lifts the guard those gates share, and the same desk then waits. */
+  function brokenUnprimed(name, src) {
+    const ud = folder(name + "-desk");
+    const shareDir = folder(name + "-share");
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(shareDir, "lamp-shop.ec"), CAT_A1, "utf8");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    /* The module loads, so the primed check can be asked, and the worker's start throws. A missing module fails that check closed, which would hide the wait this plant has to show. */
+    const failedStart = n => {
+      if (!/[\\/]folder[\\/]syncer\.cjs$/.test(String(n))) return nodeRequire(n);
+      const real = nodeRequire(n);
+      return Object.assign({}, real, { startFolderSyncer() { throw new Error("the worker did not start"); } });
+    };
+    const d = loadDesk(ud, src ? { require: failedStart, src } : { require: failedStart });
+    d.api.folderSyncerRun();
+    const read = d.api.readCatalog();
+    const primedName = (syncerMod && syncerMod.PRIMED_NAME) || ".primed";
+    const primed = fs.existsSync(path.join(ud, "folder-mirror", TEAM, primedName));
+    const reading = d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0);
+    return { share: read === CAT_A1.trim(), reading, primed };
+  }
+  {
+    const got = brokenUnprimed("broken-unprimed");
+    check(got.share && !got.reading && !got.primed,
+      "46d a folder desk whose worker failed, mirror unprimed, reads the share and does not say it is still reading (share " + got.share
+      + ", reading " + got.reading + ", primed " + got.primed + ")");
+  }
+  {
+    if (PLANTS_OFF) skip("46e lifting plant:broken-reads-share makes a desk whose worker failed wait on an unprimed mirror and say it is still reading");
+    else {
+      const r = await testPlant("broken-reads-share", mainFile, (scratchMain) => {
+        const got = brokenUnprimed("plant-broken-unprimed", fs.readFileSync(scratchMain, "utf8"));
+        return !got.share && got.reading;
+      });
+      check(r.ok, "46e lifting plant:broken-reads-share makes a desk whose worker failed wait on an unprimed mirror and say it is still reading: " + JSON.stringify(r));
+    }
+  }
+
+  /* 46f: the sentence reaches the page through the shell's team channel while the mirror is unprimed, on the empty desk and on
+     Settings' team row, and once the listing lands the page offers the catalog and the sentence is gone. 46g lifts that delivery. */
+  const pageMods = path.join(ROOT, "src", "modules");
+  const pageUrl = (n) => pathToFileURL(path.join(pageMods, n)).href;
+  let pageKit = null;
+  async function pageKitOnce() {
+    if (pageKit) return pageKit;
+    pageKit = {
+      HK: await import(pageUrl("hooks.js")),
+      ST: await import(pageUrl("storage.js")),
+      DOM: await import(pageUrl("dom.js")),
+      TJ: await import(pageUrl("team-join.js")),
+      SET: await import(pageUrl("settings.js")),
+      REN: await import(pageUrl("render.js")),
+      OFF: await import(pageUrl("catalog-offer.js")),
+    };
+    return pageKit;
+  }
+  /* A document the page's own render and offer can write into. Class selectors stay unmatched, so the empty desk's mark is
+     not drawn; the sentence is the markup render wrote. */
+  function pageDoc() {
+    const ids = new Map();
+    const quietClass = { contains: () => false, add() {}, remove() {}, toggle() {} };
+    function stubBtn() {
+      return {
+        onclick: null, isConnected: false, style: {}, textContent: "", classList: quietClass,
+        setAttribute() {}, getAttribute: () => null, removeAttribute() {},
+        addEventListener() {}, removeEventListener() {},
+        querySelector: () => null, querySelectorAll: () => [],
+        remove() {}, insertAdjacentHTML() {}, focus() {},
+        getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
+      };
+    }
+    function el(tag) {
+      const node = {
+        nodeType: 1, tagName: String(tag).toUpperCase(), localName: String(tag).toLowerCase(),
+        childNodes: [], parentNode: null, attrs: {}, _html: "",
+        style: { removeProperty() {} },
+        offsetWidth: 0, offsetHeight: 0, clientWidth: 0, clientHeight: 0, scrollWidth: 0,
+        isConnected: false, onclick: null, classList: quietClass,
+        setAttribute(k, v) { node.attrs[k] = String(v); if (k === "id") ids.set(String(v), node); },
+        getAttribute(k) { return Object.prototype.hasOwnProperty.call(node.attrs, k) ? node.attrs[k] : null; },
+        hasAttribute(k) { return Object.prototype.hasOwnProperty.call(node.attrs, k); },
+        removeAttribute(k) {
+          if (k === "id" && ids.get(node.attrs.id) === node) ids.delete(node.attrs.id);
+          delete node.attrs[k];
+        },
+        appendChild(n) { if (n) { n.parentNode = node; node.childNodes.push(n); } return n; },
+        insertBefore(n) { return node.appendChild(n); },
+        remove() {
+          const p = node.parentNode;
+          if (!p) return;
+          const i = p.childNodes.indexOf(node);
+          if (i >= 0) p.childNodes.splice(i, 1);
+          node.parentNode = null;
+        },
+        addEventListener() {}, removeEventListener() {},
+        getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
+        getContext() { return { measureText: () => ({ width: 0 }), font: "", clearRect() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {} }; },
+        focus() {}, blur() {}, click() {},
+        querySelector(sel) {
+          const m = /^#([\w-]+)$/.exec(String(sel));
+          if (!m) return null;
+          if (node.attrs.id === m[1]) return node;
+          if (node._html && node._html.indexOf('id="' + m[1] + '"') >= 0) return stubBtn();
+          for (const c of node.childNodes) {
+            if (c && c.querySelector) { const hit = c.querySelector(sel); if (hit) return hit; }
+          }
+          return null;
+        },
+        querySelectorAll() { return []; },
+      };
+      Object.defineProperty(node, "id", { get() { return node.attrs.id || ""; }, set(v) { node.setAttribute("id", v); } });
+      Object.defineProperty(node, "className", { get() { return node.attrs.class || ""; }, set(v) { node.setAttribute("class", v); } });
+      Object.defineProperty(node, "innerHTML", { get() { return node._html; }, set(v) { node._html = String(v); } });
+      Object.defineProperty(node, "textContent", {
+        get() { return node._html.replace(/<[^>]+>/g, ""); },
+        set(v) { node._html = String(v == null ? "" : v); },
+      });
+      return node;
+    }
+    const doc = { listeners: {}, visibilityState: "visible", hidden: false, readyState: "complete" };
+    doc.createElement = (t) => el(t);
+    doc.createElementNS = (_ns, t) => el(t);
+    doc.createTextNode = (s) => ({ nodeType: 3, textContent: String(s), data: String(s) });
+    doc.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }) });
+    doc.documentElement = el("html");
+    doc.body = el("body");
+    doc.documentElement.appendChild(doc.body);
+    const listEl = el("div");
+    listEl.id = "list";
+    doc.body.appendChild(listEl);
+    doc.getElementById = (id) => ids.get(id) || null;
+    doc.querySelector = (sel) => { const m = /^#([\w-]+)$/.exec(String(sel)); return m ? (ids.get(m[1]) || null) : null; };
+    doc.querySelectorAll = () => [];
+    doc.addEventListener = () => {};
+    doc.removeEventListener = () => {};
+    globalThis.document = doc;
+    globalThis.window = { addEventListener() {}, removeEventListener() {}, document: doc };
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
+    globalThis.innerWidth = 1280;
+    globalThis.innerHeight = 800;
+    globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+    globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+    globalThis.requestAnimationFrame = () => 0;
+    globalThis.cancelAnimationFrame = () => {};
+    globalThis.ResizeObserver = function ResizeObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+    globalThis.location = { protocol: "file:" };
+    return doc;
+  }
+  async function pageWhileUnprimed(name, src, releaseScan) {
+    pageDoc();
+    const kit = await pageKitOnce();
+    const LINE = "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.";
+    const shownLine = LINE.replace(/'/g, "&#39;");
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (f, t) => { const tmp = path.join(share, f + ".tmp"); fs.writeFileSync(tmp, t, "utf8"); fs.renameSync(tmp, path.join(share, f)); };
+    putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })));
+    putAt("lamp-shop.ec", CAT_A1);
+    const env = { teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } } };
+    const d = deskOver(name, share, env);
+    if (src) {
+      /* A planted shell is a second desk: the first only prepared the files. */
+      const ud = d.ud;
+      const again = loadDesk(ud, { src });
+      d.api = again.api; d.ask = again.ask; d.ipc = again.ipc; d.on = again.on; d.invoke = again.invoke; d.said = again.said;
+    }
+    const hits = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) hits.push(n + " " + path.basename(String(p)));
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
+    const pageListeners = {};
+    const errors = [];
+    const doc = pageDoc();
+    kit.DOM.grabDom();
+    kit.ST.lsSet("eUiLang", "en");
+    kit.ST.lsSet("eDeckOff", "1");
+    kit.HK.hooks.render = () => { try { kit.REN.render(); } catch (e) { errors.push(String(e && e.stack || e)); } };
+    kit.HK.hooks.syncAddFab = () => {};
+    kit.HK.hooks.syncNextDock = () => {};
+    kit.HK.hooks.importCatalogHere = () => {};
+    kit.HK.hooks.loadCatalogFromFolder = () => {};
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        send: (ch, ...args) => {
+          for (const fn of (pageListeners[ch] || [])) {
+            try { fn({}, ...args); } catch (e) { errors.push(ch + " " + String(e && e.stack || e)); }
+          }
+        },
+      },
+    };
+    const ipcRenderer = {
+      sendSync: (ch, ...args) => {
+        const e = eventFor();
+        if (d.on[ch]) d.on[ch](e, ...args);
+        return e.returnValue;
+      },
+      send: (ch, ...args) => { if (d.on[ch]) d.on[ch](eventFor(), ...args); },
+      invoke: (ch, ...args) => new Promise((resolve) => setImmediate(() => {
+        try { resolve(d.invoke[ch] ? d.invoke[ch](eventFor(), ...args) : undefined); }
+        catch (e) { errors.push(String(e && e.stack || e)); resolve(undefined); }
+      })),
+      on: (ch, fn) => { (pageListeners[ch] = pageListeners[ch] || []).push(fn); },
+    };
+    let s = null, release = false, apply = null;
+    const held = [];
+    try {
+      s = d.api.folderSyncerRun(win);
+      apply = s && s.program ? s.program.applyScan.bind(s.program) : null;
+      if (s && s.program) s.program.applyScan = (msg) => {
+        if (!release) { held.push(msg); return { answers: true, applied: [] }; }
+        return apply(msg);
+      };
+      const untilHeld = Date.now() + 4000;
+      while (!held.length && Date.now() < untilHeld) await sleep(25);
+      const contextBridge = {
+        exposeInMainWorld: (k, v) => { window[k] = v; },
+        executeInMainWorld: (o) => o.func(...(o.args || [])),
+      };
+      new Function("require", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(
+        (n) => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
+      kit.OFF.wireHostCatalogWatch();
+      kit.TJ.wireTeamJoin();
+      await sleep(200);
+      const row = kit.SET.settingsBodyHtml().indexOf(shownLine) >= 0;
+      const desk = (doc.getElementById("list").innerHTML || "").indexOf(shownLine) >= 0;
+      const said = d.said.some((l) => l.indexOf(LINE) >= 0);
+      const hitsBefore = hits.length;
+      let offer = false, gone = false;
+      if (releaseScan && apply) {
+        release = true;
+        for (const msg of held.splice(0)) apply(msg);
+        const untilOffer = Date.now() + 2000;
+        while (Date.now() < untilOffer && !doc.getElementById("eCatalogOffer")) await sleep(25);
+        const offerEl = doc.getElementById("eCatalogOffer");
+        const offerHtml = offerEl ? offerEl.innerHTML : "";
+        offer = offerHtml.indexOf("lamp-shop") >= 0 && offerHtml.indexOf("Load catalog") >= 0;
+        const rowAfter = kit.SET.settingsBodyHtml().indexOf(shownLine) < 0;
+        const deskAfter = (doc.getElementById("list").innerHTML || "").indexOf(shownLine) < 0;
+        gone = rowAfter && deskAfter;
+      }
+      return { row, desk, said, hitsBefore, offer, gone, held: held.length, started: !!s, err: errors[0] || "" };
+    } finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+      try { appSyncer().stopAllFolderSyncers(); } catch {}
+    }
+  }
+  {
+    let got = null, err = "";
+    try { got = await pageWhileUnprimed("page-unprimed", "", true); }
+    catch (e) { err = String(e && e.stack || e); }
+    const ok = !!got && got.row && got.desk && got.said && got.hitsBefore === 0 && got.offer && got.gone && !got.err;
+    check(ok, "46f while a folder desk's mirror is unprimed the page shows the still-reading line on the empty desk and the team row, the share unread on this thread ("
+      + (got ? got.hitsBefore : "?") + "), and once the listing lands the catalog is offered and the line is gone (row " + (got && got.row)
+      + ", desk " + (got && got.desk) + ", said " + (got && got.said) + ", offer " + (got && got.offer) + ", gone " + (got && got.gone)
+      + (got && got.err ? ", " + got.err : "") + (err ? ", " + err : "") + ")");
+  }
+  {
+    if (PLANTS_OFF) skip("46g lifting plant:still-reading-shown leaves the still-reading sentence in the log and off the page");
+    else {
+      const r = await testPlant("still-reading-shown", mainFile, async (scratchMain) => {
+        const got = await pageWhileUnprimed("plant-page-unprimed", fs.readFileSync(scratchMain, "utf8"), false);
+        return !!got && !got.row && !got.desk && got.said && !got.err;
+      });
+      check(r.ok, "46g lifting plant:still-reading-shown leaves the still-reading sentence in the log and off the page: " + JSON.stringify(r));
+    }
+  }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();
