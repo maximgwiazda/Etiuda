@@ -1130,8 +1130,12 @@ let folderPrimeResolve = null;
 /* A known folder team's share stays quiet on this thread until the mirror has taken one answered listing.
    Callers then read the mirror, or nothing. A join still reads the invitation folder: nothing is joined yet.
    The syncer that cannot start keeps the share as its fallback, the read folderSyncerFailed already chooses. */
+/* A failed syncer reads the share. These gates stay off, or a desk whose worker failed waits for a listing that will not come. */
+function folderSyncerReadsShare() {
+  return !!folderSyncerBroken; /* plant:broken-reads-share */
+}
 function shareUnread(dir) {
-  if (!dir || folderSyncerBroken) return false;
+  if (!dir || folderSyncerReadsShare()) return false;
   const ft = folderTeamHere();
   if (!ft || ft.joining) return false;
   if (path.resolve(String(dir)) !== path.resolve(ft.folder)) return false;
@@ -1140,7 +1144,7 @@ function shareUnread(dir) {
   return !primed; /* plant:prime-share-quiet */
 }
 function folderStillReading() {
-  if (folderSyncerBroken) return false;
+  if (folderSyncerReadsShare()) return false;
   const ft = folderTeamHere();
   if (!ft || ft.joining) return false;
   try { if (fs.existsSync(path.join(folderMirrorOf(ft.team), FolderSyncer().PRIMED_NAME))) return false; } catch { return false; }
@@ -1159,7 +1163,7 @@ function noteFolderPrimed(done) {
    already start one, do. Past the bound the desk says it is still reading and the listing arrives when it can. */
 function awaitFolderPrime() {
   const ft = folderTeamHere();
-  if (!ft || ft.joining || folderSyncerBroken || !folderStillReading()) return Promise.resolve(false);
+  if (!ft || ft.joining || folderSyncerReadsShare() || !folderStillReading()) return Promise.resolve(false);
   folderSyncerRun(theWindow);
   return new Promise(resolve => {
     const timer = setTimeout(() => { folderPrimeResolve = null; resolve(false); }, FOLDER_PRIME_MS);

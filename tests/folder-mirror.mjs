@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 74;
+const EXPECTED = 76;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -2489,6 +2489,46 @@ async function run() {
         return read == null && d.said.some(l => l.indexOf("no catalog found") >= 0);
       });
       check(r.ok, "46c lifting plant:prime-no-slate says there is no catalog while the team's mirror is still unprimed: " + JSON.stringify(r));
+    }
+  }
+
+  /* 46d: a folder desk whose worker failed, and whose mirror was never primed, reads the share and does not say it is
+     still reading. 46e lifts the guard those gates share, and the same desk then waits. */
+  function brokenUnprimed(name, src) {
+    const ud = folder(name + "-desk");
+    const shareDir = folder(name + "-share");
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(shareDir, "lamp-shop.ec"), CAT_A1, "utf8");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: shareDir, eUiLang: "en" }, teamPins: { [TEAM]: LEAD }, teamShown: { [TEAM]: { folder: shareDir } } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    /* The module loads, so the primed check can be asked, and the worker's start throws. A missing module fails that check closed, which would hide the wait this plant has to show. */
+    const failedStart = n => {
+      if (!/[\\/]folder[\\/]syncer\.cjs$/.test(String(n))) return nodeRequire(n);
+      const real = nodeRequire(n);
+      return Object.assign({}, real, { startFolderSyncer() { throw new Error("the worker did not start"); } });
+    };
+    const d = loadDesk(ud, src ? { require: failedStart, src } : { require: failedStart });
+    d.api.folderSyncerRun();
+    const read = d.api.readCatalog();
+    const primedName = (syncerMod && syncerMod.PRIMED_NAME) || ".primed";
+    const primed = fs.existsSync(path.join(ud, "folder-mirror", TEAM, primedName));
+    const reading = d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0);
+    return { share: read === CAT_A1.trim(), reading, primed };
+  }
+  {
+    const got = brokenUnprimed("broken-unprimed");
+    check(got.share && !got.reading && !got.primed,
+      "46d a folder desk whose worker failed, mirror unprimed, reads the share and does not say it is still reading (share " + got.share
+      + ", reading " + got.reading + ", primed " + got.primed + ")");
+  }
+  {
+    if (PLANTS_OFF) skip("46e lifting plant:broken-reads-share makes a desk whose worker failed wait on an unprimed mirror and say it is still reading");
+    else {
+      const r = await testPlant("broken-reads-share", mainFile, (scratchMain) => {
+        const got = brokenUnprimed("plant-broken-unprimed", fs.readFileSync(scratchMain, "utf8"));
+        return !got.share && got.reading;
+      });
+      check(r.ok, "46e lifting plant:broken-reads-share makes a desk whose worker failed wait on an unprimed mirror and say it is still reading: " + JSON.stringify(r));
     }
   }
 
