@@ -3578,7 +3578,7 @@ try {
       check(false, "993c threw: " + (e && e.stack ? e.stack : e));
     }
     /* Remove, re-add, and the next edition lands. The leg asks relayRun itself, so it does not wait out the minute's probe. */
-    async function readdScene(src, tag) {
+    async function readdScene(src, tag, ceiling) {
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), share = path.join(LAB, "h35-readd-" + tag);
       R.clock.now += 1;
       const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
@@ -3626,7 +3626,7 @@ try {
         const c = D.api.relayHere() === null ? D.api.relayProbe() : D.api.relayRun();
         if (c) { c.kick(); await c.idle(); }
         return D.api.relayHere() !== null && factsOf(D.api.readCatalog() || "") === 2;
-      }, 30000);
+      }, ceiling || 30000);
       let env = {};
       try { env = D.envelope(); } catch { env = {}; }
       const gone = !!(env.teamRelayGone && env.teamRelayGone[team]);
@@ -3654,7 +3654,7 @@ try {
       let turned = false, detail = "plant line absent";
       if (at >= 0) {
         lines.splice(at, 1);
-        const g = await readdScene(lines.join("\n"), "plant");
+        const g = await readdScene(lines.join("\n"), "plant", 8000);
         turned = g.first && g.hushed && g.back === 200 && !g.here && g.rev !== 2;
         detail = "here " + (g.here ? "answers" : "null") + ", rev " + g.rev + ", first " + g.first;
       }
@@ -3739,6 +3739,8 @@ try {
        lead's mirror holds it again, and the lead's yes then admits the desk with no new invitation. `Cs` is the lead's channel layer. */
     async function withdrawScene(src, tag, Cs, opt) {
       opt = opt || {};
+      const cap = opt.cap || 30000;
+      const viewCap = opt.viewCap || 30000;
       const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), key2 = crypto.randomBytes(32);
       let epochNow = 1;
       R.clock.now += 1;
@@ -3803,8 +3805,8 @@ try {
         try { await studio.stop(); } catch { /* already stopped */ }
         return out;
       }
-      const gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 30000);
-      const takenView = await until(async () => { await both(); const v = await D.ask("etiuda:team-join", "view"); return !!(v && v.join && v.join.withdrawn === true); }, 30000);
+      const gone = await until(async () => { await both(); return !fs.existsSync(asked); }, cap);
+      const takenView = await until(async () => { await both(); const v = await D.ask("etiuda:team-join", "view"); return !!(v && v.join && v.join.withdrawn === true); }, viewCap);
       if (opt.move) {
         const yesMoved = await enrolDesk(rt, 1, [{ id: me.id, pub: me.key, desk: me.id }]);
         let joinedMoved = false;
@@ -3837,7 +3839,7 @@ try {
       const kept = !!(e1.teamJoin && e1.teamJoin.invite && e1.teamJoin.invite.relay && e1.teamJoin.invite.relay.withdrawn === true
         && e1.teamKeys && e1.teamKeys[team]);
       await D.ask("etiuda:team-join", "ask", "", "Desk North");
-      const back = await until(async () => { await both(); return fs.existsSync(asked); }, 30000);
+      const back = await until(async () => { await both(); return fs.existsSync(asked); }, cap);
       const yes2 = await enrolDesk(rt, 2, row);
       put(studioMirror, C.TEAM_NAME, teamFile(3, [entry]));
       await studio.kick(); await studio.idle();
@@ -3847,7 +3849,7 @@ try {
         const v = await D.ask("etiuda:team-join", "view");
         if (v && v.joined && v.joined.team === team) joined = true;
         return joined;
-      }, 30000);
+      }, cap);
       const e2 = envNow();
       const live2 = D.api.relayRun();
       try { await D.ask("etiuda:team-join", "leave", team); } catch { /* quench */ }
@@ -3876,7 +3878,7 @@ try {
       const lifted = dropLine("plant:e4-not-joined")(mainNow);
       let turned = false, detail = "plant line absent";
       if (lifted !== null) {
-        const g = await withdrawScene(lifted, "plant-joined", C);
+        const g = await withdrawScene(lifted, "plant-joined", C, { cap: 8000 });
         turned = g.first && g.gone && g.joinedEarly;
         detail = "joined early " + g.joinedEarly;
       }
@@ -3890,7 +3892,7 @@ try {
       const lifted = dropLine("plant:e4-ask-again-desk")(mainNow);
       let turned = false, detail = "plant line absent";
       if (lifted !== null) {
-        const g = await withdrawScene(lifted, "plant-again", C);
+        const g = await withdrawScene(lifted, "plant-again", C, { cap: 8000 });
         turned = withdrawA(g) && !g.back && !g.joined;
         detail = "asked back " + g.back + ", joined " + g.joined;
       }
@@ -3905,7 +3907,7 @@ try {
       const lifted = swapText("plant:e4-lead-withdraw", 'r.kind === "delete" || ', '')(chText);
       let turned = false, detail = "plant line absent";
       if (lifted !== null) {
-        const g = await withdrawScene(mainNow, "plant-lead", loadPlantedChannel(lifted));
+        const g = await withdrawScene(mainNow, "plant-lead", loadPlantedChannel(lifted), { cap: 8000 });
         turned = g.first && !g.gone;
         detail = "the lead's mirror " + (g.gone ? "lost the request" : "kept the request");
       }
@@ -3921,7 +3923,7 @@ try {
       const lifted = dropLine("plant:e4-rostered-ask")(chText);
       let turned = false, detail = "plant line absent";
       if (lifted !== null) {
-        const g = await withdrawScene(mainNow, "plant-rostered", loadPlantedChannel(lifted));
+        const g = await withdrawScene(mainNow, "plant-rostered", loadPlantedChannel(lifted), { cap: 8000 });
         turned = withdrawA(g) && !g.back;
         detail = "asked back " + g.back;
       }
@@ -3947,7 +3949,7 @@ try {
       const lifted = dropLine("plant:g2-taken")(mainNow);
       let turned = false, detail = "plant line absent";
       if (lifted !== null) {
-        const g = await withdrawScene(lifted, "plant-taken", C, { move: true });
+        const g = await withdrawScene(lifted, "plant-taken", C, { move: true, cap: 8000, viewCap: 4000 });
         turned = g.first && g.gone && !g.takenView;
         detail = "lead's mirror " + (g.gone ? "lost the request" : "kept it") + ", card withdrawn " + g.takenView;
       }
@@ -4349,7 +4351,7 @@ try {
 
   /* A desk that left a relay team, was removed after, and is invited again. Leaving sets the mirror's team file aside,
      so the old wrap is not read on the way back in and the new request is not thrown away. */
-  async function relayLeft(make) {
+  async function relayLeft(make, sentCeiling) {
     const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
     const secret = hex(16), inv = hex(16), token = hex(32);
     const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
@@ -4434,7 +4436,7 @@ try {
       await lead.kick(); await lead.idle();
       const body = joinRel ? read(mirrorL, joinRel) : null;
       return firstInvite !== null && body !== null && body !== firstBody && inviteOf(body) !== null && inviteOf(body) !== firstInvite;
-    }, 30000);
+    }, sentCeiling || 30000);
     const ch = H.api.relayRun(); if (ch) await ch.stop();
     await lead.stop();
     return { taken: !taken.refused, asked, admitted, parked, again: again && !again.refused, sent2, teamFile };
@@ -4466,7 +4468,7 @@ try {
           fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
             keys: { eCatalogFolder: share, eUiLang: "en" } }));
           return loadDesk(ud, spliced);
-        });
+        }, 8000);
         turned = out.admitted === true && out.parked === false && fs.existsSync(out.teamFile);
         detail = "admitted " + out.admitted + ", team file " + (out.parked ? "set aside" : "still in the mirror");
       }
@@ -5335,7 +5337,7 @@ try {
         await wait(50);
         const again = await s.Dk.ask("etiuda:team-join", "invite", text, "Desk Nine", "");
         out.taken = again && again.refused ? "refused " + again.refused : "taken";
-        await until(async () => { await s.pump(); const j = read(s.sMirror, a.own + "join.json"); return j !== null && j !== asked; }, 30000);
+        await until(async () => { await s.pump(); const j = read(s.sMirror, a.own + "join.json"); return j !== null && j !== asked; }, 8000);
         put(s.sMirror, C.TEAM_NAME, s.doc({ epoch: 2, rev: 2, roster: [s.entry(a.key2, 2)], lead: NEXT, box: s.boxNow, handover: [a.step], ring: [LEAD, NEXT] }));
         await s.studio.kick(); await s.studio.idle();
       } else {
@@ -6271,7 +6273,7 @@ try {
         if (!r.offered) { await press("back"); return r; }
         const joinRel = "desks/" + s.me.id + "/join.json", was = read(s.sMirror, joinRel);
         await press("invite");
-        await until(async () => { await s.pump(); const now = read(s.sMirror, joinRel); return !!now && now !== was; }, 30000);
+        await until(async () => { await s.pump(); const now = read(s.sMirror, joinRel); return !!now && now !== was; }, 8000);
         rev += 1;
         put(s.sMirror, C.TEAM_NAME, s.doc({ rev, roster: [s.entry(key1, 1)] }));
         await s.studio.kick(); await s.studio.idle();
