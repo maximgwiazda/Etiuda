@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 78;
+const EXPECTED = 88;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -55,9 +55,17 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes"];
 const noop = () => {};
-const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+const inert = new Proxy(function () {}, {
+  get: (target, prop) => {
+    if (prop === "getBounds") return () => ({ x: 0, y: 0, width: 800, height: 600 });
+    if (prop === "isDestroyed") return () => false;
+    return inert;
+  },
+  set: () => true,
+  apply: () => undefined
+});
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
@@ -81,7 +89,7 @@ function loadDesk(ud, overrides = {}) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const srcToRun = overrides.src || getShellSrc();
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    srcToRun + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
+    srcToRun + "\nreturn { " + EXPOSE.map(n => "get " + n + "() { return typeof " + n + " === 'undefined' ? undefined : " + n + "; }").join(", ") + " };")(n => (n === "electron" ? electron : (overrides.require || nodeRequire)(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
@@ -2776,15 +2784,319 @@ async function run() {
     }
   }
 
+  /* Finding 3 (Seam B): a desk with the folder already chosen takes an invitation to a folder team;
+     the wrap key is unwrapped, the catalog to open is returned in view.opens, view.join.invite.open is true,
+     and the team's catalog is ready to open. */
+  const channelMod = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+  const inviteCodeFn = (secret, leadPublic) => {
+    const sec = String(secret || ""), pub = String(leadPublic || "");
+    const mac = crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(Buffer.from(pub, "hex")).digest();
+    return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
+  };
+
+  function deskWithSrc(name, share, src) {
+    const ud = folder(name + "-desk");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    const d = loadDesk(ud, src ? { src } : {});
+    d.write = more => {
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }, more)), "utf8");
+      d.api.readDesk();
+    };
+    return d;
+  }
+
+  async function seamBScene(name, src) {
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const secret = crypto.randomBytes(16).toString("hex");
+    const incId = crypto.createHash("sha256").update(Buffer.from(secret, "hex")).digest("hex").slice(0, 16);
+
+    const teamDoc = teamFile({ team: T, epoch: 1, rev: 1 });
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamDoc), "utf8");
+
+    const catDoc = text(catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01"));
+    fs.writeFileSync(path.join(share, "lamp-shop.ec"), seal(K1, 1, catDoc, T), "utf8");
+
+    const wrapDoc = channelMod.sealInviteWrap({
+      secret: secret, relayTeamId: "folder", teamId: T, invitationId: incId, epoch: 1, key: K1
+    });
+    fs.mkdirSync(path.join(share, "invites"), { recursive: true });
+    fs.writeFileSync(path.join(share, "invites", incId + ".wrap.json"), JSON.stringify(wrapDoc), "utf8");
+
+    const code = inviteCodeFn(secret, LEAD.public);
+    const blob = "etiuda-join:" + Buffer.from(JSON.stringify({
+      v: 1, team: T, lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+      secret: secret, folder: share
+    })).toString("base64url");
+
+    const d = deskWithSrc(name, share, src);
+    d.api.createWindow();
+    await d.ask("etiuda:branch-identity", true);
+    const res = await d.ask("etiuda:team-join", "invite", blob, "Lamp lead", code);
+    return { res, d, T };
+  }
+
+  {
+    const { res } = await seamBScene("seam-b");
+    const opensFile = !!(res && res.opens && res.opens.file === "lamp-shop.ec");
+    const inviteOpen = !!(res && res.join && res.join.invite && res.join.invite.open === true);
+    const ok = opensFile && inviteOpen;
+    check(ok, "45i taking a folder invitation unwraps the catalog and returns it in opens with invite open true: "
+      + "opens " + JSON.stringify(res && res.opens) + ", invite open " + inviteOpen);
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("folder-invite-opens", mainFile, async (scratchMain) => {
+      const { res } = await seamBScene("plant-opens", fs.readFileSync(scratchMain, "utf8"));
+      return !res || !res.opens;
+    });
+    if (r) check(r.ok, "45j lifting plant:folder-invite-opens leaves opens unset on taking a folder invitation: " + JSON.stringify(r));
+    else skip("45j lifting plant:folder-invite-opens leaves opens unset on taking a folder invitation");
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("folder-join-open", mainFile, async (scratchMain) => {
+      const { res } = await seamBScene("plant-open", fs.readFileSync(scratchMain, "utf8"));
+      return !res || !res.join || !res.join.invite || res.join.invite.open !== true;
+    });
+    if (r) check(r.ok, "45k lifting plant:folder-join-open leaves join invite open unset for a folder invitation: " + JSON.stringify(r));
+    else skip("45k lifting plant:folder-join-open leaves join invite open unset for a folder invitation");
+  }
+
+  /* Finding 3 (Seam C): while joining, the desk writes its proposals into the local mirror and outbox,
+     and finishJoin switches watchedFolder to the mirror once admitted. */
+  async function seamCScene(name, src) {
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const d = deskWithSrc(name, share, src);
+    d.api.createWindow();
+    await d.ask("etiuda:branch-identity", true);
+    const me = d.api.branchIdentity(false);
+
+    const teamDoc = sign({
+      format: 1, kind: "etiuda-team", id: T, catalogs: ["lamp-shop"],
+      lead: LEAD, sealed: true, epoch: 1, rev: 1, roster: []
+    }, lead.privateKey, LEAD.keyId);
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamDoc), "utf8");
+
+    const joinDoc = {
+      team: T, file: "", nonce: crypto.randomBytes(32).toString("hex"),
+      commit: crypto.randomBytes(32).toString("hex"), asked: Date.now(), held: 1, name: "Lamp Desk",
+      invite: {
+        id: crypto.randomBytes(8).toString("hex"),
+        proof: crypto.randomBytes(32).toString("hex"),
+        lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" },
+        folder: share, was: "", pinned: true
+      }
+    };
+    d.write({
+      teamPins: { [T]: LEAD },
+      teamShown: { [T]: { folder: share, lead: "Lamp lead" } },
+      teamKeys: { [T]: { 1: keyIn(K1) } },
+      teamJoin: joinDoc
+    });
+
+    const mirror = path.join(d.ud, "folder-mirror", T);
+    const mirrorHereJoining = d.api.folderMirrorHere();
+    const catFolderJoining = d.api.catalogFolder();
+
+    const stem = "prop-12345678";
+    const propDoc = { desk: { id: me.id, key: me.key, box: me.box }, id: me.id + "-12345678", rev: 1 };
+    await d.ask("etiuda:branch-write", stem, JSON.stringify(propDoc));
+
+    const branchInMirror = fs.existsSync(path.join(mirror, "desks", me.id, stem + ".ec"));
+    const branchInOutbox = fs.existsSync(path.join(mirror, ".outbox.json"));
+    const branchInShare = fs.existsSync(path.join(share, "desks", me.id, stem + ".ec"));
+
+    // Admit the desk on the roster
+    const wrap1 = d.api.wrapTeamKey(K1, me.box, T, 1, me.id);
+    const admittedTeam = sign({
+      format: 1, kind: "etiuda-team", id: T, catalogs: ["lamp-shop"],
+      lead: LEAD, sealed: true, epoch: 1, rev: 2,
+      roster: [{ desk: { id: me.id, key: me.key, box: me.box }, wrap: wrap1 }]
+    }, lead.privateKey, LEAD.keyId);
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
+    /* As the syncer would bring it; a shell that never made the mirror must judge red, not throw. */
+    fs.mkdirSync(mirror, { recursive: true });
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
+
+    // Trigger finishJoin via joinView
+    await d.ask("etiuda:team-join");
+    const watchedAfterJoin = d.api.watchedFolder;
+
+    return {
+      mirrorHereJoining, catFolderJoining, mirror, share,
+      branchInMirror, branchInOutbox, branchInShare,
+      watchedAfterJoin
+    };
+  }
+
+  {
+    const r = await seamCScene("seam-c");
+    const mirrorOk = r.mirrorHereJoining === r.mirror && r.catFolderJoining === r.mirror;
+    const writeOk = r.branchInMirror && r.branchInOutbox && !r.branchInShare;
+    const watchOk = r.watchedAfterJoin === r.mirror;
+    const ok = mirrorOk && writeOk && watchOk;
+    check(ok, "45l desk while joining uses mirror and outbox for branch write and switches watchedFolder to mirror on finishJoin: "
+      + "mirror joining " + mirrorOk + " (" + r.mirrorHereJoining + "), branch in mirror " + r.branchInMirror + ", in outbox "
+      + r.branchInOutbox + ", not direct on share " + !r.branchInShare + ", watched after join " + (r.watchedAfterJoin === r.mirror));
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("mirror-while-joining", mainFile, async (scratchMain) => {
+      const res = await seamCScene("plant-mirror", fs.readFileSync(scratchMain, "utf8"));
+      return res.mirrorHereJoining !== res.mirror || res.catFolderJoining !== res.mirror;
+    });
+    if (r) check(r.ok, "45m lifting plant:mirror-while-joining prevents mirror from being used while joining: " + JSON.stringify(r));
+    else skip("45m lifting plant:mirror-while-joining prevents mirror from being used while joining");
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("finish-join-watched", mainFile, async (scratchMain) => {
+      const res = await seamCScene("plant-watched", fs.readFileSync(scratchMain, "utf8"));
+      return res.watchedAfterJoin !== res.mirror;
+    });
+    if (r) check(r.ok, "45n lifting plant:finish-join-watched leaves watchedFolder on share instead of mirror after admission: " + JSON.stringify(r));
+    else skip("45n lifting plant:finish-join-watched leaves watchedFolder on share instead of mirror after admission");
+  }
+
+  /* Step 4: a withdrawn ask file, missed by two listings, is gone from the desk's mirror by the end of the second */
+  async function step4WithdrawnScene(name, syncerFileOrMod) {
+    const shareDir = folder(name + "-share");
+    const mirrorDir = folder(name + "-mirror");
+    const deskId = "d-test-desk";
+    const relFile = path.join("catalog-asks", deskId + ".withdrawn.json");
+
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.mkdirSync(path.join(shareDir, "catalog-asks"), { recursive: true });
+    const withdrawnDoc = { format: 1, kind: "etiuda-catalog-ask-withdrawn", desk: deskId, ids: ["ask-01"] };
+    fs.writeFileSync(path.join(shareDir, relFile), JSON.stringify(withdrawnDoc), "utf8");
+
+    const mod = typeof syncerFileOrMod === "string" ? nodeRequire(syncerFileOrMod) : syncerMod;
+    const prog = mod.createFolderProgram({
+      team: TEAM, folder: shareDir, mirror: mirrorDir,
+      pin: LEAD, keys: { 1: K1 }, checks
+    });
+    await prog.syncOnce();
+    const landed = fs.existsSync(path.join(mirrorDir, relFile));
+
+    fs.unlinkSync(path.join(shareDir, relFile));
+
+    await prog.syncOnce();
+    const staysAfterOne = fs.existsSync(path.join(mirrorDir, relFile));
+
+    await prog.syncOnce();
+    const leavesAfterTwo = !fs.existsSync(path.join(mirrorDir, relFile));
+
+    return { landed, staysAfterOne, leavesAfterTwo };
+  }
+
+  {
+    const r = await step4WithdrawnScene("step4-withdrawn");
+    const ok = r.landed && r.staysAfterOne && r.leavesAfterTwo;
+    check(ok, "45o a withdrawn ask's file, missed by two listings, is gone from the desk's mirror by the end of the second: "
+      + "landed " + r.landed + ", stays after 1 missing " + r.staysAfterOne + ", leaves after 2 missing " + r.leavesAfterTwo);
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("syncer-unlink", syncerFile, async (scratchSyncer) => {
+      const res = await step4WithdrawnScene("plant-syncer-unlink", scratchSyncer);
+      return !res.leavesAfterTwo;
+    });
+    if (r) check(r.ok, "45p lifting plant:syncer-unlink leaves a withdrawn ask's file in the mirror after two missed listings: " + JSON.stringify(r));
+    else skip("45p lifting plant:syncer-unlink leaves a withdrawn ask's file in the mirror after two missed listings");
+  }
+
+  /* Step 3: end to end on a folder team, through the syncer and the mirror:
+     the lead withdraws an ask (a signed etiuda-catalog-ask-withdrawn list on the share),
+     the ask file then comes back on the share, and the desk does not answer it,
+     ending at what the desk writes (no answer file lands) */
+  async function withdrawnAskEndToEndScene(name, syncerDir) {
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const askId = "ask-withdrawn-target";
+
+    const d = deskOver(name, share, {}, syncerDir);
+    d.api.createWindow();
+    const me = await d.ask("etiuda:branch-identity", true);
+
+    const catDoc = catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01");
+    const catText = JSON.stringify(catDoc, null, 1) + "\n";
+    const pin = d.api.signedSha(catDoc);
+    d.ipc("etiuda:catalog-taken", pin, catText);
+
+    const wrap1 = d.api.wrapTeamKey(K1, me.box, T, 1, me.id);
+    const teamDoc = sign({
+      format: 1, kind: "etiuda-team", id: T, catalogs: ["lamp-shop"],
+      lead: LEAD, sealed: true, epoch: 1, rev: 1,
+      roster: [{ desk: { id: me.id, key: me.key, box: me.box }, wrap: wrap1 }]
+    }, lead.privateKey, LEAD.keyId);
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamDoc), "utf8");
+
+    d.write({
+      teamPins: { [T]: LEAD },
+      teamShown: { [T]: { folder: share, lead: "Lamp lead" } },
+      teamKeys: { [T]: { 1: keyIn(K1) } }
+    });
+
+    const s = d.api.folderSyncerRun(null);
+    const seen = watchScans(s);
+    await seen.next(1);
+    const mirror = path.join(d.ud, "folder-mirror", T);
+
+    // Lead withdraws the ask on the share
+    const wDoc = {
+      format: 1, kind: "etiuda-catalog-ask-withdrawn", desk: me.id, ids: [askId],
+      sig: { alg: "Ed25519", keyId: LEAD.keyId }
+    };
+    wDoc.sig.value = crypto.sign(null, d.api.askSignedBytes(wDoc), lead.privateKey).toString("hex");
+    fs.mkdirSync(path.join(share, "catalog-asks"), { recursive: true });
+    fs.writeFileSync(path.join(share, "catalog-asks", me.id + ".withdrawn.json"), JSON.stringify(wDoc), "utf8");
+    await seen.next(1);
+    const withdrawnInMirror = fs.existsSync(path.join(mirror, "catalog-asks", me.id + ".withdrawn.json"));
+
+    // Resurrected ask comes back on the share
+    const expAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const aDoc = {
+      format: 1, kind: "etiuda-catalog-ask", id: askId, desk: me.id, sha256: pin, expires: expAt,
+      sig: { alg: "Ed25519", keyId: LEAD.keyId }
+    };
+    aDoc.sig.value = crypto.sign(null, d.api.askSignedBytes(aDoc), lead.privateKey).toString("hex");
+    fs.writeFileSync(path.join(share, "catalog-asks", me.id + ".json"), JSON.stringify(aDoc), "utf8");
+    await seen.next(1);
+    const askInMirror = fs.existsSync(path.join(mirror, "catalog-asks", me.id + ".json"));
+
+    // Desk checks asks
+    d.api.tryCatalogAsk(null);
+    await seen.next(1);
+
+    const ansMirror = path.join(mirror, "desks", me.id, "catalog-answer.ec");
+    const ansShare = path.join(share, "desks", me.id, "catalog-answer.ec");
+    const answerLanded = fs.existsSync(ansMirror) || fs.existsSync(ansShare);
+
+    try { s.stop(); } catch {}
+
+    return { withdrawnInMirror, askInMirror, answerLanded };
+  }
+
+  {
+    const r = await withdrawnAskEndToEndScene("e2e-withdrawn");
+    const ok = r.withdrawnInMirror && r.askInMirror && !r.answerLanded;
+    check(ok, "45q end to end on a folder team, through the syncer and the mirror: the lead withdraws an ask, the ask file then comes back on the share, and the desk does not answer it, ending at what the desk writes: "
+      + "withdrawn in mirror " + r.withdrawnInMirror + ", ask in mirror " + r.askInMirror + ", no answer file lands " + !r.answerLanded);
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("syncer-ask-withdrawn", syncerFile, async (scratchSyncer) => {
+      const res = await withdrawnAskEndToEndScene("plant-ask-withdrawn", syncerCopy(scratchSyncer, "syncer.cjs"));
+      return res.answerLanded;
+    });
+    if (r) check(r.ok, "45r lifting plant:syncer-ask-withdrawn answers the returned ask on a folder team: " + JSON.stringify(r));
+    else skip("45r lifting plant:syncer-ask-withdrawn answers the returned ask on a folder team");
+  }
+
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();
   }
 
   console.log("#counts checks=" + asserted + " skipped=" + skipped + " failures=" + failed + " expected=" + EXPECTED);
   if (asserted + skipped < EXPECTED) console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
-  if (failed > 0) {
-    process.exit(Math.min(failed, 63));
-  }
+  process.exit(Math.min(failed, 63));
 }
 
 run().catch(e => {

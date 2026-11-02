@@ -39,11 +39,13 @@
  *
  *     node tests/relay-channel.mjs     exit code is the number of failed checks, capped at 63; 78 where it did not complete
  *
- * The shell runs from a copy of shell/ in a temp folder, as tests/rollback-floor.mjs runs it. No window variable is set.
+ * The shell runs from a copy of shell/ in a temp folder, as tests/rollback-floor.mjs runs it. ETIUDA_WINDOWS is never
+ * set. ETIUDA_TEST_OFFSCREEN is 1, so a desk that opens its window is placed aside and never shown.
  * Machine policy is the stand-in in tests/reg-stand.cjs, set to none.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
+process.env.ETIUDA_TEST_OFFSCREEN = "1";
 
 import fs from "node:fs";
 import os from "node:os";
@@ -1643,7 +1645,7 @@ try {
   fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
   const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
-    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead"];
+    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -3023,6 +3025,7 @@ try {
     /* The shell `src` loaded over the desk folder `ud` and the envelope already in it, as a restarted desk loads. */
     function deskLoad(ud, src, serve) {
       const said = [];
+      const sent = [];
       const on = {}, invoke = {};
       const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
       const safeStorage = {
@@ -3031,12 +3034,47 @@ try {
         decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
       };
       const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
+      /* A person's desk has a window, and the folder syncer starts only then (catalogFolderChanged returns while
+         theWindow is unset). This window is never shown: it records what the page is sent. */
+      function DeskWindow() {
+        const win = {
+          webContents: {
+            id: 1,
+            send(ch, payload) { sent.push({ ch: ch, payload: payload }); },
+            on() { return this; },
+            once() { return this; },
+            setWindowOpenHandler() {},
+            getURL() { return "file:///C:/lab/engine/etiuda.html"; },
+            getZoomLevel() { return 0; },
+            setZoomLevel() {},
+          },
+          setBounds() {},
+          getBounds() { return { x: 0, y: 0, width: 1280, height: 880 }; },
+          getNormalBounds() { return { x: 0, y: 0, width: 1280, height: 880 }; },
+          isDestroyed() { return false; },
+          isMaximized() { return false; },
+          isMinimized() { return false; },
+          isVisible() { return false; },
+          show() {}, showInactive() {}, focus() {}, close() {}, destroy() {}, maximize() {},
+          loadFile() {},
+          setTitle() {},
+          once() { return win; },
+          on() { return win; },
+        };
+        return win;
+      }
+      DeskWindow.getAllWindows = () => [];
+      DeskWindow.fromWebContents = () => null;
+      const screen = {
+        getAllDisplays: () => [{ bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
+        getPrimaryDisplay: () => ({ bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+      };
       const electron = {
         app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
         ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-        BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
-        screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
+        BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+        screen, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
       };
       process.env.XDG_CURRENT_DESKTOP = "GNOME";
       const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
@@ -3045,7 +3083,7 @@ try {
         path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
       const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
       const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-      return { api, ask, said, ud, envelope };
+      return { api, ask, said, sent, ud, envelope };
     }
     function deskFrom(name, folder, src, held, serve) {
       const ud = path.join(LAB, name);
@@ -3196,7 +3234,8 @@ try {
     const slot = (g, name) => (g.after[name] || {})[g.team];
     const barredHere = g => Array.isArray(g.after.teamBarred) && g.after.teamBarred.indexOf(g.team) >= 0;
     /* A folder invitation (E1): the desk works in its own folder `own`, takes an invitation naming `yard`, and cancels. The
-       request it writes lands on the yard and the desk's own folder setting moves there; Cancel puts both back. */
+       request it writes lands on the yard and the desk's own folder setting moves there; Cancel puts both back. While the
+       invitation is held, the catalog the desk reads is the mirror of that team, not the yard. */
     async function folderScene(src, tag, opt) {
       opt = opt || {};
       const team = "t-" + hex(8), secret = hex(16);
@@ -3213,7 +3252,8 @@ try {
       if (opt.twice) await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       let env = {};
       try { env = D.envelope(); } catch { env = {}; }
-      const pre = !taken.refused && requests() === 1 && !!env.teamJoin && env.keys.eCatalogFolder === yard && D.api.catalogFolder() === yard
+      const mirror = path.join(D.ud, "folder-mirror", team);
+      const pre = !taken.refused && requests() === 1 && !!env.teamJoin && env.keys.eCatalogFolder === yard && D.api.catalogFolder() === mirror
         && JSON.stringify((env.teamPins || {})[team]) === JSON.stringify(leadPin)
         && !!(env.teamShown && env.teamShown[team] && env.teamShown[team].folder === yard)
         && !(env.teamLeft && env.teamLeft[team]) && !(Array.isArray(env.teamBarred) && env.teamBarred.indexOf(team) >= 0);
@@ -3437,8 +3477,10 @@ try {
 
     /* C6, board 923: a desk that already keeps the key of the team's epoch takes an invitation, and the lead admits it at that
        epoch with the next rev. Admission does not rotate the key, so the join finishes on the roster that names this desk with
-       a wrap it opened. `named` is a yard whose rev 1, heeded before the invitation, already names this desk: a roster read
-       before the request is never its answer, and the join waits for the lead's rev 2. */
+       a wrap it opened. The lead's file is written only on the share. The desk's window is open, so the folder syncer copies
+       each rev into the mirror and the heed that follows is the one the page is offered. Nothing is planted in the mirror.
+       `named` is a yard whose rev 1 already names this desk, and the floor kept from before the invitation is that rev: a
+       roster read before the request is never its answer, and the join waits for the lead's rev 2. */
     async function heldJoin(src, tag, named) {
       const team = "t-" + hex(8), secret = hex(16), key = crypto.randomBytes(32);
       const own = path.join(LAB, "c6-own-" + tag), yard = path.join(LAB, "c6-yard-" + tag);
@@ -3447,6 +3489,7 @@ try {
         lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev, roster }, LEAD), null, 1) + "\n";
       const D = deskFrom("c6-desk-" + tag, own, src, Object.assign({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } },
         named ? { teamRevSeen: { [team]: { [LEAD.pub]: { epoch: 1, rev: 1 } } } } : {}));
+      D.api.createWindow();
       const pre = await D.ask("etiuda:branch-identity", true);
       const entryOf = () => ({ desk: { id: pre.id, key: pre.key, box: pre.box }, wrap: D.api.wrapTeamKey(key, pre.box, team, 1, pre.id) });
       put(yard, C.TEAM_NAME, doc(1, named ? [entryOf()] : []));
@@ -3454,25 +3497,30 @@ try {
         lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
       const taken = await D.ask("etiuda:team-join", "invite", text, "Desk North", codeOf(secret));
       const joinAt = path.join(yard, "desks", pre.id, "join.json");
+      const mirrorTeam = path.join(D.ud, "folder-mirror", team, C.TEAM_NAME);
+      const mirrorRev = () => { try { return JSON.parse(fs.readFileSync(mirrorTeam, "utf8")).rev; } catch { return 0; } };
       const asked = !taken.refused && fs.existsSync(joinAt) && !!D.envelope().teamJoin && D.envelope().teamJoin.held === 1;
-      D.api.heedTeam();
-      await D.ask("etiuda:team-join", "view");
+      const sawFirst = await until(() => mirrorRev() >= 1, 8000);
       const waited = fs.existsSync(joinAt) && !!D.envelope().teamJoin;
       put(yard, C.TEAM_NAME, doc(2, [entryOf()]));
-      D.api.heedTeam();
+      const sawNext = await until(() => mirrorRev() >= 2, 8000);
       const view = await D.ask("etiuda:team-join", "view");
-      return { asked, waited, refused: taken.refused, gone: !fs.existsSync(joinAt), join: D.envelope().teamJoin, joined: !!(view && view.joined && view.joined.team === team) };
+      const toldJoin = (D.sent || []).some(s => s.ch === "etiuda:team-join" && s.payload && s.payload.joined && s.payload.joined.team === team);
+      const joined = !!(view && view.joined && view.joined.team === team) || toldJoin;
+      try { const s = D.api.folderSyncerRun(); if (s && s.stop) s.stop(); } catch { /* already stopped */ }
+      return { asked, waited, refused: taken.refused, gone: !fs.existsSync(joinAt), join: D.envelope().teamJoin, joined: joined, brought: sawFirst && sawNext };
     }
     const heldTold = g => (g.asked ? "asked" : "not asked" + (g.refused ? " (refused " + g.refused + ")" : "")) + ", before rev 2 the request "
       + (g.waited ? "waited" : "was let go") + ", after it join.json " + (g.gone ? "deleted" : "still there") + ", the join " + (g.join ? "standing" : "gone")
+      + ", the mirror " + (g.brought ? "took both revs" : "missed a rev")
       + ", said " + (g.joined ? "joined" : "nothing");
-    const heldOk = g => g.asked && g.gone && !g.join && g.joined;
+    const heldOk = g => g.asked && g.gone && !g.join && g.joined && g.brought;
     try {
       const mainNow = fs.readFileSync(mainFile, "utf8");
       const h = await heldJoin(mainNow, "held", false);
-      check(heldOk(h), "923c a desk holding the key of the team's epoch takes an invitation, and the lead's next rev at that epoch names it with a wrap it opens: the join finishes: " + heldTold(h));
+      check(heldOk(h), "923c a desk holding the key of the team's epoch takes an invitation, and the lead's next rev, written on the share and brought into the mirror by the folder syncer, names it with a wrap it opens: the join finishes: " + heldTold(h));
       const n = await heldJoin(mainNow, "named", true);
-      check(heldOk(n) && n.waited, "923d a roster heeded before the invitation that already names this desk does not finish the join, and the lead's rev 2 does: " + heldTold(n));
+      check(heldOk(n) && n.waited, "923d a roster heeded before the invitation that already names this desk does not finish the join, and the lead's rev 2, brought into the mirror by the folder syncer, does: " + heldTold(n));
       const nameBytes = sha(fs.readFileSync(mainFile));
       const liftedNamed = dropLine("plant:c6-named")(mainNow);
       const ln = liftedNamed === null ? null : await heldJoin(liftedNamed, "plant-held", false);
