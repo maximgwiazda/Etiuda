@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 60;
+const EXPECTED = 61;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1259,7 +1259,8 @@ try {
     }
   }
 
-  /* 15w8: Load of a file says the reason the read gave. A sealed file this desk cannot open is not left on Load the new edition. */
+  /* 15w8: Load of a file says the reason the read gave. A sealed file this desk cannot open is not left on Load the new edition.
+     The same #ecYes reads that absence, and a newer edition that is not sealed, which paints the button. */
   {
     const ST = await import(MOD("storage.js"));
     const Offer = await import(MOD("catalog-offer.js"));
@@ -1312,17 +1313,177 @@ try {
     const toastEl = { classList: cls(), textContent: "", innerHTML: "", style: {},
       getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) };
     globalThis.innerHeight = 800;
+    globalThis.innerWidth = 1280;
+    globalThis.addEventListener = noop;
+    globalThis.removeEventListener = noop;
     globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0",
       fontStyle: "normal", fontWeight: "400", fontSize: "14px", fontFamily: "sans-serif", letterSpacing: "normal" });
+    /* Enough of a document for the offer bubble to paint #ecYes, which is what both readings below ask for. */
+    const VOID = { br: 1, img: 1, hr: 1, input: 1, meta: 1, link: 1, source: 1, wbr: 1, area: 1, base: 1, col: 1, embed: 1, track: 1 };
+    function selMatch(node, sel) {
+      const s = String(sel || "").trim();
+      if (!s || !node || node.tagName === "#TEXT") return false;
+      if (s.charAt(0) === "#") return node.id === s.slice(1);
+      if (s.charAt(0) === ".") return node.className.split(/\s+/).indexOf(s.slice(1)) >= 0;
+      const onlyAttr = s.match(/^\[([\w:-]+)\]$/);
+      if (onlyAttr) return node.getAttribute(onlyAttr[1]) != null;
+      const tagAttr = s.match(/^([A-Za-z][\w:-]*)\[([\w:-]+)\]$/);
+      if (tagAttr) return node.tagName.toLowerCase() === tagAttr[1].toLowerCase() && node.getAttribute(tagAttr[2]) != null;
+      return node.tagName.toLowerCase() === s.toLowerCase();
+    }
+    function collect(node, sel) {
+      const child = String(sel).match(/^:scope\s*>\s*(.+)$/);
+      if (child) return (node.children || []).filter(c => selMatch(c, child[1]));
+      const out = [];
+      const walk = (n) => {
+        (n.children || []).forEach(c => {
+          if (selMatch(c, sel)) out.push(c);
+          walk(c);
+        });
+      };
+      walk(node);
+      return out;
+    }
+    function parseInto(html, parent) {
+      const re = /<!--[\s\S]*?-->|<\/([A-Za-z][\w:-]*)>|<([A-Za-z][\w:-]*)([^>]*)>|([^<]+)/g;
+      const stack = [parent];
+      let m;
+      while ((m = re.exec(html))) {
+        const top = stack[stack.length - 1];
+        if (m[1]) {
+          const name = m[1].toLowerCase();
+          for (let i = stack.length - 1; i > 0; i--) {
+            if (stack[i].tagName.toLowerCase() === name) { stack.length = i; break; }
+          }
+          continue;
+        }
+        if (m[2]) {
+          const name = m[2].toLowerCase();
+          const node = pageEl(name);
+          const attr = /([\w:-]+)(?:="([^"]*)")?/g;
+          let a;
+          while ((a = attr.exec(m[3] || ""))) node.setAttribute(a[1], a[2] == null ? "" : a[2]);
+          top.appendChild(node);
+          if (!(VOID[name] || /\/\s*$/.test(m[3] || ""))) stack.push(node);
+          continue;
+        }
+        if (m[4] && m[4].trim()) {
+          const tn = pageEl("#text");
+          tn.textContent = m[4];
+          top.appendChild(tn);
+        }
+      }
+    }
+    function pageEl(tag) {
+      const attrs = {};
+      const children = [];
+      let html = "";
+      let ownText = "";
+      let className = "";
+      const extra = new Set();
+      const node = {
+        tagName: String(tag || "div").toUpperCase(),
+        id: "",
+        children,
+        parentNode: null,
+        style: {},
+        isConnected: false,
+        hidden: false,
+        onclick: null,
+        onkeydown: null,
+        offsetWidth: 0,
+        offsetHeight: 0,
+        classList: {
+          contains: c => extra.has(c) || className.split(/\s+/).indexOf(c) >= 0,
+          add: (...c) => c.forEach(x => extra.add(x)),
+          remove: (...c) => c.forEach(x => extra.delete(x)),
+          toggle: (c, on) => {
+            const has = extra.has(c) || className.split(/\s+/).indexOf(c) >= 0;
+            const next = on === undefined ? !has : !!on;
+            if (next) extra.add(c); else extra.delete(c);
+            return next;
+          },
+        },
+        get className() { return className; },
+        set className(v) { className = String(v == null ? "" : v); },
+        getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
+        setAttribute(k, v) {
+          attrs[k] = String(v);
+          if (k === "id") node.id = String(v);
+          if (k === "class") className = String(v);
+        },
+        removeAttribute(k) {
+          delete attrs[k];
+          if (k === "id") node.id = "";
+          if (k === "class") className = "";
+        },
+        appendChild(c) { if (c) { children.push(c); c.parentNode = node; } return c; },
+        remove() {
+          node.isConnected = false;
+          const p = node.parentNode;
+          if (p && p.children) {
+            const i = p.children.indexOf(node);
+            if (i >= 0) p.children.splice(i, 1);
+          }
+          const at = made.indexOf(node);
+          if (at >= 0) made.splice(at, 1);
+        },
+        focus() {},
+        addEventListener() {},
+        removeEventListener() {},
+        insertAdjacentHTML(where, frag) {
+          const holder = pageEl("div");
+          holder.innerHTML = frag;
+          const kids = holder.children.splice(0, holder.children.length);
+          const p = node.parentNode;
+          if (!p || !p.children) { kids.forEach(c => node.appendChild(c)); return; }
+          const i = p.children.indexOf(node);
+          const at = where === "afterend" ? i + 1 : i;
+          kids.forEach(c => { c.parentNode = p; });
+          p.children.splice(at < 0 ? p.children.length : at, 0, ...kids);
+        },
+        getBoundingClientRect() { return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }; },
+        querySelector(sel) { return collect(node, sel)[0] || null; },
+        querySelectorAll(sel) { return collect(node, sel); },
+        get textContent() {
+          if (node.tagName === "#TEXT") return ownText;
+          if (children.length) return children.map(c => c.textContent || "").join("");
+          return ownText;
+        },
+        set textContent(v) { ownText = String(v == null ? "" : v); children.length = 0; html = ownText; },
+      };
+      Object.defineProperty(node, "innerHTML", {
+        get() { return html; },
+        set(v) { html = String(v == null ? "" : v); ownText = ""; children.length = 0; parseInto(html, node); },
+      });
+      return node;
+    }
+    function findPainted(sel) {
+      for (let i = 0; i < made.length; i++) {
+        const n = made[i];
+        if (!n) continue;
+        if (n.id && sel === "#" + n.id) return n;
+        if (n.querySelector) {
+          const hit = n.querySelector(sel);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    }
     globalThis.document = {
       addEventListener: noop, removeEventListener: noop,
-      getElementById: (id) => (id === "mgCatList" ? box : id === "toast" ? toastEl : (made.find(n => n.id === id) || null)),
-      querySelector: (sel) => (sel === "#toast" ? toastEl : null),
+      getElementById: (id) => (id === "mgCatList" ? box : id === "toast" ? toastEl : findPainted("#" + id)),
+      querySelector: (sel) => (sel === "#toast" ? toastEl : findPainted(sel)),
       querySelectorAll: () => [],
-      createElement: (tag) => ({ tagName: tag, id: "", innerHTML: "", textContent: "", style: {}, children: [], classList: cls(),
-        setAttribute() {}, appendChild(c) { this.children.push(c); return c; }, querySelector() { return null; }, querySelectorAll() { return []; } }),
-      body: { classList: cls(), appendChild: (n) => { made.push(n); } },
+      createElement: (tag) => pageEl(tag),
+      body: { classList: cls(), appendChild: (n) => { made.push(n); if (n) n.isConnected = true; return n; } },
       documentElement: { classList: cls() },
+    };
+    /* One selector for the sealed file and for a newer edition that is not sealed. */
+    const EDITION_SEL = "#ecYes";
+    const editionWords = () => {
+      const yes = document.querySelector(EDITION_SEL);
+      return yes ? String(yes.textContent || "").replace(/\s+/g, " ").trim() : "";
     };
     const host = {
       readCatalogFile: (name, desk, asked, offer) => w8.ask("etiuda:catalog-read", name, desk, asked, offer),
@@ -1343,7 +1504,7 @@ try {
       else await Promise.resolve(Offer.loadCatalogFromFolder(name, 0));
       await tick();
       return { said: String(toastEl.innerHTML || toastEl.textContent || ""),
-        edition: made.some(n => n.id === "ecYes") || String(toastEl.innerHTML || "").indexOf("Load the new edition") >= 0,
+        edition: editionWords(),
         wired: !!(b && b.onclick) };
     };
     const sealedEn = await click(sealedName);
@@ -1363,6 +1524,61 @@ try {
       + ", down " + (downEn.said.indexOf(disk) >= 0) + ", polish " + (downPl.said.indexOf(diskPl) >= 0)
       + ", " + painted + (sealedEn.wired ? ", painted button" : ", direct Load")
       + (held ? "" : " sealed-said " + sealedEn.said.slice(0, 160) + " down-said " + downEn.said.slice(0, 120)));
+
+    /* A newer edition of the same catalog, not sealed. The held file is the newest on disk, so the
+       list marks that row loaded and the later rev keeps Load, the same button the sealed file used. */
+    const nextName = "next.ec";
+    const heldName = "held.ec";
+    fs.writeFileSync(path.join(w8dir, heldName), textOf(catalog(1, { id: "w8-lamps", name: "W8 lamps" })));
+    fs.writeFileSync(path.join(w8dir, nextName), textOf(catalog(2, { id: "w8-lamps", name: "W8 lamps", card: CARD + " revised" })));
+    touch(path.join(w8dir, heldName), Date.now());
+    touch(path.join(w8dir, nextName), Date.now() - 120000);
+    ST.lsSet("eCatalog", JSON.stringify({
+      id: "w8-lamps", rev: 1, langs: [{ code: "en", label: "EN" }],
+      cards: [{ id: "c-warm", c: "open", t: "Warm opening", en: CARD }],
+    }));
+    /* The list's own settle runs inside the paint. The held signature is written after that, or the settle
+       marks it unknown and the offer says Load it. */
+    Offer.paintCatalogList();
+    const untilNext = Date.now() + 1500;
+    while (!buttons.some(b => b.getAttribute("data-ec-load") === nextName) && Date.now() < untilNext) await tick();
+    ST.lsSet("eCatalogTrust", "valid");
+    ST.lsSet("eCatalogSigner", LEAD.keyId);
+    ST.lsSet("eCatalogSignerPub", LEAD.public);
+    host.catalogLeads = () => [{ keyId: LEAD.keyId, public: LEAD.public }];
+    let openEn = { edition: "", wired: false, said: "" };
+    let stayed = "";
+    let openErr = "";
+    try {
+      openEn = await click(nextName);
+      await tick();
+      await tick();
+      await tick();
+      stayed = editionWords();
+    } catch (e) {
+      openErr = String(e && e.message ? e.message : e).slice(0, 180);
+    }
+    const oldMissed = !(made.some(n => n.id === "ecYes") || String(toastEl.innerHTML || "").indexOf("Load the new edition") >= 0);
+    const sameSel = openEn.edition === "Load the new edition" && stayed === "Load the new edition" && sealedEn.edition !== "Load the new edition";
+    const titleEl = document.querySelector("#ecTitle");
+    const trustEl = document.querySelector(".ec-trust");
+    check(sameSel && openEn.wired && oldMissed && !openErr,
+      "15w8 a newer edition that is not sealed paints Load the new edition, read by the same #ecYes the sealed file left empty: "
+      + "open " + JSON.stringify(openEn.edition) + ", stayed " + JSON.stringify(stayed)
+      + ", sealed " + JSON.stringify(sealedEn.edition)
+      + ", selector #ecYes"
+      + (openEn.wired ? ", painted button" : ", direct Load")
+      + (oldMissed ? ", body id and toast missed it" : ", old reading saw it")
+      + (openErr ? ", " + openErr : "")
+      + (sameSel ? "" : " title " + JSON.stringify(titleEl ? titleEl.textContent : "")
+        + " trust " + JSON.stringify(trustEl ? String(trustEl.textContent || "").slice(0, 80) : "")
+        + " held " + JSON.stringify(ST.lsGet("eCatalogTrust"))
+        + " said " + String(openEn.said || "").slice(0, 120)));
+    ST.lsSet("eCatalog", "");
+    ST.lsSet("eCatalogTrust", "");
+    ST.lsSet("eCatalogSigner", "");
+    ST.lsSet("eCatalogSignerPub", "");
+    host.catalogLeads = undefined;
 
     fs.writeFileSync(path.join(w8dir, "access.ec"), "x");
     fs.writeFileSync(path.join(w8dir, "gone.ec"), "x");
