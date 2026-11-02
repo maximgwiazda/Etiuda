@@ -82,7 +82,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 304 };
+const EXPECTED = { chrome: 307 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2226,6 +2226,47 @@ const t0 = Date.now();
   const back = await p.evaluate(() => document.querySelector("#intent").value);
   check(i0 === n1 - 1 && i1 === 0 && i2 === i0 && away.v === "" && away.focus === "intent" && back === "probe",
     "Ctrl+Tab steps round the strip (" + i0 + " > " + i1 + " > " + i2 + "), the query travels with its tab and focus stays in the box");
+
+  /* hooks.intentPickedLine (tabs.js:181). A rail click toasts the line and marks it heard
+     (rail-list.js), so the polite region is not where that click speaks. The slot speaks when
+     the person leaves the tab and comes back: #eSay then names the tab, the language and the
+     same line. The pick drops the query, because the box is a search and the pick is not, and
+     the query is put back so the slash checks below still read it. */
+  const queryBefore = await p.evaluate(() => document.querySelector("#intent").value);
+  const langBefore = await p.evaluate(() => lang);
+  const catsBefore = await p.evaluate(() => cats.slice());
+  const rowPicked = await p.evaluate(() => {
+    const r = document.querySelector("#intentRailList .rail-item:not(.on)");
+    if (!r) return false;
+    r.click();
+    return true;
+  });
+  await sleep(500);
+  const toastPicked = await p.evaluate(() => ((document.getElementById("toast") || {}).textContent || "").trim());
+  await chord("Tab", "Tab", false); await sleep(700);
+  await chord("Tab", "Tab", false); await sleep(700);
+  const sayReturned = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
+  const line = /Intent:|Intencja:/.test(toastPicked);
+  const heard = line && sayReturned.indexOf(toastPicked) >= 0;
+  await p.evaluate(() => { const b = document.getElementById("intentRailClear"); if (b) b.click(); });
+  await sleep(500);
+  const saidCleared = await p.evaluate(() => /cleared|Wyczyszczono/i.test((document.getElementById("toast") || {}).textContent || ""));
+  const restored = await p.evaluate((q, catsWas) => {
+    if (catsWas.length && cats.slice().join("\n") !== catsWas.join("\n")) {
+      cats = catsWas.slice();
+      drawPills();
+      hooks.render();
+    }
+    const box = document.querySelector("#intent");
+    if (box) { box.value = q; box.focus(); }
+    scheduleTabSave();
+    return { q: box ? box.value : "", intents: intentIdxs.length, lang: lang, focus: document.activeElement && document.activeElement.id };
+  }, queryBefore, catsBefore);
+  check(rowPicked && heard && saidCleared && restored.q === queryBefore && restored.intents === 0
+    && restored.lang === langBefore && restored.focus === "intent",
+    "an intent picked on the rail speaks its line into the live region on returning to the tab, and clearing speaks cleared ("
+    + JSON.stringify({ picked: rowPicked, heard: heard, cleared: saidCleared, query: restored.q === queryBefore, intents: restored.intents, focus: restored.focus }) + ")");
+
   const l0 = await p.evaluate(() => lang);
   await p.keyboard.press("Slash"); await sleep(500);
   const typed = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
@@ -2773,6 +2814,108 @@ const t0 = Date.now();
      of those. The window is put back at the foot. */
   e = since();
   await p.keyboard.press("Escape"); await sleep(300);
+
+  /* hooks.syncSaveNotice (storage.js:153, pack.js:173). Reached when a storage write fails
+     (eUnsaved transitions from empty to non-empty), raising #eSaveWarn. Restoring the write
+     and saving again drops the notice and toasts that changes are saved again. */
+  const saveNotice = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const realSetItem = localStorage.setItem.bind(localStorage);
+    let warnUp = false, warnLead = "", warnDown = false, toasted = false;
+    try {
+      localStorage.setItem = () => { throw new Error("QuotaExceededError"); };
+      window.savePack();
+      await wait(300);
+      const warn = document.getElementById("eSaveWarn");
+      warnUp = !!warn;
+      warnLead = warn ? (warn.querySelector("b") || {}).textContent || "" : "";
+      localStorage.setItem = realSetItem;
+      window.savePack();
+      await wait(300);
+      warnDown = !document.getElementById("eSaveWarn");
+      const tst = document.getElementById("toast");
+      toasted = !!tst && (tst.classList.contains("show") || (tst.textContent || "").indexOf("saved") > -1);
+    } finally {
+      localStorage.setItem = realSetItem;
+      const warn = document.getElementById("eSaveWarn");
+      if (warn) warn.remove();
+      const tst = document.getElementById("toast");
+      if (tst) tst.classList.remove("show");
+    }
+    return { warnUp, warnLead: /not saved|niezapisane/i.test(warnLead), warnDown, toasted };
+  });
+  check(saveNotice.warnUp && saveNotice.warnLead && saveNotice.warnDown && saveNotice.toasted,
+    "hooks.syncSaveNotice shows #eSaveWarn when storage write fails and drops it with a toast when storage recovers ("
+    + JSON.stringify(saveNotice) + ")");
+
+  /* hooks.loadCatalogFromFolder (team-join.js, the admission on an empty or sample desk).
+     The shell tells the page a team catalog can be opened, and the page asks before it puts
+     that file down over one already loaded. The file has to be a catalog document: the runtime
+     object is not one, and a file that will not parse never raises the offer. Keep current
+     leaves the loaded catalog where it was. The sample flag is what lets the admission reach
+     the slot on a desk that already has cards, and it is put back afterwards. */
+  const folderCat = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const held = storedCatalog();
+    const file = "probe-folder.ec";
+    if (!held || typeof catalogToV2 !== "function" || typeof wireTeamJoin !== "function") {
+      return { held: !!held, up: false, named: false, kept: false, left: 0, same: false, why: "missing" };
+    }
+    let doc = null;
+    try { doc = catalogToV2(held, { id: "probe-folder-cat" }); }
+    catch (e) { return { held: true, up: false, named: false, kept: false, left: 0, same: false, why: "convert" }; }
+    const wasHost = window.E_HOST;
+    const wasSample = nsGet("Sample");
+    const wasNo = nsGet("CatalogNo");
+    const wasNoAt = nsGet("CatalogNoAt");
+    const wasId = String(held.id || "");
+    let deliver = null;
+    window.E_HOST = {
+      teamJoin: () => Promise.resolve({ sealed: null, join: null, leads: [] }),
+      onTeamJoin: fn => { deliver = fn; },
+      readCatalogFile: () => Promise.resolve({ name: file, text: JSON.stringify(doc) })
+    };
+    const restore = () => {
+      if (wasSample == null) nsDel("Sample"); else nsSet("Sample", wasSample);
+      if (wasNo == null) nsDel("CatalogNo"); else nsSet("CatalogNo", wasNo);
+      if (wasNoAt == null) nsDel("CatalogNoAt"); else nsSet("CatalogNoAt", wasNoAt);
+      if (typeof syncSampleMark === "function") syncSampleMark();
+      if (wasHost) window.E_HOST = wasHost; else delete window.E_HOST;
+      const bub = document.getElementById("eTeamJoin");
+      if (bub) bub.remove();
+      const stray = document.getElementById("eCatalogOffer");
+      if (stray) stray.remove();
+      const tst = document.getElementById("toast");
+      if (tst) tst.classList.remove("show");
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    };
+    try {
+      wireTeamJoin();
+      if (typeof deliver !== "function") {
+        return { held: true, up: false, named: false, kept: false, left: 0, same: false, why: "no-deliver" };
+      }
+      if (wasSample !== "1") nsSet("Sample", "1");
+      deliver({ joined: { file: file }, join: null, leads: [], sealed: null });
+      for (let i = 0; i < 30 && !document.getElementById("eCatalogOffer"); i++) await wait(100);
+      const offer = document.getElementById("eCatalogOffer");
+      const title = offer ? ((offer.querySelector(".ec-what b") || {}).textContent || "") : "";
+      const keep = offer ? ((offer.querySelector("#ecNo") || {}).textContent || "") : "";
+      const noBtn = offer && offer.querySelector("#ecNo");
+      if (noBtn) noBtn.click();
+      await wait(300);
+      const left = document.querySelectorAll("#eCatalogOffer").length;
+      const still = String((storedCatalog() || {}).id || "");
+      return {
+        held: true, up: !!offer, named: title === "probe-folder",
+        kept: /Keep current|Zachowaj obecny/.test(keep), left: left, same: still === wasId, why: ""
+      };
+    } finally {
+      restore();
+    }
+  });
+  check(folderCat.held && folderCat.up && folderCat.named && folderCat.kept && folderCat.left === 0 && folderCat.same,
+    "hooks.loadCatalogFromFolder reads a catalog from the host folder, shows the offer dialog with its title, and Keep current dismisses it ("
+    + JSON.stringify(folderCat) + ")");
 
   /* "+ Intent" at the foot of the panel, rail-list.js:488. The other route to
      hooks.openIntentEditor is a Ctrl-held click on a row's star, driven a few lines below. */

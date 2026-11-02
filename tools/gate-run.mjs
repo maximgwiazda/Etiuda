@@ -160,8 +160,11 @@ export function isLockStale(existing) {
 
 let heldLockPath = null;
 
-export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, waitTimeoutMs = 300000) {
-  const r = takeLock({ lockPath, what, tree, waitMs: waitTimeoutMs, say: (l) => console.log(l.replace(/^machine-lock:/, "gate-run:")) });
+export const DEFAULT_LOCK_TIMEOUT_MS = 4 * 3600 * 1000; /* plant:wait-ceiling */
+
+export function acquireLock(lockPath = LOCK_PATH, what = "run", tree = ROOT, waitTimeoutMs = DEFAULT_LOCK_TIMEOUT_MS, opts = {}) {
+  const say = (opts && opts.say) || ((l) => console.log(l.replace(/^machine-lock:/, "gate-run:")));
+  const r = takeLock(Object.assign({ lockPath, what, tree, waitMs: waitTimeoutMs }, opts, { say }));
   if (r.ok) heldLockPath = lockPath;
   return { ok: r.ok, staleTakenOver: !!r.takenOver, heldBy: r.heldBy, reason: r.ok ? "" : (r.reason.indexOf("held by") >= 0 && waitTimeoutMs > 0
     ? "timed out waiting for " + r.reason : r.reason) };
@@ -1191,7 +1194,7 @@ async function main() {
   let lockRes = null;
   if (isHeavy) {
     console.log("gate-run: taking machine lock for heavy run (" + gateLabel + ")...");
-    const timeoutMs = process.env.ETIUDA_LOCK_TIMEOUT_MS ? Number(process.env.ETIUDA_LOCK_TIMEOUT_MS) : 300000;
+    const timeoutMs = process.env.ETIUDA_LOCK_TIMEOUT_MS ? Number(process.env.ETIUDA_LOCK_TIMEOUT_MS) : DEFAULT_LOCK_TIMEOUT_MS;
     lockRes = acquireLock(LOCK_PATH, gateLabel, ROOT, timeoutMs);
     if (!lockRes.ok) refuse("could not acquire machine lock: " + lockRes.reason);
   }

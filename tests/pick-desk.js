@@ -15,6 +15,10 @@
  * among the files that are not gates. The "chat" is a window of a PowerShell form of this file's
  * own, placed at 200,200; the desk's window is off screen; the picker opens by the pointer.
  *
+ * GUARDS. node tests/pick-desk.js --guards proves the idle, touch, focus and clipboard guards
+ * on lab stand-ins and opens nothing. The window run refuses unless the desk has been still
+ * for five minutes, stops if it is touched, and puts the clipboard back.
+ *
  * NO CONTENT. The catalog is invented here. The clipboard is read by the form, compared, and never
  * printed beyond its length.
  *
@@ -30,10 +34,21 @@ const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 if (process.platform !== "win32") E.refuse("tests/pick-desk.js drives Windows' own hotkey and focus, so it runs on Windows only");
-const PORT = E.portBlock("pick-desk");
+
+const deskInput = require("../tools/desk-input.js");
+if (process.argv.includes("--guards") || process.argv.includes("--idle-check") || process.argv.includes("--guards-before")) {
+  deskInput.main(process.argv).then(code => {
+    process.exit(code);
+  }).catch(e => {
+    console.log("  FAIL " + String(e && e.message || e).split("\n")[0]);
+    process.exit(1);
+  });
+} else {
+  runPickDesk();
+}
+
+function runPickDesk() {
 E.windowWall("tests/pick-desk.js");
-const LEASED = E.takeLeases(["ports:" + PORT, "desk:foreground"], 10, "tests/pick-desk.js");
-console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
 const EXPECTED = 14;
 let checks = 0, fails = 0, reachedEnd = false, child = null, form = null, b = null;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -44,48 +59,7 @@ function electronExe() {
   return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
 }
 
-/* ---- the chat: a form of this run's own, driven through files, which also presses the keys ---- */
-const FORM_PS1 = [
-  "param([string]$Dir)",
-  "Add-Type -AssemblyName System.Windows.Forms",
-  "Add-Type @'",
-  "using System; using System.Runtime.InteropServices;",
-  "public static class PickU {",
-  "  [DllImport(\"user32.dll\")] public static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);",
-  "  [DllImport(\"user32.dll\")] public static extern bool UnregisterHotKey(IntPtr h, int id);",
-  "  [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();",
-  "  [DllImport(\"user32.dll\")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);",
-  "}",
-  "'@",
-  "$f = New-Object Windows.Forms.Form",
-  "$f.Text = 'pick-desk chat'; $f.StartPosition = 'Manual'; $f.Left = 200; $f.Top = 200; $f.Width = 640; $f.Height = 420",
-  "$t = New-Object Windows.Forms.TextBox; $t.Multiline = $true; $t.Dock = 'Fill'; $f.Controls.Add($t)",
-  "$vk = @{ ctrl = 0x11; shift = 0x10; alt = 0x12; space = 0x20; enter = 0x0D; escape = 0x1B; v = 0x56; '0' = 0x30; f9 = 0x78 }",
-  "function Press($spec) { $ks = $spec.Split('+') | ForEach-Object { [byte]$vk[$_] }",
-  "  foreach ($k in $ks) { [PickU]::keybd_event($k, 0, 0, [UIntPtr]::Zero) }",
-  "  [array]::Reverse($ks); foreach ($k in $ks) { [PickU]::keybd_event($k, 0, 2, [UIntPtr]::Zero) } }",
-  "$n = 0",
-  "$timer = New-Object Windows.Forms.Timer; $timer.Interval = 50",
-  "$timer.Add_Tick({",
-  "  $cmd = Join-Path $Dir ('cmd-' + $script:n + '.txt')",
-  "  if (-not (Test-Path $cmd)) { return }",
-  "  $c = (Get-Content -Raw $cmd).Trim(); $a = ''",
-  "  if ($c -eq 'fg') { $a = [string]([PickU]::GetForegroundWindow() -eq $f.Handle) }",
-  "  elseif ($c -eq 'activate') { $f.Activate(); $t.Focus() | Out-Null; $a = 'ok' }",
-  "  elseif ($c -eq 'clip') { $a = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([Windows.Forms.Clipboard]::GetText())) }",
-  "  elseif ($c -eq 'text') { $a = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t.Text)) }",
-  "  elseif ($c -eq 'clear') { $t.Text = ''; $a = 'ok' }",
-  "  elseif ($c -like 'setclip *') { [Windows.Forms.Clipboard]::SetText([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.Substring(8)))); $a = 'ok' }",
-  "  elseif ($c -like 'hold *') { $p = $c.Substring(5).Split(' '); $a = [string][PickU]::RegisterHotKey($f.Handle, [int]$p[0], [uint32]$p[1], [uint32]$p[2]) }",
-  "  elseif ($c -like 'free *') { $a = [string][PickU]::UnregisterHotKey($f.Handle, [int]$c.Substring(5)) }",
-  "  elseif ($c -like 'keys *') { Press $c.Substring(5); $a = 'ok' }",
-  "  elseif ($c -eq 'close') { $a = 'ok'; Set-Content -Path (Join-Path $Dir ('ans-' + $script:n + '.txt')) -Value $a; $f.Close(); return }",
-  "  Set-Content -Path (Join-Path $Dir ('ans-' + $script:n + '.txt')) -Value $a",
-  "  $script:n++",
-  "})",
-  "$f.Add_Shown({ $f.Activate(); $t.Focus() | Out-Null; $timer.Start() })",
-  "[Windows.Forms.Application]::Run($f)",
-].join("\n");
+/* The chat form is the shared helper. The same script is the lab stand-in under --guards. */
 let formN = 0;
 async function ask(cmd) {
   const n = formN++;
@@ -93,7 +67,13 @@ async function ask(cmd) {
   const ans = path.join(LAB, "ans-" + n + ".txt");
   for (let i = 0; i < 600; i++) {
     await sleep(50);
-    if (fs.existsSync(ans)) { await sleep(20); return fs.readFileSync(ans, "utf8").trim(); }
+    if (fs.existsSync(ans)) {
+      await sleep(20);
+      const got = fs.readFileSync(ans, "utf8").replace(/^\uFEFF/, "").trim();
+      if (got === "touched" || got === "notfg") throw new Error(deskInput.STOP_NOTE);
+      if (got === "foreign") throw new Error(deskInput.FOREIGN_NOTE);
+      return got;
+    }
   }
   throw new Error("the chat form did not answer " + JSON.stringify(cmd));
 }
@@ -127,6 +107,11 @@ function buildApp() {
 const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.test(p.url()) && /id%3D%22q%22/.test(p.url())) || null;
 
 (async () => {
+  const block = deskInput.idleBlock(await deskInput.readIdleMinutes());
+  if (block) { block.lines.forEach(l => console.log(l)); return; }
+  const PORT = E.portBlock("pick-desk");
+  const LEASED = E.takeLeases(["ports:" + PORT, "desk:foreground"], 10, "tests/pick-desk.js");
+  console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
   const app = buildApp();
   child = E.shellLaunch("tests/pick-desk.js", electronExe(), [app.dir, "--remote-debugging-port=" + PORT, "--user-data-dir=" + app.UD],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: app.docs }) });
@@ -152,7 +137,7 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   check(first.n === 2 && /Kate$/.test(first.text), "a the desk's page answers the picker with the catalog's two rows, the first signed ("
     + first.n + " rows, " + first.text.length + " characters)");
 
-  fs.writeFileSync(path.join(LAB, "form.ps1"), FORM_PS1, "utf8");
+  fs.writeFileSync(path.join(LAB, "form.ps1"), deskInput.helperScript(), "utf8");
   form = spawn("powershell.exe", ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", path.join(LAB, "form.ps1"), "-Dir", LAB],
     { stdio: "ignore", windowsHide: false });
   check(await until(async () => (await ask("fg")) === "True", 30000), "b the chat window stands in front with its text box focused");
@@ -320,9 +305,11 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   if (child) E.killTree(child.pid);
   if (form) E.killTree(form.pid);
   await sleep(500);
-  try { fs.rmSync(LAB, { recursive: true, force: true }); } catch (x) { /* named below */ }
   console.log("#counts checks=" + checks + " failed=" + fails + " expected=" + EXPECTED);
   const v = E.suiteVerdict({ checks, fails, expected: EXPECTED, reachedEnd });
-  v.lines.forEach(l => console.log("  " + l));
+  const end = deskInput.closingLines(v.lines, LAB);
+  for (let i = 0; i < end.length; i++) console.log(i < v.lines.length ? "  " + end[i] : end[i]);
+  try { fs.rmSync(LAB, { recursive: true, force: true }); } catch (x) { /* named below */ }
   process.exit(v.exit);
 });
+}
