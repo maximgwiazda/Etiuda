@@ -46,7 +46,7 @@ function eOpenCatalogFolder(){
   const h=eHost();
   if(!h || typeof h.openCatalogFolder!=="function") return Promise.resolve(false);
   const say=why=>{
-    if(why==="not-answering") toastRefusal(t("The team's folder is not answering just now, so it stays closed. The same link opens it once this computer can reach it."));
+    if(why==="not-answering") toastRefusal(t("The team's folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running."));
     else if(why==="not-a-folder") toastRefusal(t("Settings names a file where the team's folder should be, so nothing is opened. The Library can choose the folder again."));
     else if(why==="could-not-open") toastRefusal(t("This computer did not open the team's folder just now. The same link tries again."));
   };
@@ -178,6 +178,7 @@ function eReadCatalogFile(name,desk,asked,offer){
         const got={name:String(v.name||""),text:String(v.text||"")};
         if(typeof v.notOnTeam==="string" && v.notOnTeam) got.notOnTeam=v.notOnTeam;
         if(v.why==="not-answering"||v.why==="not-desk-file"||v.why==="sealed"||v.why==="sealed-wait"||v.why==="unreadable"||v.why==="off-roster") got.why=v.why;
+        if(v.code==="empty"||(typeof v.code==="string"&&/^[A-Z][A-Z0-9]{1,15}$/.test(v.code))) got.code=v.code;
         return got;
       })
       .catch(()=>null);
@@ -228,6 +229,8 @@ function ePickCatalogFile(title,label){
         if(!v || typeof v!=="object") return null;
         const got={name:String(v.name||""),text:String(v.text||"")};
         if(typeof v.notOnTeam==="string" && v.notOnTeam) got.notOnTeam=v.notOnTeam;
+        if(v.why==="unreadable") got.why=v.why;
+        if(v.code==="empty"||(typeof v.code==="string"&&/^[A-Z][A-Z0-9]{1,15}$/.test(v.code))) got.code=v.code;
         return got;
       })
       .catch(()=>null);

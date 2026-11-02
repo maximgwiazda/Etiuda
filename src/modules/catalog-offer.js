@@ -7,7 +7,7 @@ import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionNameOf, editionLabel, editionSaid,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile, eNeedsNewerLine,
-  eUnreadableLine } from "./catalog.js";
+  eUnreadableLine, fileReadCode, fileReadLine } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
   eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
@@ -134,7 +134,7 @@ function toastIfSameCatalog(c){
 function loadCatalogFromFolder(name,mtime,desk){
   eReadCatalogFile(name,desk,true).then(got=>{
     if(!got) return;
-    if(!got.text){ toastRefusal(fileReadLine(name, got.why)); return; }
+    if(!got.text){ toastRefusal(fileReadLine(name, fileReadCode(got))); return; }
     let c=null;
     try{ c=parseCatalogFile(got.text); }
     catch(e){
@@ -940,22 +940,11 @@ function offerToLooseAuthor(all){
 }
 /* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
    refusal, "read" for a file it could not open and anything else for one it would not parse. */
-/* The one line a Load says when the file did not come back. `why` is the shell's code, "read" for a file it could not open. */
-function fileReadLine(name, why){
-  const code=why==="read"?"unreadable":String(why||"");
-  const en=code==="not-answering"?t("{FILE} was not read, because the team's folder is not answering just now. The same Load tries again once this computer can reach it.")
-    :code==="not-desk-file"?t("{FILE} is not this desk's own file, so it was left unread.")
-    :code==="sealed"?t("{FILE} is sealed for a team this desk holds no key for, so it stays unopened.")
-    :code==="sealed-wait"?t("{FILE} is sealed with a newer key this desk does not hold yet, so it waits unopened.")
-    :code==="off-roster"?t("{FILE} belongs to a desk that is off this team's roster, so it was left unread.")
-    :t("{FILE} could not be read just now. The same Load tries again.");
-  return en.split("{FILE}").join(String(name||""));
-}
-function refuseAskedFile(name,why){
+function refuseAskedFile(name,why,code){
   const newer=/^newer ([0-9]+\.[0-9]+\.[0-9]+)$/.exec(String(why||""));
   if(newer){ toastRefusal(eNeedsNewerLine(newer[1])); return; }
   if(why==="read"||why==="not-answering"||why==="not-desk-file"||why==="sealed"||why==="sealed-wait"||why==="unreadable"||why==="off-roster"){
-    toastRefusal(fileReadLine(name, why)); return;
+    toastRefusal(fileReadLine(name, fileReadCode({text:"", why:why, code:code||""}))); return;
   }
   toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name||"")));
 }
@@ -975,7 +964,7 @@ function wireHostCatalogWatch(){
   if(newer && newer.version) setTimeout(()=>{ try{ toastRefusal(eNeedsNewerLine(newer.version)); }catch(e){} },cold?2800:1400);
   if(typeof h.onCatalogNewer==="function") h.onCatalogNewer(v=>{ if(v && v.version) toastRefusal(eNeedsNewerLine(v.version)); });
   eOnCatalogListing(onCatalogListing);
-  h.onCatalogFile((text,name,where,asked,why,builtIn,notOnTeam)=>{
+  h.onCatalogFile((text,name,where,asked,why,builtIn,notOnTeam,code)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a
        Library standing open is out of date whether or not the file is one it can offer. */
     paintCatalogList();
@@ -989,7 +978,7 @@ function wireHostCatalogWatch(){
       if(n && !asked) eOfferCatalog(n,String(next.file||""),String(next.in||""),false,false,!!next.builtIn);
       return;
     }
-    if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
+    if(!c){ if(asked) refuseAskedFile(name,why||"parse",code); return; }
     eOfferCatalog(c,name,where,!!asked,!!asked,builtIn,notOnTeam==="off-roster");
   });
 }

@@ -144,9 +144,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where, asked, why, builtIn, notOnTeam) =>
+    (_e, text, name, where, asked, why, builtIn, notOnTeam, code) =>
       fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""), !!builtIn,
-        notOnTeam === "off-roster" ? "off-roster" : "")),
+        notOnTeam === "off-roster" ? "off-roster" : "",
+        code === "empty" || (typeof code === "string" && /^[A-Z][A-Z0-9]{1,15}$/.test(code)) ? code : "")),
   /* A catalog dropped on the window, handed over by the path its File has on disk and offered as
      a double-clicked file is. False where the File has no path, and the page reads it instead. */
   offerDropped: (file) => {

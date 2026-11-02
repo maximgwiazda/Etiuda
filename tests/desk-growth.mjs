@@ -328,16 +328,16 @@ try {
     const en = shown();
     S.lsSet("eUiLang", "pl");
     const pl = shown();
-    const enLead = en.indexOf("The saved card arrangement is still stored under its old name.") >= 0;
-    const enBody = en.indexOf("This version looks for it under a new name") >= 0 && en.indexOf("running as usual") >= 0;
+    const enLead = en.indexOf("The saved card arrangement could not be read.") >= 0;
+    const enBody = en.indexOf("the copy kept here could not be converted") >= 0 && en.indexOf("runs as usual") >= 0;
     const enReset = en.indexOf("Reset personal data") >= 0;
     const enDismiss = en.indexOf("Dismiss") >= 0;
-    const enOld = en.indexOf("could not be read") >= 0;
-    const plLead = pl.indexOf("Zapisany układ kart nadal leży pod dawną nazwą.") >= 0;
-    const plBody = pl.indexOf("Ta wersja szuka go pod nową nazwą") >= 0 && pl.indexOf("działa normalnie") >= 0;
+    const enOld = en.indexOf("still stored under its old name") >= 0;
+    const plLead = pl.indexOf("Nie udało się odczytać zapisanego układu kart.") >= 0;
+    const plBody = pl.indexOf("zapisanej tutaj kopii nie dało się przekształcić") >= 0 && pl.indexOf("działa normalnie") >= 0;
     const plReset = pl.indexOf("Wyczyść dane własne") >= 0;
     const plDismiss = pl.indexOf("Zamknij") >= 0;
-    const plEnglish = pl.indexOf("The saved card arrangement is still stored under its old name.") >= 0;
+    const plEnglish = pl.indexOf("The saved card arrangement could not be read.") >= 0;
     check(enLead && enBody && enReset && enDismiss && !enOld && plLead && plBody && plReset && plDismiss && !plEnglish,
       "15wb the card-arrangement warning is the desk's language, through the interface strings: "
       + "en lead " + enLead + " body " + enBody + " reset " + enReset + " dismiss " + enDismiss + " old " + enOld
@@ -352,8 +352,8 @@ try {
       const at = lines.findIndex(l => l.indexOf("plant:pack-migrate-why") >= 0);
       if (at >= 0) {
         const next = lines[at].replace(
-          't("The saved card arrangement is still stored under its old name.")',
-          '"The saved card arrangement is still stored under its old name."');
+          't("The saved card arrangement could not be read.")',
+          '"The saved card arrangement could not be read."');
         if (next === lines[at]) detail = "the plant line did not name the sentence";
         else {
           lines[at] = next;
@@ -366,8 +366,8 @@ try {
           Q.loadPack();
           Q.showPackMigrationWarning();
           const said = textOf(byId.eMigrateWarn);
-          const english = said.indexOf("The saved card arrangement is still stored under its old name.") >= 0;
-          const polish = said.indexOf("Zapisany układ kart nadal leży pod dawną nazwą.") >= 0;
+          const english = said.indexOf("The saved card arrangement could not be read.") >= 0;
+          const polish = said.indexOf("Nie udało się odczytać zapisanego układu kart.") >= 0;
           turned = english && !polish;
           detail = turned ? "the line was gone" : "the line was still said";
         }

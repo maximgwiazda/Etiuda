@@ -482,7 +482,7 @@ function joinInviteParts(){
     return {title:t("Join a team"), line:said, body:"", acts:[["back",t("Cancel")]]};
   }
   if(joinMode==="refused") return {title:t("Join a team"),
-    line:joinWhy==="relay-mirror"?t("This computer could not keep the team's local copy, so the invitation was not taken. Free space, or leave to write here, lets the same invitation go through.")
+    line:joinWhy==="relay-mirror"?t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.")
       :joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
       :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")

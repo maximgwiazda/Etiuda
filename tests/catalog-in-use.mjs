@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 59;
+const EXPECTED = 60;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1353,14 +1353,64 @@ try {
     const downPl = await click(quietName);
     ST.lsSet("eUiLang", "en");
     w8.api.setDown("");
-    const held = sealedEn.said.indexOf("holds no key") >= 0 && !sealedEn.edition
-      && downEn.said.indexOf("not answering just now") >= 0 && downPl.said.indexOf("nie odpowiada") >= 0;
+    const disk = "could not be read from the disk,";
+    const diskPl = "nie udało się odczytać z dysku,";
+    const held = sealedEn.said.indexOf(disk) >= 0 && !sealedEn.edition
+      && downEn.said.indexOf(disk) >= 0 && downPl.said.indexOf(diskPl) >= 0;
     check(held,
       "15w8 a Load says why the file was not read, in the desk's language, and a sealed file this desk cannot open is not left on Load the new edition: "
-      + "sealed " + (sealedEn.said.indexOf("holds no key") >= 0) + ", edition " + (sealedEn.edition ? "shown" : "absent")
-      + ", down " + (downEn.said.indexOf("not answering just now") >= 0) + ", polish " + (downPl.said.indexOf("nie odpowiada") >= 0)
+      + "sealed " + (sealedEn.said.indexOf(disk) >= 0) + ", edition " + (sealedEn.edition ? "shown" : "absent")
+      + ", down " + (downEn.said.indexOf(disk) >= 0) + ", polish " + (downPl.said.indexOf(diskPl) >= 0)
       + ", " + painted + (sealedEn.wired ? ", painted button" : ", direct Load")
       + (held ? "" : " sealed-said " + sealedEn.said.slice(0, 160) + " down-said " + downEn.said.slice(0, 120)));
+
+    fs.writeFileSync(path.join(w8dir, "access.ec"), "x");
+    fs.writeFileSync(path.join(w8dir, "gone.ec"), "x");
+    fs.writeFileSync(path.join(w8dir, "held.ec"), "x");
+    fs.writeFileSync(path.join(w8dir, "blank.ec"), "");
+    const origRead = fs.readFileSync;
+    const bomb = { code: "", name: "" };
+    fs.readFileSync = function (p, enc) {
+      if (bomb.code && String(p).endsWith(path.sep + bomb.name)) {
+        const err = new Error("planted");
+        err.code = bomb.code;
+        throw err;
+      }
+      return origRead.call(fs, p, enc);
+    };
+    const say = async (name, code) => {
+      bomb.code = code;
+      bomb.name = name;
+      const got = await click(name);
+      bomb.code = "";
+      bomb.name = "";
+      return got.said;
+    };
+    let access = "", perm = "", gone = "", busy = "", other = "", blank = "", busyPl = "";
+    try {
+      access = await say("access.ec", "EACCES");
+      perm = await say("access.ec", "EPERM");
+      gone = await say("gone.ec", "ENOENT");
+      busy = await say("held.ec", "EBUSY");
+      other = await say("access.ec", "EIO");
+      blank = (await click("blank.ec")).said;
+      ST.lsSet("eUiLang", "pl");
+      busyPl = await say("held.ec", "EBUSY");
+      ST.lsSet("eUiLang", "en");
+    } finally {
+      fs.readFileSync = origRead;
+      bomb.code = "";
+    }
+    const coded = access.indexOf("may not read") >= 0 && perm.indexOf("may not read") >= 0
+      && gone.indexOf("no longer where it was") >= 0 && busy.indexOf("Another program holds") >= 0
+      && other.indexOf("(EIO)") >= 0 && blank.indexOf("is empty") >= 0
+      && busyPl.indexOf("otwarty w innym programie") >= 0;
+    check(coded,
+      "15w8 one line per reason the read gave: access " + (access.indexOf("may not read") >= 0)
+      + ", perm " + (perm.indexOf("may not read") >= 0) + ", gone " + (gone.indexOf("no longer where it was") >= 0)
+      + ", held " + (busy.indexOf("Another program holds") >= 0) + ", other " + (other.indexOf("(EIO)") >= 0)
+      + ", empty " + (blank.indexOf("is empty") >= 0) + ", polish " + (busyPl.indexOf("otwarty w innym programie") >= 0)
+      + (coded ? "" : " access-said " + access.slice(0, 120) + " blank-said " + blank.slice(0, 80)));
 
     const mainPath = path.join(ROOT, "shell", "main.js");
     const before = fs.readFileSync(mainPath);
@@ -1378,7 +1428,7 @@ try {
       planted.api.setDown(w8dir);
       ST.lsSet("eUiLang", "en");
       const again = await click(quietName);
-      turned = again.said.indexOf("not answering just now") < 0;
+      turned = again.said.indexOf("could not be read from the disk") < 0;
       detail = turned ? "the line was gone" : "the line was still said";
     }
     const same = fs.readFileSync(mainPath).equals(before);

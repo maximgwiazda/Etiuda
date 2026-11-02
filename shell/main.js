@@ -1301,13 +1301,14 @@ function catalogChanged(win) {
 /* A REFUSAL IS ANSWERED TOO, as an empty text with the reason in the fifth argument: the page
    owns the words, and a double-click that only brings the window forward reads as nothing. */
 function offerFile(win, file) {
-  const refuse = (why) => {
+  const refuse = (why, code) => {
     if (win && !win.isDestroyed())
-      win.webContents.send("etiuda:catalog-file", "", path.basename(file), path.dirname(file), true, why);
+      win.webContents.send("etiuda:catalog-file", "", path.basename(file), path.dirname(file), true, why, false, "", code || "");
   };
   let text;
   try { text = fs.readFileSync(file, "utf8"); }
-  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read"); return; }
+  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read", readOsCode(e)); return; }
+  if (!text) { refuse("read", "empty"); return; }
   try {
     const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -6142,7 +6143,13 @@ function historyOpen(sha, file) {
     const note = rosterNoteOf(opened.data);
     return note ? { name: name, text: opened.json, notOnTeam: note } : { name: name, text: opened.json };
   }
-  catch (e) { console.error("etiuda: an earlier version of " + (v.path || v.sha) + " could not be opened - " + e.message); return { name: name, text: "" }; }
+  catch (e) {
+    console.error("etiuda: an earlier version of " + (v.path || v.sha) + " could not be opened - " + e.message);
+    const code = readOsCode(e);
+    const out = { name: name, text: "", why: "unreadable" };
+    if (code) out.code = code;
+    return out;
+  }
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. */
@@ -7258,6 +7265,11 @@ function readFailWhy(err) {
   if (m.indexOf("sealed for team ") === 0 || m === "an envelope sealed inside another") return "sealed";
   return "unreadable";
 }
+/* The operating system's own code, where the read named one. A message is never copied: it can hold a path. */
+function readOsCode(err) {
+  const c = err && typeof err.code === "string" ? err.code : "";
+  return /^[A-Z][A-Z0-9]{1,15}$/.test(c) ? c : "";
+}
 /* A read the page means to offer unasked hands on, once a lead is pinned, only a file that lead signed. */
 function unsolicitedLeadText(text) {
   if (!pinnedLeadPubs().length) return true;
@@ -7297,7 +7309,10 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
-    return { name: base, text: "", why: readFailWhy(err) }; /* plant:catalog-read-why */
+    const code = readOsCode(err);
+    const out = { name: base, text: "", why: readFailWhy(err) };
+    if (code) out.code = code;
+    return out; /* plant:catalog-read-why */
   }
 });
 /* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page
@@ -7405,7 +7420,10 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
-    return { name: name, text: "" };
+    const code = readOsCode(err);
+    const out = { name: name, text: "", why: "unreadable" };
+    if (code) out.code = code;
+    return out;
   }
 });
 

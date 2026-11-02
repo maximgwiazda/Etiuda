@@ -4390,8 +4390,10 @@ try {
 
   /* 15w9: a relay invitation whose local mirror cannot be made says so, and does not blame a folder. */
   {
-    const EN_MIRROR = "local copy";
-    const PL_MIRROR = "lokalnej kopii";
+    const EN_MIRROR = "own copy of the team";
+    const PL_MIRROR = "własnej kopii plików zespołu";
+    const EN_STILL = "the invitation still works";
+    const PL_STILL = "zaproszenie nadal działa";
     const FOLDER_BLAME = "This folder could not be reached";
     const relayFailCard = async (D) => {
       const teamId = "t-" + crypto.randomBytes(8).toString("hex");
@@ -4425,9 +4427,11 @@ try {
     };
     const Dw9 = await deskWith("relay-mirror", folder("relay-mirror-own"));
     const card = await relayFailCard(Dw9);
-    check(card.en.indexOf(EN_MIRROR) >= 0 && card.pl.indexOf(PL_MIRROR) >= 0 && card.en.indexOf(FOLDER_BLAME) < 0,
+    check(card.en.indexOf(EN_MIRROR) >= 0 && card.pl.indexOf(PL_MIRROR) >= 0
+      && card.en.indexOf(EN_STILL) >= 0 && card.pl.indexOf(PL_STILL) >= 0 && card.en.indexOf(FOLDER_BLAME) < 0,
       "15w9 a relay invitation whose local copy could not be kept says so, and does not blame a folder: "
       + "en " + (card.en.indexOf(EN_MIRROR) >= 0) + ", pl " + (card.pl.indexOf(PL_MIRROR) >= 0)
+      + ", still " + (card.en.indexOf(EN_STILL) >= 0) + ", polish still " + (card.pl.indexOf(PL_STILL) >= 0)
       + ", folder " + (card.en.indexOf(FOLDER_BLAME) >= 0)
       + (card.en.indexOf(EN_MIRROR) >= 0 ? "" : " en-card " + card.en.slice(0, 220)));
 

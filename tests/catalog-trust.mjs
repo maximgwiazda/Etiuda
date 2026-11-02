@@ -295,11 +295,11 @@ try {
   electron.shell.openPath = async p => { opened.push(p); return "denied"; };
   const refusedEn = await shown();
   electron.shell.openPath = realOpen;
-  check(downEn.indexOf("not answering just now") >= 0 && downPl.indexOf("nie odpowiada") >= 0
+  check(downEn.indexOf("does not answer from this computer just now") >= 0 && downPl.indexOf("nie odpowiada teraz") >= 0
       && fileEn.indexOf("names a file") >= 0 && refusedEn.indexOf("did not open") >= 0
       && opened.length === atOpen + 1,
     "15w7 opening the team's folder says why it did not, in the desk's language, and a refusal from the file manager is its own line: "
-    + "down " + (downEn.indexOf("not answering just now") >= 0) + ", polish " + (downPl.indexOf("nie odpowiada") >= 0)
+    + "down " + (downEn.indexOf("does not answer from this computer just now") >= 0) + ", polish " + (downPl.indexOf("nie odpowiada teraz") >= 0)
     + ", file " + (fileEn.indexOf("names a file") >= 0) + ", refused " + (refusedEn.indexOf("did not open") >= 0)
     + ", opened " + opened.length);
 
@@ -317,7 +317,7 @@ try {
       planted.setDown(CF);
       const again = await shown();
       planted.setDown("");
-      turned = again.indexOf("not answering just now") < 0;
+      turned = again.indexOf("does not answer from this computer just now") < 0;
       detail = turned ? "the line was gone" : "the line was still said";
     }
     const same = fs.readFileSync(mainPath).equals(before);

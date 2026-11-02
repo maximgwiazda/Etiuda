@@ -91,9 +91,9 @@ function showPackMigrationWarning(){
     +"color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
     +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
   const lead=document.createElement("b");
-  lead.textContent=t("The saved card arrangement is still stored under its old name."); /* plant:pack-migrate-why */
+  lead.textContent=t("The saved card arrangement could not be read."); /* plant:pack-migrate-why */
   const body=document.createElement("span");
-  body.textContent=" "+t("This version looks for it under a new name, so that copy was left as it was. Etiuda is running as usual and the catalog is untouched. Only the personal order, the hidden cards and the favourites on this desk are waiting.");
+  body.textContent=" "+t("This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh.");
   const row=document.createElement("div");
   row.style.marginTop="10px";
   const reset=document.createElement("button");

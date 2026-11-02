@@ -2,7 +2,7 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, eUnreadableLine, catalogDocOf, eCatalogSignature, eCatalog } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, eUnreadableLine, fileReadCode, fileReadLine, catalogDocOf, eCatalogSignature, eCatalog } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash, v2CatKey } from "./catalog-v2.js";
@@ -862,7 +862,7 @@ function importCatalogText(text,fileName,offTeam){
 function importCatalogHosted(){
   ePickCatalogFile(t("Load catalog"),t("Catalogs")).then(got=>{
     if(!got) return;
-    if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(got.name)); return; }
+    if(!got.text){ toastRefusal(fileReadLine(got.name, fileReadCode(got))); return; }
     importCatalogText(got.text,got.name,!!got.notOnTeam);
   });
 }
@@ -884,7 +884,7 @@ function importCatalogFile(){
     if(!f) return;
     const reader=new FileReader();
     reader.onload=()=>{ importCatalogText(String(reader.result||""),f.name); };
-    reader.onerror=()=>toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(f.name));
+    reader.onerror=()=>toastRefusal(fileReadLine(f.name, ""));
     reader.readAsText(f);
   };
   inp.click();
@@ -915,7 +915,7 @@ function wireCatalogDrop(){
     const h=eHost();
     if(h && typeof h.offerDropped==="function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
     f.text().then(text=>importCatalogText(text,f.name),
-      ()=>toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(f.name)));
+      ()=>toastRefusal(fileReadLine(f.name, "")));
   });
 }
 /* The picker returns a HANDLE - the same dialog to the user, but what comes back can be

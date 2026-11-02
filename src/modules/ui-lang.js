@@ -134,20 +134,12 @@ UI_STRINGS.pl={
   "{FILE} is not a catalog Etiuda can read.":"{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
   "This edition needs Etiuda {VERSION} or newer, so it is kept but not used yet, and the edition in use stays as it is. Once a newer Etiuda is installed, the new edition is offered here.":"To wydanie wymaga Etiudy w wersji {VERSION} lub nowszej, więc zostało zachowane, ale nie jest jeszcze używane, a obecne wydanie działa dalej bez zmian. Po zainstalowaniu nowszej wersji Etiudy nowe wydanie pojawi się tutaj.",
   "{FILE} could not be read.":"Nie udało się odczytać pliku {FILE}.",
-  /* draft words: copywriter */
-  "{FILE} was not read, because the team's folder is not answering just now. The same Load tries again once this computer can reach it.":"Plik {FILE} nie został odczytany, bo folder zespołu w tej chwili nie odpowiada. To samo Wczytaj spróbuje ponownie, gdy komputer znów będzie mógł do niego sięgnąć.",
-  /* draft words: copywriter */
-  "{FILE} is not this desk's own file, so it was left unread.":"Plik {FILE} nie jest własnym plikiem tego stanowiska, więc pozostał nieodczytany.",
-  /* draft words: copywriter */
-  "{FILE} is sealed for a team this desk holds no key for, so it stays unopened.":"Plik {FILE} jest zapieczętowany dla zespołu, do którego to stanowisko nie ma klucza, więc pozostaje nieotwarty.",
-  /* draft words: copywriter */
-  "{FILE} is sealed with a newer key this desk does not hold yet, so it waits unopened.":"Plik {FILE} jest zapieczętowany nowszym kluczem, którego to stanowisko jeszcze nie ma, więc czeka nieotwarty.",
-  /* draft words: copywriter */
-  "{FILE} belongs to a desk that is off this team's roster, so it was left unread.":"Plik {FILE} należy do stanowiska spoza listy tego zespołu, więc pozostał nieodczytany.",
-  /* draft words: copywriter */
-  "{FILE} could not be read just now. The same Load tries again.":"Pliku {FILE} nie udało się teraz odczytać. To samo Wczytaj spróbuje ponownie.",
-  /* draft words: copywriter */
-  "The team's folder is not answering just now, so it stays closed. The same link opens it once this computer can reach it.":"Folder zespołu w tej chwili nie odpowiada, więc zostaje zamknięty. Ten sam odnośnik otwiera go, gdy komputer znów może do niego sięgnąć.",
+  "This computer may not read {FILE}, so nothing was loaded. A copy saved where it may read, such as Documents, can be picked instead.":"Ten komputer nie ma uprawnień do odczytu pliku {FILE}, więc nic nie wczytano. Wystarczy wybrać kopię zapisaną tam, gdzie odczyt jest możliwy, na przykład w Dokumentach.",
+  "{FILE} is no longer where it was, so nothing was loaded. Pick it again from where it is now.":"Pliku {FILE} nie ma już w tym miejscu, więc nic nie wczytano. Wystarczy wybrać go ponownie tam, gdzie jest teraz.",
+  "Another program holds {FILE} open, so nothing was loaded. Once it is closed there, pick it again.":"Plik {FILE} jest otwarty w innym programie, więc nic nie wczytano. Po zamknięciu go tam wystarczy wybrać go ponownie.",
+  "{FILE} is empty, so nothing was loaded.":"Plik {FILE} jest pusty, więc nic nie wczytano.",
+  "{FILE} could not be read from the disk ({CODE}), so nothing was loaded. Try again once the disk answers, or pick a copy from elsewhere.":"Pliku {FILE} nie udało się odczytać z dysku ({CODE}), więc nic nie wczytano. Wystarczy spróbować ponownie, gdy dysk będzie dostępny, albo wybrać kopię z innego miejsca.",
+  "The team's folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running.":"Folder zespołu nie odpowiada teraz z tego komputera, więc go nie otwarto. Wystarczy otworzyć go ponownie, gdy będzie osiągalny: po podłączeniu dysku sieciowego albo uruchomieniu programu, który go synchronizuje.",
   /* draft words: copywriter */
   "Settings names a file where the team's folder should be, so nothing is opened. The Library can choose the folder again.":"W ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc nic się nie otwiera. W Bibliotece można wybrać folder ponownie.",
   /* draft words: copywriter */
@@ -612,10 +604,8 @@ UI_STRINGS.pl={
   "Save everything loaded now as a catalog file, your edits merged in":"Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
   "Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.":"Wczytuje plik katalogu z dysku jako same dane, bez uruchamiania czegokolwiek. Zastępuje obecny katalog, a pliki na dysku zostają bez zmian.",
   "Reset personal data":"Wyczyść dane własne",
-  /* draft words: copywriter */
-  "The saved card arrangement is still stored under its old name.":"Zapisany układ kart nadal leży pod dawną nazwą.",
-  /* draft words: copywriter */
-  "This version looks for it under a new name, so that copy was left as it was. Etiuda is running as usual and the catalog is untouched. Only the personal order, the hidden cards and the favourites on this desk are waiting.":"Ta wersja szuka go pod nową nazwą, więc tamta kopia została tak, jak była. Etiuda działa normalnie, a katalog pozostaje nietknięty. Czeka tylko osobisty porządek, ukryte karty i ulubione na tym stanowisku.",
+  "The saved card arrangement could not be read.":"Nie udało się odczytać zapisanego układu kart.",
+  "This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh.":"Ta wersja przechowuje układ w nowy sposób, a zapisanej tutaj kopii nie dało się przekształcić. Katalog jest nienaruszony, a Etiuda działa normalnie; zmiana dotyczy tylko zapisanych tutaj: kolejności kart, ukrytych kart i ulubionych. Wyczyść dane własne usuwa je i pozwala zacząć od nowa.",
   "Reset Etiuda":"Zresetuj Etiudę",
   "Edit card":"Edytuj kartę",
   "Edit this intent":"Edytuj tę intencję",
@@ -1073,8 +1063,7 @@ UI_STRINGS.pl={
   "This invitation cannot be read, so nothing was changed.":"Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
   "This folder is on the computer {HOST}.":"Ten folder znajduje się na komputerze {HOST}.",
   "This folder could not be reached, so nothing was written.":"Ten folder jest teraz niedostępny, więc nic nie zapisano.",
-  /* draft words: copywriter */
-  "This computer could not keep the team's local copy, so the invitation was not taken. Free space, or leave to write here, lets the same invitation go through.":"Na tym komputerze nie udało się zachować lokalnej kopii zespołu, więc zaproszenie nie zostało przyjęte. Wolne miejsce albo prawo zapisu pozwala temu samemu zaproszeniu przejść.",
+  "Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.":"Etiuda nie mogła utworzyć na tym komputerze własnej kopii plików zespołu, więc nic nie zapisano. Gdy na dysku będzie miejsce, a Etiuda będzie mogła zapisywać w swoim folderze, wystarczy ponownie dołączyć; zaproszenie nadal działa.",
   "Desks on other computers read this folder only if it is shared with them.":"Stanowiska na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
   "OneDrive keeps this folder in sync.":"Ten folder jest synchronizowany przez OneDrive.",
   "This folder is a SharePoint library that OneDrive keeps in sync.":"Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",

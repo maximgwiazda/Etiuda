@@ -6,7 +6,7 @@ import { openDialog } from "./dialog.js";
 import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
-import { parseCatalogFile, eUnreadableLine, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
+import { parseCatalogFile, eUnreadableLine, fileReadCode, fileReadLine, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
 import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
@@ -73,7 +73,7 @@ function historyOpen(v){
   const h=historyHost(); if(!h) return;
   Promise.resolve(h.historyRead(v.sha,v.path)).then(got=>{
     const name=String((got&&got.name)||v.name||"");
-    if(!got || !got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(name)); return; }
+    if(!got || !got.text){ toastRefusal(fileReadLine(name, fileReadCode(got))); return; }
     let c=null;
     try{ c=parseCatalogFile(String(got.text)); }
     catch(e){ toastRefusal(eUnreadableLine(e,name)); return; }
