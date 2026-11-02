@@ -2506,6 +2506,8 @@ async function run() {
       roster: [{ desk: { id: me.id, key: me.key, box: me.box }, wrap: wrap1 }]
     }, lead.privateKey, LEAD.keyId);
     fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
+    /* As the syncer would bring it; a shell that never made the mirror must judge red, not throw. */
+    fs.mkdirSync(mirror, { recursive: true });
     fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
 
     // Trigger finishJoin via joinView
