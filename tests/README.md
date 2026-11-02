@@ -60,7 +60,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panels, the menus, Quick facts, the pill bar and a dialog: painted in dark, absent in light, a quiet line along the top and bottom, Chrome
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
-    node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
+    node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard. node tests/pick-desk.js --guards proves the desk guards on stand-ins and opens nothing
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures; npm run swap, in npm run gates and the release
     node tests/theme-fade.mjs                        every category, then the theme: the page lives and its window is painted in the theme asked for, read from screenshots by area against each theme's palette from a fresh start, no press opens a view transition or cuts the controls' transitions, and a second press 60 ms after the first is taken (tf1 to tf3), Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
