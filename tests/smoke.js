@@ -2227,26 +2227,45 @@ const t0 = Date.now();
   check(i0 === n1 - 1 && i1 === 0 && i2 === i0 && away.v === "" && away.focus === "intent" && back === "probe",
     "Ctrl+Tab steps round the strip (" + i0 + " > " + i1 + " > " + i2 + "), the query travels with its tab and focus stays in the box");
 
-  /* hooks.intentPickedLine (tabs.js:181): selecting an intent on the rail and switching tabs speaks
-     the tab, language and the picked intent line into the polite region (#eSay). */
-  const pickRow = await p.evaluate(() => {
+  /* hooks.intentPickedLine (tabs.js:181). A rail click toasts the line and marks it heard
+     (rail-list.js), so the polite region is not where that click speaks. The slot speaks when
+     the person leaves the tab and comes back: #eSay then names the tab, the language and the
+     same line. The pick drops the query, because the box is a search and the pick is not, and
+     the query is put back so the slash checks below still read it. */
+  const queryBefore = await p.evaluate(() => document.querySelector("#intent").value);
+  const langBefore = await p.evaluate(() => lang);
+  const catsBefore = await p.evaluate(() => cats.slice());
+  const rowPicked = await p.evaluate(() => {
     const r = document.querySelector("#intentRailList .rail-item:not(.on)");
     if (!r) return false;
     r.click();
     return true;
   });
-  await sleep(400);
-  const sayPicked = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
+  await sleep(500);
+  const toastPicked = await p.evaluate(() => ((document.getElementById("toast") || {}).textContent || "").trim());
   await chord("Tab", "Tab", false); await sleep(700);
-  const sayOther = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
   await chord("Tab", "Tab", false); await sleep(700);
   const sayReturned = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
-  await p.evaluate(() => { const on = document.querySelector("#intentRailList .rail-item.on"); if (on) on.click(); });
-  await sleep(400);
-  const sayCleared = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
-  check(pickRow && /Intent:|Intencja:/.test(sayPicked) && /Intent:|Intencja:/.test(sayReturned) && /cleared|skasowan/.test(sayCleared),
-    "an intent picked on the rail speaks its line into the live region, repeats on returning to the tab, and clearing speaks cleared ("
-    + JSON.stringify({ sayPicked: sayPicked.slice(0, 40), sayOther: sayOther.slice(0, 40), sayReturned: sayReturned.slice(0, 40), sayCleared: sayCleared.slice(0, 40) }) + ")");
+  const line = /Intent:|Intencja:/.test(toastPicked);
+  const heard = line && sayReturned.indexOf(toastPicked) >= 0;
+  await p.evaluate(() => { const b = document.getElementById("intentRailClear"); if (b) b.click(); });
+  await sleep(500);
+  const saidCleared = await p.evaluate(() => /cleared|Wyczyszczono/i.test((document.getElementById("toast") || {}).textContent || ""));
+  const restored = await p.evaluate((q, catsWas) => {
+    if (catsWas.length && cats.slice().join("\n") !== catsWas.join("\n")) {
+      cats = catsWas.slice();
+      drawPills();
+      hooks.render();
+    }
+    const box = document.querySelector("#intent");
+    if (box) { box.value = q; box.focus(); }
+    scheduleTabSave();
+    return { q: box ? box.value : "", intents: intentIdxs.length, lang: lang, focus: document.activeElement && document.activeElement.id };
+  }, queryBefore, catsBefore);
+  check(rowPicked && heard && saidCleared && restored.q === queryBefore && restored.intents === 0
+    && restored.lang === langBefore && restored.focus === "intent",
+    "an intent picked on the rail speaks its line into the live region on returning to the tab, and clearing speaks cleared ("
+    + JSON.stringify({ picked: rowPicked, heard: heard, cleared: saidCleared, query: restored.q === queryBefore, intents: restored.intents, focus: restored.focus }) + ")");
 
   const l0 = await p.evaluate(() => lang);
   await p.keyboard.press("Slash"); await sleep(500);
@@ -2820,6 +2839,8 @@ const t0 = Date.now();
       localStorage.setItem = realSetItem;
       const warn = document.getElementById("eSaveWarn");
       if (warn) warn.remove();
+      const tst = document.getElementById("toast");
+      if (tst) tst.classList.remove("show");
     }
     return { warnUp, warnLead: /not saved|niezapisane/i.test(warnLead), warnDown, toasted };
   });
@@ -2827,34 +2848,72 @@ const t0 = Date.now();
     "hooks.syncSaveNotice shows #eSaveWarn when storage write fails and drops it with a toast when storage recovers ("
     + JSON.stringify(saveNotice) + ")");
 
-  /* hooks.loadCatalogFromFolder (catalog-offer.js:134). Reached when a team catalog is opened
-     from the folder onto an empty or sample desk (team-join.js:333 and :337). A host provides
-     the file, the offer dialog opens with the catalog's title, and Keep current dismisses it. */
+  /* hooks.loadCatalogFromFolder (team-join.js, the admission on an empty or sample desk).
+     The shell tells the page a team catalog can be opened, and the page asks before it puts
+     that file down over one already loaded. The file has to be a catalog document: the runtime
+     object is not one, and a file that will not parse never raises the offer. Keep current
+     leaves the loaded catalog where it was. The sample flag is what lets the admission reach
+     the slot on a desk that already has cards, and it is put back afterwards. */
   const folderCat = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const held = storedCatalog();
-    if (!held) return { held: false };
-    const mockCat = Object.assign(JSON.parse(JSON.stringify(held)), { id: "probe-folder-cat", name: "Folder Probe" });
-    const realHost = window.E_HOST;
-    window.E_HOST = Object.assign({}, realHost, {
-      readCatalogFile: name => Promise.resolve({ name, text: JSON.stringify(mockCat) })
-    });
+    const file = "probe-folder.ec";
+    if (!held || typeof catalogToV2 !== "function" || typeof wireTeamJoin !== "function") {
+      return { held: !!held, up: false, named: false, kept: false, left: 0, same: false, why: "missing" };
+    }
+    let doc = null;
+    try { doc = catalogToV2(held, { id: "probe-folder-cat" }); }
+    catch (e) { return { held: true, up: false, named: false, kept: false, left: 0, same: false, why: "convert" }; }
+    const wasHost = window.E_HOST;
+    const wasSample = nsGet("Sample");
+    const wasNo = nsGet("CatalogNo");
+    const wasNoAt = nsGet("CatalogNoAt");
+    const wasId = String(held.id || "");
+    let deliver = null;
+    window.E_HOST = {
+      teamJoin: () => Promise.resolve({ sealed: null, join: null, leads: [] }),
+      onTeamJoin: fn => { deliver = fn; },
+      readCatalogFile: () => Promise.resolve({ name: file, text: JSON.stringify(doc) })
+    };
+    const restore = () => {
+      if (wasSample == null) nsDel("Sample"); else nsSet("Sample", wasSample);
+      if (wasNo == null) nsDel("CatalogNo"); else nsSet("CatalogNo", wasNo);
+      if (wasNoAt == null) nsDel("CatalogNoAt"); else nsSet("CatalogNoAt", wasNoAt);
+      if (typeof syncSampleMark === "function") syncSampleMark();
+      if (wasHost) window.E_HOST = wasHost; else delete window.E_HOST;
+      const bub = document.getElementById("eTeamJoin");
+      if (bub) bub.remove();
+      const stray = document.getElementById("eCatalogOffer");
+      if (stray) stray.remove();
+      const tst = document.getElementById("toast");
+      if (tst) tst.classList.remove("show");
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    };
     try {
-      hooks.loadCatalogFromFolder("probe-folder.ec", 0);
+      wireTeamJoin();
+      if (typeof deliver !== "function") {
+        return { held: true, up: false, named: false, kept: false, left: 0, same: false, why: "no-deliver" };
+      }
+      if (wasSample !== "1") nsSet("Sample", "1");
+      deliver({ joined: { file: file }, join: null, leads: [], sealed: null });
       for (let i = 0; i < 30 && !document.getElementById("eCatalogOffer"); i++) await wait(100);
       const offer = document.getElementById("eCatalogOffer");
-      const title = offer ? (offer.querySelector(".ec-what b") || {}).textContent || "" : "";
+      const title = offer ? ((offer.querySelector(".ec-what b") || {}).textContent || "") : "";
+      const keep = offer ? ((offer.querySelector("#ecNo") || {}).textContent || "") : "";
       const noBtn = offer && offer.querySelector("#ecNo");
       if (noBtn) noBtn.click();
       await wait(300);
       const left = document.querySelectorAll("#eCatalogOffer").length;
-      return { held: true, up: !!offer, title, left };
+      const still = String((storedCatalog() || {}).id || "");
+      return {
+        held: true, up: !!offer, named: title === "probe-folder",
+        kept: /Keep current|Zachowaj obecny/.test(keep), left: left, same: still === wasId, why: ""
+      };
     } finally {
-      if (realHost) window.E_HOST = realHost;
-      else delete window.E_HOST;
+      restore();
     }
   });
-  check(folderCat.held && folderCat.up && folderCat.title === "Folder Probe" && folderCat.left === 0,
+  check(folderCat.held && folderCat.up && folderCat.named && folderCat.kept && folderCat.left === 0 && folderCat.same,
     "hooks.loadCatalogFromFolder reads a catalog from the host folder, shows the offer dialog with its title, and Keep current dismisses it ("
     + JSON.stringify(folderCat) + ")");
 
