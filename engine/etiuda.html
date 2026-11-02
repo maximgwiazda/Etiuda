@@ -9016,7 +9016,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-01";
+  var E_BUILT = "2026-11-02";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -15027,6 +15027,7 @@ What you type stays in this browser only.`;
     teamJoinEmptyHtml: () => teamJoinEmptyHtml,
     teamJoinShown: () => teamJoinShown,
     teamLeads: () => teamLeads,
+    teamReadingEmptyHtml: () => teamReadingEmptyHtml,
     wireTeamJoin: () => wireTeamJoin,
     wireTeamJoinEmpty: () => wireTeamJoinEmpty
   });
@@ -15398,6 +15399,7 @@ What you type stays in this browser only.`;
         if (fork) row.fork = fork;
         if (l.stranded && typeof l.stranded === "object") row.stranded = { seen: l.stranded.seen === true };
         if (l.needsFolder === true) row.needsFolder = true;
+        if (typeof l.reading === "string" && l.reading) row.reading = String(l.reading);
         return row;
       }) : []
     };
@@ -15737,6 +15739,15 @@ What you type stays in this browser only.`;
     }
     if (act === "load") return Promise.resolve(hooks.importCatalogHere());
     return Promise.resolve(null);
+  }
+  function teamReadingLine() {
+    const row = (joinNow && joinNow.leads || []).filter((l) => typeof l.reading === "string" && l.reading)[0];
+    return row ? String(row.reading) : "";
+  }
+  function teamReadingEmptyHtml() {
+    const line = teamReadingLine();
+    if (!line) return "";
+    return '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>' + esc(line) + "</div>";
   }
   function teamJoinEmptyHtml() {
     if (!teamJoinShown()) return "";
@@ -22697,7 +22708,7 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + (teamCanJoin() ? '<br><br><button type="button" class="btn" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + (teamCanJoin() ? '<br><br><button type="button" class="btn" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
@@ -30454,6 +30465,7 @@ What you type stays in this browser only.`;
     if (l.head) notes.push(teamHeadNote(l.head));
     if (l.lapse) notes.push(lapseNote(l.lapse));
     if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
+    if (l.reading) notes.push(l.reading);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
   var leaveHold = "";

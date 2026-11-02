@@ -935,9 +935,12 @@ function folderSyncerRun(win) {
     },
     onChange: (change) => {
       if (change && change.primed) noteFolderPrimed(true);
-      if (theWindow && !theWindow.isDestroyed()) {
-        if (change && change.primed && catalogFolder() !== watchedFolder) catalogFolderChanged();
-        else catalogChanged(theWindow);
+      /* The desk window, where one exists. A syncer started with a window before that exists tells that window, so a page already up hears the listing. A running desk is unchanged. */
+      const notify = (theWindow && !theWindow.isDestroyed()) ? theWindow
+        : (win && typeof win.isDestroyed === "function" && !win.isDestroyed() ? win : null);
+      if (notify && !notify.isDestroyed()) {
+        if (change && change.primed && catalogFolder() !== watchedFolder && notify === theWindow) catalogFolderChanged();
+        else catalogChanged(notify);
       }
     }
   };
@@ -5361,6 +5364,8 @@ function forkDismissed(team) {
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
+  const ftHere = folderTeamHere();
+  const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
     const relayRemoved = teamRelayGone[t] === true;
@@ -5387,6 +5392,8 @@ function leadsView() {
       row.openFolder = shellWords().openFolder;
       row.meetsInFolder = shellWords().teamMeetsInFolder;
     }
+    /* The same sentence the log says, on this team's row, until the listing lands. The page prints it. */
+    if (reading && ftHere && t === ftHere.team) row.reading = reading; /* plant:still-reading-shown */
     return row;
   });
 }

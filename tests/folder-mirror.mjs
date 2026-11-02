@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 76;
+const EXPECTED = 78;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -2529,6 +2529,248 @@ async function run() {
         return !got.share && got.reading;
       });
       check(r.ok, "46e lifting plant:broken-reads-share makes a desk whose worker failed wait on an unprimed mirror and say it is still reading: " + JSON.stringify(r));
+    }
+  }
+
+  /* 46f: the sentence reaches the page through the shell's team channel while the mirror is unprimed, on the empty desk and on
+     Settings' team row, and once the listing lands the page offers the catalog and the sentence is gone. 46g lifts that delivery. */
+  const pageMods = path.join(ROOT, "src", "modules");
+  const pageUrl = (n) => pathToFileURL(path.join(pageMods, n)).href;
+  let pageKit = null;
+  async function pageKitOnce() {
+    if (pageKit) return pageKit;
+    pageKit = {
+      HK: await import(pageUrl("hooks.js")),
+      ST: await import(pageUrl("storage.js")),
+      DOM: await import(pageUrl("dom.js")),
+      TJ: await import(pageUrl("team-join.js")),
+      SET: await import(pageUrl("settings.js")),
+      REN: await import(pageUrl("render.js")),
+      OFF: await import(pageUrl("catalog-offer.js")),
+    };
+    return pageKit;
+  }
+  /* A document the page's own render and offer can write into. Class selectors stay unmatched, so the empty desk's mark is
+     not drawn; the sentence is the markup render wrote. */
+  function pageDoc() {
+    const ids = new Map();
+    const quietClass = { contains: () => false, add() {}, remove() {}, toggle() {} };
+    function stubBtn() {
+      return {
+        onclick: null, isConnected: false, style: {}, textContent: "", classList: quietClass,
+        setAttribute() {}, getAttribute: () => null, removeAttribute() {},
+        addEventListener() {}, removeEventListener() {},
+        querySelector: () => null, querySelectorAll: () => [],
+        remove() {}, insertAdjacentHTML() {}, focus() {},
+        getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
+      };
+    }
+    function el(tag) {
+      const node = {
+        nodeType: 1, tagName: String(tag).toUpperCase(), localName: String(tag).toLowerCase(),
+        childNodes: [], parentNode: null, attrs: {}, _html: "",
+        style: { removeProperty() {} },
+        offsetWidth: 0, offsetHeight: 0, clientWidth: 0, clientHeight: 0, scrollWidth: 0,
+        isConnected: false, onclick: null, classList: quietClass,
+        setAttribute(k, v) { node.attrs[k] = String(v); if (k === "id") ids.set(String(v), node); },
+        getAttribute(k) { return Object.prototype.hasOwnProperty.call(node.attrs, k) ? node.attrs[k] : null; },
+        hasAttribute(k) { return Object.prototype.hasOwnProperty.call(node.attrs, k); },
+        removeAttribute(k) {
+          if (k === "id" && ids.get(node.attrs.id) === node) ids.delete(node.attrs.id);
+          delete node.attrs[k];
+        },
+        appendChild(n) { if (n) { n.parentNode = node; node.childNodes.push(n); } return n; },
+        insertBefore(n) { return node.appendChild(n); },
+        remove() {
+          const p = node.parentNode;
+          if (!p) return;
+          const i = p.childNodes.indexOf(node);
+          if (i >= 0) p.childNodes.splice(i, 1);
+          node.parentNode = null;
+        },
+        addEventListener() {}, removeEventListener() {},
+        getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
+        getContext() { return { measureText: () => ({ width: 0 }), font: "", clearRect() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {} }; },
+        focus() {}, blur() {}, click() {},
+        querySelector(sel) {
+          const m = /^#([\w-]+)$/.exec(String(sel));
+          if (!m) return null;
+          if (node.attrs.id === m[1]) return node;
+          if (node._html && node._html.indexOf('id="' + m[1] + '"') >= 0) return stubBtn();
+          for (const c of node.childNodes) {
+            if (c && c.querySelector) { const hit = c.querySelector(sel); if (hit) return hit; }
+          }
+          return null;
+        },
+        querySelectorAll() { return []; },
+      };
+      Object.defineProperty(node, "id", { get() { return node.attrs.id || ""; }, set(v) { node.setAttribute("id", v); } });
+      Object.defineProperty(node, "className", { get() { return node.attrs.class || ""; }, set(v) { node.setAttribute("class", v); } });
+      Object.defineProperty(node, "innerHTML", { get() { return node._html; }, set(v) { node._html = String(v); } });
+      Object.defineProperty(node, "textContent", {
+        get() { return node._html.replace(/<[^>]+>/g, ""); },
+        set(v) { node._html = String(v == null ? "" : v); },
+      });
+      return node;
+    }
+    const doc = { listeners: {}, visibilityState: "visible", hidden: false, readyState: "complete" };
+    doc.createElement = (t) => el(t);
+    doc.createElementNS = (_ns, t) => el(t);
+    doc.createTextNode = (s) => ({ nodeType: 3, textContent: String(s), data: String(s) });
+    doc.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }) });
+    doc.documentElement = el("html");
+    doc.body = el("body");
+    doc.documentElement.appendChild(doc.body);
+    const listEl = el("div");
+    listEl.id = "list";
+    doc.body.appendChild(listEl);
+    doc.getElementById = (id) => ids.get(id) || null;
+    doc.querySelector = (sel) => { const m = /^#([\w-]+)$/.exec(String(sel)); return m ? (ids.get(m[1]) || null) : null; };
+    doc.querySelectorAll = () => [];
+    doc.addEventListener = () => {};
+    doc.removeEventListener = () => {};
+    globalThis.document = doc;
+    globalThis.window = { addEventListener() {}, removeEventListener() {}, document: doc };
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
+    globalThis.innerWidth = 1280;
+    globalThis.innerHeight = 800;
+    globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+    globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+    globalThis.requestAnimationFrame = () => 0;
+    globalThis.cancelAnimationFrame = () => {};
+    globalThis.ResizeObserver = function ResizeObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+    globalThis.location = { protocol: "file:" };
+    return doc;
+  }
+  async function pageWhileUnprimed(name, src, releaseScan) {
+    pageDoc();
+    const kit = await pageKitOnce();
+    const LINE = "Etiuda is still reading the team's shared folder. The catalog opens here once that is done.";
+    const shownLine = LINE.replace(/'/g, "&#39;");
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (f, t) => { const tmp = path.join(share, f + ".tmp"); fs.writeFileSync(tmp, t, "utf8"); fs.renameSync(tmp, path.join(share, f)); };
+    putAt("etiuda-team.json", JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })));
+    putAt("lamp-shop.ec", CAT_A1);
+    const env = { teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } } };
+    const d = deskOver(name, share, env);
+    if (src) {
+      /* A planted shell is a second desk: the first only prepared the files. */
+      const ud = d.ud;
+      const again = loadDesk(ud, { src });
+      d.api = again.api; d.ask = again.ask; d.ipc = again.ipc; d.on = again.on; d.invoke = again.invoke; d.said = again.said;
+    }
+    const hits = [];
+    const spyNames = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
+    const spyOrig = {};
+    const shareRoot = path.resolve(share).toLowerCase();
+    for (const n of spyNames) {
+      spyOrig[n] = fs[n];
+      fs[n] = function (p, ...rest) {
+        if (typeof p === "string") {
+          const got = path.resolve(p).toLowerCase();
+          if (got === shareRoot || got.startsWith(shareRoot + path.sep)) hits.push(n + " " + path.basename(String(p)));
+        }
+        return spyOrig[n].call(fs, p, ...rest);
+      };
+    }
+    const pageListeners = {};
+    const errors = [];
+    const doc = pageDoc();
+    kit.DOM.grabDom();
+    kit.ST.lsSet("eUiLang", "en");
+    kit.ST.lsSet("eDeckOff", "1");
+    kit.HK.hooks.render = () => { try { kit.REN.render(); } catch (e) { errors.push(String(e && e.stack || e)); } };
+    kit.HK.hooks.syncAddFab = () => {};
+    kit.HK.hooks.syncNextDock = () => {};
+    kit.HK.hooks.importCatalogHere = () => {};
+    kit.HK.hooks.loadCatalogFromFolder = () => {};
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        send: (ch, ...args) => {
+          for (const fn of (pageListeners[ch] || [])) {
+            try { fn({}, ...args); } catch (e) { errors.push(ch + " " + String(e && e.stack || e)); }
+          }
+        },
+      },
+    };
+    const ipcRenderer = {
+      sendSync: (ch, ...args) => {
+        const e = eventFor();
+        if (d.on[ch]) d.on[ch](e, ...args);
+        return e.returnValue;
+      },
+      send: (ch, ...args) => { if (d.on[ch]) d.on[ch](eventFor(), ...args); },
+      invoke: (ch, ...args) => new Promise((resolve) => setImmediate(() => {
+        try { resolve(d.invoke[ch] ? d.invoke[ch](eventFor(), ...args) : undefined); }
+        catch (e) { errors.push(String(e && e.stack || e)); resolve(undefined); }
+      })),
+      on: (ch, fn) => { (pageListeners[ch] = pageListeners[ch] || []).push(fn); },
+    };
+    let s = null, release = false, apply = null;
+    const held = [];
+    try {
+      s = d.api.folderSyncerRun(win);
+      apply = s && s.program ? s.program.applyScan.bind(s.program) : null;
+      if (s && s.program) s.program.applyScan = (msg) => {
+        if (!release) { held.push(msg); return { answers: true, applied: [] }; }
+        return apply(msg);
+      };
+      const untilHeld = Date.now() + 4000;
+      while (!held.length && Date.now() < untilHeld) await sleep(25);
+      const contextBridge = {
+        exposeInMainWorld: (k, v) => { window[k] = v; },
+        executeInMainWorld: (o) => o.func(...(o.args || [])),
+      };
+      new Function("require", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(
+        (n) => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
+      kit.OFF.wireHostCatalogWatch();
+      kit.TJ.wireTeamJoin();
+      await sleep(200);
+      const row = kit.SET.settingsBodyHtml().indexOf(shownLine) >= 0;
+      const desk = (doc.getElementById("list").innerHTML || "").indexOf(shownLine) >= 0;
+      const said = d.said.some((l) => l.indexOf(LINE) >= 0);
+      const hitsBefore = hits.length;
+      let offer = false, gone = false;
+      if (releaseScan && apply) {
+        release = true;
+        for (const msg of held.splice(0)) apply(msg);
+        const untilOffer = Date.now() + 2000;
+        while (Date.now() < untilOffer && !doc.getElementById("eCatalogOffer")) await sleep(25);
+        const offerEl = doc.getElementById("eCatalogOffer");
+        const offerHtml = offerEl ? offerEl.innerHTML : "";
+        offer = offerHtml.indexOf("lamp-shop") >= 0 && offerHtml.indexOf("Load catalog") >= 0;
+        const rowAfter = kit.SET.settingsBodyHtml().indexOf(shownLine) < 0;
+        const deskAfter = (doc.getElementById("list").innerHTML || "").indexOf(shownLine) < 0;
+        gone = rowAfter && deskAfter;
+      }
+      return { row, desk, said, hitsBefore, offer, gone, held: held.length, started: !!s, err: errors[0] || "" };
+    } finally {
+      for (const n of spyNames) fs[n] = spyOrig[n];
+      try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+      try { appSyncer().stopAllFolderSyncers(); } catch {}
+    }
+  }
+  {
+    let got = null, err = "";
+    try { got = await pageWhileUnprimed("page-unprimed", "", true); }
+    catch (e) { err = String(e && e.stack || e); }
+    const ok = !!got && got.row && got.desk && got.said && got.hitsBefore === 0 && got.offer && got.gone && !got.err;
+    check(ok, "46f while a folder desk's mirror is unprimed the page shows the still-reading line on the empty desk and the team row, the share unread on this thread ("
+      + (got ? got.hitsBefore : "?") + "), and once the listing lands the catalog is offered and the line is gone (row " + (got && got.row)
+      + ", desk " + (got && got.desk) + ", said " + (got && got.said) + ", offer " + (got && got.offer) + ", gone " + (got && got.gone)
+      + (got && got.err ? ", " + got.err : "") + (err ? ", " + err : "") + ")");
+  }
+  {
+    if (PLANTS_OFF) skip("46g lifting plant:still-reading-shown leaves the still-reading sentence in the log and off the page");
+    else {
+      const r = await testPlant("still-reading-shown", mainFile, async (scratchMain) => {
+        const got = await pageWhileUnprimed("plant-page-unprimed", fs.readFileSync(scratchMain, "utf8"), false);
+        return !!got && !got.row && !got.desk && got.said && !got.err;
+      });
+      check(r.ok, "46g lifting plant:still-reading-shown leaves the still-reading sentence in the log and off the page: " + JSON.stringify(r));
     }
   }
 

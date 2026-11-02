@@ -158,6 +158,7 @@ function teamRowHtml(l,status,bar){
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */
   if(l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
+  if(l.reading) notes.push(l.reading);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.filter(Boolean).map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
