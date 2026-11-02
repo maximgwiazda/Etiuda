@@ -936,16 +936,11 @@ UI_STRINGS.pl={
   "Replies over any window":"Odpowiedzi nad dowolnym oknem",
   "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.":"{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
   "Bring the replies over any window":"Przywołaj odpowiedzi nad dowolne okno",
-  /* draft words: copywriter */
   "Suggested from the copied message":"Propozycje na podstawie skopiowanej wiadomości",
-  /* draft words: copywriter */
   "Intents suggested from the message on the clipboard. None is chosen until one is clicked.":"Intencje zaproponowane na podstawie wiadomości ze schowka. Żadna nie jest wybrana, dopóki się jej nie kliknie.",
-  /* draft words: copywriter */
   "Suggestions taken: {N}":"Wybrane propozycje: {N}",
-  /* draft words: copywriter */
   "Openings with suggestions: {N}":"Otwarcia z propozycjami: {N}",
-  /* draft words: copywriter */
-  "When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent.":"Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta, nad listą pojawia się do pięciu intencji, których może ona dotyczyć. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko w tej chwili i nigdy nie jest zapisywana ani wysyłana.",
+  "When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.":"Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta, nad listą pojawia się do pięciu intencji, których może ona dotyczyć. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko przy otwarciu wyboru i nigdy nie jest zapisywana ani wysyłana; statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
   "Works from any program; Enter copies a reply and goes back to the window you were in.":"Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
   "Another program uses this combination just now; a different one will do.":"Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
   "{KEYS} already belongs to another program; a different combination will do.":"{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",

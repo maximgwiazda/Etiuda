@@ -86,7 +86,7 @@ function hotkeyRowHtml(){
     +'<small id="setHotkeyNote">'+esc(st.taken
       ? t("Another program uses this combination just now; a different one will do.")
       : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'
-    +'<small id="setSuggestNote">'+esc(t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent."))+'</small>'
+    +'<small id="setSuggestNote">'+esc(t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken."))+'</small>'
     +'<small id="setSuggestCounts">'+esc(suggestCountLine())+'</small>'
     +'</div><div class="sc-binds"><button type="button" class="sc-bind sc-long'+(st.accel?"":" sc-empty")+'" id="setHotkey"'
     +' style="flex-basis:100%" title="'+esc(t("Click, then press the new key combo"))+'">'
@@ -104,7 +104,7 @@ function syncHotkeyRow(box,now){
     ? t("Another program uses this combination just now; a different one will do.")
     : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
   const help=box.querySelector("#setSuggestNote"), counts=box.querySelector("#setSuggestCounts");
-  if(help) help.textContent=t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only then, and never kept or sent.");
+  if(help) help.textContent=t("When the picker opens with a customer's message copied, up to five intents it seems to be about are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
   if(counts) counts.textContent=suggestCountLine();
 }
 function hotkeyListen(box,on,now){
