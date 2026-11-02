@@ -2472,6 +2472,33 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2s9 Clear local memory sits in the Library's actions bar before Close, at its left edge with"
     + " Close at the right, still danger, and not in the Catalog & data fold: "
     + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
+  /* The one-row bar holds only on a window wide enough for it (template.html, the Library's
+     bar). At 600px wide the bar wraps instead, and every button stays inside the card and is the
+     element under its own centre, so a person can press it. Read by hit test, never by a click:
+     Clear local memory restarts the app. */
+  await s.p.setViewport({ width: 600, height: 880 });
+  await sleep(400);
+  const narrowBar = await s.p.evaluate(() => {
+    const card = document.getElementById("modalCard");
+    const acts = card && card.querySelector(".modal-actions");
+    if (!card || !acts) return { step: "missing" };
+    const c = card.getBoundingClientRect();
+    const btns = Array.from(acts.querySelectorAll("button")).filter(b => b.offsetParent);
+    const out = btns.map(b => {
+      const r = b.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { id: b.id, inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5
+        && r.top >= c.top - 0.5 && r.bottom <= c.bottom + 0.5,
+        hit: !!(hit && (hit === b || b.contains(hit))) };
+    });
+    return { step: "read", width: innerWidth, n: out.length, out };
+  });
+  await s.p.setViewport(null);
+  await sleep(400);
+  check(narrowBar.step === "read" && narrowBar.width === 600 && narrowBar.n >= 5
+        && narrowBar.out.every(b => b.inside && b.hit),
+    "2s9w at 600px wide the Library's bar wraps, and every button lies inside the card and is"
+    + " the element under its own centre: " + JSON.stringify(narrowBar));
 
   /* Eject from that row: the Library is still there over the desk started again in place, showing
      the folder rather than being replaced by a dialog about one file in it, and the section says in
