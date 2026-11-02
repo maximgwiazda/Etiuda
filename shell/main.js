@@ -7628,7 +7628,7 @@ const SHELL_WORDS = {
         folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
         folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
         pickTeamFolder: "Choose the team's shared folder",
-        stillReading: "Etiuda is still reading the team's shared folder. The catalog opens here once that is done." /* draft words: copywriter */ },
+        stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it." },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
@@ -7638,7 +7638,7 @@ const SHELL_WORDS = {
         folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
         folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
         pickTeamFolder: "Wybierz wspólny folder zespołu",
-        stillReading: "Etiuda wciąż wczytuje wspólny folder zespołu. Katalog otworzy się tutaj, gdy to się skończy." /* draft words: copywriter */ },
+        stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył." },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();

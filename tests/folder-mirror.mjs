@@ -2435,10 +2435,12 @@ async function run() {
       waited = await pending;
       shown = d.api.readCatalog();
       const plRead = pl.api.readCatalog();
-      const reading = d.said.some(l => l.indexOf("Etiuda is still reading the team's shared folder. The catalog opens here once that is done.") >= 0);
-      const polish = pl.said.some(l => l.indexOf("Etiuda wciąż wczytuje wspólny folder zespołu. Katalog otworzy się tutaj, gdy to się skończy.") >= 0);
+      const reading = d.said.some(l => l.indexOf("Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.") >= 0);
+      const polish = pl.said.some(l => l.indexOf("Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.") >= 0);
       const slate = d.said.some(l => l.indexOf("no catalog found") >= 0) || pl.said.some(l => l.indexOf("no catalog found") >= 0);
-      const marked = getShellSrc().indexOf("/* draft words: copywriter */") >= 0;
+      /* The copywriter's final words (2026-11-02 03:58), no longer marked as a draft on either language's line. */
+      const marked = getShellSrc().split(String.fromCharCode(10)).filter(l => l.indexOf("stillReading:") >= 0)
+        .every(l => l.indexOf("/* draft words: copywriter */") < 0);
       const quiet = before === 0 && opened === false && early == null && !slate && reading && polish && marked;
       const landed = waited === true && shown === CAT_A1.trim();
       check(!!s && held !== null && quiet && landed,
@@ -2646,7 +2648,7 @@ async function run() {
   async function pageWhileUnprimed(name, src, releaseScan) {
     pageDoc();
     const kit = await pageKitOnce();
-    const LINE = "Etiuda is still reading the team's shared folder. The catalog opens here once that is done.";
+    const LINE = "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.";
     const shownLine = LINE.replace(/'/g, "&#39;");
     const share = folder(name + "-share");
     const T = "t-" + crypto.randomBytes(8).toString("hex");
