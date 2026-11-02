@@ -1965,7 +1965,7 @@ try {
     const invP = await inviteOnW(1);
     const Dp = deskOnWrap("wrap-plant", invP.wrap);
     const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
-    const end = Date.now() + 30000;
+    const end = Date.now() + 4000;
     while (Date.now() < end) {
       const ch = Dp.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
@@ -2008,7 +2008,7 @@ try {
   }
   let devRevW = 0, teamRevW = 1;
   const devKeysW = [];
-  async function wrapRestart(label, edition) {
+  async function wrapRestart(label, edition, readCeiling) {
     const inv = await inviteOnW(2);
     const seen = { asks: 0, afterUpload: 0 };
     let mode = "serve", uploaded = false;
@@ -2056,7 +2056,7 @@ try {
       const ch = second.api.relayRun();
       if (ch) { ch.kick(); await ch.idle(); }
       return factsOf(second.api.readCatalog() || "") === edition;
-    }, 30000);
+    }, readCeiling || 30000);
     const stopSecond = second.api.relayRun();
     if (stopSecond) await stopSecond.stop();
     return { taken: taken, said: said, uploaded: uploaded, keptAfterUpload: keptAfterUpload, read: read2, asks: seen.asks, afterUpload: seen.afterUpload };
@@ -2071,7 +2071,7 @@ try {
   const PUT_BACK_REFUSED = '    const why = r.refused || refusalOf(r); if (why.reason === "token-spent") return why; wrapPhase = "none";';
   const e2Plant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }, { tag: "plant:S3-wrap-gone", text: null },
     { tag: "plant:S3-wrap-refused", text: PUT_BACK_REFUSED }], async () => {
-    const again = await wrapRestart("wrap-restart-plant", 4);
+    const again = await wrapRestart("wrap-restart-plant", 4, 8000);
     return !again.read;
   });
   check(e2Plant.turned && e2Plant.back,
@@ -2134,7 +2134,7 @@ try {
     + oncePlant.detail + ", sha " + (oncePlant.back ? "restored" : "differs"));
   /* Board 922, F1. A relay invitation the relay answers token-spent, or invite-ended, is kept with the request and said in its view,
      which the page draws, and not only in the console. */
-  async function endedJoin(label, error) {
+  async function endedJoin(label, error, shownCeiling) {
     const inv = await inviteOnW(1);
     const hooks = { fetch: (url, init) => (init && init.method === "POST" && String(url).endsWith("/session") && init.body
       && String(init.body).indexOf('"invite"') >= 0
@@ -2150,7 +2150,7 @@ try {
       if (ch) { ch.kick(); await ch.idle(); }
       view = await desk.ask("etiuda:team-join", "view");
       return !!(view && view.join && view.join.state !== "waiting");
-    }, 30000);
+    }, shownCeiling || 30000);
     const kept = (((((desk.envelope().teamJoin || {}).invite || {}).relay || {}).end)) || "";
     const again = loadDesk(desk.ud);
     const after = await again.ask("etiuda:team-join", "view");
@@ -2169,14 +2169,14 @@ try {
     "967b a relay invitation answered invite-ended is said in the request's view, naming the relay, and kept with the request through a restart: view "
     + (endedJoined.view && endedJoined.view.join ? endedJoined.view.join.state : "none") + ", kept " + JSON.stringify(endedJoined.kept) + ", after a restart " + endedJoined.reloaded);
   const usedLift = await liftChannel("plant:S3-page-used", async () => {
-    const again = await endedJoin("ended-used-plant", "token-spent");
+    const again = await endedJoin("ended-used-plant", "token-spent", 6000);
     return !again.shown && again.kept === "";
   });
   check(usedLift.turned && usedLift.back,
     "967c lifting plant:S3-page-used leaves the used invitation unsaid in the view, and the product file is never written: "
     + usedLift.detail + ", sha " + (usedLift.back ? "restored" : "differs"));
   const endedLift = await liftChannel("plant:S3-page-ended", async () => {
-    const again = await endedJoin("ended-expired-plant", "invite-ended");
+    const again = await endedJoin("ended-expired-plant", "invite-ended", 6000);
     return !again.shown && again.kept === "";
   });
   check(endedLift.turned && endedLift.back,
@@ -3136,7 +3136,7 @@ try {
       const running = D.api.relayRun();
       const wasOnline = !!(running && running.online());
       await D.ask("etiuda:team-join", "cancel");
-      const stopped = await until(() => !!(running && running.online() === false), 30000);
+      const stopped = await until(() => !!(running && running.online() === false), 1500);
       const here = D.api.relayHere();
       const folder = D.api.catalogFolder();
       let after = {};
@@ -5103,7 +5103,7 @@ try {
   /* 939a, finding 2 (1) and (2): the lead hands the team to a new key on the relay, then writes as that key the team file
      carrying the step the old key signed, and the edition, head and span re-signed under it, each replacing the old key's
      blob of its path. The new key has a box of its own, as Studio makes one. */
-  async function handoverOnline(tag, app) {
+  async function handoverOnline(tag, app, ceiling) {
     const out = { synced: false, moved: 0, now: null, notes: [] };
     const s = await relayDeskScene(tag, app);
     try {
@@ -5120,7 +5120,7 @@ try {
       put(s.sMirror, "stats-span.json", span);
       await s.studio.kick(); await s.studio.idle();
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5131,7 +5131,7 @@ try {
   }
   /* 939d, finding 2 (3): the desk is away while the lead hands the team to a new key and then moves it to a new team key. The
      lead keeps the team's box across the handover; Studio does not yet (the report says what it must change). */
-  async function handoverAway(tag, app) {
+  async function handoverAway(tag, app, ceiling) {
     const out = { synced: false, moved: 0, now: null, notes: [] };
     const s = await relayDeskScene(tag, app);
     try {
@@ -5157,7 +5157,7 @@ try {
       await s.studio.kick(); await s.studio.idle();
       deskTransport.down = false;
       const done = n => n.pin === "the new lead" && n.epoch === 2 && n.edition === "re-signed rev 2" && n.head === "Second key edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5224,7 +5224,7 @@ try {
       out.newCopyOpens = copies(s.boxNow).reduce((n, c) => n + after.filter(u => u.meta.place === "invite:" + c.id && aesOpens(u, s.rt, c.key)).length, 0);
       deskTransport.down = false;
       const settled = n => keep ? n.pin === "the new lead" && n.epoch === 2 : false;
-      await until(async () => { await s.pump(); return settled(deskNow(s, NEXT, span)); }, 30000);
+      await until(async () => { await s.pump(); return settled(deskNow(s, NEXT, span)); }, keep ? 30000 : 2500);
       out.now = deskNow(s, NEXT, span);
       return out;
     } finally {
@@ -5314,7 +5314,7 @@ try {
      939l's scene once the desk is left. "invite" (939q): the agent leaves the team and takes the new lead's invitation; the
      lead writes its team file again, and the desk finds its copy by the invitation's box. "recopy" (939r): the lead puts up one copy for the desk at the place the box the desk holds names, as
      a program holding that box and the new key could. Either way the desk's two files reach the lead's mirror, opened. */
-  async function strandedWayOut(tag, way, app) {
+  async function strandedWayOut(tag, way, app, ceiling) {
     const out = { synced: false, moved: 0, before: "", taken: "", recopy: 0, arrived: false, said: 0, epoch: null, pin: "", row: "" };
     const s = await relayDeskScene(tag, app);
     try {
@@ -5348,7 +5348,7 @@ try {
         out.recopy = await putRaw(s.rt, NEXT, b);
       }
       const arrived = () => read(s.sMirror, a.own + "away.json") !== null && read(s.sMirror, a.own + "back.json") !== null;
-      await until(async () => { await s.pump(); return arrived(); }, 30000);
+      await until(async () => { await s.pump(); return arrived(); }, ceiling || 30000);
       out.arrived = arrived();
       out.said = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
       try { out.epoch = JSON.parse(read(s.mirror, C.TEAM_NAME)).epoch; } catch { out.epoch = null; }
@@ -5602,7 +5602,7 @@ try {
   /* 939f, finding 3 (1): the lead moves the team to a shared folder, filled with its team file at a higher rev naming a folder
      channel, and puts the same file up to the relay. The desk's catalog folder before joining is that folder, so the move
      finds it there. */
-  async function toFolder(tag, app) {
+  async function toFolder(tag, app, ceiling) {
     const out = { synced: false, folder: "", shown: "", channel: "" };
     const s = await relayDeskScene(tag, app);
     try {
@@ -5624,7 +5624,7 @@ try {
         out.channel = ch ? ch.kind : "none";
         return out.folder === "the folder team's mirror" && out.shown === "the shared folder" && out.channel !== "relay";
       };
-      await until(async () => { await s.pump(); return look(); }, 30000);
+      await until(async () => { await s.pump(); return look(); }, ceiling || 30000);
       out.ok = look();
       return out;
     } finally {
@@ -5635,7 +5635,7 @@ try {
      successor reaches a desk only as a team file of a chain of its own put up under K1 while the relay still names K1. Here
      someone else holding K1 puts up such a file handing K1 to K3; the team's lead then moves the relay to K2 and writes K2's
      file under K2. A desk away meanwhile catches up both in one look. */
-  async function forkOnRelay(tag, app) {
+  async function forkOnRelay(tag, app, ceiling) {
     const out = { synced: false, thief: 0, moved: 0, pin: "", channelPin: "", fork: "", said: 0, rev: 0 };
     const s = await relayDeskScene(tag, app);
     try {
@@ -5652,7 +5652,7 @@ try {
       deskTransport.down = false;
       const two = C.FORK_SAID ? C.FORK_SAID.two : null;
       const twoSaid = () => (two ? s.Dk.said.filter(l => l.indexOf(two) >= 0).length : 0);
-      await until(async () => { await s.pump(); return twoSaid() > 0; }, 30000);
+      await until(async () => { await s.pump(); return twoSaid() > 0; }, ceiling || 30000);
       for (let i = 0; i < 2; i++) await s.pump();
       const p = (s.Dk.envelope().teamPins || {})[s.team];
       const name = k => (k && k.public === LEAD.pub ? "K1" : k && k.public === K2.pub ? "K2" : k && k.public === K3.pub ? "K3" : "none");
@@ -5728,7 +5728,7 @@ try {
      and the edition, head and span re-signed under it. Both team files reach the desk in one since page. 994c, the next file
      tried (`broken`): what the old key puts up instead names the new key with the genuine step, but its own signature does not
      verify, so it is the first handover tried and is refused. */
-  async function handoverUnderOld(tag, broken, app) {
+  async function handoverUnderOld(tag, broken, app, ceiling) {
     const out = { synced: false, old: 0, moved: 0, now: null, notes: [] };
     const s = await relayDeskScene(tag, app);
     try {
@@ -5754,7 +5754,7 @@ try {
       await s.studio.kick(); await s.studio.idle();
       deskTransport.down = false;
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5811,7 +5811,7 @@ try {
   /* 994i, the control: the lead hands the team to a new key, which writes the team file carrying the step and the edition, head
      and span re-signed under it, all on the desk's first page, and then more than a page of listings. The desk, away meanwhile,
      follows once its catch-up reads the short page, and takes what the new key wrote on the first page. */
-  async function handoverAcrossPages(tag, app) {
+  async function handoverAcrossPages(tag, app, ceiling) {
     const out = { synced: false, moved: 0, pages: 0, now: null, notes: [] };
     const v = { armed: false, pad: 1500 };
     const s = await relayDeskScene(tag, app ? { app, fetch: padFetch(v) } : { fetch: padFetch(v) });
@@ -5833,7 +5833,7 @@ try {
       v.armed = true;
       deskTransport.down = false;
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.pages = v.pages || 0;
       out.now = deskNow(s, NEXT, span);
       out.ok = out.pages >= 2 && done(out.now);
@@ -5887,7 +5887,7 @@ try {
      then entries left out to the round cap, so the first catch-up holds the handover and stops there. The next catch-up's first ask
      is answered 503 until the desk is stopped and loaded again from its user data; its fresh channel, built from the saved state,
      then reads the short page and follows. */
-  async function heldAcrossRestart(tag, app) {
+  async function heldAcrossRestart(tag, app, ceiling) {
     const out = { synced: false, moved: 0, pages: 0, held: -1, now: null, notes: [] };
     const CAP = 1000 * 1000;
     const v = { armed: false, pad: 0, padTo: CAP, refused: false, again: false };
@@ -5924,7 +5924,7 @@ try {
       v.again = true;
       s.Dk = loadDesk(s.ud, hooks);
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
-      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, 30000);
+      await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.now = deskNow(s, NEXT, span);
       out.ok = v.refused && out.pages === 1000 && out.held === 1 && done(out.now);
       if (!out.ok) out.notes.push("desk " + s.Dk.said.slice(-3).join(" / "));
@@ -5942,11 +5942,11 @@ try {
     check(!!a.x && a.x.ok === true,
       "939a an online joined relay desk follows a handover the lead makes on the relay and then as the new key, and opens the edition, head and"
       + " span re-signed under it: " + sceneText(a.x, a.err));
-    const b = await liftApp("plant:handed-first", async app => { const x = await handoverOnline("939b", app); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead"; });
+    const b = await liftApp("plant:handed-first", async app => { const x = await handoverOnline("939b", app, 8000); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead"; });
     check(b.turned && b.back, "939b lifting plant:handed-first leaves the desk on the old lead, the new key's team file dropped as from no roster,"
       + " and the product file is never written: " + b.detail + ", sha " + (b.back ? "restored" : "differs"));
     const c = await liftApp("plant:chain-handed", async app => {
-      const x = await handoverOnline("939c", app);
+      const x = await handoverOnline("939c", app, 8000);
       return x.synced && x.now && x.now.pin === "the new lead" && x.now.edition !== "re-signed rev 1" && x.now.head !== "Handover edition";
     });
     check(c.turned && c.back, "939c lifting plant:chain-handed follows the handover but refuses the re-signed edition and head as outside-place,"
@@ -5955,7 +5955,7 @@ try {
     check(!!d.x && d.x.ok === true,
       "939d a desk away across a handover and an epoch move, the lead keeping the team's box, finds its own copy under the new key, follows"
       + " it and opens the second key's edition, head and span: " + sceneText(d.x, d.err));
-    const e = await liftApp("plant:copy-by-writer", async app => { const x = await handoverAway("939e", app); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead" && x.now.epoch === 1; });
+    const e = await liftApp("plant:copy-by-writer", async app => { const x = await handoverAway("939e", app, 8000); return x.synced && x.moved === 200 && x.now && x.now.pin === "the old lead" && x.now.epoch === 1; });
     check(e.turned && e.back, "939e lifting plant:copy-by-writer leaves the desk that was away on the old lead and the first key, its copy"
       + " unfound, and the product file is never written: " + e.detail + ", sha " + (e.back ? "restored" : "differs"));
     const j = await run(handoverAwayFresh, "939j", false);
@@ -6012,7 +6012,7 @@ try {
       "939r a desk left behind whose copy the lead puts up again at the place its box names lands the new key's team file, follows it, puts"
       + " its own files up and loses the row's notice: " + wText(r.x) + (r.err ? ", " + r.err : ""));
     const w = await liftApp("plant:stranded-out-invite", async app => {
-      const x = await strandedWayOut("939w", "invite", app);
+      const x = await strandedWayOut("939w", "invite", app, 8000);
       return left(x) && x.before === "left behind" && x.taken === "taken" && !x.arrived && x.row === "{\"seen\":false}";
     });
     check(w.turned && w.back && w.sites === 2, "939w lifting plant:stranded-out-invite, both lines that end the state for 939q at once (a pin to"
@@ -6020,7 +6020,7 @@ try {
       + " the invitation, its files not at the lead, and the product file is never written: " + w.detail + ", sites " + w.sites + ", sha "
       + (w.back ? "restored" : "differs"));
     const x2 = await liftApp("plant:stranded-out-recopy", async app => {
-      const x = await strandedWayOut("939x", "recopy", app);
+      const x = await strandedWayOut("939x", "recopy", app, 8000);
       return left(x) && x.before === "left behind" && x.recopy === 200 && !x.arrived && x.row === "{\"seen\":false}";
     });
     check(x2.turned && x2.back && x2.sites === 2, "939x lifting plant:stranded-out-recopy, both lines that end the state for 939r at once (following"
@@ -6092,7 +6092,7 @@ try {
       "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
       + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", the team shown in " + f.x.shown + ", team channel " + f.x.channel : "")
       + (f.err ? ", " + f.err : ""));
-    const g = await liftApp("plant:relay-to-folder", async app => { const x = await toFolder("939g", app); return x.synced && x.folder === "the relay's mirror" && x.channel === "relay"; });
+    const g = await liftApp("plant:relay-to-folder", async app => { const x = await toFolder("939g", app, 8000); return x.synced && x.folder === "the relay's mirror" && x.channel === "relay"; });
     check(g.turned && g.back, "939g lifting plant:relay-to-folder refuses the move as wrong-team, so the desk stays on the relay, and the product"
       + " file is never written: " + g.detail + ", sha " + (g.back ? "restored" : "differs"));
     const h = await run(forkOnRelay, "939h");
@@ -6100,7 +6100,7 @@ try {
       "939h through the relay, a desk that catches up K1 handed to K2 and to K3 in one look follows neither, keeps its pin and team file, and"
       + " says so: " + (h.x ? "synced " + h.x.synced + ", the K3 file by K1 " + h.x.thief + ", relay move to K2 " + h.x.moved + ", desk pin "
       + h.x.pin + ", channel pin " + h.x.channelPin + ", fork " + h.x.fork + ", said " + h.x.said + ", team file rev " + h.x.rev : "") + (h.err ? ", " + h.err : ""));
-    const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
+    const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app, 8000); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
     check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
       + i.detail + ", sha " + (i.back ? "restored" : "differs"));
   }
@@ -6112,7 +6112,7 @@ try {
       + ", " + sceneText(a.x, a.err));
     if (PLANTS_OFF) skip("994b lifting plant:handed-wins lets the old lead's later counter win the page, so the desk stays on the old lead");
     else {
-      const b = await liftApp("plant:handed-wins", async app => { const x = await handoverUnderOld("994b", false, app); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
+      const b = await liftApp("plant:handed-wins", async app => { const x = await handoverUnderOld("994b", false, app, 8000); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
       check(b.turned && b.back, "994b lifting plant:handed-wins lets the old lead's later counter win the page, so the desk stays on the old lead,"
         + " and the product file is never written: " + b.detail + ", sha " + (b.back ? "restored" : "differs"));
     }
@@ -6123,7 +6123,7 @@ try {
       + ", " + sceneText(c.x, c.err));
     if (PLANTS_OFF) skip("994d lifting plant:team-next stops at the refused file, so the desk stays on the old lead");
     else {
-      const d = await liftApp("plant:team-next", async app => { const x = await handoverUnderOld("994d", true, app); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
+      const d = await liftApp("plant:team-next", async app => { const x = await handoverUnderOld("994d", true, app, 8000); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
       check(d.turned && d.back, "994d lifting plant:team-next stops at the refused file, so the desk stays on the old lead, and the product file is"
         + " never written: " + d.detail + ", sha " + (d.back ? "restored" : "differs"));
     }
@@ -6156,13 +6156,13 @@ try {
       + " is read, and what the new key wrote on the first page is taken: " + pText(i.x) + (i.err ? ", " + i.err : ""));
     if (PLANTS_OFF) skip("994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead");
     else {
-      const j = await liftApp("plant:ahead-land", async app => { const x = await handoverAcrossPages("994j", app); return x.synced && x.moved === 200 && x.pages >= 2 && !!x.now && x.now.pin === "the old lead"; });
+      const j = await liftApp("plant:ahead-land", async app => { const x = await handoverAcrossPages("994j", app, 8000); return x.synced && x.moved === 200 && x.pages >= 2 && !!x.now && x.now.pin === "the old lead"; });
       check(j.turned && j.back, "994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead, and the product file"
         + " is never written: " + j.detail + ", sha " + (j.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) skip("994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head");
     else {
-      const k = await liftApp("plant:ahead-park", async app => { const x = await handoverAcrossPages("994k", app); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
+      const k = await liftApp("plant:ahead-park", async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
       check(k.turned && k.back, "994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head,"
         + " and the product file is never written: " + k.detail + ", sha " + (k.back ? "restored" : "differs"));
     }
@@ -6185,7 +6185,7 @@ try {
       + " takes what the new key wrote: " + rText(n.x) + (n.err ? ", " + n.err : ""));
     if (PLANTS_OFF) skip("994o lifting plant:ahead-kept loses the held handover at the restart, so the desk stays on the old lead");
     else {
-      const o = await liftApp("plant:ahead-kept", async app => { const x = await heldAcrossRestart("994o", app); return x.synced && x.moved === 200 && x.held === 1 && !!x.now && x.now.pin === "the old lead"; });
+      const o = await liftApp("plant:ahead-kept", async app => { const x = await heldAcrossRestart("994o", app, 8000); return x.synced && x.moved === 200 && x.held === 1 && !!x.now && x.now.pin === "the old lead"; });
       check(o.turned && o.back, "994o lifting plant:ahead-kept loses the held handover at the restart, so the desk stays on the old lead, and the product"
         + " file is never written: " + o.detail + ", sha " + (o.back ? "restored" : "differs"));
     }
@@ -9546,7 +9546,7 @@ const retryPlant = await liftChannel("plant:h35-enrol-retry", async mod => {
   const invited = await admin("POST", "/relay/v1/t/" + rt + "/invites", { add, drop: [], t: tInv,
     sig: signHex(LEAD, core.invitesBytes(rt, tInv, add, [])) });
   if (invited.status !== 200) { try { await ch.stop(); } catch { /* already stopped */ } throw new Error("invite " + invited.status); }
-  const again = await until(() => hellos >= first + 1, 30000);
+  const again = await until(() => hellos >= first + 1, 8000);
   try { await ch.stop(); } catch { /* already stopped */ }
   if (again) throw new Error("still asked, hellos " + hellos);
   if (first < 1) throw new Error("no first hello");

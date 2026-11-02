@@ -3647,7 +3647,7 @@ const t0 = Date.now();
     fs.writeFileSync(sib, asSibling(sampleSib));
     await q3.reload({ waitUntil: "load" });
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
-    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 30000);
+    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 4000);
     const other = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-other", name: "Invented Other" });
     delete other.sample; delete other.hash;
     fs.writeFileSync(sib, asSibling(other));

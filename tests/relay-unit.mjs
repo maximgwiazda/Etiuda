@@ -2528,7 +2528,7 @@ async function main() {
         let answer = "pending";
         const done = team.fetch(new Request("https://relay.test/relay/v1/t/" + rt + "/" + route, { method: "POST", body: s.stream, duplex: "half" }))
           .then(async res => { answer = [res.status, JSON.parse(await res.text()).error]; }, () => { answer = "threw"; });
-        await Promise.race([done, delay(30000)]);
+        await Promise.race([done, delay(300)]);
         const early = answer, reads = s.reads.n;
         s.end();
         await Promise.race([done, delay(30000)]);
