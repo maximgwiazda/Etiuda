@@ -2802,6 +2802,14 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
+/* THE LIBRARY'S BAR HOLDS EVERY BUTTON ON ONE ROW at the default window, 1280 by 880.
+   At 560px, Clear local memory, Load catalog, Join a team and Earlier versions left Close
+   on the row below: the Polish labels need about 645px inside the padding, measured on
+   the built page. 720px leaves a gap between the two ends, which is the gap 2s9 reads.
+   nowrap, so a spare pixel cannot drop Close. Other dialogs stay at 560. */
+.modal-card.lib-modal{max-width:720px}
+.modal-card.lib-modal .modal-actions,
+.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:nowrap}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
@@ -9016,7 +9024,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-01";
+  var E_BUILT = "2026-11-02";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -30155,6 +30163,9 @@ What you type stays in this browser only.`;
     if (justHtml) return mgBody;
     openDialog({
       title: "Library",
+      /* Wide enough that Clear, Load, Join, Earlier versions and Close sit on one row at the
+         default window. The 560px card put Close on the row below. */
+      cls: "lib-modal",
       /* Every section here is about one catalog, and the only place that says WHICH is inside
          "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
          name for the same reason the editors carry theirs: it scopes the screen you are on.

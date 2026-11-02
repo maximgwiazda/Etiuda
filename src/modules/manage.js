@@ -692,6 +692,9 @@ function openManage(justHtml){
   if(justHtml) return mgBody;
   openDialog({
     title: "Library",
+    /* Wide enough that Clear, Load, Join, Earlier versions and Close sit on one row at the
+       default window. The 560px card put Close on the row below. */
+    cls: "lib-modal",
     /* Every section here is about one catalog, and the only place that says WHICH is inside
        "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
        name for the same reason the editors carry theirs: it scopes the screen you are on.
