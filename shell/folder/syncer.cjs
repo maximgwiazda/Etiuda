@@ -59,6 +59,7 @@ function conflictSiblingName(canonical, name) {
   if (/^ \(.*conflicted copy.*\)$/i.test(tail)) return true;
   if (/^-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(tail)) return true;
   if (/^\.sync-conflict-/.test(tail)) return true;
+  if (/^(_conf\(\d+\))+$/i.test(tail)) return true;
   return false;
 }
 

@@ -24,7 +24,7 @@ const nodeRequire = createRequire(import.meta.url);
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 18;
+const EXPECTED = 20;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -69,6 +69,7 @@ function boot(ud, source) {
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     src + "\n__test.isCatalogName = isCatalogName; __test.heed = heedTeam; __test.teamDoc = folderTeamDoc;"
     + " __test.conflictSiblingName = typeof conflictSiblingName === \"function\" ? conflictSiblingName : null;"
+    + " __test.isConflictName = typeof isConflictName === \"function\" ? isConflictName : null;"
     + " __test.deskTrustChecks = typeof deskTrustChecks === \"function\" ? deskTrustChecks : null;"
     + " __test.signDesk = function (doc) {"
     + "   const me = branchIdentity(true); if (!me) return null;"
@@ -209,6 +210,36 @@ try {
       && !pred("guide.ec", "desk-copy.ec") && !pred("guide.ec", "guide.ec"),
       "f3g a conflict tail is a sibling, including the OneDrive hyphen, and an ordinary name is not");
   }
+  {
+    const { ud, folder } = fresh();
+    const plain = catalog("support-board", 1), newer = catalog("support-board", 4);
+    put(folder, "support.ec", plain);
+    put(folder, "support_conf(1).ec", newer);
+    put(folder, "support_conf(2).ec", catalog("support-board", 3));
+    put(folder, "known (conflicted copy 2026-10-28).ec", catalog("known-board", 5));
+    put(folder, "tie.ec", catalog("tie-board", 2));
+    put(folder, "tie_conf(1).ec", catalog("tie-board", 2));
+    const before = snap(folder);
+    const A = boot(ud);
+    const rows = await A.ask("etiuda:catalog-files");
+    const support = rowsOf(rows, "support-board");
+    const known = rowsOf(rows, "known-board");
+    const tie = rowsOf(rows, "tie-board");
+    const pred = A.test.conflictSiblingName;
+    const isConf = A.test.isConflictName;
+    check(support.length === 1 && support[0].rev === 4 && support[0].name === "support_conf(1).ec"
+      && known.length === 1 && known[0].rev === 5
+      && tie.length === 1 && tie[0].name === "tie.ec"
+      && typeof pred === "function" && pred("support.ec", "support_conf(1).ec")
+      && pred("support.ec", "support_conf(2).ec")
+      && pred("etiuda-team.json", "etiuda-team_conf(1).json")
+      && !pred("support.ec", "support_config.ec") && !pred("support.ec", "support_conf.ec")
+      && typeof isConf === "function" && isConf("support_conf(1).ec") && isConf("support_conf(2).ec")
+      && !isConf("support_config.ec") && !isConf("support_conf.ec")
+      && sameSnap(before, snap(folder)),
+      "f4a Drive _conf(n) copy collapses to one Library catalog row and is a conflict name ("
+      + support.length + " row(s), rev " + (support[0] && support[0].rev) + ")");
+  }
 
   /* ---- a desk's own files, one row per id ---------------------------------------------------- */
   {
@@ -340,6 +371,29 @@ try {
     check(rose && rose.rev === 6 && held && held.rev === 6 && /older file/.test(said),
       "f3m the floor still refuses a conflict sibling below a rev already heeded (rose " + (rose && rose.rev)
       + ", held " + (held && held.rev) + ")");
+  }
+  {
+    const { ud, folder } = fresh();
+    plantRing(folder);
+    const canon = teamDoc(1, 1), conf = teamDoc(4, 1);
+    const canonAt = put(folder, "etiuda-team.json", canon);
+    const confAt = put(folder, "etiuda-team_conf(1).json", conf);
+    syncMirror(ud, folder);
+    const before = [fileSha(canonAt), fileSha(confAt)];
+    const A = boot(ud);
+    A.test.heed();
+    await A.ask("etiuda:catalog-files");
+    const floor = floorOf(ud);
+    const doc = A.test.teamDoc();
+    const after = [fileSha(canonAt), fileSha(confAt)];
+    const mirrorConf = path.join(ud, "folder-mirror", teamId, "etiuda-team_conf(1).json");
+    check(floor && floor.epoch === 1 && floor.rev === 4 && doc && doc.rev === 4
+      && fs.existsSync(mirrorConf)
+      && before[0] === after[0] && before[1] === after[1]
+      && fs.existsSync(canonAt) && fs.existsSync(confAt)
+      && A.test.isCatalogName("etiuda-team_conf(1).json"),
+      "f4b Drive etiuda-team_conf(1).json at a higher rev reaches mirror and is heeded (rev "
+      + (floor && floor.rev) + ", doc " + (doc && doc.rev) + ")");
   }
 
   {
