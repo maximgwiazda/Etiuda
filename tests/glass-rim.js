@@ -21,9 +21,10 @@
  * The ring is now a real 1px border, which is snapped. Each ratio gets its own headless Chrome with
  * --force-device-scale-factor (the emulated ratio does not snap borders the way a real display does, so it would prove
  * nothing). The slab is photographed whole at the device's own pixels, and at three places along the top and the
- * bottom (30 px in from each end and the middle) the rows are read: the same number of rows above half of the line's
- * own peak at the top and the bottom, and the equivalent width (the rows' brightness above the card, over the peak
- * row, in CSS pixels) within 0.1 of a pixel between them. The control is the previous pass's masked ring injected in
+ * bottom (30 px in from each end and the middle) the rows are read: one CSS pixel is one row (the device rows at or
+ * above half of the line's own peak; two device pixels of a 1px border at a ratio of 2 are one row), and the
+ * equivalent width (that light over the peak, in CSS pixels) within 0.1 of a pixel between them. Light below half
+ * the peak is not the line. The control is the previous pass's masked ring injected in
  * the same launch, which must read the two apart. It centres the lone slab whose top or bottom, times the ratio, has
  * a fractional part nearest one half. At 1.25 and 1.5 the box stays at that centred position, since those
  * reads are about an edge between device pixels. At 1.25 that same slab is also read at ratios 1 and 2, after the top has been moved onto a whole CSS pixel.
@@ -297,8 +298,10 @@ async function lift(pg) {
 /* The rows across the top edge and the bottom edge of the probe macro at the device's own pixels: the whole window is
    photographed (no clip to round), the edge rows are the box's rounded top and bottom, and at three places along each
    the red channel is read from outside to inside (top) and inside to outside (bottom). The card's own level inside is
-   the rest; the page outside is darker than it, so only brightness above the rest counts. rows: those above half the
-   line's peak; width: all of it over the peak row, in CSS pixels (a device pixel is 1 / ratio of one). */
+   the rest; the page outside is darker than it, so only brightness above the rest counts. A row is one CSS pixel of
+   the line: the device rows at or above half the line's own peak, and the two device pixels of a 1px border at a
+   ratio of 2 share one. The width is that light over the peak, in CSS pixels. Light below half the peak is not the
+   line, so dividing the whole window by the peak is not a width. */
 async function edgeRows(pg, ratio, onGrid) {
   await settle(pg);
   if (onGrid) await sitWhole(pg);
@@ -324,7 +327,11 @@ async function edgeRows(pg, ratio, onGrid) {
       const rest = a[a.length - 1];
       const e = a.map(v => Math.max(0, v - rest));
       const peak = Math.max(...e);
-      return { peak, rows: e.filter(v => v > 0 && v >= peak / 2).length, width: e.reduce((p, q) => p + q, 0) / Math.max(peak, 1) / d };
+      const on = [];
+      for (let i = 0; i < e.length; i++) if (e[i] > 0 && e[i] >= peak / 2) on.push(i);
+      const css = new Set(on.map(i => Math.floor((y0 + dy * (i - span)) / d)));
+      const sum = on.reduce((p, i) => p + e[i], 0);
+      return { peak, rows: css.size, width: sum / Math.max(peak, 1) / d };
     };
     return { ratio: d, top: xs.map(x => read(x, topRow, 1)), bot: xs.map(x => read(x, botRow, -1)) };
   }, png, r, ratio, D);
