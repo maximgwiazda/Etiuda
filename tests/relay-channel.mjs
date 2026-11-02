@@ -39,7 +39,7 @@
  *
  *     node tests/relay-channel.mjs     exit code is the number of failed checks, capped at 63; 78 where it did not complete
  *
- * The shell runs from a copy of shell/ in a temp folder, as tests/rollback-floor.mjs runs it. ETIUDA_WINDOWS is never
+ * The shell runs from a copy of shell/ in a temp folder, as tests/rollback-floor.mjs runs it. The window variable is never
  * set. ETIUDA_TEST_OFFSCREEN is 1, so a desk that opens its window is placed aside and never shown.
  * Machine policy is the stand-in in tests/reg-stand.cjs, set to none.
  */
