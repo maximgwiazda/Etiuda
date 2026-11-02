@@ -1,16 +1,17 @@
-/* THE MACHINE LOCK: two heavy runs at a time on the laptop (Core's test regimen, rule 13), the same file in the engine's
- * tree and in Studio's, and the one writer of the lock files.
+/* THE MACHINE LOCK: two heavy runs at a time on the laptop (Core's test regimen, rule 13), three while Max is away
+ * (2026-11-02), the same file in the engine's tree and in Studio's, and the one writer of the lock files.
  *
  *   node tools/machine-lock.mjs run [--exclusive] -- <command> [args]   take a slot as this process, run the command, free it
  *   node tools/machine-lock.mjs wait [--exclusive]                      wait until a slot is free (taking and freeing it at once)
  *   node tools/machine-lock.mjs status                                  say who holds each slot, and whether that holder is alive
  *
- * TWO SLOTS: machine.lock and machine-2.lock, side by side. A taker takes the first free one, or waits on either; release
- * frees its own slot; status lists both. --exclusive (exclusive: true to acquire) waits until both are free and holds both,
- * for a run that must not share the machine; nothing uses it by default. An exclusive taker takes the slots in order and
- * holds each as it gets it, and a plain taker leaves a free slot alone while any slot carries a live exclusive record, so
- * a waiting exclusive taker is not starved by plain ones. ETIUDA_LOCK_PATH, when set, keeps the single file it names, as
- * before: one slot, and the record unchanged. Every rule below is per slot.
+ * THREE SLOTS: machine.lock, machine-2.lock and machine-3.lock. machine-3.lock is taken only while Max is not using the
+ * laptop (idle input >= 20 min) or when the lane file sets 3. A taker takes the first free slot up to the active count,
+ * or waits; release frees its own slot; status lists all three. --exclusive (exclusive: true to acquire) waits until all
+ * active slots are free and holds them, for a run that must not share the machine; nothing uses it by default. An exclusive
+ * taker takes the slots in order and holds each as it gets it, and a plain taker leaves a free slot alone while any slot
+ * carries a live exclusive record, so a waiting exclusive taker is not starved by plain ones. ETIUDA_LOCK_PATH, when set,
+ * keeps the single file it names, as before: one slot, and the record unchanged. Every rule below is per slot.
  *
  * THE HOLDER IS A PAIR: the Windows PID and that process's creation time, read through Get-CimInstance Win32_Process
  * (wmic may be missing on Windows 11), here and nowhere else, so the time has one source and one format and is compared
@@ -30,9 +31,9 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_LOCK_PATH = "C:/Users/maxim/Workspace/etiuda-runs/machine.lock";
 export const LOCK_PATH = path.resolve(process.env.ETIUDA_LOCK_PATH || DEFAULT_LOCK_PATH);
-/* The slots, in the order they are taken: with ETIUDA_LOCK_PATH set the one file it names, otherwise the office's two. */
+/* The slots, in the order they are taken: with ETIUDA_LOCK_PATH set the one file it names, otherwise the office's three. */
 export const LOCK_PATHS = process.env.ETIUDA_LOCK_PATH ? [LOCK_PATH]
-  : [LOCK_PATH, path.join(path.dirname(LOCK_PATH), "machine-2.lock")];
+  : [LOCK_PATH, path.join(path.dirname(LOCK_PATH), "machine-2.lock"), path.join(path.dirname(LOCK_PATH), "machine-3.lock")];
 
 /** The slot files a call works on: `slots` if given (a lab's own set), the tool's slots for the tool's own LOCK_PATH,
  *  otherwise the one file `lockPath` names, as before. */
@@ -45,6 +46,84 @@ export const REPORT_AFTER_MS = 30 * 60 * 1000;
 /* How old a live holder's lock may be before a waiter or a status read warns about it. Never a takeover. */
 export const AGE_WARNING_MS = 6 * 3600 * 1000;
 const POLL_MS = 10000;
+
+function isLabEnv() {
+  const p = process.env.ETIUDA_LOCK_PATH;
+  if (!p) return false;
+  const resolved = path.resolve(p).toLowerCase();
+  const defDir = path.dirname(path.resolve(DEFAULT_LOCK_PATH)).toLowerCase();
+  return resolved !== path.resolve(DEFAULT_LOCK_PATH).toLowerCase() && !resolved.startsWith(defDir);
+}
+
+/** The laptop idle minutes read through GetLastInputInfo, or null if unreadable or timed out (10 s). */
+export function readIdleMinutes(opts = {}) {
+  if (isLabEnv() && (opts.testIdleMinutes !== undefined || process.env.ETIUDA_TEST_IDLE_MINUTES !== undefined)) {
+    const raw = opts.testIdleMinutes !== undefined ? opts.testIdleMinutes : process.env.ETIUDA_TEST_IDLE_MINUTES;
+    if (raw === "fail" || raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  if (process.platform === "win32") {
+    try {
+      const script = `
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+public class UserInput {
+  [DllImport("user32.dll")]
+  public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+  public static uint GetIdleMs() {
+    LASTINPUTINFO lii = new LASTINPUTINFO();
+    lii.cbSize = (uint)Marshal.SizeOf(lii);
+    if (GetLastInputInfo(ref lii)) {
+      return ((uint)Environment.TickCount - lii.dwTime);
+    }
+    return 0;
+  }
+}
+'@
+[UserInput]::GetIdleMs()
+`;
+      const r = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script],
+        { encoding: "utf8", windowsHide: true, timeout: 10000 });
+      if (r.status === 0 && r.stdout) {
+        const ms = Number(String(r.stdout).trim());
+        if (Number.isFinite(ms) && ms >= 0) return ms / 60000;
+      }
+    } catch (e) {
+      /* failed read */
+    }
+  }
+  return null;
+}
+
+function resolveLanePolicy(paths, opts) {
+  const baseDir = path.dirname(paths[0]);
+  const lanesFile = path.join(baseDir, "lanes");
+  try {
+    if (fs.existsSync(lanesFile)) {
+      const val = fs.readFileSync(lanesFile, "utf8").trim();
+      if (val === "2" || val === "3") {
+        return { count: Number(val), reason: "the lane file" };
+      }
+    }
+  } catch (e) {
+    /* unreadable */
+  }
+  const idle = readIdleMinutes(opts);
+  if (idle !== null && idle >= 20) {
+    return { count: 3, reason: "idle for " + Math.floor(idle) + " minutes" };
+  }
+  return { count: 2, reason: "in use" };
+}
+
+/** The lane count and reason currently in force for `paths`. */
+export function lanePolicy(paths, opts = {}) {
+  const res = resolveLanePolicy(paths, opts);
+  /* plant:lane-count */
+  return res;
+}
 
 /** The creation time of process `pid` as an ISO string in UTC, or "" where no such process exists or it cannot be read. */
 export function processStart(pid) {
@@ -126,7 +205,7 @@ function liveExclusive(paths) {
  * {ok, takenOver, heldBy, reason}. `say` receives the lines a waiter or a takeover prints.
  */
 export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false, what = "run", tree = process.cwd(),
-  waitMs = Infinity, holder = null, say = (l) => console.log(l) } = {}) {
+  waitMs = Infinity, holder = null, testIdleMinutes = undefined, pollMs = undefined, say = (l) => console.log(l) } = {}) {
   const paths = slotPaths(lockPath, slots);
   for (const p of paths) { try { fs.mkdirSync(path.dirname(p), { recursive: true }); } catch (e) { /* refused below */ } }
   const me = holder || { pid: process.pid, started: processStart(process.pid) };
@@ -134,7 +213,10 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
   if (exclusive) record.exclusive = true;
   const payload = JSON.stringify(record) + "\n";
   const began = Date.now();
-  let reported = false, warned = false, takenOver = null;
+  let reported = false, warned = false, waitAnnounced = false, takenOver = null;
+  let lastWaitReport = began;
+  const WAIT_REPORT_INTERVAL_MS = 15 * 60 * 1000;
+  const pollInterval = (typeof pollMs === "number" && pollMs > 0) ? pollMs : POLL_MS;
   const mine = [];
   const onTakeover = (held, aside) => {
     takenOver = { pid: held.pid, started: held.started || "", what: held.what || "", since: held.since || "", aside };
@@ -142,20 +224,22 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
       + "): no process has that pid with that creation time; the old record is " + aside);
   };
   for (;;) {
+    const policy = paths.length > 1 ? lanePolicy(paths, { testIdleMinutes }) : { count: 1, reason: "single" };
+    const activePaths = paths.slice(0, policy.count);
     let held = null;
     if (exclusive) {
-      for (const p of paths) {
+      for (const p of activePaths) {
         if (mine.includes(p)) continue;
         const c = claim(p, payload, onTakeover);
         if (c.taken) { mine.push(p); continue; }
         held = c.held;
         break;
       }
-      if (mine.length === paths.length) return { ok: true, takenOver, heldBy: null, reason: "" };
+      if (mine.length === activePaths.length) return { ok: true, takenOver, heldBy: null, reason: "" };
     } else {
       held = liveExclusive(paths);
       if (!held) {
-        for (const p of paths) {
+        for (const p of activePaths) {
           const c = claim(p, payload, onTakeover);
           if (c.taken) return { ok: true, takenOver, heldBy: null, reason: "" };
           if (!held) held = c.held;
@@ -166,18 +250,35 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
     if (waited >= waitMs) {
       if (mine.length) release({ lockPath, slots: mine, holder: me });
       return { ok: false, takenOver: null, heldBy: held,
-        reason: "lock held by pid " + held.pid + " (" + (held.what || "?") + " since " + (held.since || "?") + ")" };
+        reason: "lock held by pid " + (held ? held.pid : "?") + " (" + (held && held.what || "?") + " since " + (held && held.since || "?") + ")" };
     }
-    if (!warned && held.since && Date.now() - Date.parse(held.since) > AGE_WARNING_MS) {
+    if (!waitAnnounced && waitMs > 0) {
+      waitAnnounced = true;
+      const holders = [];
+      for (const p of activePaths) {
+        const r = readLock(p);
+        if (r && r.pid) holders.push("pid " + r.pid + " (" + (r.what || "?") + ")");
+      }
+      const whoEach = holders.length ? holders.join(", ") : (held ? "pid " + held.pid + " (" + (held.what || "?") + ")" : "held");
+      const ceilingStr = (waitMs >= 4 * 3600 * 1000 || waitMs === Infinity) ? "4 h"
+        : (waitMs >= 3600 * 1000 ? Math.round(waitMs / 3600000) + " h"
+        : (waitMs >= 60000 ? Math.round(waitMs / 60000) + " min" : Math.round(waitMs / 1000) + " s"));
+      say("machine-lock: every lane is held (" + whoEach + "); waiting for one, up to " + ceilingStr);
+    }
+    if (waited >= WAIT_REPORT_INTERVAL_MS && waited - lastWaitReport >= WAIT_REPORT_INTERVAL_MS) {
+      lastWaitReport = waited;
+      say("machine-lock: waited " + Math.round(waited / 60000) + " minutes; waiting for a lane");
+    }
+    if (!warned && held && held.since && Date.now() - Date.parse(held.since) > AGE_WARNING_MS) {
       warned = true;
       say("machine-lock: warning: pid " + held.pid + " has held the lock since " + held.since + " and is still alive; it is not taken");
     }
-    if (!reported && waited >= REPORT_AFTER_MS) {
+    if (!reported && held && waited >= REPORT_AFTER_MS) {
       reported = true;
       say("machine-lock: waited 30 minutes for pid " + held.pid + " (" + (held.what || "?") + " on " + (held.tree || "?") + " since "
         + (held.since || "?") + ")");
     }
-    sleep(Math.min(POLL_MS, Math.max(50, waitMs - waited)));
+    sleep(Math.min(pollInterval, Math.max(50, waitMs - waited)));
   }
 }
 
@@ -196,13 +297,25 @@ export function release({ lockPath = LOCK_PATH, slots = null, holder = null } = 
 
 /** Who holds each slot, and whether that holder is alive. `held`, `holder` and `alive` are the first held slot's (the one
  *  file's, with a single slot); `slots` lists every slot. */
-export function status(lockPath = LOCK_PATH, slots = null) {
-  const list = slotPaths(lockPath, slots).map((p) => {
+export function status(lockPath = LOCK_PATH, slots = null, opts = {}) {
+  const paths = slotPaths(lockPath, slots);
+  const list = paths.map((p) => {
     const held = readLock(p);
     return held ? { path: p, held: true, holder: held, alive: holderAlive(held) } : { path: p, held: false };
   });
   const first = list.find((s) => s.held);
-  return first ? { held: true, holder: first.holder, alive: first.alive, slots: list } : { held: false, slots: list };
+  const policy = paths.length > 1 ? lanePolicy(paths, opts) : { count: 1, reason: "single" };
+  const base = {
+    held: Boolean(first),
+    slots: list,
+    count: policy.count,
+    reason: policy.reason,
+  };
+  if (first) {
+    base.holder = first.holder;
+    base.alive = first.alive;
+  }
+  return base;
 }
 
 function describe(h, alive) {
@@ -222,6 +335,7 @@ function cli(argv) {
     }
     s.slots.forEach((x, i) => console.log("machine-lock: slot " + (i + 1) + " (" + path.basename(x.path) + "): "
       + (x.held ? describe(x.holder, x.alive) : "free")));
+    console.log("machine-lock: " + s.count + " lanes in force (" + s.reason + ")");
     return 0;
   }
   if (verb === "wait") {

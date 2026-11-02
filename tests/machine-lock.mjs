@@ -19,7 +19,14 @@
  *   ml13 each slot has its own holder rule: a dead holder in one slot is taken over beside a live holder in the other
  *   ml14 two takers racing on one stale slot beside a live holder: exactly one wins, and the live holder is untouched
  *   ml15 status lists both slots, each with its holder and whether that holder is alive
- *   ml16 run --exclusive holds both slots for its command (here the one slot of ETIUDA_LOCK_PATH) and frees them after */
+ *   ml16 run --exclusive holds both slots for its command (here the one slot of ETIUDA_LOCK_PATH) and frees them after
+ *   ml17 gate-run waits up to 4 h when every lane is held and prints the wait line, taking a freed slot
+ *   ml18 count 2 from the lane file leaves a third taker waiting
+ *   ml19 count 3 from the lane file lets the third taker take machine-3.lock
+ *   ml20 idle and active: 25 minutes gives 3, 1 minute gives 2, honoured only in lab
+ *   ml21 a failed idle read gives 2
+ *   ml22 lifting plant:lane-count gives 3 lanes always and turns count-2 red
+ *   ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,14 +35,21 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOOL = path.join(ROOT, "tools", "machine-lock.mjs");
+const GATE_RUN = path.join(ROOT, "tools", "gate-run.mjs");
 const L = await import(pathToFileURL(TOOL).href);
-const EXPECTED = 16;
+const G = await import(pathToFileURL(GATE_RUN).href);
+const EXPECTED = 23;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "machine-lock-legs-"));
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
   if (cond) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 const lockAt = (name) => path.join(LAB, name + ".lock");
 const write = (file, rec) => fs.writeFileSync(file, JSON.stringify(rec) + "\n");
@@ -230,7 +244,7 @@ const rec = (h, extra) => Object.assign({ pid: h.pid, started: h.started, what: 
   const keys = Object.keys(who(file) || {}).join(",");
   const r2 = L.acquire({ lockPath: file, what: "ml12", holder: h2, waitMs: 400, say: quiet });
   const files = fs.readdirSync(folder).join(",");
-  check(set.n === 1 && set.names[0] === "only.lock" && unset.n === 2 && unset.names.join(",") === "machine.lock,machine-2.lock"
+  check(set.n === 1 && set.names[0] === "only.lock" && unset.n === 3 && unset.names.join(",") === "machine.lock,machine-2.lock,machine-3.lock"
     && r1.ok && !r2.ok && keys === "pid,started,host,tree,what,since" && files === "only.lock",
     "ml12 ETIUDA_LOCK_PATH keeps today's single file: slots set " + set.n + ", unset " + unset.names.join("+") + ", second taker " + (r2.ok ? "took" : "waited")
     + ", keys " + keys + ", files " + files);
@@ -308,8 +322,171 @@ const rec = (h, extra) => Object.assign({ pid: h.pid, started: h.started, what: 
     + ", lock " + (fs.existsSync(file) ? "left" : "freed"));
 }
 
+/* ml17 */
+{
+  const slots = pair("ml17");
+  const h1 = await live(), h2 = await live(), h3 = await live();
+  take(slots, h1);
+  take(slots, h2);
+
+  /* A known positive first: with both slots held by live test holders and a timeout of 1 s, a gate-run take refuses. */
+  const rRefuse = G.acquireLock(slots[0], "refuse leg", ROOT, 1000, { slots, holder: h3 });
+  const refused = !rRefuse.ok && !!rRefuse.heldBy;
+
+  /* Then, after the change: with no timeout set it is still waiting at 3 s, and has printed the wait line;
+     freeing one slot lets it take that slot and run. */
+  const runnerScript = path.join(LAB, "ml17-waiter.mjs");
+  const waiterCode = `import fs from "node:fs";
+import * as G from ${JSON.stringify(pathToFileURL(GATE_RUN).href)};
+const slots = ${JSON.stringify(slots)};
+const r = G.acquireLock(slots[0], "ml17-waiter", ${JSON.stringify(ROOT)}, undefined, { slots, pollMs: 200 });
+const took = r.ok && fs.existsSync(slots[0]);
+process.stdout.write(JSON.stringify({ ok: r.ok, took }) + "\\n");
+process.exit(r.ok ? 0 : 1);
+`;
+  fs.writeFileSync(runnerScript, waiterCode);
+  const childWaiter = spawn(process.execPath, [runnerScript], { stdio: ["ignore", "pipe", "pipe"] });
+  let waiterOut = "";
+  childWaiter.stdout.on("data", (d) => { waiterOut += d; });
+  childWaiter.stderr.on("data", (d) => { waiterOut += d; });
+
+  await new Promise((r) => setTimeout(r, 3000));
+  const waitingAt3s = childWaiter.exitCode === null;
+  const hasWaitLine = /every lane is held.*waiting for one, up to 4 h/i.test(waiterOut);
+
+  free(slots, h1);
+  const exitCode = await new Promise((r) => childWaiter.once("exit", r));
+  let report = null;
+  try {
+    const lastLine = waiterOut.trim().split(/\r?\n/).pop();
+    report = JSON.parse(lastLine);
+  } catch (e) {
+    report = null;
+  }
+  const tookFreed = exitCode === 0 && !!report && report.took === true;
+
+  check(refused && waitingAt3s && hasWaitLine && tookFreed,
+    "ml17 gate-run waits up to 4 h when every lane is held and prints the wait line, then takes a freed slot: refused 1s "
+    + refused + ", waiting at 3s " + waitingAt3s + ", printed wait line " + hasWaitLine + ", took freed " + tookFreed);
+
+  h1.kill(); h2.kill(); h3.kill();
+}
+
+/* ml18 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml18-"));
+  const lanesFile = path.join(labDir, "lanes");
+  fs.writeFileSync(lanesFile, "2\n");
+  const slots = [path.join(labDir, "slot-1.lock"), path.join(labDir, "slot-2.lock"), path.join(labDir, "machine-3.lock")];
+  const h1 = await live(), h2 = await live(), h3 = await live();
+  take(slots, h1);
+  take(slots, h2);
+  const r3 = take(slots, h3, { waitMs: 600 });
+  check(!r3.ok && !fs.existsSync(slots[2]) && pidAt(slots[0]) === h1.pid && pidAt(slots[1]) === h2.pid,
+    "ml18 count 2 from the lane file: third taker waits, leaving slot 3 untouched: ok " + r3.ok + ", slot 3 left free " + !fs.existsSync(slots[2]));
+  h1.kill(); h2.kill(); h3.kill();
+}
+
+/* ml19 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml19-"));
+  const lanesFile = path.join(labDir, "lanes");
+  fs.writeFileSync(lanesFile, "3\n");
+  const slots = [path.join(labDir, "slot-1.lock"), path.join(labDir, "slot-2.lock"), path.join(labDir, "machine-3.lock")];
+  const h1 = await live(), h2 = await live(), h3 = await live();
+  take(slots, h1);
+  take(slots, h2);
+  const r3 = take(slots, h3, { waitMs: 0 });
+  check(r3.ok && fs.existsSync(slots[2]) && pidAt(slots[2]) === h3.pid,
+    "ml19 count 3 from the lane file: third taker takes machine-3.lock: ok " + r3.ok + ", slot 3 held by third taker " + (pidAt(slots[2]) === h3.pid));
+  free(slots, h3);
+  h1.kill(); h2.kill(); h3.kill();
+}
+
+/* ml20 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml20-"));
+  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock")];
+  const oldEnv = process.env.ETIUDA_LOCK_PATH;
+  try {
+    process.env.ETIUDA_LOCK_PATH = slots[0];
+    const p25 = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 25 }) : { count: 0, reason: "" };
+    const p1 = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0, reason: "" };
+    delete process.env.ETIUDA_LOCK_PATH;
+    const pReal = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 25 }) : { count: 0, reason: "" };
+    check(p25.count === 3 && p25.reason === "idle for 25 minutes"
+      && p1.count === 2 && p1.reason === "in use"
+      && pReal.reason !== "idle for 25 minutes",
+      "ml20 idle and active: test-only idle 25m gives 3, 1m gives 2, honoured only in lab: p25=" + p25.count + " (" + p25.reason + "), p1=" + p1.count + " (" + p1.reason + "), real ignores test reading " + (pReal.reason !== "idle for 25 minutes"));
+  } finally {
+    if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
+    else delete process.env.ETIUDA_LOCK_PATH;
+  }
+}
+
+/* ml21 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml21-"));
+  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock")];
+  const oldEnv = process.env.ETIUDA_LOCK_PATH;
+  try {
+    process.env.ETIUDA_LOCK_PATH = slots[0];
+    const pFail = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: "fail" }) : { count: 0, reason: "" };
+    check(pFail.count === 2 && pFail.reason === "in use",
+      "ml21 a failed idle read gives 2: count=" + pFail.count + " (" + pFail.reason + ")");
+  } finally {
+    if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
+    else delete process.env.ETIUDA_LOCK_PATH;
+  }
+}
+
+/* ml22 */
+{
+  if (PLANTS_OFF) {
+    skip("ml22 lifting plant:lane-count gives 3 lanes always and turns count-2 red (ETIUDA_PLANTS=off)");
+  } else {
+    const labDir = fs.mkdtempSync(path.join(LAB, "ml22-plant-"));
+    const src = fs.readFileSync(TOOL, "utf8");
+    const plantedSrc = src.replace(/\/\* plant:lane-count \*\/[\s\S]*?return\s+[^;]+;/, "/* plant:lane-count */ return { count: 3, reason: 'planted 3 lanes' };");
+    const plantedTool = path.join(labDir, "machine-lock-planted.mjs");
+    fs.writeFileSync(plantedTool, plantedSrc);
+    const PL = await import(pathToFileURL(plantedTool).href);
+    const lanesFile = path.join(labDir, "lanes");
+    fs.writeFileSync(lanesFile, "2\n");
+    const slots = [path.join(labDir, "slot-1.lock"), path.join(labDir, "slot-2.lock"), path.join(labDir, "machine-3.lock")];
+    const h1 = await live(), h2 = await live(), h3 = await live();
+    PL.acquire({ lockPath: slots[0], slots, what: "h1", holder: h1, waitMs: 0, say: quiet });
+    PL.acquire({ lockPath: slots[0], slots, what: "h2", holder: h2, waitMs: 0, say: quiet });
+    const r3 = PL.acquire({ lockPath: slots[0], slots, what: "h3", holder: h3, waitMs: 0, say: quiet });
+    const turnedRed = r3.ok === true && fs.existsSync(slots[2]);
+    check(turnedRed, "ml22 lifting plant:lane-count gives 3 lanes always and turns count-2 red: took slot 3 " + turnedRed);
+    PL.release({ lockPath: slots[0], slots, holder: h3 });
+    h1.kill(); h2.kill(); h3.kill();
+  }
+}
+
+/* ml23 */
+{
+  if (PLANTS_OFF) {
+    skip("ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red (ETIUDA_PLANTS=off)");
+  } else {
+    const labDir = fs.mkdtempSync(path.join(LAB, "ml23-plant-"));
+    const src = fs.readFileSync(GATE_RUN, "utf8");
+    const toolUrl = pathToFileURL(TOOL).href;
+    const plantedSrc = src
+      .replace(/from\s+["']\.\/machine-lock\.mjs["']/, `from ${JSON.stringify(toolUrl)}`)
+      .replace(/const ROOT = [^;]+;/, "const ROOT = " + JSON.stringify(ROOT) + ";")
+      .replace(/4\s*\*\s*3600\s*\*\s*1000\s*;\s*\/\*\s*plant:wait-ceiling\s*\*\//, "300000; /* plant:wait-ceiling */");
+    const plantedGateRun = path.join(labDir, "gate-run-planted.mjs");
+    fs.writeFileSync(plantedGateRun, plantedSrc);
+    const PG = await import(pathToFileURL(plantedGateRun).href);
+    const restored5m = PG.DEFAULT_LOCK_TIMEOUT_MS === 300000;
+    check(restored5m, "ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red: default ms " + PG.DEFAULT_LOCK_TIMEOUT_MS);
+  }
+}
+
 try { fs.rmSync(LAB, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* the system's to clear */ }
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted !== EXPECTED) { console.log("  FAIL ran " + asserted + " of " + EXPECTED + " leg(s)"); process.exit(78); }
-console.log("  RESULT: " + (failed ? "FAIL " + failed + " of " + asserted : "ok " + asserted + " check(s)"));
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped !== EXPECTED) { console.log("  FAIL ran " + (asserted + skipped) + " of " + EXPECTED + " leg(s)"); process.exit(78); }
+console.log("  RESULT: " + (failed ? "FAIL " + failed + " of " + asserted : "ok " + asserted + " check(s)" + (skipped ? ", " + skipped + " skipped" : "")));
 process.exit(failed ? 1 : 0);
