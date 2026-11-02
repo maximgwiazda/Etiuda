@@ -82,7 +82,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 304 };
+const EXPECTED = { chrome: 307 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2226,6 +2226,28 @@ const t0 = Date.now();
   const back = await p.evaluate(() => document.querySelector("#intent").value);
   check(i0 === n1 - 1 && i1 === 0 && i2 === i0 && away.v === "" && away.focus === "intent" && back === "probe",
     "Ctrl+Tab steps round the strip (" + i0 + " > " + i1 + " > " + i2 + "), the query travels with its tab and focus stays in the box");
+
+  /* hooks.intentPickedLine (tabs.js:181): selecting an intent on the rail and switching tabs speaks
+     the tab, language and the picked intent line into the polite region (#eSay). */
+  const pickRow = await p.evaluate(() => {
+    const r = document.querySelector("#intentRailList .rail-item:not(.on)");
+    if (!r) return false;
+    r.click();
+    return true;
+  });
+  await sleep(400);
+  const sayPicked = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
+  await chord("Tab", "Tab", false); await sleep(700);
+  const sayOther = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
+  await chord("Tab", "Tab", false); await sleep(700);
+  const sayReturned = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
+  await p.evaluate(() => { const on = document.querySelector("#intentRailList .rail-item.on"); if (on) on.click(); });
+  await sleep(400);
+  const sayCleared = await p.evaluate(() => (document.getElementById("eSay") || {}).textContent || "");
+  check(pickRow && /Intent:|Intencja:/.test(sayPicked) && /Intent:|Intencja:/.test(sayReturned) && /cleared|skasowan/.test(sayCleared),
+    "an intent picked on the rail speaks its line into the live region, repeats on returning to the tab, and clearing speaks cleared ("
+    + JSON.stringify({ sayPicked: sayPicked.slice(0, 40), sayOther: sayOther.slice(0, 40), sayReturned: sayReturned.slice(0, 40), sayCleared: sayCleared.slice(0, 40) }) + ")");
+
   const l0 = await p.evaluate(() => lang);
   await p.keyboard.press("Slash"); await sleep(500);
   const typed = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
@@ -2773,6 +2795,68 @@ const t0 = Date.now();
      of those. The window is put back at the foot. */
   e = since();
   await p.keyboard.press("Escape"); await sleep(300);
+
+  /* hooks.syncSaveNotice (storage.js:153, pack.js:173). Reached when a storage write fails
+     (eUnsaved transitions from empty to non-empty), raising #eSaveWarn. Restoring the write
+     and saving again drops the notice and toasts that changes are saved again. */
+  const saveNotice = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const realSetItem = localStorage.setItem.bind(localStorage);
+    let warnUp = false, warnLead = "", warnDown = false, toasted = false;
+    try {
+      localStorage.setItem = () => { throw new Error("QuotaExceededError"); };
+      window.savePack();
+      await wait(300);
+      const warn = document.getElementById("eSaveWarn");
+      warnUp = !!warn;
+      warnLead = warn ? (warn.querySelector("b") || {}).textContent || "" : "";
+      localStorage.setItem = realSetItem;
+      window.savePack();
+      await wait(300);
+      warnDown = !document.getElementById("eSaveWarn");
+      const tst = document.getElementById("toast");
+      toasted = !!tst && (tst.classList.contains("show") || (tst.textContent || "").indexOf("saved") > -1);
+    } finally {
+      localStorage.setItem = realSetItem;
+      const warn = document.getElementById("eSaveWarn");
+      if (warn) warn.remove();
+    }
+    return { warnUp, warnLead: /not saved|niezapisane/i.test(warnLead), warnDown, toasted };
+  });
+  check(saveNotice.warnUp && saveNotice.warnLead && saveNotice.warnDown && saveNotice.toasted,
+    "hooks.syncSaveNotice shows #eSaveWarn when storage write fails and drops it with a toast when storage recovers ("
+    + JSON.stringify(saveNotice) + ")");
+
+  /* hooks.loadCatalogFromFolder (catalog-offer.js:134). Reached when a team catalog is opened
+     from the folder onto an empty or sample desk (team-join.js:333 and :337). A host provides
+     the file, the offer dialog opens with the catalog's title, and Keep current dismisses it. */
+  const folderCat = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const held = storedCatalog();
+    if (!held) return { held: false };
+    const mockCat = Object.assign(JSON.parse(JSON.stringify(held)), { id: "probe-folder-cat", name: "Folder Probe" });
+    const realHost = window.E_HOST;
+    window.E_HOST = Object.assign({}, realHost, {
+      readCatalogFile: name => Promise.resolve({ name, text: JSON.stringify(mockCat) })
+    });
+    try {
+      hooks.loadCatalogFromFolder("probe-folder.ec", 0);
+      for (let i = 0; i < 30 && !document.getElementById("eCatalogOffer"); i++) await wait(100);
+      const offer = document.getElementById("eCatalogOffer");
+      const title = offer ? (offer.querySelector(".ec-what b") || {}).textContent || "" : "";
+      const noBtn = offer && offer.querySelector("#ecNo");
+      if (noBtn) noBtn.click();
+      await wait(300);
+      const left = document.querySelectorAll("#eCatalogOffer").length;
+      return { held: true, up: !!offer, title, left };
+    } finally {
+      if (realHost) window.E_HOST = realHost;
+      else delete window.E_HOST;
+    }
+  });
+  check(folderCat.held && folderCat.up && folderCat.title === "Folder Probe" && folderCat.left === 0,
+    "hooks.loadCatalogFromFolder reads a catalog from the host folder, shows the offer dialog with its title, and Keep current dismisses it ("
+    + JSON.stringify(folderCat) + ")");
 
   /* "+ Intent" at the foot of the panel, rail-list.js:488. The other route to
      hooks.openIntentEditor is a Ctrl-held click on a row's star, driven a few lines below. */
