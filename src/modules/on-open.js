@@ -30,22 +30,31 @@ function focusEmptyLoadOnOpen(){
   try{
     const a=document.activeElement;
     if(a&&a!==document.body) return;
-    if(dialogStanding()) return;
+    if(document.body && document.body.classList && document.body.classList.contains("e-launch")) return;
+    if(dialogStanding() || dialogShown()) return;
     const b=document.querySelector("#emptyLoad");
     if(b) b.focus({preventScroll:true});
   }catch(_){}
 }
 
+/* A dialog on screen that is not a .modal (Quick facts, the tour's card, a question's bubble) holds the desk too. */
+function dialogShown(){
+  try{
+    return Array.prototype.some.call(document.querySelectorAll('[role="dialog"]'), d=>d.getClientRects && d.getClientRects().length>0);
+  }catch(_){ return false; }
+}
+
 // On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
 // INTENT still receives typing when the user starts typing (global keydown → intent field).
 function focusFirstEntryOnOpen(){
+  // An empty desk takes nothing from what holds the focus: Load catalog waits for the page itself to have it.
+  const els=listEntryEls();
+  if(!els.length){ focusEmptyLoadOnOpen(); return; }
   try{
     const a=document.activeElement;
     // Never out of a dialog: the first-run questions take the keyboard before this runs.
     if(a&&a!==document.body&&typeof a.blur==="function"&&!(a.closest&&a.closest(".modal"))) a.blur();
   }catch(_){}
-  const els=listEntryEls();
-  if(!els.length){ focusEmptyLoadOnOpen(); return; }
   const el=els[0];
   const card=el.closest(".card[data-id]");
   if(!card) return;

@@ -23652,22 +23652,30 @@ What you type stays in this browser only.`;
     try {
       const a = document.activeElement;
       if (a && a !== document.body) return;
-      if (dialogStanding()) return;
+      if (document.body && document.body.classList && document.body.classList.contains("e-launch")) return;
+      if (dialogStanding() || dialogShown()) return;
       const b = document.querySelector("#emptyLoad");
       if (b) b.focus({ preventScroll: true });
     } catch (_) {
     }
   }
-  function focusFirstEntryOnOpen() {
+  function dialogShown() {
     try {
-      const a = document.activeElement;
-      if (a && a !== document.body && typeof a.blur === "function" && !(a.closest && a.closest(".modal"))) a.blur();
+      return Array.prototype.some.call(document.querySelectorAll('[role="dialog"]'), (d) => d.getClientRects && d.getClientRects().length > 0);
     } catch (_) {
+      return false;
     }
+  }
+  function focusFirstEntryOnOpen() {
     const els = listEntryEls();
     if (!els.length) {
       focusEmptyLoadOnOpen();
       return;
+    }
+    try {
+      const a = document.activeElement;
+      if (a && a !== document.body && typeof a.blur === "function" && !(a.closest && a.closest(".modal"))) a.blur();
+    } catch (_) {
     }
     const el = els[0];
     const card = el.closest(".card[data-id]");

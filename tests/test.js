@@ -3452,13 +3452,14 @@ function launchFollowsTests() {
     const code = read("on-open.js").replace(/^import [^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
     let launching = !!o.launching;
     const frames = [], held = [];
-    const doc = { body: { id: "body" }, activeElement: null };
+    const doc = { body: { id: "body", classList: { contains: c => c === "e-launch" && launching && !o.noLaunchClass } }, activeElement: null };
     const el = (id, modal) => ({ id, closest: s => (modal && s === ".modal" ? { id: "modal" } : null),
       blur() { if (doc.activeElement === this) doc.activeElement = doc.body; },
       focus() { if (!launching || o.focusWhileHidden) doc.activeElement = this; } });
     const intent = el("intent"), load = el("emptyLoad");
-    doc.activeElement = o.startIn ? o.startIn(el) : intent;
+    doc.activeElement = o.startIn ? o.startIn(el) : doc.body;
     doc.querySelector = s => (s === "#emptyLoad" && o.empty ? load : null);
+    doc.querySelectorAll = s => (s === '[role="dialog"]' && o.shownDialog ? [{ getClientRects: () => [{}] }] : []);
     const sb = { document: doc, requestAnimationFrame: fn => frames.push(fn), setTimeout: () => 0, setInterval: () => 0,
       ssGet: () => "1", ssSet: () => {}, mgReduceMotion: () => false, markCovered: () => false, fifthPhase: () => 0,
       afterShown: fn => fn(), greeting: () => "", render: () => {}, applyUiLang: () => {}, warmMenu: () => {},
@@ -3483,6 +3484,17 @@ function launchFollowsTests() {
   } catch (x) { got = "the lab threw: " + x.message; }
   eq("957a the empty desk puts focus on #emptyLoad at once, and where the launch hides the work as it lands; cards, a dialog and a control already holding focus keep theirs",
     got, ["emptyLoad", "body", "emptyLoad", "body", "field", "menu"]);
+
+  try {
+    /* The review's three (Flash, 2026-11-03): an empty desk blurs nothing that holds the focus; the launch's own class
+       keeps the button from the focus even where the browser would let it; a dialog that is not a .modal holds it too. */
+    const f = openLab({ empty: true, startIn: el => el("intent") });
+    const g = openLab({ empty: true, launching: true, focusWhileHidden: true }), gFlying = g.now(); g.land();
+    const h = openLab({ empty: true, shownDialog: true });
+    got = [f.now(), gFlying, g.now(), h.now()];
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957f an empty desk takes the focus from nothing that holds it, waits for the landing under the launch's class, and leaves a shown dialog its focus",
+    got, ["intent", "body", "emptyLoad", "body"]);
 
   try {
     const tags = tpl.match(/<[a-z][^<>]*\bautofocus\b[^<>]*>/g) || [];
