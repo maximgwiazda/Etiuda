@@ -2658,7 +2658,7 @@ function markLab(o) {
     joinStands: () => false, heedJoin: () => {},
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
-    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {},
+    focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => {}, greeting: () => "", render: () => {},
     warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
