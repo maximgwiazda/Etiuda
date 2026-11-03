@@ -1,3 +1,4 @@
+/* run: alone (timing) */
 /* CLAIM: no frame-to-frame jump of the theme glyph as seen beyond what a smooth 300 ms turn makes
  *
  *   node tests/theme-roll.mjs

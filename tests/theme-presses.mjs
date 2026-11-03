@@ -1,3 +1,4 @@
+/* run: alone (timing) */
 /* CLAIM: 10 of 10 presses reach the screen at 80 and 150 ms, and worst press-to-frame under 50 ms
  *
  *   ETIUDA_FIXTURES=<folder> node tests/theme-presses.mjs

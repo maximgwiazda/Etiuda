@@ -43,6 +43,8 @@ export const NIGHTLY_ONLY = [
   "tests/machine-lock.mjs",
   "tests/sbom.mjs",
   "tests/text-scan-selftest.js",
+  "tests/theme-presses.mjs",
+  "tests/theme-roll.mjs",
 ];
 
 let asserted = 0, failed = 0;
