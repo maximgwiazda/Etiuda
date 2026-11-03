@@ -5,7 +5,7 @@ import { listEntryEls } from "./entry-walk.js";
 import { render } from "./render.js";
 import { setEntrySel } from "./mark.js";
 import { applyUiLang } from "./repaint.js";
-import { EMPTY_DESK_R, afterShown, markCovered, syncEmptyMark } from "./empty-mark.js";
+import { afterShown, markCovered } from "./empty-mark.js";
 import { warmMenu } from "./header-menus.js";
 import { ssGet, ssSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
@@ -46,11 +46,10 @@ function focusFirstEntryOnOpen(){
 function deskLaunch(){
   if(ssGet("eLaunched")) return null;
   ssSet("eLaunched","1");
-  const region=document.querySelector("#dotField>div"), empty=document.querySelector(".empty-desk");
+  const region=document.querySelector("#dotField>div");
   if(!region) return null;
-  const h=launchMark({app:"desk", region:region, R:empty ? EMPTY_DESK_R : undefined, still:mgReduceMotion, covered:markCovered,
+  const h=launchMark({app:"desk", region:region, still:mgReduceMotion, covered:markCovered,
     phase:fifthPhase, ready:new Promise(r=>afterShown(()=>requestAnimationFrame(()=>r())))});
-  if(empty) syncEmptyMark(empty); /* plant:empty-desk-rises */
   return h;
 }
 

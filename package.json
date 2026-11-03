@@ -18,6 +18,7 @@
     "all-users-install": "node tests/update-install.js --all-users",
     "storage-carry": "node tests/storage-carry.js",
     "swap": "node tests/swap.mjs",
+    "opening-legs": "node tests/opening-legs.mjs",
     "theme-fade": "node tests/theme-fade.mjs",
     "theme-flip-hold": "node tests/theme-flip-hold.mjs",
     "quiet-lane": "node tests/quiet-lane-selftest.mjs",

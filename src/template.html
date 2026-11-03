@@ -2190,29 +2190,31 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 /* THE EMPTY DESK'S MARK (empty-mark.js) stands in for the drawing: the launch's figure on .e-fifth-spot above
    the words, its canvas over the whole block so the arrival comes from across it, landed in the accent. */
-.empty:has(>.e-fifth-spot)::before{content:none}
-.empty-desk{position:relative}
+.empty:has(>.e-fifth-spot)::before,.empty.empty-desk::before{content:none}
+.empty-desk{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:72px 16px 80px}
 .empty-desk>*{position:relative;z-index:1}
-.empty-desk>.e-fifth-spot{display:block;width:280px;height:280px;margin:0 auto 6px}
-.empty-desk>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
+.empty-desk h2{font:600 26px/1.25 "Segoe UI Variable Display","Segoe UI",sans-serif;margin:0 0 22px;letter-spacing:-.2px;color:var(--ink)}
+.empty-desk #emptyLoad{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:10px;background:#0e67d8;color:#fff;font:600 16px "Segoe UI Variable Text","Segoe UI",sans-serif;padding:13px 26px;box-shadow:0 6px 18px rgba(14,103,216,.25);cursor:pointer}
+:root[data-theme=dark] .empty-desk #emptyLoad{background:#409afc;color:#0b0d12;box-shadow:0 6px 18px rgba(64,154,252,.25)}
+.empty-desk .mid-or{margin-top:12px;font-size:14px;color:var(--dim)}
+.empty-desk .mid-or a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;cursor:pointer}
+.empty-desk .mid-or a:hover{color:var(--accent)}
+.empty-desk #emptyJoin{margin-top:16px}
+.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;opacity:.75}
+/* THE LAUNCH (launch-mark.js): opening variant A, turning over window ground, landing on the corner mark; nothing of the UI before landing. --e-launch-out is the give-way fade. */
+.e-launch-veil{position:fixed;inset:0;z-index:100;width:100vw;height:100vh;background:var(--bg);display:block;
+  margin:0;padding:0;overflow:hidden;transition:opacity var(--e-launch-out,.35s) ease-out}
+.e-launch-veil>canvas.e-opening,.e-launch-veil>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
   color:var(--accent);--fifth-halo:#2881ea}
-:root[data-theme=dark] .empty-desk>canvas.e-fifth{--fifth-halo:#409afc}
-/* THE LAUNCH (launch-mark.js): the mark stands over the dot field while the cards, the panel and the category row
-   are hidden; the search box stays live. --e-launch-out is the give-way's length, shorter after a key or a click.
-   Hidden at an opacity no screen shows rather than at 0, so they are painted under the mark and the give-way's
-   first frame is not their first paint. */
-.e-launch-veil{position:fixed;z-index:40;display:flex;align-items:center;justify-content:center;box-sizing:border-box;
-  padding-bottom:48px;transition:opacity var(--e-launch-out,.26s) ease-out}
-.e-launch-veil>.e-fifth-spot{width:280px;height:280px;flex:none;position:relative;z-index:1}
-.e-launch-veil>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
-  color:var(--accent);--fifth-halo:#2881ea}
-:root[data-theme=dark] .e-launch-veil>canvas.e-fifth{color:#cfe3ff;--fifth-halo:#409afc}
+:root[data-theme=dark] .e-launch-veil>canvas.e-opening,:root[data-theme=dark] .e-launch-veil>canvas.e-fifth{color:#cfe3ff;--fifth-halo:#409afc}
 .e-launch-veil.e-going{opacity:0;pointer-events:none}
 @keyframes e-launch-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@media (max-height:640px){.e-launch-veil>.e-fifth-spot{width:160px;height:160px}.e-launch-veil{padding-bottom:16px}}
+body.e-launch .row-main,body.e-launch #intentComboWrap,body.e-launch #intentRail,body.e-launch #main{visibility:hidden!important;pointer-events:none!important}
 body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:.001;pointer-events:none} /* plant:launch-work-painted */
-body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.26s) var(--m-ease) both}
+body.e-launch-out .row-main,body.e-launch-out #intentComboWrap,body.e-launch-out #intentRail,body.e-launch-out #main,
+body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.35s) var(--m-ease) both}
 :root.e-still .e-launch-veil{transition:none}
+:root.e-still body.e-launch-out .row-main,:root.e-still body.e-launch-out #intentComboWrap,:root.e-still body.e-launch-out #intentRail,:root.e-still body.e-launch-out #main{animation:none}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
    is behind it, which everywhere else is a panel; here it is the field, and the dots read
    THROUGH the control. The same colour mixed against the canvas instead of against transparency
@@ -4155,7 +4157,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
-<div class="stage">
+<div class="stage" id="main">
 <div class="dotfield" id="dotField" aria-hidden="true"><div></div></div>
 <div class="scroller" id="pageScroll">
 <div class="shell">

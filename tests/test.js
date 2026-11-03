@@ -920,7 +920,7 @@ function emptyDeskTests() {
   });
   let draw = null;
   try {
-    draw = new Function("scope", "with(scope){\n" + extractDecl(src, "const afterBtn=") + "\n"
+    draw = new Function("scope", "with(scope){\n"
       + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}");
   } catch (e) { eq("render.js carries the empty desk's markup", e.message, "sliced"); return; }
   const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
@@ -2758,34 +2758,26 @@ function markClockTests() {
     eq("952i lifting plant:shown-has-a-bound holds the opening past the first frame's bound", got, true);
   }
 
-  /* 952h. THE EMPTY DESK'S WORK RISES UNDER THE LOGO, as Studio's empty screen does (Max, 2026-11-01 18:19): at a launch
-     over the empty desk the launch stands, hiding the work, and the block takes its drawing in the same task, so the
-     launch gives way "moved" once the work is ready, the work rising over LAUNCH_OUT_MS with the mark in it (the launch
-     lab's "moved" and give-way legs and 952e hold those two). The work is ready on the first frame after the window is
-     on screen: before the word one frame is asked, the bound's of 952i, and the word asks the work's. */
-  const riseRun = o => {
+  /* The empty desk R 10 drawing half is retired naming decision 86 (state/decisions.md line 86:
+     "the empty desk shows no mark"). The tail is rewritten as a leg of the new launch:
+     the work's ready frame is asked only once the window is on screen. */
+  const readyRun = o => {
     const h = unseen(), w = markLab(Object.assign({ host: h }, o || {})), order = [];
     let opts = null, frames = 0;
     w.sb.launchMark = x => { opts = x; order.push("launch"); return null; };
-    w.sb.syncLaunchMark = host => { order.push(host === w.host ? "handed" : "other"); };
     w.sb.requestAnimationFrame = fn => { frames++; fn(); return 1; };
-    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".empty-desk" ? w.host : null;
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : null;
     w.sb.deskLaunch();
-    return { h, order, R: opts && opts.R, frames: () => frames };
+    return { h, order, frames: () => frames };
   };
   try {
-    const r = riseRun(), before = r.frames();
+    const r = readyRun(), before = r.frames();
     r.h.tell();
-    got = [r.order, r.R, before, r.frames()];
+    got = [r.order, before, r.frames()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("952h at a launch over the empty desk the launch stands and the block takes its drawing in the same task, at R 10, so the work rises with the mark in it; the work's ready frame is asked only once the window is on screen",
-    got, [["launch", "handed"], 10, 1, 2]);
-  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  952h lifting plant:empty-desk-rises leaves the drawing over the veil");
-  else {
-    try { got = riseRun({ lift: { file: "on-open.js", tag: "plant:empty-desk-rises" } }).order; }
-    catch (e) { got = "the lab threw: " + e.message; }
-    eq("952h lifting plant:empty-desk-rises leaves the drawing over the veil", got, ["launch"]);
-  }
+  eq("the work's ready frame is asked only once the window is on screen",
+    got, [["launch"], 1, 2]);
+
 
   const tourRun = (o, landAt) => { const c = markLab(o); c.make(); c.sb.maybeStartTour(); c.land(landAt); c.timersTo(4000); return c.log; };
   try {
@@ -2865,6 +2857,7 @@ class LaunchSyncPromise {
 function launchLab(o) {
   o = o || {};
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "launch-mark.js"), "utf8")
+    .replace(/^import[^\n]*\n/gm, "")
     .replace(/export\s*\{[^}]*\};?\s*$/, "");
   let clock = 0, seq = 0, frames = [], timers = [];
   const drawn = { arc: 0, image: 0 }, heard = [], ros = [];
@@ -2910,6 +2903,7 @@ function launchLab(o) {
     Event: class { constructor(type, o) { this.type = type; Object.assign(this, o || {}); } }
   };
   sb.window = sb;
+  sb.setFifthPhase = phi => { sb.lastSetFifthPhase = phi; };
   require("vm").runInNewContext(src + "\nfunction __k(){ return lmK; }\nfunction __R(){ return LAUNCH_R; }\nfunction __phase(k, ms){ return lmPhaseAt(k, ms); }\n", sb);
   // Each lab's spot stands at a fixed place in its veil; the region is the dot field's box.
   const region = el("div", { left: 300, top: 180, width: 980, height: 580 });
@@ -2972,194 +2966,129 @@ function launchMarkTests() {
     got, [true, true, true, true, false, true, 7]);
 
   try {
-    const L = launchLab(), lm = L.sb;
-    const at = R => {
-      const F = lm.launchFigure(R), La = lm.launchLattice(F), n = La.lat.nx * La.lat.ny;
-      const rest = F.lay(PHI1, La.to, La.rad, 1.75, La.lat, new Float32Array(n)), std = F.lay(PHI0, La.to, La.rad, 1.75, La.lat, new Float32Array(n));
-      const Rs = lm.launchRiders(F, La, rest, () => 0.5), o = [0, 0, 0, 0];
-      let miss = 0, missMid = 0;
-      Rs.list.forEach(r => {
-        lm.launchPlace(Rs.C, r, PHI1, o); miss = Math.max(miss, Math.hypot(o[0] - r.hx, o[1] - r.hy));
-        lm.launchPlace(Rs.C, r, PHI0 + 1, o); missMid = Math.max(missMid, Math.hypot(o[0] - r.hx, o[1] - r.hy));
-      });
-      const lit = [], nearOf = {};
-      rest.forEach((v, i) => { if (v) lit.push(i); });
-      Rs.list.forEach(r => { if (r.near) nearOf[r.n] = (nearOf[r.n] || 0) + 1; });
-      let dq = 0; for (let i = 0; i < n; i++) dq = Math.max(dq, Math.abs(rest[i] - std[i]));
-      return { lit: lit.length, riders: Rs.list.length, miss, missMid, oneNear: lit.every(i => nearOf[i] === 1), stillIsLanded: dq < 1e-6 };
-    };
-    const d = at(7), ten = at(10);
-    got = [d.lit, d.riders === 2 * d.lit, d.miss < 1e-9, d.oneNear, d.stillIsLanded, d.missMid > 1, ten.lit !== d.lit];
+    const L = launchLab(); const h = L.launch(); L.play(200); L.ready(); L.play(3300);
+    const phi = L.sb.lastSetFifthPhase;
+    got = [h.reason === "time", Math.abs(phi - L.sb.cornerPhase(h.ms / 1000)) < 1e-4];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("at R 7 the landed mark is the lattice: 602 lit dots, two riders each that stand on their dot at the half turn and one of them near, the still frame equal to the landed one, and a mid-turn rider off its dot",
-    got, [602, true, true, true, true, true, true]);
-
-  try {
-    // a figure landed at a phase the turn has carried away from the standard one: the corner logo's, at any moment
-    const lm = launchLab().sb, F = lm.launchFigure(7), La = lm.launchLattice(F), n = La.lat.nx * La.lat.ny, o = [0, 0, 0, 0];
-    got = [PHI0 + 1, PHI0 + 2.3].map(phi => {
-      const rest = F.lay(phi, La.to, La.rad, 1.75, La.lat, new Float32Array(n));
-      const Rs = lm.launchRiders(F, La, rest, () => 0.5, phi), nearOf = {}, lit = [];
-      let miss = 0, off = 0, missStd = 0;
-      Rs.list.forEach(r => {
-        lm.launchPlace(Rs.C, r, phi, o); miss = Math.max(miss, Math.hypot(o[0] - r.hx, o[1] - r.hy));
-        Rs.C.at(r.t, phi, o); off = Math.max(off, Math.hypot(o[0] - r.hx, o[1] - r.hy));
-        lm.launchPlace(Rs.C, r, PHI1, o); missStd = Math.max(missStd, Math.hypot(o[0] - r.hx, o[1] - r.hy));
-        if (r.near) nearOf[r.n] = (nearOf[r.n] || 0) + 1;
-      });
-      rest.forEach((v, i) => { if (v) lit.push(i); });
-      return [miss < 1e-9, lit.length > 400 && lit.every(i => nearOf[i] === 1), off < La.rad + 1.75, missStd > 1];
-    });
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("riders for a figure landed at any phase stand on their dot there, one of them lighting each lit dot, every one within the band's reach of its dot; control: at the standard figure they miss",
-    got, [[true, true, true, true], [true, true, true, true]]);
-
-  try {
-    // the program's clock, standing in for the desk's fifthPhase: advanced with the frames at 2 pi times 0.007 a second
-    // from a phase far from the standard figure, then carried round a whole half turn in twelve steps
-    const W0 = 2 * Math.PI * 0.007, P0 = PHI0 + 2.3;
-    let P = P0, t = 0, landed = null, miss = null;
-    const L = launchLab(); L.launch({ phase: () => P }); const k = L.k(), o = [0, 0, 0, 0];
-    while (landed === null && t < 1500) {
-      t += 1000 / 60; P = P0 + W0 * t / 1000; L.frame(t);
-      if (k.ms >= 1000) {
-        landed = k.laid === P; miss = 0;
-        k.R.list.forEach(r => { L.sb.launchPlace(k.R.C, r, P, o); miss = Math.max(miss, Math.hypot(o[0] - r.hx, o[1] - r.hy)); });
-      }
-    }
-    const P1 = P, turn = [];
-    for (let i = 1; i <= 12; i++) { t += 70; P = P1 + i * Math.PI / 12; L.frame(t); turn.push(k.laid === P); }
-    // the control: a launch given no clock lands on its own, the standard figure
-    const M = launchLab(); M.launch(); let u = 0; while (M.k().ms < 1000 && u < 1500) { u += 1000 / 60; M.frame(u); }
-    got = [landed, miss !== null && miss < 0.25, turn.every(Boolean), Math.abs(M.k().laid - PHI1) < 1e-3];
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("given the program's clock, the launch lands on the clock's phase at that moment, its riders on their dots there within a quarter pixel, and turns with it frame by frame; control: given none it lands on the standard figure",
-    got, [true, true, true, true]);
+  eq("the launch lands on the clock's phase at that moment and hands over without a jump", got, [true, true]);
 
   try {
     const run = (readyAt, until) => { const L = launchLab(), h = L.launch(); if (readyAt != null) { L.play(readyAt); L.ready(); } L.play(until || 6000); return [h.reason, h.ms]; };
-    got = [run(300), run(1500), run(null)];
+    got = [run(300), run(3500), run(null)];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("at the display's rate the launch gives way by itself at max(1.1 s, the work ready), and at 4 s if the work never says it is",
-    got, [["time", 1100], ["time", 1500], ["time", 4000]]);
+  eq("at the display's rate the launch gives way by itself at max(3.25 s, the work ready), and at 4.75 s if the work never says it is",
+    got, [["time", 3267], ["time", 3500], ["failsafe", 4750]]);
 
   try {
-    /* A BUSY PAGE GIVES FEW FRAMES: each moves the arrival on by at most two display frames, so the arrival is seen in
-       every frame the page gives. Frames only every 300 ms reach the ceiling, which gives way with the mark drawn
-       landed. The last item is the largest move one frame gave the arrival, within two display frames. */
+    /* A BUSY PAGE GIVES FEW FRAMES: each moves the arrival on by at most two display frames. */
     const starve = every => {
       const L = launchLab(), h = L.launch(); L.frame(0); L.timersTo(50); L.ready();
-      let at = null, most = 0;
-      for (let t = 10; t <= 5000 && !at; t += 10) {
+      let most = 0;
+      for (let t = 10; t <= 3000 && !h.reason; t += 10) {
         const was = L.k() ? L.k().ms : 0;
         if (t % every < 10) L.frame(t); else L.timersTo(t);
-        if (h.reason) { const k = L.k(); at = [h.reason, h.ms, !!k && k.ms >= 1000, !!k && k.laid != null, most <= 2000 / 60 + 1e-9]; }
-        else if (was < 1000) most = Math.max(most, L.k().ms - was);
+        if (was < 2900 && L.k()) most = Math.max(most, L.k().ms - was);
       }
-      return at;
+      return most;
     };
-    got = [starve(300), starve(1000 / 60)];
+    got = [starve(300) <= 2000 / 60 + 1e-9, starve(1000 / 60) <= 2000 / 60 + 1e-9];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("with a frame only every 300 ms each frame moves the arrival on by at most two display frames, and the ceiling gives way with the mark drawn landed; at the display's rate it gives way at 1.1 s as before",
-    got, [["time", 4000, true, true, true], ["time", 1100, true, true, true]]);
+  eq("with a frame only every 300 ms each frame moves the flight on by at most two display frames",
+    got, [true, true]);
 
   try {
-    /* THE DESK'S OWN START, as measured on its build in headless Chrome with the shell's sample catalog: boot calls the
-       launch inside a long task, the first frame after it is stamped before that task began, and the next is stamped
-       400 ms after it at full speed (800 ms at half, 1.9 s at a quarter), the first layout between. Neither may carry
-       the arrival on: it is drawn moving at the display's rate after the stall, and the work rises at the arrival's
-       1.1 s, a tenth of a second after it landed. Launched at 300 ms, first frame run at 400 stamped 30. */
-    const desk = stall => {
-      const L = launchLab(); L.timersTo(300);
-      const h = L.launch(), k = L.k();
-      L.frame(400, 30); L.ready();
-      const first = k.ms;
-      L.frame(400 + stall);
-      const after = k.ms;
-      let moving = 2, landedAt = null;
-      for (let t = 400 + stall + 1000 / 60; t <= 8000 && !h.reason; t += 1000 / 60) {
-        const was = k.ms;
-        L.frame(t);
-        if (!h.reason && was < 1000) moving++;
-        if (landedAt === null && k.ms >= 1000) landedAt = t;
-      }
-      const gaveAt = 300 + h.ms;
-      return [first, after <= 2000 / 60 + 1e-9, moving >= 55, h.reason, Math.abs(h.ms - (stall + 1167)) <= 17,
-        landedAt !== null && Math.abs(gaveAt - landedAt - 100) <= 17];
-    };
-    // the control: a first frame 5 ms after the launch is no frame interval, so the display's rate after it lands the mark at 1 s
-    const soon = () => {
-      const L = launchLab();
-      L.launch();
-      const k = L.k();
-      L.frame(5); L.ready();
-      for (let t = 5 + 1000 / 60; t <= 3000; t += 1000 / 60) { L.frame(t); if (k.ms >= 1000) return t <= 1030; }
-      return false;
-    };
-    // and a stall after the landing does not hold the work back: no frame comes from just past 1 s, and it rises at 1.1 s
-    const rise = () => {
-      const L = launchLab(), h = L.launch(), k = L.k();
-      let t = 0;
-      while (k.ms < 1000) { t += 1000 / 60; L.frame(t); if (t === 1000 / 60) L.ready(); }
-      L.timersTo(2000);
-      return [h.reason, h.ms];
-    };
-    got = [desk(400), desk(900), desk(1900), soon(), rise()];
+    const L = launchLab(); L.timersTo(300);
+    const h = L.launch(), k = L.k();
+    L.frame(400, 30); L.ready();
+    const first = k.ms;
+    L.frame(800);
+    const after = k.ms;
+    got = [first, after <= 2000 / 60 + 1e-9];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a first frame stamped before the launch and a stall behind it carry the arrival no further than two display frames; it is drawn moving in at least 55 frames after, and the work rises at its 1.1 s, a tenth of a second after it landed; controls: a first frame soon after the launch lands it at 1 s, and a stall after the landing does not hold the rise",
-    got, [[0, true, true, "time", true, true], [0, true, true, "time", true, true], [0, true, true, "time", true, true], true, ["time", 1100]]);
+  eq("a first frame stamped before the launch with a stall behind it carries the flight no further than two display frames",
+    got, [0, true]);
 
   try {
-    /* A FRAME 400 MS LATE IN THE MIDDLE OF THE GATHERING carries the points home no further than two display frames
-       would: the pull is taken over the arrival's step, not the wall's. Each item is the fraction of a far point's way
-       to its address closed by one frame; the first a display frame's, the second the late frame's. */
-    const L = launchLab(), h = L.launch(), k = L.k(), o = [0, 0, 0, 0];
-    L.ready();
-    let t = 0;
-    while (t + 1000 / 60 < 480) { t += 1000 / 60; L.frame(t); }
-    const pullAt = at => {
-      const was = k.R.list.map(p => p.cx);
-      L.frame(at);
-      const phi = L.sb.__phase(k, Math.min(k.ms, 999));
-      let far = 0, part = null;
-      k.R.list.forEach((p, i) => {
-        L.sb.launchPlace(k.R.C, p, phi, o);
-        const d = k.sx + o[0] * k.scale - was[i];
-        if (Math.abs(d) > far) { far = Math.abs(d); part = (p.cx - was[i]) / d; }
-      });
-      return part;
-    };
-    const one = pullAt(t += 1000 / 60), late = pullAt(t += 400);
-    got = [one > 0.05, late <= 1 - Math.pow(1 - one, 2.5), h.reason];
+    /* A MACHINE WITH STALLS: landing comes later than 2.90 s wall clock and still sits on .brand svg (centre within 1 px). */
+    const L = launchLab();
+    const brand = L.el("div"); brand.className = "brand-tile";
+    const brandSvg = L.el("svg", { left: 14, top: 6, width: 25, height: 25 });
+    brand.appendChild(brandSvg);
+    L.doc.body.appendChild(brand);
+    const target = { cx: 14 + 12.5, cy: 6 + 12.5 };
+    const h = L.launch(); L.ready();
+    // Advance with two 400 ms stalls
+    L.play(1000);
+    L.frame(1400);
+    L.play(2000);
+    L.frame(2400);
+    L.play(2900);
+    const stateAt2900 = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState() : null;
+    const distAt2900 = stateAt2900 ? Math.hypot(stateAt2900.cx - target.cx, stateAt2900.cy - target.cy) : 0;
+    const notLandedYet = distAt2900 > 1.0;
+    while (!h.reason && L.k() && L.k().ms < 2900 && L.now() < 5000) {
+      L.frame(L.now() + 1000 / 60);
+    }
+    const landWallTime = L.now();
+    const stateAtLand = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState() : null;
+    const distAtLand = stateAtLand ? Math.hypot(stateAtLand.cx - target.cx, stateAtLand.cy - target.cy) : 999;
+    got = [notLandedYet, landWallTime > 2900, distAtLand <= 1.0];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a frame 400 ms late mid-gathering closes no more of the points' way home than two display frames would",
-    got, [true, true, ""]);
+  eq("the landing on .brand svg on a machine with stalls (the landing comes later and still sits on the mark, centre within 1 px)",
+    got, [true, true, true]);
 
   try {
-    /* THE WINDOW GROWS UNDER THE LAUNCH (a maximise): the scatter fills the new area, not the old one, and a point
-       already gathered stays on its address. The veil grows from 980 x 580 to 1600 x 820, its spot to the new centre. */
-    const grow = (L, h) => {
-      const spot = h.veil.querySelector(".e-fifth-spot");
-      h.veil.rect = { left: 0, top: 180, width: 1600, height: 820 }; spot.rect = { left: 660, top: 410, width: 280, height: 280 };
-      L.resize();
-    };
-    // the lab places the spot after the launch has measured it, so each lab measures and scatters again, as a page's first layout does
-    const start = L => { const h = L.launch(), k = L.k(); L.sb.lmLayout(k); L.sb.lmScatter(k); L.frame(0); return h; };
-    const A = launchLab(), ha = start(A); A.frame(16);
-    grow(A, ha);
-    const ka = A.k(), xs = ka.R.list.map(p => p.x / ka.W), ys = ka.R.list.map(p => p.y / ka.H);
-    const fill = [ka.W, Math.min(...xs) < 0.05, Math.max(...xs) > 0.95, Math.min(...ys) < 0.05, Math.max(...ys) > 0.95];
-    const B = launchLab(), hb = start(B); B.ready(); B.play(960);
-    const kb = B.k(), o = [0, 0, 0, 0], off = () => {
-      const phi = B.sb.__phase(kb, Math.min(kb.ms, 999));
-      return Math.max(...kb.R.list.map(p => { B.sb.launchPlace(kb.R.C, p, phi, o); return Math.hypot(p.x - (kb.sx + o[0] * kb.scale), p.y - (kb.sy + o[1] * kb.scale)); }));
-    };
-    const before = off(); grow(B, hb); const after = off();
-    B.play(1500);
-    got = [fill, before < 3, after < 3 * before + 0.5, kb.laid != null, hb.reason];
+    /* THE HAND-OVER WITH NO PHASE JUMP AFTER A STALL: corner mark continues from the flight's phase. */
+    const L = launchLab(); const h = L.launch(); L.ready();
+    L.play(2000);
+    L.frame(2600); // 600 ms stall
+    while (!h.reason && L.now() < 10000) {
+      L.frame(L.now() + 1000 / 60);
+    }
+    const phi = L.sb.lastSetFifthPhase;
+    const flightPhase = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState().phase : 0;
+    got = [h.reason === "time", Math.abs(phi - flightPhase) < 1e-4];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a window grown under the launch: the gathering points are carried to fill the new area, a point already gathered stays on its address, and the mark lands",
-    got, [[1600, true, true, true, true], true, true, true, "time"]);
+  eq("the hand-over with no phase jump after a stall", got, [true, true]);
+
+  try {
+    /* A NEAR-ZERO GAP EARLY (a duplicate stamp, two frames in one millisecond) must not slow the rest of the opening:
+       steady frames after it land on time, by the clock, not by the failsafe; and so do 144 Hz frames. */
+    const landsAt = (every, early) => {
+      const L = launchLab(), h = L.launch(); L.ready();
+      L.frame(0);
+      if (early) L.frame(0.5);
+      for (let t = (early ? 0.5 : 0) + every; t < 6000 && !h.reason; t += every) L.frame(t);
+      return [h.reason, L.now()];
+    };
+    const d60 = landsAt(1000 / 60, true), d144 = landsAt(1000 / 144, false), d144e = landsAt(1000 / 144, true);
+    const onTime = (r, every) => r[0] === "time" && r[1] <= 3250 + 3 * every;
+    got = [onTime(d60, 1000 / 60), onTime(d144, 1000 / 144), onTime(d144e, 1000 / 144)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a near-zero gap early leaves the opening on time: 60 Hz after a duplicate stamp, 144 Hz, and 144 Hz after one",
+    got, [true, true, true]);
+
+  try {
+    /* THE FAILSAFE FIRING MID-FLIGHT cuts cleanly to the end state with the corner mark at the flight's phase. */
+    const L = launchLab();
+    const h = L.launch();
+    for (let t = 0; t <= 4700; t += 300) L.frame(t);
+    const flightPhaseBefore = L.sb.window.__launchOpeningState().phase;
+    L.timersTo(4750);
+    const phi = L.sb.lastSetFifthPhase;
+    got = [h.reason === "failsafe", Math.abs(phi - flightPhaseBefore) < 1e-4, L.frames() === 0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the failsafe firing mid-flight cuts to the end state with the corner mark at the flight's phase and no fast-forward frame between",
+    got, [true, true, true]);
+
+  try {
+    const L = launchLab(), h = L.launch(); L.play(200); L.ready();
+    L.sb.innerWidth = 1600; L.sb.innerHeight = 900;
+    L.play(3300);
+    const fig = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState() : null;
+    got = [h.reason === "time", fig != null && fig.ended === true];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a window resized under the launch still lands on the corner mark and gives way", got, [true, true]);
 
   try {
     const at = (ev, onVeil) => {
@@ -3178,21 +3107,21 @@ function launchMarkTests() {
       ["wheel", 400, false, false, "140ms", [false, true], true, false, false, 0]]);
 
   try {
-    const L = launchLab(), h = L.launch(); L.play(200); L.ready(); L.play(1100);
-    const out = L.doc.body.style["--e-launch-out"]; L.timersTo(1100 + 259); const up = h.veil.isConnected; L.timersTo(1100 + 260);
+    const L = launchLab(), h = L.launch(); L.play(200); L.ready(); L.play(3300);
+    const out = L.doc.body.style["--e-launch-out"]; L.timersTo(h.ms + 349); const up = h.veil.isConnected; L.timersTo(h.ms + 350);
     got = [h.reason, out, up, h.veil.isConnected, !!L.k()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("given way by itself, the work rises in over 260 ms and the drawing stops with the veil", got, ["time", "260ms", true, false, false]);
+  eq("given way by itself, the work rises in over 350 ms and the drawing stops with the veil", got, ["time", "350ms", true, false, false]);
 
   try {
     const L = launchLab({ still: true }), h = L.launch(); const framesAsked = L.frames(), dots = L.drawn.arc, img = L.drawn.image;
-    L.timersTo(50); L.ready(); L.timersTo(6000);
+    L.ready(); L.timersTo(6000);
     // the control: moving, the same launch asks for frames and draws nothing until one comes
     const M = launchLab(); M.launch();
-    got = [framesAsked, dots > 0, img, h.reason, h.ms, M.frames(), M.drawn.arc];
+    got = [framesAsked, dots, img, h.reason, h.ms, !L.doc.body.classList.contains("e-launch"), M.frames()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under a quiet switch the mark is drawn once, landed, with no frame asked for, and stands the launch's full time though the work was ready at once",
-    got, [0, true, 0, "time", 1100, 1, 0]);
+  eq("under a quiet switch the mark is painted once, still, with no second paint and no frame asked for, and the page shown at once",
+    got, [0, 0, 0, "still", 0, true, 1]);
 
   try {
     let cover = true;
@@ -3247,19 +3176,6 @@ function launchMarkTests() {
   }
 
   try {
-    // a screen painted under the launch takes the same drawing, clock and points, and the launch gives way to it
-    const L = launchLab(), h = L.launch(); L.timersTo(10);
-    const k = L.k(), screen = L.el("div", { left: 300, top: 260, width: 980, height: 500 }), spot = L.el("div", { left: 650, top: 300, width: 280, height: 280 });
-    spot.className = "e-fifth-spot"; screen.appendChild(spot); L.doc.body.appendChild(screen);
-    k.ms = 420; L.sb.syncLaunchMark(screen); const kept = L.k() === k && k.ms === 420 && !k.launch && k.cv.parentNode === screen;
-    L.timersTo(300); L.ready();
-    const reason = h.reason; L.timersTo(700); L.sb.syncLaunchMark(null);
-    got = [kept, reason, h.ms, !!L.k()];
-  } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a screen that takes the mark under the launch keeps its clock and points, the launch gives way to it when the work is ready, and the screen's null stops it",
-    got, [true, "moved", 300, false]);
-
-  try {
     // the screen's null leaves a drawing a launch still stands on
     const L = launchLab(); L.launch(); L.sb.syncLaunchMark(null);
     got = [!!L.k(), L.k() && L.k().launch];
@@ -3283,9 +3199,9 @@ function launchMarkTests() {
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock, over the cards at R 7 and over the empty desk at its own R 10, handing the empty desk the drawing",
+  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock",
     got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0], [0, [], null, 0],
-      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, 10], 1]]);
+      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0]]);
 
   try {
     // with a launch arriving, the boot repaint and the menu's warm copy wait for it to land
@@ -5548,8 +5464,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1230;
-const UI_STRINGS_SHA256 = "336e772d5628bd3c17683ebb491d1cd067a9209f04760944624e3c815209e88c";
+const UI_STRINGS_COUNT = 1228;
+const UI_STRINGS_SHA256 = "b17b66222bc3cc90874cb2b34349a4a3965ac234f9dd57b23be3ceb42523c16a";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

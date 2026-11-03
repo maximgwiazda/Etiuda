@@ -107,7 +107,9 @@ function fifthTick(ms){
   c.last=ms;
 }
 function fifthPhase(){ return fifthClock.phi; }
+function setFifthPhase(phi){ fifthClock.phi=phi; fifthClock.last=null; }
 function fifthRest(){ fifthClock.phi=FIFTH_PHI0; fifthClock.last=null; }
+if(typeof globalThis!=="undefined") globalThis.fifthPhase = fifthPhase;
 
 /* THE HEADER PAINTS ON A CANVAS. A path's d write marks the shape for layout, and this repaints
    every FIFTH_PAINT_MS for as long as the page is shown. The canvas uses the same line and the
@@ -236,6 +238,7 @@ export {
   fifthLinePath,
   fifthLay,
   fifthPhase,
+  setFifthPhase,
   fifthRadius,
   wireFifth
 };

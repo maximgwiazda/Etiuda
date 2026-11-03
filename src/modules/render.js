@@ -116,9 +116,6 @@ function render(){
        names the category, so it becomes the first (only) card. The message stays where no
        add-card can stand in - a search with no hits, or All on an empty Etiuda. */
     const oneCat=(cats.length===1) ? cats[0] : null;
-    /* A clause following a button brings its own leading space unless it opens with punctuation:
-       Polish closes these with a comma, and a space written into the markup floats it off the chip. */
-    const afterBtn=c=>(/^[,.;:!?]/.test(c)?"":" ")+esc(c);
     list.innerHTML=terms.length
       ? '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
         +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
@@ -127,40 +124,25 @@ function render(){
       /* A sealed catalog this desk cannot open, or a request to join its team, is what the empty desk says first. */
       : (wholeThingEmpty() && teamJoinShown()) ? teamJoinEmptyHtml()
       : (wholeThingEmpty()
-        ? '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
-          /* A first run has no menu habits yet, and Load is the route someone who downloaded
-             the file is looking for - so it is a button here, not the name of one elsewhere. */
-          /* No sample button, whether or not the sample is there: it is a file, and Load reaches it. */
-          +esc(t("Add a card to a category, or"))
-          +' <button type="button" class="btn" id="emptyLoad">'+esc(t("load a catalog"))+'</button>'
-          /* The sentence closes on words: one ending on a button chip reads as unfinished, and a
-             bare full stop after one reads as a stray mark. */
-          +afterBtn(t("you already have."))
-          /* The invitation door, beside Load: the shell is what can take one, and a sealed catalog
-             already offers the same act from its own panel. */
-          +(teamCanJoin()
-            ? '<br><br><button type="button" class="btn" id="emptyJoin">'+esc(t("Join a team"))+'</button>'
+        ? '<div class="empty empty-desk">'
+          + '<h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2>'
+          + '<button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button>'
+          + '<div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + '</a></div>'
+          + (teamCanJoin()
+            ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + '</button>'
             : '')
-          /* Said here because here is where it goes wrong - and WHICH answer is right depends on
-             where the copy runs. An installed desk has a catalog folder of its own, so the answer
-             is its path; on a disk the usual fault is a catalog beside Etiuda under the wrong
-             name, and an unexplained empty screen reads as broken software; opened from a link
-             there is no file beside it, so either rule is about a machine the reader is not on. */
-          +'<br><br><span style="font-size:12.5px;opacity:.75">'
-          /* ONE LINE, AND THE PATH IS THE LINK. The full path is what a person needs once, on
-             hover or in the folder itself; the short name is what the sentence can carry at the
-             narrowest width the band allows. */
-          +(eCatalogFolder()
-            ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.")
+          + '<div class="mid-folder p2">'
+          + (eCatalogFolder()
+            ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')
             : location.protocol==="file:"
             ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
               +'<code>'+esc(E_CATALOG_SCRIPT)+'</code>. '
-              +esc(t("Under any other name, bring it in with the button above."))
+              +esc(t("Under any other name, bring it in with Load catalog."))
             : esc(t("The catalog you load stays in this browser, ready whenever you come back.")))
-          +'</span></div>'
+          + '</div></div>'
         /* A chosen category with nothing in it: the same quiet drawing as the other empty
            states, but the category's own icon, so it says WHICH shelf is bare. Only when the
            category really holds no cards; filtered to nothing is a different sentence, and
@@ -178,6 +160,13 @@ function render(){
     if(ej) ej.onclick=openJoinPaste;
     const ef=$("#emptyCatFolder");
     if(ef) wireFolderLink(ef);
+    const ea=$("#emptyAddCard");
+    if(ea) ea.onclick=e=>{
+      e.preventDefault();
+      const b=$("#addCardFab");
+      if(b && !b.hidden) b.click();
+      else if(hooks.openCardEditor) hooks.openCardEditor(null);
+    };
     hooks.syncAddFab();
     hooks.syncNextDock();
     applyCardColumns();
@@ -185,7 +174,7 @@ function render(){
     setPendingScrollHit(false);
     putEntrySel(null);
     markSearchHits(terms);
-    syncEmptyMark(list.querySelector(".empty-desk"));
+    syncEmptyMark(null);
     return;
   }
   const other = nextContentLang(lang);
