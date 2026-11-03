@@ -2742,6 +2742,26 @@ function markClockTests() {
     eq("952i lifting plant:shown-has-a-bound holds the opening past the first frame's bound", got, true);
   }
 
+  /* The empty desk R 10 drawing half is retired naming decision 86 (state/decisions.md line 86:
+     "the empty desk shows no mark"). The tail is rewritten as a leg of the new launch:
+     the work's ready frame is asked only once the window is on screen. */
+  const readyRun = o => {
+    const h = unseen(), w = markLab(Object.assign({ host: h }, o || {})), order = [];
+    let opts = null, frames = 0;
+    w.sb.launchMark = x => { opts = x; order.push("launch"); return null; };
+    w.sb.requestAnimationFrame = fn => { frames++; fn(); return 1; };
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : null;
+    w.sb.deskLaunch();
+    return { h, order, frames: () => frames };
+  };
+  try {
+    const r = readyRun(), before = r.frames();
+    r.h.tell();
+    got = [r.order, before, r.frames()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the work's ready frame is asked only once the window is on screen",
+    got, [["launch"], 1, 2]);
+
 
   const tourRun = (o, landAt) => { const c = markLab(o); c.make(); c.sb.maybeStartTour(); c.land(landAt); c.timersTo(4000); return c.log; };
   try {
@@ -2944,6 +2964,35 @@ function launchMarkTests() {
     got, [["time", 3267], ["time", 3500], ["failsafe", 4750]]);
 
   try {
+    /* A BUSY PAGE GIVES FEW FRAMES: each moves the arrival on by at most two display frames. */
+    const starve = every => {
+      const L = launchLab(), h = L.launch(); L.frame(0); L.timersTo(50); L.ready();
+      let most = 0;
+      for (let t = 10; t <= 3000 && !h.reason; t += 10) {
+        const was = L.k() ? L.k().ms : 0;
+        if (t % every < 10) L.frame(t); else L.timersTo(t);
+        if (was < 2900 && L.k()) most = Math.max(most, L.k().ms - was);
+      }
+      return most;
+    };
+    got = [starve(300) <= 2000 / 60 + 1e-9, starve(1000 / 60) <= 2000 / 60 + 1e-9];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("with a frame only every 300 ms each frame moves the flight on by at most two display frames",
+    got, [true, true]);
+
+  try {
+    const L = launchLab(); L.timersTo(300);
+    const h = L.launch(), k = L.k();
+    L.frame(400, 30); L.ready();
+    const first = k.ms;
+    L.frame(800);
+    const after = k.ms;
+    got = [first, after <= 2000 / 60 + 1e-9];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a first frame stamped before the launch with a stall behind it carries the flight no further than two display frames",
+    got, [0, true]);
+
+  try {
     const L = launchLab(), h = L.launch(); L.play(200); L.ready();
     L.sb.innerWidth = 1600; L.sb.innerHeight = 900;
     L.play(3300);
@@ -2974,6 +3023,16 @@ function launchMarkTests() {
     got = [h.reason, out, up, h.veil.isConnected, !!L.k()];
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("given way by itself, the work rises in over 350 ms and the drawing stops with the veil", got, ["time", "350ms", true, false, false]);
+
+  try {
+    const L = launchLab({ still: true }), h = L.launch(); const framesAsked = L.frames(), dots = L.drawn.arc, img = L.drawn.image;
+    L.ready(); L.timersTo(6000);
+    // the control: moving, the same launch asks for frames and draws nothing until one comes
+    const M = launchLab(); M.launch();
+    got = [framesAsked, dots, img, h.reason, h.ms, !L.doc.body.classList.contains("e-launch"), M.frames()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("under a quiet switch the mark is painted once, still, with no second paint and no frame asked for, and the page shown at once",
+    got, [0, 0, 0, "still", 0, true, 1]);
 
   try {
     let cover = true;
