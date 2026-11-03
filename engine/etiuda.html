@@ -788,8 +788,9 @@ body.e-backdrop .row::before{
 @keyframes e-pick-spin{to{transform:rotate(360deg)}}
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
-   handler owns the angle; reduced motion skips the increment there. The inner group takes
-   an instant 180deg rotation under light theme to cancel the ink swap at any angle. */
+   handler owns the angle and sets the duration from the angle still to turn; reduced
+   motion skips the increment there. The inner group takes an instant 180deg rotation
+   under light theme to cancel the ink swap at any angle. */
 #theme svg{transition:transform var(--m-roll) linear}
 #theme svg g{transform-origin:10px 10px}
 :root[data-theme=light] #theme svg g{transform:rotate(180deg)}
@@ -26417,13 +26418,42 @@ What you type stays in this browser only.`;
   function traceNote(row) {
     lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)));
   }
+  var rollFrom = 0;
+  var rollTo = 0;
+  function declaredAngle(ic) {
+    const m = /rotate\(\s*([-\d.]+)deg\)/.exec(ic.style.transform || "");
+    return m ? Number(m[1]) : null;
+  }
+  function rollAngle(ic) {
+    const anims = typeof ic.getAnimations === "function" ? ic.getAnimations() : [];
+    const anim = anims.filter((a) => a && a.transitionProperty === "transform" && a.playState !== "finished").pop();
+    if (anim) {
+      const timing = anim.effect && anim.effect.getComputedTiming();
+      const dur = Number(timing && timing.duration) || 0;
+      const ct = Number(anim.currentTime);
+      const p = dur > 0 && Number.isFinite(ct) ? Math.min(1, Math.max(0, ct / dur)) : 0;
+      return rollFrom + (rollTo - rollFrom) * p;
+    }
+    const declared = declaredAngle(ic);
+    return declared == null ? 0 : declared;
+  }
   function noteRoll() {
     if (mgReduceMotion()) return;
     const ic = document.querySelector("#theme svg");
     if (!ic) return;
-    const turns = (+ic.dataset.eTurns || 0) + 1;
-    ic.dataset.eTurns = turns;
-    ic.style.transform = "rotate(" + turns * 180 + "deg)";
+    const from = rollAngle(ic);
+    const turns = (Number(ic.dataset.eTurns) || 0) + 1;
+    const to = turns * 180;
+    ic.dataset.eTurns = String(turns);
+    const delta = Math.max(0, to - from);
+    const ms = Math.round(M_MS.roll * delta / 180);
+    rollFrom = from;
+    rollTo = to;
+    ic.style.transition = "none";
+    ic.style.transform = "rotate(" + from + "deg)";
+    void ic.offsetWidth;
+    ic.style.transition = "transform " + ms + "ms linear";
+    ic.style.transform = "rotate(" + to + "deg)";
   }
   var flipHeld = 0;
   function flipHoldSheet() {
