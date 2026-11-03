@@ -56,6 +56,17 @@ function contrastRatio(rgb1, rgb2) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* The opening has given way once its veil is gone and the launch classes are off: polled every 100 ms, up to 30 s. */
+async function waitLaunchGone(page) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 30000) {
+    const gone = await page.evaluate(() => !document.querySelector(".e-launch-veil")
+      && !document.body.classList.contains("e-launch") && !document.body.classList.contains("e-launch-out"));
+    if (gone) return true;
+    await sleep(100);
+  }
+  return false;
+}
 
 async function run() {
   const browser = await puppeteer.launch({
@@ -66,11 +77,24 @@ async function run() {
 
   try {
     /* -------------------------------------------------------------------------
-     * 957o1: work hidden until opening lands
+     * 957o1: work hidden until opening lands, at a wide window and at a narrow one (1024, where the desk's own layout
+     * hides the rail with or without an opening): what the landing reveals is what a page with no opening shows.
      * ------------------------------------------------------------------------- */
-    {
+    for (const W of [1280, 1024]) {
+      /* The control: the same width under reduced motion, which plays no opening (Max, 2026-11-03 02:33). */
+      const ctl = await browser.newPage();
+      await ctl.setViewport({ width: W, height: 768 });
+      await ctl.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await ctl.goto("file://" + ENGINE_HTML);
+      await waitLaunchGone(ctl);
+      const control = await ctl.evaluate(() => {
+        const rail = document.querySelector("#intentRail");
+        const c = rail ? getComputedStyle(rail) : null;
+        return { railShown: !!c && c.opacity === "1" && c.visibility === "visible" && c.display !== "none" };
+      });
+      await ctl.close();
       const page = await browser.newPage();
-      await page.setViewport({ width: 1280, height: 768 });
+      await page.setViewport({ width: W, height: 768 });
       // Navigate to engine
       await page.goto("file://" + ENGINE_HTML);
 
@@ -101,8 +125,8 @@ async function run() {
         };
       });
 
-      // Wait until opening completes
-      await sleep(3400);
+      // Wait until the opening has given way: the veil gone and the launch classes off (30 s ceiling), not a fixed sleep
+      const gaveWay = await waitLaunchGone(page);
 
       const after = await page.evaluate(() => {
         const band = document.querySelector(".row-main");
@@ -123,14 +147,16 @@ async function run() {
           veilGone: !veil,
           bandVisible: isVisible(bandStyle),
           searchVisible: isVisible(searchStyle),
-          panesVisible: isVisible(railStyle) && isVisible(mainStyle)
+          railShown: isVisible(railStyle),
+          mainVisible: isVisible(mainStyle)
         };
       });
 
       const ok1 = early.launchActive && early.veilPresent && early.bandHidden && early.searchHidden && early.panesHidden
-        && after.launchGone && after.veilGone && after.bandVisible && after.searchVisible && after.panesVisible;
+        && gaveWay && after.launchGone && after.veilGone && after.bandVisible && after.searchVisible && after.mainVisible
+        && after.railShown === control.railShown;
 
-      check(ok1, "957o1 the work hidden until the opening lands: at frames before the landing, the band, the search bar and the panes are not visible (computed opacity or visibility, and their boxes not painted), and they are after it");
+      check(ok1, "957o1 at " + W + " px wide, the work hidden until the opening lands: at frames before the landing, the band, the search bar and the panes are not visible (computed opacity or visibility, and their boxes not painted), and they are after it");
       await page.close();
     }
 
