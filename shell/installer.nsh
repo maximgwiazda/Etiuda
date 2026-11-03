@@ -139,12 +139,43 @@
   !endif
 !macroend
 
-# THE TURNING SIDEBAR AND HEADER. 192 frames, one every 83 ms, looping. Frame 0 is the still
+# THE TURNING SIDEBAR AND HEADER. Looping frames, one every ${TURN_INTERVAL} ms. Frame 0 is the still
 # electron-builder shows from installerSidebar.bmp and installerHeader.bmp. The frames are
-# copied into $PLUGINSDIR\turn when the wizard opens. One nsDialogs timer, NSIS's own, swaps
-# whichever image is on the page: the sidebar on Welcome and Finish, the header on an inner
-# page. Leaving a page changes that key, so the count returns to frame 0 and the previous
-# page's sequence stops. A page with no image is left on the still. .onGUIEnd removes the timer.
+# extracted into $PLUGINSDIR\turn from turning.7z at .onInit and un.onInit. One nsDialogs timer,
+# NSIS's own, swaps whichever image is on the page: the sidebar on Welcome and Finish, the header
+# on an inner page. Leaving a page changes that key, so the count returns to frame 0 and the
+# previous page's sequence stops. A page with no image is left on the still. .onGUIEnd removes the timer.
+!ifndef BUILD_RESOURCES_DIR
+  !define BUILD_RESOURCES_DIR "shell"
+!endif
+!include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
+
+!macro customInit
+  InitPluginsDir
+  CreateDirectory "$PLUGINSDIR\turn"
+  Push $0
+  StrCpy $0 $OUTDIR
+  SetOutPath "$PLUGINSDIR\turn"
+  File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
+  Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
+  Delete "$PLUGINSDIR\turn\turning.7z"
+  SetOutPath "$0"
+  Pop $0
+!macroend
+
+!macro customUnInit
+  InitPluginsDir
+  CreateDirectory "$PLUGINSDIR\turn"
+  Push $0
+  StrCpy $0 $OUTDIR
+  SetOutPath "$PLUGINSDIR\turn"
+  File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
+  Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
+  Delete "$PLUGINSDIR\turn\turning.7z"
+  SetOutPath "$0"
+  Pop $0
+!macroend
+
 Var TurnFrame
 Var TurnKey
 Var TurnNext
@@ -170,18 +201,9 @@ Var TurnReady
     StrCpy $TurnHwnd 0
     StrCpy $TurnKind ""
     StrCpy $TurnBmp 0
-    InitPluginsDir
-    CreateDirectory "$PLUGINSDIR\turn"
-    Push $0
-    StrCpy $0 $OUTDIR
-    SetOutPath "$PLUGINSDIR\turn"
-    File "${BUILD_RESOURCES_DIR}\installer\turning\sidebar-*.bmp"
-    File "${BUILD_RESOURCES_DIR}\installer\turning\header-*.bmp"
-    SetOutPath "$0"
-    Pop $0
     Push $0
     GetFunctionAddress $0 ${TURN_PFX}TurnTick
-    nsDialogs::CreateTimer $0 83
+    nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
     Pop $0
   FunctionEnd
 
@@ -298,7 +320,7 @@ Var TurnReady
         StrCpy $TurnFrame 0
       ${Else}
         IntOp $TurnFrame $TurnFrame + 1
-        ${If} $TurnFrame >= 192
+        ${If} $TurnFrame >= ${TURN_FRAMES}
           StrCpy $TurnFrame 0
         ${EndIf}
       ${EndIf}
