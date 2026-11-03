@@ -39,6 +39,15 @@ function electronExe() {
   return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
 }
 
+/* The desk's debugging port, waited for as tests/desk.js waits: a busy machine brings the window up late. */
+async function connected(port) {
+  for (let i = 0; i < 40; i++) {
+    await sleep(500);
+    try { return await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
+  }
+  throw new Error("the desk did not answer on the debugging port within 20 s");
+}
+
 async function main() {
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-silent-update-"));
   const ud = path.join(lab, "user-data");
@@ -51,7 +60,7 @@ async function main() {
   try {
     const port = PORT;
     const args = [
-      path.join(E.ROOT, "shell"),
+      E.ROOT,
       "--user-data-dir=" + ud,
       "--remote-debugging-port=" + port
     ];
@@ -60,12 +69,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
-    await sleep(2500);
-
-    browser = await puppeteer.connect({
-      browserURL: "http://127.0.0.1:" + port,
-      defaultViewport: null
-    });
+    browser = await connected(port);
 
     const pages = await browser.pages();
     const page = pages[0];
@@ -82,7 +86,7 @@ async function main() {
     // Real installer signal: second instance launched with --update-close
     const t0 = Date.now();
     const second = E.shellLaunch(WHO + " 2nd", electronExe(),
-      [path.join(E.ROOT, "shell"), "--user-data-dir=" + ud, "--update-close"],
+      [E.ROOT, "--user-data-dir=" + ud, "--update-close"],
       { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs }) });
     await new Promise(resolve => {
       if (second.exitCode !== null) return resolve();
@@ -110,12 +114,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
-    await sleep(2500);
-
-    const browser2 = await puppeteer.connect({
-      browserURL: "http://127.0.0.1:" + port,
-      defaultViewport: null
-    });
+    const browser2 = await connected(port);
     const pages2 = await browser2.pages();
     const page2 = pages2[0];
     await page2.waitForSelector("#paxInput", { timeout: 10000 });
@@ -131,7 +130,7 @@ async function main() {
     // First instance launched with --update-close exits at once with no window
     const tFirst = Date.now();
     const first = E.shellLaunch(WHO + " 1st", electronExe(),
-      [path.join(E.ROOT, "shell"), "--user-data-dir=" + ud, "--update-close"],
+      [E.ROOT, "--user-data-dir=" + ud, "--update-close"],
       { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs }) });
     let firstExited = false;
     await new Promise(resolve => {
