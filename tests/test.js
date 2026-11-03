@@ -3222,7 +3222,25 @@ function launchMarkTests() {
       const h = L.launch();
       L.frame(50);
       const e = L.send("pointerdown", h.veil, { clientX: 80, clientY: 100, button: 0 });
-      return [h.reason === "click" && !!h.ended, btn.fired.indexOf("click") >= 0, !e.prevented && !e.stopped];
+      const atDown = btn.fired.indexOf("click") >= 0;
+      L.send("pointerup", btn, { clientX: 82, clientY: 102, button: 0 });
+      return [h.reason === "click" && !!h.ended, !atDown && btn.fired.indexOf("click") >= 0, !e.prevented && !e.stopped];
+    };
+    /* A down on the button and an up off it, or a drag across the list, press nothing; the launch is over either way. */
+    const offUp = (x, y) => {
+      const L = launchLab();
+      const scroll = L.el("div");
+      scroll.id = "pageScroll";
+      scroll.rect = { left: 0, top: 0, width: 1000, height: 800 };
+      const btn = L.el("button");
+      btn.rect = { left: 40, top: 80, width: 160, height: 40 };
+      scroll.appendChild(btn);
+      L.doc.body.appendChild(scroll);
+      const h = L.launch();
+      L.frame(50);
+      L.send("pointerdown", h.veil, { clientX: 80, clientY: 100, button: 0 });
+      L.send("pointerup", scroll, { clientX: x, clientY: y, button: 0 });
+      return [!!h.ended, btn.fired.indexOf("click") < 0];
     };
     const spin = () => {
       const L = launchLab();
@@ -3235,10 +3253,29 @@ function launchMarkTests() {
       L.send("wheel", h.veil, { clientX: 200, clientY: 200, deltaY: 40 });
       return [h.reason === "wheel" && !!h.ended, scroll.scrollTop];
     };
-    got = [press(), spin()];
+    /* A Ctrl+release presses with Ctrl, so a pill's Ctrl+click still adds to the selection. */
+    const ctrlUp = () => {
+      const L = launchLab();
+      L.sb.MouseEvent = function (type, init) { this.type = type; Object.assign(this, init); };
+      const scroll = L.el("div");
+      scroll.id = "pageScroll";
+      scroll.rect = { left: 0, top: 0, width: 1000, height: 800 };
+      const btn = L.el("button");
+      btn.rect = { left: 40, top: 80, width: 160, height: 40 };
+      let heard = null;
+      btn.dispatchEvent = ev => { heard = ev; };
+      scroll.appendChild(btn);
+      L.doc.body.appendChild(scroll);
+      const h = L.launch();
+      L.frame(50);
+      L.send("pointerdown", h.veil, { clientX: 80, clientY: 100, button: 0, ctrlKey: true });
+      L.send("pointerup", btn, { clientX: 80, clientY: 100, button: 0, ctrlKey: true });
+      return [!!heard && heard.type === "click", !!heard && heard.ctrlKey === true && heard.bubbles === true];
+    };
+    got = [press(), spin(), offUp(600, 100), offUp(80, 400), ctrlUp()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("during the flight a click on a button presses it and the opening is over, and a wheel scrolls the list",
-    got, [[true, true, true], [true, 40]]);
+  eq("during the flight a down and an up on a button press it at the release and the opening is over, a wheel scrolls the list, an up off the button or after a drag presses nothing, and a Ctrl+release presses with Ctrl",
+    got, [[true, true, true], [true, 40], [true, true], [true, true], [true, true]]);
 
   try {
     const sized = dpr => {

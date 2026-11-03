@@ -538,7 +538,25 @@ function launchMark(opts) {
       if (typeof ctrl.focus === "function") {
         try { ctrl.focus({ preventScroll: true }); } catch (_) { try { ctrl.focus(); } catch (__) {} }
       }
-      if (onVeil && (e.button == null || e.button === 0) && typeof ctrl.click === "function") ctrl.click();
+      /* Pressed at the release, as a native click is, and only when the up is on the same control, so a drag
+         or a selection begun in the flight stays one; with the release's modifiers, which the pills' Ctrl+click
+         reads (the test architect's read, 2026-11-03). */
+      if (onVeil && (e.button == null || e.button === 0) && win && win.addEventListener) {
+        const onUp = u => {
+          win.removeEventListener("pointerup", onUp, true);
+          if (!u || (u.button != null && u.button !== 0)) return;
+          const at = controlUnder(u);
+          if (at !== ctrl) return;
+          const M = win.MouseEvent;
+          try {
+            if (typeof M === "function" && ctrl.dispatchEvent) {
+              ctrl.dispatchEvent(new M("click", { bubbles: true, cancelable: true, view: win, button: 0, detail: 1,
+                clientX: u.clientX, clientY: u.clientY, shiftKey: !!u.shiftKey, ctrlKey: !!u.ctrlKey, altKey: !!u.altKey, metaKey: !!u.metaKey }));
+            } else if (typeof ctrl.click === "function") ctrl.click();
+          } catch (_) {}
+        };
+        win.addEventListener("pointerup", onUp, true);
+      }
     } else if (onVeil) {
       e.preventDefault();
       e.stopPropagation();

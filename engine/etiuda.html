@@ -22602,7 +22602,34 @@ What you type stays in this browser only.`;
             }
           }
         }
-        if (onVeil && (e.button == null || e.button === 0) && typeof ctrl.click === "function") ctrl.click();
+        if (onVeil && (e.button == null || e.button === 0) && win && win.addEventListener) {
+          const onUp = (u) => {
+            win.removeEventListener("pointerup", onUp, true);
+            if (!u || u.button != null && u.button !== 0) return;
+            const at = controlUnder(u);
+            if (at !== ctrl) return;
+            const M2 = win.MouseEvent;
+            try {
+              if (typeof M2 === "function" && ctrl.dispatchEvent) {
+                ctrl.dispatchEvent(new M2("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  view: win,
+                  button: 0,
+                  detail: 1,
+                  clientX: u.clientX,
+                  clientY: u.clientY,
+                  shiftKey: !!u.shiftKey,
+                  ctrlKey: !!u.ctrlKey,
+                  altKey: !!u.altKey,
+                  metaKey: !!u.metaKey
+                }));
+              } else if (typeof ctrl.click === "function") ctrl.click();
+            } catch (_) {
+            }
+          };
+          win.addEventListener("pointerup", onUp, true);
+        }
       } else if (onVeil) {
         e.preventDefault();
         e.stopPropagation();
