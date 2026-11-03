@@ -476,8 +476,8 @@ const SPAN_NAME = "stats-span.json";
 // The engine's V2_TEAM_FILE. Watched with the catalogs, since an admission is what opens a sealed one.
 const TEAM_NAME = "etiuda-team.json";
 /* A sync client's copy of one file: the same extension, and the stem is the canonical stem plus
-   one conflict tail. The tails here are ` (1)`, ` (conflicted copy ...)`, OneDrive's `-COMPUTER`
-   and Syncthing's `.sync-conflict-`. A hyphen tail matches a computer name (3+ upper chars),
+   one conflict tail. The tails here are ` (1)`, ` (conflicted copy ...)`, OneDrive's `-COMPUTER`,
+   Syncthing's `.sync-conflict-` and Drive's `_conf(n)`. A hyphen tail matches a computer name (3+ upper chars),
    not an ordinary name like guide-v2 or guide-EN. Nothing here renames or deletes the copy. */
 function conflictSiblingName(canonical, name) {
   const c = path.basename(String(canonical || ""));
@@ -493,6 +493,7 @@ function conflictSiblingName(canonical, name) {
   if (/^ \(.*conflicted copy.*\)$/i.test(tail)) return true;
   if (/^-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(tail)) return true;
   if (/^\.sync-conflict-/.test(tail)) return true;
+  if (/^(_conf\(\d+\))+$/i.test(tail)) return true;
   return false;
 }
 function isCatalogName(name) {
@@ -7141,6 +7142,7 @@ function isConflictName(name) {
   if (/ \(.*conflicted copy.*\)$/i.test(stem)) return true;
   if (/\.sync-conflict-/.test(n)) return true;
   if (/-(?!V\d+$)[A-Z0-9][A-Z0-9-]{2,62}$/.test(stem)) return true;
+  if (/_conf\(\d+\)$/i.test(stem)) return true;
   return false;
 }
 function conflictNamedAmong(name, names) {

@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 88;
+const EXPECTED = 89;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -726,6 +726,65 @@ async function run() {
     check(ok,
       "41t a genuine higher conflict sibling reaches the mirror and is heeded: "
       + "sibling in mirror " + siblingInMirror + " (rev " + mirrorSibRev + "), heeded rev " + heededRev);
+  }
+
+  /* -------------------------------------------------------------------------------------------------
+   * 41c4: a Drive _conf(n) copy on the share is taken through the scans, then read from the mirror
+   * ----------------------------------------------------------------------------------------------- */
+  {
+    const shareC = folder("share-41c4");
+    const deskC = newDesk("desk-41c4", shareC);
+    const envPath = path.join(deskC.ud, "desk.json");
+    const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    env.teamPins = { [TEAM]: LEAD };
+    env.teamShown = { [TEAM]: { lead: "Lead", folder: shareC } };
+    fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+
+    const mirrorDir = path.join(deskC.ud, "folder-mirror", TEAM);
+    fs.mkdirSync(mirrorDir, { recursive: true });
+
+    /* The copies are only on the share. The mirror stays empty until the scans below copy what they judge. */
+    const confName = "etiuda-team_conf(1).json";
+    fs.writeFileSync(path.join(shareC, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1, catalogs: ["support"] })), "utf8");
+    fs.writeFileSync(path.join(shareC, confName), JSON.stringify(teamFile({ epoch: 1, rev: 4, catalogs: ["support"] })), "utf8");
+    fs.writeFileSync(path.join(shareC, "support.ec"), text(catalog("support", 1, "Support", "2026-02-01")), "utf8");
+    fs.writeFileSync(path.join(shareC, "support_conf(1).ec"), text(catalog("support", 4, "Support", "2026-02-02")), "utf8");
+
+    const prog = syncerMod.createFolderProgram({
+      team: TEAM, folder: shareC, mirror: mirrorDir,
+      pin: LEAD, keys: { 1: K1 }, checks
+    });
+    await prog.syncOnce();
+    await prog.syncOnce();
+
+    const mirrorConf = path.join(mirrorDir, confName);
+    const confLanded = fs.existsSync(mirrorConf);
+    let mirrorConfRev = 0;
+    try { mirrorConfRev = JSON.parse(fs.readFileSync(mirrorConf, "utf8")).rev; } catch {}
+    let mirrorCanonRev = null;
+    try { mirrorCanonRev = JSON.parse(fs.readFileSync(path.join(mirrorDir, "etiuda-team.json"), "utf8")).rev; } catch {}
+    let stagingNames = [];
+    try { stagingNames = fs.readdirSync(path.join(mirrorDir, ".staging")); } catch { stagingNames = []; }
+    /* Dropped unread: staged, then deleted from staging, and never kept in the mirror. */
+    const droppedUnread = !confLanded && stagingNames.length === 0;
+    const shareKept = fs.existsSync(path.join(shareC, confName)) && fs.existsSync(path.join(shareC, "support_conf(1).ec"));
+
+    const d = loadDesk(deskC.ud);
+    const readsMirror = path.resolve(d.api.catalogFolder()) === path.resolve(mirrorDir);
+    d.api.readCatalog();
+    const rows = await d.ask("etiuda:catalog-files");
+    const supportRows = (rows || []).filter(r => r && r.id === "support");
+    const oneSupport = supportRows.length === 1 && supportRows[0].rev === 4 && supportRows[0].name === "support_conf(1).ec";
+    const envAfter = JSON.parse(fs.readFileSync(envPath, "utf8"));
+    const floor = envAfter.teamRevSeen && envAfter.teamRevSeen[TEAM] && envAfter.teamRevSeen[TEAM][LEAD.public];
+    const heededRev = floor ? floor.rev : 0;
+
+    const ok = readsMirror && confLanded && mirrorConfRev === 4 && heededRev === 4 && oneSupport && !droppedUnread && shareKept;
+    check(ok,
+      "41c4 a Drive conflict copy on the share is taken through the scans: the mirror's team file is the higher rev, the Library shows one support catalog, and the conflict copy is not dropped unread: "
+      + "heeded rev " + heededRev + ", mirror conflict rev " + mirrorConfRev + ", canonical rev " + mirrorCanonRev
+      + ", support rows " + supportRows.length + (supportRows[0] ? " (" + supportRows[0].name + " rev " + supportRows[0].rev + ")" : "")
+      + ", reads mirror " + readsMirror + ", dropped unread " + droppedUnread + ", share kept " + shareKept);
   }
 
   /* -------------------------------------------------------------------------------------------------
