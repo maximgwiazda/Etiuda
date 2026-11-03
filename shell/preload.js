@@ -50,7 +50,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   maximize: () => ipcRenderer.send("etiuda:window", "maximize"),
   close: () => ipcRenderer.send("etiuda:window", "close"),
   /* The shell asks before the window closes, and the page answers: "none", "asked", then "close" or "stay". */
-  onAskClose: (fn) => ipcRenderer.on("etiuda:ask-close", () => fn()),
+  onAskClose: (fn) => ipcRenderer.on("etiuda:ask-close", (_e, kind) => fn(kind)),
   closeAnswer: (a) => ipcRenderer.send("etiuda:close-answer", String(a || "")),
   onMaximized: (fn) => ipcRenderer.on("etiuda:maximized", (_e, v) => fn(!!v)),
   /* Whether the window was on screen when this load asked, and the word that it is now. */

@@ -79,16 +79,18 @@
 !macroend
 
 # ETIUDA IS ASKED TO CLOSE, NEVER STOPPED. taskkill without /F sends its window the close the window's own X sends, which
-# asks the person first while a conversation is in progress, and the installer waits and says so. Still open after that,
+# keeps in-progress tabs on disk without a modal, and the installer waits and says so. Still open after that,
 # it asks for Retry; a silent install gives up there and leaves the installed version as it was.
 !macro customCheckAppRunning
   Push $R7
   Push $R8
   Push $R9
   ${If} $LANGUAGE == 1045
-    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: jeśli trwa rozmowa, Etiuda najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
+    # Draft for the copywriter (Claudette)
+    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic, co jest w toku, nie przepadnie, a instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
   ${Else}
-    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: while a conversation is in progress, Etiuda asks first. The installation carries on once it has closed; if it stays open, close it by hand and press Retry."
+    # Draft for the copywriter (Claudette)
+    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing in progress is lost, and the installation carries on once it has closed. If it stays open, close it by hand and press Retry."
   ${EndIf}
   StrCpy $R7 0
   ${Do}

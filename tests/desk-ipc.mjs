@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 90;
+const EXPECTED = 94;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -119,7 +119,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
@@ -1302,6 +1302,66 @@ try {
     "1012d5 a silent page is let go at 1500 ms, so a wait written as 1600 is already past the hold (constant "
     + mainTest.CLOSE_WAIT_MS + ", timer " + delaySeen + ")");
 
+  /* 1152f, 1152g, 1152h, 1152i: Updates 8 / Row A7: A silent update never strands a desk.
+     At an installer's close the desk keeps the in-progress tabs on disk and exits without a modal.
+     The next start brings the tabs back. */
+  let extSaved = false, extClosed = false, noModal = false;
+  try {
+    const wExt = winFor();
+    const fakeEv = closeEv();
+    const draftData = JSON.stringify({ v: 1, tabs: [{ id: "t-1", pax: "Customer A", intentBox: "Refund draft" }], activeTabId: "t-1" });
+    if (mainTest.sessionHeld) {
+      const sm = new Map(); sm.set("eSessionTabs", draftData);
+      mainTest.sessionHeld.set(1, sm);
+    }
+    const held = mainTest.closeHeld(wExt, fakeEv);
+    if (typeof mainTest.writeSavedTabs === "function" && typeof mainTest.tabsFile === "function") {
+      extSaved = mainTest.writeSavedTabs(wExt);
+      mainTest.closeAnswered(wExt, "external");
+      extClosed = wExt.closes === 1;
+      noModal = held && extClosed;
+    }
+  } catch (e) { extSaved = false; }
+  check(extSaved && extClosed && noModal,
+    "1152f an installer-style external close saves in-progress tabs to disk and exits immediately without a modal");
+
+  let restoredOk = false;
+  try {
+    if (typeof mainTest.readSavedTabs === "function" && typeof mainTest.tabsFile === "function") {
+      const tf = mainTest.tabsFile();
+      const readBack = mainTest.readSavedTabs();
+      const unlinked = !fs.existsSync(tf);
+      const parsed = readBack && JSON.parse(readBack);
+      restoredOk = !!(parsed && parsed.tabs && parsed.tabs[0].pax === "Customer A" && unlinked);
+    }
+  } catch (e) { restoredOk = false; }
+  check(restoredOk,
+    "1152g the next start reads the saved tabs from disk, unlinks the file, and restores the draft");
+
+  let inAppAsked = false;
+  try {
+    const wInApp = winFor();
+    wInApp.etiudaInAppClose = true;
+    const fakeEv = closeEv();
+    const held = mainTest.closeHeld(wInApp, fakeEv);
+    mainTest.closeAnswered(wInApp, "asked");
+    const quiet = wInApp.closes === 0;
+    mainTest.closeAnswered(wInApp, "close");
+    const tf = typeof mainTest.tabsFile === "function" ? mainTest.tabsFile() : "";
+    const noFile = !tf || !fs.existsSync(tf);
+    inAppAsked = held && quiet && wInApp.closes === 1 && noFile;
+  } catch (e) { inAppAsked = false; }
+  check(inAppAsked,
+    "1152h an in-app close still asks and does not save tabs to disk when closed");
+
+  let plantDraft = false;
+  try {
+    const MAIN_SRC = shellSrc("main.js");
+    plantDraft = MAIN_SRC.indexOf("plant:installer-keeps-draft") >= 0;
+  } catch (e) { plantDraft = false; }
+  check(plantDraft,
+    "1152i plant:installer-keeps-draft guards the tab session persistence at external close");
+
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");
   H(wc); mainTest.closeAnswered(wc, "none");
@@ -1329,6 +1389,7 @@ try {
   check(askedHere === 1 && answered.join() === "etiuda:close-answer:stay" && typeof onHandlers["etiuda:close-answer"] === "function",
     "1012d3 the preload hands the page the shell's question and sends its answer on the channel main listens to ("
     + askedHere + ", " + JSON.stringify(answered) + ")");
+
   /* 952g. THE CHOSEN THEME SURVIVES A RESTART. A page is copies of theme.js and its four neighbours in a folder of its own,
      so each load is a fresh storage.js reading the desk through the preload and main's handler, as a restart does. The
      first load boots on the system's dark, takes a press, lets the send land and is closed with nothing pending; the

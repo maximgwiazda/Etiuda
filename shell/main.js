@@ -6737,15 +6737,66 @@ ipcMain.on("etiuda:desk-patch-save", (e, text) => {
 ipcMain.handle("etiuda:desk-patch", (e, text) =>
   fromEngine(e) && typeof text === "string" && patchDesk(text));
 /* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
-   profile, where a customer's name and a search would outlast the window; this is never written. */
+   profile, where a customer's name and a search would outlast the window; this is never written.
+   At an installer's close alone, the desk keeps the in-progress tabs on disk (tabs.json) and exits
+   without a modal (updates-8 condition of 2026-11-01, Board 958 row A7). The next start brings them back. */
 const sessionHeld = new Map();
+let pendingSavedTabs = null;
+
+function tabsFile() {
+  return path.join(app.getPath("userData"), "tabs.json");
+}
+
+function writeSavedTabs(win) {
+  /* plant:installer-keeps-draft */
+  try {
+    if (!win || !win.webContents) return false;
+    const id = win.webContents.id || 1;
+    let sm = sessionHeld.get(id);
+    if (!sm && sessionHeld.size > 0) sm = sessionHeld.values().next().value;
+    if (!sm) return false;
+    const tabs = sm.get("eSessionTabs");
+    if (!tabs || typeof tabs !== "string") return false;
+    const file = tabsFile();
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const tmp = file + ".tmp" + process.pid;
+    fs.writeFileSync(tmp, tabs, "utf8");
+    fs.renameSync(tmp, file);
+    return true;
+  } catch (e) {
+    console.error("etiuda: saved tabs could not be written - " + e.message);
+    return false;
+  }
+}
+
+function readSavedTabs() {
+  /* plant:installer-restores-draft */
+  try {
+    const file = tabsFile();
+    if (!fs.existsSync(file)) return "";
+    const text = fs.readFileSync(file, "utf8");
+    try { fs.unlinkSync(file); } catch (e) {}
+    return text;
+  } catch (e) {
+    console.error("etiuda: saved tabs could not be read - " + e.message);
+    return "";
+  }
+}
+
 ipcMain.on("etiuda:session", (e, op, key, value) => {
   let out = null;
   if (fromEngine(e) && typeof op === "string" && typeof key === "string") {
     const id = e.sender.id;
     if (!sessionHeld.has(id)) {
-      sessionHeld.set(id, new Map());
+      const sm = new Map();
+      sessionHeld.set(id, sm);
       e.sender.once("destroyed", () => sessionHeld.delete(id));
+      if (pendingSavedTabs === null) pendingSavedTabs = readSavedTabs();
+      if (pendingSavedTabs) {
+        sm.set("eSessionTabs", pendingSavedTabs);
+        pendingSavedTabs = "";
+      }
     }
     const m = sessionHeld.get(id);
     if (op === "get") out = m.has(key) ? m.get(key) : null;
@@ -6849,7 +6900,7 @@ ipcMain.on("etiuda:window", (e, act) => {
   if (!win) return;
   if (act === "minimize") win.minimize();
   else if (act === "maximize") { if (win.isMaximized()) win.unmaximize(); else win.maximize(); }
-  else if (act === "close") win.close();
+  else if (act === "close") { win.etiudaInAppClose = true; win.close(); }
 });
 
 /* CLOSING ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets, 2026-10-12): the X, Alt+F4
@@ -6866,7 +6917,8 @@ function closeHeld(win, e) {
   e.preventDefault();
   win.etiudaCloseAsking = true;
   win.etiudaCloseWait = setTimeout(() => closeNow(win), CLOSE_WAIT_MS);
-  win.webContents.send("etiuda:ask-close");
+  const inApp = !!win.etiudaInAppClose;
+  win.webContents.send("etiuda:ask-close", inApp ? "in-app" : "external");
   return true;
 }
 /* THE HOLD'S WIRING ON A WINDOW, apart from createWindow so that a node leg can drive it (Clément's read, hole 3): the
@@ -6891,7 +6943,13 @@ function closeNow(win) {
 function closeAnswered(win, a) {
   if (!win || !win.etiudaCloseAsking) return;
   if (a === "asked") { clearTimeout(win.etiudaCloseWait); return; }
-  if (a === "stay") { clearTimeout(win.etiudaCloseWait); win.etiudaCloseAsking = false; return; }
+  if (a === "stay") { clearTimeout(win.etiudaCloseWait); win.etiudaCloseAsking = false; win.etiudaInAppClose = false; return; }
+  if (a === "external") {
+    clearTimeout(win.etiudaCloseWait);
+    writeSavedTabs(win);
+    closeNow(win);
+    return;
+  }
   if (a === "none" || a === "close") closeNow(win);
 }
 ipcMain.on("etiuda:close-answer", (e, a) => {
