@@ -1,0 +1,22 @@
+{
+  "frames": 480,
+  "fps": 30,
+  "intervalMs": 33,
+  "loopSeconds": 16,
+  "phaseStartDeg": 56,
+  "phasePerLoopDeg": 180,
+  "art": "the app icon's mark alone, its line with depth, turning on the night (Max 2026-11-03 10:52 and 10:55); the header the same mark in the product's ink",
+  "sidebar": {
+    "width": 164,
+    "height": 314,
+    "files": "sidebar-000.bmp .. sidebar-479.bmp"
+  },
+  "header": {
+    "width": 150,
+    "height": 57,
+    "files": "header-000.bmp .. header-479.bmp"
+  },
+  "still": "frame 0 is installerSidebar.bmp and installerHeader.bmp beside this folder",
+  "loop": "exact: the figure and its depth repeat after pi of phase, so frame 191 runs on into frame 0 with no crossfade",
+  "generator": "installer-turning-mark.js"
+}

@@ -23,6 +23,13 @@ import { packagedFuseProblems, wantedFuses } from './fuses.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(ROOT, process.env.ETIUDA_DIST || 'dist');
 
+/* Pack the turning frames into solid 7z and generate turning.nsh at build time */
+const turningTool = join(ROOT, 'tools', 'turning.mjs');
+if (existsSync(turningTool)) {
+  const { prepareTurning } = await import('./turning.mjs');
+  await prepareTurning(ROOT, 'shell');
+}
+
 function installers(dir) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter(f => /-setup\.exe$/i.test(f)).map(name => {

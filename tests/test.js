@@ -554,6 +554,7 @@ function runUnitTests() {
   menuWarmTests();
   ecTypeNameTests();
   installerUpdateTests();
+  installerTurningTests();
   pageWatchTests();
   recoveryWindowTests();
   shippedFlagTests();
@@ -3480,6 +3481,24 @@ function nsisInstallWrites(root, cfg) {
    and an update leaves the installed files in place until the new ones are copied. Read as text from shell/installer.nsh,
    beside electron-builder's own templates, which call the two macros in place of their own steps; then each plant lifted
    from the text, and both macros inserted under makensis's preprocessor, which expands what LogicLib writes of them. */
+/* THE TURNING'S CARRIAGE (board 954, the test architect's read 2026-11-03 11:54 and 12:22): a silent run unpacks no frames,
+   a failed or partial unpack never stops an install or an uninstall, and the pages keep the still when a frame is absent.
+   Read as text from shell/installer.nsh. */
+function installerTurningTests() {
+  let nsh = "";
+  try { nsh = fs.readFileSync(path.join(E.ROOT, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
+  const turn = (text) => {
+    const macro = (name) => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
+    const guarded = (m) => /\$\{IfNot\} \$\{Silent\}[\s\S]*Nsis7z::Extract[\s\S]*\$\{EndIf\}/.test(m)
+      && m.indexOf("${IfNot} ${Silent}") < m.indexOf("Nsis7z::Extract") && !/\bAbort\b|\bQuit\b/.test(m);
+    return [guarded(macro("customInit")), guarded(macro("customUnInit")),
+      /\$\{If\} \$\{FileExists\} "\$PLUGINSDIR\\turn\\sidebar-000\.bmp"\r?\n[^\n]*\r?\n[^\n]*\r?\n\s*nsDialogs::CreateTimer/.test(text),
+      /\$\{If\} \$\{FileExists\} \$4\r?\n\s*System::Call 'user32::LoadImage/.test(text),
+      !/\$\{If\} \$\{Errors\}/.test(macro("customInit") + macro("customUnInit"))];
+  };
+  eq("the turning's frames unpack only when the run is not silent, in the installer and the uninstaller, with no Abort or Quit there; the timer starts only once the first frame exists; each frame is read only if it exists; and no inert error check claims a guard",
+    turn(nsh), [true, true, true, true, true]);
+}
 function installerUpdateTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   const tpl = n => fs.readFileSync(path.join(lib, "templates", "nsis", n), "utf8");
@@ -6893,7 +6912,8 @@ function lintCatalog(c, at) {
  * define names; the press is the SendMessage of 0x408 to $HWNDPARENT inside that function; and it
  * must sit under a positive test of UAC_IsInnerInstance and under nothing else. LogicLib's
  * negations are ${IfNot}, ${Unless} and the ${Else} of a positive test, so polarity is a stack
- * rather than a word. Returns { ok, why, presses, hook }.
+ * rather than a word. How many presses the page order needs is the caller's: one when the
+ * licence is first, two when the welcome page is before it. Returns { ok, why, presses, hook }.
  */
 function readSkipHook(nsh) {
   const src = nsh.split(/\r?\n/).map(l => (/^\s*[#;]/.test(l) ? "" : l.trim()));
@@ -6935,10 +6955,7 @@ function readSkipHook(nsh) {
     + JSON.stringify(wrong[0] || "nothing at all") + " rather than by " + WANT
     + ", so the page it consumes is taken from the wrong run of the wizard", presses: presses.length,
     hook: hook };
-  if (presses.length !== 1) return { ok: false, why: hook + " presses the next button "
-    + presses.length + " times, which consumes " + presses.length + " pages", presses: presses.length,
-    hook: hook };
-  return { ok: true, why: "", presses: 1, hook: hook };
+  return { ok: true, why: "", presses: presses.length, hook: hook };
 }
 
 /* ---- main --------------------------------------------------------------------------------- */
@@ -6989,7 +7006,7 @@ if (require.main === module) {
        pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "26d95153b2182a16ebecdd6fc0087684d64fcab0634799950059082973d4e853";
+    const want = "32fcfdf25acf1c9f1d5a1ce1437de94b043abb5d43cfddfa3e1cea9c72380225";
     if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
@@ -7117,9 +7134,16 @@ if (require.main === module) {
       if (ins && isPageMacro(ins[1])) { pages.push(ins[1]); return; }
       if (/^(PageEx|Page|UninstPage)\b/i.test(t)) pages.push(t.split(/\s+/)[0]);
     });
+    const welcomeAt = pages.indexOf("customWelcomePage");
     const licenseAt = pages.indexOf("licensePage");
     const modeAt = pages.indexOf("PAGE_INSTALL_MODE");
     const licenseBeforeMode = licenseAt >= 0 && modeAt >= 0 && licenseAt < modeAt;
+    /* customWelcomePage is the macro that inserts MUI_PAGE_WELCOME and nothing before it, so the
+       walker counting that name at 0 is the welcome page sitting in front of the licence. One
+       press then skips the licence only when the licence is still first; two skip the welcome
+       page and then the licence. */
+    const layout = (welcomeAt === 0 && licenseAt === 1) ? "welcome" : (licenseAt === 0 ? "licence" : "");
+    const wantPresses = layout === "welcome" ? 2 : (layout === "licence" ? 1 : 0);
     /* readSkipHook walks the include rather than reading tokens out of it; the four mutants that
        proved the token reading blind are named at its definition. */
     const skip = readSkipHook(nsh);
@@ -7140,9 +7164,13 @@ if (require.main === module) {
     const bad = [];
     if (licenseAt < 0) bad.push("assistedInstaller.nsh has no licence page");
     if (modeAt < 0) bad.push("assistedInstaller.nsh has no install-mode page");
-    if (licenseAt > 0)
-      bad.push("licence is not the first page (" + pages.join(", ")
+    if (!layout)
+      bad.push("licence is not the first page, nor the page after the welcome (" + pages.join(", ")
         + "), so 0x408 skips the wrong page");
+    if (layout && skip.presses !== wantPresses)
+      bad.push((skip.hook || "the hook") + " presses next " + skip.presses
+        + " time(s), and this page order needs " + wantPresses + " so the elevated inner copy skips "
+        + (layout === "welcome" ? "the welcome page and the licence" : "the licence"));
     if (licenseBeforeMode && !skipsInner)
       bad.push("licence page sits before install-mode (" + pages.join(", ")
         + ") and shell/installer.nsh does not skip it in the elevated inner copy: " + skip.why);
@@ -7150,8 +7178,10 @@ if (require.main === module) {
     if (bad.length) hardFail++;
     else console.log("  page order " + pages.join(", ")
       + (licenseBeforeMode ? "; " + skip.hook + " presses next " + skip.presses
-        + " time, under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips"
-        + " the licence" : "; licence is not before install-mode")
+        + (skip.presses === 1 ? " time" : " times")
+        + ", under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips "
+        + (layout === "welcome" ? "the welcome page and the licence" : "the licence")
+        : "; licence is not before install-mode")
       + (debugPages ? "; " + debugPages + " agrees" : ""));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
