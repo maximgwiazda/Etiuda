@@ -60,6 +60,14 @@ function electronExe() {
 
 /* The chat form is the shared helper. The same script is the lab stand-in under --guards. */
 let formN = 0;
+/* The process in front at the watcher's last second, for a stop's own line (the test architect, 2026-11-03 04:54). */
+function inFront() {
+  try {
+    const last = fs.readFileSync(FG_LOG, "utf8").replace(/^﻿/, "").split(/\r?\n/).filter(Boolean).pop() || "";
+    const r = last.trim().split(" ");
+    return r.length >= 4 ? "in front: " + r[3] + " (pid " + r[2] + ", " + r[0] + ")" : "in front: not yet logged";
+  } catch (x) { return "in front: the log could not be read"; }
+}
 async function ask(cmd) {
   const n = formN++;
   fs.writeFileSync(path.join(LAB, "cmd-" + n + ".txt"), cmd, "utf8");
@@ -69,8 +77,8 @@ async function ask(cmd) {
     if (fs.existsSync(ans)) {
       await sleep(20);
       const got = fs.readFileSync(ans, "utf8").replace(/^\uFEFF/, "").trim();
-      if (got === "touched") throw new Error(deskInput.STOP_NOTE);
-      if (got === "notfg") throw new Error(deskInput.NOTFG_NOTE);
+      if (got === "touched") throw new Error(deskInput.STOP_NOTE + ", " + inFront());
+      if (got === "notfg") throw new Error(deskInput.NOTFG_NOTE + ", " + inFront());
       if (got === "foreign") throw new Error(deskInput.FOREIGN_NOTE);
       return got;
     }
