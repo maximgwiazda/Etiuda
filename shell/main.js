@@ -8539,8 +8539,12 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
     return false;
   });
 });
+/* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
+   nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */
+const OWN_TEXT_MAX = 200000;
 ipcMain.on("etiuda:own-text", (e, text) => {
-  if (fromEngine(e)) noteOwnText(String(text || ""));
+  if (!fromEngine(e) || typeof text !== "string" || !text || text.length > OWN_TEXT_MAX) return;
+  noteOwnText(text);
 });
 /* Settings' row: which combination the desk asks for, and whether Windows let the desk hold it. */
 ipcMain.on("etiuda:hotkey-state", (e) => {

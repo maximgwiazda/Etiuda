@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 129;
+const EXPECTED = 130;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -512,7 +512,23 @@ try {
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
   check(threeOpensCount === 1 && (!ownOpenObj.suggest || !ownOpenObj.suggest.length) && ownSuggestOpenCalls === 0,
-    "2w copy a reply, then open the picker again: no strip, no count. Three opens on one customer message give one count");
+    "6p copy a reply, then open the picker again: no strip, no count. Three opens on one customer message give one count");
+
+  /* 6r etiuda:own-text takes a string within its cap and nothing else. A non-string that would read as a customer's message
+     if turned into one, and an over-long string, are not noted: the message still shows its strip, as it would had the page
+     never sent them. */
+  const fresh6r = secret + " Thank you.";
+  onH["etiuda:own-text"](deskEvent(), "x".repeat(300001));
+  onH["etiuda:own-text"](deskEvent(), { toString: () => fresh6r });
+  clipHeld = fresh6r;
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const afterBad = opened[opened.length - 1];
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  check(!!(afterBad.suggest && afterBad.suggest.length),
+    "6r own-text takes a string within its cap only: after a non-string and a 300,001-character send, a customer's message still"
+    + " shows its strip: " + JSON.stringify((afterBad.suggest || []).length));
 
   /* Row 7: Two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB. */
   let modelBuilds = 0;
@@ -534,7 +550,7 @@ try {
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
   check(press1Builds === 1 && modelBuilds === 1 && lastOpenPayload < 1024,
-    "2x two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB: builds "
+    "6q two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB: builds "
     + modelBuilds + ", payload " + lastOpenPayload + "B");
 
   CM_R2.setContentLangs(langsOrig_R2);
