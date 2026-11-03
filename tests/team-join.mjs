@@ -1095,21 +1095,36 @@ try {
       + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing"))) + (kept ? "" : ", trust or folder moved")
       + ", requests " + inNamed + " in the policy's folder and " + inInvited + " in the invitation's, touched " + touchedM.length);
   };
+  const policyAcceptCase = async (label, rows, from, intoNamed) => {
+    const n = policyCases++;
+    const named = folder("policy-" + n), invited = intoNamed ? named : folder("policy-invited-" + n);
+    put(named, "etiuda-team.json", teamFile([]));
+    const Dm = await underPolicy(rows(named), "policy-desk-" + n, folder("policy-own-" + n));
+    const blob = inviteBlob({ team: TEAM, folder: invited, lead: from, secret: newSecret() });
+    const readM = await Dm.join("read", blob);
+    const takeM = await Dm.join("invite", blob, "Ola", codeFor(blob));
+    const inNamed = writtenUnder(named);
+    const ok = WIN ? Dm.policyRead && readM && !!readM.offer && readM.refused === undefined
+      && takeM && takeM.join && takeM.join.state === "waiting" && inNamed === 1
+      : !Dm.policyRead && readM && !!readM.offer && readM.refused === undefined;
+    return label + ": " + (ok ? "ok" : "read " + (readM && (readM.refused || (readM.offer ? "offered" : "nothing")))
+      + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing")))
+      + ", requests " + inNamed);
+  };
   const folderLead = f => [["TeamFolder", f], ["LeadKey", LEAD.public]];
   const byFolder = [
-    await policyCase("folder and lead", folderLead, lampLead, false),
+    await policyCase("folder and lead, invitation from another lead", folderLead, forgedLead, false),
     await policyCase("folder alone", f => [["TeamFolder", f]], lampLead, false),
-    await policyCase("folder and lead, the invitation naming both", folderLead, lampLead, true),
+    await policyAcceptCase("folder and lead, the invitation naming both", folderLead, lampLead, true),
   ];
   const Dnp = await deskWith("policy-control", folder("policy-control-own"));
   const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
   const readNp = await Dnp.join("read", controlBlob);
   check(byFolder.every(x => / ok$/.test(x)) && readNp && !!readNp.offer && readNp.refused === undefined,
-    "15ay while machine policy names the team's folder, with the lead or without, a valid invitation with its right check code is"
-    + " refused at read and at yes with the policy's word, one naming the policy's own folder and lead included, and nothing"
-    + " changes: no pin, key or request, in the policy's folder or the invitation's, the desk's folder setting as it was, and"
-    + " nothing asked where the invitation points; THE CONTROL, a desk with no policy, is offered it; off Windows no machine"
-    + " policy is read and the door stands as before: " + byFolder.join("; "));
+    "15ay while machine policy names the team's folder and lead, an invitation whose lead key matches the policy's lead is accepted"
+    + " at read and at yes; an invitation from another lead, or under folder policy alone, is refused at read and at yes with the"
+    + " policy's word, and nothing changes; THE CONTROL, a desk with no policy, is offered it; off Windows no machine policy is"
+    + " read and the door stands as before: " + byFolder.join("; "));
 
   const leadAlone = () => [["LeadKey", LEAD.public]];
   const byLead = [

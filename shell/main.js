@@ -3374,10 +3374,22 @@ function policyValues(text) {
   }
   return section ? own : null;
 }
+function policyExpand(s) {
+  if (typeof s !== "string" || s.indexOf("%") < 0) return s;
+  const env = (typeof process !== "undefined" && process && process.env) || {};
+  return s.replace(/%([^%]+)%/g, (match, name) => {
+    if (name in env) return env[name];
+    const upper = name.toUpperCase();
+    for (const [k, v] of Object.entries(env)) {
+      if (k.toUpperCase() === upper) return v;
+    }
+    return match;
+  });
+}
 /* One named value, or unset where it is absent or an empty string. */
 function policyRegSz(values, name) {
   const v = values ? values[name.toLowerCase()] : undefined;
-  if (!v || (v.type === "REG_SZ" && v.value === "")) return { set: false, type: "", value: "" };
+  if (!v || ((v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && v.value === "")) return { set: false, type: "", value: "" };
   return { set: true, type: v.type, value: v.value };
 }
 /* A Windows absolute path: a drive or a share, no segment that walks out of it or names a stream, and no space at either end. */
@@ -3410,10 +3422,20 @@ function joinPolicyFacts(text) {
   let folderOk = !folder.set, leadOk = !lead.set, folderValue = "", leadValue = "";
   if (folder.set) {
     if (folder.type === "REG_SZ" && policyFolderOk(folder.value)) { folderOk = true; folderValue = folder.value; }
+    else if (folder.type === "REG_EXPAND_SZ") {
+      const exp = policyExpand(folder.value);
+      if (policyFolderOk(exp)) { folderOk = true; folderValue = exp; }
+      else bad.push("folder");
+    }
     else bad.push("folder");
   }
   if (lead.set) {
     if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
+    else if (lead.type === "REG_EXPAND_SZ") {
+      const exp = policyExpand(lead.value);
+      if (policyLeadOk(exp)) { leadOk = true; leadValue = exp; }
+      else bad.push("lead");
+    }
     else bad.push("lead");
   }
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
@@ -3471,6 +3493,7 @@ function policyLetsInviteGo(named) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin, inv = j && j.invite;
   if (!inv || !(named.folder || named.lead)) return;
+  if (named.lead && inv.lead && inv.lead.public === named.lead) return;
   teamJoin = null;
   const pin = teamPins[j.team];
   if (inv.pinned === true && pin && pin.keyId === inv.lead.keyId && pin.public === inv.lead.public) {
@@ -4888,10 +4911,14 @@ function relayKept(r) {
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
-   "policy" while machine policy names a team folder or a lead, an invitation naming those very ones included. */
-function inviteDoor() {
+   "policy" while machine policy names a team folder or a lead, unless an invitation for the policy's folder matches its lead key. */
+function inviteDoor(parsed) {
   const named = sayJoinPolicy();
-  return named.folder || named.lead ? "policy" : "";
+  if (!named.folder && !named.lead) return "";
+  if (named.folder && named.lead && parsed && parsed.lead && parsed.lead.public === named.lead) {
+    if (parsed.folder && path.resolve(parsed.folder) === path.resolve(named.folder)) return "";
+  }
+  return "policy";
 }
 /* An invitation, its folder read as this system reaches it. */
 function inviteParse(text) {
@@ -4937,7 +4964,7 @@ function inviteFolderBelongs(folder, parsed) {
 function readInvite(text) {
   const parsed = inviteParse(text);
   const view = joinView();
-  const shut = inviteDoor();
+  const shut = inviteDoor(parsed);
   if (shut) return Object.assign({}, view, { refused: shut });
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
@@ -5010,9 +5037,9 @@ async function chooseInviteFolder(parsed) {
    a key not yet shown; the request carries the proof, never the secret. */
 async function takeInvite(text, name, check) {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const shut = inviteDoor();
-  if (shut) return Object.assign({}, joinView(), { refused: shut });
   const parsed = inviteParse(text);
+  const shut = inviteDoor(parsed);
+  if (shut) return Object.assign({}, joinView(), { refused: shut });
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   const stranded = !!settled && inviteStranded(parsed);
@@ -5037,7 +5064,7 @@ async function takeInvite(text, name, check) {
     /* The leave stops its channel on the shell's next turn (relaySoon); the request waits for that, and for the old channel's last cycle. */
     await new Promise(r => setTimeout(r, 0));
     if (old && old !== relayChannel) await old.stop().catch(() => {});
-    const now = inviteDoor() || inviteSettled(parsed.team, parsed.lead);
+    const now = inviteDoor(parsed) || inviteSettled(parsed.team, parsed.lead);
     if (now) {
       if (askKept(ask)) { try { unlinkOwn(ask.file); } catch { /* gone */ } }
       return Object.assign({}, joinView(), { refused: now });
