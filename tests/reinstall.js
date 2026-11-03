@@ -933,12 +933,13 @@ let newKey = "", lnkSm = "", lnkDt = "";
   const takenRows = await LIB_ROWS(s2.p);
   await s2.stop();
   check(listing(DOCS_ETIUDA).join(",") === "desk-notes.ec," + SAMPLE
-        && samePath(takenRead, deskEc) && takenOffer === "Desk notes",
+        && samePath(takenRead, deskEc) && takenOffer === "desk-notes",
     "1h a first run whose Documents\\Etiuda ALREADY holds a catalog gives the sample beside it and does"
     + " not open it: the folder holds " + JSON.stringify(listing(DOCS_ETIUDA))
     + ", the file the shell read is " + JSON.stringify(takenRead) + " and the catalog offered is "
     + JSON.stringify(takenOffer) + ", which is the folder's own " + deskDoc.cards.length
-    + "-card file dated six hours back - the shipped sample is newer and is still not the one that loads");
+    + "-card file dated six hours back, named by its file and not by the name inside it (a243fe12, 2026-09-29: a catalog"
+    + " is named by its file) - the shipped sample is newer and is still not the one that loads");
   check(takenRows.length === 2 && takenRows[0].name === "desk-notes.ec"
         && takenRows[1].name === "sample-catalog.ec" && takenRows[1].copy === ""
         && takenRows[1].tags.indexOf("Newer") < 0 && takenRows[1].load === true,
@@ -961,11 +962,12 @@ let newKey = "", lnkSm = "", lnkDt = "";
   check(editedNewer && samePath(editedRead, sampleFile)
         && listing(DOCS_ETIUDA).join(",") === "desk-notes.ec,sample-catalog.ec"
         && editedRows.length === 2 && (editedRows[0] || {}).name === "sample-catalog.ec"
-        && (editedRows[0] || {}).copy === "own",
+        && (editedRows[0] || {}).copy === "",
     "1i a file of the sample's name in Documents\\Etiuda is read INSTEAD of the shipped one, and edited it"
     + " stops being special: one byte added and it is the newest file in the folder (" + editedNewer
     + "), so the shell reads " + JSON.stringify(editedRead) + " rather than the deployment's own, and"
-    + " the Library lists it once, at the HEAD, as this folder's copy - " + JSON.stringify(editedRows));
+    + " the Library lists it once, at the HEAD, as a plain row of this folder's: no line says it comes with Etiuda or"
+    + " takes the shipped copy's place (2a6917dc, Max 2026-09-28: \"this information is not needed\") - " + JSON.stringify(editedRows));
 
   /* The folder and the pin go back exactly as 1g left them, so phase 2 runs as it always has. */
   E.realProfileGuard(deskEc);
