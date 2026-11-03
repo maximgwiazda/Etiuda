@@ -16623,6 +16623,11 @@ What you type stays in this browser only.`;
   }
   function copy(text, msg, stamped) {
     noteCopy();
+    try {
+      const h = eHost();
+      if (h && typeof h.noteOwnText === "function") h.noteOwnText(text);
+    } catch (e) {
+    }
     const done = () => toast(msg, 0, false, stamped);
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
@@ -20510,7 +20515,7 @@ What you type stays in this browser only.`;
     };
   }
   function capturePills() {
-    if (mgReduceMotion()) return null;
+    if (!pills || mgReduceMotion()) return null;
     const before = /* @__PURE__ */ new Map();
     pills.querySelectorAll(".pill").forEach((p) => {
       const k = pillKey(p);
@@ -33202,6 +33207,7 @@ What you type stays in this browser only.`;
     hotkeyNotice: () => hotkeyNotice,
     pickExcerpt: () => pickExcerpt,
     pickRows: () => pickRows,
+    setSuggestModelStandIn: () => setSuggestModelStandIn,
     wirePick: () => wirePick
   });
 
@@ -33294,7 +33300,7 @@ What you type stays in this browser only.`;
           for (const id of reqs) s.add(id);
         }
       }
-      const titles = m.title && typeof m.title === "object" ? Object.values(m.title) : typeof m.title === "string" ? [m.title] : [];
+      const titles = m["title"] && typeof m["title"] === "object" ? Object.values(m["title"]) : typeof m["title"] === "string" ? [m["title"]] : [];
       for (const title of titles) {
         if (!title) continue;
         for (const w of splitWords(title)) {
@@ -33335,7 +33341,7 @@ What you type stays in this browser only.`;
             if (reach <= 2 && !tier1.has(w)) tier2.add(w);
           }
         }
-        const titles = m.title && typeof m.title === "object" ? Object.values(m.title) : typeof m.title === "string" ? [m.title] : [];
+        const titles = m["title"] && typeof m["title"] === "object" ? Object.values(m["title"]) : typeof m["title"] === "string" ? [m["title"]] : [];
         for (const title of titles) {
           if (!title) continue;
           for (const w of splitWords(title)) {
@@ -33432,6 +33438,9 @@ What you type stays in this browser only.`;
   function pickByUse(hits) {
     const use = statsRecentUse(pack);
     if (!use.size) return hits;
+    if (intentIdxs.length) {
+      return hits.map((m, i) => ({ m, i, n: use.get(String(m.id)) | 0, rank: relevanceRank(m) })).sort((a, b) => a.rank - b.rank || b.n - a.n || a.i - b.i).map((o) => o.m);
+    }
     return hits.map((m, i) => ({ m, i, n: use.get(String(m.id)) | 0 })).sort((a, b) => b.n - a.n || a.i - b.i).map((o) => o.m);
   }
   function pickList(q) {
@@ -33452,7 +33461,7 @@ What you type stays in this browser only.`;
     const seen = /* @__PURE__ */ new Set();
     const lastLog = now.log && now.log.length ? now.log[now.log.length - 1] : null;
     const lastCard = lastLog ? now.live && now.live.get(String(lastLog.id)) || findCard(lastLog.id) : null;
-    if (lastCard && lastCard.seq && keep(lastCard)) {
+    if (lastCard && lastCard.seq && keep(lastCard) && (!intentIdxs.length || cardHitsSelectedIntent(lastCard))) {
       const l = cardLang(lastCard), ps = parts(lastCard, l);
       const nextB = (lastLog.b | 0) + 1;
       if (nextB < ps.length) {
@@ -33464,6 +33473,7 @@ What you type stays in this browser only.`;
       if (!r || r.used) continue;
       const c = now.live && now.live.get(String(r.id));
       if (!c || !keep(c)) continue;
+      if (intentIdxs.length && !cardHitsSelectedIntent(c)) continue;
       const cl = cardLang(c), cps = parts(c, cl);
       for (let vi = 0; vi < cps.length; vi++) {
         const key = String(c.id) + ":" + vi;
@@ -33632,11 +33642,35 @@ What you type stays in this browser only.`;
     }
     return { cards: outCards, tags };
   }
+  var eSuggestStandIn = null;
+  var eSuggestEpoch = 0;
+  function setSuggestModelStandIn(fn) {
+    eSuggestStandIn = fn;
+    cachedModel = null;
+    cachedModelKey = "";
+    eSuggestEpoch++;
+  }
+  var cachedModel = null;
+  var cachedModelKey = "";
+  function suggestEpoch() {
+    let sig = ePackEpoch + ":" + eSuggestEpoch + ":" + intentCount() + ":" + CONTENT_LANGS.join(",");
+    for (let i = 0; i < intentCount(); i++) sig += ":" + intentIdAt(i);
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i];
+      if (c && c.requests) sig += ":" + c.id + ":" + (Array.isArray(c.requests) ? c.requests.join(",") : c.requests);
+    }
+    return sig;
+  }
   function suggestModel() {
-    return buildSuggestModel(suggestCatalog(), {
+    const key = suggestEpoch() + "|" + uiLang();
+    if (cachedModel && cachedModelKey === key) return cachedModel;
+    if (typeof eSuggestStandIn === "function") eSuggestStandIn();
+    cachedModelKey = key;
+    cachedModel = buildSuggestModel(suggestCatalog(), {
       suggest: t("Suggested from the copied message"),
       suggestTip: t("Intents suggested from the message on the clipboard. None is chosen until one is clicked.")
     });
+    return cachedModel;
   }
   function answerPick(op, argText) {
     let a = {};
@@ -33651,8 +33685,9 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
       const paxVal = pickDeskPax();
-      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound(""));
-      if (a.profiles) {
+      const curEpoch = suggestEpoch();
+      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, picked: intentIdxs.map((i) => intentIdAt(i)), epoch: curEpoch }, pickFound(""));
+      if (a.profiles || a.epoch !== void 0 && a.epoch !== curEpoch) {
         try {
           out.profiles = suggestModel();
         } catch (e) {
@@ -33669,12 +33704,16 @@ What you type stays in this browser only.`;
       const id = String(a.id || "").slice(0, 80);
       const idx = intentIdxOfId(id);
       if (!id || idx < 0 || isIntentHiddenIdx(idx)) return null;
-      const multi = !!a.multi || intentIdxs.indexOf(idx) > -1;
+      const isSelected = intentIdxs.indexOf(idx) > -1;
+      const multi = !!a.multi || isSelected;
       pickIntent(idx, multi);
-      bumpSuggest(pack);
-      saveStats();
+      if (!isSelected) {
+        bumpSuggest(pack);
+        saveStats();
+      }
       const paxVal = pickDeskPax();
-      return Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, last: pickLastRow() }, pickFound(""));
+      const picked = intentIdxs.map((i) => intentIdAt(i));
+      return Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, last: pickLastRow(), picked }, pickFound(""));
     }
     if (op === "tab") {
       if (a.id !== "tabNext" && a.id !== "tabPrev" && a.id !== "tabNew") return null;

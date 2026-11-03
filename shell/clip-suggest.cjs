@@ -342,7 +342,7 @@ function buildProfiles(catalog) {
         for (const id of reqs) s.add(id);
       }
     }
-    const titles = (m.title && typeof m.title === "object") ? Object.values(m.title) : (typeof m.title === "string" ? [m.title] : []);
+    const titles = (m["title"] && typeof m["title"] === "object") ? Object.values(m["title"]) : (typeof m["title"] === "string" ? [m["title"]] : []);
     for (const title of titles) {
       if (!title) continue;
       for (const w of splitWords(title)) {
@@ -383,7 +383,7 @@ function buildProfiles(catalog) {
           if (reach <= 2 && !tier1.has(w)) tier2.add(w);
         }
       }
-      const titles = (m.title && typeof m.title === "object") ? Object.values(m.title) : (typeof m.title === "string" ? [m.title] : []);
+      const titles = (m["title"] && typeof m["title"] === "object") ? Object.values(m["title"]) : (typeof m["title"] === "string" ? [m["title"]] : []);
       for (const title of titles) {
         if (!title) continue;
         for (const w of splitWords(title)) {

@@ -7840,7 +7840,7 @@ function pickPage() {
   if (!P || !q || !box) return;
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
-  let suggest = [], sgAt = -1;
+  let suggest = [], sgAt = -1, picked = [];
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
@@ -7864,6 +7864,10 @@ function pickPage() {
       rows = o.rows;
       said = o.count || "";
       if ("last" in o) last = o.last || null;
+      if (Array.isArray(o.picked)) picked = o.picked;
+      sgAt = -1;
+      at = 0;
+      box.scrollTop = 0;
       paintLang(o);
       if (who) {
         if (o.who != null) who.hidden = !o.who;
@@ -7910,10 +7914,15 @@ function pickPage() {
       const b = document.createElement("button");
       b.type = "button";
       b.id = "s" + i;
-      b.className = i === sgAt ? "on" : "";
+      const isPicked = picked.indexOf(String(s.id)) > -1;
+      const cls = [];
+      if (i === sgAt) cls.push("on");
+      if (isPicked) cls.push("picked");
+      b.className = cls.join(" ");
       b.textContent = s.name || "";
       b.setAttribute("data-id", String(s.id));
       b.setAttribute("aria-selected", i === sgAt ? "true" : "false");
+      b.setAttribute("aria-pressed", isPicked ? "true" : "false");
       el.appendChild(b);
     });
   }
@@ -8011,6 +8020,7 @@ function pickPage() {
     said = o.count || "";
     last = o.last || null;
     suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
+    picked = Array.isArray(o.picked) ? o.picked : [];
     sgAt = -1;
     q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
     box.scrollTop = 0;
@@ -8208,6 +8218,8 @@ function pickerDoc() {
     + '#sg button{box-sizing:border-box;display:block;width:100%;height:32px;margin:0;padding:0 10px;border:0;'
     + 'border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:600 14px var(--sans);text-align:left;cursor:default}\n'
     + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
+    + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
+    + '#sg button.picked.on{background:color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -8386,6 +8398,18 @@ function focusDesk() {
   win.focus();
 }
 /* The clipboard, read once when the picker opens and kept in this function only. */
+let lastOwnText = "", lastCountedText = "";
+let lastProfiles = null, lastProfilesEpoch = null;
+
+function noteOwnText(text) {
+  if (!text) return;
+  lastOwnText = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
+}
+function isOwnText(text) {
+  if (!text || !lastOwnText) return false;
+  const h = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
+  return h === lastOwnText;
+}
 function readClipText() {
   try { return String(clipboard.readText() || ""); }
   catch (e) { return ""; }
@@ -8405,29 +8429,42 @@ function pickToggle() {
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
   let clip = "";
   try { clip = readClipText(); } catch (e) { clip = ""; }
-  const want = readsLikeMessage(clip);
-  askDesk("open", want ? { profiles: 1 } : {}).then(open => {
+  const isOwn = isOwnText(clip);
+  const want = !isOwn && readsLikeMessage(clip);
+  const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
+  const req = want ? (lastProfiles ? { epoch: lastProfilesEpoch } : { profiles: 1 }) : {};
+  askDesk("open", req).then(open => {
     if (!open) { focusDesk(); return null; }
-    let showed = false;
-    if (open.profiles) {
-      if (want) {
-        try {
-          const scored = scoreSuggestions(clip, open.profiles);
-          if (scored.length) {
-            open.suggest = scored.map(r => ({ id: String(r.id), name: String(r.name || ""), score: r.score }));
-            const labels = open.profiles.labels || {};
-            open.words = Object.assign({}, open.words || {}, {
-              suggest: String(labels.suggest || ""),
-              suggestTip: String(labels.suggestTip || "")
-            });
-            showed = true;
-          }
-        } catch (err) { console.error("etiuda: suggestions could not be scored"); }
-      }
-      delete open.profiles;
+    if (open.epoch != null && open.epoch !== lastProfilesEpoch) {
+      lastProfiles = null;
+      lastProfilesEpoch = open.epoch;
     }
+    if (open.profiles) {
+      lastProfiles = open.profiles;
+      lastProfilesEpoch = open.epoch;
+    }
+    const profiles = lastProfiles || open.profiles;
+    let showed = false;
+    if (profiles && want) {
+      try {
+        const scored = scoreSuggestions(clip, profiles);
+        if (scored.length) {
+          open.suggest = scored.map(r => ({ id: String(r.id), name: String(r.name || ""), score: r.score }));
+          const labels = profiles.labels || {};
+          open.words = Object.assign({}, open.words || {}, {
+            suggest: String(labels.suggest || ""),
+            suggestTip: String(labels.suggestTip || "")
+          });
+          showed = true;
+        }
+      } catch (err) { console.error("etiuda: suggestions could not be scored"); }
+    }
+    delete open.profiles;
     clip = "";
-    if (showed) askDesk("suggest-open", {}).catch(() => {});
+    if (showed && clipHash !== lastCountedText) {
+      lastCountedText = clipHash;
+      askDesk("suggest-open", {}).catch(() => {});
+    }
     if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
     pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
     return ensurePicker().then(() => {
@@ -8492,6 +8529,7 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
   if (pick.other) arg.other = 1;
   return askDesk("copy", arg).then(v => {
     if (v && typeof v.text === "string") {
+      noteOwnText(pickClipText(v.text, process.platform));
       clipboard.writeText(pickClipText(v.text, process.platform));
       caretPaste(pickTarget, showPickNote);
       hidePicker(true);
@@ -8500,6 +8538,9 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
     if (v && v.ask) { hidePicker(false); focusDesk(); askDesk("ask", v.ask); }
     return false;
   });
+});
+ipcMain.on("etiuda:own-text", (e, text) => {
+  if (fromEngine(e)) noteOwnText(String(text || ""));
 });
 /* Settings' row: which combination the desk asks for, and whether Windows let the desk hold it. */
 ipcMain.on("etiuda:hotkey-state", (e) => {

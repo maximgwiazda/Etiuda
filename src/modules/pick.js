@@ -2,10 +2,10 @@ import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
 import { cards, intentIdxs, lang, wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms } from "./spell.js";
 import { rankedCards } from "./render.js";
-import { eNotice, pack, saveStats } from "./pack.js";
+import { eNotice, pack, saveStats, ePackEpoch } from "./pack.js";
 import { bumpSuggest, bumpSuggestOpen, statsRecentUse } from "./desk-stats.js";
 import { cardInActiveCats } from "./card-counts.js";
-import { cardIntentLinks } from "./card-intent.js";
+import { cardHitsSelectedIntent, cardIntentLinks, relevanceRank } from "./card-intent.js";
 import { altLabelAt, cardCommits, cardLang, cardText, cardTitle, findCard, parts } from "./card-model.js";
 import { fill, intentFieldAt, intentNavName } from "./intent-text.js";
 import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
@@ -60,6 +60,11 @@ function pickRow(m,l,ps,vi){
 function pickByUse(hits){
   const use=statsRecentUse(pack);
   if(!use.size) return hits;
+  if(intentIdxs.length){
+    return hits.map((m,i)=>({m,i,n:use.get(String(m.id))|0,rank:relevanceRank(m)}))
+      .sort((a,b)=>a.rank-b.rank||b.n-a.n||a.i-b.i)
+      .map(o=>o.m);
+  }
   return hits.map((m,i)=>({m,i,n:use.get(String(m.id))|0})).sort((a,b)=>b.n-a.n||a.i-b.i).map(o=>o.m);
 }
 /** What the desk's list would show for `q`: every copyable block of each card in turn as a row, PICK_ROWS at most,
@@ -82,7 +87,7 @@ function pickList(q){
   const seen=new Set();
   const lastLog=now.log&&now.log.length?now.log[now.log.length-1]:null;
   const lastCard=lastLog?(now.live&&now.live.get(String(lastLog.id))||findCard(lastLog.id)):null;
-  if(lastCard && lastCard.seq && keep(lastCard)){
+  if(lastCard && lastCard.seq && keep(lastCard) && (!intentIdxs.length || cardHitsSelectedIntent(lastCard))){
     const l=cardLang(lastCard), ps=parts(lastCard,l);
     const nextB=(lastLog.b|0)+1;
     if(nextB<ps.length){
@@ -94,6 +99,7 @@ function pickList(q){
     if(!r || r.used) continue;
     const c=now.live&&now.live.get(String(r.id));
     if(!c || !keep(c)) continue;
+    if(intentIdxs.length && !cardHitsSelectedIntent(c)) continue;
     const cl=cardLang(c), cps=parts(c,cl);
     for(let vi=0;vi<cps.length;vi++){
       const key=String(c.id)+":"+vi;
@@ -253,11 +259,35 @@ function suggestCatalog(){
   }
   return {cards:outCards, tags:tags};
 }
+let eSuggestStandIn = null, eSuggestEpoch = 0;
+function setSuggestModelStandIn(fn){
+  eSuggestStandIn = fn;
+  cachedModel = null;
+  cachedModelKey = "";
+  eSuggestEpoch++;
+}
+
+let cachedModel = null, cachedModelKey = "";
+function suggestEpoch(){
+  let sig = ePackEpoch + ":" + eSuggestEpoch + ":" + intentCount() + ":" + CONTENT_LANGS.join(",");
+  for(let i=0; i<intentCount(); i++) sig += ":" + intentIdAt(i);
+  for(let i=0; i<cards.length; i++){
+    const c=cards[i];
+    if(c && c.requests) sig += ":" + c.id + ":" + (Array.isArray(c.requests) ? c.requests.join(",") : c.requests);
+  }
+  return sig;
+}
+
 function suggestModel(){
-  return buildSuggestModel(suggestCatalog(), {
+  const key = suggestEpoch() + "|" + uiLang();
+  if(cachedModel && cachedModelKey === key) return cachedModel;
+  if(typeof eSuggestStandIn === "function") eSuggestStandIn();
+  cachedModelKey = key;
+  cachedModel = buildSuggestModel(suggestCatalog(), {
     suggest:t("Suggested from the copied message"),
     suggestTip:t("Intents suggested from the message on the clipboard. None is chosen until one is clicked.")
   });
+  return cachedModel;
 }
 function answerPick(op,argText){
   let a={};
@@ -265,8 +295,11 @@ function answerPick(op,argText){
   if(op==="open"){
     try{ tourHeardPick(); }catch(e){}
     const paxVal=pickDeskPax();
-    const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
-    if(a.profiles){ try{ out.profiles=suggestModel(); }catch(e){} }
+    const curEpoch = suggestEpoch();
+    const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, picked:intentIdxs.map(i=>intentIdAt(i)), epoch:curEpoch}, pickFound(""));
+    if(a.profiles || (a.epoch !== undefined && a.epoch !== curEpoch)){
+      try{ out.profiles=suggestModel(); }catch(e){}
+    }
     return out;
   }
   if(op==="suggest-open"){
@@ -278,12 +311,13 @@ function answerPick(op,argText){
     const id=String(a.id||"").slice(0,80);
     const idx=intentIdxOfId(id);
     if(!id||idx<0||isIntentHiddenIdx(idx)) return null;
-    const multi=!!a.multi||intentIdxs.indexOf(idx)>-1;
+    const isSelected=intentIdxs.indexOf(idx)>-1;
+    const multi=!!a.multi||isSelected;
     pickIntent(idx, multi);
-    bumpSuggest(pack);
-    saveStats();
+    if(!isSelected){ bumpSuggest(pack); saveStats(); }
     const paxVal=pickDeskPax();
-    return Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow()}, pickFound(""));
+    const picked=intentIdxs.map(i=>intentIdAt(i));
+    return Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow(), picked:picked}, pickFound(""));
   }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;
@@ -331,5 +365,6 @@ export {
   hotkeyNotice,
   pickExcerpt,
   pickRows,
+  setSuggestModelStandIn,
   wirePick
 };

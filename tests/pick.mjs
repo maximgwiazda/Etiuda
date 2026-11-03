@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 125;
+const EXPECTED = 129;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -52,7 +52,7 @@ const SYSTEM = ["en-US"];
 Object.defineProperty(globalThis, "navigator", { configurable: true,
   value: { get language() { return SYSTEM[0]; }, get languages() { return SYSTEM; }, clipboard: null } });
 const els = { "#pax": { value: "Anna Nowak" }, "#roleSel": { value: "" }, "#intent": { value: "" }, "#seg": { querySelectorAll: () => [], querySelector: () => null },
-  "#list": { classList: { add() {}, remove() {}, toggle() {}, contains: () => false }, style: { removeProperty() {}, setProperty() {} }, querySelector: () => null, querySelectorAll: () => [], replaceChildren() {} },
+  "#list": { classList: { add() {}, remove() {}, toggle() {}, contains: () => false }, style: { removeProperty() {}, setProperty() {} }, querySelector: () => null, querySelectorAll: () => [], replaceChildren() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) },
   "#toast": { classList: { add() {}, remove() {}, toggle() {}, contains: () => false }, style: {}, textContent: "", innerHTML: "", getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) } };
 const bodyClasses = new Set();
 globalThis.window = { innerWidth: 1280, innerHeight: 800, isSecureContext: true, addEventListener() {}, removeEventListener() {} };
@@ -472,6 +472,82 @@ try {
   const codeOpen = opened[opened.length - 1];
   check(codeAsks.indexOf("{}") > -1 && !("suggest" in codeOpen) && Object.keys(codeOpen).join(",") === Object.keys(opened[0]).join(","),
     "2h4 a booking code leaves the picker the same shape as the empty open: " + Object.keys(codeOpen).join(","));
+
+  /* Row 2: The strip never suggests from Etiuda's own reply, and counts a message once. */
+  const CM_R2 = await import(MOD("content-model.js"));
+  const IID_R2 = await import(MOD("intent-id.js"));
+  const langsOrig_R2 = CM_R2.CONTENT_LANGS.slice();
+  const swEnOrig_R2 = CM_R2.SW_STORE && CM_R2.SW_STORE.en ? CM_R2.SW_STORE.en.slice() : [];
+  const intentsOrig_R2 = IID_R2.baseIntentsSnapshot ? IID_R2.baseIntentsSnapshot() : null;
+  CM_R2.setContentLangs(["en"]);
+  CM_R2.SW_STORE.en.length = 0;
+  CM_R2.SW_STORE.en.push("lantern");
+  CM_R2.setIntentIds(["wick"]);
+  IID_R2.snapshotBaseIntents();
+  AS.setCards(CARDS.map(c => Object.assign({}, c, c.id === "c-lamp" ? { requests: ["t:wick"] } : {})));
+
+  clipHeld = secret;
+  const opensBeforeR2 = desk.sent.filter(a => a[0] === "etiuda:pick-ask" && a[2] === "suggest-open").length;
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  const opensAfterR2 = desk.sent.filter(a => a[0] === "etiuda:pick-ask" && a[2] === "suggest-open").length;
+  const threeOpensCount = opensAfterR2 - opensBeforeR2;
+
+  await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+  clipHeld = clip[clip.length - 1];
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const ownOpenObj = opened[opened.length - 1];
+  const ownSuggestOpenCalls = desk.sent.filter(a => a[0] === "etiuda:pick-ask" && a[2] === "suggest-open").length - opensAfterR2;
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  check(threeOpensCount === 1 && (!ownOpenObj.suggest || !ownOpenObj.suggest.length) && ownSuggestOpenCalls === 0,
+    "2w copy a reply, then open the picker again: no strip, no count. Three opens on one customer message give one count");
+
+  /* Row 7: Two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB. */
+  let modelBuilds = 0;
+  if (typeof PICK.setSuggestModelStandIn === "function") {
+    PICK.setSuggestModelStandIn(() => { modelBuilds++; });
+  }
+  clipHeld = "zebraquill please mend the lantern glass today";
+  const sentAtRow7 = desk.sent.length;
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  const press1Builds = modelBuilds;
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const openAnswersRow7 = desk.sent.slice(sentAtRow7).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "open");
+  const lastOpenAnswer = openAnswersRow7[openAnswersRow7.length - 1];
+  const lastOpenPayload = lastOpenAnswer ? JSON.stringify(lastOpenAnswer).length : 0;
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  check(press1Builds === 1 && modelBuilds === 1 && lastOpenPayload < 1024,
+    "2x two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB: builds "
+    + modelBuilds + ", payload " + lastOpenPayload + "B");
+
+  CM_R2.setContentLangs(langsOrig_R2);
+  if (CM_R2.SW_STORE && CM_R2.SW_STORE.en) {
+    CM_R2.SW_STORE.en.length = 0;
+    swEnOrig_R2.forEach(w => CM_R2.SW_STORE.en.push(w));
+  }
+  if (intentsOrig_R2) {
+    CM_R2.setIntentIds(intentsOrig_R2);
+    IID_R2.snapshotBaseIntents();
+  }
+  AS.setCards(CARDS.map(c => Object.assign({}, c)));
+
   clipHeld = "";
 
   const found2 = JSON.parse(await pickerPage.E_PICK.find("brass"));
@@ -911,7 +987,10 @@ try {
       remove() {}, addEventListener() {} };
     return el;
   };
-  pWin.E_PICK.takeSuggest = (id, multi) => { pcalls.push("take " + id + " " + (multi ? 1 : 0)); return Promise.resolve("null"); };
+  pWin.E_PICK.takeSuggest = (id, multi) => {
+    pcalls.push("take " + id + " " + (multi ? 1 : 0));
+    return Promise.resolve(JSON.stringify({ rows: pRows, count: "4 replies", picked: [id] }));
+  };
   pcalls.length = 0;
   pOpen(JSON.stringify({ rows: pRows, suggest: [{ id: "t:wick", name: "lantern", score: 4 }], words: { suggest: "Suggested", suggestTip: "tip" } }));
   const sgText = sgHost.el ? sgHost.el.children.map(c => c.textContent).join(" ") : "";
@@ -920,6 +999,11 @@ try {
   press("ArrowUp", "ArrowUp");
   press("Enter", "Enter");
   check(lastCall() === "take t:wick 0", "4r a step up from the first row marks a suggestion, and Enter takes it: " + lastCall());
+  await Promise.resolve();
+  press("Enter", "Enter");
+  const sgBtnPressed = sgHost.el && sgHost.el.children.find(c => c.getAttribute && c.getAttribute("data-id") === "t:wick");
+  check(lastCall() === 'copy {"id":"a","vi":0}' && sgBtnPressed && sgBtnPressed.getAttribute("aria-pressed") === "true",
+    "4s up, then Enter, then Enter copies row 0 and leaves the intent picked, counted once: " + lastCall());
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
   console.log("\n[5/7] what the shell may not do, read from its text with the comments taken out");
@@ -1223,6 +1307,29 @@ try {
   deskOf([A, B]); copies("c-b", 40); copies("c-a", 9);
   check(RD.rankedCards([], () => true).hits.map(m => m.id).join(" ") === resting && resting.split(" ").slice(-2).join(" ") === "c-a c-b",
     "6m the desk's resting list is the same order with copies counted as without: " + resting.split(" ").slice(-3).join(" "));
+
+  /* Row 1: On a desk where an unlinked card has 5 copies and the linked one has 0, taking the suggestion puts the linked card at row 0. */
+  const bandedRow1 = [
+    { id: "c-linked", c: "orders", t: "Linked reply", en: "Linked text.", intents: ["t:wick"] },
+    { id: "c-unlinked", c: "orders", t: "Unlinked reply", en: "Unlinked text." }
+  ];
+  CM_R2.SW_STORE.en.push("lantern");
+  CM_R2.setIntentIds(["wick"]);
+  IID_R2.snapshotBaseIntents();
+  deskOf([]); AS.setCards(bandedRow1.map(c => Object.assign({}, c)));
+  copies("c-unlinked", 5);
+  AS.setIntentIdxs([]);
+  const tookRow1 = pickAnswer("suggest-take", { id: "t:wick" });
+  check(tookRow1 && tookRow1.rows && tookRow1.rows[0] && tookRow1.rows[0].id === "c-linked",
+    "6o on a desk where an unlinked card has 5 copies and the linked one has 0, taking the suggestion puts the linked card at row 0: "
+    + (tookRow1 && tookRow1.rows ? tookRow1.rows.map(r => r.id).join(" ") : "none"));
+  AS.setIntentIdxs([]);
+  PK.resetPack();
+  CM_R2.SW_STORE.en.length = 0;
+  if (intentsOrig_R2) {
+    CM_R2.setIntentIds(intentsOrig_R2);
+    IID_R2.snapshotBaseIntents();
+  }
 
   TB.tabs.splice(0, TB.tabs.length);
   ST.ssSet(TB.TAB_KEY, "null");
