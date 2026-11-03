@@ -18,6 +18,7 @@
  */
 
 import { createRequire } from "node:module";
+import { quietOrRefuse } from "./quiet-lane.mjs";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
@@ -26,6 +27,8 @@ if (!process.env.ETIUDA_FIXTURES) {
   process.env.ETIUDA_FIXTURES = "C:/Users/maxim/Workspace/etiuda-fixtures";
 }
 
+/* A timing leg decides on a quiet machine only: another run holding a lane is a refusal (78), never a red. */
+quietOrRefuse("tests/theme-presses.mjs");
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
