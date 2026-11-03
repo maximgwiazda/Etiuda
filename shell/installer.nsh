@@ -101,7 +101,7 @@
     ${If} $R7 == 0
       DetailPrint "$R9"
       ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-        nsExec::Exec `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
+        nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
         Pop $R8
       ${EndIf}
       nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close

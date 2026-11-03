@@ -6752,7 +6752,6 @@ function tabsFile() {
 function writeSavedTabs(win) {
   /* plant:installer-keeps-draft */
   try {
-    if (!branchSealable()) return false;
     const windowSessions = [];
     const seenIds = new Set();
     for (const [id, sm] of sessionHeld.entries()) {
@@ -6779,7 +6778,8 @@ function writeSavedTabs(win) {
         } catch (_) {}
       }
     }
-    if (windowSessions.length === 0) return false;
+    if (windowSessions.length === 0) return "empty";
+    if (!branchSealable()) return false;
     const payload = JSON.stringify({ v: 1, windows: windowSessions });
     const sealed = safeStorage.encryptString(payload);
     const file = tabsFile();
@@ -6802,7 +6802,6 @@ function readSavedTabs() {
     const file = tabsFile();
     if (!fs.existsSync(file)) return "";
     const sealed = fs.readFileSync(file);
-    try { fs.unlinkSync(file); } catch (e) {}
     let plain = "";
     try {
       plain = safeStorage.decryptString(sealed);
@@ -6813,6 +6812,7 @@ function readSavedTabs() {
     if (!plain) return "";
     let data;
     try { data = JSON.parse(plain); } catch { return ""; }
+    let result = "";
     if (data && Array.isArray(data.windows)) {
       const allTabs = [];
       const seenIds = new Set();
@@ -6833,10 +6833,13 @@ function readSavedTabs() {
       }
       if (allTabs.length === 0) return "";
       if (!activeTabId && allTabs[0]) activeTabId = allTabs[0].id;
-      return JSON.stringify({ v: 1, tabs: allTabs, activeTabId });
+      result = JSON.stringify({ v: 1, tabs: allTabs, activeTabId });
+    } else if (data && Array.isArray(data.tabs)) {
+      result = plain;
     }
-    if (data && Array.isArray(data.tabs)) {
-      return plain;
+    if (result) {
+      try { fs.unlinkSync(file); } catch (e) {}
+      return result;
     }
     return "";
   } catch (e) {
@@ -6846,8 +6849,8 @@ function readSavedTabs() {
 }
 
 function handleUpdateClose(wins) {
-  if (!branchSealable()) return false;
   const saved = writeSavedTabs();
+  if (saved === false) return false;
   const list = (wins && Array.isArray(wins) ? wins : (typeof BrowserWindow.getAllWindows === "function" ? BrowserWindow.getAllWindows() : []))
     .concat(theWindow ? [theWindow] : []);
   const seen = new Set();
@@ -6857,7 +6860,7 @@ function handleUpdateClose(wins) {
     win.etiudaInstallerClose = true;
     try { win.close(); } catch (_) {}
   }
-  return saved;
+  return saved === true;
 }
 
 ipcMain.on("etiuda:session", (e, op, key, value) => {
@@ -9007,7 +9010,7 @@ function spellingFromPackage(s) {
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
    on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
 const theOnlyOne = app.requestSingleInstanceLock();
-if (!theOnlyOne) {
+if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
   app.quit();
 } else {
   registerEtiudaLink();

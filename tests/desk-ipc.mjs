@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 96;
+const EXPECTED = 98;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1400,6 +1400,45 @@ try {
   } catch (e) { plantDraft = false; }
   check(plantDraft,
     "1152k plant:installer-keeps-draft guards the tab session persistence at external close");
+
+  let writeFailAsks = false;
+  try {
+    const wFail = winFor();
+    const fakeEv = closeEv();
+    const sm = new Map();
+    sm.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-wf", pax: "Customer WriteFail", intentBox: "Draft WriteFail" }], activeTabId: "t-wf" }));
+    mainTest.sessionHeld.set(wFail.webContents.id, sm);
+    const origWriteFileSync = fs.writeFileSync;
+    fs.writeFileSync = () => { throw new Error("Planted disk failure"); };
+    let handled = true;
+    try {
+      handled = mainTest.handleUpdateClose();
+    } catch (_) {
+      handled = false;
+    } finally {
+      fs.writeFileSync = origWriteFileSync;
+    }
+    const held = mainTest.closeHeld(wFail, fakeEv);
+    writeFailAsks = !handled && wFail.closes === 0 && !wFail.etiudaInstallerClose && held && fakeEv.prevented && wFail.sent.includes("etiuda:ask-close");
+    mainTest.sessionHeld.delete(wFail.webContents.id);
+  } catch (e) { writeFailAsks = false; }
+  check(writeFailAsks,
+    "1152o a planted write failure closes nothing and asks");
+
+  let decryptLeavesFile = false;
+  try {
+    const tf = mainTest.tabsFile();
+    const fakePayload = safeStorage.encryptString(JSON.stringify({ v: 1, windows: [{ id: 1, tabs: [{ id: "t-df", pax: "Customer DecFail", intentBox: "Draft DecFail" }], activeTabId: "t-df" }] }));
+    fs.writeFileSync(tf, fakePayload);
+    decryptFails = Buffer.from(fakePayload).toString("base64");
+    const readBack = mainTest.readSavedTabs();
+    const fileStillThere = fs.existsSync(tf);
+    decryptLeavesFile = fileStillThere && readBack === "";
+    try { fs.unlinkSync(tf); } catch (_) {}
+  } catch (e) { decryptLeavesFile = false; }
+  finally { decryptFails = null; }
+  check(decryptLeavesFile,
+    "1152p a failed decrypt leaves the file");
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");

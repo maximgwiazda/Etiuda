@@ -127,6 +127,23 @@ async function main() {
 
     browser2.disconnect();
     E.killTree(child2.pid);
+
+    // First instance launched with --update-close exits at once with no window
+    const tFirst = Date.now();
+    const first = E.shellLaunch(WHO + " 1st", electronExe(),
+      [path.join(E.ROOT, "shell"), "--user-data-dir=" + ud, "--update-close"],
+      { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs }) });
+    let firstExited = false;
+    await new Promise(resolve => {
+      if (first.exitCode !== null) { firstExited = true; return resolve(); }
+      first.on("exit", () => { firstExited = true; resolve(); });
+      setTimeout(resolve, 3000);
+    });
+    const elapsedFirst = Date.now() - tFirst;
+    const firstCleanExit = firstExited && first.exitCode === 0 && elapsedFirst < 3000;
+    if (!firstExited && E.pidAlive(first.pid)) E.killTree(first.pid);
+    check(firstCleanExit,
+      "1152n a first instance with --update-close exits at once with no window (" + elapsedFirst + " ms)");
   } finally {
     if (browser) { try { browser.disconnect(); } catch {} }
     if (child && E.pidAlive(child.pid)) E.killTree(child.pid);
