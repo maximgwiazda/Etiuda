@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 115;
+const EXPECTED = 119;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -92,11 +92,20 @@ let loads = 0;
    settings and none writes them: the key's values, a blank line, then its subkeys. */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const REG_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
-const regDump = values => ["", REG_KEY, ...values.map(([n, ty, v]) => "    " + n + "    " + ty + "    " + v), "",
-  REG_KEY + "\\Connections", REG_KEY + "\\Wpad", ""].join("\r\n");
+const CONN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
+const POLICY_KEY = "HKLM\\Software\\Policies\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+const MACHINE_KEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+const MACHINE_CONN_KEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
+const { connectionsBlob, connDump } = nodeRequire("./reg-stand.cjs");
+const regDump = (values, key) => {
+  const k = key || REG_KEY;
+  return ["", k, ...values.map(([n, ty, v]) => "    " + n + "    " + ty + "    " + v), "",
+    k + "\\Connections", k + "\\Wpad", ""].join("\r\n");
+};
 const QUIET = regDump([["CertificateRevocation", "REG_DWORD", "0x1"], ["ProxyEnable", "REG_DWORD", "0x0"],
   ["User Agent", "REG_SZ", "Mozilla/4.0 (compatible; MSIE 8.0; Win32)"]]);
-/* opts.reg: what the key reads as (text, or an Error for a reg that fails). opts.ready: app.whenReady resolves,
+const QUIET_CONN = connDump(1, CONN_KEY);
+/* opts.reg: what a query reads as (text, an Error for a reg that fails, or a function of its arguments). opts.ready: app.whenReady resolves,
    so the shell boots as far as its window; opts.clock: the
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
    the source to run in place of main.js; opts.app: the folder it runs from; opts.onLine: switches
@@ -144,8 +153,14 @@ function loadShell(opts) {
     if (path.posix.basename(String(file)) === "dbus-send") { busFiles.push(file); busCalls.push(args); busOpts.push(opt); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
     if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
     regCalls.push([file, args, opt]);
-    if (o.reg instanceof Error) throw o.reg;
-    return o.reg === undefined ? QUIET : o.reg;
+    const key = String(args && args[1] || "");
+    const planted = typeof o.reg === "function" ? o.reg(args) : o.reg;
+    if (planted instanceof Error) throw planted;
+    if (planted === undefined) return (key === CONN_KEY || key === MACHINE_CONN_KEY) ? QUIET_CONN : QUIET;
+    if (typeof planted === "string" && (key === CONN_KEY || key === MACHINE_CONN_KEY) && !planted.includes("DefaultConnectionSettings")) {
+      return connDump(1, key);
+    }
+    return planted;
   } };
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   /* A file of the shell's own that main.js requires from beside itself is evaluated here too, so the
@@ -785,9 +800,10 @@ try {
       + " at the foot of the list once the sample moves on: " + editions.length + " edition(s) listed");
   }
   /* ---- 6. Chromium's proxy is chosen from Windows' own setting, before the app is ready ------
-     The key is planted (see REG_TOOL), never read from this machine. 6a to 6h are what a start does
-     with each answer, 6d and 6i the controls that show those can fail, 6j and 6k the reader alone,
-     which is shell/win-proxy.cjs (6m), and 6n the package carrying the files the shell requires. */
+     The keys are planted (see REG_TOOL), never read from this machine. 6a to 6h are what a start does
+     with each answer, 6d, 6i and 6S the controls that show those can fail, 6j and 6k the reader alone,
+     which is shell/win-proxy.cjs (6m), 6n the package carrying the files the shell requires, and 6s to
+     6u a server named only on the machine and automatic detection. */
   {
     const LINE = "for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);";
     const asked = S => S.switches.map(a => a.join("="));
@@ -801,14 +817,16 @@ try {
         "6l off Windows the shell starts no program and asks for no proxy and no lookup: " + JSON.stringify(asked(asLinux))
         + ", " + asLinux.regCalls.length + " program(s)");
       const S = loadShell();
+      const PROXY_ASKS = [["query", POLICY_KEY], ["query", REG_KEY], ["query", CONN_KEY]];
       check(JSON.stringify(asked(S)) === '["no-proxy-server"]',
-        "6a with only automatic detection or nothing set, the shell asks Chromium for --no-proxy-server, once, so an idle"
-        + " desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
-      check(S.regCalls.length === 1 && S.regCalls[0][0] === REG_TOOL
-        && JSON.stringify(S.regCalls[0][1]) === JSON.stringify(["query", REG_KEY])
-        && !!S.regCalls[0][2] && S.regCalls[0][2].windowsHide === true && S.regCalls[0][2].timeout === 5000,
-        "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for one key, once, hidden and"
-        + " given 5000 ms to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
+        "6a with the proxy switched off and automatic detection unset, the shell asks Chromium for --no-proxy-server,"
+        + " so an idle desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
+      check(S.regCalls.length === PROXY_ASKS.length && S.regCalls.every((c, i) => c[0] === REG_TOOL
+        && JSON.stringify(c[1]) === JSON.stringify(PROXY_ASKS[i])
+        && !!c[2] && c[2].windowsHide === true && c[2].timeout === 5000),
+        "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for machine"
+        + " policy, the user's Internet Settings and its Connections key, each once, hidden and given 5000 ms"
+        + " to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
       check(SRC.split(LINE).length === 2, "6c the shell holds its proxy line exactly once, so the control copy can cut it");
       const stripped = SRC.split(LINE).join("");
       const bare = loadShell({ src: stripped });
@@ -826,8 +844,8 @@ try {
       check(JSON.stringify(asked(stale)) === '["no-proxy-server"]',
         "6g a server left in the key while Windows has the proxy switched off is not followed: " + JSON.stringify(asked(stale)));
       const failing = loadShell({ reg: new Error("reg.exe did not answer") });
-      check(JSON.stringify(asked(failing)) === '["no-proxy-server"]',
-        "6h a reg tool that fails leaves today's start, no proxy and no lookup: " + JSON.stringify(asked(failing)));
+      check(JSON.stringify(asked(failing)) === "[]",
+        "6h a reg tool that fails leaves Chromium's resolver: " + JSON.stringify(asked(failing)));
       const stub = loadShell({ src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
         reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
       check(SRC.split(LINE).length === 2 && JSON.stringify(asked(stub)) !== '["proxy-server=proxy.example.test:3128"]'
@@ -862,6 +880,74 @@ try {
       check(beside.length === 3 && notPacked.length === 0,
         "6n every file the shell requires from beside itself is in electron-builder.js's files, or the installed desk would not"
         + " start: " + JSON.stringify(beside) + (notPacked.length ? ", NOT PACKED " + JSON.stringify(notPacked) : ""));
+      /* Windows proxy keys in real shape, planted per query. A key absent from the map fails as reg.exe does for a missing key. */
+      const USER_KEY = REG_KEY;
+      const USER_CONN_KEY = CONN_KEY;
+      const regKeys = (map) => (args) => {
+        const key = String(args && args[1] || "");
+        if (!Object.prototype.hasOwnProperty.call(map, key)) {
+          const e = new Error("the planted key is not there");
+          e.status = 1;
+          return e;
+        }
+        return map[key];
+      };
+      const serverOn = (key, host) => regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", host]], key);
+      const perMachine = loadShell({ reg: regKeys({
+        [POLICY_KEY]: regDump([["ProxySettingsPerUser", "REG_DWORD", "0x0"]], POLICY_KEY),
+        [MACHINE_KEY]: serverOn(MACHINE_KEY, "proxy.example.test:3128"),
+        [MACHINE_CONN_KEY]: connDump(0x03, MACHINE_CONN_KEY),
+      }) });
+      const staleMachine = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY),
+        [MACHINE_KEY]: serverOn(MACHINE_KEY, "stale.example.test:9"),
+        [MACHINE_CONN_KEY]: connDump(0x03, MACHINE_CONN_KEY),
+      }) });
+      check(JSON.stringify(asked(perMachine)) === '["proxy-server=proxy.example.test:3128"]'
+        && JSON.stringify(asked(staleMachine)) === '["no-proxy-server"]',
+        "6s a server named in machine settings is followed under ProxySettingsPerUser 0, and a stale HKLM server"
+        + " is not followed without it: " + JSON.stringify([asked(perMachine), asked(staleMachine)]));
+      const wpad09 = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x09, USER_CONN_KEY),
+      }) });
+      const direct01 = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY),
+      }) });
+      check(JSON.stringify(asked(wpad09)) === "[]" && JSON.stringify(asked(direct01)) === '["no-proxy-server"]',
+        "6t DefaultConnectionSettings flags 0x09 leaves Chromium's resolver, and 0x01 gives no-proxy-server: "
+        + JSON.stringify([asked(wpad09), asked(direct01)]));
+      const failPolicy = loadShell({ reg: regKeys({
+        [POLICY_KEY]: new Error("reg.exe failed"),
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY),
+      }) });
+      const failConn = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: new Error("reg.exe failed"),
+      }) });
+      /* A blob that is there but shorter than 9 bytes has no flags byte: a failed read too (the test architect, 21:06). */
+      const shortConn = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: regDump([["DefaultConnectionSettings", "REG_BINARY", "4600000001000000"]], USER_CONN_KEY),
+      }) });
+      check(JSON.stringify(asked(failPolicy)) === "[]" && JSON.stringify(asked(failConn)) === "[]"
+        && JSON.stringify(asked(shortConn)) === "[]",
+        "6u a failed read of policy or connections, or a Connections blob of 8 bytes, leaves Chromium's resolver: "
+        + JSON.stringify([asked(failPolicy), asked(failConn), asked(shortConn)]));
+      const blind = loadShell({
+        src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
+        reg: regKeys({
+          [POLICY_KEY]: regDump([["ProxySettingsPerUser", "REG_DWORD", "0x0"]], POLICY_KEY),
+          [MACHINE_KEY]: serverOn(MACHINE_KEY, "proxy.example.test:3128"),
+          [MACHINE_CONN_KEY]: connDump(0x03, MACHINE_CONN_KEY),
+        }),
+      });
+      check(SRC.split(LINE).length === 2 && JSON.stringify(asked(blind)) === '["no-proxy-server"]',
+        "6S THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed a per-machine"
+        + " server, does not give the server, so 6s goes red on it: " + JSON.stringify(asked(blind)));
     } finally { Object.defineProperty(process, "platform", platformWas); }
   }
   /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------

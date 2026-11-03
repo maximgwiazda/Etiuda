@@ -32,8 +32,9 @@
  *          the two changes cut out, and it must show the plants where the shipped shell shows none.
  *   runs C and D  each start on a profile of their own, idle, close cleanly and are read from the
  *          Chromium net log they wrote. C is the shell with its proxy switch cut out and must show
- *          proxy discovery, or D's silence means nothing and is NOT RUN; D is the shipped shell and
- *          must show none.
+ *          proxy discovery, or the pair is NOT RUN. D is the shipped shell: where automatic detection
+ *          is left to Chromium (0x09), D discovers too; where proxies are off (0x01), D shows none.
+ *          A named server is proved without a window.
  *
  * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
@@ -663,19 +664,46 @@ async function startOn(appDir, ud) {
   const written = !!mainLog && mainLog.closed && mainLog.events > 0;
   const quiet = !!mainLog && !mainLog.wpad && mainLog.pac === 0 && mainLog.ipv6 === 0;
   const controlShows = !!controlLog && (controlLog.wpad || controlLog.pac > 0);
+  const shippedShows = !!mainLog && (mainLog.wpad || mainLog.pac > 0);
   const said = JSON.stringify({
     main: mainLog ? { closed: mainLog.closed, events: mainLog.events, hosts: mainLog.hosts, pac: mainLog.pac,
       ipv6: mainLog.ipv6, exitedAlone: shipped.exitedAlone } : null,
     control: controlLog ? { closed: controlLog.closed, events: controlLog.events, hosts: controlLog.hosts,
       pac: controlLog.pac } : null });
+  /* The expectation is this tree's reader of Windows' settings. ETIUDA_PROXY_ORACLE names another tree's reader, so an
+     older shell can be measured against a newer reading (the red side of a fix's window run); unset, it is this tree's. */
+  const oracle = process.env.ETIUDA_PROXY_ORACLE || path.join(E.ROOT, "shell", "win-proxy.cjs");
+  const expectedSwitches = require(oracle).windowsProxySwitches();
+  const expectsNone = expectedSwitches.some(s => s[0] === "no-proxy-server");
+  const leavesResolver = expectedSwitches.length === 0;
   /* A quiet control is NOT RUN, never ok: where the shell without its switch does no discovery either,
      this machine cannot tell the switch's absence from its presence. */
-  if (controlLog && !controlShows && written && quiet)
-    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
+  /* NOT RUN only where this machine cannot tell: the shipped log unwritten, a control that does not discover, or a
+     server named, which neither run measures. Otherwise the expectation decides and a mismatch is a FAIL (the test
+     architect, 2026-11-03 22:01): entered only on a match, round 1's fault read NOT RUN here. */
+  /* Which reader decided, in every line: a record says whose expectation it measured. */
+  const told = said + " " + (process.env.ETIUDA_PROXY_ORACLE
+    ? "the expectation is the reader at " + oracle
+    : "the expectation is this tree's own reader, checked against Chromium, not an independent oracle")
+    + ", which asks for " + JSON.stringify(expectedSwitches);
+  const named = expectedSwitches.some(s => s[0] === "proxy-server" || s[0] === "proxy-pac-url");
+  if (!written)
+    notRun.push("C/D proxy discovery: the shipped shell's net log was not written whole: " + told);
+  else if (!controlLog || !controlShows)
+    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + told);
+  else if (named)
+    notRun.push("C/D proxy discovery: this machine names a proxy, which discovery cannot show: " + told);
+  else if (leavesResolver)
+    check(shippedShows,
+      "where the control discovers a proxy, the shipped shell discovers too, so automatic detection is left"
+      + " to Chromium: " + told);
+  else if (expectsNone)
+    check(quiet,
+      "where proxies are off, the shipped shell passes --no-proxy-server and does no discovery, against a control"
+      + " without the switch that does discover: " + told);
   else
-    check(written && quiet && controlShows,
-      "at start the shell does no proxy discovery, so no wpad lookup and no IPv6 probe at idle, read from a log"
-      + " Chromium wrote out at a clean close, against a control without the switch that does discover: " + said);
+    notRun.push("C/D proxy discovery: the shell asks for switches this pair does not read: "
+      + JSON.stringify(expectedSwitches) + " " + told);
 
   reachedEnd = true;
 })().catch(e => {

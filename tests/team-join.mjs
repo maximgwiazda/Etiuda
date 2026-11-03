@@ -4466,7 +4466,7 @@ try {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
 
-check(regStand.held(), "rs1 every reg call was answered by the stand-in, the policy key's at least once and no other key of the machine's hive (Windows), none off it (" + regStand.said() + ")");
+check(regStand.held(), "rs1 every reg call was answered by the stand-in, the policy key's at least once and no stray key of the machine's hive (Windows; the proxy keys are answered as missing), none off it (" + regStand.said() + ")");
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted + skipped < EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");

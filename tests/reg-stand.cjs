@@ -1,6 +1,6 @@
 /* A STAND-IN FOR reg.exe, for the legs that load the real shell/main.js in bare node (tests/team-join.mjs,
  * tests/team-desk.mjs). Until 2026-10-13 those legs ran the real reg.exe: the shell's policy reader exported this
- * machine's HKLM\SOFTWARE\Policies\Etiuda into every case, and shell/win-proxy.cjs queried its HKCU proxy setting. They
+ * machine's HKLM\SOFTWARE\Policies\Etiuda into every case, and shell/win-proxy.cjs queried the proxy keys. They
  * passed only because neither was set here (Clement beta's read of join-policy f7131c5; a Grok read of this file).
  *
  *     const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
@@ -13,9 +13,10 @@
  *   it fails as reg.exe does for a key that is not there, which the shell reads as no policy. With `policy` given as
  *   the text of a .reg export, `reg export <key> <file>` writes it to <file> as reg.exe does: UTF-16LE behind FF FE,
  *   each bare line feed made CRLF. `reg query` of the key with a policy scripted throws, as not stood in.
+ * - The proxy and Connections keys (machine policy, the user, machine settings, and Connections) fail as missing and are
+ *   counted as `proxy`. With `proxy` given as a map or function, `reg query <key>` answers the scripted text.
  * - Any other key under HKLM fails as missing and is counted as `machine`: a second reader of the machine's hive.
- * - Anything else (the HKCU proxy and theme reads) fails as missing and is counted as `user`; the shell reads both
- *   failures as unset.
+ * - Anything else (the theme reads) fails as missing and is counted as `user`.
  * spawn of reg throws, as not stood in, and counts nothing. `regStand.held()` is the line a leg checks.
  *
  * Not covered: a reader that reaches the registry through another program (PowerShell, a native addon). */
@@ -27,13 +28,24 @@ const { syncBuiltinESMExports } = require("node:module");
 const norm = (x) => String(x).replace(/\//g, "\\");
 const HIVE = /^(?:HKLM|HKEY_LOCAL_MACHINE)(?:\\|$)/i;
 const POLICY = /^(?:HKLM|HKEY_LOCAL_MACHINE)\\SOFTWARE\\Policies\\Etiuda(?:\\|$)/i;
+const PROXY = /^(?:HKCU|HKLM|HKEY_CURRENT_USER|HKEY_LOCAL_MACHINE)\\Software\\(?:Policies\\)?Microsoft\\Windows\\CurrentVersion\\Internet Settings(?:\\|$)/i;
 const isReg = (file) => /^reg(\.exe)?$/i.test(path.win32.basename(String(file || "")));
 /* A command line's words, a quoted word whole: enough for `reg export "HKLM\..." "C:\...\policy.reg" /y`. */
 const words = (cmd) => Array.from(String(cmd).matchAll(/"([^"]*)"|(\S+)/g), (m) => (m[1] !== undefined ? m[1] : m[2]));
 
+function connectionsBlob(flags) {
+  const f = (flags !== undefined ? flags : 9) & 0xff;
+  return "4600000002000000" + f.toString(16).padStart(2, "0").toUpperCase() + "00".repeat(47);
+}
+
+function connDump(flags, key) {
+  const k = key || "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
+  return ["", k, "    DefaultConnectionSettings    REG_BINARY    " + connectionsBlob(flags), ""].join("\r\n");
+}
+
 function regStand(real, opts) {
   const o = opts || {};
-  const calls = { export: 0, query: 0, other: 0, machine: 0, user: 0, reached: 0 };
+  const calls = { export: 0, query: 0, other: 0, machine: 0, proxy: 0, user: 0, reached: 0 };
   const orig = {};
   for (const k of ["execFile", "execFileSync", "exec", "execSync", "spawn", "spawnSync"]) orig[k] = real[k];
   const missing = () => {
@@ -56,6 +68,16 @@ function regStand(real, opts) {
         return { stdout: "" };
       }
       throw new Error("reg-stand: only reg export is stood in for a scripted policy, not reg " + verb);
+    }
+    if (keys.some((x) => PROXY.test(x))) {
+      if (count) calls.proxy++;
+      if (o.proxy) {
+        const k = keys.find((x) => PROXY.test(x));
+        const v = typeof o.proxy === "function" ? o.proxy(k, a) : (typeof o.proxy === "object" ? o.proxy[k] : undefined);
+        if (v instanceof Error) return { error: v };
+        if (v !== undefined) return { stdout: String(v) };
+      }
+      return missing();
     }
     if (count) calls[keys.some((x) => HIVE.test(x)) ? "machine" : "user"]++;
     return missing();
@@ -111,10 +133,11 @@ function regStand(real, opts) {
      where the shell reads no policy, no reg call at all. Either way no reg call reached the machine. */
   const held = () => (process.platform === "win32"
     ? policyReads() >= 1 && calls.machine === 0 && calls.reached === 0
-    : policyReads() + calls.machine + calls.user + calls.reached === 0);
+    : policyReads() + calls.machine + calls.proxy + calls.user + calls.reached === 0);
   const said = () => calls.export + " export, " + calls.query + " query, " + calls.other + " other of the policy key, "
-    + calls.machine + " elsewhere in HKLM, " + calls.user + " outside it, " + calls.reached + " past the stand-in";
+    + calls.machine + " elsewhere in HKLM, " + calls.proxy + " proxy, " + calls.user + " outside it, "
+    + calls.reached + " past the stand-in";
   return { calls, held, said, total: policyReads };
 }
 
-module.exports = { regStand };
+module.exports = { regStand, connectionsBlob, connDump };

@@ -44,8 +44,9 @@ function folderSyncerFailed(e) {
 }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
-   Windows' own setting is followed where it names a setup script or a server; automatic detection
-   alone, nothing set or a failed read gives no proxy and no wpad lookup. */
+   Windows' own setting is followed where it names a setup script or a server (per-machine under
+   ProxySettingsPerUser 0). Where none is named and the Connections flags say direct only, no proxy
+   is passed; automatic detection or a failed read leaves Chromium's resolver. */
 const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 
