@@ -5,7 +5,7 @@ import { listEntryEls } from "./entry-walk.js";
 import { render } from "./render.js";
 import { setEntrySel } from "./mark.js";
 import { applyUiLang } from "./repaint.js";
-import { afterShown, markCovered } from "./empty-mark.js";
+import { afterShown, dialogStanding, markCovered } from "./empty-mark.js";
 import { warmMenu } from "./header-menus.js";
 import { ssGet, ssSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
@@ -23,6 +23,19 @@ function markEReady(){
   applyUiLang();
 }
 
+/* THE EMPTY DESK'S FOCUS is its one button: Load catalog takes it where the screen draws it, once nothing else holds the
+   focus and no dialog stands. The search box takes none at open (it is hidden under the launch, and the first typed key
+   reaches it by the page's own routing); a work hidden by the launch cannot take it, so the landing asks again. */
+function focusEmptyLoadOnOpen(){
+  try{
+    const a=document.activeElement;
+    if(a&&a!==document.body) return;
+    if(dialogStanding()) return;
+    const b=document.querySelector("#emptyLoad");
+    if(b) b.focus({preventScroll:true});
+  }catch(_){}
+}
+
 // On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
 // INTENT still receives typing when the user starts typing (global keydown → intent field).
 function focusFirstEntryOnOpen(){
@@ -32,7 +45,7 @@ function focusFirstEntryOnOpen(){
     if(a&&a!==document.body&&typeof a.blur==="function"&&!(a.closest&&a.closest(".modal"))) a.blur();
   }catch(_){}
   const els=listEntryEls();
-  if(!els.length) return;
+  if(!els.length){ focusEmptyLoadOnOpen(); return; }
   const el=els[0];
   const card=el.closest(".card[data-id]");
   if(!card) return;
@@ -68,6 +81,8 @@ function wireOnOpen(){
   focusFirstEntryOnOpen();
   // Re-assert after layout (paint / sticky chrome can steal focus)
   requestAnimationFrame(()=>requestAnimationFrame(focusFirstEntryOnOpen));
+  /* Under a launch the Load button is hidden until the landing, which is when it takes the focus. */
+  formed(focusEmptyLoadOnOpen);
   // A shift crosses 12:00 or 18:00 with the page still open - re-render on the boundary
   // so the greeting never goes stale mid-session.
   lastGreet=greeting();
