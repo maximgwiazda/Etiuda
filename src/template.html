@@ -2188,9 +2188,8 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
-/* THE EMPTY DESK'S MARK (empty-mark.js) stands in for the drawing: the launch's figure on .e-fifth-spot above
-   the words, its canvas over the whole block so the arrival comes from across it, landed in the accent. */
-.empty:has(>.e-fifth-spot)::before,.empty.empty-desk::before{content:none}
+/* THE EMPTY DESK draws no picture of its own: the drawing the other empty states carry is dropped from its block. */
+.empty.empty-desk::before{content:none}
 .empty-desk{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:72px 16px 80px}
 .empty-desk>*{position:relative;z-index:1}
 .empty-desk h2{font:600 26px/1.25 "Segoe UI Variable Display","Segoe UI",sans-serif;margin:0 0 22px;letter-spacing:-.2px;color:var(--ink)}
@@ -2214,7 +2213,7 @@ body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:.001;pointer-events:n
 body.e-launch-out .row-main,body.e-launch-out #intentComboWrap,body.e-launch-out #intentRail,body.e-launch-out #main,
 body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.35s) var(--m-ease) both}
 :root.e-still .e-launch-veil{transition:none}
-:root.e-still body.e-launch-out .row-main,:root.e-still body.e-launch-out #intentComboWrap,:root.e-still body.e-launch-out #intentRail,:root.e-still body.e-launch-out #main{animation:none}
+:root.e-still body.e-launch-out .row-main,:root.e-still body.e-launch-out #intentComboWrap,:root.e-still body.e-launch-out #intentRail,:root.e-still body.e-launch-out #main,:root.e-still body.e-launch-out #pageScroll,:root.e-still body.e-launch-out #pillsSlot{animation:none}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
    is behind it, which everywhere else is a panel; here it is the field, and the dots read
    THROUGH the control. The same colour mixed against the canvas instead of against transparency
@@ -4074,7 +4073,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
       <div class="combo" id="intentComboWrap">
         <input id="intent" placeholder="search intents and cards"
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
-               data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
+               data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="One search: intents rank in the panel, cards filter below">
         <span id="intentPh" aria-hidden="true"></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>

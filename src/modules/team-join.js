@@ -660,7 +660,7 @@ function teamReadingLine(){
 function teamReadingEmptyHtml(){
   const line=teamReadingLine();
   if(!line) return "";
-  return '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>'+esc(line)+'</div>';
+  return '<div class="empty empty-desk">'+esc(line)+'</div>';
 }
 /* The empty desk's block, or "" where there is nothing sealed to say. */
 function teamJoinEmptyHtml(){

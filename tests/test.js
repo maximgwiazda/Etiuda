@@ -551,6 +551,7 @@ function runUnitTests() {
   markClockTests();
   fifthTests();
   launchMarkTests();
+  launchFollowsTests();
   menuWarmTests();
   ecTypeNameTests();
   installerUpdateTests();
@@ -902,7 +903,7 @@ function tourActTests() {
   const loadSays = [x => x, x => PL[x] == null ? x : PL[x]].map(tr => { own.t = tr; return typeof loadStep.body === "function" ? loadStep.body() : ""; });
   own.t = s => s;
   eq("the tour's load step names Load and no sample button, on the desk, in English and in Polish",
-    loadSays.map(b => /Load a catalog|wczytaj katalog/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
+    loadSays.map(b => /<b>Load catalog<\/b>|<b>Wczytaj katalog<\/b>/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
 }
 
 /* THE EMPTY DESK OFFERS LOAD AND NO SAMPLE BUTTON: the sample is a file, and Load reaches it (Maxim,
@@ -2657,7 +2658,7 @@ function markLab(o) {
     joinStands: () => false, heedJoin: () => {},
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
-    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {},
+    focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => {}, greeting: () => "", render: () => {},
     warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
@@ -2963,6 +2964,7 @@ function launchLab(o) {
     sb.fifthPhase = () => 0;
     sb.afterShown = fn => fn();
     sb.focusFirstEntryOnOpen = () => {};
+    sb.focusEmptyLoadOnOpen = () => {};
     sb.greeting = () => "";
     sb.render = () => {};
     sb.warmMenu = () => {};
@@ -3434,6 +3436,111 @@ function launchMarkTests() {
   eq("with a launch arriving the chrome is repainted at boot and the menu's warm copy waits for the landing",
     got, [[1, 0], [["repaint", 0]], [1900]]);
 }
+/* THE LAUNCH REVIEW'S FOLLOWS (board 957, the test architect's triage of 2026-11-03, follows 5, 10 and 11), against the
+   page as its other legs drive it: on-open.js, tour.js, team-join.js and ui-lang.js sliced into a VM over stubs, and the
+   template read as text. No window opens. */
+function launchFollowsTests() {
+  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const vm = require("vm");
+  let got;
+
+  /* The desk's open (on-open.js) over a model of the screen: the active element, a Load button that takes no focus while
+     the launch hides the work, the search box that carries the autofocus the page ships, and the opening's landing, which
+     whenLaunchLanded runs once the launch is over. */
+  const openLab = o => {
+    const code = read("on-open.js").replace(/^import [^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+    let launching = !!o.launching;
+    const frames = [], held = [];
+    const doc = { body: { id: "body", classList: { contains: c => c === "e-launch" && launching && !o.noLaunchClass } }, activeElement: null };
+    const el = (id, modal) => ({ id, closest: s => (modal && s === ".modal" ? { id: "modal" } : null),
+      blur() { if (doc.activeElement === this) doc.activeElement = doc.body; },
+      focus() { if (!launching || o.focusWhileHidden) doc.activeElement = this; } });
+    const intent = el("intent"), load = el("emptyLoad");
+    doc.activeElement = o.startIn ? o.startIn(el) : doc.body;
+    doc.querySelector = s => (s === "#emptyLoad" && o.empty ? load : null);
+    doc.querySelectorAll = s => (s === '[role="dialog"]' && o.shownDialog ? [{ getClientRects: () => [{}] }] : []);
+    const sb = { document: doc, requestAnimationFrame: fn => frames.push(fn), setTimeout: () => 0, setInterval: () => 0,
+      ssGet: () => "1", ssSet: () => {}, mgReduceMotion: () => false, markCovered: () => false, fifthPhase: () => 0,
+      afterShown: fn => fn(), greeting: () => "", render: () => {}, applyUiLang: () => {}, warmMenu: () => {},
+      launchMark: () => ({}), setEntrySel: () => {}, dialogStanding: () => !!o.dialog,
+      listEntryEls: () => (o.cards ? [{ dataset: { v: "0" }, closest: () => ({ dataset: { id: "c1" } }) }] : []),
+      whenLaunchLanded: fn => { if (launching) held.push(fn); else fn(); } };
+    vm.runInNewContext(code, sb);
+    sb.wireOnOpen();
+    for (let i = 0; i < 2; i++) { const run = frames.splice(0); run.forEach(f => f()); }
+    const now = () => doc.activeElement && doc.activeElement.id;
+    const land = () => { launching = false; held.splice(0).forEach(f => f()); };
+    return { doc, el, now, land };
+  };
+
+  try {
+    const a = openLab({ empty: true });
+    const b = openLab({ empty: true, launching: true }), flying = b.now(); b.land();
+    const c = openLab({ cards: true });
+    const d = openLab({ empty: true, dialog: true, startIn: el => el("field", true) });
+    const e = openLab({ empty: true, launching: true }); e.doc.activeElement = e.el("menu"); e.land();
+    got = [a.now(), flying, b.now(), c.now(), d.now(), e.now()];
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957a the empty desk puts focus on #emptyLoad at once, and where the launch hides the work as it lands; cards, a dialog and a control already holding focus keep theirs",
+    got, ["emptyLoad", "body", "emptyLoad", "body", "field", "menu"]);
+
+  try {
+    /* The review's three (Flash, 2026-11-03): an empty desk blurs nothing that holds the focus; the launch's own class
+       keeps the button from the focus even where the browser would let it; a dialog that is not a .modal holds it too. */
+    const f = openLab({ empty: true, startIn: el => el("intent") });
+    const g = openLab({ empty: true, launching: true, focusWhileHidden: true }), gFlying = g.now(); g.land();
+    const h = openLab({ empty: true, shownDialog: true });
+    got = [f.now(), gFlying, g.now(), h.now()];
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957f an empty desk takes the focus from nothing that holds it, waits for the landing under the launch's class, and leaves a shown dialog its focus",
+    got, ["intent", "body", "emptyLoad", "body"]);
+
+  try {
+    const tags = tpl.match(/<[a-z][^<>]*\bautofocus\b[^<>]*>/g) || [];
+    const intentTag = (tpl.match(/<input\b[^<>]*\bid="intent"[^<>]*>/) || [""])[0];
+    got = [!!intentTag, /\bautofocus\b/.test(intentTag), tags.some(t => /\bid="intent"/.test(t))];
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957b no #intent carries autofocus: it is hidden under the launch, and the open decides where focus goes",
+    got, [true, false, false]);
+
+  try {
+    const langSrc = read("ui-lang.js");
+    const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+    const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+    const fn = extractDecl(read("tour.js"), "function loadStepBody(");
+    const says = [];
+    [["desk", "C:/X"], ["browser", ""]].forEach(([form, dir]) => ["en", "pl"].forEach(lang => {
+      const sb = { eCatalogFolderShort: () => dir, esc: s => String(s), t: lang === "pl" ? s => (PL[s] == null ? s : PL[s]) : s => s };
+      vm.runInNewContext(fn + "\nglobalThis.__b = loadStepBody();", sb);
+      const b = sb.__b, want = lang === "pl" ? /Proszę kliknąć <b>Wczytaj katalog<\/b> i wybrać / : /Click <b>Load catalog<\/b> and choose /;
+      says.push([form, lang, want.test(b), !/logo/i.test(b)]);
+    }));
+    got = says;
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957c the tour's load step names Load catalog and no logo, in both forms and both languages",
+    got, [["desk", "en", true, true], ["desk", "pl", true, true], ["browser", "en", true, true], ["browser", "pl", true, true]]);
+
+  try {
+    const tj = read("team-join.js");
+    const fn = extractDecl(tj, "function teamReadingLine(") + "\n" + extractDecl(tj, "function teamReadingEmptyHtml(");
+    const sb = { joinNow: { leads: [{ reading: "Reading the team's folder" }] }, esc: s => String(s) };
+    vm.runInNewContext(fn + "\nglobalThis.__h = teamReadingEmptyHtml();", sb);
+    got = [/class="empty empty-desk"/.test(sb.__h), sb.__h.indexOf("Reading the team's folder") > 0, /e-fifth-spot/.test(sb.__h),
+      /\.empty\.empty-desk::before\{content:none\}/.test(tpl), /e-fifth-spot/.test(tpl)];
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957d the reading-folder state draws no .e-fifth-spot, and no rule is left for a spot nothing draws",
+    got, [true, true, false, true, false]);
+
+  try {
+    const rules = [...tpl.matchAll(/(^|\n)([^\n{]*:root\.e-still body\.e-launch-out[^\n{]*)\{animation:none\}/g)].map(m => m[2]);
+    const sel = rules.join(",");
+    got = [rules.length, ["#main", "#pageScroll", "#pillsSlot"].map(id => sel.indexOf(":root.e-still body.e-launch-out " + id) >= 0)];
+  } catch (x) { got = "the lab threw: " + x.message; }
+  eq("957e the still rule's selector reaches #pageScroll and #pillsSlot as it does #main, the three the launch's give-way animates",
+    got, [1, [true, true, true]]);
+}
+
 /* THE FIFTH TURNING: fifth.js runs in a VM on a frame queue written here, with a header path node that
    keeps what is written to it. The path the markup ships is held to the line the turn strokes, and
    the clock's three promises are measured: it moves, it holds under a quiet switch, and a late
@@ -5705,7 +5812,7 @@ function checkCatalogRoundTrip() {
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 1228;
-const UI_STRINGS_SHA256 = "b17b66222bc3cc90874cb2b34349a4a3965ac234f9dd57b23be3ceb42523c16a";
+const UI_STRINGS_SHA256 = "f14f218a6aa251069e8d664302a2bdc99563a2cdcdf4e00a1b01b3a7dc177bda";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
