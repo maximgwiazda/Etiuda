@@ -14,7 +14,7 @@ const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"
 const TRADEMARK={en:"Etiuda is a trademark of Maxim Gwiazda.", pl:"Etiuda jest znakiem towarowym Maxima Gwiazdy."};
 /* The maker line, under the notice: {STARDUST} becomes the link, whose address is this constant and
    never text from a catalog or the agent. A language without a key reads English. */
-const STARDUST_URL="https://stardustengineering.dev";
+const STARDUST_URL="https://stardustcore.com";
 const MAKER={en:"Made by {STARDUST}.", pl:"Etiuda. Tworzy ją {STARDUST}."};
 /* The licence card's line, both languages on one line so that the wording still open is a one-line swap.
    The other wording: {en:"At work, each person has a subscription of their own.", pl:"W pracy każda osoba ma własną subskrypcję."} */

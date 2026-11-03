@@ -4479,13 +4479,13 @@ function shippedFlagTests() {
   };
   /* [part count, the last part]: the oracle's own copy of the anchor below, so a drift in the source is a difference. */
   const aboutTail = lang => { const p = aboutParts(lang); return typeof p === "string" ? p : [p.length, p[p.length - 1]]; };
-  const STARDUST = '<a href="https://stardustengineering.dev" target="_blank" rel="noopener">Stardust</a>';
+  const STARDUST = '<a href="https://stardustcore.com" target="_blank" rel="noopener">Stardust</a>';
   eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
     [[2, "Made by " + STARDUST + "."], [2, "Etiuda. Tworzy ją " + STARDUST + "."], [2, "Made by " + STARDUST + "."]]);
   eq("About's credit holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l), all = String(p);
-      return typeof p === "string" ? p : [all.split("<a ").length - 1, all.split("https://stardustengineering.dev").length - 1, all.indexOf("Gwiezdny") > -1]; }),
+      return typeof p === "string" ? p : [all.split("<a ").length - 1, all.split("https://stardustcore.com").length - 1, all.indexOf("Gwiezdny") > -1]; }),
     [[1, 1, false], [1, 1, false], [1, 1, false]]);
   eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),

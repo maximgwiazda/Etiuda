@@ -214,7 +214,7 @@ function buildApp() {
       return a ? { href: a.href, target: a.target, rel: a.rel } : null; });
     if (!made) { check(false, leg + "  About's maker line in " + lang + " holds no link to press"); await p.evaluate(() => dismissModal()); continue; }
     r = await act(click("lkAbout"));
-    check(made.target === "_blank" && r.handed.length === 1 && r.handed[0] === "https://stardustengineering.dev/",
+    check(made.target === "_blank" && r.handed.length === 1 && r.handed[0] === "https://stardustcore.com/",
       leg + "  a real click on About's Stardust link in " + lang + " hands the company's address: " + JSON.stringify(made) + ", " + say(r));
     await p.evaluate(() => { const a = document.getElementById("lkAbout"); if (a) a.removeAttribute("id"); dismissModal(); });
     await sleep(300);
