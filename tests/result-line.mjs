@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 96;
+const EXPECTED = 98;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -422,6 +422,60 @@ function inheritLegs() {
     "18k the tool with the by-name line cut out inherits the test that reads the changed fixture, which is the gap: planted " + kLab.planted + " "
     + summary("then", kRun));
 }
+
+function realProfileTouchLegs() {
+  const chainLines = file => { try { return fs.readFileSync(file, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) { return []; } };
+  const standIn = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-standin-"));
+  labs.push(standIn);
+  const standInEtiuda = path.join(standIn, "etiuda");
+  fs.mkdirSync(standInEtiuda, { recursive: true });
+  fs.writeFileSync(path.join(standInEtiuda, "desk.json"), "original content");
+
+  const cleanLab = makeLab("rp-untouched", {
+    clean: prints(1, 0, "process.exit(0);"),
+  });
+  const cleanPkg = JSON.parse(fs.readFileSync(path.join(cleanLab.lab, "package.json"), "utf8"));
+  cleanPkg.scripts = { test: "node tests/clean.mjs" };
+  fs.writeFileSync(path.join(cleanLab.lab, "package.json"), JSON.stringify(cleanPkg, null, 2) + "\n");
+  const cleanChains = path.join(cleanLab.root, "chains.jsonl");
+  const cleanRun = run(cleanLab, ["release"], null, {
+    ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+    ETIUDA_LOCK_PATH: path.join(cleanLab.root, "machine.lock"),
+    ETIUDA_CHAINS_PATH: cleanChains,
+    ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+  });
+  const cleanLine = chainLines(cleanChains).pop() || null;
+  check(cleanRun.exit === 0 && !!cleanLine && cleanLine.holds === false
+    && (!cleanLine.reds || cleanLine.reds.length === 0),
+    "19a an untouched profile run does not hold: exit 0, holds false");
+
+  const touchedLab = makeLab("rp-touched", {
+    toucher: [
+      'import fs from "node:fs";',
+      'import path from "node:path";',
+      'const root = process.env.ETIUDA_REAL_PROFILE_OVERRIDE;',
+      'fs.writeFileSync(path.join(root, "etiuda", "intruder.json"), "touched");',
+      'console.log("  ok   touched leg");',
+      'process.exit(0);',
+    ].join("\n"),
+  });
+  const touchedPkg = JSON.parse(fs.readFileSync(path.join(touchedLab.lab, "package.json"), "utf8"));
+  touchedPkg.scripts = { test: "node tests/toucher.mjs" };
+  fs.writeFileSync(path.join(touchedLab.lab, "package.json"), JSON.stringify(touchedPkg, null, 2) + "\n");
+  const touchedChains = path.join(touchedLab.root, "chains.jsonl");
+  const touchedRun = run(touchedLab, ["release"], null, {
+    ETIUDA_NIGHTLY_ALLOW_TEMP: "1",
+    ETIUDA_LOCK_PATH: path.join(touchedLab.root, "machine.lock"),
+    ETIUDA_CHAINS_PATH: touchedChains,
+    ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+  });
+  const touchedLine = chainLines(touchedChains).pop() || null;
+  const touchedReds = touchedLine ? touchedLine.reds : [];
+  check(touchedRun.exit === 78 && !!touchedLine && touchedLine.holds === true
+    && touchedReds.some(r => r.cause && r.cause.indexOf("touched the real profile") > -1 && r.class === "hold" && r.gate === "release"),
+    "19b a profile run touching the stand-in real profile is held and named: exit 78, holds true, red named release with 'touched the real profile'");
+}
+
 
 async function main() {
   check(fs.existsSync(TOOL), "0 the tool is there: " + TOOL);
@@ -1806,6 +1860,9 @@ async function main() {
 
   /* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (see inheritLegs) ----------- */
   inheritLegs();
+
+  /* ---- 19. REAL PROFILE TOUCH DETECTION IN AREA AND PROFILE RUNS --------------------------------- */
+  realProfileTouchLegs();
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }

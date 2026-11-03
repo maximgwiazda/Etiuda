@@ -33,6 +33,98 @@ const NO_VERDICT = 78;
 const DEFAULT_LOCK_PATH = "C:/Users/maxim/Workspace/etiuda-runs/machine.lock";
 export const LOCK_PATH = path.resolve(process.env.ETIUDA_LOCK_PATH || DEFAULT_LOCK_PATH);
 
+export function getRealProfileSnapshotFolders() {
+  if (process.env.ETIUDA_REAL_PROFILE_OVERRIDE) {
+    const root = process.env.ETIUDA_REAL_PROFILE_OVERRIDE;
+    return [
+      path.join(root, "etiuda"),
+      path.join(root, "Etiuda Studio"),
+    ];
+  }
+  let roaming = "";
+  if (process.platform === "win32") {
+    try {
+      roaming = execFileSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-Command",
+        "[System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::ApplicationData)"
+      ], { encoding: "utf8", timeout: 10000, windowsHide: true }).trim();
+    } catch {}
+  }
+  if (!roaming) roaming = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  return [
+    path.join(roaming, "etiuda"),
+    path.join(roaming, "Etiuda Studio"),
+  ];
+}
+
+export function takeRealProfileSnapshot() {
+  const roots = getRealProfileSnapshotFolders();
+  const snap = {};
+  for (const root of roots) {
+    if (!fs.existsSync(root)) {
+      snap[root] = null;
+      continue;
+    }
+    const items = {};
+    const walk = dir => {
+      let entries = [];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        const rel = path.relative(root, full).replace(/\\/g, "/");
+        try {
+          const st = fs.statSync(full);
+          items[rel] = { size: st.size, mtimeMs: Math.round(st.mtimeMs), isDir: e.isDirectory() };
+          if (e.isDirectory()) walk(full);
+        } catch {}
+      }
+    };
+    walk(root);
+    snap[root] = items;
+  }
+  return snap;
+}
+
+export function compareRealProfileSnapshots(snapBefore, snapAfter) {
+  const changed = [];
+  if (!snapBefore || !snapAfter) return changed;
+  for (const root of Object.keys(snapBefore)) {
+    const bItems = snapBefore[root];
+    const aItems = snapAfter[root];
+    const base = path.basename(root);
+    if (bItems === null && aItems === null) continue;
+    if (bItems === null && aItems !== null) {
+      changed.push(base + " created");
+      for (const rel of Object.keys(aItems)) {
+        changed.push(base + "/" + rel);
+      }
+      continue;
+    }
+    if (bItems !== null && aItems === null) {
+      changed.push(base + " removed");
+      continue;
+    }
+    const allKeys = new Set([...Object.keys(bItems), ...Object.keys(aItems)]);
+    for (const rel of allKeys) {
+      const b = bItems[rel];
+      const a = aItems[rel];
+      if (!b) {
+        changed.push(base + "/" + rel + " added");
+      } else if (!a) {
+        changed.push(base + "/" + rel + " removed");
+      } else if (b.size !== a.size || Math.abs(b.mtimeMs - a.mtimeMs) > 1000) {
+        changed.push(base + "/" + rel + " modified");
+      }
+    }
+  }
+  return changed;
+}
+
+
 
 /* The relay core for an unmapped engine relay file, the test architect's choice (2026-10-28 00:13): the five relay files
    once each, whole, about three minutes. No single-leg switch exists in relay-unit or relay-channel, so legs named one by one
@@ -1163,6 +1255,12 @@ async function main() {
     if (asked.includes("test")) isHeavy = true;
   }
 
+  const checkRealProfile = (mode === "area") || inProfile;
+  let realProfileSnapBefore = null;
+  if (checkRealProfile) {
+    realProfileSnapBefore = takeRealProfileSnapshot();
+  }
+
   let before = fingerprint();
   let tree = gitTree();
   const COMMIT = git(["rev-parse", "--short", "HEAD"]);
@@ -1311,6 +1409,23 @@ async function main() {
     before = after;
     if (res.exit !== 0 && isWarn) { console.log("  gate-run: " + line.gate + " is a HYGIENE leg and red in the " + gateLabel + " profile: a warn, the run goes on"); continue; }
     if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }
+  }
+
+  if (checkRealProfile && realProfileSnapBefore) {
+    const realProfileSnapAfter = takeRealProfileSnapshot();
+    const diff = compareRealProfileSnapshots(realProfileSnapBefore, realProfileSnapAfter);
+    if (diff.length) {
+      const names = diff.join(", ");
+      console.log("  FAIL touched the real profile: " + names);
+      redsList.push({
+        gate: gateLabel,
+        cmd: "gate-run " + gateLabel,
+        exit: 78,
+        cause: "touched the real profile: " + names,
+        class: "hold",
+      });
+      worst = worst || 78;
+    }
   }
 
   const runEnd = new Date().toISOString();

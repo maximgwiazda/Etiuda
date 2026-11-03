@@ -99,7 +99,7 @@ const WANT_VERSION = (/E_VERSION\s*=\s*"([^"]+)"/.exec(fs.readFileSync(path.join
 const TREE_PKG = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
 const sha = buf => crypto.createHash("sha256").update(buf).digest("hex");
 const shaFile = f => { try { return sha(fs.readFileSync(f)); } catch (e) { return null; } };
-const listing = d => { try { return fs.readdirSync(d).sort(); } catch (e) { return []; } };
+const listing = d => E.safeListing(d);
 
 /* ---- the lab and the scratch home ----------------------------------------------------------- */
 
@@ -108,6 +108,8 @@ const H = P.scratchHome(LAB);
 const CHILD_ENV = Object.assign({}, process.env, H.env);
 const UD = path.join(H.places.ApplicationData, P.userDataName(TREE_PKG));
 const DOCS_ETIUDA = path.join(H.documents, "Etiuda");
+E.realProfileGuard(UD);
+E.realProfileGuard(DOCS_ETIUDA);
 const PROG = path.join(LAB, "prog");           /* the update leg's install folder */
 const PM = path.join(LAB, "pm");               /* the all-users install folder */
 const PU = path.join(LAB, "pu");               /* A10's plain per-user install */
@@ -355,6 +357,7 @@ async function updateLeg(newer) {
   const doc = JSON.parse(fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8"));
   doc.id = "desk-notes"; doc.name = "Desk notes"; delete doc.sample; doc.cards = doc.cards.slice(0, 12);
   fs.mkdirSync(DOCS_ETIUDA, { recursive: true });
+  E.realProfileGuard(path.join(DOCS_ETIUDA, "desk-notes.ec"));
   fs.writeFileSync(path.join(DOCS_ETIUDA, "desk-notes.ec"), JSON.stringify(doc), "utf8");
   let s = await launch(PROG);
   await s.p.evaluate(SKIP_TOUR);
