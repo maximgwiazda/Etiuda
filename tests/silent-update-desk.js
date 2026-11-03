@@ -6,7 +6,7 @@
  * An installer-style close (taskkill without /F) with a tab holding a draft exits
  * within the installer's wait (20s), and the next start shows the draft.
  *
- * WALLED BEHIND ETIUDA_WINDOWS. Never opens a window when ETIUDA_WINDOWS is not set.
+ * WALLED BEHIND THE WINDOW WALL. Never opens a window when the variable is not set.
  *
  * Exit code is the number of failed checks, capped at 63; 78 where the run produced no verdict.
  */
