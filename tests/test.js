@@ -2805,13 +2805,13 @@ function markClockTests() {
     got, [[["tour", 1900, 1]], [["tour", 300, 1]]]);
 
   try {
-    // The mark landing at 1700; then no mark, where the second frame comes 20 ms after boot.
+    // With a mark and without one: the chrome's language is applied as wireOnOpen runs, before either frame.
     const c = markLab(); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20); c.land(1700); c.timersTo(4000);
     const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
     got = [c.log, n.log];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the boot repaint waits for the mark to land, and without one comes on the second frame as before",
-    got, [[["repaint", 1700]], [["repaint", 20]]]);
+  eq("the chrome speaks its language from the first paint: applyUiLang runs at boot, not deferred to the landing",
+    got, [[["repaint", 0]], [["repaint", 0]]]);
 
   try {
     const c = markLab(); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20); c.land(1700); c.timersTo(4000);
@@ -2856,9 +2856,14 @@ class LaunchSyncPromise {
 }
 function launchLab(o) {
   o = o || {};
-  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "launch-mark.js"), "utf8")
+  let src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "launch-mark.js"), "utf8")
     .replace(/^import[^\n]*\n/gm, "")
     .replace(/export\s*\{[^}]*\};?\s*$/, "");
+  if (o.open) {
+    const openFile = fs.readFileSync(path.join(E.ROOT, "src", "modules", "on-open.js"), "utf8");
+    src += "\n" + ["let eReadyDone=", "let lastGreet;", "function markEReady(", "function deskLaunch(", "function wireOnOpen("]
+      .map(m => extractDecl(openFile, m)).join("\n");
+  }
   let clock = 0, seq = 0, frames = [], timers = [];
   const drawn = { arc: 0, image: 0 }, heard = [], ros = [];
   const ctx = new Proxy({}, { get: (t, k) => k === "arc" ? () => { drawn.arc++; } : k === "drawImage" ? () => { drawn.image++; }
@@ -2876,18 +2881,63 @@ function launchLab(o) {
       remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(x => x !== this); this.parentNode = null; },
       contains(x) { for (; x; x = x.parentNode) if (x === this) return true; return false; },
       querySelector(s) {
-        const want = s.replace(/^\./, "");
-        for (const c of this.children) { if ((" " + c.className + " ").indexOf(" " + want + " ") >= 0) return c; const d = c.querySelector(s); if (d) return d; }
+        const isId = s.charAt(0) === "#";
+        const want = isId ? s.slice(1) : s.replace(/^\./, "");
+        for (const c of this.children) {
+          const hit = isId ? c.id === want : (" " + c.className + " ").indexOf(" " + want + " ") >= 0;
+          if (hit) return c;
+          const d = c.querySelector(s);
+          if (d) return d;
+        }
         return null;
       },
-      getContext: () => ctx, focus() { doc.activeElement = e; }, value: "", fired: [], dispatchEvent(ev) { this.fired.push(ev.type); }
+      getContext: () => ctx, focus() { doc.activeElement = e; }, value: "", fired: [], dispatchEvent(ev) { this.fired.push(ev.type); },
+      scrollTop: 0, scrollLeft: 0, click() { this.dispatchEvent({ type: "click" }); }
     };
     const set = new Set();
     e.classList = { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c) || (" " + e.className + " ").indexOf(" " + c + " ") >= 0 };
     return e;
   }
   doc.body = el("body"); doc.documentElement = el("html");
-  doc.createElement = t => t === "div" ? el(t, { left: 300, top: 180, width: 980, height: 580 }) : el(t);
+  doc.createElement = t => {
+    const e = t === "div" ? el(t, { left: 300, top: 180, width: 980, height: 580 }) : el(t);
+    if (t === "canvas") {
+      let w = 0, h = 0;
+      e.sizeSets = 0;
+      Object.defineProperty(e, "width", { get() { return w; }, set(v) { w = v >>> 0; e.sizeSets++; } });
+      Object.defineProperty(e, "height", { get() { return h; }, set(v) { h = v >>> 0; } });
+    }
+    return e;
+  };
+  const takesPointer = n => {
+    if (!n || n === doc.documentElement) return false;
+    if (n.style && n.style.pointerEvents === "none") return false;
+    if (n.classList && n.classList.contains("e-going")) return false;
+    if ((" " + (n.className || "") + " ").indexOf(" e-opening ") >= 0) return false;
+    if (doc.body.classList && doc.body.classList.contains("e-launch")) {
+      for (let a = n; a && a !== doc.body; a = a.parentNode) {
+        if (a.id === "pageScroll" || a.id === "pillsSlot" || a.id === "main" || a.id === "intentRail" || a.id === "intentComboWrap") return false;
+        if ((" " + (a.className || "") + " ").indexOf(" row-main ") >= 0) return false;
+      }
+    }
+    return true;
+  };
+  const covers = (n, x, y) => {
+    if (n.classList && n.classList.contains("e-launch-veil")) return true;
+    const r = n.rect;
+    return !!(r && r.width > 0 && r.height > 0 && x >= r.left && y >= r.top && x < r.left + r.width && y < r.top + r.height);
+  };
+  doc.elementFromPoint = (x, y) => {
+    let found = null;
+    const walk = n => {
+      if (!n || n === doc.documentElement) return;
+      if (takesPointer(n) && covers(n, x, y)) found = n;
+      for (const c of n.children || []) walk(c);
+    };
+    walk(doc.body);
+    return found;
+  };
+  doc.querySelector = s => doc.body.querySelector(s);
   const sb = {
     document: doc, Promise: LaunchSyncPromise, devicePixelRatio: 1, innerHeight: 760,
     performance: { now: () => clock },
@@ -2904,6 +2954,20 @@ function launchLab(o) {
   };
   sb.window = sb;
   sb.setFifthPhase = phi => { sb.lastSetFifthPhase = phi; };
+  if (o.open) {
+    sb.ssGet = () => null;
+    sb.ssSet = () => {};
+    sb.mgReduceMotion = () => !!o.still;
+    sb.markCovered = () => false;
+    sb.fifthPhase = () => 0;
+    sb.afterShown = fn => fn();
+    sb.focusFirstEntryOnOpen = () => {};
+    sb.greeting = () => "";
+    sb.render = () => {};
+    sb.warmMenu = () => {};
+    sb.setInterval = () => 0;
+    sb.applyUiLang = () => { if (typeof o.onLang === "function") o.onLang(); };
+  }
   require("vm").runInNewContext(src + "\nfunction __k(){ return lmK; }\nfunction __R(){ return LAUNCH_R; }\nfunction __phase(k, ms){ return lmPhaseAt(k, ms); }\n", sb);
   // Each lab's spot stands at a fixed place in its veil; the region is the dot field's box.
   const region = el("div", { left: 300, top: 180, width: 980, height: 580 });
@@ -2940,6 +3004,14 @@ function launchLab(o) {
   const resize = () => ros.forEach(r => r.fn([]));
   return { sb, doc, el, timersTo, send, launch, ready: () => open(), frames: () => frames.length, frame, play, resize, drawn, heard,
     k: () => sb.__k(), now: () => clock };
+}
+/* The engine's own Polish for one chrome word, read through t() with the interface language stored as pl. */
+function polishWord(en) {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8")
+    .replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const box = { lsGet: k => k === "eUiLang" ? "pl" : null, navigator: { languages: ["pl-PL"], language: "pl-PL" } };
+  require("vm").runInNewContext(src + "\nglobalThis.__t = t;\n", box);
+  return box.__t(en);
 }
 function launchMarkTests() {
   const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
@@ -3079,6 +3151,27 @@ function launchMarkTests() {
     got, [true, true, true, true]);
 
   try {
+    /* One 6 ms gap at 60 Hz, and a switch from 120 Hz to 60 Hz, each land by the clock. */
+    const onTime = (r, every) => r[0] === "time" && r[1] <= 3250 + 3 * every;
+    const landBy = stamps => {
+      const L = launchLab(), h = L.launch(); L.ready();
+      L.frame(0);
+      for (let i = 0; i < stamps.length && !h.reason; i++) L.frame(stamps[i]);
+      return [h.reason, L.now()];
+    };
+    const d60 = 1000 / 60, d120 = 1000 / 120;
+    const six = [6];
+    for (let t = 6 + d60; t < 7000; t += d60) six.push(t);
+    const sw = [];
+    for (let t = d120; t < 1500; t += d120) sw.push(t);
+    for (let t = sw[sw.length - 1] + d60; t < 7000; t += d60) sw.push(t);
+    const a = landBy(six), b = landBy(sw);
+    got = [onTime(a, d60), a[0] !== "failsafe", onTime(b, d60), b[0] !== "failsafe"];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("at 60 Hz with one 6 ms gap early, and with a 120 Hz to 60 Hz switch mid-flight, the landing comes within three frames of 3.25 s and not by the failsafe",
+    got, [true, true, true, true]);
+
+  try {
     /* THE FAILSAFE FIRING MID-FLIGHT cuts cleanly to the end state with the corner mark at the flight's phase. */
     const L = launchLab();
     const h = L.launch();
@@ -3115,6 +3208,86 @@ function launchMarkTests() {
       ["click", 400, true, true, "140ms", [false, true], true, false, false, 0],
       ["click", 400, false, false, "140ms", [false, true], true, false, false, 0],
       ["wheel", 400, false, false, "140ms", [false, true], true, false, false, 0]]);
+
+  try {
+    const press = () => {
+      const L = launchLab();
+      const scroll = L.el("div");
+      scroll.id = "pageScroll";
+      scroll.rect = { left: 0, top: 0, width: 1000, height: 800 };
+      const btn = L.el("button");
+      btn.rect = { left: 40, top: 80, width: 160, height: 40 };
+      scroll.appendChild(btn);
+      L.doc.body.appendChild(scroll);
+      const h = L.launch();
+      L.frame(50);
+      const e = L.send("pointerdown", h.veil, { clientX: 80, clientY: 100, button: 0 });
+      return [h.reason === "click" && !!h.ended, btn.fired.indexOf("click") >= 0, !e.prevented && !e.stopped];
+    };
+    const spin = () => {
+      const L = launchLab();
+      const scroll = L.el("div");
+      scroll.id = "pageScroll";
+      scroll.rect = { left: 0, top: 0, width: 1000, height: 800 };
+      L.doc.body.appendChild(scroll);
+      const h = L.launch();
+      L.frame(50);
+      L.send("wheel", h.veil, { clientX: 200, clientY: 200, deltaY: 40 });
+      return [h.reason === "wheel" && !!h.ended, scroll.scrollTop];
+    };
+    got = [press(), spin()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("during the flight a click on a button presses it and the opening is over, and a wheel scrolls the list",
+    got, [[true, true, true], [true, 40]]);
+
+  try {
+    const sized = dpr => {
+      const L = launchLab();
+      L.sb.devicePixelRatio = dpr;
+      L.sb.innerWidth = 1281;
+      L.sb.innerHeight = 769;
+      const h = L.launch();
+      L.ready();
+      L.play(3400);
+      const canvas = h.veil.querySelector(".e-opening");
+      return [canvas ? canvas.sizeSets : -1, h.reason];
+    };
+    got = [sized(1.25), sized(1.5)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("at dpr 1.25 and 1.5 the canvas is sized once across the opening",
+    got, [[1, "time"], [1, "time"]]);
+
+  let word = "";
+  try {
+    word = polishWord("Settings");
+    const boot = (still, skip) => {
+      const L = launchLab({ still: still, open: true });
+      const btn = L.el("button");
+      btn.textContent = "Settings";
+      const header = L.el("header");
+      header.appendChild(btn);
+      const region = L.el("div");
+      const field = L.el("div");
+      field.id = "dotField";
+      field.appendChild(region);
+      L.doc.body.appendChild(header);
+      L.doc.body.appendChild(field);
+      const orig = L.doc.querySelector;
+      L.doc.querySelector = s => s === "#dotField>div" ? region : s === "header" ? header : orig(s);
+      L.sb.applyUiLang = () => { btn.textContent = word; };
+      L.sb.wireOnOpen();
+      const atBoot = btn.textContent;
+      L.frame(16);
+      if (skip) L.send("keydown", L.doc.body, { key: "a" });
+      const atFrame = btn.textContent;
+      L.timersTo(500);
+      const reason = typeof L.sb.launchState === "function" ? L.sb.launchState() : null;
+      return [atBoot, atFrame, skip ? (reason && reason.reason) : true, L.now() < 1000];
+    };
+    got = [boot(true, false), boot(false, true)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a Polish desk under reduced motion, and one skipped at once, shows Polish chrome in its first frame",
+    got, [[word, word, true, true], [word, word, "key", true]]);
 
   try {
     const L = launchLab(), h = L.launch(); L.play(200); L.ready(); L.play(3300);
@@ -3214,13 +3387,14 @@ function launchMarkTests() {
       [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0]]);
 
   try {
-    // with a launch arriving, the boot repaint and the menu's warm copy wait for it to land
+    // with a launch arriving, the chrome is already repainted and the menu's warm copy is what waits
     const held = [], c = markLab(); c.sb.whenLaunchLanded = fn => held.push(fn); c.sb.wireOnOpen();
     c.frame(10); c.frame(20); c.timersTo(1000); const before = [c.log.length, c.warms.length];
     held.forEach(f => f()); c.timersTo(4000);
     got = [before, c.log, c.warms];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("with a launch arriving the boot repaint and the menu's warm copy wait for it to land", got, [[0, 0], [["repaint", 1000]], [1900]]);
+  eq("with a launch arriving the chrome is repainted at boot and the menu's warm copy waits for the landing",
+    got, [[1, 0], [["repaint", 0]], [1900]]);
 }
 /* THE FIFTH TURNING: fifth.js runs in a VM on a frame queue written here, with a header path node that
    keeps what is written to it. The path the markup ships is held to the line the turn strokes, and

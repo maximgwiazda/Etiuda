@@ -370,6 +370,13 @@ function launchMark(opts) {
   let lastFrameTime = t0;
   let framed = false;
   let frameGap = 1000 / 60;
+  /* The median of the last five counted gaps, from a 60 Hz start. A stall is longer than
+     two of these and longer than a 60 Hz frame, so it is not a sample: sampling it would lift the two-frame cap. */
+  const gapSamples = [frameGap, frameGap, frameGap, frameGap, frameGap];
+  const medianGap = () => {
+    const s = gapSamples.slice().sort((a, b) => a - b);
+    return s[(s.length - 1) >> 1];
+  };
 
   const off = [];
   const on = (el, ev, fn, opt) => {
@@ -506,15 +513,52 @@ function launchMark(opts) {
     }
   });
 
+  /* The veil ends the opening and then gets out of the way. The hit is read after that,
+     so a control under the pointer takes the click; an empty part of the veil still eats it. */
+  const controlOf = node => {
+    for (let n = node; n && n !== body && n !== (doc && doc.documentElement); n = n.parentNode) {
+      if (veil && (n === veil || (veil.contains && veil.contains(n)))) continue;
+      const tag = String(n.tagName || "").toLowerCase();
+      if (tag === "button" || tag === "a" || tag === "input" || tag === "select" || tag === "textarea") return n;
+      if (typeof n.getAttribute === "function" && n.getAttribute("role") === "button") return n;
+      const cls = " " + (typeof n.className === "string" ? n.className : "") + " ";
+      if (cls.indexOf(" card ") >= 0 || cls.indexOf(" pill ") >= 0) return n;
+    }
+    return null;
+  };
+  const controlUnder = e => {
+    if (!e || typeof e.clientX !== "number" || !doc || typeof doc.elementFromPoint !== "function") return null;
+    return controlOf(doc.elementFromPoint(e.clientX, e.clientY));
+  };
   on(win, "pointerdown", e => {
-    if (e.target === veil || (veil && veil.contains && veil.contains(e.target))) {
+    const onVeil = !!(veil && (e.target === veil || (veil.contains && veil.contains(e.target))));
+    giveWay("click");
+    const ctrl = controlUnder(e);
+    if (ctrl) {
+      if (typeof ctrl.focus === "function") {
+        try { ctrl.focus({ preventScroll: true }); } catch (_) { try { ctrl.focus(); } catch (__) {} }
+      }
+      if (onVeil && (e.button == null || e.button === 0) && typeof ctrl.click === "function") ctrl.click();
+    } else if (onVeil) {
       e.preventDefault();
       e.stopPropagation();
     }
-    giveWay("click");
   }, true);
   on(win, "keydown", () => giveWay("key"), true);
-  on(win, "wheel", () => giveWay("wheel"), { passive: true, capture: true });
+  on(win, "wheel", e => {
+    const x = e && e.clientX, y = e && e.clientY;
+    const dy = e ? +e.deltaY || 0 : 0;
+    const dx = e ? +e.deltaX || 0 : 0;
+    giveWay("wheel");
+    if (typeof x !== "number" || !doc || typeof doc.elementFromPoint !== "function") return;
+    for (let n = doc.elementFromPoint(x, y); n && n !== (doc && doc.documentElement); n = n.parentNode) {
+      if (n.id === "pageScroll") {
+        if (dy && typeof n.scrollTop === "number") n.scrollTop += dy;
+        if (dx && typeof n.scrollLeft === "number") n.scrollLeft += dx;
+        return;
+      }
+    }
+  }, { passive: true, capture: true });
 
   if (win) {
     win.__launchOpeningState = () => ({
@@ -570,7 +614,11 @@ function launchMark(opts) {
   function drawFrame(now) {
     if (state.ended) return;
     const dt = Math.max(0, now - lastFrameTime);
-    if (framed && dt >= SHORTEST_FRAME_MS) frameGap = Math.min(frameGap, dt);
+    if (framed && dt >= SHORTEST_FRAME_MS && dt <= Math.max(2 * frameGap, 1000 / 60) + 1e-4) {
+      gapSamples.push(dt);
+      gapSamples.shift();
+      frameGap = medianGap();
+    }
     const step = Math.min(dt, 2 * frameGap);
     framed = true;
     lastFrameTime = Math.max(lastFrameTime, now);
@@ -588,10 +636,14 @@ function launchMark(opts) {
 
     if (ctx && canvas) {
       const dpr = (win && win.devicePixelRatio) || 1;
-      if (canvas.width !== curW * dpr || canvas.height !== curH * dpr) {
-        canvas.width = curW * dpr;
-        canvas.height = curH * dpr;
-        if (ctx.scale) ctx.scale(dpr, dpr);
+      /* canvas.width is an integer. Compare the rounded device pixels, or a fractional
+         scale allocates the backing store on every frame. */
+      const bw = Math.round(curW * dpr), bh = Math.round(curH * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh;
+        if (ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        else if (ctx.scale) ctx.scale(dpr, dpr);
       }
       const ground = getGroundRgb(doc);
       if (ctx.clearRect) ctx.clearRect(0, 0, curW, curH);

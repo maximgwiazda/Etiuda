@@ -55,14 +55,10 @@ function deskLaunch(){
 
 function wireOnOpen(){
   deskLaunch();
+  /* The saved interface language is on the chrome before the first paint. The landing
+     waits only for what must follow it: the menu's warm copy, drawn once nothing moves. */
+  markEReady();
   const formed=fn=>whenLaunchLanded(fn);
-  /* Boot is painted, so a saved interface language may repaint the chrome. Two frames, so the
-     first paint and the frame that settles after it are both behind us. With a timeout behind
-     THAT, because rAF DOES NOT RUN IN A HIDDEN TAB: restored into a background tab the class
-     would never arrive - the same trap that kept schedulePillsCollapse's two-frame wait from
-     ever firing there. First one wins, and neither lands inside the mark's arrival, the launch's or the empty desk's. */
-  requestAnimationFrame(()=>requestAnimationFrame(()=>formed(markEReady)));
-  setTimeout(()=>formed(markEReady),300);
   /* The menu's warm copy (header-menus.js, warmMenu) is drawn while nothing moves: once the mark has
      formed, MENU_WARM_MS on, when the page is idle. */
   const MENU_WARM_MS=900;
