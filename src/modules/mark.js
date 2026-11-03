@@ -39,6 +39,7 @@ function noteCopy(){
 }
 function copy(text,msg,stamped){
   noteCopy();
+  try{ const h=eHost(); if(h && typeof h.noteOwnText==="function") h.noteOwnText(text); }catch(e){}
   const done=()=>toast(msg,0,false,stamped);
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(text).then(done,()=>fallback(text,done));

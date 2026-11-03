@@ -187,6 +187,7 @@ export const SCANS = {
   "tests/tab-focus.mjs": ["src/template.html", "src/modules/list-pointer.js", "src/modules/run-shortcut.js", "src/modules/tabs.js", "shell/main.js", "shell/preload.js", "src/modules/host.js"],
   "tests/shell-office.mjs": ["shell/*.ec"],
   "tests/pick.mjs": ["shell/*.js", "src/modules/*.js", "src/main.js", "shell/caret.cs", "electron-builder.js", "src/modules/tour.js", "src/modules/pick.js"],
+  "tests/clip-suggest.mjs": ["src/modules/clip-suggest.js", "shell/clip-suggest.cjs", "src/modules/pick.js", "shell/main.js"],
   "tests/module-calls.mjs": ["src/template.html", "src/modules/deck.js"],
   "tests/team-join.mjs": ["src/template.html", "src/modules/ui-lang.js", "shell/main.js", "src/modules/catalog-trust.js"],
   "tests/relay-blob.mjs": ["relay/test/target-contract.md", "shell/main.js"],
