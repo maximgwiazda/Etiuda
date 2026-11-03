@@ -554,6 +554,7 @@ function runUnitTests() {
   menuWarmTests();
   ecTypeNameTests();
   installerUpdateTests();
+  installerTurningTests();
   pageWatchTests();
   recoveryWindowTests();
   shippedFlagTests();
@@ -3538,6 +3539,24 @@ function nsisInstallWrites(root, cfg) {
    and an update leaves the installed files in place until the new ones are copied. Read as text from shell/installer.nsh,
    beside electron-builder's own templates, which call the two macros in place of their own steps; then each plant lifted
    from the text, and both macros inserted under makensis's preprocessor, which expands what LogicLib writes of them. */
+/* THE TURNING'S CARRIAGE (board 954, the test architect's read 2026-11-03 11:54 and 12:22): a silent run unpacks no frames,
+   a failed or partial unpack never stops an install or an uninstall, and the pages keep the still when a frame is absent.
+   Read as text from shell/installer.nsh. */
+function installerTurningTests() {
+  let nsh = "";
+  try { nsh = fs.readFileSync(path.join(E.ROOT, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
+  const turn = (text) => {
+    const macro = (name) => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
+    const guarded = (m) => /\$\{IfNot\} \$\{Silent\}[\s\S]*Nsis7z::Extract[\s\S]*\$\{EndIf\}/.test(m)
+      && m.indexOf("${IfNot} ${Silent}") < m.indexOf("Nsis7z::Extract") && !/\bAbort\b|\bQuit\b/.test(m);
+    return [guarded(macro("customInit")), guarded(macro("customUnInit")),
+      /\$\{If\} \$\{FileExists\} "\$PLUGINSDIR\\turn\\sidebar-000\.bmp"\r?\n[^\n]*\r?\n[^\n]*\r?\n\s*nsDialogs::CreateTimer/.test(text),
+      /\$\{If\} \$\{FileExists\} \$4\r?\n\s*System::Call 'user32::LoadImage/.test(text),
+      !/\$\{If\} \$\{Errors\}/.test(macro("customInit") + macro("customUnInit"))];
+  };
+  eq("the turning's frames unpack only when the run is not silent, in the installer and the uninstaller, with no Abort or Quit there; the timer starts only once the first frame exists; each frame is read only if it exists; and no inert error check claims a guard",
+    turn(nsh), [true, true, true, true, true]);
+}
 function installerUpdateTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   const tpl = n => fs.readFileSync(path.join(lib, "templates", "nsis", n), "utf8");

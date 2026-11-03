@@ -158,11 +158,9 @@
     StrCpy $0 $OUTDIR
     SetOutPath "$PLUGINSDIR\turn"
     File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
-    ClearErrors
+    # Nsis7z::Extract answers nothing and sets no error flag; what guards a failed or partial
+    # extraction is the FileExists before the timer and before every frame, so the still stays.
     Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
-    ${If} ${Errors}
-      ClearErrors
-    ${EndIf}
     Delete "$PLUGINSDIR\turn\turning.7z"
     SetOutPath "$0"
     Pop $0
@@ -177,11 +175,9 @@
     StrCpy $0 $OUTDIR
     SetOutPath "$PLUGINSDIR\turn"
     File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
-    ClearErrors
+    # Nsis7z::Extract answers nothing and sets no error flag; what guards a failed or partial
+    # extraction is the FileExists before the timer and before every frame, so the still stays.
     Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
-    ${If} ${Errors}
-      ClearErrors
-    ${EndIf}
     Delete "$PLUGINSDIR\turn\turning.7z"
     SetOutPath "$0"
     Pop $0
