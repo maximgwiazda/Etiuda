@@ -131,6 +131,18 @@ function bumpLang(pack, lang, at){
   const b=statsDay(pack, at);
   b.l[code]=(b.l[code]|0)+1;
 }
+/* A suggestion taken, and an opening that showed any, as counts only. The day's bucket gains
+   g or o on the first of that kind, so a day with neither keeps the shape it had. */
+function bumpSuggest(pack, at){
+  pack.suggestTaken=(pack.suggestTaken|0)+1;
+  const b=statsDay(pack, at);
+  b.g=(b.g|0)+1;
+}
+function bumpSuggestOpen(pack, at){
+  pack.suggestOpen=(pack.suggestOpen|0)+1;
+  const b=statsDay(pack, at);
+  b.o=(b.o|0)+1;
+}
 /* A departed card's day counts go with its lifetime tally; keep(id) says which ids stay. Every
    rebuild asks, so the days are walked only when the ids that would go differ from the last walk. */
 const STATS_FORGOT=new WeakMap();
@@ -225,14 +237,17 @@ function statsDoc(pack, info){
   let uc=(pack&&pack.useCounts)||{}, at=(pack&&pack.useAt)||{}, ic=(pack&&pack.intentCounts)||{};
   let misses=(pack&&pack.searchMisses)|0;
   let lc=(pack&&pack.langs&&typeof pack.langs==="object"&&!Array.isArray(pack.langs))?pack.langs:{};
+  let suggestTaken=(pack&&pack.suggestTaken)|0, suggestOpen=(pack&&pack.suggestOpen)|0;
   let since="";
   const pr=new Map();
   if(spanned){
     const days=(pack&&pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days))?pack.days:{};
     const ids=(pack&&Array.isArray(pack.dayIds))?pack.dayIds:[];
-    uc={}; at={}; ic={}; lc={}; misses=0;
+    uc={}; at={}; ic={}; lc={}; misses=0; suggestTaken=0; suggestOpen=0;
     Object.keys(days).filter(d=>STATS_YMD.test(d)&&d>=from&&d<=to).sort().forEach(d=>{
       const b=days[d]||{};
+      suggestTaken+=b.g|0;
+      suggestOpen+=b.o|0;
       Object.keys(b.c||{}).forEach(k=>{
         const id=ids[k], n=b.c[k]|0;
         if(id!=null&&n){ uc[id]=(uc[id]|0)+n; at[id]=d; }
@@ -279,6 +294,8 @@ function statsDoc(pack, info){
   if(spanned) doc.since=since;
   Object.assign(doc,{cards,intents,misses,langs});
   if(pr.size) doc.pairs=[...pr.values()].sort((x,y)=>y.n-x.n || (x.from<y.from ? -1 : x.from>y.from ? 1 : 0) || (x.to<y.to ? -1 : x.to>y.to ? 1 : 0));
+  if(suggestTaken>0) doc.suggestTaken=suggestTaken;
+  if(suggestOpen>0) doc.suggestOpen=suggestOpen;
   if(info&&info.catalog&&info.catalog.id){
     doc.catalog={id:String(info.catalog.id),rev:+info.catalog.rev||0};
   }
@@ -292,6 +309,8 @@ export {
   bumpLang,
   bumpMiss,
   bumpPair,
+  bumpSuggest,
+  bumpSuggestOpen,
   bumpUse,
   statsDoc,
   statsLearntAfter,

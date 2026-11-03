@@ -233,7 +233,7 @@ function startPillCatAdd(addEl){
 /* THE FLIPS ANSWER THE SWITCH AT THEIR CAPTURE: one handed nothing plays nothing, and every
    caller already treats an empty capture as "redraw, do not animate". Same in the two below. */
 function capturePills(){
-  if(mgReduceMotion()) return null;
+  if(!pills || mgReduceMotion()) return null;
   const before=new Map();
   pills.querySelectorAll(".pill").forEach(p=>{ const k=pillKey(p); if(k!==undefined) before.set(k,p.getBoundingClientRect()); });
   return before;

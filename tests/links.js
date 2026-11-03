@@ -90,7 +90,7 @@ function buildApp() {
   outCalls = count;
   fs.writeFileSync(path.join(APP, "shell", "main.js"), lab, "utf8");
   fs.writeFileSync(path.join(APP, "shell", "preload.js"), pre, "utf8");
-  for (const f of ["win-proxy.cjs", "page-watch.cjs"])
+  for (const f of ["win-proxy.cjs", "page-watch.cjs", "clip-suggest.cjs"])
     fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(APP, "shell", f));
   fs.writeFileSync(path.join(APP, "package.json"),
     JSON.stringify({ name: "etiuda-links-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");

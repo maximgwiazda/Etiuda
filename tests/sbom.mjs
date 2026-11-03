@@ -319,14 +319,14 @@ async function main() {
 
   /* ---- 7. THE RELEASE LEAVES ONE BESIDE THE INSTALLER --------------------------------------- */
   /* A throwaway repository with the real release script and its imports, stub npm scripts, and a
-     stub package step that writes a fourteen-byte installer and a real twelve-file app.asar, the
-     release's allowlist (twelve since the folder syncer, 2026-11-01). Every gate then runs and the last two are the
+     stub package step that writes a fourteen-byte installer and a real thirteen-file app.asar, the
+     release's allowlist (thirteen since the suggestion scorer). Every gate then runs and the last two are the
      ones after the document is written. */
   const STUB_PACKAGE = [
     "import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module';",
     "const asar = createRequire(import.meta.url)(process.env.ETIUDA_TEST_ASAR);",
     "const dist = process.env.ETIUDA_DIST; const src = path.join(dist, '..', 'stage');",
-    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/folder/syncer-worker.cjs', 'shell/folder/syncer.cjs',"
+    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/clip-suggest.cjs', 'shell/folder/syncer-worker.cjs', 'shell/folder/syncer.cjs',"
     + " 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',"
     + " 'shell/relay/blob.cjs', 'shell/relay/channel.cjs', 'shell/sample-catalog.ec', 'shell/win-proxy.cjs']) {",
     "  fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), 'x\\n'); }",
