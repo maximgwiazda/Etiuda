@@ -788,8 +788,9 @@ body.e-backdrop .row::before{
 @keyframes e-pick-spin{to{transform:rotate(360deg)}}
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
-   handler owns the angle; reduced motion skips the increment there. The inner group takes
-   an instant 180deg rotation under light theme to cancel the ink swap at any angle. */
+   handler owns the angle and sets the duration from the angle still to turn; reduced
+   motion skips the increment there. The inner group takes an instant 180deg rotation
+   under light theme to cancel the ink swap at any angle. */
 #theme svg{transition:transform var(--m-roll) linear}
 #theme svg g{transform-origin:10px 10px}
 :root[data-theme=light] #theme svg g{transform:rotate(180deg)}

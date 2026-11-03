@@ -1,5 +1,5 @@
 import { lsGet, lsSet } from "./storage.js";
-import { mgReduceMotion } from "./motion.js";
+import { mgReduceMotion, M_MS } from "./motion.js";
 
 /* Theme follows the SYSTEM until the user says otherwise; a stored choice always wins
    and is never overwritten - someone who picked light on a dark machine meant it. While
@@ -20,14 +20,44 @@ function themeTrace(){
 function traceNote(row){
   lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)));
 }
-/* Half a revolution per press, accumulating. */
+/* One half-turn per press at the roll tier's rate. A press during a turn lengthens
+   it from the angle already reached. The inline rotate() is the target, not the
+   angle mid-turn: that one is the running transition. */
+let rollFrom=0, rollTo=0;
+function declaredAngle(ic){
+  const m=/rotate\(\s*([-\d.]+)deg\)/.exec(ic.style.transform||"");
+  return m ? Number(m[1]) : null;
+}
+function rollAngle(ic){
+  const anims=typeof ic.getAnimations==="function" ? ic.getAnimations() : [];
+  const anim=anims.filter(a=>a && a.transitionProperty==="transform" && a.playState!=="finished").pop();
+  if(anim){
+    const timing=anim.effect && anim.effect.getComputedTiming();
+    const dur=Number(timing && timing.duration)||0;
+    const ct=Number(anim.currentTime);
+    const p=dur>0 && Number.isFinite(ct) ? Math.min(1, Math.max(0, ct/dur)) : 0;
+    return rollFrom+(rollTo-rollFrom)*p;
+  }
+  const declared=declaredAngle(ic);
+  return declared==null ? 0 : declared;
+}
 function noteRoll(){
   if(mgReduceMotion()) return;
   const ic=document.querySelector("#theme svg");
   if(!ic) return;
-  const turns=(+ic.dataset.eTurns||0)+1;
-  ic.dataset.eTurns=turns;
-  ic.style.transform="rotate("+(turns*180)+"deg)";
+  const from=rollAngle(ic);
+  const turns=(Number(ic.dataset.eTurns)||0)+1;
+  const to=turns*180;
+  ic.dataset.eTurns=String(turns);
+  const delta=Math.max(0, to-from);
+  const ms=Math.round(M_MS.roll*delta/180);
+  rollFrom=from;
+  rollTo=to;
+  ic.style.transition="none";
+  ic.style.transform="rotate("+from+"deg)";
+  void ic.offsetWidth;
+  ic.style.transition="transform "+ms+"ms linear";
+  ic.style.transform="rotate("+to+"deg)";
 }
 /* THE THEME LANDS AT ONCE, as Studio's does: the attribute in the press's own task, and each control
    eases its own colours on the sheet's tiers. Nothing waits on the host. */
