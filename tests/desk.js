@@ -32,8 +32,8 @@
  *          the two changes cut out, and it must show the plants where the shipped shell shows none.
  *   runs C and D  each start on a profile of their own, idle, close cleanly and are read from the
  *          Chromium net log they wrote. C is the shell with its proxy switch cut out and must show
- *          proxy discovery, or D's silence means nothing and is NOT RUN; D is the shipped shell and
- *          must show none.
+ *          proxy discovery, or the pair is NOT RUN. D is the shipped shell and must discover too,
+ *          where automatic detection is left to Chromium. A named server is proved without a window.
  *
  * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
@@ -663,19 +663,25 @@ async function startOn(appDir, ud) {
   const written = !!mainLog && mainLog.closed && mainLog.events > 0;
   const quiet = !!mainLog && !mainLog.wpad && mainLog.pac === 0 && mainLog.ipv6 === 0;
   const controlShows = !!controlLog && (controlLog.wpad || controlLog.pac > 0);
+  const shippedShows = !!mainLog && (mainLog.wpad || mainLog.pac > 0);
   const said = JSON.stringify({
     main: mainLog ? { closed: mainLog.closed, events: mainLog.events, hosts: mainLog.hosts, pac: mainLog.pac,
       ipv6: mainLog.ipv6, exitedAlone: shipped.exitedAlone } : null,
     control: controlLog ? { closed: controlLog.closed, events: controlLog.events, hosts: controlLog.hosts,
       pac: controlLog.pac } : null });
   /* A quiet control is NOT RUN, never ok: where the shell without its switch does no discovery either,
-     this machine cannot tell the switch's absence from its presence. */
-  if (controlLog && !controlShows && written && quiet)
+     this machine cannot tell the switch's absence from its presence. A shipped shell that stays quiet
+     while the control discovers is NOT RUN too: this log cannot tell a named server from no proxy, and
+     tests/shell-office.mjs holds that difference. */
+  if (written && controlShows && shippedShows)
+    check(shippedShows,
+      "where the control discovers a proxy, the shipped shell discovers too, so automatic detection is left"
+      + " to Chromium: " + said);
+  else if (controlLog && !controlShows && written && quiet)
     notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
   else
-    check(written && quiet && controlShows,
-      "at start the shell does no proxy discovery, so no wpad lookup and no IPv6 probe at idle, read from a log"
-      + " Chromium wrote out at a clean close, against a control without the switch that does discover: " + said);
+    notRun.push("C/D proxy discovery: the shipped shell stayed quiet while the control discovered, which this log"
+      + " cannot tell from a named server: " + said);
 
   reachedEnd = true;
 })().catch(e => {

@@ -134,7 +134,7 @@ const FS_IO = ["statSync", "lstatSync", "readFileSync", "writeFileSync", "append
   "readFile", "writeFile"];
 function regCalls() {
   const c = regStand.calls;
-  return c.export + c.query + c.other + c.machine + c.user + c.reached;
+  return c.export + c.query + c.other + c.machine + c.proxy + c.user + c.reached;
 }
 function ioDuring(fn) {
   const fsMod = nodeRequire("node:fs");
