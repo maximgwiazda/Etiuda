@@ -151,29 +151,41 @@
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
 !macro customInit
-  InitPluginsDir
-  CreateDirectory "$PLUGINSDIR\turn"
-  Push $0
-  StrCpy $0 $OUTDIR
-  SetOutPath "$PLUGINSDIR\turn"
-  File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
-  Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
-  Delete "$PLUGINSDIR\turn\turning.7z"
-  SetOutPath "$0"
-  Pop $0
+  ${IfNot} ${Silent}
+    InitPluginsDir
+    CreateDirectory "$PLUGINSDIR\turn"
+    Push $0
+    StrCpy $0 $OUTDIR
+    SetOutPath "$PLUGINSDIR\turn"
+    File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
+    ClearErrors
+    Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
+    ${If} ${Errors}
+      ClearErrors
+    ${EndIf}
+    Delete "$PLUGINSDIR\turn\turning.7z"
+    SetOutPath "$0"
+    Pop $0
+  ${EndIf}
 !macroend
 
 !macro customUnInit
-  InitPluginsDir
-  CreateDirectory "$PLUGINSDIR\turn"
-  Push $0
-  StrCpy $0 $OUTDIR
-  SetOutPath "$PLUGINSDIR\turn"
-  File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
-  Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
-  Delete "$PLUGINSDIR\turn\turning.7z"
-  SetOutPath "$0"
-  Pop $0
+  ${IfNot} ${Silent}
+    InitPluginsDir
+    CreateDirectory "$PLUGINSDIR\turn"
+    Push $0
+    StrCpy $0 $OUTDIR
+    SetOutPath "$PLUGINSDIR\turn"
+    File "${BUILD_RESOURCES_DIR}\installer\turning.7z"
+    ClearErrors
+    Nsis7z::Extract "$PLUGINSDIR\turn\turning.7z"
+    ${If} ${Errors}
+      ClearErrors
+    ${EndIf}
+    Delete "$PLUGINSDIR\turn\turning.7z"
+    SetOutPath "$0"
+    Pop $0
+  ${EndIf}
 !macroend
 
 Var TurnFrame
@@ -201,10 +213,12 @@ Var TurnReady
     StrCpy $TurnHwnd 0
     StrCpy $TurnKind ""
     StrCpy $TurnBmp 0
-    Push $0
-    GetFunctionAddress $0 ${TURN_PFX}TurnTick
-    nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
-    Pop $0
+    ${If} ${FileExists} "$PLUGINSDIR\turn\sidebar-000.bmp"
+      Push $0
+      GetFunctionAddress $0 ${TURN_PFX}TurnTick
+      nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
+      Pop $0
+    ${EndIf}
   FunctionEnd
 
   Function ${TURN_PFX}TurnPage
@@ -284,15 +298,17 @@ Var TurnReady
       ${Else}
         StrCpy $4 "$PLUGINSDIR\turn\sidebar-$3.bmp"
       ${EndIf}
-      System::Call 'user32::LoadImage(p 0, t r4, i 0, i r1, i r2, i 0x10) p.r5'
-      ${If} $5 != 0
-        SendMessage $TurnHwnd 0x172 0 $5 $6
-        ${If} $TurnBmp != 0
-        ${AndIf} $6 == $TurnBmp
-          StrCpy $1 $TurnBmp
-          System::Call 'gdi32::DeleteObject(p r1)'
+      ${If} ${FileExists} $4
+        System::Call 'user32::LoadImage(p 0, t r4, i 0, i r1, i r2, i 0x10) p.r5'
+        ${If} $5 != 0
+          SendMessage $TurnHwnd 0x172 0 $5 $6
+          ${If} $TurnBmp != 0
+          ${AndIf} $6 == $TurnBmp
+            StrCpy $1 $TurnBmp
+            System::Call 'gdi32::DeleteObject(p r1)'
+          ${EndIf}
+          StrCpy $TurnBmp $5
         ${EndIf}
-        StrCpy $TurnBmp $5
       ${EndIf}
     ${EndIf}
     Pop $R0
