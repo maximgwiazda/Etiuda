@@ -13,8 +13,8 @@
  *   it fails as reg.exe does for a key that is not there, which the shell reads as no policy. With `policy` given as
  *   the text of a .reg export, `reg export <key> <file>` writes it to <file> as reg.exe does: UTF-16LE behind FF FE,
  *   each bare line feed made CRLF. `reg query` of the key with a policy scripted throws, as not stood in.
- * - The three proxy keys (machine policy, the user, machine settings) fail as missing and are counted as `proxy`.
- *   The shell reads that as no proxy configured. They are not a stray read of the machine's hive.
+ * - The proxy and Connections keys (machine policy, the user, machine settings, and Connections) fail as missing and are
+ *   counted as `proxy`. With `proxy` given as a map or function, `reg query <key>` answers the scripted text.
  * - Any other key under HKLM fails as missing and is counted as `machine`: a second reader of the machine's hive.
  * - Anything else (the theme reads) fails as missing and is counted as `user`.
  * spawn of reg throws, as not stood in, and counts nothing. `regStand.held()` is the line a leg checks.
@@ -32,6 +32,16 @@ const PROXY = /^(?:HKCU|HKLM|HKEY_CURRENT_USER|HKEY_LOCAL_MACHINE)\\Software\\(?
 const isReg = (file) => /^reg(\.exe)?$/i.test(path.win32.basename(String(file || "")));
 /* A command line's words, a quoted word whole: enough for `reg export "HKLM\..." "C:\...\policy.reg" /y`. */
 const words = (cmd) => Array.from(String(cmd).matchAll(/"([^"]*)"|(\S+)/g), (m) => (m[1] !== undefined ? m[1] : m[2]));
+
+function connectionsBlob(flags) {
+  const f = (flags !== undefined ? flags : 9) & 0xff;
+  return "4600000002000000" + f.toString(16).padStart(2, "0").toUpperCase() + "00".repeat(47);
+}
+
+function connDump(flags, key) {
+  const k = key || "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
+  return ["", k, "    DefaultConnectionSettings    REG_BINARY    " + connectionsBlob(flags), ""].join("\r\n");
+}
 
 function regStand(real, opts) {
   const o = opts || {};
@@ -61,6 +71,12 @@ function regStand(real, opts) {
     }
     if (keys.some((x) => PROXY.test(x))) {
       if (count) calls.proxy++;
+      if (o.proxy) {
+        const k = keys.find((x) => PROXY.test(x));
+        const v = typeof o.proxy === "function" ? o.proxy(k, a) : (typeof o.proxy === "object" ? o.proxy[k] : undefined);
+        if (v instanceof Error) return { error: v };
+        if (v !== undefined) return { stdout: String(v) };
+      }
       return missing();
     }
     if (count) calls[keys.some((x) => HIVE.test(x)) ? "machine" : "user"]++;
@@ -124,4 +140,4 @@ function regStand(real, opts) {
   return { calls, held, said, total: policyReads };
 }
 
-module.exports = { regStand };
+module.exports = { regStand, connectionsBlob, connDump };

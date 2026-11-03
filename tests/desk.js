@@ -32,8 +32,9 @@
  *          the two changes cut out, and it must show the plants where the shipped shell shows none.
  *   runs C and D  each start on a profile of their own, idle, close cleanly and are read from the
  *          Chromium net log they wrote. C is the shell with its proxy switch cut out and must show
- *          proxy discovery, or the pair is NOT RUN. D is the shipped shell and must discover too,
- *          where automatic detection is left to Chromium. A named server is proved without a window.
+ *          proxy discovery, or the pair is NOT RUN. D is the shipped shell: where automatic detection
+ *          is left to Chromium (0x09), D discovers too; where proxies are off (0x01), D shows none.
+ *          A named server is proved without a window.
  *
  * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
@@ -669,19 +670,23 @@ async function startOn(appDir, ud) {
       ipv6: mainLog.ipv6, exitedAlone: shipped.exitedAlone } : null,
     control: controlLog ? { closed: controlLog.closed, events: controlLog.events, hosts: controlLog.hosts,
       pac: controlLog.pac } : null });
+  const expectedSwitches = require(path.join(E.ROOT, "shell", "win-proxy.cjs")).windowsProxySwitches();
+  const expectsNone = expectedSwitches.some(s => s[0] === "no-proxy-server");
+  const leavesResolver = expectedSwitches.length === 0;
   /* A quiet control is NOT RUN, never ok: where the shell without its switch does no discovery either,
-     this machine cannot tell the switch's absence from its presence. A shipped shell that stays quiet
-     while the control discovers is NOT RUN too: this log cannot tell a named server from no proxy, and
-     tests/shell-office.mjs holds that difference. */
-  if (written && controlShows && shippedShows)
+     this machine cannot tell the switch's absence from its presence. */
+  if (controlLog && !controlShows && written && quiet)
+    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
+  else if (leavesResolver && written && controlShows && shippedShows)
     check(shippedShows,
       "where the control discovers a proxy, the shipped shell discovers too, so automatic detection is left"
       + " to Chromium: " + said);
-  else if (controlLog && !controlShows && written && quiet)
-    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
+  else if (expectsNone && written && controlShows && quiet)
+    check(quiet,
+      "where proxies are off, the shipped shell passes --no-proxy-server and does no discovery, against a control"
+      + " without the switch that does discover: " + said);
   else
-    notRun.push("C/D proxy discovery: the shipped shell stayed quiet while the control discovered, which this log"
-      + " cannot tell from a named server: " + said);
+    notRun.push("C/D proxy discovery: the proxy setting did not match discovery on this machine: " + said);
 
   reachedEnd = true;
 })().catch(e => {

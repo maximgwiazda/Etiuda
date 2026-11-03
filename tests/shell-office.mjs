@@ -92,8 +92,11 @@ let loads = 0;
    settings and none writes them: the key's values, a blank line, then its subkeys. */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const REG_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+const CONN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
 const POLICY_KEY = "HKLM\\Software\\Policies\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 const MACHINE_KEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+const MACHINE_CONN_KEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
+const { connectionsBlob, connDump } = nodeRequire("./reg-stand.cjs");
 const regDump = (values, key) => {
   const k = key || REG_KEY;
   return ["", k, ...values.map(([n, ty, v]) => "    " + n + "    " + ty + "    " + v), "",
@@ -101,6 +104,7 @@ const regDump = (values, key) => {
 };
 const QUIET = regDump([["CertificateRevocation", "REG_DWORD", "0x1"], ["ProxyEnable", "REG_DWORD", "0x0"],
   ["User Agent", "REG_SZ", "Mozilla/4.0 (compatible; MSIE 8.0; Win32)"]]);
+const QUIET_CONN = connDump(1, CONN_KEY);
 /* opts.reg: what a query reads as (text, an Error for a reg that fails, or a function of its arguments). opts.ready: app.whenReady resolves,
    so the shell boots as far as its window; opts.clock: the
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
@@ -149,9 +153,14 @@ function loadShell(opts) {
     if (path.posix.basename(String(file)) === "dbus-send") { busFiles.push(file); busCalls.push(args); busOpts.push(opt); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
     if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
     regCalls.push([file, args, opt]);
+    const key = String(args && args[1] || "");
     const planted = typeof o.reg === "function" ? o.reg(args) : o.reg;
     if (planted instanceof Error) throw planted;
-    return planted === undefined ? QUIET : planted;
+    if (planted === undefined) return (key === CONN_KEY || key === MACHINE_CONN_KEY) ? QUIET_CONN : QUIET;
+    if (typeof planted === "string" && (key === CONN_KEY || key === MACHINE_CONN_KEY) && !planted.includes("DefaultConnectionSettings")) {
+      return connDump(1, key);
+    }
+    return planted;
   } };
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   /* A file of the shell's own that main.js requires from beside itself is evaluated here too, so the
@@ -808,15 +817,16 @@ try {
         "6l off Windows the shell starts no program and asks for no proxy and no lookup: " + JSON.stringify(asked(asLinux))
         + ", " + asLinux.regCalls.length + " program(s)");
       const S = loadShell();
-      const PROXY_ASKS = [["query", POLICY_KEY], ["query", REG_KEY], ["query", MACHINE_KEY]];
+      const PROXY_ASKS = [["query", POLICY_KEY], ["query", REG_KEY], ["query", CONN_KEY]];
       check(JSON.stringify(asked(S)) === '["no-proxy-server"]',
         "6a with the proxy switched off and automatic detection unset, the shell asks Chromium for --no-proxy-server,"
         + " so an idle desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
       check(S.regCalls.length === PROXY_ASKS.length && S.regCalls.every((c, i) => c[0] === REG_TOOL
         && JSON.stringify(c[1]) === JSON.stringify(PROXY_ASKS[i])
         && !!c[2] && c[2].windowsHide === true && c[2].timeout === 5000),
-        "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for three keys,"
-        + " each once, hidden and given 5000 ms to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
+        "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for machine"
+        + " policy, the user's Internet Settings and its Connections key, each once, hidden and given 5000 ms"
+        + " to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
       check(SRC.split(LINE).length === 2, "6c the shell holds its proxy line exactly once, so the control copy can cut it");
       const stripped = SRC.split(LINE).join("");
       const bare = loadShell({ src: stripped });
@@ -834,8 +844,8 @@ try {
       check(JSON.stringify(asked(stale)) === '["no-proxy-server"]',
         "6g a server left in the key while Windows has the proxy switched off is not followed: " + JSON.stringify(asked(stale)));
       const failing = loadShell({ reg: new Error("reg.exe did not answer") });
-      check(JSON.stringify(asked(failing)) === '["no-proxy-server"]',
-        "6h a reg tool that fails leaves today's start, no proxy and no lookup: " + JSON.stringify(asked(failing)));
+      check(JSON.stringify(asked(failing)) === "[]",
+        "6h a reg tool that fails leaves Chromium's resolver: " + JSON.stringify(asked(failing)));
       const stub = loadShell({ src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
         reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
       check(SRC.split(LINE).length === 2 && JSON.stringify(asked(stub)) !== '["proxy-server=proxy.example.test:3128"]'
@@ -870,8 +880,9 @@ try {
       check(beside.length === 3 && notPacked.length === 0,
         "6n every file the shell requires from beside itself is in electron-builder.js's files, or the installed desk would not"
         + " start: " + JSON.stringify(beside) + (notPacked.length ? ", NOT PACKED " + JSON.stringify(notPacked) : ""));
-      /* Three fixed keys, planted per query. A key absent from the map fails as reg.exe does for a missing key. */
+      /* Windows proxy keys in real shape, planted per query. A key absent from the map fails as reg.exe does for a missing key. */
       const USER_KEY = REG_KEY;
+      const USER_CONN_KEY = CONN_KEY;
       const regKeys = (map) => (args) => {
         const key = String(args && args[1] || "");
         if (!Object.prototype.hasOwnProperty.call(map, key)) {
@@ -882,47 +893,55 @@ try {
         return map[key];
       };
       const serverOn = (key, host) => regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", host]], key);
-      const policyOnly = loadShell({ reg: regKeys({ [POLICY_KEY]: serverOn(POLICY_KEY, "proxy.example.test:3128") }) });
-      const machineOnly = loadShell({ reg: regKeys({ [MACHINE_KEY]: serverOn(MACHINE_KEY, "proxy.example.test:3128") }) });
-      const ranked = loadShell({ reg: regKeys({
-        [POLICY_KEY]: serverOn(POLICY_KEY, "policy.example.test:8080"),
-        [USER_KEY]: serverOn(USER_KEY, "user.example.test:9"),
+      const perMachine = loadShell({ reg: regKeys({
+        [POLICY_KEY]: regDump([["ProxySettingsPerUser", "REG_DWORD", "0x0"]], POLICY_KEY),
+        [MACHINE_KEY]: serverOn(MACHINE_KEY, "proxy.example.test:3128"),
+        [MACHINE_CONN_KEY]: connDump(0x03, MACHINE_CONN_KEY),
       }) });
-      check(JSON.stringify(asked(policyOnly)) === '["proxy-server=proxy.example.test:3128"]'
-        && JSON.stringify(asked(machineOnly)) === '["proxy-server=proxy.example.test:3128"]'
-        && JSON.stringify(asked(ranked)) === '["proxy-server=policy.example.test:8080"]',
-        "6s a server named only in machine policy, or only in machine settings, is followed, and machine policy outranks"
-        + " the user's server: " + JSON.stringify([asked(policyOnly), asked(machineOnly), asked(ranked)]));
-      const wpadUser = loadShell({ reg: regKeys({
-        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoDetect", "REG_DWORD", "0x1"]], USER_KEY),
-      }) });
-      const wpadPolicy = loadShell({ reg: regKeys({
-        [POLICY_KEY]: regDump([["AutoDetect", "REG_DWORD", "0x1"]], POLICY_KEY),
+      const staleMachine = loadShell({ reg: regKeys({
         [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY),
+        [MACHINE_KEY]: serverOn(MACHINE_KEY, "stale.example.test:9"),
+        [MACHINE_CONN_KEY]: connDump(0x03, MACHINE_CONN_KEY),
       }) });
-      check(JSON.stringify(asked(wpadUser)) === "[]" && JSON.stringify(asked(wpadPolicy)) === "[]",
-        "6t where no key names a server and automatic detection is on, in the user key or in machine policy, the shell"
-        + " asks for no proxy switch, so Chromium keeps its resolver: "
-        + JSON.stringify([asked(wpadUser), asked(wpadPolicy)]));
-      const off = loadShell({ reg: regKeys({
-        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoDetect", "REG_DWORD", "0x0"],
-          ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]], USER_KEY),
-        [MACHINE_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["ProxyServer", "REG_SZ", "proxy.example.test:9"]], MACHINE_KEY),
+      check(JSON.stringify(asked(perMachine)) === '["proxy-server=proxy.example.test:3128"]'
+        && JSON.stringify(asked(staleMachine)) === '["no-proxy-server"]',
+        "6s a server named in machine settings is followed under ProxySettingsPerUser 0, and a stale HKLM server"
+        + " is not followed without it: " + JSON.stringify([asked(perMachine), asked(staleMachine)]));
+      const wpad09 = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x09, USER_CONN_KEY),
       }) });
-      const policyOff = loadShell({ reg: regKeys({
-        [POLICY_KEY]: regDump([["AutoDetect", "REG_DWORD", "0x0"]], POLICY_KEY),
-        [USER_KEY]: regDump([["AutoDetect", "REG_DWORD", "0x1"]], USER_KEY),
+      const direct01 = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY),
       }) });
-      check(JSON.stringify(asked(off)) === '["no-proxy-server"]' && JSON.stringify(asked(policyOff)) === '["no-proxy-server"]',
-        "6u with proxies off, a stale server is not followed, and machine policy turning detection off still asks for"
-        + " --no-proxy-server: " + JSON.stringify([asked(off), asked(policyOff)]));
+      check(JSON.stringify(asked(wpad09)) === "[]" && JSON.stringify(asked(direct01)) === '["no-proxy-server"]',
+        "6t DefaultConnectionSettings flags 0x09 leaves Chromium's resolver, and 0x01 gives no-proxy-server: "
+        + JSON.stringify([asked(wpad09), asked(direct01)]));
+      const failPolicy = loadShell({ reg: regKeys({
+        [POLICY_KEY]: new Error("reg.exe failed"),
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY),
+      }) });
+      const failConn = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: new Error("reg.exe failed"),
+      }) });
+      check(JSON.stringify(asked(failPolicy)) === "[]" && JSON.stringify(asked(failConn)) === "[]",
+        "6u a failed read of policy or connections leaves Chromium's resolver: "
+        + JSON.stringify([asked(failPolicy), asked(failConn)]));
       const blind = loadShell({
         src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
-        reg: regKeys({ [POLICY_KEY]: serverOn(POLICY_KEY, "proxy.example.test:3128") }),
+        reg: regKeys({
+          [POLICY_KEY]: regDump([["ProxySettingsPerUser", "REG_DWORD", "0x0"]], POLICY_KEY),
+          [MACHINE_KEY]: serverOn(MACHINE_KEY, "proxy.example.test:3128"),
+          [MACHINE_CONN_KEY]: connDump(0x03, MACHINE_CONN_KEY),
+        }),
       });
       check(SRC.split(LINE).length === 2 && JSON.stringify(asked(blind)) === '["no-proxy-server"]',
-        "6S THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed a server only in machine"
-        + " policy, does not give the server, so 6s goes red on it: " + JSON.stringify(asked(blind)));
+        "6S THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed a per-machine"
+        + " server, does not give the server, so 6s goes red on it: " + JSON.stringify(asked(blind)));
     } finally { Object.defineProperty(process, "platform", platformWas); }
   }
   /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------

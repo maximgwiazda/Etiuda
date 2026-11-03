@@ -705,20 +705,20 @@ is not read, since it is sealed inside the installer. 29 checks, about 6 s.
 
 ## The shell's proxy switch, and how it is proved in two places
 
-The shell reads three Windows proxy keys with the reg tool before ready: machine policy, the
-user's Internet Settings, and machine settings. A setup script or a proxy server named in the
-first of those that names one is followed. Where none names one and automatic detection is on,
-the shell passes no proxy switch, so Chromium keeps its own resolver. Where proxies are off,
-nothing is set or a read fails, it asks for `no-proxy-server`, so an idle desk does no proxy
-discovery and no IPv6 reachability probe. The probe still fires on the first hostname lookup.
-`tests/shell-office.mjs` leg 6 reads the switches the real `shell/main.js` sets, with electron
-stubbed and the keys planted, never read from the machine: the server, the script, the quiet
-answers, a machine-policy server, a machine-settings server, automatic detection, and none once
-the line is cut out of a copy. That leg proves the switch is set; only Electron can prove what
-Chromium then does. `tests/desk.js` runs C and D do that, each on a profile of its own with
-`--log-net-log`: C is the shell with the line cut out and must show discovery, and D, the shipped
-shell, must show discovery too. Where C shows none, the leg is NOT RUN. A net log is complete
-only at a clean close, so the window is closed through the debugging port and the log must parse
+The shell reads Windows proxy and Connections keys with the reg tool before ready: machine policy
+(ProxySettingsPerUser), then either the user's or machine's Internet Settings and Connections. A setup
+script or a proxy server named in the active key is followed. Where none is named, the Connections flags
+decide: direct only (0x01) asks for `no-proxy-server`, so an idle desk does no proxy discovery and no IPv6
+reachability probe; automatic detection (0x09) or a failed read leaves Chromium's resolver. The probe
+still fires on the first hostname lookup. `tests/shell-office.mjs` leg 6 reads the switches the real
+`shell/main.js` sets, with electron stubbed and the keys planted, never read from the machine: the server,
+the script, the quiet answers, a per-machine server under policy, DefaultConnectionSettings flags 0x09
+and 0x01, a failed read leaving the resolver, and none once the line is cut out of a copy. That leg
+proves the switch is set; only Electron can prove what Chromium then does. `tests/desk.js` runs C and D
+do that, each on a profile of its own with `--log-net-log`: C is the shell with the line cut out and
+must show discovery, and D, the shipped shell: where automatic detection is left to Chromium (0x09), D
+discovers too; where proxies are off (0x01), D shows none. Where C shows none, the leg is NOT RUN. A net log
+is complete only at a clean close, so the window is closed through the debugging port and the log must parse
 whole and hold events.
 
 ## A window reopened maximised
