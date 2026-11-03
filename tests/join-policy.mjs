@@ -932,13 +932,25 @@ function scratchGone(reg, problems, name) {
       ]), "en");
       if (gotLiteral.folder !== "D:\\Quay\\team" || gotLiteral.lead !== HEX || gotLiteral.said.length !== 0)
         problems.push("literal expand not taken: " + JSON.stringify(gotLiteral));
+      const gotUnresolved = P.joinPolicyFrom(exportText([
+        ["TeamFolder", "REG_EXPAND_SZ", "D:\\%UNRESOLVED_POLICY_X%\\team"],
+        ["LeadKey", "REG_SZ", HEX]
+      ]), "en");
+      if (gotUnresolved.folder !== "" || gotUnresolved.lead !== "" || saidOf(gotUnresolved) !== EN.folder + "|" + EN.beside)
+        problems.push("unresolved variable not counted as bad: " + JSON.stringify(gotUnresolved));
+      const gotToString = P.joinPolicyFrom(exportText([
+        ["TeamFolder", "REG_EXPAND_SZ", "D:\\%toString%\\team"],
+        ["LeadKey", "REG_SZ", HEX]
+      ]), "en");
+      if (gotToString.folder !== "" || gotToString.lead !== "" || saidOf(gotToString) !== EN.folder + "|" + EN.beside)
+        problems.push("prototype toString reached: " + JSON.stringify(gotToString));
     } finally {
       delete process.env.TEST_POLICY_SHARE;
       delete process.env.TEST_POLICY_LEAD;
     }
   }
   check(problems.length === 0,
-    "19j REG_EXPAND_SZ values are expanded for TeamFolder and LeadKey: environment variables are expanded case-insensitively and values taken: "
+    "19j REG_EXPAND_SZ values are expanded for TeamFolder and LeadKey: environment variables are expanded case-insensitively and values taken, while unresolved variables and inherited names are bad: "
     + (problems.join("; ") || "expanded"));
 }
 

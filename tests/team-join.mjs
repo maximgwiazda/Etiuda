@@ -1095,9 +1095,10 @@ try {
       + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing"))) + (kept ? "" : ", trust or folder moved")
       + ", requests " + inNamed + " in the policy's folder and " + inInvited + " in the invitation's, touched " + touchedM.length);
   };
-  const policyAcceptCase = async (label, rows, from, intoNamed) => {
+  const policyAcceptCase = async (label, rows, from, intoNamed, cased) => {
     const n = policyCases++;
-    const named = folder("policy-" + n), invited = intoNamed ? named : folder("policy-invited-" + n);
+    const named = folder("policy-" + n);
+    const invited = intoNamed ? (cased && WIN ? (named.toLowerCase() === named ? named.toUpperCase() : named.toLowerCase()) : named) : folder("policy-invited-" + n);
     put(named, "etiuda-team.json", teamFile([]));
     const Dm = await underPolicy(rows(named), "policy-desk-" + n, folder("policy-own-" + n));
     const blob = inviteBlob({ team: TEAM, folder: invited, lead: from, secret: newSecret() });
@@ -1116,25 +1117,25 @@ try {
     await policyCase("folder and lead, invitation from another lead", folderLead, forgedLead, false),
     await policyCase("folder alone", f => [["TeamFolder", f]], lampLead, false),
     await policyAcceptCase("folder and lead, the invitation naming both", folderLead, lampLead, true),
+    await policyAcceptCase("folder and lead, a folder differing only in case", folderLead, lampLead, true, true),
   ];
   const Dnp = await deskWith("policy-control", folder("policy-control-own"));
   const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
   const readNp = await Dnp.join("read", controlBlob);
   check(byFolder.every(x => / ok$/.test(x)) && readNp && !!readNp.offer && readNp.refused === undefined,
     "15ay while machine policy names the team's folder and lead, an invitation whose lead key matches the policy's lead is accepted"
-    + " at read and at yes; an invitation from another lead, or under folder policy alone, is refused at read and at yes with the"
+    + " at read and at yes, a folder differing only in case included; an invitation from another lead, or under folder policy alone, is refused at read and at yes with the"
     + " policy's word, and nothing changes; THE CONTROL, a desk with no policy, is offered it; off Windows no machine policy is"
     + " read and the door stands as before: " + byFolder.join("; "));
 
   const leadAlone = () => [["LeadKey", LEAD.public]];
   const byLead = [
-    await policyCase("lead alone, the invitation from that lead", leadAlone, lampLead, false),
+    await policyAcceptCase("lead alone, the invitation from that lead", leadAlone, lampLead, true),
     await policyCase("lead alone, the invitation from another", leadAlone, forgedLead, false),
   ];
   check(byLead.every(x => / ok$/.test(x)),
-    "15az a policy naming only the lead's key closes the door too: an invitation from that very lead, or from another, is refused"
-    + " at read and at yes with the same word and nothing changes; off Windows no machine policy is read and the door stands as"
-    + " before: " + byLead.join("; "));
+    "15az a policy naming only the lead's key accepts an invitation whose lead matches and refuses another lead's at read and at yes"
+    + " with the policy's word, and nothing changes; off Windows no machine policy is read and the door stands as before: " + byLead.join("; "));
 
   /* A join kept from an invitation is let go when machine policy arrives in a later run: the pin it set and the folder it
      set go, and what the desk held before stays. The same desk restarted with no policy keeps it all. */
@@ -1216,11 +1217,13 @@ try {
   const codeG = viewG(await Dg.join("state"));
   const joinG = JSON.stringify(Dg.envelope().teamJoin || null), bytesG = fs.existsSync(reqG) ? fs.readFileSync(reqG, "utf8") : "";
   const plainBlob = inviteBlob({ team: TEAM, folder: folder("plain-yard"), lead: lampLead, secret: newSecret() });
+  /* Under a policy naming the lead alone, that lead's invitation is taken (15az), so the proof the policy is in force is another lead's. */
+  const otherBlob = inviteBlob({ team: TEAM, folder: folder("plain-yard"), lead: FORGED, secret: newSecret() });
   const plainKept = [];
   for (const [label, rows] of [["no policy", null], ["folder and lead", bothNamed(plainShare)], ["folder alone", [["TeamFolder", plainShare]]],
     ["lead alone", [["LeadKey", LEAD.public]]]]) {
     const Dgr = await restartUnder(rows, Dg.ud);
-    const v = await Dgr.join("state"), door = await Dgr.join("read", plainBlob);
+    const v = await Dgr.join("state"), door = await Dgr.join("read", label === "lead alone" && WIN ? otherBlob : plainBlob);
     const env = Dgr.envelope(), pins = env.teamPins || {};
     const stays = JSON.stringify(env.teamJoin || null) === joinG && !(env.teamJoin || {}).invite && viewG(v) === codeG
       && fs.readFileSync(reqG, "utf8") === bytesG && env.keys.eCatalogFolder === plainShare

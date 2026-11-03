@@ -3377,14 +3377,17 @@ function policyValues(text) {
 function policyExpand(s) {
   if (typeof s !== "string" || s.indexOf("%") < 0) return s;
   const env = (typeof process !== "undefined" && process && process.env) || {};
-  return s.replace(/%([^%]+)%/g, (match, name) => {
-    if (name in env) return env[name];
+  let bad = false;
+  const res = s.replace(/%([^%]+)%/g, (match, name) => {
+    if (Object.prototype.hasOwnProperty.call(env, name) && typeof env[name] === "string") return env[name];
     const upper = name.toUpperCase();
-    for (const [k, v] of Object.entries(env)) {
-      if (k.toUpperCase() === upper) return v;
+    for (const k of Object.keys(env)) {
+      if (k.toUpperCase() === upper && typeof env[k] === "string") return env[k];
     }
+    bad = true;
     return match;
   });
+  return bad ? null : res;
 }
 /* One named value, or unset where it is absent or an empty string. */
 function policyRegSz(values, name) {
@@ -3424,7 +3427,7 @@ function joinPolicyFacts(text) {
     if (folder.type === "REG_SZ" && policyFolderOk(folder.value)) { folderOk = true; folderValue = folder.value; }
     else if (folder.type === "REG_EXPAND_SZ") {
       const exp = policyExpand(folder.value);
-      if (policyFolderOk(exp)) { folderOk = true; folderValue = exp; }
+      if (exp !== null && policyFolderOk(exp)) { folderOk = true; folderValue = exp; }
       else bad.push("folder");
     }
     else bad.push("folder");
@@ -3433,7 +3436,7 @@ function joinPolicyFacts(text) {
     if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
     else if (lead.type === "REG_EXPAND_SZ") {
       const exp = policyExpand(lead.value);
-      if (policyLeadOk(exp)) { leadOk = true; leadValue = exp; }
+      if (exp !== null && policyLeadOk(exp)) { leadOk = true; leadValue = exp; }
       else bad.push("lead");
     }
     else bad.push("lead");
@@ -3485,6 +3488,12 @@ function sayJoinPolicy() {
   if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); policyLetsInviteGo(got); }
   return got;
 }
+/* Case-insensitive path comparison on Windows. A UNC path and a mapped drive read as different folders. */
+function policySameFolder(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ra = path.resolve(a), rb = path.resolve(b);
+  return process.platform === "win32" ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
+}
 /* Once a run, where machine policy names a folder or a lead: a join this desk keeps from an invitation is let go, with the
    pin that invitation set where it still stands, and the desk's own folder setting where the invitation's is still there,
    put back as it was before. A pin, a key or a folder the desk held before stays, and the request stays where it was
@@ -3493,7 +3502,9 @@ function policyLetsInviteGo(named) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin, inv = j && j.invite;
   if (!inv || !(named.folder || named.lead)) return;
-  if (named.lead && inv.lead && inv.lead.public === named.lead) return;
+  if (named.lead && inv.lead && inv.lead.public === named.lead) {
+    if (!named.folder || (typeof inv.folder === "string" && policySameFolder(inv.folder, named.folder))) return;
+  }
   teamJoin = null;
   const pin = teamPins[j.team];
   if (inv.pinned === true && pin && pin.keyId === inv.lead.keyId && pin.public === inv.lead.public) {
@@ -4911,14 +4922,16 @@ function relayKept(r) {
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
-   "policy" while machine policy names a team folder or a lead, unless an invitation for the policy's folder matches its lead key. */
+   "policy" while machine policy names a team folder or a lead, unless an invitation matches the policy.
+   A named lead must match, and a named folder must match. LeadKey-only needs the lead alone; folder-only
+   stays shut, since nothing names who may invite. A UNC path and a mapped drive read as different folders. */
 function inviteDoor(parsed) {
   const named = sayJoinPolicy();
   if (!named.folder && !named.lead) return "";
-  if (named.folder && named.lead && parsed && parsed.lead && parsed.lead.public === named.lead) {
-    if (parsed.folder && path.resolve(parsed.folder) === path.resolve(named.folder)) return "";
-  }
-  return "policy";
+  if (!named.lead) return "policy";
+  if (!parsed || !parsed.lead || parsed.lead.public !== named.lead) return "policy";
+  if (named.folder && (!parsed.folder || !policySameFolder(parsed.folder, named.folder))) return "policy";
+  return "";
 }
 /* An invitation, its folder read as this system reaches it. */
 function inviteParse(text) {
