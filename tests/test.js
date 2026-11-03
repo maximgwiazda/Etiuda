@@ -3047,10 +3047,20 @@ function launchMarkTests() {
     };
     const d60 = landsAt(1000 / 60, true), d144 = landsAt(1000 / 144, false), d144e = landsAt(1000 / 144, true);
     const onTime = (r, every) => r[0] === "time" && r[1] <= 3250 + 3 * every;
-    got = [onTime(d60, 1000 / 60), onTime(d144, 1000 / 144), onTime(d144e, 1000 / 144)];
+    /* Faster than 240 Hz no gap sets the estimate: every step is the frame's own dt, never capped, NaN or zero. */
+    const L = launchLab(), h = L.launch(); L.ready(); L.frame(0);
+    let fast = true, was = 0;
+    for (let t = 1000 / 360; t < 6000 && !h.reason; t += 1000 / 360) {
+      L.frame(t);
+      const ms = L.k() ? L.k().ms : was, step = ms - was;
+      if (!h.reason && ms < 2900 && !(Number.isFinite(step) && Math.abs(step - 1000 / 360) < 1e-6)) fast = false;
+      was = ms;
+    }
+    const d360 = [h.reason, L.now()];
+    got = [onTime(d60, 1000 / 60), onTime(d144, 1000 / 144), onTime(d144e, 1000 / 144), fast && onTime(d360, 1000 / 360)];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("a near-zero gap early leaves the opening on time: 60 Hz after a duplicate stamp, 144 Hz, and 144 Hz after one",
-    got, [true, true, true]);
+  eq("a near-zero gap early leaves the opening on time: 60 Hz after a duplicate stamp, 144 Hz, 144 Hz after one, and 360 Hz uncapped",
+    got, [true, true, true, true]);
 
   try {
     /* THE FAILSAFE FIRING MID-FLIGHT cuts cleanly to the end state with the corner mark at the flight's phase. */
