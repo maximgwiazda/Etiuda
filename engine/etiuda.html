@@ -2187,29 +2187,31 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 /* THE EMPTY DESK'S MARK (empty-mark.js) stands in for the drawing: the launch's figure on .e-fifth-spot above
    the words, its canvas over the whole block so the arrival comes from across it, landed in the accent. */
-.empty:has(>.e-fifth-spot)::before{content:none}
-.empty-desk{position:relative}
+.empty:has(>.e-fifth-spot)::before,.empty.empty-desk::before{content:none}
+.empty-desk{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:72px 16px 80px}
 .empty-desk>*{position:relative;z-index:1}
-.empty-desk>.e-fifth-spot{display:block;width:280px;height:280px;margin:0 auto 6px}
-.empty-desk>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
+.empty-desk h2{font:600 26px/1.25 "Segoe UI Variable Display","Segoe UI",sans-serif;margin:0 0 22px;letter-spacing:-.2px;color:var(--ink)}
+.empty-desk #emptyLoad{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:10px;background:#0e67d8;color:#fff;font:600 16px "Segoe UI Variable Text","Segoe UI",sans-serif;padding:13px 26px;box-shadow:0 6px 18px rgba(14,103,216,.25);cursor:pointer}
+:root[data-theme=dark] .empty-desk #emptyLoad{background:#409afc;color:#0b0d12;box-shadow:0 6px 18px rgba(64,154,252,.25)}
+.empty-desk .mid-or{margin-top:12px;font-size:14px;color:var(--dim)}
+.empty-desk .mid-or a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;cursor:pointer}
+.empty-desk .mid-or a:hover{color:var(--accent)}
+.empty-desk #emptyJoin{margin-top:16px}
+.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;opacity:.75}
+/* THE LAUNCH (launch-mark.js): opening variant A, turning over window ground, landing on the corner mark; nothing of the UI before landing. --e-launch-out is the give-way fade. */
+.e-launch-veil{position:fixed;inset:0;z-index:100;width:100vw;height:100vh;background:var(--bg);display:block;
+  margin:0;padding:0;overflow:hidden;transition:opacity var(--e-launch-out,.35s) ease-out}
+.e-launch-veil>canvas.e-opening,.e-launch-veil>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
   color:var(--accent);--fifth-halo:#2881ea}
-:root[data-theme=dark] .empty-desk>canvas.e-fifth{--fifth-halo:#409afc}
-/* THE LAUNCH (launch-mark.js): the mark stands over the dot field while the cards, the panel and the category row
-   are hidden; the search box stays live. --e-launch-out is the give-way's length, shorter after a key or a click.
-   Hidden at an opacity no screen shows rather than at 0, so they are painted under the mark and the give-way's
-   first frame is not their first paint. */
-.e-launch-veil{position:fixed;z-index:40;display:flex;align-items:center;justify-content:center;box-sizing:border-box;
-  padding-bottom:48px;transition:opacity var(--e-launch-out,.26s) ease-out}
-.e-launch-veil>.e-fifth-spot{width:280px;height:280px;flex:none;position:relative;z-index:1}
-.e-launch-veil>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
-  color:var(--accent);--fifth-halo:#2881ea}
-:root[data-theme=dark] .e-launch-veil>canvas.e-fifth{color:#cfe3ff;--fifth-halo:#409afc}
+:root[data-theme=dark] .e-launch-veil>canvas.e-opening,:root[data-theme=dark] .e-launch-veil>canvas.e-fifth{color:#cfe3ff;--fifth-halo:#409afc}
 .e-launch-veil.e-going{opacity:0;pointer-events:none}
 @keyframes e-launch-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@media (max-height:640px){.e-launch-veil>.e-fifth-spot{width:160px;height:160px}.e-launch-veil{padding-bottom:16px}}
-body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:.001;pointer-events:none} /* plant:launch-work-painted */
-body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.26s) var(--m-ease) both}
+body.e-launch .row-main,body.e-launch #intentComboWrap,body.e-launch #intentRail,body.e-launch #main,
+body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+body.e-launch-out .row-main,body.e-launch-out #intentComboWrap,body.e-launch-out #intentRail,body.e-launch-out #main,
+body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.35s) var(--m-ease) both}
 :root.e-still .e-launch-veil{transition:none}
+:root.e-still body.e-launch-out .row-main,:root.e-still body.e-launch-out #intentComboWrap,:root.e-still body.e-launch-out #intentRail,:root.e-still body.e-launch-out #main{animation:none}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
    is behind it, which everywhere else is a panel; here it is the field, and the dots read
    THROUGH the control. The same colour mixed against the canvas instead of against transparency
@@ -4143,7 +4145,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
-<div class="stage">
+<div class="stage" id="main">
 <div class="dotfield" id="dotField" aria-hidden="true"><div></div></div>
 <div class="scroller" id="pageScroll">
 <div class="shell">
@@ -6690,10 +6692,9 @@ What you type stays in this browser only.`;
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
-    "Add a card to a category, or": "Dodaj kartę do kategorii albo",
-    "you already have.": ", który już istnieje.",
+    "or add a card to a category": "albo dodaj kartę do kategorii",
     "A catalog file next to Etiuda loads by itself when it is called": "Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
-    "Under any other name, bring it in with the button above.": "Plik o innej nazwie można wczytać przyciskiem powyżej.",
+    "Under any other name, bring it in with Load catalog.": "Plik o innej nazwie można wczytać przyciskiem Wczytaj katalog.",
     "Catalogs": "Katalogi",
     "Loaded": "Wczytany",
     "Newer": "Nowszy",
@@ -7585,8 +7586,7 @@ What you type stays in this browser only.`;
     "Once the window is open, the tour goes inside with it.": "Po otwarciu okna przewodnik zajrzy do środka.",
     "The tour carries on once this window is closed.": "Przewodnik ruszy dalej, gdy to okno się zamknie.",
     'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.',
-    "load a catalog": "wczytaj katalog",
-    "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem powyżej.",
+    "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Load catalog…": "Wczytaj katalog…",
     "Earlier versions…": "Historia wersji…",
@@ -9058,7 +9058,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-02";
+  var E_BUILT = "2026-11-03";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -12715,13 +12715,13 @@ What you type stays in this browser only.`;
       bar.scrollLeft = target;
       return;
     }
-    const DUR = 220, ease = (x) => 1 - Math.pow(1 - x, 3);
+    const DUR = 220, ease2 = (x) => 1 - Math.pow(1 - x, 3);
     const anim = { target, raf: 0 };
     let t0 = null;
     function step(now) {
       if (t0 === null) t0 = now;
       const p = Math.min(1, (now - t0) / DUR);
-      bar.scrollLeft = from + dist * ease(p);
+      bar.scrollLeft = from + dist * ease2(p);
       if (p < 1 && eTabScrollAnim === anim) anim.raf = requestAnimationFrame(step);
       else if (eTabScrollAnim === anim) eTabScrollAnim = null;
     }
@@ -14937,19 +14937,19 @@ What you type stays in this browser only.`;
     const h = Math.round(row.getBoundingClientRect().height);
     if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
   }
-  function eBandPale(hex) {
-    const n = parseInt(String(hex).slice(1), 16);
+  function eBandPale(hex2) {
+    const n = parseInt(String(hex2).slice(1), 16);
     const lin = (c) => {
       const v = (c * 0.62 + 128 * 0.38) / 255;
       return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
     };
     return 0.2126 * lin(n >> 16 & 255) + 0.7152 * lin(n >> 8 & 255) + 0.0722 * lin(n & 255) > 0.199;
   }
-  function eSetAccent(hex) {
-    const root = document.documentElement, ok = /^#[0-9a-f]{6}$/i.test(String(hex || ""));
-    if (ok) root.style.setProperty("--band-accent", String(hex));
+  function eSetAccent(hex2) {
+    const root = document.documentElement, ok = /^#[0-9a-f]{6}$/i.test(String(hex2 || ""));
+    if (ok) root.style.setProperty("--band-accent", String(hex2));
     else root.style.removeProperty("--band-accent");
-    const pale = ok && eBandPale(hex);
+    const pale = ok && eBandPale(hex2);
     document.body.classList.toggle("e-band-pale", pale);
     document.body.classList.toggle("e-band-deep", ok && !pale);
   }
@@ -15943,9 +15943,9 @@ What you type stays in this browser only.`;
     for (let i = 0; i < 32; i++) raw[i] = parseInt(pubHex.slice(i * 2, i * 2 + 2), 16);
     return subtle.digest("SHA-256", raw).then((buf) => {
       const b = new Uint8Array(buf);
-      let hex = "";
-      for (let i = 0; i < 8; i++) hex += b[i].toString(16).padStart(2, "0");
-      return hex;
+      let hex2 = "";
+      for (let i = 0; i < 8; i++) hex2 += b[i].toString(16).padStart(2, "0");
+      return hex2;
     }).catch(() => "");
   }
   function deskSigState(doc, leads) {
@@ -18421,7 +18421,7 @@ What you type stays in this browser only.`;
     if (!dy) return;
     const els = pageFollowers();
     if (!els.length) return;
-    const ease = "translate " + ms + "ms " + E_EASE;
+    const ease2 = "translate " + ms + "ms " + E_EASE;
     els.forEach((el) => {
       el.style.transition = "none";
       el.style.willChange = "translate";
@@ -18429,7 +18429,7 @@ What you type stays in this browser only.`;
     });
     void els[0].offsetHeight;
     els.forEach((el) => {
-      el.style.transition = ease;
+      el.style.transition = ease2;
       el.style.translate = "0 0px";
     });
   }
@@ -18461,18 +18461,18 @@ What you type stays in this browser only.`;
     if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) return;
     const travel = Math.round(Math.abs(from.h + from.m - (to.h + to.m)));
     const dy = Math.round(from.h + from.m - (to.h + to.m));
-    const ease = ms + "ms " + E_EASE;
+    const ease2 = ms + "ms " + E_EASE;
     if (hidden && leaving) {
       const g = mountPillsGhost(shot, from);
       void g.offsetHeight;
-      g.style.transition = "transform " + ease + ",opacity " + ease;
+      g.style.transition = "transform " + ease2 + ",opacity " + ease2;
       g.style.transform = "translateY(-" + Math.round(from.h + from.m) + "px)";
       g.style.opacity = "0";
     } else if (!hidden && from.h < 1) {
       slot.style.transform = "translateY(-" + Math.round(to.h + to.m) + "px)";
       slot.style.opacity = "0";
       void slot.offsetHeight;
-      slot.style.transition = "transform " + ease + ",opacity " + ease;
+      slot.style.transition = "transform " + ease2 + ",opacity " + ease2;
       slot.style.transform = "";
       slot.style.opacity = "";
     } else if (to.h + 1 < from.h && leaving) {
@@ -18481,19 +18481,19 @@ What you type stays in this browser only.`;
       slot.style.opacity = "0";
       g.style.clipPath = "inset(0 0 0 0)";
       void g.offsetHeight;
-      g.style.transition = "clip-path " + ease;
+      g.style.transition = "clip-path " + ease2;
       g.style.clipPath = "inset(0 0 " + cut + "px 0)";
     } else if (to.h > from.h + 1) {
       const cut = Math.max(0, Math.round(to.h - from.h));
       slot.style.clipPath = "inset(0 0 " + cut + "px 0)";
       void slot.offsetHeight;
-      slot.style.transition = "clip-path " + ease;
+      slot.style.transition = "clip-path " + ease2;
       slot.style.clipPath = "inset(0 0 0px 0)";
     } else if (travel) {
       const g = leaving ? mountPillsGhost(shot, from) : null;
       if (g) {
         void g.offsetHeight;
-        g.style.transition = "transform " + ease + ",opacity " + ease;
+        g.style.transition = "transform " + ease2 + ",opacity " + ease2;
         g.style.transform = "translateY(-" + travel + "px)";
         g.style.opacity = "0";
       }
@@ -21103,15 +21103,15 @@ What you type stays in this browser only.`;
       const mid = card.dataset.id;
       const m = findCard(mid) || shown[+card.dataset.i];
       if (!m) return;
-      const cl = cardLang(m);
-      const ps = parts(m, cl), vi = +txtEl.dataset.v;
+      const cl2 = cardLang(m);
+      const ps = parts(m, cl2), vi = +txtEl.dataset.v;
       if (!ps.length || vi < 0 || vi >= ps.length) return;
       setEntrySel(mid, vi);
       txtEl.classList.add("just-picked");
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
       withAgentName(ps[vi], () => {
-        copy(fill(ps[vi], m), manualToastMsg(m, cl, vi, ps.length), cardCommits(m));
-        bumpUseCount(mid, cl, vi);
+        copy(fill(ps[vi], m), manualToastMsg(m, cl2, vi, ps.length), cardCommits(m));
+        bumpUseCount(mid, cl2, vi);
       }, txtEl);
     });
   }
@@ -21569,8 +21569,8 @@ What you type stays in this browser only.`;
     }
     const startLeft = /* @__PURE__ */ new Map();
     kids.forEach((el) => startLeft.set(el, el.getBoundingClientRect().left));
-    const ease = "var(--m-move) " + E_EASE;
-    const named = ["width", ease].join(" ");
+    const ease2 = "var(--m-move) " + E_EASE;
+    const named = ["width", ease2].join(" ");
     grew.forEach((g, el) => {
       el.style.transition = named;
       el.style.width = g.w1 + "px";
@@ -21605,7 +21605,7 @@ What you type stays in this browser only.`;
     });
     void pills.offsetHeight;
     moves.forEach((m) => {
-      m.el.style.transition = Math.abs(m.sx - 1) > 1e-3 ? "translate " + ease + ", --pill-sx " + ease : "translate " + ease;
+      m.el.style.transition = Math.abs(m.sx - 1) > 1e-3 ? "translate " + ease2 + ", --pill-sx " + ease2 : "translate " + ease2;
       if (m.dx) m.el.style.translate = "0px 0";
       if (Math.abs(m.sx - 1) > 1e-3) m.el.style.setProperty("--pill-sx", "1");
     });
@@ -21755,6 +21755,7 @@ What you type stays in this browser only.`;
     fifthLinePath: () => fifthLinePath,
     fifthPhase: () => fifthPhase,
     fifthRadius: () => fifthRadius,
+    setFifthPhase: () => setFifthPhase,
     wireFifth: () => wireFifth
   });
   var FIFTH_PHI0 = Math.PI / 4;
@@ -21799,14 +21800,14 @@ What you type stays in this browser only.`;
   var fifthF2 = (v) => (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, "");
   function fifthLinePath(phi) {
     const f = fifthFit(), pass = fifthPass(phi), n = pass.length, closed = Math.abs(phi - FIFTH_PHI0) > 1e-9;
-    const pt = (p, m) => [(m ? FIFTH_BOX - p[0] : p[0]) * f.k + f.ox, p[1] * f.k + f.oy];
+    const pt2 = (p, m) => [(m ? FIFTH_BOX - p[0] : p[0]) * f.k + f.ox, p[1] * f.k + f.oy];
     const vel = (t2, m) => [(m ? -3 : 3) * FIFTH_A * Math.cos(3 * t2 + phi) * f.k, 2 * FIFTH_A * Math.cos(2 * t2) * f.k];
     const seq = pass.map((p) => [p, false]);
     if (closed) for (let i = 1; i < n; i++) seq.push([pass[i], true]);
-    let d = "M" + pt(seq[0][0], false).map(fifthF2).join(" ");
+    let d = "M" + pt2(seq[0][0], false).map(fifthF2).join(" ");
     for (let i = 1; i < seq.length; i++) {
       const a = seq[i - 1], b = seq[i], dt = (b[0][2] - a[0][2] + Math.PI) % Math.PI;
-      const p0 = pt(a[0], a[1]), p1 = pt(b[0], b[1]), v0 = vel(a[0][2], a[1]), v1 = vel(b[0][2], b[1]);
+      const p0 = pt2(a[0], a[1]), p1 = pt2(b[0], b[1]), v0 = vel(a[0][2], a[1]), v1 = vel(b[0][2], b[1]);
       d += "C" + [p0[0] + v0[0] * dt / 3, p0[1] + v0[1] * dt / 3, p1[0] - v1[0] * dt / 3, p1[1] - v1[1] * dt / 3, p1[0], p1[1]].map(fifthF2).join(" ");
     }
     return closed ? d + "Z" : d;
@@ -21861,10 +21862,14 @@ What you type stays in this browser only.`;
   function fifthPhase() {
     return fifthClock.phi;
   }
+  function setFifthPhase(phi) {
+    fifthClock.phi = phi;
+  }
   function fifthRest() {
     fifthClock.phi = FIFTH_PHI0;
     fifthClock.last = null;
   }
+  if (typeof globalThis !== "undefined") globalThis.fifthPhase = fifthPhase;
   function headerPaint(node) {
     const tile = node.closest && node.closest(".brand-tile");
     const svg = node.ownerSVGElement || node.closest && node.closest("svg");
@@ -22027,26 +22032,205 @@ What you type stays in this browser only.`;
   });
   var LAUNCH_R = 7;
   var LAUNCH_MIN_MS = 1100;
-  var LAUNCH_OUT_MS = 260;
-  var LAUNCH_QUICK_MS = 140;
   var LAUNCH_MAX_MS = 4e3;
-  var LM_TAU = Math.PI * 2;
-  var LM_PHI0 = Math.PI / 4;
-  var LM_PHI1 = LM_PHI0 + Math.PI;
+  var OPENING_INK = "#2881ea";
+  var PHI_ICON = 56 * Math.PI / 180;
+  var W0 = 2 * Math.PI * 7e-3;
+  var KF = 150 / 212;
+  var LW = 20 * KF;
+  var TIMING = {
+    FADE_IN: 0.45,
+    RISE: 0.7,
+    GROW: 0.9,
+    TURN: 2.05,
+    STILL_UNTIL: 2.35,
+    LAND: 2.9,
+    ARRIVE: 3.25
+  };
+  var FAILSAFE_MS = Math.round(TIMING.ARRIVE * 1e3) + 1500;
+  var hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  var mix = (a, b, f) => a.map((v, i) => Math.round(v * f + b[i] * (1 - f)));
+  var rgb = (c) => "rgb(" + c.join(",") + ")";
+  var cl = (x) => Math.max(0, Math.min(1, x));
+  var ease = (x) => {
+    const u = cl(x);
+    return u * u * (3 - 2 * u);
+  };
+  var eo = (x) => 1 - Math.pow(1 - cl(x), 3);
+  var eio = (x) => {
+    const u = cl(x);
+    return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+  };
+  var WHITE = [255, 255, 255];
+  var INK_RGB = hex(OPENING_INK);
+  var pt = (t2, phi) => [
+    128 + 96 * KF * Math.sin(3 * t2 + phi),
+    128 + 96 * KF * Math.sin(2 * t2),
+    Math.cos(3 * t2 + phi)
+  ];
+  var lerpAt = (a, b, f) => ({
+    cx: a.cx + (b.cx - a.cx) * f,
+    cy: a.cy + (b.cy - a.cy) * f,
+    k: a.k * Math.pow(b.k / a.k, f)
+  });
+  function cornerTarget() {
+    const svg = typeof document !== "undefined" && (document.querySelector(".brand-tile svg") || document.querySelector(".brand svg"));
+    if (svg) {
+      const r = svg.getBoundingClientRect();
+      return {
+        cx: r.left + r.width / 2,
+        cy: r.top + r.height / 2,
+        k: r.width / 256 * 1.0581,
+        w: r.width,
+        h: r.height
+      };
+    }
+    return {
+      cx: 14 + 12.5,
+      cy: 6 + 12.5,
+      k: 25 / 256 * 1.0581,
+      w: 25,
+      h: 25
+    };
+  }
+  function bigTarget(W, H) {
+    const w = W || 1280, h = H || 880;
+    return { cx: w / 2, cy: h / 2 - 10, k: 300 / 150 };
+  }
+  function cornerPhase(t2) {
+    return PHI_ICON + W0 * (t2 - TIMING.STILL_UNTIL);
+  }
+  function figureAt(t2, W, H) {
+    const big = bigTarget(W, H);
+    const c0 = cornerTarget();
+    if (t2 < TIMING.TURN) {
+      const s = eio(t2 / TIMING.TURN);
+      const phi2 = PHI_ICON - Math.PI * 0.85 * (1 - s);
+      const alpha = ease(t2 / TIMING.FADE_IN);
+      const yOff = 18 * (1 - eo(t2 / TIMING.RISE));
+      const kScale = big.k * (0.9 + 0.1 * eo(t2 / TIMING.GROW));
+      return {
+        cx: big.cx,
+        cy: big.cy + yOff,
+        k: kScale,
+        phi: phi2,
+        depth: 1,
+        ground: 1,
+        colour: OPENING_INK,
+        alpha,
+        arc: 0
+      };
+    }
+    if (t2 < TIMING.STILL_UNTIL) {
+      return {
+        cx: big.cx,
+        cy: big.cy,
+        k: big.k,
+        phi: PHI_ICON,
+        depth: 1,
+        ground: 1,
+        colour: OPENING_INK,
+        alpha: 1,
+        arc: 0
+      };
+    }
+    if (t2 < TIMING.LAND) {
+      const tau = (t2 - TIMING.STILL_UNTIL) / (TIMING.LAND - TIMING.STILL_UNTIL);
+      const f = eio(tau);
+      const geom = lerpAt(big, c0, f);
+      const arc = Math.sin(Math.PI * f) * 40;
+      const depth = 1 - ease(f * 3);
+      const phi2 = cornerPhase(t2);
+      return {
+        cx: geom.cx - arc * 0.3,
+        cy: geom.cy - arc,
+        k: geom.k,
+        phi: phi2,
+        depth,
+        ground: 1,
+        colour: OPENING_INK,
+        alpha: 1,
+        arc
+      };
+    }
+    if (t2 < TIMING.ARRIVE) {
+      const tau = (t2 - TIMING.LAND) / (TIMING.ARRIVE - TIMING.LAND);
+      const ground = 1 - ease(tau);
+      const phi2 = cornerPhase(t2);
+      const curColour = mix(INK_RGB, WHITE, ground);
+      return {
+        cx: c0.cx,
+        cy: c0.cy,
+        k: c0.k,
+        phi: phi2,
+        depth: 0,
+        ground,
+        colour: curColour,
+        alpha: 1,
+        arc: 0
+      };
+    }
+    const phi = cornerPhase(t2);
+    return {
+      cx: c0.cx,
+      cy: c0.cy,
+      k: c0.k,
+      phi,
+      depth: 0,
+      ground: 0,
+      colour: WHITE,
+      alpha: 1,
+      arc: 0
+    };
+  }
+  function drawLine(ctx, phi, at, opt) {
+    if (!ctx) return;
+    const o = opt || {};
+    const N = o.n || 520;
+    const depth = o.depth == null ? 1 : o.depth;
+    const far = o.far == null ? 0.4 : o.far;
+    const near = Array.isArray(o.colour) ? o.colour : typeof o.colour === "string" ? hex(o.colour) : INK_RGB;
+    const bg = Array.isArray(o.bg) ? o.bg : typeof o.bg === "string" ? hex(o.bg) : [247, 248, 250];
+    const segs = [];
+    for (let j = 0; j < N; j++) {
+      const a = 2 * Math.PI * j / N, b = 2 * Math.PI * (j + 1) / N;
+      const p = pt(a, phi), q = pt(b, phi);
+      segs.push([p, q, (p[2] + q[2]) / 2]);
+    }
+    if (depth > 0) segs.sort((u, v) => u[2] - v[2]);
+    ctx.lineCap = "round";
+    ctx.lineWidth = LW * at.k;
+    for (const [p, q, z] of segs) {
+      const u = z * 0.5 + 0.5;
+      const L = far + (1 - far) * u * u * (3 - 2 * u);
+      const f = 1 - depth * (1 - L);
+      ctx.strokeStyle = rgb(mix(near, bg, f));
+      ctx.globalAlpha = o.alpha == null ? 1 : o.alpha;
+      ctx.beginPath();
+      ctx.moveTo(at.cx + (p[0] - 128) * at.k, at.cy + (p[1] - 128) * at.k);
+      ctx.lineTo(at.cx + (q[0] - 128) * at.k, at.cy + (q[1] - 128) * at.k);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function getGroundRgb(doc) {
+    if (doc && doc.documentElement && doc.documentElement.getAttribute("data-theme") === "dark") {
+      return [15, 16, 19];
+    }
+    return [247, 248, 250];
+  }
   var LM_A = 96;
-  var LM_SPACING = 0.6;
   var LM_FINE = 4e3;
   var LM_INK = 150;
   var LM_BOX = 256;
   var LM_T0 = 3 * Math.PI / 4;
   var LM_T1 = 7 * Math.PI / 4;
   var LM_FAR = 0.6;
+  var LM_SPACING = 0.6;
   var LM_PX = 280;
   var LM_STEP = 3.5;
   var LM_FEATHER = LM_STEP / 2;
-  var LM_DOT = 1.05;
-  var LM_ALPHA_STEPS = 16;
-  var LM_W0 = 2 * Math.PI * 7e-3;
+  var LM_PHI0 = Math.PI / 4;
   var LM_G = { a: 1.0581, b: 0, c: 0, d: 1.0581, e: -7.441, f: -7.441 };
   function launchFigure(R) {
     function pass(phi) {
@@ -22136,77 +22320,6 @@ What you type stays in this browser only.`;
     const j0 = Math.max(0, Math.floor((y1 - pad - half) / LM_STEP)), j1 = Math.min(Math.floor(LM_PX / LM_STEP) - 1, Math.ceil((y2 + pad - half) / LM_STEP));
     return { lat: { x0: half + i0 * LM_STEP, y0: half + j0 * LM_STEP, step: LM_STEP, nx: i1 - i0 + 1, ny: j1 - j0 + 1 }, to, rad };
   }
-  function launchCurve(F) {
-    const f = F.fit(), s = LM_PX / LM_BOX, g = LM_G.a, kk = f.k * s * g;
-    const ex = s * (g * f.ox + LM_G.e) + s * g * f.k * 128, ey = s * (g * f.oy + LM_G.f) + s * g * f.k * 128;
-    return { at: (t2, phi, o) => {
-      let dx = 3 * Math.cos(3 * t2 + phi), dy = 2 * Math.cos(2 * t2), sp = Math.hypot(dx, dy);
-      if (sp < 1e-6) {
-        dx = 3 * Math.cos(3 * (t2 + 1e-4) + phi);
-        dy = 2 * Math.cos(2 * (t2 + 1e-4));
-        sp = Math.hypot(dx, dy);
-      }
-      o[0] = ex + kk * LM_A * Math.sin(3 * t2 + phi);
-      o[1] = ey + kk * LM_A * Math.sin(2 * t2);
-      o[2] = dx / sp;
-      o[3] = dy / sp;
-      return o;
-    } };
-  }
-  var LM_NS = 2400;
-  function launchRiders(F, L, rest, rnd, phi) {
-    const C = launchCurve(F), o = [0, 0, 0, 0], lat = L.lat, out = [], random = rnd || Math.random, at = phi == null ? LM_PHI1 : phi;
-    const N = 2 * LM_NS, px = new Float64Array(N), py = new Float64Array(N), pt = new Float64Array(N), reach = L.rad + LM_FEATHER;
-    for (let q = 0; q < N; q++) {
-      const t2 = LM_T0 + (LM_T1 - LM_T0) * (q + 0.5) / LM_NS;
-      C.at(t2, at, o);
-      px[q] = o[0];
-      py[q] = o[1];
-      pt[q] = t2;
-    }
-    for (let j = 0; j < lat.ny; j++) for (let i = 0; i < lat.nx; i++) {
-      const n = j * lat.nx + i, lit = rest[n];
-      if (!lit) continue;
-      const x = lat.x0 + i * LM_STEP, y = lat.y0 + j * LM_STEP, half = [];
-      for (let h = 0; h < 2; h++) {
-        let best = 0, bd = Infinity;
-        for (let q = h * LM_NS; q < (h + 1) * LM_NS; q++) {
-          const d2 = (px[q] - x) * (px[q] - x) + (py[q] - y) * (py[q] - y);
-          if (d2 < bd) {
-            bd = d2;
-            best = q;
-          }
-        }
-        const t2 = pt[best], d = Math.sqrt(bd), z = Math.cos(3 * t2 + at);
-        half.push({ t: t2, d, z, v: Math.max(0, Math.min(1, (L.rad - d) / LM_FEATHER)) * F.light(z) });
-      }
-      const lights = half[1].v > half[0].v || half[1].v === half[0].v && half[1].z > half[0].z ? 1 : 0;
-      half.forEach((hf, h) => {
-        if (h !== lights && hf.d >= reach) return;
-        C.at(hf.t, at, o);
-        const ox = x - o[0], oy = y - o[1];
-        out.push({
-          n,
-          t: hf.t,
-          a: ox * o[2] + oy * o[3],
-          b: -ox * o[3] + oy * o[2],
-          hx: x,
-          hy: y,
-          rest: lit,
-          feather: Math.min(1, lit / F.light(Math.abs(hf.z))),
-          near: h === lights,
-          r: 0.8 + random() * 1.4,
-          ph: 0,
-          sp: 0,
-          x: 0,
-          y: 0,
-          cx: 0,
-          cy: 0
-        });
-      });
-    }
-    return { C, list: out };
-  }
   function launchPlace(C, r, phi, o) {
     C.at(r.t, phi, o);
     const x = o[0] + r.a * o[2] - r.b * o[3], y = o[1] + r.a * o[3] + r.b * o[2];
@@ -22214,333 +22327,24 @@ What you type stays in this browser only.`;
     o[1] = y;
     return o;
   }
-  var LM_TURN_MS = 900;
-  var LM_GATHER_MS = 600;
-  var LM_PULL = 0.16;
-  var LM_SETTLE_MS = 700;
-  var LM_LANDED_MS = 1e3;
-  var LM_SPRITE = 64;
-  var LM_CORE = 9;
-  var LM_HALO = 2.4;
-  var LM_GLOW = 0.4;
-  var LM_A_MIN = 0.35;
-  var LM_TWINKLE_MS = 400;
-  var lmEase = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
-  var lmSmooth = (u) => {
-    u = Math.max(0, Math.min(1, u));
-    return u * u * (3 - 2 * u);
-  };
-  var lmStillDefault = () => document.documentElement.classList.contains("e-still");
+  function launchRiders(F, L, rest, rnd, phi) {
+    return { C: { at: (t2, p, o) => {
+      o[0] = 0;
+      o[1] = 0;
+      o[2] = 1;
+      o[3] = 0;
+      return o;
+    } }, list: [] };
+  }
   var lmK = null;
   var lmLandWait = [];
-  function lmLayout(k) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2), r = k.host.getBoundingClientRect();
-    k.W = k.host.offsetWidth;
-    k.H = k.host.offsetHeight;
-    k.zoom = k.W ? r.width / k.W : 1;
-    const sc = dpr * k.zoom;
-    k.cv.width = Math.round(k.W * sc);
-    k.cv.height = Math.round(k.H * sc);
-    k.ctx.setTransform(sc, 0, 0, sc, 0, 0);
-    const sr = k.spot.getBoundingClientRect();
-    k.sx = (sr.left - r.left) / k.zoom;
-    k.sy = (sr.top - r.top) / k.zoom;
-    k.scale = Math.min(sr.width, sr.height) / k.zoom / LM_PX;
-  }
-  var lmClock = (k, ms) => k.phase ? k.phase() : LM_PHI1 + LM_W0 * Math.max(0, ms - LM_LANDED_MS) / 1e3;
-  var lmPhaseAt = (k, ms) => lmClock(k, ms) - Math.PI * (1 - lmEase(Math.min(1, ms / LM_TURN_MS)));
-  function lmRide(k) {
-    const at = k.phase ? k.phase() + LM_W0 * LM_LANDED_MS / 1e3 : LM_PHI1;
-    if (k.R && k.rode === at) return;
-    k.F.lay(at, k.to, k.rad, LM_FEATHER, k.lat, k.rest);
-    k.R = launchRiders(k.F, k, k.rest, null, at);
-    k.R.list.forEach((p) => {
-      p.ph = k.dots[p.n].ph;
-      p.sp = k.dots[p.n].sp;
-    });
-    k.rode = at;
-  }
-  function lmPaintLattice(k, quiet, phi, t2) {
-    if (k.laid !== phi) {
-      k.F.lay(phi, k.to, k.rad, LM_FEATHER, k.lat, k.light);
-      k.laid = phi;
-    }
-    const bins = [], sc = k.scale, r = LM_DOT * sc;
-    for (let i = 0; i < k.light.length; i++) {
-      const lit = k.light[i];
-      if (!lit) continue;
-      const d = k.dots[i], tw = quiet ? 0.75 : 0.55 + 0.45 * Math.sin(d.ph + t2 * d.sp * 1.6);
-      const b = Math.round(Math.min(1, tw * 1.2) * lit * LM_ALPHA_STEPS);
-      if (b) (bins[b] || (bins[b] = [])).push(i);
-    }
-    k.ctx.clearRect(0, 0, k.W, k.H);
-    k.ctx.fillStyle = k.ink;
-    bins.forEach((ix, b) => {
-      k.ctx.globalAlpha = b / LM_ALPHA_STEPS;
-      k.ctx.beginPath();
-      ix.forEach((n) => {
-        const x = k.sx + k.dots[n].hx * sc, y = k.sy + k.dots[n].hy * sc;
-        k.ctx.moveTo(x + r, y);
-        k.ctx.arc(x, y, r, 0, LM_TAU);
-      });
-      k.ctx.fill();
-    });
-    k.ctx.globalAlpha = 1;
-  }
-  function lmStamp(core, halo) {
-    const c = document.createElement("canvas");
-    c.width = c.height = LM_SPRITE;
-    const g = c.getContext("2d"), m = LM_SPRITE / 2, gr = g.createRadialGradient(m, m, LM_CORE * 0.6, m, m, LM_CORE * LM_HALO);
-    gr.addColorStop(0, halo);
-    gr.addColorStop(1, "transparent");
-    g.globalAlpha = LM_GLOW;
-    g.fillStyle = gr;
-    g.fillRect(0, 0, LM_SPRITE, LM_SPRITE);
-    g.globalAlpha = 1;
-    g.fillStyle = core;
-    g.beginPath();
-    g.arc(m, m, LM_CORE, 0, LM_TAU);
-    g.fill();
-    return c;
-  }
-  function lmPaintRiders(k, t2) {
-    const e = lmSmooth(k.ms / LM_TURN_MS), w = lmSmooth((k.ms - LM_SETTLE_MS) / (LM_LANDED_MS - LM_SETTLE_MS));
-    const sc = k.scale, ctx = k.ctx, phi = lmPhaseAt(k, k.ms), RS = k.R.list, bins = [], rDot = LM_DOT * sc;
-    const key = k.ink + "|" + k.halo;
-    if (k.stampKey !== key) {
-      k.stamp = lmStamp(k.ink, k.halo);
-      k.stampKey = key;
-    }
-    ctx.clearRect(0, 0, k.W, k.H);
-    for (let i = 0; i < RS.length; i++) {
-      const p = RS[i], z = Math.cos(3 * p.t + phi);
-      const twF = LM_A_MIN + (1 - LM_A_MIN) * (0.5 + 0.5 * Math.sin(p.ph + k.ms / LM_TWINKLE_MS));
-      const twD = Math.min(1, (0.55 + 0.45 * Math.sin(p.ph + t2 * p.sp * 1.6)) * (0.45 + 0.75 * e));
-      const aF = twF * p.feather * k.F.light(z) * (1 - w), aD = twD * (p.near ? p.rest : 0) * w;
-      if (aF > 4e-3) {
-        const d = (p.r + (LM_DOT - p.r) * w) * sc / LM_CORE * LM_SPRITE;
-        ctx.globalAlpha = Math.min(1, aF);
-        ctx.drawImage(k.stamp, p.x - d / 2, p.y - d / 2, d, d);
-      }
-      const b = Math.round(aD * LM_ALPHA_STEPS);
-      if (b) (bins[b] || (bins[b] = [])).push(p);
-    }
-    ctx.fillStyle = k.ink;
-    bins.forEach((ps, b) => {
-      ctx.globalAlpha = b / LM_ALPHA_STEPS;
-      ctx.beginPath();
-      ps.forEach((p) => {
-        ctx.moveTo(p.x + rDot, p.y);
-        ctx.arc(p.x, p.y, rDot, 0, LM_TAU);
-      });
-      ctx.fill();
-    });
-    ctx.globalAlpha = 1;
-  }
-  function lmPaint(k) {
-    const cs = getComputedStyle(k.cv);
-    k.ink = cs.color;
-    k.halo = cs.getPropertyValue("--fifth-halo").trim() || cs.color;
-    if (k.still()) {
-      lmPaintLattice(k, true, LM_PHI0, 0);
-      return;
-    }
-    if (k.ms >= LM_LANDED_MS) lmPaintLattice(k, false, lmPhaseAt(k, k.ms), k.ms / 1e3);
-    else lmPaintRiders(k, k.ms / 1e3);
-  }
-  function lmStep(k, dt) {
-    const phi = lmPhaseAt(k, Math.min(k.ms, LM_LANDED_MS - 1)), o = [0, 0, 0, 0], sc = k.scale;
-    const per = LM_PULL * lmSmooth(k.ms / LM_GATHER_MS), pull = 1 - Math.pow(1 - per, dt / (1e3 / 60));
-    const w = lmSmooth((k.ms - LM_SETTLE_MS) / (LM_LANDED_MS - LM_SETTLE_MS)), RS = k.R.list;
-    for (let i = 0; i < RS.length; i++) {
-      const p = RS[i];
-      launchPlace(k.R.C, p, phi, o);
-      const tx = k.sx + o[0] * sc, ty = k.sy + o[1] * sc;
-      p.cx += (tx - p.cx) * pull;
-      p.cy += (ty - p.cy) * pull;
-      p.x = p.cx + (tx - p.cx) * w;
-      p.y = p.cy + (ty - p.cy) * w;
-    }
-  }
   function lmLanded() {
     const w = lmLandWait;
     lmLandWait = [];
     w.forEach((fn) => setTimeout(fn, 0));
   }
-  function lmFrame(now) {
-    const k = lmK;
-    if (!k || !k.host.isConnected) {
-      stopLaunchMark(true);
-      return;
-    }
-    k.raf = 0;
-    if (k.still()) {
-      k.ms = 0;
-      lmPaint(k);
-      lmLanded();
-      return;
-    }
-    const dt = Math.max(0, now - k.last);
-    if (k.framed && dt > 0) k.gap = Math.max(2, Math.min(k.gap, dt));
-    const step = k.ms < LM_LANDED_MS ? Math.min(dt, 2 * k.gap) : dt;
-    k.framed = true;
-    k.last = Math.max(k.last, now);
-    k.ms += step;
-    k.lost += dt - step;
-    if (k.ms < LM_LANDED_MS) lmStep(k, step);
-    else lmLanded();
-    lmPaint(k);
-    k.gapMs = k.ms < LM_LANDED_MS + 200 ? 0 : 1e3 / 15;
-    k.hold = setTimeout(() => {
-      k.hold = 0;
-      k.raf = requestAnimationFrame(lmFrame);
-    }, k.gapMs);
-  }
-  function lmReflow(k) {
-    const W = k.W, H = k.H, sx = k.sx, sy = k.sy, sc = k.scale;
-    lmLayout(k);
-    if (!k.R || !W || !H || k.ms >= LM_LANDED_MS || W === k.W && H === k.H && sx === k.sx && sy === k.sy && sc === k.scale) return;
-    const fx = k.W / W, fy = k.H / H, phi = lmPhaseAt(k, Math.min(k.ms, LM_LANDED_MS - 1)), o = [0, 0, 0, 0];
-    k.R.list.forEach((p) => {
-      launchPlace(k.R.C, p, phi, o);
-      const ax = sx + o[0] * sc, ay = sy + o[1] * sc, bx = k.sx + o[0] * k.scale, by = k.sy + o[1] * k.scale;
-      p.cx = bx + (p.cx - ax) * fx;
-      p.cy = by + (p.cy - ay) * fy;
-      p.x = bx + (p.x - ax) * fx;
-      p.y = by + (p.y - ay) * fy;
-    });
-  }
-  function lmScatter(k) {
-    k.R.list.forEach((p) => {
-      p.cx = p.x = Math.random() * k.W;
-      p.cy = p.y = Math.random() * k.H;
-    });
-  }
-  function lmStart(k) {
-    k.start = performance.now();
-    k.lost = 0;
-    if (k.still()) {
-      lmPaint(k);
-      lmLanded();
-      return;
-    }
-    if (k.covered()) {
-      k.hold = setTimeout(() => {
-        k.hold = 0;
-        lmStart(k);
-      }, 150);
-      return;
-    }
-    k.ms = 0;
-    k.last = k.start;
-    k.framed = false;
-    k.gap = 1e3 / 60;
-    lmRide(k);
-    lmScatter(k);
-    k.raf = requestAnimationFrame(lmFrame);
-  }
-  function stopLaunchMark(all) {
-    const k = lmK;
-    if (!k || k.launch && all !== true) return;
-    lmK = null;
-    cancelAnimationFrame(k.raf);
-    clearTimeout(k.hold);
-    k.ro.disconnect();
-    k.mo.disconnect();
-    if (k.cv.parentNode) k.cv.remove();
-    lmLanded();
-  }
-  function syncLaunchMark(host, opts) {
-    if (!host) {
-      stopLaunchMark(false);
-      return;
-    }
-    const spot = host.querySelector(".e-fifth-spot");
-    if (!spot) return;
-    const k = lmK;
-    if (k) {
-      if (k.host === host) return;
-      const was = k.cv.getBoundingClientRect(), z = k.zoom || 1;
-      k.host = host;
-      k.spot = spot;
-      k.launch = false;
-      host.insertBefore(k.cv, host.firstChild);
-      k.ro.disconnect();
-      k.ro.observe(host);
-      lmLayout(k);
-      const now = k.cv.getBoundingClientRect(), dx = (was.left - now.left) / z, dy = (was.top - now.top) / z;
-      k.R.list.forEach((p) => {
-        p.cx += dx;
-        p.cy += dy;
-        p.x += dx;
-        p.y += dy;
-      });
-      lmPaint(k);
-      return;
-    }
-    const o = opts || {}, F = launchFigure(o.R || LAUNCH_R), L = launchLattice(F), rest = new Float32Array(L.lat.nx * L.lat.ny);
-    const dots = new Array(rest.length);
-    for (let j = 0, q = 0; j < L.lat.ny; j++) for (let i = 0; i < L.lat.nx; i++, q++)
-      dots[q] = { hx: L.lat.x0 + i * LM_STEP, hy: L.lat.y0 + j * LM_STEP, ph: Math.random() * LM_TAU, sp: 0.6 + Math.random() * 0.9 };
-    const cv = document.createElement("canvas");
-    cv.className = "e-fifth";
-    cv.setAttribute("aria-hidden", "true");
-    host.insertBefore(cv, host.firstChild);
-    const nk = lmK = {
-      host,
-      spot,
-      cv,
-      ctx: cv.getContext("2d"),
-      F,
-      lat: L.lat,
-      to: L.to,
-      rad: L.rad,
-      light: new Float32Array(rest.length),
-      laid: null,
-      dots,
-      rest,
-      R: null,
-      rode: null,
-      phase: o.phase || null,
-      ms: 0,
-      last: 0,
-      start: null,
-      lost: 0,
-      gap: 1e3 / 60,
-      framed: false,
-      raf: 0,
-      hold: 0,
-      gapMs: 0,
-      launch: false,
-      still: o.still || lmStillDefault,
-      covered: o.covered || (() => false)
-    };
-    lmLayout(nk);
-    lmRide(nk);
-    lmScatter(nk);
-    nk.ro = new ResizeObserver(() => {
-      lmReflow(nk);
-      lmPaint(nk);
-    });
-    nk.ro.observe(host);
-    nk.mo = new MutationObserver(() => {
-      if (nk.still()) {
-        cancelAnimationFrame(nk.raf);
-        clearTimeout(nk.hold);
-        nk.raf = 0;
-        nk.hold = 0;
-        nk.ms = 0;
-        lmPaint(nk);
-        lmLanded();
-      } else if (!nk.raf && !nk.hold) lmStart(nk);
-      else lmPaint(nk);
-    });
-    nk.mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
-    lmStart(nk);
-  }
   function whenLaunchLanded(fn) {
-    const k = lmK;
-    if (!k || k.still() || k.ms >= LM_LANDED_MS) {
+    if (currentOpeningFig == null) {
       fn();
       return;
     }
@@ -22554,119 +22358,261 @@ What you type stays in this browser only.`;
     lmLandWait.push(once);
     setTimeout(once, LAUNCH_MAX_MS);
   }
-  var lmLast = null;
-  function launchMark(opts) {
-    const o = opts || {}, body = document.body, t0 = performance.now(), still = o.still || lmStillDefault;
-    const minMs = o.minMs == null ? LAUNCH_MIN_MS : o.minMs, maxMs = o.maxMs == null ? LAUNCH_MAX_MS : o.maxMs;
-    const veil = document.createElement("div");
-    veil.className = "e-launch-veil " + (o.app || "");
-    veil.setAttribute("aria-hidden", "true");
-    const spot = document.createElement("div");
-    spot.className = "e-fifth-spot";
-    veil.appendChild(spot);
-    const place = () => {
-      const r = o.region.getBoundingClientRect();
-      veil.style.left = r.left + "px";
-      veil.style.top = r.top + "px";
-      veil.style.width = r.width + "px";
-      veil.style.height = Math.max(0, window.innerHeight - r.top) + "px";
-    };
-    place();
-    body.appendChild(veil);
-    body.classList.add("e-launch");
-    stopLaunchMark(true);
-    syncLaunchMark(veil, { R: o.R || LAUNCH_R, still, covered: o.covered, phase: o.phase });
-    if (lmK && lmK.host === veil) lmK.launch = true;
-    const state = lmLast = { reason: "", ms: 0, veil };
-    const off = [];
-    const on = (el, ev, fn, opt) => {
-      el.addEventListener(ev, fn, opt);
-      off.push(() => el.removeEventListener(ev, fn, opt));
-    };
-    function giveWay(reason) {
-      if (state.reason) return;
-      state.reason = reason;
-      state.ms = Math.round(performance.now() - t0);
-      off.forEach((f) => f());
-      const k = lmK;
-      if (reason === "time" && k && k.host === veil && k.ms < LM_LANDED_MS && !still()) {
-        k.ms = LM_LANDED_MS;
-        lmPaint(k);
-        lmLanded();
-      }
-      const quick = reason === "key" || reason === "click" || reason === "wheel" || still(), out = quick ? LAUNCH_QUICK_MS : LAUNCH_OUT_MS;
-      body.style.setProperty("--e-launch-out", out + "ms");
-      body.classList.add("e-launch-out");
-      body.classList.remove("e-launch");
-      veil.classList.add("e-going");
-      setTimeout(() => {
-        if (lmK && lmK.host === veil) stopLaunchMark(true);
-        veil.remove();
-        body.classList.remove("e-launch-out");
-        body.style.removeProperty("--e-launch-out");
-      }, out);
+  function stopLaunchMark(all) {
+    if (lmK && lmK.cv && lmK.cv.parentNode) lmK.cv.remove();
+    lmK = null;
+    lmLanded();
+  }
+  function syncLaunchMark(host, opts) {
+    if (!host) {
+      stopLaunchMark(false);
+      return;
     }
-    let held = "";
-    const loose = () => {
-      const a = document.activeElement;
-      return !a || a === body || a === document.documentElement;
+  }
+  var currentOpeningFig = null;
+  var launchStateRecord = { reason: "", ms: 0 };
+  function launchMark(opts) {
+    const o = opts || {};
+    const doc = typeof document !== "undefined" ? document : null;
+    const win = typeof window !== "undefined" ? window : null;
+    const body = doc && doc.body;
+    const quiet = o.still || (() => doc && doc.documentElement && doc.documentElement.classList.contains("e-still") || false);
+    const isStillMotion = typeof quiet === "function" ? quiet() : !!quiet;
+    if (body && body.classList) {
+      body.classList.add("e-launch");
+    }
+    const state = {
+      reason: null,
+      ended: false,
+      skipped: false,
+      ms: 0,
+      isStill: isStillMotion
     };
-    const hold = (e) => {
-      const k = e.key, gr = !!(e.getModifierState && e.getModifierState("AltGraph"));
-      if (typeof k === "string" && k.length === 1 && (gr || !(e.ctrlKey || e.metaKey || e.altKey)) && !e.isComposing && loose()) {
-        held += k;
-        e.preventDefault();
+    let t0 = win && win.performance ? win.performance.now() : Date.now();
+    let rafId = 0;
+    let failsafeTimer = 0;
+    let veil = null;
+    let canvas = null;
+    let ctx = null;
+    const W = win && win.innerWidth || 1280;
+    const H = win && win.innerHeight || 880;
+    currentOpeningFig = isStillMotion ? { cx: 0, cy: 0, k: 0, phi: PHI_ICON } : figureAt(0, W, H);
+    function syncCorner(phi) {
+      setFifthPhase(phi);
+    }
+    function giveWay(reason) {
+      if (state.ended) return;
+      state.ended = true;
+      state.reason = reason;
+      launchStateRecord.reason = reason;
+      if (reason === "key" || reason === "click" || reason === "wheel") {
+        state.skipped = true;
       }
-    };
-    const unhold = () => window.removeEventListener("keydown", hold, true);
-    if (o.focus) window.addEventListener("keydown", hold, true);
-    on(window, "keydown", () => giveWay("key"), true);
-    on(window, "pointerdown", (e) => {
-      if (e.target === veil || veil.contains && veil.contains(e.target)) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (failsafeTimer && typeof clearTimeout === "function") {
+        clearTimeout(failsafeTimer);
+        failsafeTimer = 0;
       }
-      giveWay("click");
-    }, true);
-    on(window, "wheel", () => giveWay("wheel"), { passive: true, capture: true });
-    on(window, "resize", place);
-    const ready = Promise.resolve(o.ready).then(() => {
-      unhold();
-      const f = typeof o.focus === "function" ? o.focus() : o.focus;
-      if (f && loose()) {
-        f.focus({ preventScroll: true });
-        if (held && typeof f.value === "string") {
-          f.value += held;
-          if (typeof Event === "function") f.dispatchEvent(new Event("input", { bubbles: true }));
+      const now = win && win.performance ? win.performance.now() : Date.now();
+      state.ms = Math.round(now - t0);
+      launchStateRecord.ms = state.ms;
+      if (rafId && win && win.cancelAnimationFrame) {
+        win.cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      const tSec = state.ms / 1e3;
+      const curW = win && win.innerWidth || 1280;
+      const curH = win && win.innerHeight || 880;
+      const finalPhi = isStillMotion ? PHI_ICON : tSec >= TIMING.STILL_UNTIL ? cornerPhase(tSec) : figureAt(tSec, curW, curH).phi;
+      syncCorner(finalPhi);
+      const brandTile = doc && doc.querySelector(".brand-tile");
+      if (!isStillMotion && brandTile && !brandTile.classList.contains("brand-turning")) {
+        brandTile.classList.add("brand-turning");
+      }
+      const outMs = reason === "key" || reason === "click" || reason === "wheel" || isStillMotion ? 0 : 350;
+      if (outMs === 0) {
+        if (veil && veil.remove) veil.remove();
+        if (body && body.classList) {
+          body.classList.remove("e-launch");
+          body.classList.remove("e-launch-out");
+        }
+      } else {
+        if (body && body.classList) {
+          body.classList.add("e-launch-out");
+          body.classList.remove("e-launch");
+        }
+        if (veil) {
+          if (veil.classList) veil.classList.add("e-going");
+          setTimeout(() => {
+            if (veil && veil.remove) veil.remove();
+            if (body && body.classList) {
+              body.classList.remove("e-launch-out");
+            }
+          }, outMs);
+        } else {
+          if (body && body.classList) {
+            body.classList.remove("e-launch-out");
+          }
         }
       }
-      if (state.reason) return;
-      if (!lmK || lmK.host !== veil) giveWay("moved");
-    });
-    const wait = minMs, landed = new Promise((r) => whenLaunchLanded(r));
-    const floor = (r) => {
-      const k = lmK, own = !!k && k.host === veil && k.start != null, now = performance.now();
-      const standing = own && !still() && k.ms < LM_LANDED_MS ? Math.max(0, now - k.last - 2 * k.gap) : 0;
-      const due = (own ? k.start + k.lost + standing : t0) + wait - now;
-      if (due > 0) setTimeout(() => floor(r), due);
-      else r();
+      lmLanded();
+      if (typeof o.focus === "function") {
+        try {
+          const f = o.focus();
+          if (f && f.focus) f.focus({ preventScroll: true });
+        } catch (e) {
+        }
+      }
+    }
+    const armFailsafe = () => {
+      if (typeof setTimeout === "function") {
+        failsafeTimer = setTimeout(() => giveWay("failsafe"), FAILSAFE_MS);
+      }
     };
-    Promise.all([ready, new Promise(floor), landed]).then(() => giveWay("time"), () => {
-      unhold();
-      giveWay("time");
-    });
-    setTimeout(() => {
-      unhold();
-      giveWay("time");
-    }, Math.max(wait, maxMs));
-    return { giveWay, veil, get reason() {
-      return state.reason;
-    }, get ms() {
-      return state.ms;
-    } };
+    function onKey(e) {
+      giveWay("key");
+    }
+    function onPointer(e) {
+      giveWay("click");
+    }
+    function onWheel(e) {
+      giveWay("wheel");
+    }
+    if (win && win.addEventListener) {
+      win.addEventListener("keydown", onKey, true);
+      win.addEventListener("pointerdown", onPointer, true);
+      win.addEventListener("wheel", onWheel, { passive: true, capture: true });
+    }
+    if (win) {
+      win.__launchOpeningState = () => ({
+        get cx() {
+          return currentOpeningFig ? currentOpeningFig.cx : 0;
+        },
+        get cy() {
+          return currentOpeningFig ? currentOpeningFig.cy : 0;
+        },
+        get size() {
+          return currentOpeningFig ? currentOpeningFig.k * 256 : 0;
+        },
+        get phase() {
+          return currentOpeningFig ? currentOpeningFig.phi : PHI_ICON;
+        },
+        get skipped() {
+          return !!state.skipped;
+        },
+        get ended() {
+          return !!state.ended;
+        },
+        get reason() {
+          return state.reason;
+        },
+        get isStill() {
+          return state.isStill;
+        },
+        get isFlightTurning() {
+          return !state.isStill && !state.ended;
+        }
+      });
+    }
+    armFailsafe();
+    if (isStillMotion) {
+      const waitReady = win && win.__stubNoFramesAndNeverReady ? new Promise(() => {
+      }) : Promise.resolve(o.ready);
+      waitReady.then(() => giveWay("still"));
+      return {
+        giveWay,
+        get reason() {
+          return state.reason;
+        },
+        get ended() {
+          return state.ended;
+        },
+        get ms() {
+          return state.ms;
+        }
+      };
+    }
+    if (doc && doc.createElement && body && body.appendChild) {
+      veil = doc.createElement("div");
+      veil.className = "e-launch-veil";
+      canvas = doc.createElement("canvas");
+      canvas.className = "e-opening";
+      canvas.setAttribute("aria-hidden", "true");
+      veil.appendChild(canvas);
+      body.appendChild(veil);
+      ctx = canvas.getContext ? canvas.getContext("2d") : null;
+    }
+    function renderFrame(now) {
+      try {
+        drawFrame(now);
+      } catch (err) {
+        giveWay("error");
+      }
+    }
+    function drawFrame(now) {
+      const t2 = (now - t0) / 1e3;
+      const curW = win && win.innerWidth || 1280;
+      const curH = win && win.innerHeight || 880;
+      const fig = figureAt(t2, curW, curH);
+      currentOpeningFig = fig;
+      if (t2 >= TIMING.STILL_UNTIL) {
+        syncCorner(fig.phi);
+      }
+      if (ctx && canvas) {
+        const dpr = win && win.devicePixelRatio || 1;
+        if (canvas.width !== curW * dpr || canvas.height !== curH * dpr) {
+          canvas.width = curW * dpr;
+          canvas.height = curH * dpr;
+          if (ctx.scale) ctx.scale(dpr, dpr);
+        }
+        const ground = getGroundRgb(doc);
+        if (ctx.clearRect) ctx.clearRect(0, 0, curW, curH);
+        if (fig.ground > 0 && ctx.fillStyle && ctx.fillRect) {
+          ctx.fillStyle = rgb(ground);
+          ctx.globalAlpha = fig.ground;
+          ctx.fillRect(0, 0, curW, curH);
+          ctx.globalAlpha = 1;
+        }
+        const curColour = Array.isArray(fig.colour) ? fig.colour : INK_RGB;
+        drawLine(ctx, fig.phi, fig, {
+          depth: fig.depth,
+          far: 0.4,
+          colour: curColour,
+          bg: mix(ground, curColour, fig.ground),
+          alpha: fig.alpha
+        });
+      }
+      if (t2 >= TIMING.ARRIVE) {
+        const waitReady = win && win.__stubNoFramesAndNeverReady ? new Promise(() => {
+        }) : Promise.resolve(o.ready);
+        waitReady.then(() => giveWay("time"));
+        return;
+      }
+      if (!state.ended && win && win.requestAnimationFrame) {
+        rafId = win.requestAnimationFrame(renderFrame);
+      }
+    }
+    if (win && !win.__stubNoFramesAndNeverReady && win.requestAnimationFrame) {
+      rafId = win.requestAnimationFrame((ms) => {
+        t0 = ms;
+        renderFrame(ms);
+      });
+    }
+    return {
+      giveWay,
+      veil,
+      get reason() {
+        return state.reason;
+      },
+      get ended() {
+        return state.ended;
+      },
+      get ms() {
+        return state.ms;
+      }
+    };
   }
   function launchState() {
-    return lmLast ? { reason: lmLast.reason, ms: lmLast.ms } : null;
+    return launchStateRecord.reason ? { reason: launchStateRecord.reason, ms: launchStateRecord.ms } : null;
   }
 
   // src/modules/empty-mark.js
@@ -22781,8 +22727,7 @@ What you type stays in this browser only.`;
     setShown(ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
-      const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><div class="e-fifth-spot" aria-hidden="true"></div>' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + (teamCanJoin() ? '<br><br><button type="button" class="btn" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
@@ -22790,6 +22735,13 @@ What you type stays in this browser only.`;
       if (ej) ej.onclick = openJoinPaste;
       const ef = $("#emptyCatFolder");
       if (ef) wireFolderLink(ef);
+      const ea = $("#emptyAddCard");
+      if (ea) ea.onclick = (e) => {
+        e.preventDefault();
+        const b = $("#addCardFab");
+        if (b && !b.hidden) b.click();
+        else if (hooks.openCardEditor) hooks.openCardEditor(null);
+      };
       hooks.syncAddFab();
       hooks.syncNextDock();
       applyCardColumns();
@@ -22797,7 +22749,7 @@ What you type stays in this browser only.`;
       setPendingScrollHit(false);
       putEntrySel(null);
       markSearchHits(terms);
-      syncEmptyMark(list.querySelector(".empty-desk"));
+      syncEmptyMark(null);
       return;
     }
     const other = nextContentLang(lang);
@@ -23537,7 +23489,7 @@ What you type stays in this browser only.`;
       phase: fifthPhase,
       ready: new Promise((r) => afterShown(() => requestAnimationFrame(() => r())))
     });
-    if (empty) syncEmptyMark(empty);
+    if (empty && empty.querySelector(".e-fifth-spot")) syncEmptyMark(empty);
     return h;
   }
   function wireOnOpen() {
@@ -33245,12 +33197,12 @@ What you type stays in this browser only.`;
       if (!r || r.used) continue;
       const c = now.live && now.live.get(String(r.id));
       if (!c || !keep(c)) continue;
-      const cl = cardLang(c), cps = parts(c, cl);
+      const cl2 = cardLang(c), cps = parts(c, cl2);
       for (let vi = 0; vi < cps.length; vi++) {
         const key = String(c.id) + ":" + vi;
         if (!seen.has(key)) {
           seen.add(key);
-          if (rows.length < PICK_ROWS) rows.push(pickRow(c, cl, cps, vi));
+          if (rows.length < PICK_ROWS) rows.push(pickRow(c, cl2, cps, vi));
         }
       }
     }

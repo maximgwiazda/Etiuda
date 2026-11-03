@@ -50,7 +50,7 @@ function deskLaunch(){
   if(!region) return null;
   const h=launchMark({app:"desk", region:region, R:empty ? EMPTY_DESK_R : undefined, still:mgReduceMotion, covered:markCovered,
     phase:fifthPhase, ready:new Promise(r=>afterShown(()=>requestAnimationFrame(()=>r())))});
-  if(empty) syncEmptyMark(empty); /* plant:empty-desk-rises */
+  if(empty && empty.querySelector(".e-fifth-spot")) syncEmptyMark(empty); /* plant:empty-desk-rises */
   return h;
 }
 
