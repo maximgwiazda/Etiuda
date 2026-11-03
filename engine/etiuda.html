@@ -7566,8 +7566,8 @@ What you type stays in this browser only.`;
     "The tour waits in the Menu, under Show tour…": "Przewodnik czeka w Menu, pod Pokaż przewodnik…",
     "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.": "Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
     "A catalog of replies": "Katalog odpowiedzi",
-    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu.",
-    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
+    "Replies come in a catalog. Click <b>Load catalog</b> and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Wczytaj katalog</b> i wybrać katalog zespołu z folderu {FOLDER}. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu.",
+    "Replies come in a catalog. Click <b>Load catalog</b> and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Wczytaj katalog</b> i wybrać plik katalogu. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
     "comes with Etiuda": "dołączony do Etiudy",
     "Signed": "Podpisany",
     "Unsigned": "Niepodpisany",
@@ -23820,8 +23820,8 @@ What you type stays in this browser only.`;
   }
   function loadStepBody() {
     const dir = eCatalogFolderShort();
-    if (!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
-    return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.").split("{FOLDER}").join(esc(dir));
+    if (!dir) return t("Replies come in a catalog. Click <b>Load catalog</b> and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
+    return t("Replies come in a catalog. Click <b>Load catalog</b> and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.").split("{FOLDER}").join(esc(dir));
   }
   function menuOpen() {
     const m = $("#settingsMenu");

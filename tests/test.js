@@ -903,7 +903,7 @@ function tourActTests() {
   const loadSays = [x => x, x => PL[x] == null ? x : PL[x]].map(tr => { own.t = tr; return typeof loadStep.body === "function" ? loadStep.body() : ""; });
   own.t = s => s;
   eq("the tour's load step names Load and no sample button, on the desk, in English and in Polish",
-    loadSays.map(b => /Load a catalog|wczytaj katalog/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
+    loadSays.map(b => /<b>Load catalog<\/b>|<b>Wczytaj katalog<\/b>/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
 }
 
 /* THE EMPTY DESK OFFERS LOAD AND NO SAMPLE BUTTON: the sample is a file, and Load reaches it (Maxim,
@@ -5800,7 +5800,7 @@ function checkCatalogRoundTrip() {
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 1228;
-const UI_STRINGS_SHA256 = "b17b66222bc3cc90874cb2b34349a4a3965ac234f9dd57b23be3ceb42523c16a";
+const UI_STRINGS_SHA256 = "f14f218a6aa251069e8d664302a2bdc99563a2cdcdf4e00a1b01b3a7dc177bda";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

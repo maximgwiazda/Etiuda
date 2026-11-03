@@ -132,8 +132,8 @@ function tourRevealCardActions(){
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.")
+  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog</b> and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
+  return t("Replies come in a catalog. Click <b>Load catalog</b> and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
