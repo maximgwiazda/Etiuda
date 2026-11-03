@@ -74,7 +74,7 @@ try {
     { timeout: 30000 }
   );
   await page.keyboard.press("Escape");
-  await new Promise(r => setTimeout(r, 1200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
 
   const cardCount = await page.evaluate(() => document.querySelectorAll("#list .card").length);
   console.log(`Page ready with ${cardCount} cards loaded.`);
@@ -221,7 +221,7 @@ try {
         );
       }
       await Promise.all(dispatchPromises);
-      await new Promise(r => setTimeout(r, 450));
+      await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
 
       const paceData = await page.evaluate(paceVal => {
         const recs = window.pressRecords;
@@ -285,7 +285,7 @@ try {
     }
     s.textContent = "#dotField, .dotfield, .brand-tile, .brand-fifth { display: none !important; }";
   });
-  await new Promise(r => setTimeout(r, 200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
   const dotFieldOff = await runPaces("Dot field off");
 
   // 3. Colour easing switched off via test-only stylesheet
@@ -293,7 +293,7 @@ try {
     const s = document.getElementById("themeTestStyle");
     s.textContent = "*, *::before, *::after { transition: none !important; }";
   });
-  await new Promise(r => setTimeout(r, 200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
   const easingOff = await runPaces("Colour easing off");
 
   // Remove test stylesheet to leave page clean

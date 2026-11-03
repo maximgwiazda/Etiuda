@@ -77,7 +77,7 @@ try {
     { timeout: 30000 }
   );
   await page.keyboard.press("Escape");
-  await new Promise(r => setTimeout(r, 1200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
 
   const btnCoords = await page.$eval("#theme", b => {
     const r = b.getBoundingClientRect();
@@ -185,7 +185,7 @@ try {
 
   // 1. Single press: dark to light
   await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
-  await new Promise(r => setTimeout(r, 200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
   await probeRoll("single press dark to light", async () => {
     await clickTheme();
   }, 500);
@@ -197,7 +197,7 @@ try {
 
   // 3. Run of presses at 150 ms
   await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
-  await new Promise(r => setTimeout(r, 200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
   await probeRoll("run of 5 presses at 150 ms", async () => {
     for (let i = 0; i < 5; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 150));
@@ -207,7 +207,7 @@ try {
 
   // 4. Run of presses at 80 ms
   await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
-  await new Promise(r => setTimeout(r, 200));
+  await page.waitForFunction(() => document.getAnimations().length === 0, { timeout: 30000 });
   await probeRoll("run of 5 presses at 80 ms", async () => {
     for (let i = 0; i < 5; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 80));
