@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 9;
+const EXPECTED = 10;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -61,9 +61,9 @@ function load(src, markers, names, params, args) {
 }
 
 const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
-  "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyRegSz(",
-  "function policyFolderOk(", "function policyLeadOk(", "function joinPolicyFacts(", "function policyWords(",
-  "function joinPolicyFrom(", "let joinPolicyRead =", "function readJoinPolicy("];
+  "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
+  "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function joinPolicyFacts(",
+  "function policyWords(", "function joinPolicyFrom(", "let joinPolicyRead =", "function readJoinPolicy("];
 const POLICY_NAMES = ["execFileSync", "process", "fs", "os", "path"];
 const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X25519 =", "function hpkeLabeledExtract(",
   "function hpkeLabeledExpand(", "function hpkeX25519Public(", "function hpkeShared(", "function hpkeSchedule(",
@@ -138,7 +138,7 @@ function saidOf(got) { return got.said.join("|"); }
 let P = null, M = null, loadError = "", memberError = "";
 try {
   P = load(SRC, POLICY_DECLS, ["joinPolicyFrom", "readJoinPolicy", "REG_TOOL", "POLICY_KEY", "POLICY_WORDS"],
-    POLICY_NAMES, [() => "", { platform: "linux" }, fs, os, path]);
+    POLICY_NAMES, [() => "", { platform: "linux", env: process.env }, fs, os, path]);
 } catch (e) { loadError = (e && e.message) || String(e); }
 try {
   M = load(SRC, MEMBER_DECLS,
@@ -218,10 +218,10 @@ const goodRows = [
     }
     const dword = alone([["TeamFolder", "REG_DWORD", 1]]);
     if (dword.folder !== "" || saidOf(dword) !== EN.folder) problems.push("dword " + JSON.stringify(dword));
-    const expand = alone([["TeamFolder", "REG_EXPAND_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]]);
+    const expand = alone([["TeamFolder", "REG_EXPAND_SZ", "%NO_SUCH_FOLDER%\\team"], ["LeadKey", "REG_SZ", HEX]]);
     if (expand.folder !== "" || expand.lead !== "" || saidOf(expand) !== EN.folder + "|" + EN.beside)
       problems.push("expand " + JSON.stringify(expand));
-    const expandLead = alone([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", HEX]]);
+    const expandLead = alone([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", "%NO_SUCH_LEAD%"]]);
     if (expandLead.folder !== "" || expandLead.lead !== "" || saidOf(expandLead) !== EN.lead + "|" + EN.beside)
       problems.push("an expandable lead " + JSON.stringify(expandLead));
     const multiLead = alone([["LeadKey", "REG_MULTI_SZ", HEX]]);
@@ -911,6 +911,47 @@ function scratchGone(reg, problems, name) {
     "19h a policy lead outranks a pin kept for another key: that key's file covers nothing and is said once, the kept pin"
     + " stays for when the policy goes, and a barred team's file under the policy lead is pinned: "
     + (problems.join("; ") || "the policy's lead alone"));
+}
+
+{
+  const problems = [];
+  if (!P) problems.push(loadError);
+  else {
+    process.env.TEST_POLICY_SHARE = "D:\\Quay";
+    process.env.TEST_POLICY_LEAD = HEX;
+    try {
+      const got = P.joinPolicyFrom(exportText([
+        ["TeamFolder", "REG_EXPAND_SZ", "%TEST_POLICY_SHARE%\\team"],
+        ["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD%"]
+      ]), "en");
+      if (got.folder !== "D:\\Quay\\team" || got.lead !== HEX || got.said.length !== 0)
+        problems.push("expanded values not taken: " + JSON.stringify(got));
+      const gotLiteral = P.joinPolicyFrom(exportText([
+        ["TeamFolder", "REG_EXPAND_SZ", "D:\\Quay\\team"],
+        ["LeadKey", "REG_SZ", HEX]
+      ]), "en");
+      if (gotLiteral.folder !== "D:\\Quay\\team" || gotLiteral.lead !== HEX || gotLiteral.said.length !== 0)
+        problems.push("literal expand not taken: " + JSON.stringify(gotLiteral));
+      const gotUnresolved = P.joinPolicyFrom(exportText([
+        ["TeamFolder", "REG_EXPAND_SZ", "D:\\%UNRESOLVED_POLICY_X%\\team"],
+        ["LeadKey", "REG_SZ", HEX]
+      ]), "en");
+      if (gotUnresolved.folder !== "" || gotUnresolved.lead !== "" || saidOf(gotUnresolved) !== EN.folder + "|" + EN.beside)
+        problems.push("unresolved variable not counted as bad: " + JSON.stringify(gotUnresolved));
+      const gotToString = P.joinPolicyFrom(exportText([
+        ["TeamFolder", "REG_EXPAND_SZ", "D:\\%toString%\\team"],
+        ["LeadKey", "REG_SZ", HEX]
+      ]), "en");
+      if (gotToString.folder !== "" || gotToString.lead !== "" || saidOf(gotToString) !== EN.folder + "|" + EN.beside)
+        problems.push("prototype toString reached: " + JSON.stringify(gotToString));
+    } finally {
+      delete process.env.TEST_POLICY_SHARE;
+      delete process.env.TEST_POLICY_LEAD;
+    }
+  }
+  check(problems.length === 0,
+    "19j REG_EXPAND_SZ values are expanded for TeamFolder and LeadKey: environment variables are expanded case-insensitively and values taken, while unresolved variables and inherited names are bad: "
+    + (problems.join("; ") || "expanded"));
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }
