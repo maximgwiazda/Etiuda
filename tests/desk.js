@@ -670,23 +670,35 @@ async function startOn(appDir, ud) {
       ipv6: mainLog.ipv6, exitedAlone: shipped.exitedAlone } : null,
     control: controlLog ? { closed: controlLog.closed, events: controlLog.events, hosts: controlLog.hosts,
       pac: controlLog.pac } : null });
-  const expectedSwitches = require(path.join(E.ROOT, "shell", "win-proxy.cjs")).windowsProxySwitches();
+  /* The expectation is this tree's reader of Windows' settings. ETIUDA_PROXY_ORACLE names another tree's reader, so an
+     older shell can be measured against a newer reading (the red side of a fix's window run); unset, it is this tree's. */
+  const oracle = process.env.ETIUDA_PROXY_ORACLE || path.join(E.ROOT, "shell", "win-proxy.cjs");
+  const expectedSwitches = require(oracle).windowsProxySwitches();
   const expectsNone = expectedSwitches.some(s => s[0] === "no-proxy-server");
   const leavesResolver = expectedSwitches.length === 0;
   /* A quiet control is NOT RUN, never ok: where the shell without its switch does no discovery either,
      this machine cannot tell the switch's absence from its presence. */
-  if (controlLog && !controlShows && written && quiet)
+  /* NOT RUN only where this machine cannot tell: the shipped log unwritten, a control that does not discover, or a
+     server named, which neither run measures. Otherwise the expectation decides and a mismatch is a FAIL (the test
+     architect, 2026-11-03 22:01): entered only on a match, round 1's fault read NOT RUN here. */
+  const named = expectedSwitches.some(s => s[0] === "proxy-server" || s[0] === "proxy-pac-url");
+  if (!written)
+    notRun.push("C/D proxy discovery: the shipped shell's net log was not written whole: " + said);
+  else if (!controlLog || !controlShows)
     notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
-  else if (leavesResolver && written && controlShows && shippedShows)
+  else if (named)
+    notRun.push("C/D proxy discovery: this machine names a proxy, which discovery cannot show: " + said);
+  else if (leavesResolver)
     check(shippedShows,
       "where the control discovers a proxy, the shipped shell discovers too, so automatic detection is left"
       + " to Chromium: " + said);
-  else if (expectsNone && written && controlShows && quiet)
+  else if (expectsNone)
     check(quiet,
       "where proxies are off, the shipped shell passes --no-proxy-server and does no discovery, against a control"
       + " without the switch that does discover: " + said);
   else
-    notRun.push("C/D proxy discovery: the proxy setting did not match discovery on this machine: " + said);
+    notRun.push("C/D proxy discovery: the shell asks for switches this pair does not read: "
+      + JSON.stringify(expectedSwitches) + " " + said);
 
   reachedEnd = true;
 })().catch(e => {
