@@ -143,6 +143,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const E = require("./engine.js");
+const P = require("./install-plan.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const KEEP = process.argv.indexOf("--keep") > -1;
@@ -169,7 +170,7 @@ const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ")
 const note = what => console.log("       " + what);
 const phase = what => console.log("\n" + what);
 
-/* ---- the lab, and the profile it borrows -------------------------------------------------- */
+/* ---- the lab, and its own scratch home ------------------------------------------------ */
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-reinstall-"));
 const REG_PS1 = path.join(LAB, "uninstall-keys.ps1");
@@ -177,40 +178,28 @@ const ASSOC_PS1 = path.join(LAB, "file-association.ps1");
 const KEY_PS1 = path.join(LAB, "uninstall-key.ps1");
 const PROC_PS1 = path.join(LAB, "lab-processes.ps1");
 const FOREIGN_PS1 = path.join(LAB, "foreign-etiuda.ps1");
-/* THE CATALOG FOLDER THIS RUN PINS, and it is deliberately EMPTY. The shell looks in the catalog
-   folder first, then the user-data folder, then the install folder; unpinned, the first of those
-   is Documents\Etiuda, which on a working desk holds somebody's live catalog and is the reason
-   this instrument stopped on 2026-09-15. Pinning it at a folder of the lab's own takes the desk
-   out of the search order without moving the fixture, so the shell still finds the fixture where
-   this run put it - in the profile - and check 2a still reads the profile's own path back. */
+
+const H = P.scratchHome(LAB);
+for (const d of H.make) fs.mkdirSync(d, { recursive: true });
+const CHILD_ENV = Object.assign({}, process.env, H.env);
+
 const LABCAT = path.join(LAB, "catalogs");
-/* AND A DOCUMENTS FOLDER OF THE LAB'S OWN. The shipped sample is read beside a person's own
-   Documents\Etiuda, and `app.getPath("documents")` cannot be redirected from outside the process -
-   so the shell takes ETIUDA_TEST_DOCUMENTS and the sample legs below point it here. The pin above
-   cannot serve for this: the shipped folder is read only where the catalog folder IS the default
-   one, on purpose, so a run that pins is a run the sample never reaches. Every launch that clears
-   the pin passes this, and each asserts the folder the app named back before it reads anything,
-   because the alternative to this folder is the real Documents\Etiuda of whoever is at the desk. */
-const LABDOCS = path.join(LAB, "documents");
-/* Made here rather than left to the shell: a redirect at a folder that cannot be made falls back
-   to the real Documents with a line on stderr, so E.shellLaunch asks for one that is there. */
-fs.mkdirSync(LABDOCS, { recursive: true });
+const LABDOCS = H.documents;
 const DOCS_ETIUDA = path.join(LABDOCS, "Etiuda");
+fs.mkdirSync(DOCS_ETIUDA, { recursive: true });
+E.realProfileGuard(DOCS_ETIUDA);
+
 const SAMPLE = "sample-catalog.ec";
 const SAMPLE_KEY = "e~sampled";
 
-const HOME = os.homedir();
-const APPDATA = process.env.APPDATA || path.join(HOME, "AppData", "Roaming");
-const LOCALAPPDATA = process.env.LOCALAPPDATA || path.join(HOME, "AppData", "Local");
-const USERDATA = path.join(APPDATA, "etiuda");
-const START_MENU = path.join(APPDATA, "Microsoft", "Windows", "Start Menu", "Programs");
-const DESKTOP = path.join(HOME, "Desktop");
-const UPDATER = path.join(LOCALAPPDATA, "etiuda-updater");
+const USERDATA = path.join(H.places.ApplicationData, "etiuda");
+E.realProfileGuard(USERDATA);
+fs.mkdirSync(USERDATA, { recursive: true });
+
+const START_MENU = H.places.Programs;
+const DESKTOP = H.places.Desktop;
+const UPDATER = path.join(H.places.LocalApplicationData, "etiuda-updater");
 const PARKED = path.join(USERDATA, "qa-parked");
-/* WHERE A FILE THIS RUN DID NOT WRITE IS KEPT, beside the parking folder and so on the same volume
-   as the files it receives, which is what lets a rename move them rather than a copy. Made only
-   when something is to be kept (and left empty where the move then failed); never removed by
-   this file. */
 const EVIDENCE = path.join(USERDATA, "qa-evidence-" + new Date().toISOString().replace(/[:.]/g, "-"));
 
 /* THE SHORTCUT NAME IS THE INSTALLER'S OWN, read out of the build config rather than typed here.
@@ -299,7 +288,7 @@ const FOREIGN = [
 function ps(file, args) {
   return execFileSync("powershell.exe",
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file].concat(args || []),
-    { encoding: "utf8", windowsHide: true }).trim();
+    { encoding: "utf8", windowsHide: true, env: CHILD_ENV }).trim();
 }
 function uninstallKeys() {
   return ps(REG_PS1).split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort();
@@ -324,15 +313,24 @@ function killPid(pid) {
 }
 
 function listing(dir) {
-  try { return fs.readdirSync(dir).sort(); } catch (e) { return []; }
+  return E.safeListing(dir);
 }
 function added(before, after) { return after.filter(n => before.indexOf(n) < 0); }
 function sha256Of(file) { try { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); } catch (e) { return null; } }
-function deskFile() { return path.join(USERDATA, "desk.json"); }
+function deskFile() {
+  const f = path.join(USERDATA, "desk.json");
+  E.realProfileGuard(f);
+  return f;
+}
 /* A FIRST RUN IS A PROFILE WITH NO DESK FILE AT ALL, backups included (the shell gives the sample on
    one and only one), so the desk and its backups go, which takes the pin with them. */
 function firstRunDesk() {
-  for (const n of listing(USERDATA)) if (/^desk([.]bak[0-9]+)?[.]json$/.test(n)) fs.rmSync(path.join(USERDATA, n), { force: true });
+  E.realProfileGuard(USERDATA);
+  for (const n of listing(USERDATA)) if (/^desk([.]bak[0-9]+)?[.]json$/.test(n)) {
+    const f = path.join(USERDATA, n);
+    E.realProfileGuard(f);
+    fs.rmSync(f, { force: true });
+  }
 }
 function deskKeys() {
   try { return JSON.parse(fs.readFileSync(deskFile(), "utf8")).keys || {}; } catch (e) { return {}; }
@@ -375,6 +373,7 @@ function keepAsEvidence(files, why) {
 }
 
 function park() {
+  E.realProfileGuard(USERDATA);
   if (!fs.existsSync(USERDATA)) fs.mkdirSync(USERDATA, { recursive: true });
   /* THE LEASES BEFORE THE LOCK, board item 568. The lock below sees other runs of this harness
      and nothing else, and this instrument takes the real profile and installs the real product,
@@ -406,8 +405,8 @@ function park() {
   /* WHERE WINDOWS PUTS THE DESK'S FOLDERS, asked before anything moves. The installer and the app
      resolve them through the shell, which ignores APPDATA and LOCALAPPDATA (measured 2026-09-24),
      so a disagreement means this run would park one folder while the product wrote another. */
-  const places = E.placesMismatch({ ApplicationData: APPDATA, LocalApplicationData: LOCALAPPDATA,
-                                    Desktop: DESKTOP, Programs: START_MENU });
+  const places = E.placesMismatch({ ApplicationData: H.places.ApplicationData, LocalApplicationData: H.places.LocalApplicationData,
+                                    Desktop: DESKTOP, Programs: START_MENU }, CHILD_ENV);
   if (places.said.length)
     E.refuse("this run's reading of the desk's folders is not Windows's: " + places.said.join("; "),
              "nothing was moved. To run in a scratch home, point USERPROFILE at it with APPDATA and"
@@ -433,9 +432,8 @@ function park() {
      rename and the return would otherwise leave the desk and the shortcuts parked with nothing
      left to put them back. */
   parkedOk = true;
-  /* A rename rather than a copy: it is atomic, it costs nothing at 600 KB or at 60 MB, and a
-     desk that is moved cannot be half-copied. */
-  for (const n of parkedNames) fs.renameSync(path.join(USERDATA, n), path.join(PARKED, n));
+  /* A verified move rather than a bare rename: it is verified after move. */
+  for (const n of parkedNames) E.safeMove(path.join(USERDATA, n), path.join(PARKED, n));
   /* THE SHORTCUTS, board item 514, and they are parked for the same reason the desk is. The
      installer writes its shortcut by name, so one of that name already on this desk is
      overwritten by the install and DELETED by the uninstall; on 2026-09-18 that is what happened
@@ -447,7 +445,7 @@ function park() {
      did not put there. Same treatment. */
   const cached = path.join(UPDATER, "installer.exe");
   if (fs.existsSync(cached)) {
-    fs.renameSync(cached, path.join(UPDATER, "installer.parked.exe"));
+    E.safeMove(cached, path.join(UPDATER, "installer.parked.exe"));
     updaterParked = true;
   }
 }
@@ -455,6 +453,7 @@ function park() {
 function unpark() {
   if (unparked) return;
   unparked = true;
+  E.realProfileGuard(USERDATA);
   /* WHAT STANDS IN THE PROFILE NOW, out of the way of what goes back. Before this run's first
      write it cannot be the run's own, so it is printed and kept; after, it is the run's desk and
      goes into the lab. Neither is deleted here. */
@@ -462,7 +461,7 @@ function unpark() {
   if (!runWrote) keepAsEvidence(standing, "on the way out, found where this run had written nothing");
   else intoLab(standing);
   for (const n of parkedNames) {
-    try { fs.renameSync(path.join(PARKED, n), path.join(USERDATA, n)); }
+    try { E.safeMove(path.join(PARKED, n), path.join(USERDATA, n)); }
     catch (e) { console.log("       " + n + " could not go back and STAYS PARKED in " + PARKED + ": " + e.message); }
   }
   /* BEFORE THE PARKING FOLDER GOES, since that is where the shortcuts are. Each row carries the
@@ -481,7 +480,7 @@ function unpark() {
     const cached = path.join(UPDATER, "installer.exe");
     /* Standing there now, it is the copy this run's own install made. */
     if (fs.existsSync(cached)) intoLab([cached]);
-    try { fs.renameSync(path.join(UPDATER, "installer.parked.exe"), cached); }
+    try { E.safeMove(path.join(UPDATER, "installer.parked.exe"), cached); }
     catch (e) { console.log("       the parked installer could not go back and stays as installer.parked.exe: " + e.message); }
   }
   lockReleased = E.releaseDeskLock();
@@ -537,7 +536,7 @@ function buildSetup() {
    too, because a per-user install writes it into its own UninstallString. */
 function installTo(setup, dir) {
   if (/\s/.test(dir)) throw new Error("the install directory holds a space, which /D cannot carry: " + dir);
-  execFileSync(setup, ["/S", "/currentuser", "/D=" + dir.replace(/\//g, "\\")], { stdio: "ignore", windowsHide: true });
+  execFileSync(setup, ["/S", "/currentuser", "/D=" + dir.replace(/\//g, "\\")], { env: CHILD_ENV, stdio: "ignore", windowsHide: true });
 }
 
 /* The uninstaller returns in under a second and finishes in its own time: measured 0.9 s to
@@ -545,7 +544,7 @@ function installTo(setup, dir) {
 async function uninstallFrom(dir, seconds) {
   const un = path.join(dir, "Uninstall Etiuda.exe");
   if (!fs.existsSync(un)) return -1;
-  execFileSync(un, ["/S", "/currentuser"], { stdio: "ignore", windowsHide: true });
+  execFileSync(un, ["/S", "/currentuser"], { env: CHILD_ENV, stdio: "ignore", windowsHide: true });
   const limit = seconds === undefined ? 40 : seconds;
   for (let i = 1; i <= limit; i++) {
     await sleep(1000);
@@ -564,14 +563,10 @@ async function launch(dir, env) {
      ETIUDA_TEST_DOCUMENTS so that the one file this app writes into somebody's Documents is
      written into the lab instead. offscreenEnv merges it over the environment.
 
-     ownsDesk, board item 467: this is the one launcher in the harness with no --user-data-dir of
-     its own, because the real profile IS its subject - it is parked aside above and put back on
-     the way out. Every other launch anywhere in tests/ is refused without one. The catalog
-     folder is still confined, by the pin this file writes into the profile or by the lab's own
-     Documents, and E.shellLaunch reads which of the two before it spawns anything. */
+     The scratch home profile is passed via --user-data-dir into the lab's own folder. */
   const child = E.shellLaunch("tests/reinstall.js", path.join(dir, "Etiuda.exe"),
-    ["--remote-debugging-port=" + port],
-    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env), ownsDesk: true });
+    ["--remote-debugging-port=" + port, "--user-data-dir=" + USERDATA],
+    { stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, CHILD_ENV, E.offscreenEnv(env)), ownsDesk: true });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -885,6 +880,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " key(s) the app wrote, the folder holding " + JSON.stringify(listing(DOCS_ETIUDA)) + ", and the pin goes back ("
     + Object.keys(keys1b).join(", ") + "), so phase 2 runs exactly as it did before this leg existed");
   // The copy goes, so that 1h's first run finds a folder holding only the deployment's own catalog.
+  E.realProfileGuard(sampleFile);
   fs.rmSync(sampleFile, { force: true });
 
   /* 1h AND 1i: THE DESK THAT ALREADY HOLDS A CATALOG, board item 497. The sample is a special
@@ -899,6 +895,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   const deskDoc = JSON.parse(sampleInAsar.toString("utf8"));
   deskDoc.id = "desk-notes"; deskDoc.name = "Desk notes"; delete deskDoc.sample;
   deskDoc.cards = deskDoc.cards.slice(0, 12);
+  E.realProfileGuard(deskEc);
   fs.writeFileSync(deskEc, JSON.stringify(deskDoc), "utf8");
   const sixHoursBack = (Date.now() - 6 * 3600 * 1000) / 1000;
   fs.utimesSync(deskEc, sixHoursBack, sixHoursBack);
@@ -954,6 +951,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   /* 1i: one byte more, which is the smallest edit there is, in a file of exactly the sample's name
      put into Documents\Etiuda. It is read in place of the shipped one, and being no longer what
      shipped it competes on its date. */
+  E.realProfileGuard(sampleFile);
   fs.writeFileSync(sampleFile, sampleInAsar.toString("utf8") + " ", "utf8");
   const editedNewer = fs.statSync(sampleFile).mtimeMs > fs.statSync(deskEc).mtimeMs;
   let s3 = await launch(PROG1, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
@@ -970,7 +968,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " the Library lists it once, at the HEAD, as this folder's copy - " + JSON.stringify(editedRows));
 
   /* The folder and the pin go back exactly as 1g left them, so phase 2 runs as it always has. */
+  E.realProfileGuard(deskEc);
   fs.rmSync(deskEc, { force: true });
+  E.realProfileGuard(sampleFile);
   fs.rmSync(sampleFile, { force: true });
   E.pinCatalogFolder(USERDATA, LABCAT);
   if (listing(DOCS_ETIUDA).length || deskKeys()[SAMPLE_KEY] !== "1"
@@ -981,6 +981,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   /* ---- 2: a key and a catalog written through the running app -------------------------------- */
 
   phase("[2/6] a key and a catalog, written through the app");
+  E.realProfileGuard(path.join(USERDATA, "etiuda-catalog.ec"));
   fs.copyFileSync(FIX, path.join(USERDATA, "etiuda-catalog.ec"));
   let s = await launch(PROG1);
   const readLine = s.said.filter(l => /catalog read from /.test(l)).join(" | ");
@@ -1132,6 +1133,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "4f the reinstalled app, on an empty " + DOCS_ETIUDA + " it can write to, writes nothing there ("
     + listing(DOCS_ETIUDA).length + " entries) and reads the sample its own install carries: "
     + JSON.stringify(againRead) + ", E_CATALOG " + again.catalogThere);
+  E.realProfileGuard(sampleFile);
   fs.writeFileSync(sampleFile, sampleInAsar.toString("utf8") + " ", "utf8");
   writeDesk(unpin(keys4));
   s = await launch(PROG2, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
@@ -1140,6 +1142,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   check(samePath(twinRead, sampleFile),
     "4g and the twin that gives 4f its teeth: the same install and the same launch with a file of the"
     + " sample's name in the folder, one byte longer, and that file is what is read: " + JSON.stringify(twinRead));
+  E.realProfileGuard(sampleFile);
   fs.rmSync(sampleFile, { force: true });
 
   /* ---- 5: the control ------------------------------------------------------------------------ */

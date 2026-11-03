@@ -2294,6 +2294,100 @@ Module.prototype._compile = function (content, filename) {
   }
 }
 
+/* ---- 36: THE REAL PROFILE WALL AND SAFETY LISTINGS (no-real-profile brief) ----------------- */
+{
+  const snapshotFolder = dir => {
+    if (!fs.existsSync(dir)) return null;
+    const map = {};
+    for (const ent of fs.readdirSync(dir).sort()) {
+      try {
+        const st = fs.statSync(path.join(dir, ent));
+        map[ent] = { size: st.size, mtimeMs: st.mtimeMs, isDir: st.isDirectory() };
+      } catch (e) { map[ent] = { error: e.code }; }
+    }
+    return map;
+  };
+
+  /* 36a: The wall refuses on the real profile path before any operation, exit 78,
+     and the real profile folder's listing is identical before and after. */
+  const roots = E.realProfileFolders();
+  const realUd = roots[0];
+  const snapBefore = snapshotFolder(realUd);
+  const guardReal = run('const E = require("./engine.js"); E.realProfileGuard(' + JSON.stringify(realUd) + ');');
+  const snapAfter = snapshotFolder(realUd);
+  const sameListing = JSON.stringify(snapBefore) === JSON.stringify(snapAfter);
+  ok(guardReal.code === 78 && guardReal.out.indexOf("#refused real-profile") > -1
+     && guardReal.out.indexOf("refused real-profile") > -1 && sameListing,
+     "36a the wall refuses on the real profile path before any operation (exit 78) and the real profile listing is identical before and after: "
+     + guardReal.code + ", identical=" + sameListing);
+
+  /* 36b: The wall lets a lab path through. */
+  const labPath = path.join(tmp, "lab-profile");
+  fs.mkdirSync(labPath, { recursive: true });
+  const guardLab = run('const E = require("./engine.js"); E.realProfileGuard(' + JSON.stringify(labPath) + '); console.log("LAB_ALLOWED");');
+  ok(guardLab.code === 0 && guardLab.out.indexOf("LAB_ALLOWED") > -1,
+     "36b the wall lets a lab path through: exit " + guardLab.code + " (" + guardLab.out.trim() + ")");
+
+  /* 36c: An unreadable stand-in folder refuses with exit 78 rather than returning an empty list. */
+  const unreadableDir = path.join(tmp, "unreadable-folder");
+  fs.mkdirSync(unreadableDir, { recursive: true });
+  let unreadableTested = false;
+  try {
+    if (process.platform === "win32") {
+      execFileSync("icacls", [unreadableDir, "/deny", (process.env.USERNAME || "Everyone") + ":(RD)"], { windowsHide: true });
+    } else {
+      fs.chmodSync(unreadableDir, 0);
+    }
+    const rListing = run('const E = require("./engine.js"); const list = E.safeListing(' + JSON.stringify(unreadableDir) + '); console.log("EMPTY " + list.length);');
+    unreadableTested = rListing.code === 78 && rListing.out.indexOf("EMPTY") === -1;
+  } finally {
+    if (process.platform === "win32") {
+      try { execFileSync("icacls", [unreadableDir, "/remove:d", (process.env.USERNAME || "Everyone")], { windowsHide: true }); } catch (e) {}
+    } else {
+      try { fs.chmodSync(unreadableDir, 0o755); } catch (e) {}
+    }
+    try { fs.rmdirSync(unreadableDir); } catch (e) {}
+  }
+  ok(unreadableTested, "36c an unreadable stand-in folder refuses with exit 78 rather than returning an empty list");
+
+  /* 36d: The September case: a lab profile with a stale pair in parking and a genuine chain
+     in the profile is never mixed, and the genuine chain ends where it began, by names, sizes and mtimes. */
+  const labProfile = path.join(tmp, "sept-profile");
+  const labParked = path.join(tmp, "sept-parked");
+  fs.mkdirSync(labProfile, { recursive: true });
+  fs.mkdirSync(labParked, { recursive: true });
+  // Genuine chain in profile
+  fs.writeFileSync(path.join(labProfile, "desk.json"), Buffer.alloc(58753, "a"));
+  fs.writeFileSync(path.join(labProfile, "desk.bak1.json"), Buffer.alloc(396796, "b"));
+  fs.writeFileSync(path.join(labProfile, "desk.bak2.json"), Buffer.alloc(396729, "c"));
+  fs.writeFileSync(path.join(labProfile, "desk.bak3.json"), Buffer.alloc(396729, "d"));
+  // Stale pair in parking
+  fs.writeFileSync(path.join(labParked, "desk.bak2.json"), Buffer.alloc(338776, "x"));
+  fs.writeFileSync(path.join(labParked, "desk.bak3.json"), Buffer.alloc(22352, "y"));
+  const chainBefore = snapshotFolder(labProfile);
+  const parkedBefore = snapshotFolder(labParked);
+
+  const parkAttempt = run('const E = require("./engine.js"); const stale = E.safeListing(' + JSON.stringify(labParked) + ');'
+    + 'if (stale.length) E.refuse("parking folder is already holding files: " + stale.join(", "));');
+  const chainAfter = snapshotFolder(labProfile);
+  const parkedAfter = snapshotFolder(labParked);
+  const chainsEqual = JSON.stringify(chainBefore) === JSON.stringify(chainAfter);
+  const parkedEqual = JSON.stringify(parkedBefore) === JSON.stringify(parkedAfter);
+  ok(parkAttempt.code === 78 && chainsEqual && parkedEqual,
+     "36d the September case: stale pair in parking refuses before moves (exit " + parkAttempt.code
+     + "), chains are never mixed, genuine chain identical by names, sizes and mtimes: " + chainsEqual);
+
+  /* 36e: A move a safety step relies on is verified after it (source gone, target holds same size and mtime). */
+  const srcFile = path.join(tmp, "move-src.txt");
+  const dstFile = path.join(tmp, "move-dst.txt");
+  fs.writeFileSync(srcFile, "verified move content", "utf8");
+  const moveRes = run('const E = require("./engine.js"); E.safeMove(' + JSON.stringify(srcFile) + ', ' + JSON.stringify(dstFile) + '); console.log("MOVE_OK");');
+  const srcGone = !fs.existsSync(srcFile);
+  const dstPresent = fs.existsSync(dstFile) && fs.readFileSync(dstFile, "utf8") === "verified move content";
+  ok(moveRes.code === 0 && srcGone && dstPresent,
+     "36e safeMove verifies source is gone and target is present with identical content: " + (srcGone && dstPresent));
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });

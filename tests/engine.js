@@ -745,12 +745,15 @@ function lowerTree(rootPid) {
    in the parking folder, `dir` the folder to take it from. Nothing here knows what a .lnk is; the
    name is handed in whole, because what the installer writes is the caller's question. */
 function parkNamedShortcuts(homes, name, parkDir) {
+  realProfileGuard(parkDir);
   const parked = [];
   for (const home of homes || []) {
     const from = path.join(home.dir, name);
+    realProfileGuard(from);
     if (!fs.existsSync(from)) continue;
     fs.mkdirSync(parkDir, { recursive: true });
     const to = path.join(parkDir, home.tag + "-" + name);
+    realProfileGuard(to);
     /* A rename rather than a copy, for the reason the desk files are renamed: it is atomic, and a
        shortcut that is moved cannot be half-copied. */
     fs.renameSync(from, to);
@@ -767,6 +770,8 @@ function parkNamedShortcuts(homes, name, parkDir) {
 function restoreNamedShortcuts(parked) {
   const out = [];
   for (const p of parked || []) {
+    realProfileGuard(p.from);
+    realProfileGuard(p.to);
     const row = { what: p.what, from: p.from, back: false, same: false, tookRunsOwn: false, sha: null, why: null };
     try {
       if (fs.existsSync(p.from)) { fs.rmSync(p.from, { force: true }); row.tookRunsOwn = true; }
@@ -825,6 +830,129 @@ function placesMismatch(expect, env) {
   return { shell, said };
 }
 
+/* ---- the real profile wall and safe operations (no-real-profile brief) ----------------------
+ *
+ * No test, in either tree, moves, renames, parks, writes or deletes anything under Max's real
+ * user-data folder for Etiuda or Etiuda Studio, or in his real Documents\Etiuda.
+ * Real means the folders known to the OS for the running user (SHGetKnownFolderPath through one
+ * bounded query), not the environment variables. */
+
+let cachedRealProfileFolders = null;
+let stubbedRealProfileFolders = null;
+
+function realProfileFolders() {
+  if (stubbedRealProfileFolders) return stubbedRealProfileFolders;
+  if (cachedRealProfileFolders) return cachedRealProfileFolders;
+  if (process.platform !== "win32") {
+    const h = os.homedir();
+    cachedRealProfileFolders = [
+      path.join(h, ".config", "etiuda"),
+      path.join(h, ".config", "Etiuda Studio"),
+      path.join(h, "Documents", "Etiuda"),
+    ];
+    return cachedRealProfileFolders;
+  }
+  try {
+    const script = [
+      "$a = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)",
+      "$d = [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)",
+      "$a + [char]9 + $d"
+    ].join("; ");
+    const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      encoding: "utf8", windowsHide: true, timeout: 30000
+    }).trim();
+    const parts = out.split("\t");
+    const appData = parts[0] || (process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"));
+    const docs = parts[1] || path.join(os.homedir(), "Documents");
+    cachedRealProfileFolders = [
+      path.join(appData, "etiuda"),
+      path.join(appData, "Etiuda Studio"),
+      path.join(docs, "Etiuda"),
+    ];
+  } catch (e) {
+    const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    const docs = path.join(os.homedir(), "Documents");
+    cachedRealProfileFolders = [
+      path.join(appData, "etiuda"),
+      path.join(appData, "Etiuda Studio"),
+      path.join(docs, "Etiuda"),
+    ];
+  }
+  return cachedRealProfileFolders;
+}
+
+function stubRealProfileFolders(folders) {
+  stubbedRealProfileFolders = folders;
+}
+
+function isRealProfilePath(target, roots) {
+  if (!target) return false;
+  const list = roots || realProfileFolders();
+  const resolved = path.resolve(String(target));
+  const normTarget = process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  for (const r of list) {
+    const normRoot = process.platform === "win32" ? path.resolve(r).toLowerCase() : path.resolve(r);
+    if (normTarget === normRoot || normTarget.startsWith(normRoot + path.sep)) {
+      return r;
+    }
+  }
+  return false;
+}
+
+function realProfileGuard(target, opts) {
+  const targets = Array.isArray(target) ? target : [target];
+  const roots = (opts && opts.roots) || undefined;
+  for (const t of targets) {
+    const matched = isRealProfilePath(t, roots);
+    if (matched) {
+      console.log("#refused real-profile");
+      refuse("refused real-profile",
+             "path resolves inside the real profile: " + t + " (matches " + matched + ")",
+             "no test or tool may move, rename, write or delete anything in Max's real profile.");
+    }
+  }
+}
+
+function safeListing(dir) {
+  try {
+    return fs.readdirSync(dir).sort();
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    console.log("#refused unreadable-folder");
+    refuse("refused unreadable folder: " + dir + " (" + (e && e.code || e.message || e) + ")",
+           "a listing or stat deciding safety must refuse on error, never answer empty.");
+  }
+}
+
+function safeMove(src, dst) {
+  realProfileGuard(src);
+  realProfileGuard(dst);
+  let srcStat;
+  try {
+    srcStat = fs.statSync(src);
+  } catch (e) {
+    refuse("safeMove: source cannot be stated: " + src + " (" + (e && e.message || e) + ")");
+  }
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  fs.renameSync(src, dst);
+  if (fs.existsSync(src)) {
+    refuse("safeMove: source still exists after move: " + src);
+  }
+  let dstStat;
+  try {
+    dstStat = fs.statSync(dst);
+  } catch (e) {
+    refuse("safeMove: destination does not exist after move: " + dst);
+  }
+  if (dstStat.size !== srcStat.size) {
+    refuse("safeMove: size mismatch after move: " + src + " (" + srcStat.size + " bytes) -> " + dst + " (" + dstStat.size + " bytes)");
+  }
+  if (Math.abs(dstStat.mtimeMs - srcStat.mtimeMs) > 1000) {
+    refuse("safeMove: mtime mismatch after move: " + src + " -> " + dst);
+  }
+  return { ok: true, size: dstStat.size, mtimeMs: dstStat.mtimeMs };
+}
+
 /* ---- a file the run did not write, kept rather than deleted ---------------------------------
  *
  * THE ENVELOPE, board carve A of 2026-09-24. The reinstall loop's 0a found a desk.json in the
@@ -870,8 +998,10 @@ function envelopeLine(e) {
    folder beside them always is: a rename across volumes fails, and a failed row says so and
    leaves the file where it was. */
 function keepAside(files, toDir) {
+  realProfileGuard(toDir);
   const rows = [];
   for (const from of files || []) {
+    realProfileGuard(from);
     const row = { from: from, to: null, moved: false, sha: null, same: null, why: null };
     try {
       const st = fs.statSync(from);
@@ -879,6 +1009,7 @@ function keepAside(files, toDir) {
       fs.mkdirSync(toDir, { recursive: true });
       let to = path.join(toDir, path.basename(from));
       for (let n = 2; fs.existsSync(to); n++) to = path.join(toDir, path.basename(from) + "." + n);
+      realProfileGuard(to);
       fs.renameSync(from, to);
       row.to = to;
       row.moved = !fs.existsSync(from) && fs.existsSync(to);
@@ -1506,6 +1637,7 @@ module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FIL
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
                    parkNamedShortcuts, restoreNamedShortcuts,
                    SHELL_FOLDERS, shellFolders, placesMismatch, deskEnvelope, envelopeLine, keepAside,
+                   realProfileFolders, stubRealProfileFolders, isRealProfilePath, realProfileGuard, safeListing, safeMove,
                    windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree, launchTree, processTable,
                    electronRunsLive, refuseWhileElectronLive, belowNormal, lowerTree,
                    NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
