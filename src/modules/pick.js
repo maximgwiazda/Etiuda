@@ -243,7 +243,7 @@ function suggestCatalog(){
     }
     const reqs=[];
     const links=cardIntentLinks(m);
-    if(links===true){ for(const id of visible) reqs.push(id); }
+    if(links===true){ /* an all-intents card is not spread across every intent's profile */ }
     else if(Array.isArray(links)){ for(const id of links) if(id) reqs.push(id); }
     const card={requests:reqs};
     if(m.k) card.k=String(m.k);

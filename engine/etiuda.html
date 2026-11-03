@@ -9082,7 +9082,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-02";
+  var E_BUILT = "2026-11-03";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -33207,17 +33207,25 @@ What you type stays in this browser only.`;
 
   // src/modules/clip-suggest.js
   function cardTexts(m) {
-    return [m && m.title && m.title.en, m && m.title && m.title.pl, m && m.k, m && m.body && m.body.en, m && m.body && m.body.pl];
+    const out = [];
+    if (m) {
+      if (m.title && typeof m.title === "object") out.push(...Object.values(m.title));
+      else if (typeof m.title === "string") out.push(m.title);
+      if (m.k) out.push(m.k);
+      if (m.body && typeof m.body === "object") out.push(...Object.values(m.body));
+      else if (typeof m.body === "string") out.push(m.body);
+    }
+    return out;
   }
   function tagTexts(t2) {
-    return [
-      t2 && t2.topic && t2.topic.en,
-      t2 && t2.topic && t2.topic.pl,
-      t2 && t2.clause && t2.clause.en,
-      t2 && t2.clause && t2.clause.pl,
-      t2 && t2.action && t2.action.en,
-      t2 && t2.action && t2.action.pl
-    ];
+    const out = [];
+    if (t2) {
+      for (const f of ["topic", "clause", "action"]) {
+        if (t2[f] && typeof t2[f] === "object") out.push(...Object.values(t2[f]));
+        else if (typeof t2[f] === "string") out.push(t2[f]);
+      }
+    }
+    return out;
   }
   function buildCatalogVocab(catalog) {
     const vocab = /* @__PURE__ */ new Map();
@@ -33265,7 +33273,7 @@ What you type stays in this browser only.`;
     if (!tag) return "";
     if (typeof tag.name === "string") return tag.name;
     const n = tag.name || {};
-    return String(n.en || n.pl || "");
+    return String(n.en || n.pl || Object.values(n)[0] || "");
   }
   function buildProfiles(catalog) {
     const cards2 = Array.isArray(catalog && catalog.cards) ? catalog.cards : [];
@@ -33273,6 +33281,7 @@ What you type stays in this browser only.`;
     const kwIntents = /* @__PURE__ */ new Map();
     const titleIntents = /* @__PURE__ */ new Map();
     for (const m of cards2) {
+      if (m.allIntents || m.requests === true || m.requests === "all") continue;
       const reqs = Array.isArray(m.requests) ? m.requests.map(String) : [];
       if (!reqs.length) continue;
       if (m.k) {
@@ -33285,8 +33294,8 @@ What you type stays in this browser only.`;
           for (const id of reqs) s.add(id);
         }
       }
-      for (const code of ["en", "pl"]) {
-        const title = m.title && m.title[code];
+      const titles = m.title && typeof m.title === "object" ? Object.values(m.title) : typeof m.title === "string" ? [m.title] : [];
+      for (const title of titles) {
         if (!title) continue;
         for (const w of splitWords(title)) {
           let s = titleIntents.get(w);
@@ -33307,21 +33316,18 @@ What you type stays in this browser only.`;
       const tier3 = /* @__PURE__ */ new Map();
       const topicWords = [];
       const clauseWords = [];
-      for (const code of ["en", "pl"]) {
-        const top = req.topic && req.topic[code];
-        if (top) for (const w of splitWords(top)) {
-          tier1.add(w);
-          topicWords.push(w);
+      for (const f of ["topic", "clause", "action"]) {
+        const texts = req[f] && typeof req[f] === "object" ? Object.values(req[f]) : typeof req[f] === "string" ? [req[f]] : [];
+        for (const txt of texts) {
+          if (!txt) continue;
+          for (const w of splitWords(txt)) {
+            tier1.add(w);
+            if (f === "topic") topicWords.push(w);
+            else if (f === "clause") clauseWords.push(w);
+          }
         }
-        const cls = req.clause && req.clause[code];
-        if (cls) for (const w of splitWords(cls)) {
-          tier1.add(w);
-          clauseWords.push(w);
-        }
-        const act = req.action && req.action[code];
-        if (act) for (const w of splitWords(act)) tier1.add(w);
       }
-      const linked = cards2.filter((m) => (m.requests || []).map(String).indexOf(id) > -1);
+      const linked = cards2.filter((m) => !m.allIntents && m.requests !== true && (m.requests || []).map(String).indexOf(id) > -1);
       for (const m of linked) {
         if (m.k) {
           for (const w of splitWords(m.k)) {
@@ -33329,8 +33335,8 @@ What you type stays in this browser only.`;
             if (reach <= 2 && !tier1.has(w)) tier2.add(w);
           }
         }
-        for (const code of ["en", "pl"]) {
-          const title = m.title && m.title[code];
+        const titles = m.title && typeof m.title === "object" ? Object.values(m.title) : typeof m.title === "string" ? [m.title] : [];
+        for (const title of titles) {
           if (!title) continue;
           for (const w of splitWords(title)) {
             const reach = titleIntents.get(w) ? titleIntents.get(w).size : 0;
@@ -33338,8 +33344,8 @@ What you type stays in this browser only.`;
           }
         }
         if ((m.requests || []).length <= 2) {
-          for (const code of ["en", "pl"]) {
-            const body = m.body && m.body[code];
+          const bodies = m.body && typeof m.body === "object" ? Object.values(m.body) : typeof m.body === "string" ? [m.body] : [];
+          for (const body of bodies) {
             if (!body) continue;
             for (const w of splitWords(body)) {
               if (tier1.has(w) || tier2.has(w)) continue;
@@ -33615,7 +33621,6 @@ What you type stays in this browser only.`;
       const reqs = [];
       const links = cardIntentLinks(m);
       if (links === true) {
-        for (const id of visible) reqs.push(id);
       } else if (Array.isArray(links)) {
         for (const id of links) if (id) reqs.push(id);
       }

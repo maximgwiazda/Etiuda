@@ -73,12 +73,26 @@ function suggestEditDistance1(a, b) {
 }
 
 function cardTexts(m) {
-  return [m && m.title && m.title.en, m && m.title && m.title.pl, m && m.k, m && m.body && m.body.en, m && m.body && m.body.pl];
+  const out = [];
+  if (m) {
+    if (m.title && typeof m.title === "object") out.push(...Object.values(m.title));
+    else if (typeof m.title === "string") out.push(m.title);
+    if (m.k) out.push(m.k);
+    if (m.body && typeof m.body === "object") out.push(...Object.values(m.body));
+    else if (typeof m.body === "string") out.push(m.body);
+  }
+  return out;
 }
 
 function tagTexts(t) {
-  return [t && t.topic && t.topic.en, t && t.topic && t.topic.pl, t && t.clause && t.clause.en, t && t.clause && t.clause.pl,
-    t && t.action && t.action.en, t && t.action && t.action.pl];
+  const out = [];
+  if (t) {
+    for (const f of ["topic", "clause", "action"]) {
+      if (t[f] && typeof t[f] === "object") out.push(...Object.values(t[f]));
+      else if (typeof t[f] === "string") out.push(t[f]);
+    }
+  }
+  return out;
 }
 
 function buildCatalogVocab(catalog) {
@@ -143,7 +157,7 @@ function intentName(tag) {
   if (!tag) return "";
   if (typeof tag.name === "string") return tag.name;
   const n = tag.name || {};
-  return String(n.en || n.pl || "");
+  return String(n.en || n.pl || Object.values(n)[0] || "");
 }
 
 function buildProfiles(catalog) {
@@ -152,6 +166,7 @@ function buildProfiles(catalog) {
   const kwIntents = new Map();
   const titleIntents = new Map();
   for (const m of cards) {
+    if (m.allIntents || m.requests === true || m.requests === "all") continue;
     const reqs = Array.isArray(m.requests) ? m.requests.map(String) : [];
     if (!reqs.length) continue;
     if (m.k) {
@@ -161,8 +176,8 @@ function buildProfiles(catalog) {
         for (const id of reqs) s.add(id);
       }
     }
-    for (const code of ["en", "pl"]) {
-      const title = m.title && m.title[code];
+    const titles = (m.title && typeof m.title === "object") ? Object.values(m.title) : (typeof m.title === "string" ? [m.title] : []);
+    for (const title of titles) {
       if (!title) continue;
       for (const w of splitWords(title)) {
         let s = titleIntents.get(w);
@@ -180,15 +195,18 @@ function buildProfiles(catalog) {
     const tier3 = new Map();
     const topicWords = [];
     const clauseWords = [];
-    for (const code of ["en", "pl"]) {
-      const top = req.topic && req.topic[code];
-      if (top) for (const w of splitWords(top)) { tier1.add(w); topicWords.push(w); }
-      const cls = req.clause && req.clause[code];
-      if (cls) for (const w of splitWords(cls)) { tier1.add(w); clauseWords.push(w); }
-      const act = req.action && req.action[code];
-      if (act) for (const w of splitWords(act)) tier1.add(w);
+    for (const f of ["topic", "clause", "action"]) {
+      const texts = (req[f] && typeof req[f] === "object") ? Object.values(req[f]) : (typeof req[f] === "string" ? [req[f]] : []);
+      for (const txt of texts) {
+        if (!txt) continue;
+        for (const w of splitWords(txt)) {
+          tier1.add(w);
+          if (f === "topic") topicWords.push(w);
+          else if (f === "clause") clauseWords.push(w);
+        }
+      }
     }
-    const linked = cards.filter(m => (m.requests || []).map(String).indexOf(id) > -1);
+    const linked = cards.filter(m => !m.allIntents && m.requests !== true && (m.requests || []).map(String).indexOf(id) > -1);
     for (const m of linked) {
       if (m.k) {
         for (const w of splitWords(m.k)) {
@@ -196,8 +214,8 @@ function buildProfiles(catalog) {
           if (reach <= 2 && !tier1.has(w)) tier2.add(w);
         }
       }
-      for (const code of ["en", "pl"]) {
-        const title = m.title && m.title[code];
+      const titles = (m.title && typeof m.title === "object") ? Object.values(m.title) : (typeof m.title === "string" ? [m.title] : []);
+      for (const title of titles) {
         if (!title) continue;
         for (const w of splitWords(title)) {
           const reach = titleIntents.get(w) ? titleIntents.get(w).size : 0;
@@ -205,8 +223,8 @@ function buildProfiles(catalog) {
         }
       }
       if ((m.requests || []).length <= 2) {
-        for (const code of ["en", "pl"]) {
-          const body = m.body && m.body[code];
+        const bodies = (m.body && typeof m.body === "object") ? Object.values(m.body) : (typeof m.body === "string" ? [m.body] : []);
+        for (const body of bodies) {
           if (!body) continue;
           for (const w of splitWords(body)) {
             if (tier1.has(w) || tier2.has(w)) continue;
@@ -362,16 +380,17 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
     const matched = new Set();
     for (const term of corrected) {
       let base = 0;
-      if (p.tier1.has(term)) base = 4;
-      else if (p.tier2.has(term)) base = 2.5;
-      else if (p.tier3.has(term)) base = 1 * p.tier3.get(term);
+      let tier = 0;
+      if (p.tier1.has(term)) { base = 4; tier = 1; }
+      else if (p.tier2.has(term)) { base = 2.5; tier = 2; }
+      else if (p.tier3.has(term)) { base = 1 * p.tier3.get(term); tier = 3; }
       else {
-        for (const w of p.tier1) if (wordMatchesTerm(w, term)) { base = 2.8; break; }
-        if (!base) for (const w of p.tier2) if (wordMatchesTerm(w, term)) { base = 1.8; break; }
-        if (!base) for (const [w, mult] of p.tier3.entries()) if (wordMatchesTerm(w, term)) { base = 0.7 * mult; break; }
+        for (const w of p.tier1) if (wordMatchesTerm(w, term)) { base = 2.8; tier = 1; break; }
+        if (!base) for (const w of p.tier2) if (wordMatchesTerm(w, term)) { base = 1.8; tier = 2; break; }
+        if (!base) for (const [w, mult] of p.tier3.entries()) if (wordMatchesTerm(w, term)) { base = 0.7 * mult; tier = 3; break; }
       }
       if (base > 0) {
-        const weight = weightOf.has(term) ? weightOf.get(term) : 1;
+        const weight = (tier === 3 && weightOf.has(term)) ? weightOf.get(term) : 1;
         const score = base * weight;
         if (score > 0) { termMatches.push({ term, score }); matched.add(term); }
       }

@@ -138,5 +138,46 @@ const again = cjs.scoreSuggestions("please mend lantern today", cjs.buildSuggest
 check(JSON.stringify(again) === JSON.stringify(shown),
   "the shell's copy scores the same row: " + JSON.stringify(again));
 
+/* Row 4: A 5-card, 3-intent catalog whose intent topic is the customer's noun suggests that intent. */
+const smallCat = {
+  cards: [
+    { title: { en: "Kettle order" }, body: { en: "The kettle arrives tomorrow." }, requests: ["t:kettle"] },
+    { title: { en: "Whistle order" }, body: { en: "The whistle arrives tomorrow." }, requests: ["t:whistle"] },
+    { title: { en: "Handle order" }, body: { en: "The handle arrives tomorrow." }, requests: ["t:handle"] },
+    { title: { en: "Filler pack one" }, body: { en: "Plain package one." }, requests: [] },
+    { title: { en: "Filler pack two" }, body: { en: "Plain package two." }, requests: [] }
+  ],
+  tags: [
+    { kind: "request", id: "t:kettle", name: "Kettle spouts", topic: { en: "kettle" }, clause: { en: "a kettle spout" } },
+    { kind: "request", id: "t:whistle", name: "Steam whistle", topic: { en: "whistle" }, clause: { en: "a brass whistle" } },
+    { kind: "request", id: "t:handle", name: "Timber handle", topic: { en: "handle" }, clause: { en: "wooden grip" } }
+  ]
+};
+const smallModel = buildSuggestModel(smallCat, labels);
+const smallShown = scoreSuggestions("Please send kettle today", smallModel);
+check(smallShown.length === 1 && smallShown[0].id === "t:kettle",
+  "a 5-card, 3-intent catalog whose intent topic is the customer's noun suggests that intent");
+const smallCjs = cjs.scoreSuggestions("Please send kettle today", cjs.buildSuggestModel(smallCat, labels));
+check(smallCjs.length === 1 && smallCjs[0].id === "t:kettle",
+  "the shell copy suggests the small catalog's intent as well");
+
+/* Row 8a: A German-only fixture catalog (invented words, never a real catalog) suggests its intent. */
+const deCat = {
+  cards: [
+    { title: { de: "Schraube paket" }, body: { de: "Ihre schrauben kommen bald." }, requests: ["t:schraube"] },
+    { title: { de: "Andere sache" }, body: { de: "Ein anderes paket." }, requests: [] }
+  ],
+  tags: [
+    { kind: "request", id: "t:schraube", name: "Schraubenlieferung", topic: { de: "schraube" }, clause: { de: "lieferung von schrauben" } }
+  ]
+};
+const deModel = buildSuggestModel(deCat, labels);
+const deShown = scoreSuggestions("Guten tag schraube bitte", deModel);
+check(deShown.length === 1 && deShown[0].id === "t:schraube",
+  "a German-only fixture catalog (invented words, never a real catalog) suggests its intent");
+const deCjs = cjs.scoreSuggestions("Guten tag schraube bitte", cjs.buildSuggestModel(deCat, labels));
+check(deCjs.length === 1 && deCjs[0].id === "t:schraube",
+  "the shell copy suggests the German-only intent as well");
+
 console.log("\n#counts checks=" + checks + " failed=" + failed);
 process.exit(failed ? 1 : 0);
