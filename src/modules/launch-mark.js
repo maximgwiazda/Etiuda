@@ -1,10 +1,7 @@
 /* THE OPENING (board 957, Claudia handover 2026-11-03, Max decisions 30 and 31):
- * First-round variant A, the desk's turn phiIcon 56 degrees (a-turning), ink #2881ea over the window's own ground (theme token),
- * landing in the header's corner mark (.brand svg) with no jump, then the window arriving;
- * nothing of the UI before the landing; one clock with the corner logo.
- * Under reduced motion: no opening; the window shows as soon as the page is ready, its corner mark still (Max, 2026-11-03 02:33).
- * A key, click or wheel ends the opening at once.
- */
+ * First-round variant A, the desk's turn phiIcon 56 degrees (a-turning), ink #2881ea over window ground (theme token),
+ * landing in the header's corner mark (.brand svg) with no jump, then the window arriving; nothing of UI before landing.
+ * Under reduced motion: no opening; window shows as soon as ready, corner mark still. A key, click or wheel skips it. */
 import { setFifthPhase } from "./fifth.js";
 
 const LAUNCH_R = 7, LAUNCH_MIN_MS = 1100, LAUNCH_OUT_MS = 350, LAUNCH_QUICK_MS = 140, LAUNCH_MAX_MS = 4000;
@@ -52,7 +49,7 @@ const lerpAt = (a, b, f) => ({
 });
 
 function cornerTarget() {
-  const svg = (typeof document !== "undefined")
+  const svg = (typeof document !== "undefined" && typeof document.querySelector === "function")
     && (document.querySelector(".brand-tile svg") || document.querySelector(".brand svg"));
   if (svg) {
     const r = svg.getBoundingClientRect();
@@ -207,8 +204,13 @@ function drawLine(ctx, phi, at, opt) {
 }
 
 function getGroundRgb(doc) {
-  if (doc && doc.documentElement && doc.documentElement.getAttribute("data-theme") === "dark") {
-    return [15, 16, 19];
+  if (doc && doc.documentElement) {
+    const theme = typeof doc.documentElement.getAttribute === "function"
+      ? doc.documentElement.getAttribute("data-theme")
+      : (doc.documentElement.attrs && doc.documentElement.attrs["data-theme"]);
+    if (theme === "dark") {
+      return [15, 16, 19];
+    }
   }
   return [247, 248, 250];
 }
@@ -317,7 +319,9 @@ function whenLaunchLanded(fn) {
 }
 
 function stopLaunchMark(all) {
-  if (lmK && lmK.cv && lmK.cv.parentNode) lmK.cv.remove();
+  const k = lmK;
+  if (!k || (k.launch && all !== true)) return;
+  if (k.cv && k.cv.parentNode) k.cv.remove();
   lmK = null;
   lmLanded();
 }
@@ -337,6 +341,7 @@ function launchMark(opts) {
   const body = doc && doc.body;
   const quiet = o.still || (() => (doc && doc.documentElement && doc.documentElement.classList.contains("e-still")) || false);
   const isStillMotion = typeof quiet === "function" ? quiet() : !!quiet;
+  const isCovered = () => (typeof o.covered === "function" ? !!o.covered() : false);
 
   if (body && body.classList) {
     body.classList.add("e-launch");
@@ -350,12 +355,38 @@ function launchMark(opts) {
     isStill: isStillMotion
   };
 
-  let t0 = (win && win.performance ? win.performance.now() : Date.now());
+  const t0 = (win && win.performance ? win.performance.now() : Date.now());
   let rafId = 0;
   let failsafeTimer = 0;
+  let coverHoldTimer = 0;
   let veil = null;
   let canvas = null;
   let ctx = null;
+
+  const off = [];
+  const on = (el, ev, fn, opt) => {
+    if (el && el.addEventListener) {
+      el.addEventListener(ev, fn, opt);
+      off.push(() => el.removeEventListener(ev, fn, opt));
+    }
+  };
+
+  let held = "";
+  const loose = () => {
+    const a = doc && doc.activeElement;
+    return !a || a === body || a === (doc && doc.documentElement);
+  };
+  const hold = e => {
+    const k = e.key, gr = !!(e.getModifierState && e.getModifierState("AltGraph"));
+    if (typeof k === "string" && k.length === 1 && (gr || !(e.ctrlKey || e.metaKey || e.altKey)) && !e.isComposing && loose()) {
+      held += k;
+      e.preventDefault();
+    }
+  };
+  const unhold = () => {
+    if (win && win.removeEventListener) win.removeEventListener("keydown", hold, true);
+  };
+  if (o.focus && win && win.addEventListener) win.addEventListener("keydown", hold, true);
 
   const W = (win && win.innerWidth) || 1280;
   const H = (win && win.innerHeight) || 880;
@@ -373,13 +404,20 @@ function launchMark(opts) {
     if (reason === "key" || reason === "click" || reason === "wheel") {
       state.skipped = true;
     }
+    off.forEach(f => f());
+    unhold();
     if (failsafeTimer && typeof clearTimeout === "function") {
       clearTimeout(failsafeTimer);
       failsafeTimer = 0;
     }
+    if (coverHoldTimer && typeof clearTimeout === "function") {
+      clearTimeout(coverHoldTimer);
+      coverHoldTimer = 0;
+    }
     const now = (win && win.performance ? win.performance.now() : Date.now());
     state.ms = Math.round(now - t0);
     launchStateRecord.ms = state.ms;
+    if (lmK && lmK.launch) lmK = null;
 
     if (rafId && win && win.cancelAnimationFrame) {
       win.cancelAnimationFrame(rafId);
@@ -395,19 +433,26 @@ function launchMark(opts) {
 
     syncCorner(finalPhi);
 
-    const brandTile = doc && doc.querySelector(".brand-tile");
+    const brandTile = doc && typeof doc.querySelector === "function" && doc.querySelector(".brand-tile");
     if (!isStillMotion && brandTile && !brandTile.classList.contains("brand-turning")) {
       brandTile.classList.add("brand-turning");
     }
 
-    const outMs = (reason === "key" || reason === "click" || reason === "wheel" || isStillMotion) ? 0 : 350;
+    const quick = reason === "key" || reason === "click" || reason === "wheel";
+    const outMs = quick ? LAUNCH_QUICK_MS : (isStillMotion || reason === "still" ? 0 : 350);
     if (outMs === 0) {
-      if (veil && veil.remove) veil.remove();
       if (body && body.classList) {
         body.classList.remove("e-launch");
         body.classList.remove("e-launch-out");
       }
+      if (body && body.style && body.style.removeProperty) {
+        body.style.removeProperty("--e-launch-out");
+      }
+      if (veil && veil.remove) veil.remove();
     } else {
+      if (body && body.style && body.style.setProperty) {
+        body.style.setProperty("--e-launch-out", outMs + "ms");
+      }
       if (body && body.classList) {
         body.classList.add("e-launch-out");
         body.classList.remove("e-launch");
@@ -419,6 +464,9 @@ function launchMark(opts) {
           if (body && body.classList) {
             body.classList.remove("e-launch-out");
           }
+          if (body && body.style && body.style.removeProperty) {
+            body.style.removeProperty("--e-launch-out");
+          }
         }, outMs);
       } else {
         if (body && body.classList) {
@@ -428,13 +476,6 @@ function launchMark(opts) {
     }
 
     lmLanded();
-
-    if (typeof o.focus === "function") {
-      try {
-        const f = o.focus();
-        if (f && f.focus) f.focus({ preventScroll: true });
-      } catch (e) {}
-    }
   }
 
   const armFailsafe = () => {
@@ -443,15 +484,32 @@ function launchMark(opts) {
     }
   };
 
-  function onKey(e) { giveWay("key"); }
-  function onPointer(e) { giveWay("click"); }
-  function onWheel(e) { giveWay("wheel"); }
+  const waitReady = (win && win.__stubNoFramesAndNeverReady)
+    ? new Promise(() => {})
+    : Promise.resolve(o.ready);
 
-  if (win && win.addEventListener) {
-    win.addEventListener("keydown", onKey, true);
-    win.addEventListener("pointerdown", onPointer, true);
-    win.addEventListener("wheel", onWheel, { passive: true, capture: true });
-  }
+  waitReady.then(() => {
+    unhold();
+    const f = typeof o.focus === "function" ? o.focus() : o.focus;
+    if (f && loose()) {
+      if (f.focus) f.focus({ preventScroll: true });
+      if (held && typeof f.value === "string") {
+        f.value += held;
+        const Ev = (win && win.Event) || (typeof Event !== "undefined" ? Event : null);
+        if (typeof Ev === "function" && f.dispatchEvent) f.dispatchEvent(new Ev("input", { bubbles: true }));
+      }
+    }
+  });
+
+  on(win, "pointerdown", e => {
+    if (e.target === veil || (veil && veil.contains && veil.contains(e.target))) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    giveWay("click");
+  }, true);
+  on(win, "keydown", () => giveWay("key"), true);
+  on(win, "wheel", () => giveWay("wheel"), { passive: true, capture: true });
 
   if (win) {
     win.__launchOpeningState = () => ({
@@ -472,12 +530,11 @@ function launchMark(opts) {
   if (isStillMotion) {
     /* NO OPENING UNDER REDUCED MOTION (Max, 2026-11-03 02:33): nothing is drawn over the
        window, which shows as soon as the page is ready, the corner mark still. */
-    const waitReady = (win && win.__stubNoFramesAndNeverReady)
-      ? new Promise(() => {})
-      : Promise.resolve(o.ready);
+    const stillVeil = doc && doc.createElement ? doc.createElement("div") : null;
     waitReady.then(() => giveWay("still"));
     return {
       giveWay,
+      veil: stillVeil,
       get reason() { return state.reason; },
       get ended() { return state.ended; },
       get ms() { return state.ms; }
@@ -486,7 +543,7 @@ function launchMark(opts) {
 
   if (doc && doc.createElement && body && body.appendChild) {
     veil = doc.createElement("div");
-    veil.className = "e-launch-veil";
+    veil.className = "e-launch-veil" + (o.app ? " " + o.app : "");
     canvas = doc.createElement("canvas");
     canvas.className = "e-opening";
     canvas.setAttribute("aria-hidden", "true");
@@ -494,6 +551,8 @@ function launchMark(opts) {
     body.appendChild(veil);
     ctx = canvas.getContext ? canvas.getContext("2d") : null;
   }
+  stopLaunchMark(true);
+  lmK = { launch: true, host: veil, cv: canvas, ctx: ctx, ms: 0 };
 
   function renderFrame(now) {
     try {
@@ -505,6 +564,7 @@ function launchMark(opts) {
 
   function drawFrame(now) {
     const t = (now - t0) / 1000;
+    if (lmK) lmK.ms = Math.round(now - t0);
     const curW = (win && win.innerWidth) || 1280;
     const curH = (win && win.innerHeight) || 880;
     const fig = figureAt(t, curW, curH);
@@ -540,9 +600,6 @@ function launchMark(opts) {
     }
 
     if (t >= TIMING.ARRIVE) {
-      const waitReady = (win && win.__stubNoFramesAndNeverReady)
-        ? new Promise(() => {})
-        : Promise.resolve(o.ready);
       waitReady.then(() => giveWay("time"));
       return;
     }
@@ -552,12 +609,16 @@ function launchMark(opts) {
     }
   }
 
-  if (win && !(win.__stubNoFramesAndNeverReady) && win.requestAnimationFrame) {
-    rafId = win.requestAnimationFrame((ms) => {
-      t0 = ms;
-      renderFrame(ms);
-    });
+  function startOpening() {
+    if (isCovered()) {
+      coverHoldTimer = setTimeout(startOpening, 150);
+      return;
+    }
+    if (win && !(win.__stubNoFramesAndNeverReady) && win.requestAnimationFrame) {
+      rafId = win.requestAnimationFrame(renderFrame);
+    }
   }
+  startOpening();
 
   return {
     giveWay,

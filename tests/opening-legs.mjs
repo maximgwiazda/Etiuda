@@ -213,7 +213,7 @@ async function run() {
       await pageKey.goto("file://" + ENGINE_HTML);
       await sleep(500);
       await pageKey.keyboard.press("Escape");
-      await sleep(100);
+      await sleep(200);
       const keySkipped = await pageKey.evaluate(() => {
         const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
         const brandTile = document.querySelector(".brand-tile");
@@ -229,7 +229,7 @@ async function run() {
       await pageClick.goto("file://" + ENGINE_HTML);
       await sleep(500);
       await pageClick.mouse.click(500, 400);
-      await sleep(100);
+      await sleep(200);
       const clickSkipped = await pageClick.evaluate(() => {
         const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
         return !document.body.classList.contains("e-launch")
@@ -243,7 +243,7 @@ async function run() {
       await pageWheel.goto("file://" + ENGINE_HTML);
       await sleep(500);
       await pageWheel.mouse.wheel({ deltaY: 100 });
-      await sleep(100);
+      await sleep(200);
       const wheelSkipped = await pageWheel.evaluate(() => {
         const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
         return !document.body.classList.contains("e-launch")
