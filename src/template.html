@@ -788,8 +788,11 @@ body.e-backdrop .row::before{
 @keyframes e-pick-spin{to{transform:rotate(360deg)}}
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
-   handler owns the angle; reduced motion skips the increment there. */
-#theme svg{transition:transform var(--m-roll) var(--m-ease)}
+   handler owns the angle; reduced motion skips the increment there. The inner group takes
+   an instant 180deg rotation under light theme to cancel the ink swap at any angle. */
+#theme svg{transition:transform var(--m-roll) linear}
+#theme svg g{transform-origin:10px 10px}
+:root[data-theme=light] #theme svg g{transform:rotate(180deg)}
 /* Only the SHACKLE moves - the first path in both lock drawings. Translating the whole svg
    read as the icon shifting in its button. The class rides the button, the animation the
    fresh svg syncRailPinBtn swapped in; boot's first sync is not a toggle and stays still. */
@@ -1963,7 +1966,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 #list .card.deck.deck-up{content-visibility:visible;contain-intrinsic-size:none}
 #list .card.deck.deck-up{z-index:6}
 .card.deck>.txt{z-index:var(--deck-z,1);
-  transition:box-shadow var(--m-move) ease,background-color var(--m-tone) ease,border-color var(--m-tone) ease}
+  transition:box-shadow var(--m-move) ease}
 .card.deck:not(.deck-open)>.txt.deck-back{
   transform:translateY(var(--deck-dy)) scaleX(var(--deck-sx));transform-origin:50% 100%;
   clip-path:inset(var(--deck-clip) -3px -3px -3px round var(--radius));
@@ -3905,8 +3908,13 @@ body.e-lanes #pillsSlot{display:none}
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
-.pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
-.txt,.tab-x,.field-clear,.combo-clear{
+.pill,.btn,.seg button,.tab,.menu button,
+.tab-x,.field-clear,.combo-clear{
+  transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
+/* THE REPEATING ROWS EASE ON HOVER, NEVER ON THE FLIP: hundreds of them, so a theme press that started
+   a colour transition on each cost the press its frame. The sheet #eFlipHold, after this one, holds
+   them still for the flip's own two frames (theme.js), so hover keeps the tone tier. */
+.rail-item,.cacts button,.cat-chip{
   transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
 /* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
    be the general reason: a CSS box snaps to device pixels and the vector inside it does not,
@@ -4008,6 +4016,10 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 .txt{padding-right:max(44px,calc(100% - 105ch - 41px))}
 }
 </style>
+<!-- THE FLIP'S HOLD: enabled by theme.js for a theme press's own two frames and disabled otherwise.
+     A sheet toggled through the CSSOM touches no element and wakes no observer, and the browser
+     restyles only what its one rule matches. Unlayered, so it outranks the tone tier. -->
+<style id="eFlipHold">.rail-item,.cacts button,.cat-chip{transition:none}</style>
 
 <header>
   <div class="row">
@@ -4092,7 +4104,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
                     data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Edit quick facts"></textarea>
         </div>
       </div>
-      <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
+      <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><g><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></g></svg></button>
       <!-- THE CHEVRON - displaced controls get their own door: it exists exactly when the ladder
            hides something, sits where they stood, and its rows are exactly them. Visibility is a
            MEASUREMENT (syncMoreBtn reads computed display), so every rung is honoured

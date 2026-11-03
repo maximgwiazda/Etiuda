@@ -23,6 +23,7 @@ export const HELPERS = {
   "tests/ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/install-plan.js": "the library tests/update-install.js judges with",
   "tests/launch-wait.js": "a helper the window legs require, not a gate",
+  "tests/quiet-lane.mjs": "the timing legs' busy-machine refusal, not a gate (its leg is tests/quiet-lane-selftest.mjs)",
   "tests/linux-desk.js": "a machine-window gate on Linux, not in either chain",
   "tests/linux-keyring.js": "a machine-window gate on Linux, not in either chain",
   "tests/motion.js": "legs tests/smoke.js requires and runs",
@@ -43,6 +44,8 @@ export const NIGHTLY_ONLY = [
   "tests/machine-lock.mjs",
   "tests/sbom.mjs",
   "tests/text-scan-selftest.js",
+  "tests/theme-presses.mjs",
+  "tests/theme-roll.mjs",
 ];
 
 let asserted = 0, failed = 0;

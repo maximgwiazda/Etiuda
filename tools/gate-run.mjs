@@ -53,6 +53,8 @@ export const RELEASE_ONLY_LEGS = [
   "tests/machine-lock.mjs",
   "tests/sbom.mjs",
   "tests/text-scan-selftest.js",
+  "tests/theme-presses.mjs",
+  "tests/theme-roll.mjs",
 ];
 
 export const NIGHTLY_LEGS = [
@@ -65,6 +67,8 @@ export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/sbom.mjs", args: [], cmd: "node tests/sbom.mjs" },
   /* A browser leg: the carries a desk arrives with, driven in headless Chrome (the test architect, 2026-11-01 07:17). */
   { script: "nightly", file: "tests/storage-carry.js", args: [], cmd: "node tests/storage-carry.js" },
+  { script: "nightly", file: "tests/theme-presses.mjs", args: [], cmd: "node tests/theme-presses.mjs" },
+  { script: "nightly", file: "tests/theme-roll.mjs", args: [], cmd: "node tests/theme-roll.mjs" },
 ];
 
 export const FLOOR = [

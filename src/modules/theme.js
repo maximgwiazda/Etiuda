@@ -31,7 +31,22 @@ function noteRoll(){
 }
 /* THE THEME LANDS AT ONCE, as Studio's does: the attribute in the press's own task, and each control
    eases its own colours on the sheet's tiers. Nothing waits on the host. */
+/* The flip starts no transition on the repeating rows: the sheet #eFlipHold is on for the press's
+   own frame and the next, then off. A later press re-arms it; only the last lets go. */
+let flipHeld=0;
+function flipHoldSheet(){
+  const el=typeof document.getElementById==="function" ? document.getElementById("eFlipHold") : null;
+  return el && el.sheet ? el.sheet : null;
+}
+function holdFlip(){
+  const sh=flipHoldSheet();
+  if(!sh || typeof requestAnimationFrame!=="function") return;
+  const n=++flipHeld;
+  sh.disabled=false;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(n===flipHeld) sh.disabled=true; }));
+}
 function paintTheme(next){
+  holdFlip();
   document.documentElement.dataset.theme=next; /* plant:theme-lands-at-once */
 }
 // The theme on screen, so a second press flips back whatever is still easing.
@@ -47,6 +62,7 @@ function watchSystemTheme(){
   }catch(e){}
 }
 function wireThemeBtn(){
+  const sh=flipHoldSheet(); if(sh) sh.disabled=true;   // on until boot, so the first paint starts nothing
   const btn=document.querySelector("#theme");
   if(!btn) return;
   btn.onclick=()=>{

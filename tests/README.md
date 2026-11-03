@@ -63,6 +63,8 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard. node tests/pick-desk.js --guards proves the desk guards on stand-ins and opens nothing
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures; npm run swap, in npm run gates and the release
     node tests/theme-fade.mjs                        every category, then the theme: the page lives and its window is painted in the theme asked for, read from screenshots by area against each theme's palette from a fresh start, no press opens a view transition or cuts the controls' transitions, and a second press 60 ms after the first is taken (tf1 to tf3), Chrome, no fixtures
+    ETIUDA_FIXTURES=<folder> node tests/theme-presses.mjs  10 of 10 presses reach the screen at 80 and 150 ms, worst press-to-frame under 50 ms, Chrome
+    node tests/theme-roll.mjs                        no frame-to-frame jump of the theme glyph as seen beyond what a smooth 300 ms turn makes, across single presses and runs at 80 and 150 ms, Chrome
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
