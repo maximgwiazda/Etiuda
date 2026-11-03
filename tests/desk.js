@@ -681,24 +681,29 @@ async function startOn(appDir, ud) {
   /* NOT RUN only where this machine cannot tell: the shipped log unwritten, a control that does not discover, or a
      server named, which neither run measures. Otherwise the expectation decides and a mismatch is a FAIL (the test
      architect, 2026-11-03 22:01): entered only on a match, round 1's fault read NOT RUN here. */
+  /* Which reader decided, in every line: a record says whose expectation it measured. */
+  const told = said + " " + (process.env.ETIUDA_PROXY_ORACLE
+    ? "the expectation is the reader at " + oracle
+    : "the expectation is this tree's own reader, checked against Chromium, not an independent oracle")
+    + ", which asks for " + JSON.stringify(expectedSwitches);
   const named = expectedSwitches.some(s => s[0] === "proxy-server" || s[0] === "proxy-pac-url");
   if (!written)
-    notRun.push("C/D proxy discovery: the shipped shell's net log was not written whole: " + said);
+    notRun.push("C/D proxy discovery: the shipped shell's net log was not written whole: " + told);
   else if (!controlLog || !controlShows)
-    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
+    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + told);
   else if (named)
-    notRun.push("C/D proxy discovery: this machine names a proxy, which discovery cannot show: " + said);
+    notRun.push("C/D proxy discovery: this machine names a proxy, which discovery cannot show: " + told);
   else if (leavesResolver)
     check(shippedShows,
       "where the control discovers a proxy, the shipped shell discovers too, so automatic detection is left"
-      + " to Chromium: " + said);
+      + " to Chromium: " + told);
   else if (expectsNone)
     check(quiet,
       "where proxies are off, the shipped shell passes --no-proxy-server and does no discovery, against a control"
-      + " without the switch that does discover: " + said);
+      + " without the switch that does discover: " + told);
   else
     notRun.push("C/D proxy discovery: the shell asks for switches this pair does not read: "
-      + JSON.stringify(expectedSwitches) + " " + said);
+      + JSON.stringify(expectedSwitches) + " " + told);
 
   reachedEnd = true;
 })().catch(e => {
