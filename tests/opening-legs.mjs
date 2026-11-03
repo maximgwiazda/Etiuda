@@ -6,8 +6,11 @@
  *   957o1 the work hidden until the opening lands: at frames before the landing, the band, the search bar and the panes are not visible (computed opacity or visibility, and their boxes not painted), and they are after it
  *   957o2 the landing on the corner mark: the drawn mark's last frame of the flight sits on the .brand svg's box (centre within 1 px, size within 2 per cent), and the hand-over shows no jump in the corner mark's phase
  *   957o3 a key, a click and the wheel each end the opening at once, the window shown
- *   957o4 reduced motion: the still mark about a second, then the window, no turning flight
- *   957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as before
+ *   957o4 reduced motion: no opening, the window shown as soon as the page is ready, its corner mark still
+ *   957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as now decided
+ *   957o6 a frame that throws still gives way
+ *   957o7 no frames and a ready that never comes gives way by the failsafe
+ *   957o8 reduced motion: a ready that never comes gives way by the failsafe
  *
  * Exit code is the number of failed checks.
  */
@@ -235,29 +238,22 @@ async function run() {
       await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
       await page.goto("file://" + ENGINE_HTML);
 
-      // Early: still mark held (~400ms)
-      await sleep(400);
-      const earlyRm = await page.evaluate(() => {
+      // Under reduced motion: no opening, window shows as soon as ready (~200ms)
+      await sleep(250);
+      const rm = await page.evaluate(() => {
         const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
-        return {
-          launchActive: document.body.classList.contains("e-launch"),
-          still: state ? state.isStill : false,
-          flightTurning: state ? state.isFlightTurning : true
-        };
-      });
-
-      // After ~1.2s: window arrives
-      await sleep(1000);
-      const afterRm = await page.evaluate(() => {
         const brandTile = document.querySelector(".brand-tile");
+        const veil = document.querySelector(".e-launch-veil");
         return {
           launchGone: !document.body.classList.contains("e-launch"),
-          headerMarkTurning: brandTile ? brandTile.classList.contains("brand-turning") : false
+          veilGone: !veil,
+          headerMarkStill: brandTile ? !brandTile.classList.contains("brand-turning") : false,
+          stateStill: state ? state.isStill : false
         };
       });
 
-      const ok4 = earlyRm.launchActive && earlyRm.still && !earlyRm.flightTurning && afterRm.launchGone && afterRm.headerMarkTurning;
-      check(ok4, "957o4 reduced motion: the still mark about a second, then the window, no turning flight");
+      const ok4 = rm.launchGone && rm.veilGone && rm.headerMarkStill && rm.stateStill;
+      check(ok4, "957o4 reduced motion: no opening, the window shown as soon as the page is ready, its corner mark still");
       await page.close();
     }
 
@@ -284,7 +280,6 @@ async function run() {
           const h2 = emptyDesk.querySelector("h2");
           const btn = emptyDesk.querySelector("#emptyLoad");
           const orText = emptyDesk.querySelector(".mid-or");
-          const joinBtn = emptyDesk.querySelector("#emptyJoin");
           const catLine = emptyDesk.querySelector(".open-folder, #emptyCatFolder");
 
           const h2Text = h2 ? h2.textContent.trim() : "";
@@ -308,10 +303,12 @@ async function run() {
           const bgCol = btnStyle ? btnStyle.backgroundColor : "";
           const textCol = btnStyle ? btnStyle.color : "";
 
-          // 4. Catalog-folder line present
-          const folderBranchPresent = !!emptyDesk.querySelector("#emptyCatFolder")
-            || emptyDesk.textContent.includes("loads by itself when it is called")
-            || emptyDesk.textContent.includes("stays in this browser, ready whenever you come back.");
+          // 4. Catalog-folder line present and byte-for-byte as decided
+          const folderBranchPresent = emptyDesk.textContent.includes("Under any other name, bring it in with Load catalog.")
+            || emptyDesk.textContent.includes("loads with Load catalog.")
+            || emptyDesk.textContent.includes("The catalog you load stays in this browser, ready whenever you come back.");
+
+          const orLinkPresent = orText && (orText.querySelector("a, button, [role='button']") || orText.classList.contains("link"));
 
           return {
             found: true,
@@ -322,7 +319,8 @@ async function run() {
             orContent,
             bgCol,
             textCol,
-            folderBranchPresent
+            folderBranchPresent,
+            orLinkPresent: !!orLinkPresent
           };
         }, theme);
       };
@@ -336,11 +334,104 @@ async function run() {
       const ok5 = light.found && dark.found
         && light.figureAbsent && dark.figureAbsent
         && light.inOrder && dark.inOrder
-        && light.btnText === "Load a catalog" && dark.btnText === "Load a catalog"
+        && light.h2Text === "Etiuda is ready for its first replies." && dark.h2Text === "Etiuda is ready for its first replies."
+        && light.btnText === "Load catalog" && dark.btnText === "Load catalog"
+        && light.orContent.includes("or add a card to a category") && dark.orContent.includes("or add a card to a category")
         && lightContrast >= 4.5 && darkContrast >= 4.5
-        && light.folderBranchPresent && dark.folderBranchPresent;
+        && light.folderBranchPresent && dark.folderBranchPresent
+        && light.orLinkPresent && dark.orLinkPresent;
 
-      check(ok5, "957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as before");
+      check(ok5, "957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as now decided");
+      await page.close();
+    }
+
+    /* -------------------------------------------------------------------------
+     * 957o6: a frame that throws still gives way
+     * ------------------------------------------------------------------------- */
+    {
+      const page = await browser.newPage();
+      await page.evaluateOnNewDocument(() => {
+        let count = 0;
+        const origStroke = CanvasRenderingContext2D.prototype.stroke;
+        CanvasRenderingContext2D.prototype.stroke = function(...args) {
+          if (++count === 5) {
+            throw new Error("simulated render frame error");
+          }
+          return origStroke.apply(this, args);
+        };
+      });
+      await page.goto("file://" + ENGINE_HTML);
+      await sleep(400);
+      const res = await page.evaluate(() => {
+        const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
+        return {
+          launchGone: !document.body.classList.contains("e-launch"),
+          reasonError: state ? state.reason === "error" : false
+        };
+      });
+      const ok6 = res.launchGone && res.reasonError;
+      check(ok6, "957o6 a frame that throws still gives way");
+      await page.close();
+    }
+
+    /* -------------------------------------------------------------------------
+     * 957o7: no frames and a ready that never comes gives way by failsafe
+     * ------------------------------------------------------------------------- */
+    {
+      const page = await browser.newPage();
+      await page.evaluateOnNewDocument(() => {
+        window.__stubNoFramesAndNeverReady = true;
+      });
+      await page.goto("file://" + ENGINE_HTML);
+      await sleep(3800);
+      const beforeFailsafe = await page.evaluate(() => {
+        const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
+        return {
+          launchActive: document.body.classList.contains("e-launch"),
+          ended: state ? state.ended : false
+        };
+      });
+      await sleep(1200); // 5000ms total (failsafe is 4750ms)
+      const afterFailsafe = await page.evaluate(() => {
+        const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
+        return {
+          launchGone: !document.body.classList.contains("e-launch"),
+          reasonFailsafe: state ? state.reason === "failsafe" : false
+        };
+      });
+      const ok7 = beforeFailsafe.launchActive && !beforeFailsafe.ended && afterFailsafe.launchGone && afterFailsafe.reasonFailsafe;
+      check(ok7, "957o7 no frames and a ready that never comes gives way by the failsafe");
+      await page.close();
+    }
+
+    /* -------------------------------------------------------------------------
+     * 957o8: reduced motion failsafe
+     * ------------------------------------------------------------------------- */
+    {
+      const page = await browser.newPage();
+      await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await page.evaluateOnNewDocument(() => {
+        window.__stubNoFramesAndNeverReady = true;
+      });
+      await page.goto("file://" + ENGINE_HTML);
+      await sleep(3800);
+      const beforeFailsafe = await page.evaluate(() => {
+        const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
+        return {
+          launchActive: document.body.classList.contains("e-launch"),
+          ended: state ? state.ended : false
+        };
+      });
+      await sleep(1200); // 5000ms total
+      const afterFailsafe = await page.evaluate(() => {
+        const state = window.__launchOpeningState ? window.__launchOpeningState() : null;
+        return {
+          launchGone: !document.body.classList.contains("e-launch"),
+          reasonFailsafe: state ? state.reason === "failsafe" : false
+        };
+      });
+      const ok8 = beforeFailsafe.launchActive && !beforeFailsafe.ended && afterFailsafe.launchGone && afterFailsafe.reasonFailsafe;
+      check(ok8, "957o8 reduced motion: a ready that never comes gives way by the failsafe");
       await page.close();
     }
   } finally {
