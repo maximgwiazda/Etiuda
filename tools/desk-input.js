@@ -19,6 +19,8 @@ const LOCK_MOD = path.join(ROOT, "tools", "machine-lock.mjs");
 const SELF = __filename;
 
 const STOP_NOTE = "pick-desk: stopped, the desk was touched";
+/* The chat window not in front at a press is its own stop, named apart from a touch (the test architect, 2026-11-03 04:52). */
+const NOTFG_NOTE = "pick-desk: stopped, the chat window was not in front";
 const FOREIGN_NOTE = "pick-desk: the clipboard holds more than text; nothing was written";
 const RESTORE_NOTE = "pick-desk: the clipboard could not be restored";
 const IDLE_NEED = 5;
@@ -847,7 +849,32 @@ async function main(argv) {
   return 0;
 }
 
+/* THE FOREGROUND, ONCE A SECOND, READ ONLY (the test architect, 2026-11-03 04:52): the window handle in front and its
+   process's name, never its text, appended to -Out until -Seconds pass or the file -Stop appears. It sends nothing and
+   opens nothing, so a refusal can name what held the front. */
+function fgWatchScript() {
+  return [
+    "param([int]$Seconds = 600, [string]$Out, [string]$Stop)",
+    "Add-Type -TypeDefinition @'",
+    "using System; using System.Runtime.InteropServices;",
+    "public static class FgW {",
+    "  [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();",
+    "  [DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);",
+    "}",
+    "'@",
+    "for ($i = 0; $i -lt $Seconds; $i++) {",
+    "  if ($Stop -and (Test-Path $Stop)) { break }",
+    "  $h = [FgW]::GetForegroundWindow(); $p = 0; [void][FgW]::GetWindowThreadProcessId($h, [ref]$p)",
+    "  $n = try { (Get-Process -Id $p -ErrorAction Stop).ProcessName } catch { '?' }",
+    "  ((Get-Date -Format 'HH:mm:ss') + ' ' + $h + ' ' + $p + ' ' + $n) | Out-File -Append -Encoding utf8 $Out",
+    "  Start-Sleep -Seconds 1",
+    "}",
+  ].join("\r\n");
+}
+
 module.exports = {
+  fgWatchScript: fgWatchScript,
+  NOTFG_NOTE: NOTFG_NOTE,
   idleBlock: idleBlock,
   helperScript: helperScript,
   restoreLine: restoreLine,

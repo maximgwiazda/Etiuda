@@ -48,9 +48,10 @@ if (process.argv.includes("--guards") || process.argv.includes("--idle-check") |
 function runPickDesk() {
 E.windowWall("tests/pick-desk.js");
 const EXPECTED = 11;
-let checks = 0, fails = 0, reachedEnd = false, child = null, form = null, b = null;
+let checks = 0, fails = 0, reachedEnd = false, child = null, form = null, b = null, fgWatch = null;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-desk-"));
+const FG_LOG = path.join(LAB, "fg-log.txt");
 
 function electronExe() {
   const dir = path.join(E.ROOT, "node_modules", "electron");
@@ -68,7 +69,8 @@ async function ask(cmd) {
     if (fs.existsSync(ans)) {
       await sleep(20);
       const got = fs.readFileSync(ans, "utf8").replace(/^\uFEFF/, "").trim();
-      if (got === "touched" || got === "notfg") throw new Error(deskInput.STOP_NOTE);
+      if (got === "touched") throw new Error(deskInput.STOP_NOTE);
+      if (got === "notfg") throw new Error(deskInput.NOTFG_NOTE);
       if (got === "foreign") throw new Error(deskInput.FOREIGN_NOTE);
       return got;
     }
@@ -110,6 +112,10 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   const LEASED = E.takeLeases(["ports:" + PORT, "desk:foreground"], 10, "tests/pick-desk.js");
   console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
   const app = buildApp();
+  /* The foreground's owner, once a second, read only, from here to the end, so a stop names what held the front. */
+  fs.writeFileSync(path.join(LAB, "fg-watch.ps1"), deskInput.fgWatchScript(), "utf8");
+  fgWatch = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(LAB, "fg-watch.ps1"),
+    "-Out", FG_LOG, "-Stop", path.join(LAB, "fg-stop")], { stdio: "ignore", windowsHide: true });
   child = E.shellLaunch("tests/pick-desk.js", electronExe(), [app.dir, "--remote-debugging-port=" + PORT, "--user-data-dir=" + app.UD],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: app.docs }) });
   const said = [];
@@ -240,6 +246,16 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   try { if (b) b.disconnect(); } catch (x) { /* gone */ }
   if (child) E.killTree(child.pid);
   if (form) E.killTree(form.pid);
+  /* The foreground's owners, by process and seconds held, before the lab goes (read only, no window text). */
+  try { fs.writeFileSync(path.join(LAB, "fg-stop"), ""); } catch (x) { /* the lab is gone */ }
+  if (fgWatch) E.killTree(fgWatch.pid);
+  try {
+    const rows = fs.readFileSync(FG_LOG, "utf8").replace(/^﻿/, "").split(/\r?\n/).filter(Boolean).map(l => l.trim().split(" "));
+    const held = {};
+    for (const r of rows) { const k = r[3] || "?"; held[k] = held[k] || { n: 0, first: r[0], last: r[0] }; held[k].n++; held[k].last = r[0]; }
+    console.log("       in front, by second: " + (Object.keys(held).map(k => k + " " + held[k].n + " s (" + held[k].first + " to "
+      + held[k].last + ")").join("; ") || "nothing logged"));
+  } catch (x) { console.log("       in front, by second: the log could not be read (" + String(x && x.message || x).slice(0, 80) + ")"); }
   await sleep(500);
   console.log("#counts checks=" + checks + " failed=" + fails + " expected=" + EXPECTED);
   const v = E.suiteVerdict({ checks, fails, expected: EXPECTED, reachedEnd });
