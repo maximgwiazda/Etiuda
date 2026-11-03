@@ -928,9 +928,15 @@ try {
         [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
         [USER_CONN_KEY]: new Error("reg.exe failed"),
       }) });
-      check(JSON.stringify(asked(failPolicy)) === "[]" && JSON.stringify(asked(failConn)) === "[]",
-        "6u a failed read of policy or connections leaves Chromium's resolver: "
-        + JSON.stringify([asked(failPolicy), asked(failConn)]));
+      /* A blob that is there but shorter than 9 bytes has no flags byte: a failed read too (the test architect, 21:06). */
+      const shortConn = loadShell({ reg: regKeys({
+        [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY),
+        [USER_CONN_KEY]: regDump([["DefaultConnectionSettings", "REG_BINARY", "4600000001000000"]], USER_CONN_KEY),
+      }) });
+      check(JSON.stringify(asked(failPolicy)) === "[]" && JSON.stringify(asked(failConn)) === "[]"
+        && JSON.stringify(asked(shortConn)) === "[]",
+        "6u a failed read of policy or connections, or a Connections blob of 8 bytes, leaves Chromium's resolver: "
+        + JSON.stringify([asked(failPolicy), asked(failConn), asked(shortConn)]));
       const blind = loadShell({
         src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
         reg: regKeys({
