@@ -483,6 +483,8 @@ function joinInviteParts(){
   }
   if(joinMode==="refused") return {title:t("Join a team"),
     line:joinWhy==="relay-mirror"?t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.")
+      /* Draft for the copywriter (Claudette). */
+      :joinWhy==="folder-not-writable"?t("This computer can only read from the team's folder; joining needs permission to write, such as Content manager or Editor. Once that is granted, join again; the invitation still works.")
       :joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
       :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")

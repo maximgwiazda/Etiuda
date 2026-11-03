@@ -5112,15 +5112,19 @@ async function takeInvite(text, name, check) {
   try {
     if (fs.statSync(wrapPath).size <= 65536) wrapDoc = JSON.parse(fs.readFileSync(wrapPath, "utf8"));
   } catch { wrapDoc = null; }
+  let wrapEpochOpened = null;
+  let hadKeyBefore = false;
   if (wrapDoc && wrapKey && branchSealable()) {
     const wrapTeamDoc = teamTextChosen(parsed.folder).doc;
     if (wrapTeamDoc && teamWhole(wrapTeamDoc) && wrapTeamDoc.id === parsed.team && wrapTeamDoc.lead && wrapTeamDoc.lead.keyId === parsed.lead.keyId && wrapTeamDoc.lead.public === parsed.lead.public) {
       const opened = RelayChannel().openInviteWrap(wrapKey, { wrap: wrapDoc, teamDoc: wrapTeamDoc, teamId: parsed.team, relayTeamId: "folder", invitationId: incomingId });
       if (opened.ok) {
-        const kept = teamKeys[parsed.team] || {}, had = !!kept[opened.epoch];
+        wrapEpochOpened = opened.epoch;
+        const kept = teamKeys[parsed.team] || {};
+        hadKeyBefore = !!kept[opened.epoch];
         kept[opened.epoch] = safeStorage.encryptString(opened.key.toString("base64")).toString("base64");
         teamKeys[parsed.team] = kept;
-        if (!had) j.invite.wrapped = (j.invite.wrapped || []).concat(opened.epoch);
+        if (!hadKeyBefore) j.invite.wrapped = (j.invite.wrapped || []).concat(opened.epoch);
         ecFactsRead.clear();
       }
     }
@@ -5128,8 +5132,16 @@ async function takeInvite(text, name, check) {
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
-    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-    return Object.assign({}, joinView(), { refused: "silent" });
+    if (wrapEpochOpened !== null && !hadKeyBefore && teamKeys[parsed.team]) {
+      delete teamKeys[parsed.team][wrapEpochOpened];
+      if (Object.keys(teamKeys[parsed.team]).length === 0) delete teamKeys[parsed.team];
+      ecFactsRead.clear();
+    }
+    deskSetOwn(CATALOG_FOLDER_KEY, ownBefore || undefined);
+    settleFolder(previous, true);
+    const code = e && e.code;
+    const notWritable = code === "EACCES" || code === "EPERM" || code === "EROFS";
+    return Object.assign({}, joinView(), { refused: notWritable ? "folder-not-writable" : "silent" }); /* plant:invite-folder-not-writable */
   }
   if (keptJoin && previous !== parsed.folder && deskBranch && folderAnswers(previous)) {
     try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }

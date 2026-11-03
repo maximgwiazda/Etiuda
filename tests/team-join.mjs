@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 167;
+const EXPECTED = 170;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -4452,6 +4452,121 @@ try {
       }
       const same = fs.readFileSync(mainPath).equals(before);
       check(turned && same, "15wd lifting plant:relay-mirror-why turns 15w9 red (the card blames a folder): "
+        + detail + ", sha " + (same ? "restored" : "differs"));
+    }
+  }
+
+  /* 15eu: a join with a write-denied desks/ folder shows the line, and nothing half-joined remains. */
+  {
+    const EN_NOWRITE_ROLE = "Content manager or Editor";
+    const PL_NOWRITE_ROLE = "Content manager lub Edytor";
+    const FOLDER_BLAME = "This folder could not be reached";
+    const nowriteYard = folder("folder-nowrite-yard");
+    const KNW = crypto.randomBytes(32);
+    const meNW2 = { id: "k-" + crypto.randomBytes(8).toString("hex"), key: crypto.randomBytes(32).toString("hex"), box: crypto.randomBytes(32).toString("hex") };
+    put(nowriteYard, "etiuda-team.json", teamAt(1, [entry(meNW2, KNW, 1)]));
+    put(nowriteYard, "lamps.ec", P.sealCatalog(KNW, TEAM, 1, A1));
+    const secretNW = crypto.randomBytes(16).toString("hex");
+    SECRETS.push(secretNW);
+    const invIdNW = P.inviteIdOf(secretNW);
+    const wrapNW = safeSealWrap({ secret: secretNW, folder: true, teamId: TEAM, invitationId: invIdNW, epoch: 1, key: KNW });
+    fs.mkdirSync(path.join(nowriteYard, "invites"), { recursive: true });
+    put(nowriteYard, path.join("invites", invIdNW + ".wrap.json"), JSON.stringify(wrapNW));
+    fs.mkdirSync(path.join(nowriteYard, "desks"), { recursive: true });
+
+    const Dnw = await deskWith("nowrite-desk", folder("nowrite-desk-own"));
+    const beforeTrust = trustOf(Dnw);
+    const blobNW = inviteBlob({ team: TEAM, folder: nowriteYard, lead: lampLead, secret: secretNW });
+
+    const joinNowriteDesk = async (D, deny = true) => {
+      await pageOn(D);
+      document.querySelector = (sel) => sel === "[data-join-paste]" ? pasted : null;
+      TJ.openJoinPaste();
+      pasted = elOf({ "data-join-paste": "" }, blobNW);
+      await press("read");
+      typeFour(codeFor(blobNW));
+      const origMk = fs.mkdirSync;
+      fs.mkdirSync = function (p, opts) {
+        if (deny && String(p).indexOf(path.join("folder-nowrite-yard", "desks") + path.sep) >= 0) {
+          const err = new Error("permission denied");
+          err.code = "EACCES";
+          throw err;
+        }
+        return origMk.call(this, p, opts);
+      };
+      let res = null;
+      try {
+        res = await press("invite");
+        const en = TJ.teamJoinEmptyHtml();
+        ST.lsSet("eUiLang", "pl");
+        const pl = TJ.teamJoinEmptyHtml();
+        ST.lsSet("eUiLang", "en");
+        return { res: res, en: en, pl: pl };
+      } finally {
+        fs.mkdirSync = origMk;
+      }
+    };
+
+    const envBefore = Dnw.envelope();
+    const card = await joinNowriteDesk(Dnw);
+    const afterTrust = trustOf(Dnw);
+    const catRead = Dnw.api.readCatalog("lamps.ec");
+    const nwState = await Dnw.join("state");
+    /* The rollback put the desk's own folder back and kept no key for the invitation's epoch on disk (the test
+       architect's read, 22:46): desk.json as written, not the shell's memory. */
+    const envAfter = Dnw.envelope();
+    const ownKept = (envAfter.keys || {}).eCatalogFolder === (envBefore.keys || {}).eCatalogFolder;
+    const noEpochKey = !(((envAfter.teamKeys || {})[TEAM] || {})["1"]);
+
+    check(card.res && (card.res.refused === "folder-not-writable" || card.res.askRefused === "folder-not-writable")
+      && card.en.indexOf(EN_NOWRITE_ROLE) >= 0 && card.pl.indexOf(PL_NOWRITE_ROLE) >= 0
+      && card.en.indexOf(FOLDER_BLAME) < 0
+      && beforeTrust === afterTrust && catRead !== A1.trim() && nwState.join === null && ownKept && noEpochKey,
+      "15eu a join with a write-denied desks/ folder shows the line, and nothing half-joined remains: "
+      + "refused " + (card.res && (card.res.refused || card.res.askRefused))
+      + ", en " + (card.en.indexOf(EN_NOWRITE_ROLE) >= 0)
+      + ", pl " + (card.pl.indexOf(PL_NOWRITE_ROLE) >= 0)
+      + ", folder blame " + (card.en.indexOf(FOLDER_BLAME) >= 0)
+      + ", trust preserved " + (beforeTrust === afterTrust)
+      + ", catalog shut " + (catRead !== A1.trim())
+      + ", join cleared " + (nwState.join === null)
+      + ", own folder as before " + ownKept + ", no epoch key on disk " + noEpochKey);
+
+    /* 15ew: the refusal spent nothing, so once the folder can be written the same invitation joins. */
+    {
+      /* A join that lands opens the team's catalog through the page's hook, which this page lab stands in for, as
+         the joins at 2743 do. */
+      const loadWas = HK.hooks.loadCatalogFromFolder, loaded = [];
+      HK.hooks.loadCatalogFromFolder = n => { loaded.push(String(n)); };
+      let again;
+      try { again = await joinNowriteDesk(Dnw, false); } finally { HK.hooks.loadCatalogFromFolder = loadWas; }
+      const joined = await Dnw.join("state");
+      const desksDir = path.join(nowriteYard, "desks");
+      const requests = fs.existsSync(desksDir)
+        ? fs.readdirSync(desksDir).filter(d => fs.existsSync(path.join(desksDir, d, "join.json"))).length : 0;
+      check(again.res && !again.res.refused && !again.res.askRefused && joined.join !== null && requests === 1,
+        "15ew once the folder can be written, the same invitation joins: refused "
+        + JSON.stringify(again.res && (again.res.refused || again.res.askRefused || null))
+        + ", join kept " + (joined.join !== null) + ", requests in desks/ " + requests);
+    }
+
+    if (PLANTS_OFF) {
+      skip("15ev lifting plant:invite-folder-not-writable turns 15eu red");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const before = fs.readFileSync(mainPath);
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:invite-folder-not-writable") >= 0);
+      let turned = false, detail = "plant line absent";
+      if (at >= 0) {
+        lines[at] = lines[at].replace('notWritable ? "folder-not-writable" : "silent"', '"silent"');
+        const planted = await deskWith("nowrite-desk-plant", folder("nowrite-desk-plant-own"), null, lines.join("\n"));
+        const again = await joinNowriteDesk(planted);
+        turned = again.res && (again.res.refused !== "folder-not-writable" && again.res.askRefused !== "folder-not-writable") && again.en.indexOf(EN_NOWRITE_ROLE) < 0;
+        detail = turned ? "the line was gone and refused was silent" : "still returned folder-not-writable";
+      }
+      const same = fs.readFileSync(mainPath).equals(before);
+      check(turned && same, "15ev lifting plant:invite-folder-not-writable turns 15eu red (the card blames a folder): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
