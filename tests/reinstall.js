@@ -566,7 +566,7 @@ async function launch(dir, env) {
      The scratch home profile is passed via --user-data-dir into the lab's own folder. */
   const child = E.shellLaunch("tests/reinstall.js", path.join(dir, "Etiuda.exe"),
     ["--remote-debugging-port=" + port, "--user-data-dir=" + USERDATA],
-    { stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, CHILD_ENV, E.offscreenEnv(env)) });
+    { stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, CHILD_ENV, E.offscreenEnv(env)), ownsDesk: true });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
