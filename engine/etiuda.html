@@ -22050,6 +22050,7 @@ What you type stays in this browser only.`;
     ARRIVE: 3.25
   };
   var FAILSAFE_MS = Math.round(TIMING.ARRIVE * 1e3) + 1500;
+  var SHORTEST_FRAME_MS = 1e3 / 240;
   var hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   var mix = (a, b, f) => a.map((v, i) => Math.round(v * f + b[i] * (1 - f)));
   var rgb = (c) => "rgb(" + c.join(",") + ")";
@@ -22605,7 +22606,7 @@ What you type stays in this browser only.`;
     function drawFrame(now) {
       if (state.ended) return;
       const dt = Math.max(0, now - lastFrameTime);
-      if (framed && dt > 0) frameGap = Math.max(2, Math.min(frameGap, dt));
+      if (framed && dt >= SHORTEST_FRAME_MS) frameGap = Math.min(frameGap, dt);
       const step = Math.min(dt, 2 * frameGap);
       framed = true;
       lastFrameTime = Math.max(lastFrameTime, now);

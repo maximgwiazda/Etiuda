@@ -3036,6 +3036,23 @@ function launchMarkTests() {
   eq("the hand-over with no phase jump after a stall", got, [true, true]);
 
   try {
+    /* A NEAR-ZERO GAP EARLY (a duplicate stamp, two frames in one millisecond) must not slow the rest of the opening:
+       steady frames after it land on time, by the clock, not by the failsafe; and so do 144 Hz frames. */
+    const landsAt = (every, early) => {
+      const L = launchLab(), h = L.launch(); L.ready();
+      L.frame(0);
+      if (early) L.frame(0.5);
+      for (let t = (early ? 0.5 : 0) + every; t < 6000 && !h.reason; t += every) L.frame(t);
+      return [h.reason, L.now()];
+    };
+    const d60 = landsAt(1000 / 60, true), d144 = landsAt(1000 / 144, false), d144e = landsAt(1000 / 144, true);
+    const onTime = (r, every) => r[0] === "time" && r[1] <= 3250 + 3 * every;
+    got = [onTime(d60, 1000 / 60), onTime(d144, 1000 / 144), onTime(d144e, 1000 / 144)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a near-zero gap early leaves the opening on time: 60 Hz after a duplicate stamp, 144 Hz, and 144 Hz after one",
+    got, [true, true, true]);
+
+  try {
     /* THE FAILSAFE FIRING MID-FLIGHT cuts cleanly to the end state with the corner mark at the flight's phase. */
     const L = launchLab();
     const h = L.launch();

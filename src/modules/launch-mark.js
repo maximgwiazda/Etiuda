@@ -24,6 +24,9 @@ const TIMING = {
 /* THE PAGE IS NEVER LEFT HIDDEN (the test architect, 2026-11-03 03:04): whatever happens to the frames or to the page's
    ready, the window is given way 1.5 s after the opening would have arrived. A page shown before ready beats one never shown. */
 const FAILSAFE_MS = Math.round(TIMING.ARRIVE * 1000) + 1500;
+/* A gap shorter than a 240 Hz frame is a repeated stamp, not a display frame: counted, it would cap every later
+   step at a few milliseconds and the opening would crawl to the failsafe. */
+const SHORTEST_FRAME_MS = 1000 / 240;
 
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mix = (a, b, f) => a.map((v, i) => Math.round(v * f + b[i] * (1 - f)));
@@ -567,7 +570,7 @@ function launchMark(opts) {
   function drawFrame(now) {
     if (state.ended) return;
     const dt = Math.max(0, now - lastFrameTime);
-    if (framed && dt > 0) frameGap = Math.max(2, Math.min(frameGap, dt));
+    if (framed && dt >= SHORTEST_FRAME_MS) frameGap = Math.min(frameGap, dt);
     const step = Math.min(dt, 2 * frameGap);
     framed = true;
     lastFrameTime = Math.max(lastFrameTime, now);
