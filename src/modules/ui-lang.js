@@ -1066,6 +1066,8 @@ UI_STRINGS.pl={
   "This invitation cannot be read, so nothing was changed.":"Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
   "This folder is on the computer {HOST}.":"Ten folder znajduje się na komputerze {HOST}.",
   "This folder could not be reached, so nothing was written.":"Ten folder jest teraz niedostępny, więc nic nie zapisano.",
+  /* Draft for the copywriter (Claudette). */
+  "This computer can only read from the team's folder; joining needs permission to write, such as Content manager or Editor. Once that is granted, join again; the invitation still works.":"Ten komputer może tylko czytać z folderu zespołu; dołączenie wymaga uprawnień do zapisu, takich jak Content manager lub Edytor. Po ich nadaniu dołącz ponownie; zaproszenie nadal działa.",
   "Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.":"Etiuda nie mogła utworzyć na tym komputerze własnej kopii plików zespołu, więc nic nie zapisano. Gdy na dysku będzie miejsce, a Etiuda będzie mogła zapisywać w swoim folderze, wystarczy ponownie dołączyć; zaproszenie nadal działa.",
   "Desks on other computers read this folder only if it is shared with them.":"Stanowiska na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
   "OneDrive keeps this folder in sync.":"Ten folder jest synchronizowany przez OneDrive.",

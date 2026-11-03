@@ -4512,12 +4512,12 @@ try {
     const catRead = Dnw.api.readCatalog("lamps.ec");
     const nwState = await Dnw.join("state");
 
-    check(card.res && card.res.refused === "folder-not-writable"
+    check(card.res && (card.res.refused === "folder-not-writable" || card.res.askRefused === "folder-not-writable")
       && card.en.indexOf(EN_NOWRITE_ROLE) >= 0 && card.pl.indexOf(PL_NOWRITE_ROLE) >= 0
       && card.en.indexOf(FOLDER_BLAME) < 0
       && beforeTrust === afterTrust && catRead !== A1.trim() && nwState.join === null,
       "15eu a join with a write-denied desks/ folder shows the line, and nothing half-joined remains: "
-      + "refused " + (card.res && card.res.refused)
+      + "refused " + (card.res && (card.res.refused || card.res.askRefused))
       + ", en " + (card.en.indexOf(EN_NOWRITE_ROLE) >= 0)
       + ", pl " + (card.pl.indexOf(PL_NOWRITE_ROLE) >= 0)
       + ", folder blame " + (card.en.indexOf(FOLDER_BLAME) >= 0)
@@ -4537,7 +4537,7 @@ try {
         lines[at] = lines[at].replace('notWritable ? "folder-not-writable" : "silent"', '"silent"');
         const planted = await deskWith("nowrite-desk-plant", folder("nowrite-desk-plant-own"), null, lines.join("\n"));
         const again = await joinNowriteDesk(planted);
-        turned = again.res && again.res.refused !== "folder-not-writable" && again.en.indexOf(EN_NOWRITE_ROLE) < 0;
+        turned = again.res && (again.res.refused !== "folder-not-writable" && again.res.askRefused !== "folder-not-writable") && again.en.indexOf(EN_NOWRITE_ROLE) < 0;
         detail = turned ? "the line was gone and refused was silent" : "still returned folder-not-writable";
       }
       const same = fs.readFileSync(mainPath).equals(before);
