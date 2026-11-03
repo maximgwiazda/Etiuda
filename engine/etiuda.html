@@ -12575,16 +12575,11 @@ What you type stays in this browser only.`;
     else toast("All tabs closed");
     activeHeard();
   }
-  function askClose(answer, kind) {
+  function askClose(answer) {
     snapshotActiveTab();
     const n = tabs.filter(tabHasWork).length;
     if (!n) {
       answer("none");
-      return;
-    }
-    if (kind === "external") {
-      saveTabSession();
-      answer("external");
       return;
     }
     answer("asked");
@@ -15074,13 +15069,13 @@ What you type stays in this browser only.`;
     eSetAccent(h.accent);
     if (typeof h.onAccent === "function") h.onAccent(eSetAccent);
     if (typeof h.onAskClose === "function" && typeof h.closeAnswer === "function")
-      h.onAskClose((kind) => askClose((a) => {
-        if (a === "none" || a === "close" || a === "external") sendStats(true);
+      h.onAskClose(() => askClose((a) => {
+        if (a === "none" || a === "close") sendStats(true);
         try {
           h.closeAnswer(a);
         } catch (e) {
         }
-      }, kind));
+      }));
     const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
     if (min) min.onclick = () => {
       try {

@@ -579,15 +579,10 @@ function closeAllTabs(){
    the taskbar closed at once and forgot every conversation. The shell holds the close and asks here, and the answer
    goes back at once: "none" where nothing would be lost, else "asked", then the person's "close" or "stay". Cancel is
    the focused button, so Enter and Escape both keep the window; an Undo bubble in the same place waits under it. */
-function askClose(answer, kind){
+function askClose(answer){
   snapshotActiveTab();
   const n=tabs.filter(tabHasWork).length;
   if(!n){ answer("none"); return; }
-  if(kind==="external"){
-    saveTabSession();
-    answer("external");
-    return;
-  }
   answer("asked");
   if(document.getElementById("eCloseAsk")) return;
   const undo=$("#eUndo");

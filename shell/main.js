@@ -6737,9 +6737,11 @@ ipcMain.on("etiuda:desk-patch-save", (e, text) => {
 ipcMain.handle("etiuda:desk-patch", (e, text) =>
   fromEngine(e) && typeof text === "string" && patchDesk(text));
 /* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
-   profile, where a customer's name and a search would outlast the window; this is never written.
-   At an installer's close alone, the desk keeps the in-progress tabs on disk (tabs.json) and exits
-   without a modal (updates-8 condition of 2026-11-01, Board 958 row A7). The next start brings them back. */
+   profile, where a customer's name and a search would outlast the window; this is never written in plain text.
+   At an installer's close alone, and only upon an explicit installer signal (--update-close) when safeStorage
+   sealing is available, the desk seals open tabs and drafts with safeStorage to disk (tabs.json) and exits
+   without a modal (updates-8 condition of 2026-11-01, Board 958 row A7). If sealing is unavailable, nothing
+   is written and closing asks as ruled. The next start unlinks and restores every window's saved tabs. */
 const sessionHeld = new Map();
 let pendingSavedTabs = null;
 
@@ -6750,18 +6752,42 @@ function tabsFile() {
 function writeSavedTabs(win) {
   /* plant:installer-keeps-draft */
   try {
-    if (!win || !win.webContents) return false;
-    const id = win.webContents.id || 1;
-    let sm = sessionHeld.get(id);
-    if (!sm && sessionHeld.size > 0) sm = sessionHeld.values().next().value;
-    if (!sm) return false;
-    const tabs = sm.get("eSessionTabs");
-    if (!tabs || typeof tabs !== "string") return false;
+    if (!branchSealable()) return false;
+    const windowSessions = [];
+    const seenIds = new Set();
+    for (const [id, sm] of sessionHeld.entries()) {
+      if (!sm) continue;
+      const raw = sm.get("eSessionTabs");
+      if (!raw || typeof raw !== "string") continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+          windowSessions.push({ id, tabs: parsed.tabs, activeTabId: parsed.activeTabId });
+          seenIds.add(id);
+        }
+      } catch (_) {}
+    }
+    if (win && win.webContents && !seenIds.has(win.webContents.id)) {
+      const sm = sessionHeld.get(win.webContents.id);
+      const raw = sm && sm.get("eSessionTabs");
+      if (raw && typeof raw === "string") {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+            windowSessions.push({ id: win.webContents.id, tabs: parsed.tabs, activeTabId: parsed.activeTabId });
+          }
+        } catch (_) {}
+      }
+    }
+    if (windowSessions.length === 0) return false;
+    const payload = JSON.stringify({ v: 1, windows: windowSessions });
+    const sealed = safeStorage.encryptString(payload);
     const file = tabsFile();
     const dir = path.dirname(file);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const tmp = file + ".tmp" + process.pid;
-    fs.writeFileSync(tmp, tabs, "utf8");
+    fs.writeFileSync(tmp, sealed);
+    try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (_) {}
     fs.renameSync(tmp, file);
     return true;
   } catch (e) {
@@ -6775,13 +6801,63 @@ function readSavedTabs() {
   try {
     const file = tabsFile();
     if (!fs.existsSync(file)) return "";
-    const text = fs.readFileSync(file, "utf8");
+    const sealed = fs.readFileSync(file);
     try { fs.unlinkSync(file); } catch (e) {}
-    return text;
+    let plain = "";
+    try {
+      plain = safeStorage.decryptString(sealed);
+    } catch (e) {
+      console.error("etiuda: saved tabs could not be decrypted - " + e.message);
+      return "";
+    }
+    if (!plain) return "";
+    let data;
+    try { data = JSON.parse(plain); } catch { return ""; }
+    if (data && Array.isArray(data.windows)) {
+      const allTabs = [];
+      const seenIds = new Set();
+      let activeTabId = null;
+      for (const w of data.windows) {
+        if (!w || !Array.isArray(w.tabs)) continue;
+        for (const t of w.tabs) {
+          if (!t || typeof t !== "object") continue;
+          let id = t.id;
+          if (seenIds.has(id)) {
+            id = id + "-w" + seenIds.size;
+            t.id = id;
+          }
+          seenIds.add(id);
+          allTabs.push(t);
+        }
+        if (!activeTabId && w.activeTabId) activeTabId = w.activeTabId;
+      }
+      if (allTabs.length === 0) return "";
+      if (!activeTabId && allTabs[0]) activeTabId = allTabs[0].id;
+      return JSON.stringify({ v: 1, tabs: allTabs, activeTabId });
+    }
+    if (data && Array.isArray(data.tabs)) {
+      return plain;
+    }
+    return "";
   } catch (e) {
     console.error("etiuda: saved tabs could not be read - " + e.message);
     return "";
   }
+}
+
+function handleUpdateClose(wins) {
+  if (!branchSealable()) return false;
+  const saved = writeSavedTabs();
+  const list = (wins && Array.isArray(wins) ? wins : (typeof BrowserWindow.getAllWindows === "function" ? BrowserWindow.getAllWindows() : []))
+    .concat(theWindow ? [theWindow] : []);
+  const seen = new Set();
+  for (const win of list) {
+    if (!win || (typeof win.isDestroyed === "function" && win.isDestroyed()) || seen.has(win)) continue;
+    seen.add(win);
+    win.etiudaInstallerClose = true;
+    try { win.close(); } catch (_) {}
+  }
+  return saved;
 }
 
 ipcMain.on("etiuda:session", (e, op, key, value) => {
@@ -6900,7 +6976,7 @@ ipcMain.on("etiuda:window", (e, act) => {
   if (!win) return;
   if (act === "minimize") win.minimize();
   else if (act === "maximize") { if (win.isMaximized()) win.unmaximize(); else win.maximize(); }
-  else if (act === "close") { win.etiudaInAppClose = true; win.close(); }
+  else if (act === "close") win.close();
 });
 
 /* CLOSING ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets, 2026-10-12): the X, Alt+F4
@@ -6912,13 +6988,13 @@ const CLOSE_WAIT_MS = 1500;
 let quitting = false;
 app.on("before-quit", () => { quitting = true; try { flushHeldStats(); } catch { /* the last sealed answer stays */ } try { FolderSyncer().stopAllFolderSyncers(); } catch {} });
 function closeHeld(win, e) {
+  if (win && win.etiudaInstallerClose) return false;
   const lost = win.webContents.etiudaLost;
   if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
   e.preventDefault();
   win.etiudaCloseAsking = true;
   win.etiudaCloseWait = setTimeout(() => closeNow(win), CLOSE_WAIT_MS);
-  const inApp = !!win.etiudaInAppClose;
-  win.webContents.send("etiuda:ask-close", inApp ? "in-app" : "external");
+  win.webContents.send("etiuda:ask-close");
   return true;
 }
 /* THE HOLD'S WIRING ON A WINDOW, apart from createWindow so that a node leg can drive it (Clément's read, hole 3): the
@@ -6943,13 +7019,7 @@ function closeNow(win) {
 function closeAnswered(win, a) {
   if (!win || !win.etiudaCloseAsking) return;
   if (a === "asked") { clearTimeout(win.etiudaCloseWait); return; }
-  if (a === "stay") { clearTimeout(win.etiudaCloseWait); win.etiudaCloseAsking = false; win.etiudaInAppClose = false; return; }
-  if (a === "external") {
-    clearTimeout(win.etiudaCloseWait);
-    writeSavedTabs(win);
-    closeNow(win);
-    return;
-  }
+  if (a === "stay") { clearTimeout(win.etiudaCloseWait); win.etiudaCloseAsking = false; return; }
   if (a === "none" || a === "close") closeNow(win);
 }
 ipcMain.on("etiuda:close-answer", (e, a) => {
@@ -8942,6 +9012,10 @@ if (!theOnlyOne) {
 } else {
   registerEtiudaLink();
   app.on("second-instance", (e, argv) => {
+    if (Array.isArray(argv) && argv.includes("--update-close")) {
+      handleUpdateClose();
+      return;
+    }
     const win = theWindow;
     if (win && !win.isDestroyed() && !PLACED_ASIDE) {
       if (win.isMinimized()) win.restore();

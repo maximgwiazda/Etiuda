@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 94;
+const EXPECTED = 96;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -93,7 +93,7 @@ RecWin.prototype.setBounds = function (b) { if (b) Object.assign(this.bounds, b)
   RecWin.prototype[n] = function () {};
 });
 RecWin.fromWebContents = () => inert;
-RecWin.getAllWindows = () => inert;
+RecWin.getAllWindows = () => madeWins;
 const onHandlers = {}, invokeHandlers = {}, appOn = {};
 const electron = {
   app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
@@ -119,7 +119,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
@@ -1198,8 +1198,10 @@ try {
     + rRO + ", ids " + idsRO + ", then " + rBackRO + ", new files " + JSON.stringify(newRO) + ")");
   /* ---- THE WINDOW'S CLOSE. A window as far as the hold asks of it: what it sends, and how often it is closed. */
   const winFor = () => {
-    const w = { sent: [], closes: 0, webContents: { send: ch => w.sent.push(ch), etiudaLost: null },
+    const id = madeWins.length + 1;
+    const w = { sent: [], closes: 0, webContents: { id, send: ch => w.sent.push(ch), etiudaLost: null },
       isDestroyed: () => false, close() { w.closes++; } };
+    madeWins.push(w);
     return w;
   };
   const closeEv = () => ({ prevented: false, preventDefault() { this.prevented = true; } });
@@ -1302,28 +1304,45 @@ try {
     "1012d5 a silent page is let go at 1500 ms, so a wait written as 1600 is already past the hold (constant "
     + mainTest.CLOSE_WAIT_MS + ", timer " + delaySeen + ")");
 
-  /* 1152f, 1152g, 1152h, 1152i: Updates 8 / Row A7: A silent update never strands a desk.
-     At an installer's close the desk keeps the in-progress tabs on disk and exits without a modal.
-     The next start brings the tabs back. */
-  let extSaved = false, extClosed = false, noModal = false;
+  /* 1152f, 1152g, 1152h, 1152i, 1152j, 1152k: Updates 8 / Row A7: A silent update never strands a desk.
+     Only the installer's explicit signal (--update-close) skips the modal when safeStorage is available,
+     saving all open windows' tabs in sealed format to disk; every other close asks as ruled. */
+  let altF4Asked = false;
   try {
-    const wExt = winFor();
+    const wAlt = winFor();
     const fakeEv = closeEv();
-    const draftData = JSON.stringify({ v: 1, tabs: [{ id: "t-1", pax: "Customer A", intentBox: "Refund draft" }], activeTabId: "t-1" });
-    if (mainTest.sessionHeld) {
-      const sm = new Map(); sm.set("eSessionTabs", draftData);
-      mainTest.sessionHeld.set(1, sm);
-    }
-    const held = mainTest.closeHeld(wExt, fakeEv);
-    if (typeof mainTest.writeSavedTabs === "function" && typeof mainTest.tabsFile === "function") {
-      extSaved = mainTest.writeSavedTabs(wExt);
-      mainTest.closeAnswered(wExt, "external");
-      extClosed = wExt.closes === 1;
-      noModal = held && extClosed;
-    }
-  } catch (e) { extSaved = false; }
-  check(extSaved && extClosed && noModal,
-    "1152f an installer-style external close saves in-progress tabs to disk and exits immediately without a modal");
+    const sm = new Map();
+    sm.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-1", pax: "Customer A", intentBox: "Draft A" }], activeTabId: "t-1" }));
+    mainTest.sessionHeld.set(wAlt.webContents.id, sm);
+    const held = mainTest.closeHeld(wAlt, fakeEv);
+    const sentAsk = wAlt.sent.some(s => (typeof s === "string" ? s : s.ch) === "etiuda:ask-close");
+    const tf = mainTest.tabsFile();
+    const noFile = !fs.existsSync(tf);
+    altF4Asked = held && fakeEv.prevented && sentAsk && wAlt.closes === 0 && noFile;
+    mainTest.sessionHeld.delete(wAlt.webContents.id);
+  } catch (e) { altF4Asked = false; }
+  check(altF4Asked,
+    "1152f an Alt+F4-shaped close with no installer signal still asks");
+
+  let signalSealed = false;
+  try {
+    const wSig = winFor();
+    const fakeEv = closeEv();
+    const draftText = "Known secret draft string for A7";
+    const sm = new Map();
+    sm.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-1", pax: "Customer A", intentBox: draftText }], activeTabId: "t-1" }));
+    mainTest.sessionHeld.set(wSig.webContents.id, sm);
+    const handled = typeof mainTest.handleUpdateClose === "function" && mainTest.handleUpdateClose();
+    const tf = mainTest.tabsFile();
+    const fileExists = fs.existsSync(tf);
+    const rawBytes = fileExists ? fs.readFileSync(tf) : Buffer.alloc(0);
+    const draftAbsent = !rawBytes.includes(draftText) && !rawBytes.includes("Customer A");
+    const heldUnderSignal = mainTest.closeHeld(wSig, fakeEv);
+    signalSealed = !!(handled && fileExists && draftAbsent && !heldUnderSignal && !fakeEv.prevented && wSig.closes >= 1);
+    mainTest.sessionHeld.delete(wSig.webContents.id);
+  } catch (e) { signalSealed = false; }
+  check(signalSealed,
+    "1152g the installer's signal gives no modal, a sealed file, and a known draft string absent from its bytes");
 
   let restoredOk = false;
   try {
@@ -1332,27 +1351,47 @@ try {
       const readBack = mainTest.readSavedTabs();
       const unlinked = !fs.existsSync(tf);
       const parsed = readBack && JSON.parse(readBack);
-      restoredOk = !!(parsed && parsed.tabs && parsed.tabs[0].pax === "Customer A" && unlinked);
+      restoredOk = !!(parsed && parsed.tabs && parsed.tabs[0].pax === "Customer A" && parsed.tabs[0].intentBox === "Known secret draft string for A7" && unlinked);
     }
   } catch (e) { restoredOk = false; }
   check(restoredOk,
-    "1152g the next start reads the saved tabs from disk, unlinks the file, and restores the draft");
+    "1152h the next start reads the saved tabs from disk, unlinks the file, and restores the draft");
 
-  let inAppAsked = false;
+  let twoWindowsKept = false;
   try {
-    const wInApp = winFor();
-    wInApp.etiudaInAppClose = true;
+    const w1 = winFor(), w2 = winFor();
+    const sm1 = new Map(), sm2 = new Map();
+    sm1.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-w1", pax: "Customer Window1", intentBox: "Draft 1" }], activeTabId: "t-w1" }));
+    sm2.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-w2", pax: "Customer Window2", intentBox: "Draft 2" }], activeTabId: "t-w2" }));
+    mainTest.sessionHeld.set(w1.webContents.id, sm1);
+    mainTest.sessionHeld.set(w2.webContents.id, sm2);
+    mainTest.handleUpdateClose();
+    const readBack = mainTest.readSavedTabs();
+    const parsed = readBack && JSON.parse(readBack);
+    const hasW1 = parsed && parsed.tabs && parsed.tabs.some(t => t.pax === "Customer Window1");
+    const hasW2 = parsed && parsed.tabs && parsed.tabs.some(t => t.pax === "Customer Window2");
+    twoWindowsKept = !!(hasW1 && hasW2 && parsed.tabs.length >= 2);
+  } catch (e) { twoWindowsKept = false; }
+  check(twoWindowsKept,
+    "1152i two windows keep both sets of tabs across an installer close and restore");
+
+  let noSealingAsks = false;
+  try {
+    sealOk = false;
+    const wNoSeal = winFor();
     const fakeEv = closeEv();
-    const held = mainTest.closeHeld(wInApp, fakeEv);
-    mainTest.closeAnswered(wInApp, "asked");
-    const quiet = wInApp.closes === 0;
-    mainTest.closeAnswered(wInApp, "close");
-    const tf = typeof mainTest.tabsFile === "function" ? mainTest.tabsFile() : "";
-    const noFile = !tf || !fs.existsSync(tf);
-    inAppAsked = held && quiet && wInApp.closes === 1 && noFile;
-  } catch (e) { inAppAsked = false; }
-  check(inAppAsked,
-    "1152h an in-app close still asks and does not save tabs to disk when closed");
+    const sm = new Map();
+    sm.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-ns", pax: "Customer NoSeal", intentBox: "Draft NS" }], activeTabId: "t-ns" }));
+    mainTest.sessionHeld.set(wNoSeal.webContents.id, sm);
+    const handled = mainTest.handleUpdateClose();
+    const tf = mainTest.tabsFile();
+    const noFile = !fs.existsSync(tf);
+    const held = mainTest.closeHeld(wNoSeal, fakeEv);
+    noSealingAsks = !handled && noFile && held && fakeEv.prevented;
+  } catch (e) { noSealingAsks = false; }
+  finally { sealOk = true; }
+  check(noSealingAsks,
+    "1152j when sealing is unavailable the desk writes nothing and falls back to the ask");
 
   let plantDraft = false;
   try {
@@ -1360,7 +1399,7 @@ try {
     plantDraft = MAIN_SRC.indexOf("plant:installer-keeps-draft") >= 0;
   } catch (e) { plantDraft = false; }
   check(plantDraft,
-    "1152i plant:installer-keeps-draft guards the tab session persistence at external close");
+    "1152k plant:installer-keeps-draft guards the tab session persistence at external close");
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");

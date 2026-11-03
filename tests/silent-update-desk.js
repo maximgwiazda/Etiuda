@@ -3,8 +3,9 @@
  *   node tests/silent-update-desk.js
  *
  * WHAT IT PROVES.
- * An installer-style close (taskkill without /F) with a tab holding a draft exits
- * within the installer's wait (20s), and the next start shows the draft.
+ * An installer-style close (running the executable with --update-close, followed by
+ * taskkill without /F) with a tab holding a draft exits within the installer's wait (20s)
+ * without a modal, and the next start restores the draft.
  *
  * WALLED BEHIND THE WINDOW WALL. Never opens a window when the variable is not set.
  *
@@ -33,6 +34,11 @@ console.log("       debugging port(s) count up from " + PORT + "; leases: " + LE
 let checks = 0, fails = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 
+function electronExe() {
+  const dir = path.join(E.ROOT, "node_modules", "electron");
+  return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
+}
+
 async function main() {
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-silent-update-"));
   const ud = path.join(lab, "user-data");
@@ -47,12 +53,13 @@ async function main() {
     const args = [
       path.join(E.ROOT, "shell"),
       "--user-data-dir=" + ud,
-      "--remote-debugging-port=" + port,
-      "--no-sandbox",
-      "--disable-gpu"
+      "--remote-debugging-port=" + port
     ];
 
-    child = E.launchElectron({ who: WHO, args, docs });
+    child = E.shellLaunch(WHO, electronExe(), args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
+    });
     await sleep(2500);
 
     browser = await puppeteer.connect({
@@ -68,13 +75,25 @@ async function main() {
     await page.type("#intentBox", "Customer draft message in progress");
     await sleep(500);
 
-    // Disconnect Puppeteer before sending taskkill so CDP does not hold the process
+    // Disconnect Puppeteer before sending the installer signal so CDP does not hold the process
     browser.disconnect();
     browser = null;
 
-    // Installer-style close: taskkill /PID <pid> without /F
+    // Real installer signal: second instance launched with --update-close
     const t0 = Date.now();
-    execFileSync("taskkill.exe", ["/PID", String(child.pid)]);
+    const second = E.shellLaunch(WHO + " 2nd", electronExe(),
+      [path.join(E.ROOT, "shell"), "--user-data-dir=" + ud, "--update-close"],
+      { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs }) });
+    await new Promise(resolve => {
+      if (second.exitCode !== null) return resolve();
+      second.on("exit", () => resolve());
+      setTimeout(resolve, 3000);
+    });
+
+    // Followed by installer taskkill if the process has not yet exited
+    if (E.pidAlive(child.pid)) {
+      try { execFileSync("taskkill.exe", ["/PID", String(child.pid)]); } catch (_) {}
+    }
 
     // Must exit within installer's wait (20s) without modal blocking it
     let exited = false;
@@ -84,10 +103,13 @@ async function main() {
     }
     const elapsed = Date.now() - t0;
     check(exited && elapsed < 20000,
-      "1152j an installer-style close with a draft exits within the wait without a modal (" + elapsed + " ms)");
+      "1152l an installer-style close with a draft exits within the wait without a modal (" + elapsed + " ms)");
 
     // Relaunch the desk on the same user-data folder
-    const child2 = E.launchElectron({ who: WHO, args, docs });
+    const child2 = E.shellLaunch(WHO + " 2", electronExe(), args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
+    });
     await sleep(2500);
 
     const browser2 = await puppeteer.connect({
@@ -101,7 +123,7 @@ async function main() {
     const restoredDraft = await page2.$eval("#intentBox", el => el.value);
 
     check(restoredPax === "Draft Customer A" && restoredDraft.includes("Customer draft message"),
-      "1152k restarting the desk restores the draft tab (" + restoredPax + ")");
+      "1152m restarting the desk restores the draft tab (" + restoredPax + ")");
 
     browser2.disconnect();
     E.killTree(child2.pid);

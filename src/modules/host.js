@@ -414,10 +414,10 @@ function wireHost(){
   if(typeof h.onAccent==="function") h.onAccent(eSetAccent);
   /* The shell asks before the window closes; the conversations answer (tabs.js). */
   if(typeof h.onAskClose==="function" && typeof h.closeAnswer==="function")
-    h.onAskClose((kind)=>askClose(a=>{
-      if(a==="none"||a==="close"||a==="external") sendStats(true);
+    h.onAskClose(()=>askClose(a=>{
+      if(a==="none"||a==="close") sendStats(true);
       try{ h.closeAnswer(a); }catch(e){}
-    }, kind));
+    }));
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };
