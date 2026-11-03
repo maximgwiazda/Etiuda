@@ -363,6 +363,11 @@ function launchMark(opts) {
   let canvas = null;
   let ctx = null;
 
+  let openingMs = 0;
+  let lastFrameTime = t0;
+  let framed = false;
+  let frameGap = 1000 / 60;
+
   const off = [];
   const on = (el, ev, fn, opt) => {
     if (el && el.addEventListener) {
@@ -424,12 +429,9 @@ function launchMark(opts) {
       rafId = 0;
     }
 
-    const tSec = state.ms / 1000;
-    const curW = (win && win.innerWidth) || 1280;
-    const curH = (win && win.innerHeight) || 880;
     const finalPhi = isStillMotion
       ? PHI_ICON
-      : (tSec >= TIMING.STILL_UNTIL ? cornerPhase(tSec) : figureAt(tSec, curW, curH).phi);
+      : (currentOpeningFig ? currentOpeningFig.phi : PHI_ICON);
 
     syncCorner(finalPhi);
 
@@ -563,8 +565,15 @@ function launchMark(opts) {
   }
 
   function drawFrame(now) {
-    const t = (now - t0) / 1000;
-    if (lmK) lmK.ms = Math.round(now - t0);
+    if (state.ended) return;
+    const dt = Math.max(0, now - lastFrameTime);
+    if (framed && dt > 0) frameGap = Math.max(2, Math.min(frameGap, dt));
+    const step = Math.min(dt, 2 * frameGap);
+    framed = true;
+    lastFrameTime = Math.max(lastFrameTime, now);
+    openingMs += step;
+    if (lmK) lmK.ms = openingMs;
+    const t = openingMs / 1000;
     const curW = (win && win.innerWidth) || 1280;
     const curH = (win && win.innerHeight) || 880;
     const fig = figureAt(t, curW, curH);
@@ -614,6 +623,7 @@ function launchMark(opts) {
       coverHoldTimer = setTimeout(startOpening, 150);
       return;
     }
+    lastFrameTime = (win && win.performance ? win.performance.now() : Date.now());
     if (win && !(win.__stubNoFramesAndNeverReady) && win.requestAnimationFrame) {
       rafId = win.requestAnimationFrame(renderFrame);
     }

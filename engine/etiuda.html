@@ -21864,6 +21864,7 @@ What you type stays in this browser only.`;
   }
   function setFifthPhase(phi) {
     fifthClock.phi = phi;
+    fifthClock.last = null;
   }
   function fifthRest() {
     fifthClock.phi = FIFTH_PHI0;
@@ -22402,6 +22403,10 @@ What you type stays in this browser only.`;
     let veil = null;
     let canvas = null;
     let ctx = null;
+    let openingMs = 0;
+    let lastFrameTime = t0;
+    let framed = false;
+    let frameGap = 1e3 / 60;
     const off = [];
     const on = (el, ev, fn, opt) => {
       if (el && el.addEventListener) {
@@ -22457,10 +22462,7 @@ What you type stays in this browser only.`;
         win.cancelAnimationFrame(rafId);
         rafId = 0;
       }
-      const tSec = state.ms / 1e3;
-      const curW = win && win.innerWidth || 1280;
-      const curH = win && win.innerHeight || 880;
-      const finalPhi = isStillMotion ? PHI_ICON : tSec >= TIMING.STILL_UNTIL ? cornerPhase(tSec) : figureAt(tSec, curW, curH).phi;
+      const finalPhi = isStillMotion ? PHI_ICON : currentOpeningFig ? currentOpeningFig.phi : PHI_ICON;
       syncCorner(finalPhi);
       const brandTile = doc && typeof doc.querySelector === "function" && doc.querySelector(".brand-tile");
       if (!isStillMotion && brandTile && !brandTile.classList.contains("brand-turning")) {
@@ -22601,8 +22603,15 @@ What you type stays in this browser only.`;
       }
     }
     function drawFrame(now) {
-      const t2 = (now - t0) / 1e3;
-      if (lmK) lmK.ms = Math.round(now - t0);
+      if (state.ended) return;
+      const dt = Math.max(0, now - lastFrameTime);
+      if (framed && dt > 0) frameGap = Math.max(2, Math.min(frameGap, dt));
+      const step = Math.min(dt, 2 * frameGap);
+      framed = true;
+      lastFrameTime = Math.max(lastFrameTime, now);
+      openingMs += step;
+      if (lmK) lmK.ms = openingMs;
+      const t2 = openingMs / 1e3;
       const curW = win && win.innerWidth || 1280;
       const curH = win && win.innerHeight || 880;
       const fig = figureAt(t2, curW, curH);
@@ -22647,6 +22656,7 @@ What you type stays in this browser only.`;
         coverHoldTimer = setTimeout(startOpening, 150);
         return;
       }
+      lastFrameTime = win && win.performance ? win.performance.now() : Date.now();
       if (win && !win.__stubNoFramesAndNeverReady && win.requestAnimationFrame) {
         rafId = win.requestAnimationFrame(renderFrame);
       }

@@ -107,7 +107,7 @@ function fifthTick(ms){
   c.last=ms;
 }
 function fifthPhase(){ return fifthClock.phi; }
-function setFifthPhase(phi){ fifthClock.phi=phi; }
+function setFifthPhase(phi){ fifthClock.phi=phi; fifthClock.last=null; }
 function fifthRest(){ fifthClock.phi=FIFTH_PHI0; fifthClock.last=null; }
 if(typeof globalThis!=="undefined") globalThis.fifthPhase = fifthPhase;
 

@@ -2993,6 +2993,62 @@ function launchMarkTests() {
     got, [0, true]);
 
   try {
+    /* A MACHINE WITH STALLS: landing comes later than 2.90 s wall clock and still sits on .brand svg (centre within 1 px). */
+    const L = launchLab();
+    const brand = L.el("div"); brand.className = "brand-tile";
+    const brandSvg = L.el("svg", { left: 14, top: 6, width: 25, height: 25 });
+    brand.appendChild(brandSvg);
+    L.doc.body.appendChild(brand);
+    const target = { cx: 14 + 12.5, cy: 6 + 12.5 };
+    const h = L.launch(); L.ready();
+    // Advance with two 400 ms stalls
+    L.play(1000);
+    L.frame(1400);
+    L.play(2000);
+    L.frame(2400);
+    L.play(2900);
+    const stateAt2900 = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState() : null;
+    const distAt2900 = stateAt2900 ? Math.hypot(stateAt2900.cx - target.cx, stateAt2900.cy - target.cy) : 0;
+    const notLandedYet = distAt2900 > 1.0;
+    while (!h.reason && L.k() && L.k().ms < 2900 && L.now() < 5000) {
+      L.frame(L.now() + 1000 / 60);
+    }
+    const landWallTime = L.now();
+    const stateAtLand = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState() : null;
+    const distAtLand = stateAtLand ? Math.hypot(stateAtLand.cx - target.cx, stateAtLand.cy - target.cy) : 999;
+    got = [notLandedYet, landWallTime > 2900, distAtLand <= 1.0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the landing on .brand svg on a machine with stalls (the landing comes later and still sits on the mark, centre within 1 px)",
+    got, [true, true, true]);
+
+  try {
+    /* THE HAND-OVER WITH NO PHASE JUMP AFTER A STALL: corner mark continues from the flight's phase. */
+    const L = launchLab(); const h = L.launch(); L.ready();
+    L.play(2000);
+    L.frame(2600); // 600 ms stall
+    while (!h.reason && L.now() < 10000) {
+      L.frame(L.now() + 1000 / 60);
+    }
+    const phi = L.sb.lastSetFifthPhase;
+    const flightPhase = L.sb.window.__launchOpeningState ? L.sb.window.__launchOpeningState().phase : 0;
+    got = [h.reason === "time", Math.abs(phi - flightPhase) < 1e-4];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the hand-over with no phase jump after a stall", got, [true, true]);
+
+  try {
+    /* THE FAILSAFE FIRING MID-FLIGHT cuts cleanly to the end state with the corner mark at the flight's phase. */
+    const L = launchLab();
+    const h = L.launch();
+    for (let t = 0; t <= 4700; t += 300) L.frame(t);
+    const flightPhaseBefore = L.sb.window.__launchOpeningState().phase;
+    L.timersTo(4750);
+    const phi = L.sb.lastSetFifthPhase;
+    got = [h.reason === "failsafe", Math.abs(phi - flightPhaseBefore) < 1e-4, L.frames() === 0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the failsafe firing mid-flight cuts to the end state with the corner mark at the flight's phase and no fast-forward frame between",
+    got, [true, true, true]);
+
+  try {
     const L = launchLab(), h = L.launch(); L.play(200); L.ready();
     L.sb.innerWidth = 1600; L.sb.innerHeight = 900;
     L.play(3300);
