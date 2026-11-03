@@ -70,7 +70,7 @@ async function run() {
      * ------------------------------------------------------------------------- */
     {
       const page = await browser.newPage();
-      await page.setViewport({ width: 1024, height: 768 });
+      await page.setViewport({ width: 1280, height: 768 });
       // Navigate to engine
       await page.goto("file://" + ENGINE_HTML);
 
@@ -102,7 +102,7 @@ async function run() {
       });
 
       // Wait until opening completes
-      await sleep(3200);
+      await sleep(3400);
 
       const after = await page.evaluate(() => {
         const band = document.querySelector(".row-main");
