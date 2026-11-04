@@ -7,6 +7,11 @@
  * taskkill without /F) with a tab holding a draft exits within the installer's wait (20s)
  * without a modal, and the next start restores the draft.
  *
+ * WHAT IT CANNOT SEE, said rather than implied. The harness's placed windows are never held (shell/main.js closeHeld,
+ * PLACED_ASIDE), so off screen a shell without the fix closes at once and 1152l is green there too: this leg proves the
+ * close ends in time, and tests/desk-ipc.mjs 1152f and 1152g prove the hold itself, on a window not placed aside. On such a
+ * shell 1152m and 1152n are the reds: the draft does not come back, and a first instance opens a window.
+ *
  * WALLED BEHIND THE WINDOW WALL. Never opens a window when the variable is not set.
  *
  * Exit code is the number of failed checks, capped at 63; 78 where the run produced no verdict.
@@ -67,7 +72,7 @@ async function main() {
   const catSource = FIX.catalogEc || FIX.sampleEc;
   fs.copyFileSync(catSource, path.join(docs, "etiuda-catalog.ec"));
 
-  let child = null, browser = null;
+  let child = null, child2 = null, browser = null;
   try {
     const port = PORT;
     const args = [
@@ -131,7 +136,7 @@ async function main() {
       "1152l an installer-style close with a draft exits within the wait without a modal (" + elapsed + " ms)");
 
     // Relaunch the desk on the same user-data folder
-    const child2 = E.shellLaunch(WHO + " 2", electronExe(), args, {
+    child2 = E.shellLaunch(WHO + " 2", electronExe(), args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
@@ -147,7 +152,7 @@ async function main() {
       const p = document.querySelector("#pax");
       const i = document.querySelector("#intent");
       return p && p.value === "Draft Customer A" && i && i.value.includes("Customer draft message");
-    }, { timeout: 10000 });
+    }, { timeout: 10000 }).catch(() => null);
     const restoredPax = await page2.$eval("#pax", el => el.value);
     const restoredDraft = await page2.$eval("#intent", el => el.value);
 
@@ -176,6 +181,7 @@ async function main() {
   } finally {
     if (browser) { try { browser.disconnect(); } catch {} }
     if (child && E.pidAlive(child.pid)) E.killTree(child.pid);
+    if (child2 && E.pidAlive(child2.pid)) E.killTree(child2.pid);
     try { fs.rmSync(lab, { recursive: true, force: true }); } catch {}
   }
 
