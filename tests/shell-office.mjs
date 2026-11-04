@@ -390,12 +390,12 @@ try {
         const Splant = loadShell({ src: lines.join("\n") });
         const targetP = path.join(Splant.DOCS, "plant-conc.ec");
         realFs.writeFileSync(targetP, "seed\n", "utf8");
-        let ran = false, crashed = false, p2Err = null;
-        Splant.ctl.writeFileSync = (real, file, data, ...rest) => {
-          const res = real(file, data, ...rest);
+        let ran = false, crashed = false;
+        Splant.ctl.writeFile = async (real, file, data, ...rest) => {
+          const res = await real(file, data, ...rest);
           if (typeof file === "string" && file.endsWith(".tmp") && !ran) {
             ran = true;
-            try { Splant.api.writeReplacing(targetP, "p2\n").catch(e => { p2Err = e; }); } catch {}
+            try { await Splant.api.writeReplacing(targetP, "p2\n"); } catch {}
           }
           return res;
         };
@@ -405,7 +405,7 @@ try {
         } catch (e) {
           crashed = (e.code === "ENOENT");
         }
-        turned = (crashed || (p2Err && p2Err.code === "ENOENT"));
+        turned = crashed;
       }
       const same = realFs.readFileSync(mainPath).equals(beforeBytes);
       check(turned && same, "1k lifting plant:unique-temp causes concurrent writes to clash on .tmp (ENOENT): turned "
