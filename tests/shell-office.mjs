@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 120;
+const EXPECTED = 123;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -45,7 +45,8 @@ const APP = path.join(LAB, "app");
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
   "SAMPLE_EDITIONS", "catalogChanged", "sendListing", "spellingFromPackage", "chromiumDesktop", "keyringSwitch",
-  "RENAME_RETRIES", "RENAME_WAIT_MS", "uniqueTempPath", "drainWrites"];
+  "RENAME_RETRIES", "RENAME_WAIT_MS", "uniqueTempPath", "drainWrites", "tabsFile", "handleUpdateClose",
+  "WRITE_DRAIN_BOUND_MS", "writeReplacingAsync"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -155,13 +156,13 @@ function loadShell(opts) {
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-  const on = {}, invoke = {}, power = {}, sent = [], switches = [], removed = [];
+  const on = {}, invoke = {}, power = {}, sent = [], switches = [], removed = [], appOn = {};
   const onLine = new Set(o.onLine || []);
   const wc = anything({ send: (...a) => { sent.push(a); }, id: 7 });
   const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready,
-           quit: noop, on: noop, getVersion: () => "0.0.0",
+           quit: noop, on: (ev, fn) => { (appOn[ev] = appOn[ev] || []).push(fn); }, getVersion: () => "0.0.0",
            commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
@@ -214,7 +215,7 @@ function loadShell(opts) {
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls, busOpts, busFiles };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls, busOpts, busFiles, appOn };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -514,6 +515,79 @@ try {
       check(elapsed >= 1950 && maxLag < 50 && whole,
         "1n with a stub write that takes 2 s, the main process's event-loop lag stays under 50 ms and the file still lands whole: lag "
         + maxLag + " ms, elapsed " + elapsed + " ms, whole " + whole);
+    }
+
+    // 1o: a tabs file written through handleUpdateClose is whole on disk when the function returns
+    {
+      const S = loadShell();
+      const tabsData = JSON.stringify({ v: 1, tabs: [{ id: "t-office-1", pax: "Customer A" }], activeTabId: "t-office-1" });
+      S.ipc("etiuda:session", "set", "eSessionTabs", tabsData);
+      const fakeWin = { isDestroyed: () => false, close: () => {} };
+      const tf = S.api.tabsFile();
+      const res = S.api.handleUpdateClose([fakeWin]);
+      const existsOnReturn = realFs.existsSync(tf);
+      const contentOnReturn = existsOnReturn ? realFs.readFileSync(tf) : null;
+      check(res === true && existsOnReturn && contentOnReturn && contentOnReturn.length > 0,
+        "1o a tabs file written through handleUpdateClose is whole on disk when the function returns: handled "
+        + res + ", exists " + existsOnReturn + ", size " + (contentOnReturn ? contentOnReturn.length : 0));
+    }
+
+    // 1p: a refused write in saveDeskFile reaches its caller
+    {
+      const S = loadShell();
+      const given = JSON.parse(S.ipc("etiuda:desk"));
+      S.ctl.renameSync = (real, a, b) => {
+        if (b === S.deskFile) throw busy("ENOSPC");
+        return real(a, b);
+      };
+      if (!S.ctl.rename) {
+        S.ctl.rename = async (real, a, b) => {
+          if (b === S.deskFile) throw busy("ENOSPC");
+          return real(a, b);
+        };
+      }
+      const ok = S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeRefused: "fail" })));
+      S.ctl.renameSync = null;
+      S.ctl.rename = null;
+      check(ok === false,
+        "1p a refused write in saveDeskFile reaches its caller: answered " + ok);
+    }
+
+    // 1q: an async write in flight at quit lands
+    {
+      const S = loadShell();
+      const target1q = path.join(S.DOCS, "write-in-flight-at-quit.ec");
+      realFs.writeFileSync(target1q, "initial-1q\n", "utf8");
+
+      let writeStarted = false;
+      let resumeWrite;
+      const writeGate = new Promise(r => { resumeWrite = r; });
+
+      S.ctl.writeFile = async (real, file, data, ...rest) => {
+        const res = await real(file, data, ...rest);
+        if (typeof file === "string" && file.includes("write-in-flight-at-quit")) {
+          writeStarted = true;
+          await writeGate;
+        }
+        return res;
+      };
+
+      const pWrite = (S.api.writeReplacingAsync || S.api.writeReplacing)(target1q, "quit-landed-1q\n");
+      for (let i = 0; i < 50 && !writeStarted; i++) await new Promise(r => setTimeout(r, 10));
+
+      const fakeEv = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+      (S.appOn["before-quit"] || []).forEach(fn => fn(fakeEv));
+
+      const intercepted = fakeEv.defaultPrevented;
+      const landedBefore = realFs.readFileSync(target1q, "utf8");
+
+      resumeWrite();
+      await pWrite;
+
+      const landedAfter = realFs.readFileSync(target1q, "utf8");
+      check(intercepted === true && landedBefore === "initial-1q\n" && landedAfter === "quit-landed-1q\n",
+        "1q an async write in flight at quit lands: intercepted " + intercepted + ", before '"
+        + landedBefore.trim() + "', after '" + landedAfter.trim() + "'");
     }
   }
 
