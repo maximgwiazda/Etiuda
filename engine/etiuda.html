@@ -10366,12 +10366,14 @@ What you type stays in this browser only.`;
   function deckScan() {
     deckRaf = 0;
     if (!list || !deckOn()) return;
+    deckInitIO();
     const todo = [];
     list.querySelectorAll(".card[data-id]").forEach((c) => {
       if (deckSlabs(c).length < 2) {
         if (c.classList.contains("deck")) deckReset(c);
         return;
       }
+      if (deckIO) deckIO.observe(c);
       if (!deckLive(c)) {
         c.classList.remove("deck-near");
         return;
@@ -10423,24 +10425,12 @@ What you type stays in this browser only.`;
     if (deckHeard(ms).fade) deckFade();
   }
   var deckApproachRaf = 0;
-  function deckApproach() {
-    if (!list || !deckOn()) return;
-    const todo = [];
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      if (c.classList.contains("deck-near") || c.classList.contains("deck-open") || c.classList.contains("deck-up")) {
-        if (!c.classList.contains("deck-open") && !c.classList.contains("deck-up") && !deckInRange(c)) c.classList.remove("deck-near");
-        return;
-      }
-      if (deckSlabs(c).length < 2 || !deckInRange(c)) return;
-      todo.push(c);
-    });
-    deckMeasure(todo);
-  }
-  function deckLaterApproach() {
-    if (!deckApproachRaf && deckOn()) deckApproachRaf = requestAnimationFrame(() => {
-      deckApproachRaf = 0;
-      deckApproach();
-    });
+  function deckMarkLive() {
+    if (deckKbdCard) return true;
+    if (!list) return false;
+    if (typeof list.querySelector === "function") return !!list.querySelector(".card.deck.deck-open, .card.deck.deck-up");
+    if (typeof list.querySelectorAll === "function") return list.querySelectorAll(".card.deck.deck-open, .card.deck.deck-up").length > 0;
+    return false;
   }
   function deckSetOpen(card, open, instant) {
     clearTimeout(card._deckT);
@@ -10592,7 +10582,7 @@ What you type stays in this browser only.`;
     list.addEventListener("animationend", deckFadeLater);
     list.addEventListener("transitionend", deckFadeLater);
     document.addEventListener("scroll", () => {
-      deckLaterApproach();
+      if (!deckMarkLive()) return;
       deckFadeLater();
     }, { capture: true, passive: true });
     addEventListener("resize", () => {
@@ -10626,6 +10616,27 @@ What you type stays in this browser only.`;
   }
   var deckSizeObs = null;
   var deckWatching = false;
+  var deckIO = null;
+  function deckInitIO() {
+    if (typeof IntersectionObserver !== "function" || deckIO) return;
+    deckIO = new IntersectionObserver((entries) => {
+      const todo = [];
+      for (const entry of entries) {
+        const c = entry.target;
+        if (entry.isIntersecting) {
+          if (!c.classList.contains("deck-near")) {
+            c.classList.add("deck-near");
+            if (deckSlabs(c).length >= 2) todo.push(c);
+          }
+        } else {
+          if (!c.classList.contains("deck-open") && !c.classList.contains("deck-up")) {
+            c.classList.remove("deck-near");
+          }
+        }
+      }
+      if (todo.length) deckMeasure(todo);
+    }, { rootMargin: "800px 0px" });
+  }
   function deckClass(on) {
     try {
       document.body.classList.toggle("deck-off", !on);
@@ -10638,9 +10649,14 @@ What you type stays in this browser only.`;
     if (on) {
       if (deckObs) deckObs.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
       if (deckSizeObs) deckSizeObs.observe(list);
+      deckInitIO();
     } else {
       if (deckObs) deckObs.disconnect();
       if (deckSizeObs) deckSizeObs.disconnect();
+      if (deckIO) {
+        deckIO.disconnect();
+        deckIO = null;
+      }
     }
   }
   function deckFlat() {
@@ -10651,6 +10667,10 @@ What you type stays in this browser only.`;
     deckFadeRaf = 0;
     deckApproachRaf = 0;
     deckKbdCard = null;
+    if (deckIO) {
+      deckIO.disconnect();
+      deckIO = null;
+    }
     list.querySelectorAll(".card.deck").forEach((c) => {
       clearTimeout(c._deckM);
       deckReset(c);
@@ -34184,7 +34204,9 @@ What you type stays in this browser only.`;
       }
     }, 900);
     wirePops();
-    addEventListener("resize", () => {
+    let resizeRaf = 0;
+    function runResize() {
+      resizeRaf = 0;
       syncHeaderElevation();
       syncShortcutTitles();
       schedulePillsCollapse();
@@ -34194,6 +34216,9 @@ What you type stays in this browser only.`;
       if (tourActive()) scheduleTourPlace();
       mtRefreshLive();
       scheduleCutScan();
+    }
+    addEventListener("resize", () => {
+      if (!resizeRaf) resizeRaf = requestAnimationFrame(runResize);
     }, { passive: true });
     translateChrome();
     placeRailNow();
