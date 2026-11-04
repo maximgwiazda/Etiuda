@@ -3983,7 +3983,11 @@ const CARD_B = {
       g.ResizeObserver = class { constructor(f) { rig.size = f; } observe() { rig.ro = true; } disconnect() { rig.ro = false; } };
       g.requestAnimationFrame = fn => { rig.frames.push({ id: rig.frames.length + 1, fn, state: "queued" }); return rig.frames.length; };
       g.cancelAnimationFrame = id => { const f = rig.frames[id - 1]; if (f && f.state === "queued") f.state = "cancelled"; };
-      g.addEventListener = () => {}; globalThis.document.addEventListener = () => {};
+      const listeners = [];
+      rig.listeners = listeners;
+      const add = (evt, fn, opts) => { listeners.push({ evt, fn, opts }); };
+      g.addEventListener = add;
+      if (globalThis.document) globalThis.document.addEventListener = add;
       g.innerHeight = 800;
       return rig;
     };
@@ -4118,6 +4122,29 @@ const CARD_B = {
           if (had.root === undefined) delete doc.documentElement; else doc.documentElement = had.root;
           if (had.gcs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = had.gcs;
         }
+      });
+    check("deck.js", "1104dk1 100 scroll events make zero getBoundingClientRect calls once all cards are measured",
+      () => {
+        const rig = deckRig();
+        try {
+          const cards = [];
+          for (let i = 0; i < 258; i++) {
+            cards.push(deckCard("c-" + i, i * 60, { one: i % 2 === 1 }));
+          }
+          const l = wired(cards);
+          rig.run();
+          cards.forEach(c => {
+            if (c.querySelectorAll().length >= 2) c.classList.add("deck", "deck-near");
+            c.rects = 0;
+          });
+          const scroller = rig.listeners.find(x => x.evt === "scroll");
+          for (let i = 0; i < 100; i++) {
+            if (scroller) scroller.fn({ target: globalThis.document });
+            rig.run();
+          }
+          const calls = cards.reduce((sum, c) => sum + c.rects, 0);
+          return eq(calls, 0);
+        } finally { rig.restore(); }
       });
     /* THE SWITCH (board 903): Layout's row turns the deck off, and off is a card laid out as it was before the deck, every
        reply in its place and nothing of the deck acting. The cards are drawn by the card body itself, one of alternatives
