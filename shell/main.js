@@ -1701,12 +1701,12 @@ function deskEnvelopeBody(keysText) {
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
 const RENAME_RETRIES = 60;
 const RENAME_WAIT_MS = 50;
-function renamePatiently(from, to) {
+async function renamePatiently(from, to) {
   for (let i = 1; ; i++) {
-    try { fs.renameSync(from, to); return; }
+    try { await fs.promises.rename(from, to); return; }
     catch (e) {
       if (i >= RENAME_RETRIES || RENAME_BUSY.indexOf(e.code) < 0) throw e; /* plant:rename-retries */
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RENAME_WAIT_MS);
+      await new Promise(r => setTimeout(r, RENAME_WAIT_MS));
     }
   }
 }
@@ -1722,22 +1722,32 @@ function uniqueTempPath(file) {
    refused one leaves no temp file behind it. The temp name is unique per write to prevent collisions
    on shared folders, fsynced to disk before the rename, and unlinked on every failure path.
    Throws what stopped it. */
-function writeReplacing(file, text) {
+const activeWrites = new Set();
+function drainWrites() {
+  return Promise.allSettled(Array.from(activeWrites));
+}
+async function doWriteReplacing(file, text) {
   const tmp = uniqueTempPath(file);
   try {
-    fs.writeFileSync(tmp, text, "utf8");
-    const fd = fs.openSync(tmp, "r+");
+    await fs.promises.writeFile(tmp, text, typeof text === "string" ? "utf8" : undefined);
+    const handle = await fs.promises.open(tmp, "r+");
     try {
-      fs.fsyncSync(fd); /* plant:write-fsync */
+      await handle.sync(); /* plant:write-fsync */
     } finally {
-      fs.closeSync(fd);
+      await handle.close();
     }
-    renamePatiently(tmp, file);
+    await renamePatiently(tmp, file);
   } catch (e) {
-    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    try { await fs.promises.unlink(tmp); } catch { /* never made */ }
     throw e;
   }
   mirrorOwes(file);
+}
+function writeReplacing(file, text) {
+  const p = doWriteReplacing(file, text);
+  activeWrites.add(p);
+  p.finally(() => activeWrites.delete(p)).catch(() => {});
+  return p;
 }
 /* A file written into, or taken out of, a folder team's mirror is owed to that team's share, and the syncer's outbox
    carries it there (shell/folder/syncer.cjs). Every write and removal of the desk's own files in the mirror passes here. */
@@ -1761,7 +1771,9 @@ function persistDeskEnvelope() {
   const file = deskFile();
   try {
     keepUnkept();
-    writeReplacing(file, deskEnvelopeBody(JSON.stringify(deskKeys)));
+    const tmp = file + "." + process.pid + ".env.tmp";
+    fs.writeFileSync(tmp, deskEnvelopeBody(JSON.stringify(deskKeys)), "utf8");
+    fs.renameSync(tmp, file);
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
   }
@@ -2603,7 +2615,7 @@ function sealFor(catalogId, pin, root) {
    are two files. An empty text takes every file of that id away. Anything else is a catalog the page
    built, which the desk signs only when it names this desk, and writes by replacement with the edition
    raised from the highest it knows (the envelope keeps it past a removal), then the other files of that id go. */
-function writeBranch(stem, text) {
+async function writeBranch(stem, text) {
   stem = String(stem || ""); text = String(text || "");
   const tail = /-([0-9a-f]{8})$/.exec(stem);
   if (!tail || !branchStemOk(stem) || text.length > BRANCH_TEXT_MAX) return { ok: false };
@@ -2636,7 +2648,7 @@ function writeBranch(stem, text) {
     const lastRev = same.reduce((hi, e) => (branchGenuine(e.doc) ? Math.max(hi, +e.doc.rev || 0) : hi), branchRevs[id] || 0);
     const tidy = () => same.forEach(e => { if (e.file !== at.dest) unlinkOwn(e.file); });
     if (!doc) {
-      if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; persistDeskEnvelope(); }
+      if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; await persistDeskEnvelope(); }
       same.forEach(e => unlinkOwn(e.file));
       if (!same.some(e => e.file === at.dest) && fs.existsSync(at.dest)) unlinkOwn(at.dest);
       heldBranch.delete(stem);
@@ -2659,11 +2671,11 @@ function writeBranch(stem, text) {
     }
     const signed = JSON.stringify(doc, null, 1) + "\n";
     const written = seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
-    writeReplacing(at.dest, written);
+    await writeReplacing(at.dest, written);
     historyKeep(at.dest, written, true);
     tidy();
     branchRevs[id] = doc.rev;
-    persistDeskEnvelope();
+    await persistDeskEnvelope();
     heldBranch.delete(stem);
     return { ok: true, rev: doc.rev };
   } catch (e) {
@@ -5490,7 +5502,7 @@ function setRelayTeamAside(rt) {
   const file = path.join(relayMirrorOf(rt), TEAM_NAME);
   const aside = file + ".aside";
   try { fs.unlinkSync(aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
-  try { renamePatiently(file, aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
+  renamePatiently(file, aside).catch(e => { if (e.code !== "ENOENT") throw e; });
 }
 function forgetLead(team, left) {
   team = String(team || "");
@@ -6305,7 +6317,7 @@ function sharedLock(file) {
   if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
   if (st) {
     const aside = lock + "." + token + ".stale";
-    try { renamePatiently(lock, aside); } catch { return null; }
+    renamePatiently(lock, aside).catch(() => {});
     try { fs.unlinkSync(aside); } catch { /* left beside it */ }
   }
   try { take(); return { lock: lock, token: token }; }
@@ -6683,7 +6695,7 @@ function saveDeskFile(keysText) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   keepUnkept();
   rotateDesk();
-  writeReplacing(file, deskEnvelopeBody(keysText));
+  return writeReplacing(file, deskEnvelopeBody(keysText));
 }
 /* A key the MAIN PROCESS owns, written before any window exists. Not writeDesk: that one applies
    a delta against the map a particular load was handed, and re-arms the watch and the theme
@@ -9036,9 +9048,10 @@ function hardenSession() {
    never read (measured the same day). English and Polish are the languages the desk is written in.
    tests/shell-office.mjs 13 holds both platforms, tests/linux-desk.js 8 the installed package. */
 const SPELLING = { langs: ["en-US", "pl"], files: ["en-US-10-1.bdic", "pl-PL-3-0.bdic"] };
-function spellingFromPackage(s) {
+async function spellingFromPackage(s) {
   const from = path.join(process.resourcesPath || "", "dictionaries");
   s.setSpellCheckerDictionaryDownloadURL("file://" + from.split("/").map(encodeURIComponent).join("/") + "/");
+  s.setSpellCheckerLanguages(SPELLING.langs);
   const to = path.join(app.getPath("userData"), "Dictionaries"), placed = [];
   for (const name of SPELLING.files) {
     try {
@@ -9047,13 +9060,12 @@ function spellingFromPackage(s) {
       try { had = fs.readFileSync(path.join(to, name)); } catch { /* not there yet */ }
       if (had && had.equals(bytes)) continue;
       fs.mkdirSync(to, { recursive: true });
-      writeReplacing(path.join(to, name), bytes);
+      await writeReplacing(path.join(to, name), bytes);
       placed.push(name);
     } catch (e) {
       console.error("etiuda: the spelling dictionary " + name + " was not placed: " + (e && e.code || e));
     }
   }
-  s.setSpellCheckerLanguages(SPELLING.langs);
   return placed;
 }
 

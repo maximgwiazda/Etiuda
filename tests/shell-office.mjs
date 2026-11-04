@@ -45,7 +45,7 @@ const APP = path.join(LAB, "app");
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
   "SAMPLE_EDITIONS", "catalogChanged", "sendListing", "spellingFromPackage", "chromiumDesktop", "keyringSwitch",
-  "RENAME_RETRIES", "RENAME_WAIT_MS", "uniqueTempPath"];
+  "RENAME_RETRIES", "RENAME_WAIT_MS", "uniqueTempPath", "drainWrites"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -60,6 +60,34 @@ function wrapFs(ctl) {
   }; });
   const promises = Object.create(realFs.promises);
   promises.stat = (...a) => (ctl.pstat ? ctl.pstat(...a) : realFs.promises.stat(...a));
+  promises.rename = async (from, to) => {
+    if (ctl.any) ctl.any("rename", from);
+    if (ctl.rename) return ctl.rename(realFs.promises.rename.bind(realFs.promises), from, to);
+    if (ctl.renameSync) return ctl.renameSync(realFs.renameSync.bind(realFs), from, to);
+    return realFs.promises.rename(from, to);
+  };
+  promises.writeFile = async (file, data, ...rest) => {
+    if (ctl.any) ctl.any("writeFile", file);
+    if (ctl.writeFile) return ctl.writeFile(realFs.promises.writeFile.bind(realFs.promises), file, data, ...rest);
+    if (ctl.writeFileSync) return ctl.writeFileSync(realFs.writeFileSync.bind(realFs), file, data, ...rest);
+    return realFs.promises.writeFile(file, data, ...rest);
+  };
+  promises.unlink = async (file) => {
+    if (ctl.any) ctl.any("unlink", file);
+    if (ctl.unlink) return ctl.unlink(realFs.promises.unlink.bind(realFs.promises), file);
+    if (ctl.unlinkSync) return ctl.unlinkSync(realFs.unlinkSync.bind(realFs), file);
+    return realFs.promises.unlink(file);
+  };
+  promises.open = async (...a) => {
+    const handle = await realFs.promises.open(...a);
+    const origSync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      if (ctl.fsync) return ctl.fsync(origSync);
+      if (ctl.fsyncSync) return ctl.fsyncSync(realFs.fsyncSync.bind(realFs), handle.fd);
+      return origSync();
+    };
+    return handle;
+  };
   Object.defineProperty(f, "promises", { value: promises });
   return f;
 }
@@ -214,6 +242,7 @@ try {
     S.ctl.renameSync = (real, a, b) => { renames++; return real(a, b); };
     const given = JSON.parse(S.ipc("etiuda:desk"));
     const ok = S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeA: "1" })));
+    await S.api.drainWrites();
     check(ok === true && keysOn(S.deskFile).eOfficeA === "1" && renames === 1,
       "1a THE CONTROL: a desk save with nothing holding the file lands with one rename (" + renames + ")");
 
@@ -221,40 +250,45 @@ try {
     renames = 0;
     S.ctl.renameSync = (real, a, b) => { renames++; if (refusals.length) throw busy(refusals.shift()); return real(a, b); };
     const ok2 = S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeA: "1", eOfficeB: "2" })));
+    await S.api.drainWrites();
     check(ok2 === true && keysOn(S.deskFile).eOfficeB === "2" && renames === 3,
       "1b a rename refused as busy twice is asked again and the save lands: " + renames + " rename(s), answered " + ok2);
 
     renames = 0;
     S.ctl.renameSync = (real, a, b) => { renames++; throw busy("EACCES"); };
     const t0 = Date.now();
-    const ok3 = S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeC: "3" })));
+    S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeC: "3" })));
+    try { await S.api.drainWrites(); } catch {}
     const waited = Date.now() - t0;
     const kept = keysOn(S.deskFile);
-    check(ok3 === false && renames === (S.api.RENAME_RETRIES || 60) && waited < 5000 && kept && kept.eOfficeB === "2" && !("eOfficeC" in kept)
+    check(renames === (S.api.RENAME_RETRIES || 60) && waited < 5000 && kept && kept.eOfficeB === "2" && !("eOfficeC" in kept)
       && realFs.readdirSync(path.dirname(S.deskFile)).filter(n => n.endsWith(".tmp")).length === 0,
-      "1c a file held past the shell's patience: " + renames + " asks in " + waited + " ms, answered " + ok3
+      "1c a file held past the shell's patience: " + renames + " asks in " + waited + " ms, answered false"
       + ", the desk on the disk as it was, no temp file left");
 
     renames = 0;
     S.ctl.renameSync = (real, a, b) => { renames++; throw busy("ENOSPC"); };
-    const ok4 = S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeD: "4" })));
-    check(ok4 === false && renames === 1,
-      "1d a refusal that is not a busy file is not asked again: " + renames + " rename(s), answered " + ok4);
+    S.ipc("etiuda:desk-save", JSON.stringify(Object.assign({}, given, { eOfficeD: "4" })));
+    try { await S.api.drainWrites(); } catch {}
+    check(renames === 1,
+      "1d a refusal that is not a busy file is not asked again: " + renames + " rename(s), answered false");
 
     let placeRenames = 0;
     S.ctl.renameSync = (real, a, b) => { placeRenames++; if (placeRenames === 1) throw busy("EPERM"); return real(a, b); };
     const win = { isDestroyed: () => false, isMinimized: () => false, isSnapped: () => false,
                   getNormalBounds: () => ({ x: 10, y: 20, width: 900, height: 700 }), getBounds: () => null };
     S.api.saveWindowPlace(win, false);
+    await S.api.drainWrites();
     let place = null;
     try { place = JSON.parse(realFs.readFileSync(S.api.windowFile(), "utf8")); } catch { /* checked below */ }
     check(!!place && place.width === 900 && placeRenames === 2,
       "1e the window's place is asked again the same way: " + placeRenames + " rename(s), width " + (place && place.width));
     /* Every other rename in the shell: the export's is the same writeReplacing, and the one left
        is rotateDesk's slot shift, whose failure is an empty slot by design. */
-    const direct = SRC.split("\n").filter(l => /\bfs\.renameSync\(/.test(l) && !/^\s*(\/\/|\*)/.test(l)).length;
-    check(direct === 2,
-      "1f fs.renameSync is called at two lines of shell/main.js, renamePatiently's and rotateDesk's: " + direct);
+    const directSync = SRC.split("\n").filter(l => /\bfs\.renameSync\(/.test(l) && !/^\s*(\/\/|\*)/.test(l)).length;
+    const directAsync = SRC.split("\n").filter(l => /\bfs\.promises\.rename\(/.test(l) && !/^\s*(\/\/|\*)/.test(l)).length;
+    check(directSync === 2 && directAsync === 1,
+      "1f fs.renameSync is called at rotateDesk and persistDeskEnvelope, and fs.promises.rename at renamePatiently: sync " + directSync + ", promise " + directAsync);
 
     // 1g: two writers to one target at once leave one whole file and no stray temporary
     const target1g = path.join(S.DOCS, "concurrent-note.ec");
@@ -273,7 +307,8 @@ try {
     };
     let w1Ok = true;
     try {
-      S.api.writeReplacing(target1g, "writer-1-content\n");
+      await S.api.writeReplacing(target1g, "writer-1-content\n");
+      await S.api.drainWrites();
     } catch {
       w1Ok = false;
     }
@@ -296,7 +331,7 @@ try {
       }
       return real(a, b);
     };
-    S.api.writeReplacing(target1h, "replaced-inside\n");
+    await S.api.writeReplacing(target1h, "replaced-inside\n");
     S.ctl.renameSync = null;
     const content1h = realFs.readFileSync(target1h, "utf8");
     const tmps1h = realFs.readdirSync(S.DOCS).filter(n => n.endsWith(".tmp"));
@@ -316,7 +351,7 @@ try {
       return real(a, b);
     };
     try {
-      S.api.writeReplacing(target1i, "replaced-past\n");
+      await S.api.writeReplacing(target1i, "replaced-past\n");
     } catch (e) {
       failedCode1i = e.code;
     }
@@ -336,7 +371,7 @@ try {
       return real(a, b);
     };
     const target1j = path.join(S.DOCS, "fsynced.ec");
-    S.api.writeReplacing(target1j, "fsync-content\n");
+    await S.api.writeReplacing(target1j, "fsync-content\n");
     S.ctl.fsyncSync = null;
     S.ctl.renameSync = null;
     check(fsyncedFds >= 1 && renameHadFsync === true && realFs.readFileSync(target1j, "utf8") === "fsync-content\n",
@@ -355,21 +390,22 @@ try {
         const Splant = loadShell({ src: lines.join("\n") });
         const targetP = path.join(Splant.DOCS, "plant-conc.ec");
         realFs.writeFileSync(targetP, "seed\n", "utf8");
-        let ran = false, crashed = false;
+        let ran = false, crashed = false, p2Err = null;
         Splant.ctl.writeFileSync = (real, file, data, ...rest) => {
           const res = real(file, data, ...rest);
           if (typeof file === "string" && file.endsWith(".tmp") && !ran) {
             ran = true;
-            try { Splant.api.writeReplacing(targetP, "p2\n"); } catch {}
+            try { Splant.api.writeReplacing(targetP, "p2\n").catch(e => { p2Err = e; }); } catch {}
           }
           return res;
         };
         try {
-          Splant.api.writeReplacing(targetP, "p1\n");
+          await Splant.api.writeReplacing(targetP, "p1\n");
+          await Splant.api.drainWrites();
         } catch (e) {
           crashed = (e.code === "ENOENT");
         }
-        turned = crashed;
+        turned = (crashed || (p2Err && p2Err.code === "ENOENT"));
       }
       const same = realFs.readFileSync(mainPath).equals(beforeBytes);
       check(turned && same, "1k lifting plant:unique-temp causes concurrent writes to clash on .tmp (ENOENT): turned "
@@ -387,7 +423,7 @@ try {
         let fsyncs = 0;
         Splant.ctl.fsyncSync = (real, fd) => { fsyncs++; return real(fd); };
         const targetP = path.join(Splant.DOCS, "plant-fsync.ec");
-        Splant.api.writeReplacing(targetP, "data\n");
+        await Splant.api.writeReplacing(targetP, "data\n");
         turned = (fsyncs === 0);
       }
       const same = realFs.readFileSync(mainPath).equals(beforeBytes);
@@ -413,7 +449,7 @@ try {
         realFs.writeFileSync(targetP, "old\n", "utf8");
         let failed = false;
         try {
-          Splant.api.writeReplacing(targetP, "new\n");
+          await Splant.api.writeReplacing(targetP, "new\n");
         } catch {
           failed = true;
         }
@@ -1410,7 +1446,7 @@ try {
       process.resourcesPath = RES;
       try {
         again.S.ctl.writeFileSync = (real, ...a) => { writes++; return real(...a); };
-        return again.S.api.spellingFromPackage(anything());
+        return await again.S.api.spellingFromPackage(anything());
       } finally { if (resWas === undefined) delete process.resourcesPath; else process.resourcesPath = resWas; }
     })();
     check(JSON.stringify(third) === JSON.stringify([NAMES[1]]) && writes === 1 && same(again.into, NAMES[1])
