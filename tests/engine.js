@@ -276,11 +276,16 @@ function shellLaunch(who, exe, args, options) {
   windowWall(who);
   /* An installed desk drops a debugging switch, and takes neither test variable, unless this rides beside them (shell/main.js). */
   const carried = opts.env || process.env;
+  opts.env = Object.assign({}, carried);
   if (noDoor) {
-    opts.env = Object.assign({}, carried);
     delete opts.env.ETIUDA_TEST_DEVTOOLS;
-  } else if ((args || []).some(a => /^--remote-debugging-(port|pipe)\b/.test(String(a))) || carried.ETIUDA_TEST_DOCUMENTS || carried.ETIUDA_TEST_SAVE_AS)
-    opts.env = Object.assign({}, carried, { ETIUDA_TEST_DEVTOOLS: "1" });
+  } else if ((args || []).some(a => /^--remote-debugging-(port|pipe)\b/.test(String(a))) || carried.ETIUDA_TEST_DOCUMENTS || carried.ETIUDA_TEST_SAVE_AS) {
+    opts.env.ETIUDA_TEST_DEVTOOLS = "1";
+  }
+  /* The main-process crash guard: loaded into Electron before the app so an uncaught exception prints to stderr rather than raising a native dialog. */
+  const guard = path.join(__dirname, "no-crash-dialog.js").replace(/\\/g, "/");
+  const guardOpt = '--require "' + guard + '"';
+  opts.env.NODE_OPTIONS = opts.env.NODE_OPTIONS ? opts.env.NODE_OPTIONS + " " + guardOpt : guardOpt;
   return spawn(exe, args, opts);
 }
 
