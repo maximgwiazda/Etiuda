@@ -6785,10 +6785,7 @@ function writeSavedTabs(win) {
     const file = tabsFile();
     const dir = path.dirname(file);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const tmp = file + ".tmp" + process.pid;
-    fs.writeFileSync(tmp, sealed);
-    try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (_) {}
-    fs.renameSync(tmp, file);
+    writeReplacing(file, sealed);
     return true;
   } catch (e) {
     console.error("etiuda: saved tabs could not be written - " + e.message);
