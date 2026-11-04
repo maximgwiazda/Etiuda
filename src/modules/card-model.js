@@ -136,7 +136,7 @@ function reorderMacroBlocks(id, fromVi, toVi){
     const o=overrideAgainstBase(base, Object.assign({}, m, moved));
     if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
   }
-  savePack();
+  savePack([id]);
   eMoveRecent(id, fromVi, toVi);
   hooks.rebuildCards();
   return true;
