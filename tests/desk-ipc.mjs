@@ -126,7 +126,7 @@ if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else proce
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
    catalog and the host are answered here, because this file is about the desk. ------------- */
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
-const sent = { sync: {}, invoke: {}, args: {} };
+const sent = { sync: {}, invoke: {}, send: {}, args: {} };
 const bump = (o, ch) => { o[ch] = (o[ch] || 0) + 1; };
 const eventFor = frame => ({ sender: { id: 1, once: noop }, senderFrame: frame, returnValue: undefined });
 const ipcRenderer = {
@@ -139,7 +139,7 @@ const ipcRenderer = {
     onHandlers[ch](e, ...args);
     return e.returnValue;
   },
-  send: (ch, ...args) => { if (onHandlers[ch]) onHandlers[ch](eventFor(ENGINE_FRAME), ...args); },
+  send: (ch, ...args) => { bump(sent.send, ch); if (onHandlers[ch]) onHandlers[ch](eventFor(ENGINE_FRAME), ...args); },
   /* Across a process boundary: the handler runs after the caller's task, never inside it. */
   invoke: (ch, ...args) => {
     bump(sent.invoke, ch);
@@ -305,7 +305,11 @@ try {
   let ssCleared = 0;
   const lsStub = { length: 0, key: () => null, removeItem: noop }, ssStub = { clear: () => { ssCleared++; } };
   const TAB = "eResetTab";
-  const tabPlanted = window.E_HOST.session("set", TAB, "the customer's name") === true && window.E_HOST.session("get", TAB) === "the customer's name";
+  const mainTab = () => {
+    const m = mainTest.sessionHeld && mainTest.sessionHeld.get(1);
+    return m && m.has(TAB) ? m.get(TAB) : null;
+  };
+  const tabPlanted = window.E_HOST.session("set", TAB, "the customer's name") === true && window.E_HOST.session("get", TAB) === "the customer's name" && mainTab() === "the customer's name";
   const clearState = new Function("window", "localStorage", "sessionStorage",
     slice("hostDesk") + "\n" + slice("clearState") + "\nreturn clearState;")(window, lsStub, ssStub);
   check(tabPlanted && ssCleared === 0,
@@ -321,15 +325,16 @@ try {
     + (stayed.length ? " (" + stayed.slice(0, 4).join(", ") + ")" : "") + ", the carried mark " + left["e~carried"]);
   check(ssCleared === 1,
     "5c the Reset clears the page's own sessionStorage, once: " + ssCleared + " call(s)");
-  check(tabsAfter === null,
-    "5d and it clears the tabs main holds, so a customer's name does not outlive the Reset: the plant reads back " + JSON.stringify(tabsAfter));
+  check(tabsAfter === null && mainTab() === null,
+    "5d and it clears the tabs main holds, so a customer's name does not outlive the Reset: the plant reads back " + JSON.stringify(tabsAfter)
+    + ", main holds " + JSON.stringify(mainTab()));
   /* The #reset hatch clears with no desk: it runs before the app does, and a customer's name must not outlive it either. */
   const planted2 = window.E_HOST.session("set", TAB, "the customer's name") === true && window.E_HOST.session("get", TAB) === "the customer's name";
   clearState(false);
   const hatchTabs = window.E_HOST.session("get", TAB);
-  check(planted2 && hatchTabs === null && ssCleared === 2,
+  check(planted2 && hatchTabs === null && mainTab() === null && ssCleared === 2,
     "5e the #reset hatch's clearState(false) clears the tabs too, in main and in the page: planted " + planted2 + ", the plant reads back "
-    + JSON.stringify(hatchTabs) + ", sessionStorage cleared " + ssCleared + " time(s) in all");
+    + JSON.stringify(hatchTabs) + ", main holds " + JSON.stringify(mainTab()) + ", sessionStorage cleared " + ssCleared + " time(s) in all");
 
   /* ---- a click on a link, at the preload's two listeners: only a middle click, besides the primary
      one, hands its address to main, and so licenses it; a right click on a link is a context menu ---- */
@@ -1058,25 +1063,71 @@ try {
 
     let railDraws = 0;
     let langUIDraws = 0;
+    let tailCancels = 0;
     const wasRail = HK.hooks.drawIntentRail;
     const wasLang = HK.hooks.applyLangUI;
     HK.hooks.drawIntentRail = () => { railDraws++; };
-    HK.hooks.applyLangUI = (l) => { langUIDraws++; railDraws++; };
+    HK.hooks.applyLangUI = (l, mode) => {
+      if (mode === "tail") { tailCancels++; return; }
+      langUIDraws++;
+      railDraws++;
+    };
+    const syncOf = () => sent.sync["etiuda:session"] || 0;
+    const sendOf = () => (sent.send && sent.send["etiuda:session"]) || 0;
+    const allSync = () => Object.values(sent.sync).reduce((n, v) => n + v, 0);
 
-    const syncBefore = sent.sync["etiuda:session"] || 0;
+    const syncBefore = syncOf(), sendBefore = sendOf(), allBefore = allSync();
     const t0 = performance.now();
     TB.switchTab("tab-2");
-    const t1 = performance.now();
-    const switchElapsed = Math.round((t1 - t0) * 100) / 100;
-    const syncDuring = (sent.sync["etiuda:session"] || 0) - syncBefore;
+    const sameMs = Math.round((performance.now() - t0) * 100) / 100;
+    const sameSync = syncOf() - syncBefore, sameSend = sendOf() - sendBefore, sameAll = allSync() - allBefore;
+    const sameRail = railDraws, sameLang = langUIDraws, sameTail = tailCancels;
+
+    const back = TB.tabs.find(t => t.id === "tab-1");
+    back.lang = "pl";
+    const railAt = railDraws, langAt = langUIDraws, syncAt = syncOf(), sendAt = sendOf(), allAt = allSync();
+    const t2 = performance.now();
+    TB.switchTab("tab-1");
+    const langMs = Math.round((performance.now() - t2) * 100) / 100;
+    const langSync = syncOf() - syncAt, langSend = sendOf() - sendAt, langAll = allSync() - allAt;
+    const langRail = railDraws - railAt, langLang = langUIDraws - langAt;
 
     HK.hooks.drawIntentRail = wasRail;
     HK.hooks.applyLangUI = wasLang;
 
-    const ok78o = syncDuring === 0 && railDraws === 1 && langUIDraws === 0;
+    /* The width the ten-step loop stopped on, walked here on a straight flex line, against
+       settleBarWidth. alpha 0.3 is the row the staircase's comment names (seven tenths handed back). */
+    const floor = 40, alpha = 0.3;
+    const walk = (from, o0) => {
+      let bw = from, o = o0;
+      for (let i = 0; i < 10 && o > 0.5 && bw > floor; i++) {
+        const next = Math.max(floor, bw - Math.ceil(o * 1.5));
+        if (next === bw) break;
+        o -= alpha * (bw - next);
+        bw = next;
+      }
+      return bw;
+    };
+    const widthMiss = [];
+    for (const pair of [[500, 10], [800, 40], [400, 1], [300, 0.4], [200, 80]]) {
+      const from = pair[0], o0 = pair[1];
+      const probed = Math.max(floor, from - Math.ceil(o0 * 1.5));
+      const moved = from - probed;
+      const o1 = moved > 0 ? o0 - alpha * moved : o0;
+      const got = TB.settleBarWidth(from, o0, probed, o1, floor);
+      const want = walk(from, o0);
+      if (got !== want) widthMiss.push(from + ":" + got + "<>" + want);
+    }
+
+    const ok78o = sameSync === 0 && sameAll === 0 && sameRail === 1 && sameLang === 0 && sameTail === 1 && sameSend === 1
+      && langSync === 0 && langAll === 0 && langRail === 1 && langLang === 1 && langSend === 1
+      && widthMiss.length === 0;
     check(ok78o,
       "78o a tab switch: zero sendSync (counted in preload), one drawIntentRail, and the time to first frame measured before and after: "
-      + syncDuring + " sendSync, " + railDraws + " rail draw(s), " + langUIDraws + " lang UI draw(s), time " + switchElapsed + " ms");
+      + "same lang " + sameSync + " sendSync (" + sameAll + " of any channel), " + sameSend + " async, " + sameRail + " rail, "
+      + sameLang + " lang UI, " + sameTail + " tail, " + sameMs + " ms; "
+      + "other lang " + langSync + " sendSync (" + langAll + " of any channel), " + langSend + " async, " + langRail + " rail, "
+      + langLang + " lang UI, " + langMs + " ms; widths " + (widthMiss.length ? widthMiss.join(" ") : "match"));
   }
 
   /* A catalog taken while the identity is asked: the write that began over the one before, its file already made. */

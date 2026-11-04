@@ -122,6 +122,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     if (o === "get") return sessionCache.has(k) ? sessionCache.get(k) : null;
     if (o === "set") {
       const v = value === undefined ? null : String(value);
+      if (typeof v !== "string") return null;
       sessionCache.set(k, v);
       ipcRenderer.send("etiuda:session", o, k, v);
       return true;

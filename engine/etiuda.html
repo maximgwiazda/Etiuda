@@ -11244,6 +11244,7 @@ What you type stays in this browser only.`;
     sayLive: () => sayLive,
     scheduleTabSave: () => scheduleTabSave,
     setTabBeads: () => setTabBeads,
+    settleBarWidth: () => settleBarWidth,
     stepTab: () => stepTab,
     switchTab: () => switchTab,
     syncTabBeads: () => syncTabBeads,
@@ -12351,6 +12352,7 @@ What you type stays in this browser only.`;
     setPickRun(false);
     const langChanged = !!(tb.lang && tb.lang !== lang);
     if (langChanged) hooks.applyLangUI(tb.lang);
+    else hooks.applyLangUI(tb.lang, "tail");
     hooks.updateIntentPlaceholder();
     if (intentEl) {
       intentEl.value = tb.intentBox || "";
@@ -12828,6 +12830,23 @@ What you type stays in this browser only.`;
       if (wrap) ro.observe(wrap);
     }
   }
+  function settleBarWidth(from, o0, probed, o1, floor) {
+    if (!(o0 > 0.5)) return from;
+    const moved = from - probed;
+    if (!(moved > 0)) return from;
+    if (!(o1 > 0.5)) return probed;
+    const alpha = (o0 - o1) / moved;
+    if (!(alpha > 0)) return probed;
+    let bw = probed, o = o1;
+    for (let i = 1; i < 10 && o > 0.5 && bw > floor; i++) {
+      const step = Math.ceil(o * 1.5);
+      const next = Math.max(floor, bw - step);
+      if (next === bw) break;
+      o -= alpha * (bw - next);
+      bw = next;
+    }
+    return bw;
+  }
   function applyTabWidths() {
     const bar = $("#tabsBar");
     const wrap = $("#tabsWrap") || bar && bar.parentElement;
@@ -12904,13 +12923,25 @@ What you type stays in this browser only.`;
     updateTabOverflow();
     if (add) {
       let bw = barW;
-      const overhang = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
-      if (overhang > 0.5) {
-        bw = Math.max(40, bw - Math.ceil(overhang * 3.3));
-        bar.style.flex = "0 0 " + bw + "px";
-        bar.style.width = bw + "px";
-        bar.style.minWidth = bw + "px";
-        bar.style.maxWidth = bw + "px";
+      const o0 = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+      if (o0 > 0.5) {
+        const probed = Math.max(40, bw - Math.ceil(o0 * 1.5));
+        if (probed < bw) {
+          bw = probed;
+          bar.style.flex = "0 0 " + bw + "px";
+          bar.style.width = bw + "px";
+          bar.style.minWidth = bw + "px";
+          bar.style.maxWidth = bw + "px";
+          const o1 = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+          const settled = settleBarWidth(barW, o0, probed, o1, 40);
+          if (settled !== bw) {
+            bw = settled;
+            bar.style.flex = "0 0 " + bw + "px";
+            bar.style.width = bw + "px";
+            bar.style.minWidth = bw + "px";
+            bar.style.maxWidth = bw + "px";
+          }
+        }
       }
       if (bw !== barW) updateTabOverflow();
       if (bw < contentW - 1) {
@@ -33007,8 +33038,9 @@ What you type stays in this browser only.`;
     drawIntentRail();
     recountMacros();
   }
-  function applyLangUI(l) {
+  function applyLangUI(l, mode) {
     cancelLangTail();
+    if (mode === "tail") return;
     applyLangState(l);
     applyLangHeavy();
   }
