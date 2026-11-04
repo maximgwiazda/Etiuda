@@ -6790,15 +6790,142 @@ ipcMain.on("etiuda:desk-patch-save", (e, text) => {
 ipcMain.handle("etiuda:desk-patch", (e, text) =>
   fromEngine(e) && typeof text === "string" && patchDesk(text));
 /* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
-   profile, where a customer's name and a search would outlast the window; this is never written. */
+   profile, where a customer's name and a search would outlast the window; this is never written in plain text.
+   At an installer's close alone, and only upon an explicit installer signal (--update-close) when safeStorage
+   sealing is available, the desk seals open tabs and drafts with safeStorage to disk (tabs.json) and exits
+   without a modal (updates-8 condition of 2026-11-01, Board 958 row A7). If sealing is unavailable, nothing
+   is written and closing asks as ruled. The next start unlinks and restores every window's saved tabs. */
 const sessionHeld = new Map();
+let pendingSavedTabs = null;
+
+function tabsFile() {
+  return path.join(app.getPath("userData"), "tabs.json");
+}
+
+function writeSavedTabs(win) {
+  /* plant:installer-keeps-draft */
+  try {
+    const windowSessions = [];
+    const seenIds = new Set();
+    for (const [id, sm] of sessionHeld.entries()) {
+      if (!sm) continue;
+      const raw = sm.get("eSessionTabs");
+      if (!raw || typeof raw !== "string") continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+          windowSessions.push({ id, tabs: parsed.tabs, activeTabId: parsed.activeTabId });
+          seenIds.add(id);
+        }
+      } catch (_) {}
+    }
+    if (win && win.webContents && !seenIds.has(win.webContents.id)) {
+      const sm = sessionHeld.get(win.webContents.id);
+      const raw = sm && sm.get("eSessionTabs");
+      if (raw && typeof raw === "string") {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+            windowSessions.push({ id: win.webContents.id, tabs: parsed.tabs, activeTabId: parsed.activeTabId });
+          }
+        } catch (_) {}
+      }
+    }
+    if (windowSessions.length === 0) return "empty";
+    if (!branchSealable()) return false;
+    const payload = JSON.stringify({ v: 1, windows: windowSessions });
+    const sealed = safeStorage.encryptString(payload);
+    const file = tabsFile();
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    writeReplacing(file, sealed);
+    return true;
+  } catch (e) {
+    console.error("etiuda: saved tabs could not be written - " + e.message);
+    return false;
+  }
+}
+
+function readSavedTabs() {
+  /* plant:installer-restores-draft */
+  try {
+    const file = tabsFile();
+    if (!fs.existsSync(file)) return "";
+    const sealed = fs.readFileSync(file);
+    let plain = "";
+    try {
+      plain = safeStorage.decryptString(sealed);
+    } catch (e) {
+      console.error("etiuda: saved tabs could not be decrypted - " + e.message);
+      return "";
+    }
+    if (!plain) return "";
+    let data;
+    try { data = JSON.parse(plain); } catch { return ""; }
+    let result = "";
+    if (data && Array.isArray(data.windows)) {
+      const allTabs = [];
+      const seenIds = new Set();
+      let activeTabId = null;
+      for (const w of data.windows) {
+        if (!w || !Array.isArray(w.tabs)) continue;
+        for (const t of w.tabs) {
+          if (!t || typeof t !== "object") continue;
+          let id = t.id;
+          if (seenIds.has(id)) {
+            id = id + "-w" + seenIds.size;
+            t.id = id;
+          }
+          seenIds.add(id);
+          allTabs.push(t);
+        }
+        if (!activeTabId && w.activeTabId) activeTabId = w.activeTabId;
+      }
+      if (allTabs.length === 0) return "";
+      if (!activeTabId && allTabs[0]) activeTabId = allTabs[0].id;
+      result = JSON.stringify({ v: 1, tabs: allTabs, activeTabId });
+    } else if (data && Array.isArray(data.tabs)) {
+      result = plain;
+    }
+    if (result) {
+      try { fs.unlinkSync(file); } catch (e) {}
+      return result;
+    }
+    return "";
+  } catch (e) {
+    console.error("etiuda: saved tabs could not be read - " + e.message);
+    return "";
+  }
+}
+
+function handleUpdateClose(wins) {
+  const saved = writeSavedTabs();
+  if (saved === false) return false;
+  const list = (wins && Array.isArray(wins) ? wins : (typeof BrowserWindow.getAllWindows === "function" ? BrowserWindow.getAllWindows() : []))
+    .concat(theWindow ? [theWindow] : []);
+  const seen = new Set();
+  for (const win of list) {
+    if (!win || (typeof win.isDestroyed === "function" && win.isDestroyed()) || seen.has(win)) continue;
+    seen.add(win);
+    win.etiudaInstallerClose = true;
+    try { win.close(); } catch (_) {}
+  }
+  return saved === true;
+}
+
 ipcMain.on("etiuda:session", (e, op, key, value) => {
   let out = null;
   if (fromEngine(e) && typeof op === "string" && typeof key === "string") {
     const id = e.sender.id;
     if (!sessionHeld.has(id)) {
-      sessionHeld.set(id, new Map());
+      const sm = new Map();
+      sessionHeld.set(id, sm);
       e.sender.once("destroyed", () => sessionHeld.delete(id));
+      if (pendingSavedTabs === null) pendingSavedTabs = readSavedTabs();
+      if (pendingSavedTabs) {
+        sm.set("eSessionTabs", pendingSavedTabs);
+        pendingSavedTabs = "";
+      }
     }
     const m = sessionHeld.get(id);
     if (op === "get") out = m.has(key) ? m.get(key) : null;
@@ -6914,6 +7041,7 @@ const CLOSE_WAIT_MS = 1500;
 let quitting = false;
 app.on("before-quit", () => { quitting = true; try { flushHeldStats(); } catch { /* the last sealed answer stays */ } try { FolderSyncer().stopAllFolderSyncers(); } catch {} });
 function closeHeld(win, e) {
+  if (win && win.etiudaInstallerClose) return false;
   const lost = win.webContents.etiudaLost;
   if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
   e.preventDefault();
@@ -8932,11 +9060,15 @@ function spellingFromPackage(s) {
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
    on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
 const theOnlyOne = app.requestSingleInstanceLock();
-if (!theOnlyOne) {
+if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
   app.quit();
 } else {
   registerEtiudaLink();
   app.on("second-instance", (e, argv) => {
+    if (Array.isArray(argv) && argv.includes("--update-close")) {
+      handleUpdateClose();
+      return;
+    }
     const win = theWindow;
     if (win && !win.isDestroyed() && !PLACED_ASIDE) {
       if (win.isMinimized()) win.restore();

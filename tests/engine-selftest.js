@@ -1744,6 +1744,7 @@ Module.prototype._compile = function (content, filename) {
     "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
     "pick-desk.js": "a machine-window gate: it takes the real foreground and presses real keys, so it runs by hand with nobody at the keyboard; its node half is tests/pick.mjs in npm test",
     "update-install.js": "a machine-window gate: it needs an older installer, and for --all-users an elevated shell, so no chain can run it; its plan and verdicts are held by tests/install-plan-selftest.js",
+    "silent-update-desk.js": "a machine-window gate: an installer-style close with draft kept; its node half is tests/desk-ipc.mjs in npm test",
     "linux-desk.js": "a machine-window gate on Linux: it needs the .deb installed or the AppImage and a display, so it runs by hand; its packages are judged by tests/linux-package.mjs in npm test",
     "linux-keyring.js": "a machine-window gate on Linux: it needs the .deb installed, a display, D-Bus and gnome-keyring, so it runs by hand; the shell's keyring choice is held in node by tests/shell-office.mjs 14 in npm test",
     "launch-wait.js": "a helper the window legs require, not a gate",

@@ -78,17 +78,18 @@
   ${endif}
 !macroend
 
-# ETIUDA IS ASKED TO CLOSE, NEVER STOPPED. taskkill without /F sends its window the close the window's own X sends, which
-# asks the person first while a conversation is in progress, and the installer waits and says so. Still open after that,
-# it asks for Retry; a silent install gives up there and leaves the installed version as it was.
+# ETIUDA IS ASKED TO CLOSE, NEVER STOPPED. The installer signals the running desk to seal its tabs and close, followed
+# by taskkill without /F; the desk keeps in-progress tabs sealed on disk without a modal, or asks where it cannot, and
+# the installer waits and says so. Still open after that, it asks for Retry; a silent install gives up there and leaves
+# the installed version as it was.
 !macro customCheckAppRunning
   Push $R7
   Push $R8
   Push $R9
   ${If} $LANGUAGE == 1045
-    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: jeśli trwa rozmowa, Etiuda najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
+    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: Etiuda zachowa otwarte rozmowy wraz z wersjami roboczymi i przywróci je przy następnym uruchomieniu, a jeśli to niemożliwe, przy trwającej rozmowie najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
   ${Else}
-    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: while a conversation is in progress, Etiuda asks first. The installation carries on once it has closed; if it stays open, close it by hand and press Retry."
+    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: Etiuda keeps its open conversations and their drafts and brings them back at its next start, or, where it cannot, asks first while a conversation is in progress. The installation carries on once it has closed; if it stays open, close it by hand and press Retry."
   ${EndIf}
   StrCpy $R7 0
   ${Do}
@@ -99,6 +100,10 @@
     ${EndIf}
     ${If} $R7 == 0
       DetailPrint "$R9"
+      ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+        nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
+        Pop $R8
+      ${EndIf}
       nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
       Pop $R8
     ${EndIf}
