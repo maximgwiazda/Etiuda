@@ -1771,8 +1771,9 @@ function persistDeskEnvelope() {
   const file = deskFile();
   try {
     keepUnkept();
+    const body = deskEnvelopeBody(JSON.stringify(deskKeys));
     const tmp = file + "." + process.pid + ".env.tmp";
-    fs.writeFileSync(tmp, deskEnvelopeBody(JSON.stringify(deskKeys)), "utf8");
+    fs.writeFileSync(tmp, body, "utf8");
     fs.renameSync(tmp, file);
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -6307,7 +6308,7 @@ function sharedReadOf(file, text, pin) {
 }
 /* {lock, token} once this desk holds the lock, else null. A stale lock is moved aside before it is taken, so of two
    desks taking over one only one succeeds; a share that lies about either is caught by the compare before the write. */
-function sharedLock(file) {
+async function sharedLock(file) {
   const lock = file + ".lock", token = crypto.randomBytes(16).toString("hex");
   const take = () => {
     const fd = fs.openSync(lock, "wx");
@@ -6320,8 +6321,8 @@ function sharedLock(file) {
   if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
   if (st) {
     const aside = lock + "." + token + ".stale";
-    renamePatiently(lock, aside).catch(() => {});
-    try { fs.unlinkSync(aside); } catch { /* left beside it */ }
+    try { await renamePatiently(lock, aside); } catch { return null; }
+    try { await fs.promises.unlink(aside); } catch { /* left beside it */ }
   }
   try { take(); return { lock: lock, token: token }; }
   catch (e) { if (e.code === "EEXIST") return null; throw e; }
@@ -6342,7 +6343,7 @@ function shareMustSeal(root) {
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
    {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused. */
-function sharedWrite(name, text, sha, create) {
+async function sharedWrite(name, text, sha, create) {
   const file = sharedFile(name);
   text = String(text || "");
   if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };
@@ -6359,7 +6360,7 @@ function sharedWrite(name, text, sha, create) {
   share = shareSyncer(root); /* plant:cas-off-thread */
   if (share) return share.then(s => (s ? sharedSwap(s, file, text, sha, create, data) : { ok: false, busy: true }));
   let held = null;
-  try { held = sharedLock(file); }
+  try { held = await sharedLock(file); }
   catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
   if (!held) return { ok: false, busy: true };
   try {
@@ -6370,8 +6371,9 @@ function sharedWrite(name, text, sha, create) {
     if (now && !historyFree(historyFacts(now))) return { ok: false, refused: true };
     if (now && !historyKeepFile(file)) return { ok: false, busy: true };
     if (!sharedHolds(held)) return { ok: false, changed: true };
-    writeReplacing(file, text);
+    await writeReplacing(file, text);
     historyKeep(file, text, true);
+    await drainWrites();
     console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
     return { ok: true, rev: +data.rev || 0 };
   } catch (e) {
@@ -6392,10 +6394,11 @@ function sharedSwap(s, file, text, sha, create, data) {
       if (!historyShipped(buf, sha256Hex(buf)) && !historyKeep(file, now, false)) return { result: { ok: false, busy: true } };
     }
     return { text: text };
-  }).then(r => {
+  }).then(async r => {
     if (!r || !r.ok) return Object.assign({ ok: false }, r && r.changed ? { changed: true } : r && r.taken ? { taken: true }
       : r && r.refused ? { refused: true } : { busy: true });
     historyKeep(file, text, true);
+    await drainWrites();
     console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
     return { ok: true, rev: +data.rev || 0 };
   });

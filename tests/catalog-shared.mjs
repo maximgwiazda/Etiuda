@@ -33,7 +33,14 @@ function check(ok, line) {
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
 }
-const tick = ms => new Promise(r => setTimeout(r, ms || 0));
+const boots = [];
+const tick = async ms => {
+  await new Promise(r => setImmediate(r));
+  for (const b of boots) {
+    if (b && b.test && b.test.drainWrites) await b.test.drainWrites();
+  }
+  return new Promise(r => setTimeout(r, ms || 0));
+};
 const sha = buf => crypto.createHash("sha256").update(buf).digest("hex");
 
 const BASE = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shared-"));
@@ -67,15 +74,18 @@ function boot(name) {
     fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
     + "\n__test.teamKeys = teamKeys;"
     + " __test.wrapTeamKey = wrapTeamKey; __test.heedTeam = heedTeam; __test.openSealed = openSealed;"
+    + " __test.drainWrites = typeof drainWrites === \"function\" ? drainWrites : null;"
     + " __test.setFolder = v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; };")(
     n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
     { exports: {} }, {}, quiet, test);
   const ev = { sender: { id: 1, once: noop }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
-  return {
+  const res = {
     ud: UD, test: test,
     read: () => { const e = Object.assign({}, ev); on["etiuda:catalog"](e); return e.returnValue; },
     ask: (ch, ...a) => (handle[ch] ? Promise.resolve(handle[ch](ev, ...a)) : Promise.resolve(undefined)),
   };
+  boots.push(res);
+  return res;
 }
 
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
