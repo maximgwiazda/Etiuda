@@ -2,6 +2,7 @@
  *
  *   node tools/gate-run.mjs test split-guard        the two fast chains
  *   node tools/gate-run.mjs shell-smoke             one gate, one line
+ *   node tools/gate-run.mjs file <path...>          one or more test files by path
  *   node tools/gate-run.mjs area [base]             area run with plant-hold bracket
  *   node tools/gate-run.mjs nightly                 nightly profile outside %TEMP%
  *   node tools/gate-run.mjs wait-lock               wait for machine lock
@@ -1015,6 +1016,17 @@ function git(args) {
   catch (e) { return ""; }
 }
 
+function gitBlobHash(relPath) {
+  const h = git(["hash-object", relPath]);
+  if (h && /^[0-9a-f]{40}$/.test(h)) return h;
+  try {
+    const buf = fs.readFileSync(path.resolve(ROOT, relPath));
+    return crypto.createHash("sha1").update("blob " + buf.length + "\0").update(buf).digest("hex");
+  } catch (e) {
+    return "";
+  }
+}
+
 function gitTree() {
   const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
   if (!top || !sameFolder(top, ROOT)) return "no git";
@@ -1237,6 +1249,59 @@ async function main() {
     gateLabel = "nightly";
     customEnv.ETIUDA_PROFILE = "nightly";
     steps = profileSteps(ROOT, pkg);
+  } else if (mode === "file") {
+    const fileArgs = asked.slice(1).filter(a => !a.startsWith("--"));
+    if (!fileArgs.length) refuse("no test file was named", "node tools/gate-run.mjs file tests/<path>");
+
+    const gf = await loadGatesFor();
+    const named = new Set();
+    if (pkg && pkg.scripts) {
+      for (const scriptName of Object.keys(pkg.scripts)) {
+        for (const step of parseStepsFromScript(pkg, scriptName)) {
+          if (step.file) named.add(normRel(step.file).replace(/^\.\//, ""));
+        }
+      }
+    }
+    if (gf && gf.SCANS) {
+      for (const key of Object.keys(gf.SCANS)) {
+        named.add(normRel(key).replace(/^\.\//, ""));
+      }
+    }
+
+    for (const raw of fileArgs) {
+      const isAbs = path.isAbsolute(raw) || path.win32.isAbsolute(raw) || path.posix.isAbsolute(raw)
+        || /^[a-zA-Z]:/.test(raw) || raw.startsWith("/") || raw.startsWith("\\");
+      if (isAbs) refuse("the path is absolute: " + raw, "give a relative path under tests/");
+
+      const slashNorm = raw.replace(/\\/g, "/");
+      if (slashNorm.startsWith("../") || slashNorm === ".." || path.posix.normalize(slashNorm).startsWith("../")) {
+        refuse("the path leaves the tree: " + raw, "give a relative path under tests/");
+      }
+
+      const normPath = path.posix.normalize(slashNorm).replace(/^\.\//, "");
+      if (!normPath.startsWith("tests/") || normPath === "tests" || normPath === "tests/") {
+        refuse("the path leaves tests/: " + raw, "give a path under tests/");
+      }
+
+      const fullPath = path.resolve(ROOT, normPath);
+      let st = null;
+      try { st = fs.statSync(fullPath); } catch (e) { st = null; }
+      if (!st || !st.isFile()) {
+        refuse("file does not exist: " + raw, "give an existing test file under tests/");
+      }
+
+      if (!named.has(normPath)) {
+        refuse("no chain or gates-for names " + raw, "the file must be named by a package.json script or tools/gates-for.mjs SCANS"); /* plant:file-names */
+      }
+
+      steps.push({
+        script: "file",
+        cmd: "node " + normPath,
+        file: normPath,
+        filePath: normPath,
+        args: [],
+      });
+    }
   } else {
     const scriptNames = asked.filter(a => !a.startsWith("--"));
     for (const name of scriptNames) {
@@ -1384,6 +1449,10 @@ async function main() {
       run: runStart,
       cause: isRed ? "unread" : undefined,
     };
+    if (step.filePath) {
+      line.filePath = step.filePath;
+      line.fileBlob = gitBlobHash(step.filePath);
+    }
     gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit });
 
     const file = path.join(RUNS, line.gate + "-" + stamp(now) + ".json");

@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 98;
+const EXPECTED = 103;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -474,6 +474,108 @@ function realProfileTouchLegs() {
   check(touchedRun.exit === 78 && !!touchedLine && touchedLine.holds === true
     && touchedReds.some(r => r.cause && r.cause.indexOf("touched the real profile") > -1 && r.class === "hold" && r.gate === "release"),
     "19b a profile run touching the stand-in real profile is held and named: exit 78, holds true, red named release with 'touched the real profile'");
+}
+
+/* ---- 20. GATE-RUN FILE MODE (runs one test file by path) --------------------------------------
+   20a a named file runs, and its record has dirty false on a clean lab tree, filePath the normalised path,
+       and fileBlob equal to git rev-parse HEAD:<path>
+   20b a package.json edit in the lab makes the same run read dirty true
+   20c each refusal, one case each, with no record written and no lock taken: an unnamed file under tests/,
+       an absolute path, ../ out of the tree, a file under tools/, a missing file
+   20d a Windows-spelled path (tests\x.mjs) names the same file as the forward one
+   20e a planted removal of the names check turns leg 3's unnamed case red, by the tree's plant convention
+*/
+function fileModeLegs() {
+  const fileLab = makeLab("file-mode", {
+    alpha: prints(2, 0, "process.exit(0);"),
+  }, { git: true });
+  spawnSync("git", ["add", "."], { cwd: fileLab.lab });
+  spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "clean tree"], { cwd: fileLab.lab });
+
+  const revBlob = spawnSync("git", ["rev-parse", "HEAD:tests/alpha.mjs"], { cwd: fileLab.lab, encoding: "utf8" }).stdout.trim();
+
+  /* 20a: A named file runs, and its record has dirty false on a clean lab tree, filePath the normalised path,
+     and fileBlob equal to git rev-parse HEAD:<path>. */
+  const r1 = run(fileLab, ["file", "tests/alpha.mjs"]);
+  const rec1 = r1.byGate["tests-alpha"];
+  check(r1.exit === 0 && !!rec1 && rec1.exit === 0 && rec1.dirty === false
+    && rec1.filePath === "tests/alpha.mjs" && rec1.fileBlob === revBlob,
+    "20a a named file runs: exit 0, dirty false, filePath tests/alpha.mjs, fileBlob " + (rec1 ? rec1.fileBlob : "none"));
+
+  /* 20b: A package.json edit in the lab makes the same run read dirty true. */
+  fs.appendFileSync(path.join(fileLab.lab, "package.json"), "\n");
+  const r2 = run(fileLab, ["file", "tests/alpha.mjs"]);
+  const rec2 = r2.byGate["tests-alpha"];
+  check(r2.exit === 0 && !!rec2 && rec2.dirty === true,
+    "20b a package.json edit in the lab makes the same run read dirty true: exit 0, dirty " + (rec2 ? rec2.dirty : "none"));
+
+  /* 20c: Each refusal, one case each, with no record written and no lock taken:
+     an unnamed file under tests/, an absolute path, ../ out of the tree, a file under tools/, a missing file. */
+  const refuseLab = makeLab("file-refuse", {
+    named: prints(1, 0, "process.exit(0);"),
+  }, { git: true });
+  fs.writeFileSync(path.join(refuseLab.lab, "tests", "unnamed.mjs"), prints(1, 0, "process.exit(0);"));
+  const lockPath = path.join(refuseLab.root, "machine.lock");
+  const runsCount = () => (fs.existsSync(refuseLab.runs) ? fs.readdirSync(refuseLab.runs).filter(f => f.endsWith(".json")).length : 0);
+  const lockExists = () => fs.existsSync(lockPath);
+  const refuseEnv = { ETIUDA_LOCK_PATH: lockPath };
+
+  const rUnnamed = run(refuseLab, ["file", "tests/unnamed.mjs"], null, refuseEnv);
+  const ok1 = rUnnamed.exit === 78 && runsCount() === 0 && !lockExists();
+
+  const absPath = path.resolve(refuseLab.lab, "tests", "named.mjs");
+  const rAbs = run(refuseLab, ["file", absPath], null, refuseEnv);
+  const ok2 = rAbs.exit === 78 && runsCount() === 0 && !lockExists();
+
+  const rOutside = run(refuseLab, ["file", "../outside.mjs"], null, refuseEnv);
+  const ok3 = rOutside.exit === 78 && runsCount() === 0 && !lockExists();
+
+  const rTools = run(refuseLab, ["file", "tools/gate-run.mjs"], null, refuseEnv);
+  const ok4 = rTools.exit === 78 && runsCount() === 0 && !lockExists();
+
+  const rMissing = run(refuseLab, ["file", "tests/missing.mjs"], null, refuseEnv);
+  const ok5 = rMissing.exit === 78 && runsCount() === 0 && !lockExists();
+
+  check(ok1 && ok2 && ok3 && ok4 && ok5,
+    "20c each refusal exits 78 with no record written and no lock taken: unnamed=" + rUnnamed.exit
+    + " abs=" + rAbs.exit + " outside=" + rOutside.exit + " tools=" + rTools.exit + " missing=" + rMissing.exit);
+
+  /* 20d: A Windows-spelled path (tests\\x.mjs) names the same file as the forward one. */
+  spawnSync("git", ["add", "."], { cwd: refuseLab.lab });
+  spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "clean"], { cwd: refuseLab.lab });
+  const revNamedBlob = spawnSync("git", ["rev-parse", "HEAD:tests/named.mjs"], { cwd: refuseLab.lab, encoding: "utf8" }).stdout.trim();
+  const rWin = run(refuseLab, ["file", "tests\\named.mjs"], null, refuseEnv);
+  const recWin = rWin.byGate["tests-named"];
+  check(rWin.exit === 0 && !!recWin && recWin.exit === 0
+    && recWin.filePath === "tests/named.mjs" && recWin.fileBlob === revNamedBlob,
+    "20d a Windows-spelled path (tests\\x.mjs) names the same file as the forward one: exit 0, filePath "
+    + (recWin ? recWin.filePath : "none") + ", fileBlob " + (recWin ? recWin.fileBlob : "none"));
+
+  /* 20e: A planted removal of the names check turns leg 3's unnamed case red, by the tree's plant convention,
+     marked so a merge skips it. */
+  const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+  if (PLANTS_OFF) {
+    skip("20e lifting plant:file-names runs an unnamed file and turns the refusal red (ETIUDA_PLANTS=off)");
+  } else {
+    const plantLab = makeLab("file-plant", {
+      named: prints(1, 0, "process.exit(0);"),
+    }, { git: true });
+    fs.writeFileSync(path.join(plantLab.lab, "tests", "unnamed.mjs"), prints(1, 0, "process.exit(0);"));
+    spawnSync("git", ["add", "."], { cwd: plantLab.lab });
+    spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "clean"], { cwd: plantLab.lab });
+
+    const toolFile = path.join(plantLab.lab, "tools", "gate-run.mjs");
+    const toolSrc = fs.readFileSync(toolFile, "utf8");
+    const PLANT_TARGET = "/* plant:file-names */";
+    const hasPlant = toolSrc.includes(PLANT_TARGET);
+    const plantedSrc = toolSrc.replace(/if\s*\(!named\.has\([^)]+\)\)\s*\{[^}]*\/\*\s*plant:file-names\s*\*\/[^}]*\}/, "/* plant:file-names removed */");
+    fs.writeFileSync(toolFile, plantedSrc);
+
+    const rPlant = run(plantLab, ["file", "tests/unnamed.mjs"]);
+    const plantDidRun = plantedSrc !== toolSrc && hasPlant && rPlant.exit === 0 && !!rPlant.byGate["tests-unnamed"];
+    check(plantDidRun,
+      "20e a planted removal of the names check turns leg 3's unnamed case red: planted " + (plantedSrc !== toolSrc) + " exit " + rPlant.exit);
+  }
 }
 
 
@@ -1863,6 +1965,9 @@ async function main() {
 
   /* ---- 19. REAL PROFILE TOUCH DETECTION IN AREA AND PROFILE RUNS --------------------------------- */
   realProfileTouchLegs();
+
+  /* ---- 20. GATE-RUN FILE MODE (see fileModeLegs) ------------------------------------------------- */
+  fileModeLegs();
 
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
