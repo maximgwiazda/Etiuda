@@ -498,6 +498,7 @@ const PORT_BLOCKS = {
                                                   of the block it actually used */
   "reinstall":     { base: 9560, size: 40 },
   "update-install": { base: 9610, size: 10 }, /* five launches at most; clear of 27e2's planted row at 9600 */
+  "eject-desk": { base: 9442, size: 2 },
 };
 const PORT_SHIFT_KEY = "ETIUDA_PORT_SHIFT";
 

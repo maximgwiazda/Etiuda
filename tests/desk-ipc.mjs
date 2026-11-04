@@ -1544,5 +1544,23 @@ if (asserted + skipped < EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
+/* 1153: EVERY SYNC SEND IS ANSWERED. ipcRenderer.sendSync waits for e.returnValue for ever, so a handler without one stops the
+   page's thread for good (Max, 2026-11-04 11:44: Eject froze the desk until the process was killed). Read from the two
+   files, so a channel added tomorrow is held too; tests/eject-desk.js is the window that shows it. */
+{
+  const unanswered = (pre, main) => Array.from(new Set(Array.from(pre.matchAll(/sendSync\(\s*"([^"]+)"/g), m => m[1])))
+    .filter(ch => {
+      const at = main.indexOf('ipcMain.on("' + ch + '"');
+      if (at < 0) return true;
+      const end = main.indexOf("\n});", at);
+      return main.slice(at, end < 0 ? undefined : end).indexOf("e.returnValue") < 0;
+    });
+  check(unanswered('sendSync("a"); sendSync("b");', 'ipcMain.on("a", (e) => {\n  e.returnValue = 1;\n});\nipcMain.on("b", (e) => {\n  go();\n});\n')
+    .join() === "b", "1153a the reading finds a handler that never answers, in planted text");
+  const left = unanswered(shellSrc("preload.js"), shellSrc("main.js"));
+  const channels = (shellSrc("preload.js").match(/sendSync\(\s*"/g) || []).length;
+  check(channels >= 12 && left.length === 0,
+    "1153b every sync channel of the preload has a handler that answers: " + channels + " send(s), unanswered " + JSON.stringify(left));
+}
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
 process.exit(Math.min(failed, 63));

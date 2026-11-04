@@ -34,6 +34,7 @@ export const HELPERS = {
   "tests/tour-walk.js": "the tour's walk tests/smoke.js requires and runs",
   "tests/update-install.js": "a machine-window gate, not in either chain",
   "tests/silent-update-desk.js": "a machine-window gate, not in either chain",
+  "tests/eject-desk.js": "a machine-window gate, not in either chain",
 };
 
 /* Nightly-only legs (rule 7): load-sensitive legs and self-tests that run only in nightly */
