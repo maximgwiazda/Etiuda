@@ -478,12 +478,8 @@ function boot(){
   pops.wirePops();
 
   /* ---- ONE RESIZE LISTENER ------------------------------------------------------------------
-     One listener, one place, a stated order: cheap flags first, text swaps, then the
-     rAF-debounced geometry, then things that read finished layout. Every member is
-     idempotent or self-debouncing, so the cost per event is what it always was. The old
-     matchMedia(max-width:720px) change listener is folded in too: resize fires on every
-     threshold crossing, and unlike matchMedia it also fires in emulated viewports. Coalesced
-     to one animation frame so dragging or resizing does not walk layout every event. */
+     One listener coalesced to one animation frame via rAF so dragging or resizing does not walk
+     layout every event; cheap flags first, text swaps, then debounced geometry. */
   let resizeRaf=0;
   function runResize(){
     resizeRaf=0;
