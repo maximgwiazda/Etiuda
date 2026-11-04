@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 119;
+const EXPECTED = 120;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -422,6 +422,62 @@ try {
       const same = realFs.readFileSync(mainPath).equals(beforeBytes);
       check(turned && same, "1m lifting plant:rename-retries limits renames to 10 and fails on 15 retries: turned "
         + turned + ", sha " + (same ? "restored" : "differs"));
+    }
+
+    // 1n: with a stub write that takes 2 s, the main process's event-loop lag stays under 50 ms and the file still lands whole
+    {
+      const S = loadShell();
+      const target1n = path.join(S.DOCS, "stub-write-2s.ec");
+      realFs.writeFileSync(target1n, "initial\n", "utf8");
+
+      let maxLag = 0;
+      let last = Date.now();
+      let ticks = 0;
+      const interval = setInterval(() => {
+        ticks++;
+        const now = Date.now();
+        const lag = now - last - 10;
+        if (lag > maxLag) maxLag = lag;
+        last = now;
+      }, 10);
+
+      let hold = true;
+      const tStart = Date.now();
+      S.ctl.renameSync = (real, a, b) => {
+        if (b === target1n && hold) {
+          if (Date.now() - tStart < 2000) {
+            throw busy("EBUSY");
+          }
+          hold = false;
+        }
+        return real(a, b);
+      };
+      if (!S.ctl.rename) {
+        S.ctl.rename = async (real, a, b) => {
+          if (b === target1n && hold) {
+            if (Date.now() - tStart < 2000) {
+              throw busy("EBUSY");
+            }
+            hold = false;
+          }
+          return real(a, b);
+        };
+      }
+
+      const t0 = Date.now();
+      await S.api.writeReplacing(target1n, "stub-content-whole\n");
+      const elapsed = Date.now() - t0;
+      await new Promise(r => setTimeout(r, 25));
+      clearInterval(interval);
+      if (ticks < 10) maxLag = Math.max(maxLag, elapsed);
+
+      const content1n = realFs.readFileSync(target1n, "utf8");
+      const tmps1n = realFs.readdirSync(S.DOCS).filter(n => n.endsWith(".tmp"));
+      const whole = content1n === "stub-content-whole\n" && tmps1n.length === 0;
+
+      check(elapsed >= 1950 && maxLag < 50 && whole,
+        "1n with a stub write that takes 2 s, the main process's event-loop lag stays under 50 ms and the file still lands whole: lag "
+        + maxLag + " ms, elapsed " + elapsed + " ms, whole " + whole);
     }
   }
 
