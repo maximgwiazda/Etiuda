@@ -133,7 +133,7 @@ async function main() {
     }
     const elapsed = Date.now() - t0;
     check(exited && elapsed < 20000,
-      "1152l an installer-style close with a draft exits within the wait without a modal (" + elapsed + " ms)");
+      "1152l an installer-style close with a draft exits within the installer's wait (" + elapsed + " ms)");
 
     // Relaunch the desk on the same user-data folder
     child2 = E.shellLaunch(WHO + " 2", electronExe(), args, {
