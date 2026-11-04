@@ -1,9 +1,13 @@
 import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
 import { cards, intentIdxs, lang, wholeThingEmpty } from "./app-state.js";
-import { cardSearchTerms } from "./spell.js";
+import { cardSearchTerms, catalogVocab } from "./spell.js";
 import { rankedCards } from "./render.js";
-import { eNotice, pack, saveStats, ePackEpoch } from "./pack.js";
-import { bumpSuggest, bumpSuggestOpen, statsRecentUse } from "./desk-stats.js";
+import { eNotice, pack, saveStats, ePackEpoch, isFavourite } from "./pack.js";
+import { bumpSuggest, bumpSuggestOpen, statsRecentUse, statsLift } from "./desk-stats.js";
+import { cardSearchIndex } from "./card-search.js";
+import { ensureCardOrder, cmpCardDisplay } from "./card-order.js";
+import { FAV_BONUS } from "./scoring.js";
+import { intentAffinityGroups, cardIntentAffinity, AFFINITY_W } from "./affinity.js";
 import { cardInActiveCats } from "./card-counts.js";
 import { cardHitsSelectedIntent, cardIntentLinks, relevanceRank } from "./card-intent.js";
 import { altLabelAt, cardCommits, cardLang, cardText, cardTitle, findCard, parts } from "./card-model.js";
@@ -12,7 +16,7 @@ import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eLastRecent, eNoteRecent } from "./recency.js";
 import { wantsAgentName, withAgentName } from "./agent.js";
 import { copy, noteCopy } from "./mark.js";
-import { counted, t, uiLang } from "./ui-lang.js";
+import { counted, t, tc, uiLang } from "./ui-lang.js";
 import { CONTENT_LANGS, intentCount, nextContentLang } from "./content-model.js";
 import { intentIdAt, intentIdxOfId, isIntentHiddenIdx } from "./intent-id.js";
 import { pickIntent } from "./intent-pick.js";
@@ -132,6 +136,56 @@ function pickCount(shown,total){
 function pickFound(q){
   const f=pickList(q);
   return {rows:f.rows, count:pickCount(f.rows.length,f.total)};
+}
+/* THE OPEN HANDS THE PICKER ITS ROWS, with the index a keystroke filters locally. The index is
+   the desk's own search in plain data, rebuilt when the name, the language or the intents
+   change, which is what a later keystroke must still agree with. */
+function pickTally(){
+  return {one:t("{N} reply"), many:t("{N} replies"), few:tc("few","{N} replies"), shown:t("{SHOWN} of {COUNT}")};
+}
+function pickIndex(){
+  ensureCardOrder();
+  const use=statsRecentUse(pack);
+  const groups=intentAffinityGroups();
+  const have=groups.length>0;
+  const list=(cards||[]).filter(m=>m&&!m._hidden);
+  const order=list.slice().sort(cmpCardDisplay);
+  const place=new Map();
+  order.forEach((m,i)=>place.set(m,i));
+  const bank=[];
+  list.forEach(m=>{
+    const idx=cardSearchIndex(m);
+    const l=cardLang(m), ps=parts(m,l), rows=[];
+    for(let vi=0;vi<ps.length;vi++) rows.push(pickRow(m,l,ps,vi));
+    const words={};
+    ["title","keys","meta","body"].forEach(f=>{ words[f]=(idx.words[f]||[]).slice(); });
+    bank.push({
+      band:(intentIdxs.length && cardHitsSelectedIntent(m))?0:1,
+      ord:place.has(m)?place.get(m):0,
+      lift:use.size ? statsLift(use.get(String(m.id))|0) : 0,
+      aff:have ? cardIntentAffinity(m,groups)*AFFINITY_W : 0,
+      favMul:isFavourite(m&&m.id) ? FAV_BONUS : 1,
+      hay:idx.hay,
+      fields:{title:idx.fields.title, keys:idx.fields.keys, meta:idx.fields.meta, body:idx.fields.body},
+      words:words,
+      uniq:[...new Set(idx.allWords)],
+      rows:rows
+    });
+  });
+  const vocab=[];
+  catalogVocab().forEach((n,w)=>vocab.push([w,n]));
+  return {bank:bank, vocab:vocab, tally:pickTally(), cap:PICK_ROWS};
+}
+function withIndex(out, q){
+  if(!out) return out;
+  const ix=pickIndex();
+  out.bank=ix.bank; out.vocab=ix.vocab; out.tally=ix.tally; out.cap=ix.cap;
+  const query=String(q==null?"":q);
+  if(query.trim()){
+    const rest=pickFound("");
+    out.rest=rest.rows; out.restCount=rest.count;
+  }
+  return out;
 }
 /* The block copied last, by any route, as a row; null where there is none or it has gone. */
 function pickLastRow(){
@@ -300,7 +354,7 @@ function answerPick(op,argText){
     if(a.profiles || (a.epoch !== undefined && a.epoch !== curEpoch)){
       try{ out.profiles=suggestModel(); }catch(e){}
     }
-    return out;
+    return withIndex(out, "");
   }
   if(op==="suggest-open"){
     bumpSuggestOpen(pack);
@@ -317,7 +371,7 @@ function answerPick(op,argText){
     if(!isSelected){ bumpSuggest(pack); saveStats(); }
     const paxVal=pickDeskPax();
     const picked=intentIdxs.map(i=>intentIdAt(i));
-    return Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow(), picked:picked}, pickFound(""));
+    return withIndex(Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow(), picked:picked}, pickFound("")), "");
   }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;
@@ -325,16 +379,16 @@ function answerPick(op,argText){
     const paxVal=pickDeskPax();
     const out=Object.assign({who:activeTabName(), name:paxVal, last:pickLastRow(), lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
     if(a.id==="tabNew") out.fresh=true;
-    return out;
+    return withIndex(out, "");
   }
   if(op==="who"){
     const paxVal=pickDeskPax(String(a.name==null?"":a.name));
-    return Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(a.q));
+    return withIndex(Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(a.q)), a.q);
   }
   if(op==="lang"){
     runShortcut("langToggle");
     const paxVal=pickDeskPax();
-    return Object.assign({words:pickWords(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound(""));
+    return withIndex(Object.assign({words:pickWords(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound("")), "");
   }
   if(op==="find") return pickFound(a.q);
   if(op==="copy"){

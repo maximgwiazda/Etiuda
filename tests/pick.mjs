@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 131;
+const EXPECTED = 132;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -984,13 +984,26 @@ try {
   let findCalls = 0;
   const origFind = pWin.E_PICK.find;
   pWin.E_PICK.find = (q) => { findCalls++; return origFind(q); };
-  reopen();
-  const t0 = performance.now();
-  qEl.value = "c";
+  const bankCard = (id, hay, ord) => ({ band: 1, ord: ord, lift: 0, aff: 0, favMul: 1, hay: hay,
+    fields: { title: hay, keys: "", meta: "", body: "" },
+    words: { title: [hay], keys: [], meta: [], body: [] }, uniq: [hay], rows: [R(id)] });
+  if (performance.clearMarks) performance.clearMarks();
+  if (performance.clearMeasures) performance.clearMeasures();
+  pcalls.length = 0; qEl.value = "";
+  pOpen(JSON.stringify({ rows: [R("brass"), R("linen")], words: { again: "again" }, cap: 50,
+    bank: [bankCard("brass", "brass", 0), bankCard("linen", "linen", 1)],
+    vocab: [["brass", 1], ["linen", 1]],
+    tally: { one: "{N} reply", many: "{N} replies", few: "{N} replies", shown: "{SHOWN} of {COUNT}" } }));
+  findCalls = 0;
+  qEl.value = "br";
   pageL["q:input"]();
-  const frameMs = performance.now() - t0;
-  check(findCalls === 0, "4t a keystroke in the picker sends no IPC, by count: " + findCalls + " call(s)");
+  const marked = performance.getEntriesByName ? performance.getEntriesByName("pick-answer") : [];
+  const answerMs = marked.length ? marked[marked.length - 1].duration : -1;
+  console.log("4t pick-answer " + (answerMs >= 0 ? answerMs.toFixed(4) : "n/a") + " ms, calls " + findCalls);
+  check(findCalls === 0 && /T brass/.test(boxHtml) && !/T linen/.test(boxHtml),
+    "4t a keystroke in the picker sends no IPC, by count: " + findCalls + " call(s), " + (answerMs >= 0 ? answerMs.toFixed(4) : "n/a") + " ms");
   pWin.E_PICK.find = origFind;
+  reopen();
 
   reopen(); qEl.value = "br"; pFound = [R("c"), R("a")]; pageL["q:input"]();
   await tick(5);
@@ -1457,11 +1470,12 @@ try {
   els7.lang.addEventListener = (t, fn) => { pg["lang:" + t] = fn; };
   const sent7 = [];
   let open7 = null, found7 = { rows: [], count: "" };
-  new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve(JSON.stringify(found7)),
+  const pick7 = { find: () => Promise.resolve(JSON.stringify(found7)),
     tab: id => Promise.resolve(JSON.stringify(pickAnswer("tab", { id }))),
     who: (name, q) => Promise.resolve(JSON.stringify(pickAnswer("who", { name, q }))),
     lang: () => Promise.resolve(JSON.stringify(pickAnswer("lang", {}))),
-    copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } } },
+    copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } };
+  new Function("window", "document", script)({ E_PICK: pick7 },
     { getElementById: id => els7[id] || null, documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
   const row = (id, vi, extra) => Object.assign({ id: id, vi: vi, t: "T " + id, x: "x " + id + vi, tag: "" }, extra || {});
   const W7 = { again: "again", stamp: "Commits the firm", who: "Filled for", langTitle: "Click to switch replies to the next language", keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes" };
@@ -1740,6 +1754,84 @@ try {
   check(els7.q.value === "/" && AS.lang === "en",
     "7u the slash typed into #q stays in #q and switches nothing: "
     + JSON.stringify([els7.q.value, AS.lang]));
+
+  /* The keystroke's rows are the desk's own find: the same excerpts and the same count, and the find is not asked. */
+  els["#intent"].value = "";
+  AS.putLang("en");
+  AS.setIntentIdxs([]);
+  const xOf = html => [...String(html || "").matchAll(/<span class="x">([^<]*)<\/span>/g)].map(m => m[1]);
+  let hops = 0;
+  const findWas = pick7.find;
+  pick7.find = q => { hops++; return findWas(q); };
+  const mismatches = [];
+  const expectFind = (label, q) => {
+    const want = pickAnswer("find", { q: q });
+    const before = hops;
+    els7.q.value = q;
+    pg["q:input"]();
+    const gotX = xOf(els7.rows.innerHTML).join(" | ");
+    const wantX = (want.rows || []).map(r => r.x).join(" | ");
+    const gotC = els7.count.textContent;
+    if (gotX !== wantX || gotC !== (want.count || "") || hops !== before)
+      mismatches.push(label + " [" + gotC + " / " + (want.count || "") + "] " + gotX + " != " + wantX + " hops " + (hops - before));
+  };
+  const prep = list => { PK.resetPack(); AS.setCats([]); AS.setIntentIdxs([]); AS.setCards(list.map(c => Object.assign({}, c))); };
+  const openNow = () => { SP.dropCatalogVocab(); open7(JSON.stringify(pickAnswer("open"))); };
+  const bagPl = { id: "c-bag", c: "orders", t: "Bagaz", en: "Bagaż travels today." };
+  prep(CARDS.map(c => Object.assign({}, c)).concat([bagPl]));
+  openNow();
+  ["brass", "dleivery", "bagaz", "shade", "sundays", "zzqx"].forEach(q => expectFind(q, q));
+  if (!pickAnswer("find", { q: "dleivery" }).rows.some(r => r.id === "c-lamp")) mismatches.push("dleivery missed the lamp");
+  if (!pickAnswer("find", { q: "bagaz" }).rows.some(r => r.id === "c-bag")) mismatches.push("bagaz missed the bag");
+  const emptyWant = pickAnswer("find", { q: "" });
+  const emptyHops = hops;
+  els7.q.value = "";
+  pg["q:input"]();
+  if (els7.count.textContent !== (emptyWant.count || "") || hops !== emptyHops) mismatches.push("empty count " + els7.count.textContent + " != " + (emptyWant.count || ""));
+  els7.who.value = "Zofia Zielinska";
+  pg["who:blur"]();
+  await tick(0);
+  expectFind("who", "zofia");
+  const six = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].map((w, i) => ({ id: "c-r" + (i + 1), c: "orders", t: "Refund " + w, en: "Reply " + (i + 1) + "." }));
+  prep(six);
+  copies("c-r5", 38);
+  openNow();
+  expectFind("lift", "refund");
+  if (ids(pickAnswer("find", { q: "refund" }).rows) !== "c-r1/0 c-r2/0 c-r5/0 c-r3/0 c-r4/0 c-r6/0") mismatches.push("lift order " + ids(pickAnswer("find", { q: "refund" }).rows));
+  const tiered = [{ id: "c-t1", c: "orders", t: "Refund timing", en: "Reply one." }, { id: "c-t2", c: "orders", t: "Refund steps", en: "Reply two." },
+    { id: "c-body", c: "orders", t: "Delivery note", en: "Ask about the refund when it arrives." }];
+  prep(tiered);
+  copies("c-body", 500);
+  openNow();
+  expectFind("tier", "refund");
+  if (ids(pickAnswer("find", { q: "refund" }).rows) !== "c-t1/0 c-t2/0 c-body/0") mismatches.push("tier order " + ids(pickAnswer("find", { q: "refund" }).rows));
+  const banded = [{ id: "c-l1", c: "orders", t: "Refund one", allIntents: true, en: "Reply one." }, { id: "c-l2", c: "orders", t: "Refund two", allIntents: true, en: "Reply two." },
+    { id: "c-u", c: "orders", t: "Refund three", en: "Reply three." }];
+  prep(banded);
+  AS.setIntentIdxs([0]);
+  copies("c-u", 500);
+  openNow();
+  expectFind("band", "refund");
+  if (ids(pickAnswer("find", { q: "refund" }).rows) !== "c-l1/0 c-l2/0 c-u/0") mismatches.push("band order " + ids(pickAnswer("find", { q: "refund" }).rows));
+  AS.setIntentIdxs([]);
+  const kettles = Array.from({ length: 60 }, (_, i) => ({ id: "c-k" + i, c: "orders", t: "Kettle " + i, en: "Kettle reply " + i + "." }));
+  prep(kettles);
+  openNow();
+  expectFind("cap", "kettle");
+  const capDesk = pickAnswer("find", { q: "kettle" });
+  if (capDesk.rows.length !== 50 || capDesk.count !== "50 of 60 replies") mismatches.push("cap desk " + capDesk.rows.length + " " + capDesk.count);
+  ST.lsSet("eUiLang", "pl");
+  openNow();
+  expectFind("pl", "kettle");
+  if (pickAnswer("find", { q: "kettle" }).count !== "50 z 60 odpowiedzi") mismatches.push("pl desk " + pickAnswer("find", { q: "kettle" }).count);
+  ST.lsDel("eUiLang");
+  AS.putLang("en");
+  AS.setCards(CARDS.map(c => Object.assign({}, c)));
+  SP.dropCatalogVocab();
+  pick7.find = findWas;
+  check(mismatches.length === 0 && hops === 0,
+    "7w a keystroke filters on the rows the open handed over, the same excerpts and the same count as the desk, and still no IPC: "
+    + (mismatches.length ? mismatches.slice(0, 3).join(" || ") : "matched") + ", hops " + hops);
   }
 } catch (e) {
   failed++;
