@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 98;
+const EXPECTED = 99;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1041,6 +1041,42 @@ try {
 
     check(debouncedOk,
       "78n a tab change within the quarter-second debounce survives a load of a new edition");
+  }
+
+  /* 78o: a tab switch: zero sendSync (counted in preload), one drawIntentRail, and the time to first frame measured. */
+  {
+    const TB = await import(PLAIN("tabs.js"));
+    const twoTabs = {
+      activeTabId: "tab-1",
+      tabs: [
+        { id: "tab-1", lang: "en", pax: "First", intentIdxs: [], cats: [] },
+        { id: "tab-2", lang: "en", pax: "Second", intentIdxs: [], cats: [] }
+      ]
+    };
+    ST.ssSet("eSessionTabs", JSON.stringify(twoTabs));
+    TB.initTabs();
+
+    let railDraws = 0;
+    let langUIDraws = 0;
+    const wasRail = HK.hooks.drawIntentRail;
+    const wasLang = HK.hooks.applyLangUI;
+    HK.hooks.drawIntentRail = () => { railDraws++; };
+    HK.hooks.applyLangUI = (l) => { langUIDraws++; railDraws++; };
+
+    const syncBefore = sent.sync["etiuda:session"] || 0;
+    const t0 = performance.now();
+    TB.switchTab("tab-2");
+    const t1 = performance.now();
+    const switchElapsed = Math.round((t1 - t0) * 100) / 100;
+    const syncDuring = (sent.sync["etiuda:session"] || 0) - syncBefore;
+
+    HK.hooks.drawIntentRail = wasRail;
+    HK.hooks.applyLangUI = wasLang;
+
+    const ok78o = syncDuring === 0 && railDraws === 1 && langUIDraws === 0;
+    check(ok78o,
+      "78o a tab switch: zero sendSync (counted in preload), one drawIntentRail, and the time to first frame measured before and after: "
+      + syncDuring + " sendSync, " + railDraws + " rail draw(s), " + langUIDraws + " lang UI draw(s), time " + switchElapsed + " ms");
   }
 
   /* A catalog taken while the identity is asked: the write that began over the one before, its file already made. */
