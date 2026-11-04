@@ -5191,7 +5191,9 @@ const CARD_B = {
     appendChild() {},
     insertAdjacentElement() {},
     remove() {},
-    querySelector: () => makeEl("span"),
+    textContent: "",
+    value: "",
+    querySelector: sel => (sel === ".chead" ? null : makeEl("span")),
     querySelectorAll: () => [],
     getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 200, height: 100 }),
     getContext: () => ({ measureText: () => ({ width: 10 }) }),
@@ -5199,27 +5201,43 @@ const CARD_B = {
     isConnected: true
   });
   const listEl = makeEl("div");
+  let tplChildren = [];
   const templateEl = {
     content: {
-      firstElementChild: null,
-      get firstChild() { return this.firstElementChild; }
+      get firstElementChild() { return tplChildren[0] || null; },
+      get firstChild() { return tplChildren[0] || null; },
+      removeChild(c) {
+        const i = tplChildren.indexOf(c);
+        if (i >= 0) tplChildren.splice(i, 1);
+        return c;
+      }
     },
     set innerHTML(h) {
-      rebuildCount++;
-      this.content.firstElementChild = makeEl("div");
+      if (h && typeof h === "string" && h.includes('class="card')) {
+        rebuildCount++;
+      }
+      const el = makeEl("div");
+      el.parentNode = this.content;
+      tplChildren = [el];
     }
   };
 
   try {
     globalThis.location = { protocol: "file:" };
-    globalThis.requestAnimationFrame = fn => setTimeout(fn, 0);
+    globalThis.requestAnimationFrame = () => 1;
     globalThis.getComputedStyle = () => ({ fontSize: "16px", getPropertyValue: () => "16px" });
     globalThis.document = {
       querySelector: s => (s === "#list" ? listEl : makeEl("div")),
       getElementById: id => (id === "list" ? listEl : makeEl("div")),
       querySelectorAll: () => [],
       createElement: tag => (tag === "template" ? templateEl : makeEl(tag)),
-      createDocumentFragment: () => ({ appendChild() {} }),
+      createDocumentFragment: () => ({
+        appendChild(c) {
+          if (c && c.parentNode && c.parentNode.removeChild) {
+            c.parentNode.removeChild(c);
+          }
+        }
+      }),
       createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) }),
       documentElement: { dataset: {}, classList: { contains: () => false } },
       body: makeEl("body"),
