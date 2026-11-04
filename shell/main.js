@@ -2677,6 +2677,7 @@ async function writeBranch(stem, text) {
     branchRevs[id] = doc.rev;
     await persistDeskEnvelope();
     heldBranch.delete(stem);
+    await drainWrites();
     return { ok: true, rev: doc.rev };
   } catch (e) {
     console.error("etiuda: the desk's own catalog file could not be written - " + e.message);
@@ -6146,8 +6147,9 @@ function historyKeep(file, text, wrote) {
       const was = idx.versions.filter(v => v.path === at).sort((a, b) => b.last - a.last)[0];
       if (was && was.last < now) was.last = now - 1;
       fs.mkdirSync(historyDir(), { recursive: true });
-      if (!fs.existsSync(historyBlob(sha))) writeReplacing(historyBlob(sha), zlib.gzipSync(buf));
-      e = Object.assign({ sha: sha, path: at, size: buf.length, gz: fs.statSync(historyBlob(sha)).size, first: now, last: now,
+      const gzBuf = zlib.gzipSync(buf);
+      if (!fs.existsSync(historyBlob(sha))) writeReplacing(historyBlob(sha), gzBuf);
+      e = Object.assign({ sha: sha, path: at, size: buf.length, gz: gzBuf.length, first: now, last: now,
         wrote: !!wrote }, historyFacts(text));
       idx.versions.push(e);
     }
@@ -6224,7 +6226,7 @@ function historyOpen(sha, file) {
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. */
-function historyPutBack(sha, file) {
+async function historyPutBack(sha, file) {
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
   try {
@@ -6235,8 +6237,9 @@ function historyPutBack(sha, file) {
     if (was && !historyFree(historyFacts(was))) return { ok: false };
     const before = historyKeepFile(v.path);
     if (!before) return { ok: false };
-    writeReplacing(v.path, text);
+    await writeReplacing(v.path, text);
     historyKeep(v.path, text, true);
+    await drainWrites();
     console.log("etiuda: " + v.path + " was put back as this desk kept it");
     return { ok: true, replaced: before.entry ? before.entry.sha : "" };
   } catch (e) {
@@ -7678,8 +7681,9 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
     historyKeepFile(p.file);
-    writeReplacing(p.file, out);
+    await writeReplacing(p.file, out);
     historyKeep(p.file, out, true);
+    await drainWrites();
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
   } catch (err) {
     console.error("etiuda: " + p.file + " could not be written - " + err.message);
