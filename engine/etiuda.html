@@ -12313,6 +12313,27 @@ What you type stays in this browser only.`;
       return false;
     }
   }
+  function syncTabActive(id) {
+    const bar = $("#tabsBar");
+    if (!bar) return false;
+    const tabEls = bar.querySelectorAll(".tab");
+    if (tabEls.length !== tabs.length) return false;
+    let matched = true;
+    tabEls.forEach((el, i) => {
+      if (!tabs[i] || el.dataset.tid !== tabs[i].id) {
+        matched = false;
+        return;
+      }
+      const on = tabs[i].id === id;
+      el.classList.toggle("on", on);
+      const lab = el.querySelector(".tab-label");
+      if (lab) lab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    if (!matched) return false;
+    syncTabAccent();
+    syncTabBeads();
+    return true;
+  }
   function applyTab(tb) {
     if (!tb) return;
     activeTabId = tb.id;
@@ -12328,7 +12349,8 @@ What you type stays in this browser only.`;
       putEntrySel(null);
     }
     setPickRun(false);
-    hooks.applyLangUI(tb.lang);
+    const langChanged = !!(tb.lang && tb.lang !== lang);
+    if (langChanged) hooks.applyLangUI(tb.lang);
     hooks.updateIntentPlaceholder();
     if (intentEl) {
       intentEl.value = tb.intentBox || "";
@@ -12340,9 +12362,9 @@ What you type stays in this browser only.`;
     const paxClear = $("#paxClear");
     if (paxClear) paxClear.disabled = !String(pax && pax.value || "").length;
     drawPills();
-    hooks.drawIntentRail();
+    if (!langChanged) hooks.drawIntentRail();
     hooks.render();
-    drawTabs();
+    if (!syncTabActive(tb.id)) drawTabs();
     requestAnimationFrame(() => {
       try {
         pageScroller().scrollTop = tb.scrollY || 0;
@@ -12882,10 +12904,9 @@ What you type stays in this browser only.`;
     updateTabOverflow();
     if (add) {
       let bw = barW;
-      for (let i = 0; i < 10; i++) {
-        const overhang = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
-        if (overhang <= 0.5) break;
-        bw = Math.max(40, bw - Math.ceil(overhang * 1.5));
+      const overhang = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+      if (overhang > 0.5) {
+        bw = Math.max(40, bw - Math.ceil(overhang * 3.3));
         bar.style.flex = "0 0 " + bw + "px";
         bar.style.width = bw + "px";
         bar.style.minWidth = bw + "px";

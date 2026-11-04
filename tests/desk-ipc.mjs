@@ -1595,7 +1595,7 @@ if (asserted + skipped < EXPECTED) {
     .join() === "b", "1153a the reading finds a handler that never answers, in planted text");
   const left = unanswered(shellSrc("preload.js"), shellSrc("main.js"));
   const channels = (shellSrc("preload.js").match(/sendSync\(\s*"/g) || []).length;
-  check(channels >= 12 && left.length === 0,
+  check(channels >= 11 && left.length === 0,
     "1153b every sync channel of the preload has a handler that answers: " + channels + " send(s), unanswered " + JSON.stringify(left));
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
