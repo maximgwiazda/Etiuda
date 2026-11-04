@@ -29,14 +29,7 @@ function check(ok, line) {
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
 }
-let currentBoot = null;
-const tick = async ms => {
-  await new Promise(r => setImmediate(r));
-  if (currentBoot && currentBoot.test && currentBoot.test.drainWrites) {
-    await currentBoot.test.drainWrites();
-  }
-  return new Promise(r => setTimeout(r, ms || 0));
-};
+const tick = ms => new Promise(r => setTimeout(r, ms || 0));
 const sha = buf => crypto.createHash("sha256").update(buf).digest("hex");
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -71,18 +64,15 @@ function boot() {
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
     + "\n__test.catalogChanged = catalogChanged; __test.teamKeys = teamKeys;"
-    + " __test.historyKept = typeof historyKept === \"function\" ? historyKept : null;"
-    + " __test.drainWrites = typeof drainWrites === \"function\" ? drainWrites : null;")(
+    + " __test.historyKept = typeof historyKept === \"function\" ? historyKept : null;")(
     n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
     { exports: {} }, {}, quiet, test);
   const ev = { sender: { id: 1, once: noop }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
-  const res = {
+  return {
     test: test,
     read: () => { const e = Object.assign({}, ev); on["etiuda:catalog"](e); return e.returnValue; },
     ask: (ch, ...a) => (handle[ch] ? Promise.resolve(handle[ch](ev, ...a)) : Promise.resolve(undefined)),
   };
-  currentBoot = res;
-  return res;
 }
 
 /* ---- catalogs, written from nothing -------------------------------------------------------------------------------- */

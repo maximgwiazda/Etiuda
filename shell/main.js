@@ -1701,7 +1701,16 @@ function deskEnvelopeBody(keysText) {
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
 const RENAME_RETRIES = 60;
 const RENAME_WAIT_MS = 50;
-async function renamePatiently(from, to) {
+function renamePatiently(from, to) {
+  for (let i = 1; ; i++) {
+    try { fs.renameSync(from, to); return; }
+    catch (e) {
+      if (i >= RENAME_RETRIES || RENAME_BUSY.indexOf(e.code) < 0) throw e; /* plant:rename-retries */
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RENAME_WAIT_MS);
+    }
+  }
+}
+async function renamePatientlyAsync(from, to) {
   for (let i = 1; ; i++) {
     try { await fs.promises.rename(from, to); return; }
     catch (e) {
@@ -1722,11 +1731,34 @@ function uniqueTempPath(file) {
    refused one leaves no temp file behind it. The temp name is unique per write to prevent collisions
    on shared folders, fsynced to disk before the rename, and unlinked on every failure path.
    Throws what stopped it. */
-const activeWrites = new Set();
-function drainWrites() {
-  return Promise.allSettled(Array.from(activeWrites));
+function writeReplacing(file, text) {
+  const tmp = uniqueTempPath(file);
+  try {
+    fs.writeFileSync(tmp, text, "utf8");
+    const fd = fs.openSync(tmp, "r+");
+    try {
+      fs.fsyncSync(fd); /* plant:write-fsync */
+    } finally {
+      fs.closeSync(fd);
+    }
+    renamePatiently(tmp, file);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    throw e;
+  }
+  mirrorOwes(file);
 }
-async function doWriteReplacing(file, text) {
+const WRITE_DRAIN_BOUND_MS = 5000;
+const activeWrites = new Set();
+function drainWrites(boundMs) {
+  const limit = typeof boundMs === "number" ? boundMs : WRITE_DRAIN_BOUND_MS;
+  const all = Promise.allSettled(Array.from(activeWrites));
+  if (!limit || limit <= 0) return all;
+  let timer;
+  const timeout = new Promise(resolve => { timer = setTimeout(resolve, limit); });
+  return Promise.race([all, timeout]).finally(() => { clearTimeout(timer); });
+}
+async function doWriteReplacingAsync(file, text) {
   const tmp = uniqueTempPath(file);
   try {
     await fs.promises.writeFile(tmp, text, typeof text === "string" ? "utf8" : undefined);
@@ -1736,15 +1768,15 @@ async function doWriteReplacing(file, text) {
     } finally {
       await handle.close();
     }
-    await renamePatiently(tmp, file);
+    await renamePatientlyAsync(tmp, file);
   } catch (e) {
     try { await fs.promises.unlink(tmp); } catch { /* never made */ }
     throw e;
   }
   mirrorOwes(file);
 }
-function writeReplacing(file, text) {
-  const p = doWriteReplacing(file, text);
+function writeReplacingAsync(file, text) {
+  const p = doWriteReplacingAsync(file, text);
   activeWrites.add(p);
   p.finally(() => activeWrites.delete(p)).catch(() => {});
   return p;
@@ -1771,10 +1803,7 @@ function persistDeskEnvelope() {
   const file = deskFile();
   try {
     keepUnkept();
-    const body = deskEnvelopeBody(JSON.stringify(deskKeys));
-    const tmp = file + "." + process.pid + ".env.tmp";
-    fs.writeFileSync(tmp, body, "utf8");
-    fs.renameSync(tmp, file);
+    writeReplacing(file, deskEnvelopeBody(JSON.stringify(deskKeys)));
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
   }
@@ -2616,7 +2645,7 @@ function sealFor(catalogId, pin, root) {
    are two files. An empty text takes every file of that id away. Anything else is a catalog the page
    built, which the desk signs only when it names this desk, and writes by replacement with the edition
    raised from the highest it knows (the envelope keeps it past a removal), then the other files of that id go. */
-async function writeBranch(stem, text) {
+function writeBranch(stem, text) {
   stem = String(stem || ""); text = String(text || "");
   const tail = /-([0-9a-f]{8})$/.exec(stem);
   if (!tail || !branchStemOk(stem) || text.length > BRANCH_TEXT_MAX) return { ok: false };
@@ -2649,7 +2678,7 @@ async function writeBranch(stem, text) {
     const lastRev = same.reduce((hi, e) => (branchGenuine(e.doc) ? Math.max(hi, +e.doc.rev || 0) : hi), branchRevs[id] || 0);
     const tidy = () => same.forEach(e => { if (e.file !== at.dest) unlinkOwn(e.file); });
     if (!doc) {
-      if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; await persistDeskEnvelope(); }
+      if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; persistDeskEnvelope(); }
       same.forEach(e => unlinkOwn(e.file));
       if (!same.some(e => e.file === at.dest) && fs.existsSync(at.dest)) unlinkOwn(at.dest);
       heldBranch.delete(stem);
@@ -2672,13 +2701,12 @@ async function writeBranch(stem, text) {
     }
     const signed = JSON.stringify(doc, null, 1) + "\n";
     const written = seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
-    await writeReplacing(at.dest, written);
+    writeReplacing(at.dest, written);
     historyKeep(at.dest, written, true);
     tidy();
     branchRevs[id] = doc.rev;
-    await persistDeskEnvelope();
+    persistDeskEnvelope();
     heldBranch.delete(stem);
-    await drainWrites();
     return { ok: true, rev: doc.rev };
   } catch (e) {
     console.error("etiuda: the desk's own catalog file could not be written - " + e.message);
@@ -5504,7 +5532,7 @@ function setRelayTeamAside(rt) {
   const file = path.join(relayMirrorOf(rt), TEAM_NAME);
   const aside = file + ".aside";
   try { fs.unlinkSync(aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
-  renamePatiently(file, aside).catch(e => { if (e.code !== "ENOENT") throw e; });
+  try { renamePatiently(file, aside); } catch (e) { if (e.code !== "ENOENT") throw e; }
 }
 function forgetLead(team, left) {
   team = String(team || "");
@@ -6148,9 +6176,8 @@ function historyKeep(file, text, wrote) {
       const was = idx.versions.filter(v => v.path === at).sort((a, b) => b.last - a.last)[0];
       if (was && was.last < now) was.last = now - 1;
       fs.mkdirSync(historyDir(), { recursive: true });
-      const gzBuf = zlib.gzipSync(buf);
-      if (!fs.existsSync(historyBlob(sha))) writeReplacing(historyBlob(sha), gzBuf);
-      e = Object.assign({ sha: sha, path: at, size: buf.length, gz: gzBuf.length, first: now, last: now,
+      if (!fs.existsSync(historyBlob(sha))) writeReplacing(historyBlob(sha), zlib.gzipSync(buf));
+      e = Object.assign({ sha: sha, path: at, size: buf.length, gz: fs.statSync(historyBlob(sha)).size, first: now, last: now,
         wrote: !!wrote }, historyFacts(text));
       idx.versions.push(e);
     }
@@ -6227,7 +6254,7 @@ function historyOpen(sha, file) {
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. */
-async function historyPutBack(sha, file) {
+function historyPutBack(sha, file) {
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
   try {
@@ -6238,9 +6265,8 @@ async function historyPutBack(sha, file) {
     if (was && !historyFree(historyFacts(was))) return { ok: false };
     const before = historyKeepFile(v.path);
     if (!before) return { ok: false };
-    await writeReplacing(v.path, text);
+    writeReplacing(v.path, text);
     historyKeep(v.path, text, true);
-    await drainWrites();
     console.log("etiuda: " + v.path + " was put back as this desk kept it");
     return { ok: true, replaced: before.entry ? before.entry.sha : "" };
   } catch (e) {
@@ -6308,7 +6334,7 @@ function sharedReadOf(file, text, pin) {
 }
 /* {lock, token} once this desk holds the lock, else null. A stale lock is moved aside before it is taken, so of two
    desks taking over one only one succeeds; a share that lies about either is caught by the compare before the write. */
-async function sharedLock(file) {
+function sharedLock(file) {
   const lock = file + ".lock", token = crypto.randomBytes(16).toString("hex");
   const take = () => {
     const fd = fs.openSync(lock, "wx");
@@ -6321,8 +6347,8 @@ async function sharedLock(file) {
   if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
   if (st) {
     const aside = lock + "." + token + ".stale";
-    try { await renamePatiently(lock, aside); } catch { return null; }
-    try { await fs.promises.unlink(aside); } catch { /* left beside it */ }
+    renamePatiently(lock, aside);
+    try { fs.unlinkSync(aside); } catch { /* left beside it */ }
   }
   try { take(); return { lock: lock, token: token }; }
   catch (e) { if (e.code === "EEXIST") return null; throw e; }
@@ -6343,7 +6369,7 @@ function shareMustSeal(root) {
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
    {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused. */
-async function sharedWrite(name, text, sha, create) {
+function sharedWrite(name, text, sha, create) {
   const file = sharedFile(name);
   text = String(text || "");
   if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };
@@ -6360,7 +6386,7 @@ async function sharedWrite(name, text, sha, create) {
   share = shareSyncer(root); /* plant:cas-off-thread */
   if (share) return share.then(s => (s ? sharedSwap(s, file, text, sha, create, data) : { ok: false, busy: true }));
   let held = null;
-  try { held = await sharedLock(file); }
+  try { held = sharedLock(file); }
   catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
   if (!held) return { ok: false, busy: true };
   try {
@@ -6371,9 +6397,8 @@ async function sharedWrite(name, text, sha, create) {
     if (now && !historyFree(historyFacts(now))) return { ok: false, refused: true };
     if (now && !historyKeepFile(file)) return { ok: false, busy: true };
     if (!sharedHolds(held)) return { ok: false, changed: true };
-    await writeReplacing(file, text);
+    writeReplacing(file, text);
     historyKeep(file, text, true);
-    await drainWrites();
     console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
     return { ok: true, rev: +data.rev || 0 };
   } catch (e) {
@@ -6394,11 +6419,10 @@ function sharedSwap(s, file, text, sha, create, data) {
       if (!historyShipped(buf, sha256Hex(buf)) && !historyKeep(file, now, false)) return { result: { ok: false, busy: true } };
     }
     return { text: text };
-  }).then(async r => {
+  }).then(r => {
     if (!r || !r.ok) return Object.assign({ ok: false }, r && r.changed ? { changed: true } : r && r.taken ? { taken: true }
       : r && r.refused ? { refused: true } : { busy: true });
     historyKeep(file, text, true);
-    await drainWrites();
     console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
     return { ok: true, rev: +data.rev || 0 };
   });
@@ -6701,7 +6725,7 @@ function saveDeskFile(keysText) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   keepUnkept();
   rotateDesk();
-  return writeReplacing(file, deskEnvelopeBody(keysText));
+  writeReplacing(file, deskEnvelopeBody(keysText));
 }
 /* A key the MAIN PROCESS owns, written before any window exists. Not writeDesk: that one applies
    a delta against the map a particular load was handed, and re-arms the watch and the theme
@@ -7059,7 +7083,19 @@ ipcMain.on("etiuda:window", (e, act) => {
    the Windows session, the refusal page's own Close, and the harness's placed windows. */
 const CLOSE_WAIT_MS = 1500;
 let quitting = false;
-app.on("before-quit", () => { quitting = true; try { flushHeldStats(); } catch { /* the last sealed answer stays */ } try { FolderSyncer().stopAllFolderSyncers(); } catch {} });
+let quitDrained = false;
+app.on("before-quit", (e) => {
+  quitting = true;
+  try { flushHeldStats(); } catch { /* the last sealed answer stays */ }
+  try { FolderSyncer().stopAllFolderSyncers(); } catch {}
+  if (!quitDrained && activeWrites.size > 0) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    drainWrites(WRITE_DRAIN_BOUND_MS).finally(() => {
+      quitDrained = true;
+      app.quit();
+    });
+  }
+});
 function closeHeld(win, e) {
   if (win && win.etiudaInstallerClose) return false;
   const lost = win.webContents.etiudaLost;
@@ -7684,9 +7720,8 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
     historyKeepFile(p.file);
-    await writeReplacing(p.file, out);
+    await writeReplacingAsync(p.file, out);
     historyKeep(p.file, out, true);
-    await drainWrites();
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
   } catch (err) {
     console.error("etiuda: " + p.file + " could not be written - " + err.message);
@@ -9055,10 +9090,9 @@ function hardenSession() {
    never read (measured the same day). English and Polish are the languages the desk is written in.
    tests/shell-office.mjs 13 holds both platforms, tests/linux-desk.js 8 the installed package. */
 const SPELLING = { langs: ["en-US", "pl"], files: ["en-US-10-1.bdic", "pl-PL-3-0.bdic"] };
-async function spellingFromPackage(s) {
+function spellingFromPackage(s) {
   const from = path.join(process.resourcesPath || "", "dictionaries");
   s.setSpellCheckerDictionaryDownloadURL("file://" + from.split("/").map(encodeURIComponent).join("/") + "/");
-  s.setSpellCheckerLanguages(SPELLING.langs);
   const to = path.join(app.getPath("userData"), "Dictionaries"), placed = [];
   for (const name of SPELLING.files) {
     try {
@@ -9067,12 +9101,13 @@ async function spellingFromPackage(s) {
       try { had = fs.readFileSync(path.join(to, name)); } catch { /* not there yet */ }
       if (had && had.equals(bytes)) continue;
       fs.mkdirSync(to, { recursive: true });
-      await writeReplacing(path.join(to, name), bytes);
+      writeReplacing(path.join(to, name), bytes);
       placed.push(name);
     } catch (e) {
       console.error("etiuda: the spelling dictionary " + name + " was not placed: " + (e && e.code || e));
     }
   }
+  s.setSpellCheckerLanguages(SPELLING.langs);
   return placed;
 }
 
