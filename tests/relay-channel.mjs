@@ -10242,7 +10242,8 @@ async function graceHeld(mod, arm) {
   await settle(lead, desk);
   const had = read(lead.mirror, stats);
   await lead.ch.stop();
-  put(desk.mirror, stats, "written-over\n");
+  if (arm.indexOf("delete") >= 0) fs.unlinkSync(path.join(desk.mirror, ...stats.split("/")));
+  else put(desk.mirror, stats, "written-over\n");
   put(desk.mirror, fresh, "last-file\n");
   await once(desk);
   await wait(5);
@@ -10287,6 +10288,9 @@ try {
   check(graceKept(h), "1165j inside the grace a removed desk's later version of a file the lead held before the removal is refused and said,"
     + " and the earlier copy stays the record: " + h.line);
   check(graceNew(h), "1165k and a new path it sealed before the removal lands: " + h.line);
+  const d = await graceHeld(C, "delete");
+  check(graceKept(d), "1165m the same by deletion: a delete blob on the held path inside the grace is refused and said, and the earlier copy"
+    + " stays the record: " + d.line);
   const lifts = [
     ["plant:grace-held",
       "1165l lifting plant:grace-held turns 1165j red (the removed desk writes over its own record)",
