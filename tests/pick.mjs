@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 130;
+const EXPECTED = 131;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -978,6 +978,20 @@ try {
   reopen();
   pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
   check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
+
+  /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;
+     a keystroke in the picker sends no IPC, by count. The answer's first frame is measured. */
+  let findCalls = 0;
+  const origFind = pWin.E_PICK.find;
+  pWin.E_PICK.find = (q) => { findCalls++; return origFind(q); };
+  reopen();
+  const t0 = performance.now();
+  qEl.value = "c";
+  pageL["q:input"]();
+  const frameMs = performance.now() - t0;
+  check(findCalls === 0, "4t a keystroke in the picker sends no IPC, by count: " + findCalls + " call(s)");
+  pWin.E_PICK.find = origFind;
+
   reopen(); qEl.value = "br"; pFound = [R("c"), R("a")]; pageL["q:input"]();
   await tick(5);
   press("Enter", "Enter");
