@@ -1539,9 +1539,11 @@ ipcMain.on("etiuda:catalog-taken", (e, pin, text) => {
   noteOpenedTaken(key, backed, win);
 });
 /* The page put the catalog down. The lead, the team pin and the desk's key stay. */
+/* A SYNC SEND WAITS FOR ITS ANSWER FOR EVER, so this answers on every path: without one the page's thread stops inside the
+   click and the window never comes back (Max, 2026-11-04 11:44). Answered last, so the shell has dropped its copy first. */
 ipcMain.on("etiuda:catalog-eject", (e) => {
-  if (!fromEngine(e)) return;
-  ejectLoadedCatalog();
+  try { if (fromEngine(e)) ejectLoadedCatalog(); }
+  finally { e.returnValue = null; }
 });
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
    would read, in the shape the host answer gives the first, or null where there is none. */

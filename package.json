@@ -15,6 +15,7 @@
     "shell-smoke": "node tests/shell-smoke.js",
     "reinstall": "node tests/reinstall.js",
     "update-install": "node tests/update-install.js --update",
+    "eject-desk": "node tests/eject-desk.js",
     "all-users-install": "node tests/update-install.js --all-users",
     "storage-carry": "node tests/storage-carry.js",
     "swap": "node tests/swap.mjs",

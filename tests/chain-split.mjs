@@ -33,6 +33,7 @@ export const HELPERS = {
   "tests/storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/tour-walk.js": "the tour's walk tests/smoke.js requires and runs",
   "tests/update-install.js": "a machine-window gate, not in either chain",
+  "tests/eject-desk.js": "a machine-window gate, not in either chain",
 };
 
 /* Nightly-only legs (rule 7): load-sensitive legs and self-tests that run only in nightly */
