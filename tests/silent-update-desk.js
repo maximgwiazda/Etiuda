@@ -18,6 +18,7 @@ const os = require("node:os");
 const { execFileSync } = require("node:child_process");
 const puppeteer = require("puppeteer-core");
 const E = require("./engine.js");
+const { waitLaunchGone } = require("./launch-wait.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const WHO = "tests/silent-update-desk.js";
@@ -56,6 +57,16 @@ async function main() {
   fs.mkdirSync(docs, { recursive: true });
   E.pinCatalogFolder(ud, docs);
 
+  // Mark the first-run tour done so it does not hold back the catalog offer or typing
+  const deskDoc = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
+  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1" });
+  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(deskDoc), "utf8");
+
+  // Give the leg a catalog as the tree's other window legs do
+  const FIX = E.fixturesDir() ? E.fixtures("catalogEc", "sampleEc") : E.fixtures("sampleEc");
+  const catSource = FIX.catalogEc || FIX.sampleEc;
+  fs.copyFileSync(catSource, path.join(docs, "etiuda-catalog.ec"));
+
   let child = null, browser = null;
   try {
     const port = PORT;
@@ -70,14 +81,24 @@ async function main() {
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
     browser = await connected(port);
+    E.lowerTree(child.pid);
 
     const pages = await browser.pages();
     const page = pages[0];
-    await page.waitForSelector("#paxInput", { timeout: 10000 });
-    await page.type("#paxInput", "Draft Customer A");
-    await page.waitForSelector("#intentBox", { timeout: 10000 });
-    await page.type("#intentBox", "Customer draft message in progress");
-    await sleep(500);
+    await waitLaunchGone(page, { who: WHO, ready: "typeof window.E_VERSION === \"string\"" });
+
+    // Accept catalog offer if shown so the desk loads its cards
+    const ecYes = await page.waitForSelector("#ecYes", { timeout: 15000 }).catch(() => null);
+    if (ecYes) {
+      await ecYes.click();
+      await page.waitForFunction(() => document.querySelectorAll("#list .card").length > 0, { timeout: 15000 });
+    }
+
+    await page.waitForSelector("#pax", { timeout: 10000 });
+    await page.type("#pax", "Draft Customer A");
+    await page.waitForSelector("#intent", { timeout: 10000 });
+    await page.type("#intent", "Customer draft message in progress");
+    await sleep(700);
 
     // Disconnect Puppeteer before sending the installer signal so CDP does not hold the process
     browser.disconnect();
@@ -115,11 +136,20 @@ async function main() {
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
     const browser2 = await connected(port);
+    E.lowerTree(child2.pid);
     const pages2 = await browser2.pages();
     const page2 = pages2[0];
-    await page2.waitForSelector("#paxInput", { timeout: 10000 });
-    const restoredPax = await page2.$eval("#paxInput", el => el.value);
-    const restoredDraft = await page2.$eval("#intentBox", el => el.value);
+    await waitLaunchGone(page2, { who: WHO + " 2", ready: "typeof window.E_VERSION === \"string\"" });
+
+    await page2.waitForSelector("#pax", { timeout: 10000 });
+    await page2.waitForSelector("#intent", { timeout: 10000 });
+    await page2.waitForFunction(() => {
+      const p = document.querySelector("#pax");
+      const i = document.querySelector("#intent");
+      return p && p.value === "Draft Customer A" && i && i.value.includes("Customer draft message");
+    }, { timeout: 10000 });
+    const restoredPax = await page2.$eval("#pax", el => el.value);
+    const restoredDraft = await page2.$eval("#intent", el => el.value);
 
     check(restoredPax === "Draft Customer A" && restoredDraft.includes("Customer draft message"),
       "1152m restarting the desk restores the draft tab (" + restoredPax + ")");
