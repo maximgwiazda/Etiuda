@@ -27,7 +27,8 @@
  * whose clock never reaches that counter stays refused: the known limit until the relay names the floor (970r).
  * The lead's own channel takes, inside the relay's grace for a removed desk, what that desk sealed before the lead held the
  * roster that leaves it off, and refuses removed what it sealed after or what comes past the grace (1165a to 1165d); a desk clock
- * running a few minutes ahead still has its last file before the removal taken (1165h).
+ * running a few minutes ahead still has its last file before the removal taken (1165h). The grace adds and never replaces: a
+ * file the lead held before the removal stays as it was, and a new path lands (1165j, 1165k).
  * A replay-counter refusal is tried again within a minute, an outbox file (970s) and an invitation's answer (970u). An invitation
  * upload whose reply was lost is counted as sent when the retry is
  * refused token-spent (966f), under the id the relay holds as asked however many replies were lost, so Cancel's withdrawal
@@ -10220,6 +10221,50 @@ async function removedGrace(mod, arm) {
     + ", said removed " + out.otherSaid + "; grace " + (out.keepSame ? "the relay's" : "differs from the relay's");
   return out;
 }
+/* THE GRACE ADDS, IT NEVER REPLACES. The lead holds the desk's file; the desk seals a later version of it and a new file, both
+   before the removal; the lead's catch-up after it refuses the first, says so, keeps its copy, and takes the second. */
+async function graceHeld(mod, arm) {
+  const k1 = crypto.randomBytes(32), gone = keyPair(true), stay = keyPair(true);
+  const tm = await freshTeam([gone, stay]);
+  const tag = arm + "-" + tm.rt.slice(0, 8);
+  const keyFor = e => (e === 1 ? k1 : null);
+  const lead = opened(mod, "1165j-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1 });
+  const desk = opened(mod, "1165j-desk-" + tag, tm, gone, "desk:" + gone.keyId, { keyFor, sealEpoch: () => 1 });
+  const doc1 = teamBody(tm, 1, 1, [member(gone), member(stay)]), doc2 = teamBody(tm, 1, 2, [member(stay)]);
+  put(lead.mirror, C.TEAM_NAME, doc1);
+  lead.prog.loadTeamFile(JSON.parse(doc1));
+  lead.ch.start();
+  desk.ch.start();
+  await settle(lead, desk);
+  const stats = "desks/" + gone.keyId + "/stats.estat", fresh = "desks/" + gone.keyId + "/in-use.ec";
+  put(desk.mirror, stats, "the-record\n");
+  await once(desk);
+  await settle(lead, desk);
+  const had = read(lead.mirror, stats);
+  await lead.ch.stop();
+  put(desk.mirror, stats, "written-over\n");
+  put(desk.mirror, fresh, "last-file\n");
+  await once(desk);
+  await wait(5);
+  put(lead.mirror, C.TEAM_NAME, doc2);
+  lead.prog.loadTeamFile(JSON.parse(doc2));
+  await wait(5);
+  await desk.ch.stop();
+  const t = R.clock.now, keep = [{ id: stay.keyId, pub: stay.pub, desk: stay.keyId }];
+  const dropped = await admin("POST", "/relay/v1/t/" + tm.rt + "/devices", { keys: keep, rev: 2, t,
+    sig: signHex(LEAD, core.devicesBytes(tm.rt, 2, t, keep)) });
+  const from = lead.said.length;
+  lead.ch.start();
+  await once(lead);
+  const said = lead.said.slice(from).filter(l => l.indexOf(B.REASONS.removed) >= 0).length;
+  const out = { dropped: dropped.status === 200, had, record: read(lead.mirror, stats), fresh: read(lead.mirror, fresh), said };
+  await lead.ch.stop();
+  out.line = "the lead held " + JSON.stringify(out.had) + " before the removal and holds " + JSON.stringify(out.record)
+    + "; the new path " + JSON.stringify(out.fresh) + "; said removed " + out.said;
+  return out;
+}
+const graceKept = x => x.dropped && x.had === "the-record\n" && x.record === "the-record\n" && x.said >= 1;
+const graceNew = x => x.dropped && x.fresh === "last-file\n";
 const graceTaken = x => x.dropped && x.held === 2 && x.keepSame && x.before === "sealed-before\n";
 const graceAfter = x => x.dropped && x.held === 2 && x.after === null && x.leadSaid >= 1;
 const gracePast = x => x.dropped && x.held === 2 && x.keepSame && x.before === null && x.after === null && x.leadSaid >= 2;
@@ -10238,7 +10283,14 @@ try {
   const f = await removedGrace(C, "fast");
   check(graceFast(f), "1165h a desk whose clock runs three minutes ahead of the lead's has the file it sealed before the removal taken, and"
     + " its file sealed fifteen minutes after is still refused removed: " + f.line);
+  const h = await graceHeld(C, "held");
+  check(graceKept(h), "1165j inside the grace a removed desk's later version of a file the lead held before the removal is refused and said,"
+    + " and the earlier copy stays the record: " + h.line);
+  check(graceNew(h), "1165k and a new path it sealed before the removal lands: " + h.line);
   const lifts = [
+    ["plant:grace-held",
+      "1165l lifting plant:grace-held turns 1165j red (the removed desk writes over its own record)",
+      async mod => !graceKept(await graceHeld(mod, "lift-held"))],
     ["plant:lead-grace-before",
       "1165e lifting plant:lead-grace-before turns 1165b red (the file sealed after the removal is taken)",
       async mod => !graceAfter(await removedGrace(mod, "lift-before"))],

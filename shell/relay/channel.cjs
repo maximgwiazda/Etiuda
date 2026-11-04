@@ -829,6 +829,13 @@ function createProgram(opts) {
     return null;
   }
 
+  /* Whether this blob would replace or delete a file the removed writer's path held here before its removal. A file landed
+     inside the grace is not one, nor is the blob already applied there, which land then calls stale. */
+  function heldBeforeRemoval(r) {
+    const key = pathKey(r.path), prev = has(st.applied, key) ? st.applied[key] : null;
+    return !!prev && !prev.del && prev.id !== r.id && !(prev.at > st.gone[r.writerKeyId]);
+  }
+
   /* One blob judged: blob.cjs's first line under `trust` at `epoch` with `key`, against `floors`; a key the newest
      loaded epoch leaves off its roster is then removed, at an older epoch and at the newest where an older roster named
      it, but for a blob the lead takes inside the grace (leadGrace); then a supersedes that names a blob this program took
@@ -847,7 +854,12 @@ function createProgram(opts) {
       let before = true, ahead = 0;
       ahead = REMOVED_CLOCK_AHEAD_MS; /* plant:lead-grace-ahead */
       before = r.ok && has(st.gone, writer) && r.counter <= st.gone[writer] + ahead; /* plant:lead-grace-before */
-      if (gone && grace === true && r.ok && before) gone = null;
+      /* THE GRACE ADDS, IT NEVER REPLACES (the test architect's fault of 2026-11-04, ruled by Claude alpha): the counter is the
+         writer's own number, so a removed desk could otherwise seal a back-dated blob and overwrite what it held before the
+         removal, its stored statistics among them, for as long as the grace runs. */
+      let replaces = false;
+      replaces = r.ok && heldBeforeRemoval(r); /* plant:grace-held */
+      if (gone && grace === true && r.ok && before && !replaces) gone = null;
       if (gone) return gone;
     }
     if (!r.ok) return r;
