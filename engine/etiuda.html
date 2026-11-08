@@ -13161,7 +13161,11 @@ What you type stays in this browser only.`;
       const idx = tabs.findIndex((x) => x.id === el.dataset.tid);
       const ti = idx >= 0 ? idx : i;
       const tb = idx >= 0 ? tabs[idx] : null;
-      const name = tabLabel(tb, ti);
+      let name;
+      if (el.dataset && el.dataset.sid) {
+        const def = getScreenDef(el.dataset.sid);
+        name = def && typeof def.title === "function" ? def.title() : el.dataset.sid === "maintenance" ? t("Maintenance") : el.dataset.sid;
+      } else name = tabLabel(tb, ti);
       const span = el.querySelector(".tab-label>span");
       if (!span) return;
       if (span.textContent !== name) span.textContent = name;
@@ -16603,6 +16607,8 @@ What you type stays in this browser only.`;
   }
   function openDialog(cfg) {
     if (!modalEl || !modalCard) return;
+    edBaseline = null;
+    edReturn = null;
     cutLeaves();
     if (modalEl.hidden) {
       let from = document.activeElement;
@@ -16654,7 +16660,8 @@ What you type stays in this browser only.`;
     const lp = t("Previous") + " · " + formatActionChord("edPrevEntry"), ln = tc("editor", "Next") + " · " + formatActionChord("edNextEntry");
     return '<span class="modal-nav"><button type="button" class="modal-x nav-up" id="edPrev" title="' + esc(lp) + '" aria-label="' + esc(t("Previous")) + '">' + ICON_CHEVRON_R + '</button><button type="button" class="modal-x nav-dn" id="edNext" title="' + esc(ln) + '" aria-label="' + esc(tc("editor", "Next")) + '">' + ICON_CHEVRON_R + "</button></span>";
   }
-  var edBaseline = "";
+  var edBaseline = null;
+  var edReturn = null;
   function edFormState() {
     if (!modalCard) return "";
     const out = [];
@@ -16695,7 +16702,7 @@ What you type stays in this browser only.`;
     });
   }
   function edDirty() {
-    return edFormState() !== edBaseline;
+    return edBaseline !== null && edFormState() !== edBaseline;
   }
   function edNavTo(run) {
     const card = modalCard;
@@ -16715,6 +16722,7 @@ What you type stays in this browser only.`;
   }
   function edWireNav(list2, cur, go) {
     edMarkClean();
+    edReturn = { go, cur };
     const i = list2.indexOf(cur);
     const step = (d) => {
       const j = i + d;
@@ -16782,13 +16790,18 @@ What you type stays in this browser only.`;
     modalBack = typeof fn === "function" ? fn : null;
   }
   function dismissModal() {
-    if (edDirty() && typeof confirm === "function" && !confirm(t("Discard changes"))) {
-      return false;
-    }
+    const was = edDirty() ? edTyped() : null;
+    const ret = was ? edReturn : null;
+    edBaseline = null;
+    edReturn = null;
     const back = modalBack;
     modalBack = null;
     if (back) back();
     else closeModal();
+    if (was && ret) offerUndo("Moved on without saving the changes", () => edNavTo(() => {
+      ret.go(ret.cur);
+      edRetype(was);
+    }));
     return true;
   }
   function mountModalBody() {
@@ -16827,6 +16840,8 @@ What you type stays in this browser only.`;
     dismissNode(g);
   }
   function closeModal() {
+    edBaseline = null;
+    edReturn = null;
     scStopCapture();
     modalBack = null;
     leaveModal();
