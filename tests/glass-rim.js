@@ -540,7 +540,8 @@ async function readMarked(pg, three, label) {
       "9gr3 dark: the docked intent rail stands on the ground, a column with no rim, bevel or lift (the peek's ring is 9gr16)");
 
     await p.click("#settingsBtn");
-    await p.evaluate(() => [...document.querySelectorAll("#settingsMenu button")].find(x => /^settings/i.test(x.textContent.trim())).click());
+    /* Settings is a screen tab since D3; About is the Menu's dialog, so the rim is read on it. */
+    await p.evaluate(() => document.querySelector('#settingsMenu [data-act="about"]').click());
     await p.waitForSelector(".modal:not([hidden]) .modal-card", { visible: true, timeout: 10000 }).catch(() => {});
     await sleep(600);
     const dlg = await p.evaluate(() => {
