@@ -1421,7 +1421,7 @@ try {
       const env = unlistedP.box.D.envelope().catalogPrivate || [];
       const useDoc = openSealedDoc(unlistedP.box.D, inUsePath(unlistedP.box.share, unlistedP.box.me.id), unlistedP.box.key);
       const nowhere = !!useDoc && !/private/i.test(JSON.stringify(useDoc)) && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
-      check(!unlistedP.written && !listedP.written && !grown.written && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
+      check(!unlistedP.written && !listedP.written && !grown.written && Array.isArray(view.private) && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
           && kept === 0 && env.length === 1 && env[0] === "quay-held" && nowhere,
         "b0d a catalog the agent marked private is answered to nobody, listed or not, nor a copy grown from it; the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
         + [unlistedP.written, listedP.written, grown.written, freed.written, grownFreed.written].join(",") + ")");
