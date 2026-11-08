@@ -48,6 +48,7 @@ function skip(line) {
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
+if (process.env.ETIUDA_SHELL_MAIN) fs.copyFileSync(process.env.ETIUDA_SHELL_MAIN, path.join(APP, "shell", "main.js"));
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "deskTrustChecks", "folderAnswers", "catalogFolder", "folderSyncerRun"];
 const noop = () => {};
