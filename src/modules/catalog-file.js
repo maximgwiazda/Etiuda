@@ -379,6 +379,9 @@ function branchCatalog(who,origin){
   c.rev=1;
   c.version=todayEdition();
   if(!origin.loose) c.grew={id:String(origin.id), rev:+origin.rev||0, sha:String(origin.pin)};
+  /* A copy of a copy carries the first catalog of its chain, so the desk judges it by that one with no hop between stored. */
+  const og=!origin.loose&&origin.grew&&typeof origin.grew==="object"?origin.grew:null;
+  if(og&&(og.root||og.id)) c.grew.root=String(og.root||og.id);
   c.desk={id:who.id, key:who.key, box:who.box};
   if(name) c.desk.name=name;
   return c;
