@@ -1511,12 +1511,11 @@ const t0 = Date.now();
     const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
     if (nav.length < 2) return { n: nav.length };
     const general = document.querySelector('#screenHost [data-sx="general"]');
-    const appearance = document.querySelector('#screenHost [data-sx="appearance"]');
-    /* The tab reopens at the section last shown, and the theme leg above leaves it at Appearance. */
+    /* The tab reopens at the section last shown (the theme leg leaves it at Appearance), and each click redraws the list. */
     if (general) general.click();
     await new Promise(r => setTimeout(r, 450));
     const hadName = !!document.getElementById("setAgentName");
-    appearance.click();
+    document.querySelector('#screenHost [data-sx="appearance"]').click();
     await new Promise(r => setTimeout(r, 450));
     const appOn = !!document.querySelector('#screenHost [data-sx="appearance"].on');
     const nameGone = !document.getElementById("setAgentName");
