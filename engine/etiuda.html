@@ -378,6 +378,17 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --rail-max:268px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
+  /* The docked rail's column: from the window's edge to where the dot field begins, one 12px pitch
+     short of the cards - see .dotfield>div. */
+  --rail-col-w:calc(var(--rail-left,14px) + var(--rail-max) + var(--rail-gap) - 12px);
+  /* THE SIDE AREA'S LANGUAGE: a column on the header's own ground, a hairline to the cards, a light
+     title, quiet rows. The docked intent rail wears it; Settings' side area is to share it. */
+  --side-ground:var(--header-bg);
+  --side-edge:var(--line);
+  --side-dim:var(--dim);
+  --side-hover:color-mix(in srgb,var(--accent) 9%,transparent);
+  --side-title-font:300 23px/1.1 var(--sans-display);
+  --side-veil:44px;
   /* Outer width of the whole app. Header rows and .shell all use it, docked or not,
      so showing/hiding the panel never resizes the frame around the user. */
   /* Uncapped: .txt holds the reading measure at 105ch, so a cap only converted width into
@@ -2500,6 +2511,50 @@ body.rail-peek:not(.rail-on) #intentRail{
   pointer-events:auto;    /* the base rule turns these off; both visible states must turn them on */
   box-shadow:var(--bevel),0 12px 36px rgba(0,0,0,.22);
 }
+/* THE DOCKED RAIL IS A COLUMN, NOT A PANEL: flush to the window's edge on the header's ground, from the
+   header's foot to the window's, a hairline where the dot field begins. body.rail-col outlives rail-on
+   so a departing column fades as a column, and a peek takes it off - see syncRailLayout; the peek
+   keeps its panel. Written after the docked, parting and peek blocks, which it ties with. */
+body.rail-col #intentRail{
+  left:0;width:var(--rail-col-w);
+  top:var(--rail-col-top,0px);height:calc(100vh - var(--rail-col-top,0px));max-height:none;
+  background:var(--side-ground);border:0;border-right:1px solid var(--side-edge);border-radius:0;
+  box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;
+  padding:14px 10px 0;gap:0}
+:root body.rail-col #intentRail::after{content:none}
+body.rail-col .rail-resize::after{background:var(--side-dim)}
+body.rail-col .rail-head{border:0;margin:0;padding:2px 2px 12px 10px;align-items:baseline;gap:8px}
+body.rail-col .rail-head b{font:var(--side-title-font);letter-spacing:0;color:var(--ink)}
+body.rail-col .rail-head .rail-n{margin-left:0;padding:0;font:13px var(--sans);color:var(--side-dim);
+  font-variant-numeric:tabular-nums;opacity:1}
+body.rail-col .rail-head .rail-hid{order:2;opacity:.75}
+body.rail-col .rail-actions{margin-left:auto;order:3;align-self:center}
+body.rail-col .rail-item{padding:7px 36px 7px 10px;gap:11px;align-items:center}
+body.rail-col .rail-item .cat-slot{color:var(--side-dim);opacity:.85}
+/* The chosen row is the panel's own - mint, green name, check - and its mark stays green, which the
+   quiet marks above would otherwise grey. */
+body.rail-col .rail-item.on .cat-slot{color:var(--go);opacity:1}
+/* The pointer's wash is flat: there is no glass under the column for a filter to speak to. */
+@media (hover:hover){
+body.rail-col:not(.e-kbdnav) .rail-item:not(.on):hover{background:var(--side-hover);
+  -webkit-backdrop-filter:none;backdrop-filter:none}
+body.rail-col:not(.e-kbdnav) .rail-item:not(.on):hover .cat-slot{opacity:1}
+}
+body.rail-col .rail-item:not(.on):focus-visible,body.rail-col .rail-item.rail-kbd:not(.on){background:var(--side-hover);
+  -webkit-backdrop-filter:none;backdrop-filter:none}
+body.rail-col .rail-item:not(.on):focus-visible .cat-slot,body.rail-col .rail-item.rail-kbd:not(.on) .cat-slot{opacity:1}
+/* The list fades into the ground at its foot: a veil, not a mask, which would take the chosen rows too. */
+body.rail-col #intentRailList{padding-bottom:var(--side-veil)}
+body.rail-col .rail-body::after{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--side-veil);
+  z-index:4;pointer-events:none;
+  background:linear-gradient(color-mix(in srgb,var(--side-ground) 0%,transparent),var(--side-ground))}
+/* Docked, the scrolled shadow starts at the column's edge and falls over the cards alone: the column and the
+   header are one ground, so nothing may cross between them. The pseudo is the header's own box clipped to
+   what lies below it from that edge; the flip holds it with the header (#eFlipHold). */
+body.rail-on.rail-col.e-scrolled header{box-shadow:none}
+body.rail-on.rail-col header::after{content:"";position:absolute;top:0;bottom:-1px;left:var(--rail-col-w);right:0;
+  pointer-events:none;clip-path:inset(100% 0 -40px 0);box-shadow:none;transition:box-shadow var(--m-tone) ease}
+body.rail-on.rail-col.e-scrolled header::after{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
 /* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
@@ -4035,7 +4090,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <!-- THE FLIP'S HOLD: enabled by theme.js for a theme press's own two frames and disabled otherwise.
      A sheet toggled through the CSSOM touches no element and wakes no observer, and the browser
      restyles only what its one rule matches. Unlayered, so it outranks the tone tier. -->
-<style id="eFlipHold">.rail-item,.cacts button,.cat-chip,.pill,.btn,.seg button,.seg::before,.tab,.tab-x,.menu button,.field-clear,.combo-clear,.rail-lock,.mg-tw,.me-stamp,.fab,.fab-clear,.card.deck>.txt,header{transition:none}</style>
+<style id="eFlipHold">.rail-item,.cacts button,.cat-chip,.pill,.btn,.seg button,.seg::before,.tab,.tab-x,.menu button,.field-clear,.combo-clear,.rail-lock,.mg-tw,.me-stamp,.fab,.fab-clear,.card.deck>.txt,header,header::after{transition:none}</style>
 
 <header>
   <div class="row">
@@ -4180,7 +4235,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div class="rail-slot" id="railSlot">
 <aside id="intentRail" aria-label="Intent list">
   <div class="rail-head">
-    <b title="Double-click to reset the intent order">INTENT</b>
+    <b title="Double-click to reset the intent order">Intents</b>
     <span class="rail-n rail-hid" id="railHidden" data-i18n-skip hidden></span>
     <span class="rail-n" id="railCount" data-i18n-skip></span>
     <div class="rail-actions">
@@ -19062,17 +19117,18 @@ What you type stays in this browser only.`;
     if (!bar || typeof ResizeObserver !== "function") return;
     new ResizeObserver(scheduleOverlapOrder).observe(bar);
   }
-  function railClearanceTop() {
+  function railHeaderEdge() {
     let bottom = 0;
     const header = document.querySelector("header");
     if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
-    return Math.ceil(bottom) + 8;
+    return Math.ceil(bottom);
   }
   function syncRailGeometry() {
     const root = document.documentElement;
     document.body.classList.add("rail-ready");
-    const top = railClearanceTop();
+    const edge = railHeaderEdge(), top = edge + 8;
     const h = Math.max(160, Math.round(window.innerHeight - top - 8));
+    root.style.setProperty("--rail-col-top", edge + "px");
     root.style.setProperty("--rail-top", top + "px");
     root.style.setProperty("--rail-h", h + "px");
     const slot = $("#railSlot") || document.querySelector(".rail-slot");
@@ -19130,6 +19186,7 @@ What you type stays in this browser only.`;
     const docked = railDocked();
     const autoHide = railAutoHide();
     document.body.classList.toggle("rail-on", docked);
+    if (docked) document.body.classList.add("rail-col");
     document.body.classList.toggle("rail-auto-hide", autoHide);
     if (docked) {
       railEdgeHover = false;
@@ -19373,6 +19430,7 @@ What you type stays in this browser only.`;
       railReachT = 0;
     }
     document.body.classList.toggle("rail-peek", show);
+    if (show) document.body.classList.remove("rail-col");
     if (show) scheduleRailGeometry();
     else if (show) syncRailGeometry();
   }
@@ -20276,11 +20334,11 @@ What you type stays in this browser only.`;
           railSuppressClick = false;
           return;
         }
-        if (e.target.closest("#railPinBtn")) {
+        const b = e.target.closest("#railPinBtn");
+        if (b) {
           e.preventDefault();
           e.stopPropagation();
           toggleRailLock();
-          const b = e.target.closest("#railPinBtn");
           b.classList.remove("e-lock-shut", "e-lock-open");
           void b.offsetWidth;
           b.classList.add(railLocked() ? "e-lock-shut" : "e-lock-open");
