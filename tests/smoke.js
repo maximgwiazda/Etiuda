@@ -771,7 +771,7 @@ const t0 = Date.now();
     check(en0[k].length > 0 && plSurf[k] !== en0[k], "and the " + k + " surface repainted, so "
       + REPAINT[k] + " ran (" + en0[k].length + " chars to " + plSurf[k].length + ")");
   }
-  for (const act of ["settings", "manage"]) { await p.evaluate(a => document.querySelector('[data-act="' + a + '"]').click(), act); await sleep(700); await p.keyboard.press("Escape"); await sleep(300); }
+  for (const act of ["settings", "manage"]) { await p.evaluate(a => document.querySelector('[data-act="' + a + '"]').click(), act); await sleep(700); await p.keyboard.press("Escape"); await sleep(300); await p.evaluate(() => { if (screenOn) closeScreenTab(screenOn); }); await sleep(300); }
   await p.evaluate(async () => { setUiLang("en"); await new Promise(r => setTimeout(r, 400)); });
   await sleep(400);
   const en1 = await surfaces();
@@ -1512,6 +1512,9 @@ const t0 = Date.now();
     if (nav.length < 2) return { n: nav.length };
     const general = document.querySelector('#screenHost [data-sx="general"]');
     const appearance = document.querySelector('#screenHost [data-sx="appearance"]');
+    /* The tab reopens at the section last shown, and the theme leg above leaves it at Appearance. */
+    if (general) general.click();
+    await new Promise(r => setTimeout(r, 450));
     const hadName = !!document.getElementById("setAgentName");
     appearance.click();
     await new Promise(r => setTimeout(r, 450));
@@ -2094,7 +2097,9 @@ const t0 = Date.now();
                cardOver: card.scrollWidth - card.clientWidth };
     };
     const short = await read("C:\\Users\\x\\Documents\\Etiuda");
-    const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later\\Etiuda live desk for the whole team");
+    /* The title line spans the Library's tab, so the long folder is long against a full window. */
+    const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later, kept for every desk of the support team"
+      + " in each of its offices\\Etiuda live desk for the whole team and every colleague who answers by telephone, by chat and by mail");
     closeScreenTab("library"); await wait(300);
     delete window.E_HOST;
     return { short, long };
