@@ -583,7 +583,7 @@ function openCardEditor(id, presetCat, fromManage){
   syncMeIntentPick();
   if($("#meReset")) $("#meReset").onclick=()=>{
     delete pack.overrides[id];
-    savePack(); rebuildCards(); doneCardEditor();
+    savePack([id]); rebuildCards(); doneCardEditor();
     toast(t("Restored original -")+" "+(base.t||id));
   };
   $("#meSave").onclick=()=>{
@@ -666,7 +666,7 @@ function openCardEditor(id, presetCat, fromManage){
        card asks about changes that are already saved. */
     if(!isNew) edMarkClean();
     afterPaint(()=>{
-      savePack(); rebuildCards();
+      savePack([savedId]); rebuildCards();
       toast(isNew?"Card added":"Card saved");
       if(isNew) openCardEditor(savedId,null,fromManage);
       else refreshDialogChrome();   // the title may have changed, and Reset may have woken
@@ -723,9 +723,7 @@ function hideCard(id){
     toast(lostStar ? "Put away - greyed at the foot of its category, unfavourited"
                    : "Put away - greyed at the foot of its category");
   }
-  const was=ePackEpoch;
-  savePack();
-  hooks.keepPoolAcross(was,[id]);   // a hide rewrites this card alone
+  savePack([id]);   // a hide rewrites this card alone
   /* Flip the flag in place: rebuildCards() re-derives everything for a change that
      alters none of it, and its cost lands inside the FLIP's own window - the first third
      of the journey was over before anything painted, which is what made hiding less
