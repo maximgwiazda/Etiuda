@@ -61,7 +61,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 415;
+const EXPECTED = 419;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -2765,7 +2765,7 @@ try {
       const opt = o || {};
       const ud = path.join(LAB, "s5-head-" + (++n5) + "-" + hex(3)), mir = path.join(ud, "folder-mirror", TMF), elsewhere = path.join(ud, "share");
       fs.mkdirSync(mir, { recursive: true }); fs.mkdirSync(elsewhere, { recursive: true });
-      fs.writeFileSync(path.join(mir, C.TEAM_NAME), folderTeamS5);
+      fs.writeFileSync(path.join(mir, C.TEAM_NAME), opt.team || folderTeamS5);
       for (const [n, t] of opt.files || []) fs.writeFileSync(path.join(mir, n), t);
       if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
       const revs = {};
@@ -2818,13 +2818,27 @@ try {
     check(!rF.ahead && !!rF.next && rF.next.edition === "Pebble now",
       "962s5r2f on a folder team, a head dated beyond now plus ten minutes is not shown and leaves the floor, so the genuine head after it shows: ahead "
       + shownS5(rF.ahead) + ", then " + shownS5(rF.next));
+    /* 962s5t4: the folder's epoch floor, as the relay's: a head below the epoch of the team file the mirror holds is left out. */
+    const teamAt2 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TMF, catalogs: ["pebble-board", "quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 2, rev: 1, roster: [] }, LEAD), null, 1) + "\n";
+    const t4Scene = async src => {
+      const desk = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble at epoch one")], t: now }), { team: teamAt2, src });
+      const at2 = await desk.again(signHead({ v: 1, team: TMF, epoch: 2, rev: 1, editions: [pe(5, "Pebble at epoch two")], t: now + 1 }));
+      return { low: desk.head, at2 };
+    };
+    const t4 = await t4Scene();
+    check(!t4.low && !!t4.at2 && t4.at2.edition === "Pebble at epoch two",
+      "962s5t4 on a folder team, a head below the epoch of the team file the mirror holds is left out, and one at it shows: below " + shownS5(t4.low) + ", at " + shownS5(t4.at2));
     if (PLANTS_OFF) {
+      skip("962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch");
       skip("962s5f2 lifting plant:head-listed keeps the unlisted catalog's entry");
       skip("962s5g2 lifting plant:folder-head-older keeps the entry below the desk's rev");
       skip("962s5p2 lifting plant:head-loaded calls the loaded rev newer");
       skip("962s5r4 lifting plant:folder-head-ahead shows the head from ahead and refuses the genuine one");
     } else {
       const lifted = tag => { const lines = SRC.split(/\n/), at = lines.findIndex(l => l.indexOf(tag) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
+      const s5 = lifted("plant:folder-head-epoch"), t5 = s5 ? await t4Scene(s5) : null;
+      check(!!t5 && !!t5.low, "962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t4): " + (s5 ? shownS5(t5 && t5.low) : "plant line absent"));
       const s1 = lifted("plant:head-listed"), s2 = lifted("plant:folder-head-older"), s3 = lifted("plant:head-loaded"), s4 = lifted("plant:folder-head-ahead");
       const f2 = s1 ? await fScene(s1) : null, g2 = s2 ? await gScene(s2) : null, p2 = s3 ? await pScene(s3) : null, r2 = s4 ? await rFScene(s4) : null;
       check(!!f2 && !!entryOf(f2, "stone-board"), "962s5f2 lifting plant:head-listed keeps the unlisted catalog's entry (FAIL 962s5f): " + (s1 ? shownS5(f2) : "plant line absent"));
@@ -10015,23 +10029,41 @@ check(retryPlant.turned && retryPlant.back,
     /* 962s5z4: the catch-up, two polls. The new lead's own upload of its head comes on the first page, before any team file names it;
        the handover's team file on the next. The head shows once that file lands. Each page goes through applyBatch, as createChannel
        hands it each page of since/<seq>. */
-    const z4Scene = mod => {
+    /* The cursor moves past each page (setSeq, as the catch-up does), and the desk restarts between the head and the team file.
+       `junk`: a later head-shaped blob from a key that never leads comes between. */
+    const z4Scene = (mod, junk) => {
       const m = mod || C;
-      const p = progS(m);
+      let kept = null;
+      const save = st => { kept = JSON.parse(JSON.stringify(st)); };
+      const p = progS(m, { save, load: () => kept });
       const ctx = { keyFor: e => (e === 1 ? KS : null) };
       const head = sealS(headS(Date.now(), [edA(7, "Pebble the new lead wrote")], leadS2), 1, leadS2);
       const first = p.applyBatch([fetchOf(head, 10)], ctx, { whole: true });
+      p.setSeq(10);
+      if (junk) {
+        const stray = keyPair(false);
+        p.applyBatch([fetchOf(sealS(headS(Date.now(), [edA(9, "Pebble from nobody")], stray), 1, stray), 11)], ctx, { whole: true });
+        p.setSeq(11);
+      }
       const between = p.headNews(Date.now());
+      const q = progS(m, { save, load: () => kept });
       const team = sealS(JSON.stringify(docS2), 2, leadS2, C.TEAM_NAME);
-      const second = p.applyBatch([fetchOf(team, 11)], ctx, { whole: true });
-      return { first: first.applied.slice(), between: between.shown, second: second.applied.slice(), pinned: p.pinned().lead.keyId === leadS2.keyId,
-        news: p.headNews(Date.now()) };
+      const second = q.applyBatch([fetchOf(team, 12)], ctx, { whole: true });
+      q.setSeq(12);
+      return { first: first.applied.slice(), between: between.shown, second: second.applied.slice(), pinned: q.pinned().lead.keyId === leadS2.keyId,
+        seq: q.state().seq, news: q.headNews(Date.now()) };
     };
     const z4 = z4Scene();
     const z4Said = s => "first page " + JSON.stringify(s.first) + ", shown between " + s.between + ", second page " + JSON.stringify(s.second)
       + ", pinned " + s.pinned + ", news " + (s.news.shown ? s.news.edition : "none");
     check(z4.between === false && z4.pinned && z4.news.shown === true && z4.news.edition === "Pebble the new lead wrote",
-      "962s5z4 the new lead's own head on one page of the catch-up and the team file that hands over on the next: the head shows once that file lands: " + z4Said(z4));
+      "962s5z4 the new lead's own head on one page of the catch-up, the cursor past it and the desk restarted, and the team file that hands over on the next: the head shows once that file lands: " + z4Said(z4));
+    const z7 = z4Scene(null, true);
+    check(z7.pinned && z7.news.shown === true && z7.news.edition === "Pebble the new lead wrote",
+      "962s5z7 a later head-shaped blob from a key that never leads neither takes nor clears the kept head: " + z4Said(z7));
+    const z7Plant = await liftChannel("plant:item-keep", async mod => { const s = z4Scene(mod, true); return s.pinned && s.news.shown === false; });
+    check(z7Plant.turned && z7Plant.back, "962s5z8 lifting plant:item-keep lets the stray blob take the slot, and the new lead's head is lost (FAIL 962s5z7): "
+      + z7Plant.detail + ", sha " + (z7Plant.back ? "restored" : "differs"));
     const z4Held = await liftChannel("plant:item-held", async mod => { const s = z4Scene(mod); return s.pinned && s.news.shown === false; });
     check(z4Held.turned && z4Held.back, "962s5z5 lifting plant:item-held drops the new lead's head for good (FAIL 962s5z4): " + z4Held.detail + ", sha " + (z4Held.back ? "restored" : "differs"));
     const z4Again = await liftChannel("plant:item-again", async mod => { const s = z4Scene(mod); return s.pinned && s.news.shown === false; });

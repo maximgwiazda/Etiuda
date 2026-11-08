@@ -1501,13 +1501,16 @@ function createProgram(opts) {
     const peek = blob ? peekBlob(blob, pin.rt, key) : null;
     return !!peek && peek.kind === "file" && peek.path === HEAD_NAME;
   }
-  /* One such blob is kept, the latest in the relay's sequence, with the floor its counter is judged against. */
+  /* One such blob is kept, with the floor its counter is judged against: the first that reads back whole, replaced only by a later
+     one of the same writer that does, so another unnamed key's blob neither takes the slot nor clears it. */
   function holdItem(it, floors0) {
     const m = it.meta, was = st.heldItem;
     if (was && Number.isSafeInteger(it.seq) && it.seq < was.seq) return;
+    if (was && was.meta.writer !== m.writer) return; /* plant:item-keep */
     const ct = toBytes(it.ct);
-    st.heldItem = heldItemOf({ seq: Number.isSafeInteger(it.seq) ? it.seq : 0,
+    const next = heldItemOf({ seq: Number.isSafeInteger(it.seq) ? it.seq : 0,
       floor: it.floor !== undefined ? it.floor : floorAt(floors0, m.writer, m.epoch), meta: m, ct: ct ? ct.toString("base64") : "" });
+    if (next) st.heldItem = next;
   }
   /* The kept blob, once its writer is a lead: opened and judged as any lead blob is, and let go whatever the answer. */
   function itemAgain(floors0, ctx) {

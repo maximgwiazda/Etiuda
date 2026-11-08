@@ -3290,10 +3290,31 @@ function teamListedDoc(doc, use) {
     return own;
   }
   const ids = lineageOf(doc);
-  const hop = ids.length === 2 ? String(doc.grew && doc.grew.sha || "") : ids.length > 2 ? String(catalogLineageSha[ids[ids.length - 2]] || "") : "";
+  const hop = ids.length === 2 ? String(doc.grew && doc.grew.sha || "") : ids.length > 2 ? firstHopSha(ids[ids.length - 2], ids[ids.length - 1]) : "";
   let first = true;
   first = leadSignedPin(hop, pub); /* plant:s5-first-hop */
   return first;
+}
+/* The grew.sha of the copy `id` that grew from `root`: as seen this run, else read from that copy's own file in the catalog
+   folder or under its desks/, envelopes this desk opens included. Not found is "". */
+function firstHopSha(id, root) {
+  if (catalogLineageSha[id]) return String(catalogLineageSha[id]);
+  let sha = "";
+  sha = hopShaOnDisk(id, root); /* plant:s5-hop-disk */
+  return sha;
+}
+function hopShaOnDisk(id, root) {
+  const base = catalogFolder(), files = ecFilesIn(base);
+  let dirs = [];
+  try { dirs = fs.readdirSync(path.join(base, "desks")); } catch { dirs = []; }
+  for (const d of dirs) files.push(...ecFilesIn(path.join(base, "desks", d)));
+  for (const file of files) {
+    let doc = null;
+    try { if (fs.statSync(file).size <= BRANCH_TEXT_MAX) doc = catalogDocIn(catalogRead(fs.readFileSync(file, "utf8")).json); } catch { doc = null; }
+    const g = doc && doc.id === id && doc.grew && typeof doc.grew === "object" ? doc.grew : null;
+    if (g && String(g.id || "") === root && PIN_RE.test(String(g.sha || ""))) { catalogLineageSha[id] = String(g.sha); return String(g.sha); }
+  }
+  return "";
 }
 /* True where `pin` is the signed hash of an edition `leadPublic` signed, found among what this desk was handed or holds in its
    catalog folder, envelopes it can open included. Kept once found; anything not found is false. */
@@ -5760,6 +5781,9 @@ function folderHeadShown(team) {
     genuine = crypto.verify(null, Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), bytes]), pubKey, Buffer.from(sig.value, "hex"));
   } catch { genuine = false; }
   if (!genuine) return null; /* plant:folder-head-sig */
+  /* Below the epoch of the team file this mirror holds: left out, as the relay leaves it out. */
+  const held = teamTextChosen(folder).doc;
+  if (held && teamWhole(held) && String(held.id) === team && Number.isInteger(held.epoch) && doc.epoch < held.epoch) return null; /* plant:folder-head-epoch */
   const RCh = RelayChannel();
   /* Dated past the allowance ahead of this clock: refused, not floored, and read again at the next look. */
   if (doc.t > Date.now() + RCh.HEAD_AHEAD_MS) return null; /* plant:folder-head-ahead */

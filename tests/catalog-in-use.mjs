@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 115;
+const EXPECTED = 117;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1819,6 +1819,38 @@ try {
         const p = planted !== SRC ? await firstHop("s5u3-plant", planted) : null;
         check(!!p && p.written && !p.held, "962s5u4 lifting plant:s5-first-hop writes the copy's working copy to the share (FAIL 962s5u3): "
           + (p ? JSON.stringify(p) : "plant not found"));
+      }
+    }
+    /* ---- 962 stage 5, round three: a copy of a copy, grown at its first hop from the lead's signed edition, survives a restart:
+       the first hop's grew.sha is read from that copy's own file under desks/, so the withdrawal leaves both on the share. The copy of a copy is named to be read first, before the copy it grew from. */
+    {
+      const pinV3 = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
+      const chainCopy = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const leadEd = b0Body("quay-held");
+        put(box.share, "quay-lead.ec", leadEd);
+        const c1 = branchDoc(box, "62626262", "quay-held");
+        c1.grew.sha = pinV3(JSON.parse(leadEd));
+        const w1 = await box.D.ask("etiuda:branch-write", "quay-62626262", JSON.stringify(c1));
+        const c2 = branchDoc(box, "61616161", c1.id);
+        c2.grew = { id: c1.id, rev: 1, sha: pinV3(c1) };
+        const w2 = await box.D.ask("etiuda:branch-write", "quay-61616161", JSON.stringify(c2));
+        const before = { c1: fs.existsSync(branchAt(box, "62626262")), c2: fs.existsSync(branchAt(box, "61616161")) };
+        const again = loadDesk(box.D.ud, src);
+        again.api.tryCatalogAsk(again.win);
+        return { w1: !!w1 && w1.ok === true && !w1.held, w2: !!w2 && w2.ok === true && !w2.held, before,
+          c1: fs.existsSync(branchAt(box, "62626262")), c2: fs.existsSync(branchAt(box, "61616161")) };
+      };
+      const cc = await chainCopy("s5u5");
+      check(cc.w1 && cc.w2 && cc.before.c2 && cc.c1 && cc.c2,
+        "962s5u5 a copy of a copy grown at its first hop from the lead's signed edition stays on the share after a restart, its first hop read from that copy's own file ("
+        + JSON.stringify(cc) + ")");
+      if (PLANTS_OFF) skip("962s5u6 lifting plant:s5-hop-disk withdraws the copy of a copy after a restart");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-hop-disk") >= 0 ? "  /* plant:s5-hop-disk */" : l).join("\n");
+        const p = planted !== SRC ? await chainCopy("s5u5-plant", planted) : null;
+        check(!!p && p.before.c2 && !p.c2, "962s5u6 lifting plant:s5-hop-disk withdraws the copy of a copy after a restart (FAIL 962s5u5): " + (p ? JSON.stringify(p) : "plant not found"));
       }
     }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */
