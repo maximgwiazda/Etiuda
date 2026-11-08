@@ -425,7 +425,7 @@ function settingsHost(){
   return document.getElementById("screenHost");
 }
 function settingsScreenHtml(){
-  return '<div class="sx" data-sel="tint"><nav class="sx-nav" aria-label="'+esc(t("Settings"))+'">'
+  return '<div class="sx"><nav class="sx-nav" aria-label="'+esc(t("Settings"))+'">'
     +'<h1>'+esc(t("Settings"))+'</h1>'
     +'<label class="sx-search">'+sxIcon("search")+'<input type="search" id="sxSearch" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("Search settings"))+'" aria-label="'+esc(t("Search settings"))+'" value="'+esc(sxQuery)+'"></label>'
