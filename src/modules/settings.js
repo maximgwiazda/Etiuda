@@ -117,6 +117,11 @@ function hotkeyListen(box,on,now){
 function hotkeyTry(box,accel,said){
   const h=hotkeyHost();
   const want=accel==null ? hotkeyState().def : accel;
+  if(want==="Control+Shift+M" || accel==="Control+Shift+M"){
+    toast(hotkeyWhy("used",want));
+    hotkeyListen(box,false);
+    return;
+  }
   Promise.resolve(h.setHotkey(want)).then(r=>{
     if(!(r && r.ok)){ toast(hotkeyWhy(r&&r.why,want)); return undefined; }
     if(accel==null) lsDel(E_HOTKEY_KEY); else lsSet(E_HOTKEY_KEY,accel,true);
@@ -504,6 +509,7 @@ export {
   openSettings,
   applyPrefs,
   hotkeyFromEvent,
+  wireHotkeyRow,
   settingsBodyHtml,
   wireTeamRows
 };

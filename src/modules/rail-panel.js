@@ -176,7 +176,8 @@ function watchPillBarHeight(){
   if(!bar || typeof ResizeObserver!=="function") return;
   new ResizeObserver(scheduleOverlapOrder).observe(bar);
 }
-function railClearanceTop(){
+/* The header's foot, where the docked column begins; the panels clear it by 8px - see syncRailGeometry. */
+function railHeaderEdge(){
   let bottom=0;
   const header=document.querySelector("header");
   if(header) bottom=Math.max(bottom, header.getBoundingClientRect().bottom);
@@ -185,7 +186,7 @@ function railClearanceTop(){
      clears the header only and the expanded bar draws over it (docked sits one z below
      the pills; a peek stays above at 55). When they overlap, the cursor decides - see
      applyOverlapOrder. */
-  return Math.ceil(bottom) + 8;
+  return Math.ceil(bottom);
 }
 // Fixed rail geometry: clear header + any expanded pills (docked + peek).
 // Docked also aligns left/width to .rail-slot so page scroll never shifts it.
@@ -196,8 +197,9 @@ function syncRailGeometry(){
      fade-in should be. rail-ready holds it invisible until a real position exists; the
      first appearance is in place, and it fades. */
   document.body.classList.add("rail-ready");
-  const top=railClearanceTop();
+  const edge=railHeaderEdge(), top=edge + 8;
   const h=Math.max(160, Math.round(window.innerHeight - top - 8));
+  root.style.setProperty("--rail-col-top", edge + "px");
   root.style.setProperty("--rail-top", top + "px");
   root.style.setProperty("--rail-h", h + "px");
 
@@ -271,6 +273,7 @@ function syncRailLayout(){
   const docked=railDocked();
   const autoHide=railAutoHide();
   document.body.classList.toggle("rail-on", docked);
+  if(docked) document.body.classList.add("rail-col");
   document.body.classList.toggle("rail-auto-hide", autoHide);
   if(docked){
     railEdgeHover=false;
@@ -569,6 +572,7 @@ function applyRailPeek(){
     return;
   }else{ clearTimeout(railReachT); railReachT=0; }
   document.body.classList.toggle("rail-peek", show);
+  if(show) document.body.classList.remove("rail-col");
   // Re-measure under the (possibly multi-row) header before painting the overlay
   if(show) scheduleRailGeometry();
   else if(show) syncRailGeometry();

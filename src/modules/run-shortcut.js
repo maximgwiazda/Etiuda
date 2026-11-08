@@ -26,6 +26,20 @@ import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder,
 
 // ---- running a shortcut: the dispatcher reaches the whole app, so it stays here -------
 function runShortcut(id){
+  if(typeof document!=="undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")){
+    if(id==="tabNext"){ stepTab(1); return true; }
+    if(id==="tabPrev"){ stepTab(-1); return true; }
+    if(id==="tabNew"){ addTab(); return true; }
+    if(id==="tabClose"){ closeActiveTab(); return true; }
+    if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
+    if(id==="openMenu"){
+      const m=$("#settingsMenu");
+      if(!m) return false;
+      if(m.hidden){ closeLooseOverlays(); openSettingsMenu(true); } else closeSettingsMenu();
+      return true;
+    }
+    return false;
+  }
   if(id==="lanes") return lanesKey();
   // While the lanes show, the keys that walk and copy cards walk and copy the replies there.
   if(lanesOpen()){ const r=lanesShortcut(id); if(r!==undefined) return r; }

@@ -140,6 +140,8 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
+  /* Null outside an editor. Written in place: this function is sliced out and run on its own. */
+  edBaseline=null; edReturn=null;
   cutLeaves();
   /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
      and the next Tab starts from the top of the document. A dialog opened over another keeps
@@ -215,7 +217,11 @@ function edNavHtml(){
 /* Read off the CONTROLS rather than from each editor's own fields: three editors with
    different shapes all answer "has anything been typed" the same way, and a field added
    later is covered without being registered anywhere. */
-let edBaseline="";
+/* Null outside an editor. An editor sets it when it wires; any other dialog is not an
+   edit, and must not be compared with the editor that stood here before. */
+let edBaseline=null;
+/* The editor's own way back, the go edWireNav already undoes through. */
+let edReturn=null;
 function edFormState(){
   if(!modalCard) return "";
   const out=[];
@@ -246,7 +252,7 @@ function edRetype(was){
     else if(String(el.value||"")!==v){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); }
   });
 }
-function edDirty(){ return edFormState()!==edBaseline; }
+function edDirty(){ return edBaseline!==null && edFormState()!==edBaseline; }
 /* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
    ends disable rather than wrap, so a dead arrow is how you know you are at one. */
 /* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves: the
@@ -268,6 +274,7 @@ function edNavTo(run){
 }
 function edWireNav(list,cur,go){
   edMarkClean();
+  edReturn={go:go, cur:cur};
   const i=list.indexOf(cur);
   const step=d=>{
     const j=i+d;
@@ -361,9 +368,16 @@ function setModalBack(fn){ modalBack=(typeof fn==="function")?fn:null; }
  *  Consumed on use: the parent redraws and sets its own, and a hook that survived its screen
  *  would be worse than none. */
 function dismissModal(){
+  /* plant:maintenance-unsaved-edit-guard */
+  /* Leaving keeps the edit the way the next entry does: go back, and retype. */
+  const was=edDirty()?edTyped():null;
+  const ret=was?edReturn:null;
+  edBaseline=null; edReturn=null;
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
+  if(was && ret) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ ret.go(ret.cur); edRetype(was); }));
+  return true;
 }
 /* A flex column with a scrolling middle, so the scrollbar sits beside the content it
    moves - not running past the pinned heading and actions where nothing scrolls. Wrapped
@@ -402,6 +416,7 @@ function leaveModal(){
   dismissNode(g);
 }
 function closeModal(){
+  edBaseline=null; edReturn=null;
   scStopCapture();
   modalBack=null;
   leaveModal();
@@ -451,5 +466,5 @@ export {
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,
-  edNavHtml, edWireNav, edMarkClean, edStepLang,
+  edNavHtml, edWireNav, edMarkClean, edDirty, edStepLang,
 };
