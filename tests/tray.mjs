@@ -128,29 +128,34 @@ async function run() {
   check(decideClose(null) === "quit", "close policy: null options quits");
   check(decideClose({ stayInTray: true }) === "hide", "close policy: stayInTray true hides");
 
-  /* Never-hide cases: update-close, session-end, quitting, refusal close, harness window */
-  check(decideClose({ stayInTray: true, updateClose: true }) === "quit",
-    "close policy: updateClose quits even when stayInTray is true");
-  check(decideClose({ stayInTray: true, isUpdateClose: true }) === "quit",
-    "close policy: isUpdateClose alias quits");
+  /* Never-hide inputs under their one name quit with stayInTray on */
   check(decideClose({ stayInTray: true, etiudaInstallerClose: true }) === "quit",
-    "close policy: etiudaInstallerClose quits");
+    "close policy: etiudaInstallerClose quits with stayInTray on");
   check(decideClose({ stayInTray: true, sessionEnd: true }) === "quit",
-    "close policy: sessionEnd quits even when stayInTray is true");
-  check(decideClose({ stayInTray: true, isSessionEnd: true }) === "quit",
-    "close policy: isSessionEnd alias quits");
+    "close policy: sessionEnd quits with stayInTray on");
   check(decideClose({ stayInTray: true, quitting: true }) === "quit",
-    "close policy: quitting quits even when stayInTray is true");
-  check(decideClose({ stayInTray: true, isQuit: true }) === "quit",
-    "close policy: isQuit alias quits");
+    "close policy: quitting quits with stayInTray on");
   check(decideClose({ stayInTray: true, refusalClose: true }) === "quit",
-    "close policy: refusalClose quits even when stayInTray is true");
-  check(decideClose({ stayInTray: true, isRefusal: true }) === "quit",
-    "close policy: isRefusal alias quits");
+    "close policy: refusalClose quits with stayInTray on");
   check(decideClose({ stayInTray: true, placedWindow: true }) === "quit",
-    "close policy: placedWindow (harness) quits even when stayInTray is true");
-  check(decideClose({ stayInTray: true, isHarness: true }) === "quit",
-    "close policy: isHarness alias quits");
+    "close policy: placedWindow quits with stayInTray on");
+
+  /* An unknown key throws so a misspelt key cannot fall through and hide */
+  let unknownThrew = false;
+  try {
+    decideClose({ stayInTray: true, unknownKey: true });
+  } catch {
+    unknownThrew = true;
+  }
+  check(unknownThrew === true, "close policy: an unknown key throws");
+
+  let misspeltThrew = false;
+  try {
+    decideClose({ stayInTray: true, updateClose: true });
+  } catch {
+    misspeltThrew = true;
+  }
+  check(misspeltThrew === true, "close policy: misspelt alias updateClose throws");
 
   /* 2. First-close note once: says sentence once and remembers */
   {
@@ -186,6 +191,18 @@ async function run() {
       body: "First Close Body",
     });
     check(res2 === null || (res2 && res2.shown === false), "first-close does not show again when told is true");
+
+    /* Leg: no Notification, told stays false */
+    let toldNoNotif = false;
+    const resNoNotif = notifyFirstClose({
+      electron: {},
+      told: toldNoNotif,
+      setTold: (val) => { toldNoNotif = val; },
+      title: "First Close Title",
+      body: "First Close Body",
+    });
+    check(resNoNotif === null, "first-close returns null when electron has no Notification");
+    check(toldNoNotif === false, "no Notification, told stays false");
   }
 
   /* 3. Login item and its arguments */
@@ -341,9 +358,9 @@ async function run() {
       fs.writeFileSync(scratchFile, lines.join("\n"), "utf8");
 
       const scratchMod = nodeRequire(scratchFile);
-      const mutatedDecision = scratchMod.decideClose({ stayInTray: true, updateClose: true });
+      const mutatedDecision = scratchMod.decideClose({ stayInTray: true, etiudaInstallerClose: true });
       check(mutatedDecision === "hide",
-        "planted removal of updateClose rule turns decideClose({ stayInTray: true, updateClose: true }) to 'hide'");
+        "planted removal of update-close rule turns decideClose({ stayInTray: true, etiudaInstallerClose: true }) to 'hide'");
     } finally {
       try {
         fs.rmSync(scratchDir, { recursive: true, force: true });

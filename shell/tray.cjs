@@ -1,7 +1,16 @@
 "use strict";
 /* THE TRAY AND NOTIFICATION HELPER, shared between Desk and Studio through the pin.
    Pure Node with Electron passed in, so every path is testable in bare node.
-   British English, no em or en dashes. */
+   British English, no em or en dashes.
+
+   Input names accepted by decideClose (one name per input, unknown keys throw):
+     stayInTray: boolean, whether minimising or closing to tray is enabled.
+     etiudaInstallerClose: boolean, installer --update-close (shell/main.js win.etiudaInstallerClose).
+     sessionEnd: boolean, Windows session is ending (shell/main.js session-end).
+     quitting: boolean, application is shutting down (shell/main.js quitting).
+     refusalClose: boolean, closed from refusal page (shell/main.js closeFromRefusal).
+     placedWindow: boolean, offscreen harness instance (shell/main.js placed windows / PLACED_ASIDE).
+*/
 
 const APP_IDS = Object.freeze({
   desktop: "app.etiuda.desktop",
@@ -15,15 +24,30 @@ const TOAST_BUTTON_PROBE = Object.freeze({
   reason: "Windows notifications in Electron do not support action buttons; a click opens the item.",
 });
 
+const VALID_CLOSE_KEYS = new Set([
+  "stayInTray",
+  "etiudaInstallerClose",
+  "sessionEnd",
+  "quitting",
+  "refusalClose",
+  "placedWindow",
+]);
+
 /** Decide whether window close hides to tray or quits.
- *  Never-hide cases always quit: installer update-close, session-end, quitting, refusal, harness. */
+ *  Never-hide cases always quit: installer update-close, session-end, quitting, refusal, harness.
+ *  One name per input; unknown keys throw so misspelt inputs cannot hide. */
 function decideClose(opts) {
   if (!opts) return "quit";
-  /* plant:update-close */ if (opts.updateClose || opts.isUpdateClose || opts.etiudaInstallerClose) return "quit";
-  if (opts.sessionEnd || opts.isSessionEnd) return "quit";
-  if (opts.quitting || opts.isQuit) return "quit";
-  if (opts.refusalClose || opts.isRefusal) return "quit";
-  if (opts.placedWindow || opts.isHarness) return "quit";
+  for (const k of Object.keys(opts)) {
+    if (!VALID_CLOSE_KEYS.has(k)) {
+      throw new Error("Unknown close option: " + k);
+    }
+  }
+  /* plant:update-close */ if (opts.etiudaInstallerClose) return "quit";
+  if (opts.sessionEnd) return "quit";
+  if (opts.quitting) return "quit";
+  if (opts.refusalClose) return "quit";
+  if (opts.placedWindow) return "quit";
   if (opts.stayInTray) return "hide";
   return "quit";
 }
@@ -39,20 +63,27 @@ function setAppUserModelId(electronApp, appId) {
 function showNotification(opts) {
   const { electron, appId, title, body, icon, onClick } = opts || {};
   if (!electron || !electron.Notification) return null;
+  if (typeof electron.Notification.isSupported === "function" && !electron.Notification.isSupported()) {
+    return null;
+  }
   if (appId && electron.app) {
     setAppUserModelId(electron.app, appId);
   }
-  const notif = new electron.Notification({
-    title,
-    body,
-    icon,
-    actions: [],
-  });
-  if (typeof onClick === "function") {
-    notif.on("click", onClick);
+  try {
+    const notif = new electron.Notification({
+      title,
+      body,
+      icon,
+      actions: [],
+    });
+    if (typeof onClick === "function") {
+      notif.on("click", onClick);
+    }
+    notif.show();
+    return notif;
+  } catch {
+    return null;
   }
-  notif.show();
-  return notif;
 }
 
 /** Show the first-close toast once and remember that it has been shown. */
@@ -60,6 +91,7 @@ function notifyFirstClose(opts) {
   const { told, setTold } = opts || {};
   if (told) return null;
   const notif = showNotification(opts);
+  if (!notif) return null;
   if (typeof setTold === "function") {
     setTold(true);
   }
