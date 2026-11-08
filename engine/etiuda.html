@@ -1202,6 +1202,8 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
 .menu.e-ctx:focus{outline:none}
+.menu.e-ctx button{display:flex;align-items:center;justify-content:space-between;width:100%}
+.menu.e-ctx button small{margin-left:auto;padding-left:14px;font:12px var(--sans);color:var(--dim)}
 body.pills-off .pills-slot{display:none}
 /* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
    back into flow: the snap has already taken its final display. */
@@ -3542,6 +3544,7 @@ body.screen-on #lanes { display: none !important; }
 .sx .set-ctl{grid-column:3;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
 .sx .sc-list{max-height:none;overflow:visible;gap:0;margin:0}
 .sx .sc-row{padding:10px 16px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+.sc-row .chg{font:600 10.5px var(--sans);color:var(--accent);margin-left:6px;vertical-align:middle}
 .sx .sc-list>.sc-row:first-child{border-top:0}
 .sx .sc-sep{margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
 .sx-note{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 2px 0;color:var(--dim);font-size:12.5px}
@@ -7059,6 +7062,10 @@ What you type stays in this browser only.`;
     "Clear the chosen intents ({N})": "Wyczyść wybrane intencje ({N})",
     "Reveal / expand categories": "Pokaż / rozwiń kategorie",
     "Maintenance panel": "Panel konserwacji",
+    "new key": "nowy skrót",
+    "Rename": "Zmień nazwę",
+    "Rename the focused card, intent or category": "Rename the focused card, intent or category",
+    // placeholder: Claudette
     "Select search text": "Zaznacz tekst wyszukiwania",
     "{PAX} in the vocative": "{PAX} w wołaczu",
     "Customer's gender": "Płeć klienta",
@@ -11665,7 +11672,17 @@ What you type stays in this browser only.`;
       label: "Maintenance panel",
       hint: "Readings about this machine, and rescue switches",
       def: { code: "KeyM", key: "m", ctrl: 1, alt: 0, shift: 1, meta: 0 },
-      inField: 1
+      inField: 1,
+      newKey: 1
+    },
+    /* F2: renames the focused card, intent or category, and in the Library a category row's name field (board 965). */
+    {
+      id: "rename",
+      label: "Rename",
+      hint: "Rename the focused card, intent or category",
+      def: { code: "F2", key: "F2", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 0,
+      newKey: 1
     },
     /* Ctrl+A reaches the search box without the caret being in it - after a pick the box
        is deliberately blurred, and the natural way to replace a query is Ctrl+A and type.
@@ -16631,6 +16648,7 @@ What you type stays in this browser only.`;
     scListShown: () => scListShown,
     scRepaint: () => scRepaint,
     scStopCapture: () => scStopCapture,
+    shortcutsListHtml: () => shortcutsListHtml,
     shortcutsShown: () => shortcutsShown,
     wireShortcutsList: () => wireShortcutsList
   });
@@ -16651,7 +16669,8 @@ What you type stays in this browser only.`;
       return '<button type="button" class="sc-bind' + (fixed2 ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed2 ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
     };
     const row2 = (d) => {
-      return '<div class="sc-row" data-sc="' + esc(d.id) + '"><div class="sc-label">' + esc(t(d.label)) + (d.hint ? "<small>" + esc(t(d.hint)) + "</small>" : "") + '</div><div class="sc-binds">' + bind(d, 1) + (d.fixed ? "" : bind(d, 2)) + "</div></div>";
+      const chg = d.newKey ? ' <span class="chg">' + esc(t("new key")) + "</span>" : "";
+      return '<div class="sc-row" data-sc="' + esc(d.id) + '"><div class="sc-label">' + esc(t(d.label)) + chg + (d.hint ? "<small>" + esc(t(d.hint)) + "</small>" : "") + '</div><div class="sc-binds">' + bind(d, 1) + (d.fixed ? "" : bind(d, 2)) + "</div></div>";
     };
     const fixed = SC_DEFS.filter((d) => d.fixed && scMatch(d, q));
     return SC_DEFS.filter((d) => !d.fixed && scMatch(d, q)).map(row2).join("") + (fixed.length ? '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" + fixed.map(row2).join("") : "");
@@ -27582,7 +27601,13 @@ What you type stays in this browser only.`;
     );
     drawPrev();
     const firstEl = nameEls[primary];
-    if (firstEl && firstEl.focus) firstEl.focus();
+    if (firstEl && firstEl.focus) {
+      firstEl.focus();
+      try {
+        firstEl.select();
+      } catch (_) {
+      }
+    }
   }
   var IE_HINT = {
     clause: { en: "e.g. changing your flight", pl: "np. zmianą lotu (narzędnik po z/ze)" },
@@ -27703,10 +27728,18 @@ What you type stays in this browser only.`;
       }
     };
     edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
-    setTimeout(() => {
+    const focusClause = () => {
       const el = $("#" + langFieldId("ie", "clause", CONTENT_LANGS[0]));
-      if (el) el.focus();
-    }, 30);
+      if (el && el.focus) {
+        el.focus();
+        try {
+          el.select();
+        } catch (_) {
+        }
+      }
+    };
+    focusClause();
+    setTimeout(focusClause, 30);
   }
 
   // src/modules/card-editor.js
@@ -28858,10 +28891,18 @@ What you type stays in this browser only.`;
       id,
       (nid) => openCardEditor(nid, null, fromManage)
     );
-    setTimeout(() => {
+    const focusTitle = () => {
       const el = $("#" + meFieldId("t", CONTENT_LANGS[0]));
-      if (el) el.focus();
-    }, 30);
+      if (el) {
+        el.focus();
+        try {
+          el.select();
+        } catch (_) {
+        }
+      }
+    };
+    focusTitle();
+    setTimeout(focusTitle, 30);
   }
   function ensureCustomCat(name) {
     applyCatsToGlobal();
@@ -30533,7 +30574,7 @@ What you type stays in this browser only.`;
       const nMac = rows.reduce((sum, o) => sum + macroBlockCount(o.m), 0);
       const key = "cat:" + k;
       const op = mgOpen.has(key);
-      const name = '<span class="mg-cat-fixed">' + esc(label2) + "</span>";
+      const name = fixed || k === "__orphan" ? '<span class="mg-cat-fixed">' + esc(label2) + "</span>" : '<input type="text" class="mg-cat-lab2" data-rename="' + esc(k) + '" value="' + esc(label2) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Category name")) + '">';
       const x = !n && k !== "__orphan" ? '<button type="button" class="mg-cat-x2 icbtn" data-delcat="' + esc(k) + '" title="Delete this empty category" aria-label="Delete category">' + ICON_TRASH + "</button>" : "";
       const add = k === "__orphan" ? "" : (function() {
         const tip = esc(t("Add a card to {CAT}").replace("{CAT}", label2));
@@ -31123,6 +31164,44 @@ What you type stays in this browser only.`;
       btn.onclick = () => {
         if (removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary();
       };
+    });
+    page.querySelectorAll("input.mg-cat-lab2[data-rename]").forEach((inp) => {
+      const k = inp.getAttribute("data-rename");
+      const orig = () => CATS[k] || k;
+      const apply = () => {
+        const name = inp.value.trim();
+        if (!name || name === orig()) {
+          inp.value = orig();
+          return;
+        }
+        if (!pack.catLabels) pack.catLabels = {};
+        pack.catLabels[k] = name;
+        if (pack.customCats && pack.customCats[k]) pack.customCats[k] = name;
+        savePack();
+        applyCatsToGlobal();
+        drawPills();
+        render();
+        if (typeof drawIntentRail === "function") drawIntentRail();
+        inp.value = name;
+        toast("Category updated");
+      };
+      inp.addEventListener("focus", () => {
+        try {
+          inp.select();
+        } catch (_) {
+        }
+      });
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          inp.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          inp.value = orig();
+          inp.blur();
+        }
+      });
+      inp.addEventListener("blur", apply);
     });
     page.querySelectorAll("[data-delcat]").forEach((btn) => {
       btn.onclick = (e) => {
@@ -33442,7 +33521,7 @@ What you type stays in this browser only.`;
     const btn = (a) => card.querySelector('.cacts [data-act="' + a + '"]');
     const note = btn("note"), edit = btn("edit"), fav = btn("fav"), hide = btn("hide");
     rows.push("-");
-    if (edit) rows.push({ label: label(edit, t("Edit this card")), act: () => press(edit) });
+    if (edit) rows.push({ label: label(edit, t("Edit this card")), act: () => press(edit), key: "F2" });
     if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
     if (note) rows.push({ label: t("Show the note"), act: () => press(note) });
     if (hide) rows.push({ label: t(card.classList.contains("is-hidden") ? "Show this card again" : "Put this card away"), act: () => press(hide) });
@@ -33472,7 +33551,7 @@ What you type stays in this browser only.`;
     }
     const fav = row2.querySelector("[data-fav-intent]"), edit = row2.querySelector("[data-edit-intent]"), hide = row2.querySelector("[data-hide-intent]");
     if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
-    if (edit) rows.push({ label: label(edit, t("Edit this intent")), act: () => press(edit, { ctrlKey: true }) });
+    if (edit) rows.push({ label: label(edit, t("Edit this intent")), act: () => press(edit, { ctrlKey: true }), key: "F2" });
     if (hide) rows.push({ label: label(hide, t("Hide this intent")), act: () => press(hide, { shiftKey: true }) });
     return rows;
   }
@@ -33483,7 +33562,7 @@ What you type stays in this browser only.`;
     const ed = pill.querySelector("[data-editcat]");
     if (ed) {
       rows.push("-");
-      rows.push({ label: t("Edit this category"), act: () => press(ed) });
+      rows.push({ label: t("Edit this category"), act: () => press(ed), key: "F2" });
     }
     return rows;
   }
@@ -33526,7 +33605,11 @@ What you type stays in this browser only.`;
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("role", "menuitem");
-      b.textContent = r.label;
+      if (r.key) {
+        b.innerHTML = "<span>" + esc(r.label) + "</span><small>" + esc(r.key) + "</small>";
+      } else {
+        b.textContent = r.label;
+      }
       b.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -33902,6 +33985,22 @@ What you type stays in this browser only.`;
         } else closeSettingsMenu();
         return true;
       }
+      if (id === "rename") {
+        const a = typeof document !== "undefined" ? document.activeElement : null;
+        const row2 = a && a.closest ? a.closest(".mg-cat-row, .mg-cat") : null;
+        if (row2) {
+          const inp = row2.querySelector("input.mg-cat-lab2[data-rename], input.mg-cat-lab2");
+          if (inp && inp.focus) {
+            inp.focus();
+            try {
+              inp.select();
+            } catch (_) {
+            }
+            return true;
+          }
+        }
+        return false;
+      }
       return false;
     }
     if (id === "lanes") return lanesKey();
@@ -33965,6 +34064,43 @@ What you type stays in this browser only.`;
       closeLooseOverlays();
       b.click();
       return true;
+    }
+    if (id === "rename") {
+      const a = typeof document !== "undefined" ? document.activeElement : null;
+      const card = a && a.closest ? a.closest("#list .card[data-id], .card[data-id]") : null;
+      if (card && card.dataset && card.dataset.id) {
+        closeLooseOverlays();
+        hooks.openCardEditor(card.dataset.id, null, false);
+        return true;
+      }
+      const item = a && a.closest ? a.closest("#intentRail .rail-item[data-si], .rail-item[data-si]") : null;
+      if (item && item.dataset && item.dataset.si != null) {
+        closeLooseOverlays();
+        hooks.openIntentEditor(+item.dataset.si);
+        return true;
+      }
+      const pill = a && a.closest ? a.closest("#pills .pill[data-k], .pill[data-k]") : null;
+      if (pill && pill.dataset && pill.dataset.k) {
+        closeLooseOverlays();
+        hooks.openCategoryEditor(pill.dataset.k, true);
+        return true;
+      }
+      if (markSurface() === "intent") {
+        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+        if (idx >= 0) {
+          closeLooseOverlays();
+          hooks.openIntentEditor(idx);
+          return true;
+        }
+      }
+      if (markSurface() === "card" || entrySel) {
+        if (entrySel && entrySel.id) {
+          closeLooseOverlays();
+          hooks.openCardEditor(entrySel.id, null, false);
+          return true;
+        }
+      }
+      return false;
     }
     if (id === "selectSearch") {
       if (!intentEl) return false;

@@ -1202,6 +1202,8 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
 .menu.e-ctx:focus{outline:none}
+.menu.e-ctx button{display:flex;align-items:center;justify-content:space-between;width:100%}
+.menu.e-ctx button small{margin-left:auto;padding-left:14px;font:12px var(--sans);color:var(--dim)}
 body.pills-off .pills-slot{display:none}
 /* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
    back into flow: the snap has already taken its final display. */
@@ -3542,6 +3544,7 @@ body.screen-on #lanes { display: none !important; }
 .sx .set-ctl{grid-column:3;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
 .sx .sc-list{max-height:none;overflow:visible;gap:0;margin:0}
 .sx .sc-row{padding:10px 16px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+.sc-row .chg{font:600 10.5px var(--sans);color:var(--accent);margin-left:6px;vertical-align:middle}
 .sx .sc-list>.sc-row:first-child{border-top:0}
 .sx .sc-sep{margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
 .sx-note{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 2px 0;color:var(--dim);font-size:12.5px}

@@ -6193,6 +6193,59 @@ const CARD_B = {
     contains: c => o.has(c),
     toggle: (c, f) => { const w = f === undefined ? !o.has(c) : Boolean(f); if (w) o.add(c); else o.delete(c); return w; }
   });
+
+  function matchSel(n, s) {
+    if (!n) return false;
+    s = s.trim();
+    if (s.includes(",")) return s.split(",").some(part => matchSel(n, part));
+    const parts = s.split(/\s+/);
+    if (parts.length > 1) {
+      const target = parts[parts.length - 1];
+      if (!matchSel(n, target)) return false;
+      const ancestorSel = parts.slice(0, -1).join(" ");
+      let p = n.parentNode;
+      while (p) {
+        if (matchSel(p, ancestorSel)) return true;
+        p = p.parentNode;
+      }
+      return false;
+    }
+    let sel = s;
+    const tagMatch = sel.match(/^([A-Za-z0-9]+)/);
+    if (tagMatch) {
+      if ((n.tagName || "").toUpperCase() !== tagMatch[1].toUpperCase()) return false;
+      sel = sel.slice(tagMatch[1].length);
+    }
+    const idMatch = sel.match(/#([A-Za-z0-9_-]+)/);
+    if (idMatch) {
+      if (n.id !== idMatch[1]) return false;
+    }
+    const classMatches = sel.match(/\.([A-Za-z0-9_-]+)/g);
+    if (classMatches) {
+      for (const cm of classMatches) {
+        if (!n.classList || !n.classList.contains(cm.slice(1))) return false;
+      }
+    }
+    const attrMatches = sel.match(/\[([A-Za-z0-9_-]+)(?:=["']?([^"']*)["']?)?\]/g);
+    if (attrMatches) {
+      for (const am of attrMatches) {
+        const m = am.match(/\[([A-Za-z0-9_-]+)(?:=["']?([^"']*)["']?)?\]/);
+        if (m) {
+          const attr = m[1], val = m[2];
+          if (attr.startsWith("data-")) {
+            const k = attr.slice(5).replace(/-([a-z])/g, (_, g) => g.toUpperCase());
+            if (!n.dataset || n.dataset[k] === undefined) return false;
+            if (val !== undefined && String(n.dataset[k]) !== val) return false;
+          } else {
+            if (!n.getAttribute || n.getAttribute(attr) == null) return false;
+            if (val !== undefined && n.getAttribute(attr) !== val) return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
   const el = extra => {
     const classes = new Set((extra && extra.className || "").split(/\s+/).filter(Boolean));
     const e = Object.assign({
@@ -6213,9 +6266,7 @@ const CARD_B = {
       querySelector(s) {
         if (!this.kids) return null;
         for (const k of this.kids) {
-          if (s.startsWith("#") && k.id === s.slice(1)) return k;
-          if (s.startsWith(".") && k.classList && k.classList.contains(s.slice(1))) return k;
-          if (k.tagName === s.toUpperCase()) return k;
+          if (matchSel(k, s)) return k;
           const found = k.querySelector && k.querySelector(s);
           if (found) return found;
         }
@@ -6226,8 +6277,7 @@ const CARD_B = {
         const walk = n => {
           if (!n || !n.kids) return;
           for (const k of n.kids) {
-            if (s.startsWith(".") && k.classList && k.classList.contains(s.slice(1))) out.push(k);
-            else if (s === "input.mg-cat-lab2" && k.tagName === "INPUT" && k.classList && k.classList.contains("mg-cat-lab2")) out.push(k);
+            if (matchSel(k, s)) out.push(k);
             walk(k);
           }
         };
@@ -6237,10 +6287,7 @@ const CARD_B = {
       closest(s) {
         let p = this;
         while (p) {
-          if (s.startsWith(".") && p.classList && p.classList.contains(s.slice(1))) return p;
-          if (s.startsWith("#") && p.id === s.slice(1)) return p;
-          if (s.includes(",") && s.split(",").map(x => x.trim()).some(part => (part.startsWith(".") && p.classList && p.classList.contains(part.slice(1))) || (part.startsWith("#") && p.id === part.slice(1)))) return p;
-          if (p.tagName === s.toUpperCase()) return p;
+          if (matchSel(p, s)) return p;
           p = p.parentNode;
         }
         return null;
@@ -6434,27 +6481,33 @@ const CARD_B = {
 
     // D4-7. context-menu rows show F2 as Studio's do
     check("context-menu.js", "D4-7 context-menu rows show F2 as Studio's do", () => {
-      const cardEl = el({ dataset: { id: "c-1" }, querySelector: s => (s.includes('edit') ? el() : null) });
-      const intentElNode = el({ dataset: { si: "1" }, querySelector: s => (s.includes('edit') ? el() : null) });
-      const pillElNode = el({ dataset: { k: "cat-1" }, querySelector: s => (s.includes('editcat') ? el() : null) });
+      const hadCards = AS.cards;
+      AS.setCards([{ id: "c-1", p: ["hello"] }]);
+      try {
+        const cardEl = el({ dataset: { id: "c-1" }, querySelector: s => (s.includes('edit') ? el() : null) });
+        const intentElNode = el({ dataset: { si: "1" }, querySelector: s => (s.includes('edit') ? el() : null) });
+        const pillElNode = el({ dataset: { k: "cat-1" }, querySelector: s => (s.includes('editcat') ? el() : null) });
 
-      cardEl.closest = s => (s.includes(".card") ? cardEl : null);
-      intentElNode.closest = s => (s.includes(".rail-item") ? intentElNode : null);
-      pillElNode.closest = s => (s.includes(".pill") ? pillElNode : null);
+        cardEl.closest = s => (s.includes(".card") ? cardEl : null);
+        intentElNode.closest = s => (s.includes(".rail-item") ? intentElNode : null);
+        pillElNode.closest = s => (s.includes(".pill") ? pillElNode : null);
 
-      const cardRows = CX.ctxRowsFor(cardEl);
-      const intentRows = CX.ctxRowsFor(intentElNode);
-      const pillRows = CX.ctxRowsFor(pillElNode);
+        const cardRows = CX.ctxRowsFor(cardEl);
+        const intentRows = CX.ctxRowsFor(intentElNode);
+        const pillRows = CX.ctxRowsFor(pillElNode);
 
-      const cardEdit = cardRows && cardRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this card"))));
-      const intentEdit = intentRows && intentRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this intent"))));
-      const pillEdit = pillRows && pillRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this category"))));
+        const cardEdit = cardRows && cardRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this card"))));
+        const intentEdit = intentRows && intentRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this intent"))));
+        const pillEdit = pillRows && pillRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this category"))));
 
-      if (!cardEdit || cardEdit.key !== "F2") return "card row missing key F2";
-      if (!intentEdit || intentEdit.key !== "F2") return "intent row missing key F2";
-      if (!pillEdit || pillEdit.key !== "F2") return "pill row missing key F2";
+        if (!cardEdit || cardEdit.key !== "F2") return "card row missing key F2";
+        if (!intentEdit || intentEdit.key !== "F2") return "intent row missing key F2";
+        if (!pillEdit || pillEdit.key !== "F2") return "pill row missing key F2";
 
-      return true;
+        return true;
+      } finally {
+        AS.setCards(hadCards);
+      }
     });
 
   } finally {
