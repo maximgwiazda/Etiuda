@@ -7925,6 +7925,14 @@ What you type stays in this browser only.`;
     "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.": "Lider zespołu nadal widzi nazwę i wydanie tego katalogu, ale jego treść i zmiany wprowadzone w nim na tym stanowisku nigdy nie są wysyłane. Oznaczenie wycofuje to, co stanowisko z niego udostępniło; tego, co lider zespołu już otworzył, nie da się odebrać.",
     "This catalog is no longer private, and the team's rules apply to it again.": "Ten katalog nie jest już prywatny i znów obowiązują go zasady zespołu.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
+    "Another catalog of the team has a newer edition.": "Another catalog of the team has a newer edition.",
+    // placeholder: Claudette
+    "{N} other catalogs of the team have newer editions.": "{N} other catalogs of the team have newer editions.",
+    // placeholder: Claudette
+    "few␟{N} other catalogs of the team have newer editions.": "{N} other catalogs of the team have newer editions.",
+    // placeholder: Claudette
+    "many␟{N} other catalogs of the team have newer editions.": "{N} other catalogs of the team have newer editions.",
+    // placeholder: Claudette
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.": "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.",
     /* Claudette's words, 2026-11-08: said where a catalog is marked private or the lead's switch goes off. */
@@ -15822,7 +15830,33 @@ What you type stays in this browser only.`;
     const edition = typeof h.edition === "string" ? h.edition : "", published = typeof h.published === "string" ? h.published : "";
     if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80 || !Number.isFinite(h.t)) return null;
     if (/[\u0000-\u001f\u007f]/.test(edition + published)) return null;
-    return { edition, published, t: h.t };
+    const kept = { edition, published, t: h.t };
+    const list2 = headEntriesKept(h.editions), named = list2 ? headNamed(list2, edition, published) : null;
+    if (named) {
+      kept.editions = list2;
+      kept.catalog = named.catalog;
+    }
+    return kept;
+  }
+  function headEntriesKept(list2) {
+    if (!Array.isArray(list2) || !list2.length || list2.length > 64) return null;
+    const out = [], ids = /* @__PURE__ */ new Set();
+    for (const e of list2) {
+      if (!e || typeof e !== "object" || typeof e.catalog !== "string" || e.catalog.length < 1 || e.catalog.length > 200 || ids.has(e.catalog) || !Number.isInteger(e.rev) || typeof e.edition !== "string" || typeof e.published !== "string" || e.edition.length > 120 || e.published.length > 80 || /[\u0000-\u001f\u007f]/.test(e.catalog + e.edition + e.published)) return null;
+      ids.add(e.catalog);
+      out.push({ catalog: e.catalog, rev: e.rev, edition: e.edition, published: e.published, newer: e.newer === true });
+    }
+    return out;
+  }
+  function headNamed(list2, edition, published) {
+    const same = list2.filter((e) => e.edition === edition && e.published === published);
+    if (same.length < 2) return same[0] || null;
+    const c = typeof window !== "undefined" && window.E_CATALOG && typeof window.E_CATALOG === "object" ? String(window.E_CATALOG.id || "") : "";
+    let pick = same.filter((e) => e.catalog === c)[0] || null;
+    if (!pick) {
+      for (const e of same) if (!pick || e.rev >= pick.rev) pick = e;
+    }
+    return pick;
   }
   var LAPSE_STEPS = ["grace", "read-only", "lapsed", "gone", "unknown"];
   var instantOk = (v) => v === null || Number.isSafeInteger(v);
@@ -31527,7 +31561,11 @@ What you type stays in this browser only.`;
     return fileStamp(at);
   }
   function teamHeadNote(h) {
-    return t("Newest edition {E}, published {WHEN}. The team's news: {AGE}.").split("{E}").join(h.edition).split("{WHEN}").join(h.published).split("{AGE}").join(headAgeWords(h.t));
+    const said = t("Newest edition {E}, published {WHEN}. The team's news: {AGE}.").split("{E}").join(h.edition).split("{WHEN}").join(h.published).split("{AGE}").join(headAgeWords(h.t));
+    let others = (h.editions || []).filter((e) => e.catalog !== h.catalog);
+    others = others.filter((e) => e.newer);
+    if (!others.length) return said;
+    return said + " " + counted(others.length, "Another catalog of the team has a newer edition.", "{N} other catalogs of the team have newer editions.");
   }
   function teamRowHtml(l, status, bar) {
     const notes = [
