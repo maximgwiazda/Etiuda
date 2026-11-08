@@ -8056,7 +8056,7 @@ function pickPage() {
   };
   const FOLD_RE = new RegExp("[" + Object.keys(FOLD).join("") + "]", "g");
   const FIELDS = ["title", "keys", "meta", "body"];
-  const WEIGHT = { title: 10, keys: 6, meta: 3, body: 1 };
+  const WEIGHT = { title: 10, keys: 6, meta: 3, body: 1 }; /* plant:pick-weight */
   const Q_EXACT = 3, Q_PREFIX = 2, Q_LOOSE = 1;
   const SAME_FIELD = 1.5, ADJACENT = 8, TITLE_START = 4, PROX = 6;
   const PROX_FIELD = { title: 1, keys: 0.8, meta: 0.6, body: 0.5 };
