@@ -1,0 +1,248 @@
+/* THE AREA RUN SHORTCUT COVERS ALL GATES. Node only.
+ *
+ *     node tests/gate-run.mjs
+ *
+ * An area run inherits green only from a run that covered it:
+ * 1. A green file-mode record on the tree, then an area: the area runs its gates.
+ * 2. A whole-chain record on the tree that stopped at a red, later marked machine: the area runs.
+ * 3. A complete green area record on the tree whose ran misses one of this area's files: the area runs.
+ * 4. A complete green whole-chain record covering every file: the area skips, naming the record.
+ * 5. A planted removal of the coverage check turns leg 1 red, by the tree's plant convention, and honours ETIUDA_PLANTS=off.
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+
+let asserted = 0, failed = 0;
+function check(cond, line) {
+  asserted++;
+  if (cond) process.stdout.write("  ok   " + line + "\n");
+  else { failed++; process.stdout.write("  FAIL " + line + "\n"); }
+}
+
+function skip(line) {
+  asserted++;
+  process.stdout.write("  SKIP " + line + "\n");
+}
+
+function gitCmd(args, cwd, env) {
+  const r = spawnSync("git", args, { cwd, env, encoding: "utf8" });
+  if (r.status !== 0) throw new Error("git " + args.join(" ") + " failed: " + (r.stderr || r.stdout));
+  return String(r.stdout || "").trim();
+}
+
+function runTool(lab, args, customEnv = {}) {
+  const env = Object.assign({}, process.env, {
+    ETIUDA_RUNS: lab.runs,
+    ETIUDA_CHAINS_PATH: lab.chainsPath,
+    ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock"),
+  }, customEnv);
+  const r = spawnSync(process.execPath, [path.join(lab.lab, "tools", "gate-run.mjs"), ...args], {
+    cwd: lab.lab,
+    env,
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 60000,
+  });
+  return {
+    exit: r.status,
+    out: String(r.stdout || "") + String(r.stderr || ""),
+  };
+}
+
+function setupLab() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-gate-run-lab-"));
+  const lab = path.join(root, "lab");
+  const runs = path.join(root, "runs");
+  const chainsPath = path.join(root, "chains.jsonl");
+
+  fs.mkdirSync(path.join(lab, "tools"), { recursive: true });
+  fs.mkdirSync(path.join(lab, "tests"), { recursive: true });
+  fs.mkdirSync(path.join(lab, "src"), { recursive: true });
+  fs.mkdirSync(runs, { recursive: true });
+
+  fs.copyFileSync(path.join(ROOT, "tools", "gate-run.mjs"), path.join(lab, "tools", "gate-run.mjs"));
+  fs.copyFileSync(path.join(ROOT, "tools", "machine-lock.mjs"), path.join(lab, "tools", "machine-lock.mjs"));
+  fs.copyFileSync(path.join(ROOT, "tools", "gates-for.mjs"), path.join(lab, "tools", "gates-for.mjs"));
+
+  const pkg = {
+    name: "gate-run-lab",
+    private: true,
+    version: "0.0.0",
+    scripts: {
+      test: "node tests/a.mjs && node tests/b.mjs",
+      a: "node tests/a.mjs",
+      b: "node tests/b.mjs",
+    },
+  };
+  fs.writeFileSync(path.join(lab, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+
+  fs.writeFileSync(path.join(lab, "src", "leaf.mjs"), "export const leaf = 1;\n");
+  fs.writeFileSync(path.join(lab, "tests", "a.mjs"), "import \"../src/leaf.mjs\";\nconsole.log(\"  ok   leg a\");\nprocess.exit(0);\n");
+  fs.writeFileSync(path.join(lab, "tests", "b.mjs"), "import \"../src/leaf.mjs\";\nconsole.log(\"  ok   leg b\");\nprocess.exit(0);\n");
+
+  const gitEnv = { ...process.env };
+  delete gitEnv.GIT_DIR;
+  delete gitEnv.GIT_INDEX_FILE;
+  delete gitEnv.GIT_WORK_TREE;
+
+  gitCmd(["init", "-q", "-b", "main"], lab, gitEnv);
+  gitCmd(["add", "."], lab, gitEnv);
+  gitCmd(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "init"], lab, gitEnv);
+
+  fs.writeFileSync(path.join(lab, "src", "leaf.mjs"), "export const leaf = 2;\n");
+  gitCmd(["add", "."], lab, gitEnv);
+  gitCmd(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "change"], lab, gitEnv);
+
+  const head = gitCmd(["rev-parse", "--short", "HEAD"], lab, gitEnv);
+  const gitTree = gitCmd(["rev-parse", "HEAD^{tree}"], lab, gitEnv);
+
+  return { root, lab, runs, chainsPath, gitEnv, head, gitTree };
+}
+
+function cleanLab(lab) {
+  try { fs.rmSync(lab.root, { recursive: true, force: true }); } catch {}
+}
+
+function main() {
+  const lab = setupLab();
+  try {
+    /* 1. A green file-mode record on the tree, then an area: the area runs its gates */
+    fs.writeFileSync(lab.chainsPath, JSON.stringify({
+      gate: "file tests/a.mjs",
+      tree: lab.lab,
+      head: lab.head,
+      treeSha: lab.gitTree,
+      gitTree: lab.gitTree,
+      start: "2026-11-08T00:00:00.000Z",
+      end: "2026-11-08T00:00:01.000Z",
+      counts: { ok: 1, fail: 0, exitCode: 0 },
+      reds: [],
+      holds: false,
+      ran: ["tests/a.mjs"],
+    }) + "\n", "utf8");
+
+    const r1 = runTool(lab, ["area", "HEAD~1...HEAD"]);
+    check(r1.exit === 0 && r1.out.indexOf("rerunning nothing") < 0 && r1.out.indexOf("> node tests/a.mjs") >= 0,
+      "1 a green file-mode record on the tree does not skip: area runs its gates");
+
+    /* 2. A whole-chain record on the tree that stopped at a red, later marked machine: the area runs */
+    fs.writeFileSync(lab.chainsPath, JSON.stringify({
+      gate: "test",
+      tree: lab.lab,
+      head: lab.head,
+      treeSha: lab.gitTree,
+      gitTree: lab.gitTree,
+      start: "2026-11-08T00:00:00.000Z",
+      end: "2026-11-08T00:00:01.000Z",
+      counts: { ok: 1, fail: 1, exitCode: 1 },
+      reds: [{ gate: "tests-b", cmd: "node tests/b.mjs", exit: 1, cause: "machine", class: "hold" }],
+      holds: true,
+      ran: ["tests/a.mjs", "tests/b.mjs"],
+    }) + "\n", "utf8");
+
+    const marksPath = path.join(path.dirname(lab.chainsPath), "marks.jsonl");
+    fs.writeFileSync(marksPath, JSON.stringify({
+      run: { head: lab.head, start: "2026-11-08T00:00:00.000Z", gate: "test" },
+      gate: "tests-b",
+      cmd: "node tests/b.mjs",
+      cause: "machine",
+      escaped: false,
+      marked: "2026-11-08T00:02:00.000Z",
+    }) + "\n", "utf8");
+
+    const r2 = runTool(lab, ["area", "HEAD~1...HEAD"]);
+    check(r2.exit === 0 && r2.out.indexOf("rerunning nothing") < 0 && r2.out.indexOf("> node tests/a.mjs") >= 0,
+      "2 a whole-chain record stopping at a red marked machine does not skip: area runs");
+
+    /* 3. A complete green area record on the tree whose ran misses one of this area's files: the area runs */
+    fs.writeFileSync(lab.chainsPath, JSON.stringify({
+      gate: "area",
+      tree: lab.lab,
+      head: lab.head,
+      treeSha: lab.gitTree,
+      gitTree: lab.gitTree,
+      start: "2026-11-08T00:05:00.000Z",
+      end: "2026-11-08T00:06:00.000Z",
+      counts: { ok: 1, fail: 0, exitCode: 0 },
+      reds: [],
+      holds: false,
+      ran: ["tests/a.mjs"],
+    }) + "\n", "utf8");
+
+    const r3 = runTool(lab, ["area", "HEAD~1...HEAD"]);
+    check(r3.exit === 0 && r3.out.indexOf("rerunning nothing") < 0 && r3.out.indexOf("> node tests/b.mjs") >= 0,
+      "3 a complete green area record missing one file does not skip: area runs");
+
+    /* 4. A complete green whole-chain record covering every file: the area skips, naming the record */
+    fs.writeFileSync(lab.chainsPath, JSON.stringify({
+      gate: "test",
+      tree: lab.lab,
+      head: lab.head,
+      treeSha: lab.gitTree,
+      gitTree: lab.gitTree,
+      start: "2026-11-08T00:10:00.000Z",
+      end: "2026-11-08T00:11:00.000Z",
+      counts: { ok: 2, fail: 0, exitCode: 0 },
+      reds: [],
+      holds: false,
+      ran: ["tests/a.mjs", "tests/b.mjs"],
+    }) + "\n", "utf8");
+
+    const r4 = runTool(lab, ["area", "HEAD~1...HEAD"]);
+    check(r4.exit === 0 && r4.out.indexOf("rerunning nothing") >= 0 && r4.out.indexOf("test") >= 0
+      && (r4.out.indexOf("cover") >= 0 || r4.out.indexOf("covering") >= 0),
+      "4 a complete green whole-chain record covering every file skips and names the record");
+
+    /* 5. A planted removal of the coverage check turns leg 1 red, by the tree's plant convention, and honours ETIUDA_PLANTS=off */
+    if (PLANTS_OFF) {
+      skip("5 planted removal of coverage check turns leg 1 red (ETIUDA_PLANTS=off)");
+    } else {
+      const toolFile = path.join(lab.lab, "tools", "gate-run.mjs");
+      const toolSrc = fs.readFileSync(toolFile, "utf8");
+      const PLANT_TAG = "/* plant:area-coverage */";
+      const hasPlant = toolSrc.includes(PLANT_TAG);
+      const plantedSrc = toolSrc.replace(/^[^\n]*\/\*\s*plant:area-coverage\s*\*\/[^\n]*$/m, "/* plant:area-coverage removed */");
+      fs.writeFileSync(toolFile, plantedSrc);
+
+      gitCmd(["add", "tools/gate-run.mjs"], lab.lab, lab.gitEnv);
+      gitCmd(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "plant"], lab.lab, lab.gitEnv);
+
+      const plantHead = gitCmd(["rev-parse", "--short", "HEAD"], lab.lab, lab.gitEnv);
+      const plantGitTree = gitCmd(["rev-parse", "HEAD^{tree}"], lab.lab, lab.gitEnv);
+
+      fs.writeFileSync(lab.chainsPath, JSON.stringify({
+        gate: "file tests/a.mjs",
+        tree: lab.lab,
+        head: plantHead,
+        treeSha: plantGitTree,
+        gitTree: plantGitTree,
+        start: "2026-11-08T00:00:00.000Z",
+        end: "2026-11-08T00:00:01.000Z",
+        counts: { ok: 1, fail: 0, exitCode: 0 },
+        reds: [],
+        holds: false,
+        ran: ["tests/a.mjs"],
+      }) + "\n", "utf8");
+
+      const rPlant = runTool(lab, ["area", "HEAD~2...HEAD"]);
+      gitCmd(["reset", "--hard", "HEAD~1"], lab.lab, lab.gitEnv);
+
+      const leg1TurnedRed = plantedSrc !== toolSrc && hasPlant && rPlant.exit === 0 && rPlant.out.indexOf("rerunning nothing") >= 0;
+      check(leg1TurnedRed, "5 planted removal of coverage check turns leg 1 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
+    }
+  } finally {
+    cleanLab(lab);
+  }
+
+  process.stdout.write("#counts checks=" + asserted + " failures=" + failed + "\n");
+  process.stdout.write("gate-run " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted + " check(s)\n");
+  process.exit(failed ? 1 : 0);
+}
+
+main();
