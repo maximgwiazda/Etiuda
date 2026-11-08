@@ -81,9 +81,11 @@ function deckMeasure(todo){
 function deckScan(){
   deckRaf=0;
   if(!list||!deckOn()) return;
+  deckInitIO();
   const todo=[];
   list.querySelectorAll(".card[data-id]").forEach(c=>{
     if(deckSlabs(c).length<2){ if(c.classList.contains("deck")) deckReset(c); return; }
+    if(deckIO) deckIO.observe(c);
     if(!deckLive(c)){ c.classList.remove("deck-near"); return; }
     todo.push(c);
   });
@@ -122,11 +124,13 @@ function deckDrawnBy(r, made){
    `made`, every card it drew, is what the records are held against, `drawn` where it is left out. */
 function deckSettle(drawn, made){
   if(!list||!deckOn()) return;
+  deckInitIO();
   const ms=deckObs ? deckObs.takeRecords() : [];
   if(!drawn){
     if(deckRaf){ cancelAnimationFrame(deckRaf); deckRaf=0; }
     deckScan();
   }else{
+    if(deckIO&&made) made.filter(c=>deckSlabs(c).length>1).forEach(c=>deckIO.observe(c)); /* plant:deck-io-rebuilt */
     deckMeasure(drawn.filter(c=>deckSlabs(c).length>1));
     if(ms.some(r=>r.type==="childList" && !deckDrawnBy(r, made||drawn))) deckLater();
   }
@@ -135,19 +139,23 @@ function deckSettle(drawn, made){
 /* Scroll only picks up a deck that has just entered the band. One already measured stays as it is. */
 let deckApproachRaf=0;
 function deckApproach(){
-  if(!list||!deckOn()) return;
+  if(!list||!deckOn()||typeof IntersectionObserver==="function") return;
   const todo=[];
-  list.querySelectorAll(".card[data-id]").forEach(c=>{
-    if(c.classList.contains("deck-near")||c.classList.contains("deck-open")||c.classList.contains("deck-up")){
-      if(!c.classList.contains("deck-open")&&!c.classList.contains("deck-up")&&!deckInRange(c)) c.classList.remove("deck-near");
-      return;
-    }
+  list.querySelectorAll(".card[data-id]:not(.deck-near)").forEach(c=>{
     if(deckSlabs(c).length<2||!deckInRange(c)) return;
     todo.push(c);
   });
   deckMeasure(todo);
 }
 function deckLaterApproach(){ if(!deckApproachRaf&&deckOn()) deckApproachRaf=requestAnimationFrame(()=>{ deckApproachRaf=0; deckApproach(); }); }
+
+function deckMarkLive(){
+  if(deckKbdCard) return true;
+  if(!list) return false;
+  if(typeof list.querySelector==="function") return !!list.querySelector(".card.deck.deck-open, .card.deck.deck-up");
+  if(typeof list.querySelectorAll==="function") return list.querySelectorAll(".card.deck.deck-open, .card.deck.deck-up").length > 0;
+  return false;
+}
 
 function deckSetOpen(card, open, instant){
   clearTimeout(card._deckT);
@@ -299,7 +307,7 @@ function wireDeck(){
   deckWatch(deckOn());
   // A card caught mid-move, a fresh card's unfold or a slab still travelling, is read again once it lands.
   list.addEventListener("animationend",deckFadeLater); list.addEventListener("transitionend",deckFadeLater);
-  document.addEventListener("scroll",()=>{ deckLaterApproach(); deckFadeLater(); },{capture:true, passive:true});
+  document.addEventListener("scroll",()=>{ if(!deckMarkLive()) return; deckFadeLater(); },{capture:true, passive:true});
   addEventListener("resize",()=>{ deckLater(); deckFadeLater(); });
 
   // The pointer deals after a short rest, so a sweep across the desk deals nothing, and leaves
@@ -327,7 +335,32 @@ function wireDeck(){
   deckLater();
 }
 
-let deckSizeObs=null, deckWatching=false;
+let deckSizeObs=null, deckWatching=false, deckIO=null;
+function deckInitIO(){
+  if(typeof IntersectionObserver!=="function"||deckIO) return;
+  let ioOpts={root:null, rootMargin:"0px"};
+  if(list&&list.closest) ioOpts={root:list.closest(".scroller"), rootMargin:"100% 0px"}; /* plant:deck-io-root */
+  deckIO=new IntersectionObserver(entries=>{
+    const todo=[];
+    for(const entry of entries){
+      const c=entry.target;
+      if(entry.isIntersecting){
+        if(!c.classList.contains("deck-near")){
+          c.classList.add("deck-near");
+          if(deckSlabs(c).length>=2) todo.push(c); /* plant:deck-io-measure */
+        }
+      }else{
+        if(!c.classList.contains("deck-open")&&!c.classList.contains("deck-up")){
+          c.classList.remove("deck-near");
+        }
+      }
+    }
+    if(todo.length) deckMeasure(todo);
+  },ioOpts);
+}
+function deckUnobserve(el){
+  if(deckIO&&el) deckIO.unobserve(el);
+}
 // The sheet's half of the switch: body.deck-off takes the fade's transition off every card.
 function deckClass(on){ try{ document.body.classList.toggle("deck-off",!on); }catch(e){} }
 function deckWatch(on){
@@ -336,15 +369,18 @@ function deckWatch(on){
   if(on){
     if(deckObs) deckObs.observe(list,{childList:true, subtree:true, attributes:true, attributeFilter:["class"], attributeOldValue:true});
     if(deckSizeObs) deckSizeObs.observe(list);
+    deckInitIO();
   }else{
     if(deckObs) deckObs.disconnect();
     if(deckSizeObs) deckSizeObs.disconnect();
+    if(deckIO){ deckIO.disconnect(); deckIO=null; }
   }
 }
 // Every deck laid flat and every faded card given back at once, with the frames and timers that would redraw them.
 function deckFlat(){
   [deckRaf,deckFadeRaf,deckApproachRaf].forEach(id=>{ if(id) cancelAnimationFrame(id); });
   deckRaf=0; deckFadeRaf=0; deckApproachRaf=0; deckKbdCard=null;
+  if(deckIO){ deckIO.disconnect(); deckIO=null; }
   list.querySelectorAll(".card.deck").forEach(c=>{ clearTimeout(c._deckM); deckReset(c); });
   list.querySelectorAll(".deck-under, .deck-fresh").forEach(e=>e.classList.remove("deck-under","deck-fresh"));
 }
@@ -366,6 +402,7 @@ export {
   deckFade,
   deckScan,
   deckSettle,
+  deckUnobserve,
   deckOn,
   syncDeck,
   wireDeck,
