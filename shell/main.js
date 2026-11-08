@@ -3222,14 +3222,19 @@ function catalogMarkedPrivate(doc) {
   if (!doc || typeof doc !== "object") return false;
   return lineageOf(doc).some(id => catalogPrivate.has(id));
 }
+/* Whether the team lists a catalog, judged by the first catalog of its grew chain (Claude alpha's ruling of 12:04): the one test
+   the answer and the working copy both take, so a copy is never shared in one and private in the other. */
+function chainListed(doc, catalogs) {
+  const ids = lineageOf(doc);
+  return ids.length > 0 && Array.isArray(catalogs) && catalogs.indexOf(ids[ids.length - 1]) >= 0; /* plant:s0b-chain-listed */
+}
 /* Where a working copy may go on a team this desk is on: a private one nowhere; one whose first catalog the team does not list
    to the lead's box while the lead's switch applies, else held until it does; any other as before. Off a team, as before but private. */
 function branchGate(doc) {
   if (catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
   const use = teamUse();
   if (!use.member || !use.seal) return {};
-  const ids = lineageOf(doc);
-  if (Array.isArray(use.catalogs) && use.catalogs.indexOf(ids[ids.length - 1]) >= 0) return {};
+  if (chainListed(doc, use.catalogs)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
   return { box: use.seal };
 }
@@ -3258,8 +3263,7 @@ function withdrawClosed() {
     if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || lineageOfId(me.id + "-" + tail[1]).some(id => catalogPrivate.has(id));
     else {
       if (d && d.kind === SEALED_KIND) { const inner = teamOpen(d); try { d = inner === null ? null : JSON.parse(inner); } catch { d = null; } }
-      const ids = d && typeof d === "object" ? lineageOf(d) : [];
-      gone = ids.length > 0 && (ids.some(id => catalogPrivate.has(id)) || use.catalogs.indexOf(ids[ids.length - 1]) < 0);
+      gone = !!d && typeof d === "object" && (catalogMarkedPrivate(d) || !chainListed(d, use.catalogs));
     }
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
@@ -3349,7 +3353,7 @@ function tryCatalogAsk(win) {
     let pin = "";
     try { pin = signedSha(doc); } catch { return; }
     if (!PIN_RE.test(pin)) return;
-    const listed = Array.isArray(use.catalogs) && use.catalogs.indexOf(typeof doc.id === "string" ? doc.id : "") >= 0;
+    const listed = chainListed(doc, use.catalogs);
     if (ask.sha256 !== pin && !listed) return;
     if (catalogMarkedPrivate(doc)) return; /* plant:s0b-private */
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */

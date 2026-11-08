@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 98;
+const EXPECTED = 100;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1307,14 +1307,14 @@ try {
       putAsk(box, "Askgrown" + name.replace(/[^A-Za-z0-9]/g, ""), pin);
       box.D.api.tryCatalogAsk(box.D.win);
       const use = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
-      return { pin, named: !!use && use.catalog.sha256 === pin, written: fs.existsSync(ans), lead: openLeadDoc(box.D, ans) };
+      return { pin, named: !!use && use.catalog.sha256 === pin, written: fs.existsSync(ans), lead: openLeadDoc(box.D, ans), team: openSealedDoc(box.D, ans, box.key) };
     };
     {
       const sealed = await grownFrom("s0-grown", true);
       const plain = await grownFrom("s0-grown-plain", false);
       check(!!sealed.pin && sealed.named && !sealed.written
-          && plain.named && plain.written && !!plain.lead && JSON.stringify(plain.lead).indexOf(S0_MARK) >= 0,
-        "s0j a working copy grown from another team's sealed catalog is not answered; one grown from the same catalog in the clear is, to the lead's box");
+          && plain.named && plain.written && !!plain.team && JSON.stringify(plain.team).indexOf(S0_MARK) >= 0,
+        "s0j a working copy grown from another team's sealed catalog is not answered; one grown from the same catalog in the clear is, under the team key, since the team lists the catalog it grew from (Claude alpha's ruling of 12:04)");
       if (PLANTS_OFF) skip("s0k lifting plant:s0-grew turns s0j red: the grown copy of another team's catalog is answered");
       else {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0-grew") >= 0 ? "  /* plant:s0-grew */" : l).join("\n");
@@ -1730,6 +1730,33 @@ try {
       const third = await writeCopy(box, "88888888", c2.id);
       check(!!pin2 && !answered && third.withheld === true && !fs.existsSync(branchAt(box, "88888888")),
         "r2g a copy of a copy of a private catalog is private: not answered, and a copy of it is written nowhere (" + [answered, JSON.stringify(third)].join(",") + ")");
+    }
+    {
+      /* Claude alpha's ruling of 12:04: one test for "listed", by the grew chain, in the answer and the working copy alike. A
+         catalog that kept a listed id but grew from an unlisted one is unlisted in both; a desk's copy of a listed one, listed. */
+      const oneTest = async (name, src) => {
+        const grown = (id, grewId) => { const c = catalog(4, { id, name: "Quay held", card: B0_MARK, unsigned: true });
+          c.grew = { id: grewId, rev: 3, sha: "sha256:" + "ab".repeat(32) }; return textOf(c); };
+        const a = await b0Ask(name, { catalogs: ["quay-held"], body: grown("quay-held", "harbour-board"), src });
+        await writeCopy(a.box, "91919191", "quay-held");
+        const aCopy = fs.existsSync(branchAt(a.box, "91919191")) ? JSON.parse(fs.readFileSync(branchAt(a.box, "91919191"), "utf8")) : null;
+        const b = await b0Ask(name + "-reverse", { catalogs: ["quay-held"], body: grown("k-0123456789abcdef-12345678", "quay-held"), src });
+        await writeCopy(b.box, "92929292", "k-0123456789abcdef-12345678");
+        const bCopy = fs.existsSync(branchAt(b.box, "92929292")) ? JSON.parse(fs.readFileSync(branchAt(b.box, "92929292"), "utf8")) : null;
+        return {
+          keptId: !!a.lead && !a.team && !!aCopy && aCopy.kind === "etiuda-branch-sealed",
+          reverse: !!b.team && !b.lead && !!bCopy && bCopy.kind !== "etiuda-branch-sealed",
+        };
+      };
+      const o = await oneTest("r2-one-test");
+      check(o.keptId && o.reverse,
+        "r2s one test for listed, by the grew chain: a catalog that kept a listed id but grew from an unlisted one goes to the lead's box as answer and as copy; a desk's copy of a listed catalog goes under the team as both (" + JSON.stringify(o) + ")");
+      if (PLANTS_OFF) skip("r2t lifting plant:s0b-chain-listed turns r2s red");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-chain-listed") >= 0 ? "  /* plant:s0b-chain-listed */" : l).join("\n");
+        const p = planted !== SRC ? await oneTest("r2-one-test-plant", planted) : null;
+        check(!!p && !p.reverse, "r2t lifting plant:s0b-chain-listed turns r2s red: the copy of a listed catalog is judged unlisted (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
     }
     {
       /* F6: the agent shown the switch, an ask already waiting is answered then, with nothing else to wake it. */
