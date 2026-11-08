@@ -405,7 +405,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
     pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] } };
 }
 
@@ -420,6 +420,8 @@ function stateOf(x, now) {
   if (count(x.leadEpoch)) s.leadEpoch = x.leadEpoch;
   if (Number.isFinite(x.headT)) s.headT = x.headT;
   if (Number.isFinite(s.headT) && Number.isFinite(now) && s.headT > now + HEAD_AHEAD_MS) s.headT = null; /* plant:head-t-load */
+  s.heldHead = heldHeadOf(x.heldHead); /* plant:held-head-load */
+  s.heldItem = heldItemOf(x.heldItem);
   if (Number.isSafeInteger(x.listed)) s.listed = x.listed;
   s.lapse = lapseKept(x.lapse);
   if (Number.isSafeInteger(x.skew)) s.skew = x.skew;
@@ -517,6 +519,23 @@ function stateOf(x, now) {
   return s;
 }
 
+/* A head held for its key or its time (headJudged's `again`), read back whole or not at all. */
+const HELD_BODY_MAX = 64 * 1024;
+function heldHeadOf(h) {
+  if (!table(h) || h.path !== HEAD_NAME || h.kind !== "file" || typeof h.body !== "string" || h.body.length > HELD_BODY_MAX
+    || !B.isId(h.writerKeyId) || !isCount(h.epoch) || !isCount(h.counter) || !HEX32.test(String(h.id))) return null;
+  return { path: HEAD_NAME, kind: "file", body: h.body, writerKeyId: h.writerKeyId, epoch: h.epoch, counter: h.counter, id: h.id,
+    size: Number.isSafeInteger(h.size) && h.size >= 0 ? h.size : 0 };
+}
+/* A fetched blob kept to be opened again once its writer is the pinned lead: the header as the relay gave it, the ciphertext. */
+const HELD_META = ["v", "size", "id", "epoch", "supersedes", "writer", "counter", "nonce", "sig", "place", "del"];
+function heldItemOf(h) {
+  if (!table(h) || !table(h.meta) || typeof h.ct !== "string" || h.ct.length > 2 * HELD_BODY_MAX + 8192 || !Number.isSafeInteger(h.seq)
+    || !HEX32.test(String(h.meta.id)) || !B.isId(h.meta.writer) || !isCount(h.meta.epoch) || !isCount(h.meta.counter)) return null;
+  const meta = {};
+  for (const k of HELD_META) if (has(h.meta, k) && (h.meta[k] === null || ["string", "number", "boolean"].indexOf(typeof h.meta[k]) >= 0)) meta[k] = h.meta[k];
+  return { seq: h.seq, floor: Number.isSafeInteger(h.floor) && h.floor >= 0 ? h.floor : 0, meta, ct: h.ct };
+}
 /* A short text the desk may show from a head: nothing hidden in it, and not so long that one head fills the row. */
 function headTextOk(s, max) {
   return typeof s === "string" && s.length >= 1 && s.length <= max && !/[\u0000-\u001f\u007f]/.test(s);
@@ -566,8 +585,6 @@ function createProgram(opts) {
   const waiting = new Map();
   /* A case variant left beside the one file its folded path sends, so that variant is said once. */
   const stayed = new Set();
-  /* The head last refused for its key or its time (headJudged's `again`), this run only. */
-  let heldHead = null;
 
   function chainLeads() {
     const out = [];
@@ -737,7 +754,8 @@ function createProgram(opts) {
     const edition = newestEdition(doc.editions);
     if (!edition) return R("bad-signature");
     if (doc.t > clock() + HEAD_AHEAD_MS) return { ok: false, reason: "head-ahead", said: HEAD_AHEAD_SAID, served: false, again: true }; /* plant:head-ahead */
-    if (doc.epoch < st.leadEpoch) return R("epoch"); /* plant:head-epoch */
+    const held = newestRoster();
+    if (held && doc.epoch < held.epoch) return R("epoch"); /* plant:head-epoch */
     if (floor && Number.isFinite(st.headT) && doc.t < st.headT) return R("replay-counter");
     return { ok: true, t: doc.t, edition: edition.edition, published: edition.published, epoch: doc.epoch, rev: doc.rev,
       editions: headEditions(doc.editions) };
@@ -920,9 +938,9 @@ function createProgram(opts) {
     let head = null;
     if (r.path === HEAD_NAME && r.kind === "file") {
       head = headJudged(r.body, true);
-      if (!head.ok && head.again && (!heldHead || later(r, heldHead))) heldHead = r; /* plant:head-held */
+      if (!head.ok && head.again && (!st.heldHead || later(r, st.heldHead))) { st.heldHead = heldHeadOf(r); persist(); } /* plant:head-held */
       if (!head.ok) return dropSaid(HEAD_NAME, head);
-      if (heldHead && !later(heldHead, r)) heldHead = null;
+      if (st.heldHead && !later(st.heldHead, r)) st.heldHead = null;
     }
     try {
       if (r.kind === "delete") io.remove(r.path);
@@ -1444,12 +1462,15 @@ function createProgram(opts) {
       if (x) after.push(x);
     }
     landTop(after);
-    landNewest(opened.concat(after).filter(x => !isTeam(x)), out, ctx);
+    let again = [];
+    again = itemAgain(floors0, ctx); /* plant:item-again */
+    landNewest(opened.concat(after, again).filter(x => !isTeam(x)), out, ctx);
     const desks = [];
     /* What a held handover's new lead wrote waits for the pin to move, then comes back through retryPending. */
     const heldLeads = new Set(st.ahead.held.map(h => h.lead));
     for (const it of others) {
       if (st.ahead.held.some(h => h.id === it.meta.id)) continue;
+      if (headAhead(it, ctx)) { holdItem(it, floors0); continue; } /* plant:item-held */
       if (look && !look.whole && heldLeads.has(it.meta.writer)) { pend(it, floors0); continue; } /* plant:ahead-park */
       const x = openOne(it, floors0, ctx);
       if (x) desks.push(x);
@@ -1463,6 +1484,38 @@ function createProgram(opts) {
     }
     persist();
     return out;
+  }
+
+  /* A root file from a key no roster names and that is not yet a lead, which opens under the team key as the head: the next
+     lead's head, uploaded before the team file that hands over to it. Nothing about it is trusted until its writer leads. */
+  function headAhead(it, ctx) {
+    const m = it && it.meta;
+    if (!pin || !table(m) || isLeadKey(m.writer) || m.del === true || typeof m.pub === "string") return false;
+    if (!(m.place === undefined || m.place === null || m.place === "root")) return false;
+    for (const e of Object.keys(st.trust)) {
+      const row = st.trust[e];
+      if ((row.desks || []).concat(row.prior || []).some(d => d.keyId === m.writer)) return false;
+    }
+    const key = ctx && typeof ctx.keyFor === "function" ? ctx.keyFor(m.epoch) : null;
+    const blob = key ? envelopeOf(it) : null;
+    const peek = blob ? peekBlob(blob, pin.rt, key) : null;
+    return !!peek && peek.kind === "file" && peek.path === HEAD_NAME;
+  }
+  /* One such blob is kept, the latest in the relay's sequence, with the floor its counter is judged against. */
+  function holdItem(it, floors0) {
+    const m = it.meta, was = st.heldItem;
+    if (was && Number.isSafeInteger(it.seq) && it.seq < was.seq) return;
+    const ct = toBytes(it.ct);
+    st.heldItem = heldItemOf({ seq: Number.isSafeInteger(it.seq) ? it.seq : 0,
+      floor: it.floor !== undefined ? it.floor : floorAt(floors0, m.writer, m.epoch), meta: m, ct: ct ? ct.toString("base64") : "" });
+  }
+  /* The kept blob, once its writer is a lead: opened and judged as any lead blob is, and let go whatever the answer. */
+  function itemAgain(floors0, ctx) {
+    const h = st.heldItem;
+    if (!h || !isLeadKey(h.meta.writer)) return [];
+    st.heldItem = null;
+    const x = openOne({ seq: h.seq, floor: h.floor, meta: Object.assign({}, h.meta), ct: Buffer.from(h.ct, "base64") }, floors0, ctx);
+    return x ? [x] : [];
   }
 
   /* The steps the team files of a catch-up have shown so far, with `docs` added, as one look for forkIn. */
@@ -1695,12 +1748,13 @@ function createProgram(opts) {
   /* The head last refused for its key or its time, judged again: landed where it now holds, let go where it is refused for
      anything else or a later head has landed since. Said once, when it was first refused. */
   function headAgain() {
-    const h = heldHead;
+    const h = st.heldHead;
     if (!h || !pin) return;
     const j = headJudged(h.body, true);
     if (!j.ok && j.again) return;
-    heldHead = null;
+    st.heldHead = null;
     if (j.ok) land(h);
+    else persist();
   }
 
   /* The head in this mirror, read again and verified. A missing or bad file shows nothing, and nothing is blocked. */

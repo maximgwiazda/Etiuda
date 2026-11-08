@@ -38,7 +38,7 @@ if (!PLANTS_OFF && process.env.ETIUDA_PLANTS_COPY !== "1") {
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 89;
+const EXPECTED = 91;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1676,13 +1676,51 @@ try {
       skip("962s5m4 lifting plant:pick-in-use with plant:changed-in-use sends the second catalog over the first");
       skip("962s5m5 lifting plant:pick-many-none opens one of two catalogs on an empty desk");
     } else {
-      const s1 = lift("plant:pick-in-use"), s2 = lift("plant:pick-in-use", "plant:changed-in-use"), s3 = lift("plant:pick-many-none");
+      const s1 = lift("plant:pick-in-use", "plant:pick-in-use-gone"), s2 = lift("plant:pick-in-use", "plant:pick-in-use-gone", "plant:changed-in-use"),
+        s3 = lift("plant:pick-many-none");
       const p1 = s1 ? working(s1) : null, p2 = s2 ? working(s2) : null, p3 = s3 ? empty(s3) : null;
       check(!!p1 && p1.pick === "Pebble Board" && p1.newer.length === 0, "962s5m3 lifting plant:pick-in-use picks the second catalog, and the watch still sends nothing for it (FAIL 962s5m): "
         + (p1 ? "pick " + p1.pick + ", sent " + (p1.newer.join(",") || "nothing") : "plant line absent"));
       check(!!p2 && p2.newer.length === 1, "962s5m4 lifting plant:pick-in-use with plant:changed-in-use sends the second catalog over the first (FAIL 962s5m): "
         + (p2 ? p2.newer.join(",") || "nothing" : "plant line absent"));
       check(!!p3 && p3.rev != null, "962s5m5 lifting plant:pick-many-none opens one of two catalogs on an empty desk (FAIL 962s5m2): " + (p3 ? p3.rev : "plant line absent"));
+    }
+    /* 962s5m6 (round two): a desk working in a catalog its team does not list keeps it as its pick, and is sent nothing of
+       another id, when a catalog the team lists is published with a newer file time. */
+    const ONE_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const oneTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: ONE_TEAM, catalogs: ["pebble-board"], lead: LEAD,
+      sealed: true, exportsSealed: false, epoch: 1, roster: [] }));
+    const unlisted = (src, gone) => {
+      const tag = "s5m6" + (gone ? "-gone" : "") + (src ? "-plant" + crypto.randomBytes(2).toString("hex") : "");
+      const share = folder(tag + "-share"), ud = path.join(LAB, tag);
+      put(share, "etiuda-ring.json", RING);
+      put(share, "etiuda-team.json", oneTeamFile);
+      put(share, "board.ec", CAT2);
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+        teamPins: { [ONE_TEAM]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+      const D = loadDesk(ud, src || undefined);
+      syncFolder(share);
+      const booted = facts(D.sync("etiuda:catalog") || "");
+      /* `gone`: the file in use rewritten by hand, so no edition of it is one the lead signed. */
+      if (gone) put(share, "board.ec", JSON.stringify(Object.assign(JSON.parse(CAT2), { sig: undefined, rev: 3 }), null, 1) + "\n");
+      put(share, "pebble.ec", sideOf("pebble-board", 1, "Pebble Board"));
+      touch(path.join(share, "pebble.ec"), Date.now() + 3000);
+      const pick = facts(D.api.readCatalog() || "").name || "nothing";
+      D.sent.length = 0;
+      D.api.catalogChanged(D.win);
+      return { booted: booted.rev, pick, sent: sent(D) };
+    };
+    const m6 = unlisted(null, false), m7 = unlisted(null, true);
+    check(m6.booted === 2 && m6.pick === "Quay Board" && m6.sent.length === 0 && m7.pick === "nothing" && m7.sent.length === 0,
+      "962s5m6 a desk working in a catalog its team does not list keeps it as its pick and is sent nothing of another id; with no edition of it the lead signed left, it picks nothing: pick "
+      + m6.pick + ", sent " + (m6.sent.join(",") || "nothing") + "; rewritten, pick " + m7.pick + ", sent " + (m7.sent.join(",") || "nothing"));
+    if (PLANTS_OFF) skip("962s5m7 lifting plant:pick-in-use-gone picks the team's catalog over the one in use");
+    else {
+      const s7 = lift("plant:pick-in-use-gone");
+      const p7 = s7 ? unlisted(s7, true) : null;
+      check(!!p7 && p7.pick === "Pebble Board", "962s5m7 lifting plant:pick-in-use-gone picks the team's catalog over the one in use (FAIL 962s5m6): "
+        + (p7 ? "pick " + p7.pick : "plant line absent"));
     }
   }
 

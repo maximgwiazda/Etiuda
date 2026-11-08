@@ -61,7 +61,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 409;
+const EXPECTED = 415;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9998,18 +9998,77 @@ check(retryPlant.turned && retryPlant.back,
     /* 962s5t: a head below the newest epoch the lead has named is left out. */
     const tScene = mod => {
       const m = mod || C;
-      const s0 = JSON.parse(JSON.stringify(progS(m).state()));
-      s0.leadEpoch = 2;
-      const p = progS(m, { load: () => s0 });
+      const p = progS(m);
+      p.loadTeamFile(teamDocWith(tmS, rtS, leadS1, 2, 1, []));
       const low = putHead(p, headS(Date.now(), [edA(2)], leadS1, 1), 1);
       return { low, shown: p.headNews(Date.now()).shown };
     };
     const tR = tScene();
     check(tR.low.ok !== true && tR.low.reason === "epoch" && tR.shown === false,
-      "962s5t a head at epoch 1, once the lead has named epoch 2, is left out: head " + (tR.low.ok === true ? "taken" : tR.low.reason) + ", shown " + tR.shown);
+      "962s5t a head at epoch 1, once a team file of epoch 2 is held, is left out: head " + (tR.low.ok === true ? "taken" : tR.low.reason) + ", shown " + tR.shown);
     const tPlant = await liftChannel("plant:head-epoch", async mod => { const s = tScene(mod); return s.low.ok === true; });
     check(tPlant.turned && tPlant.back, "962s5t2 lifting plant:head-epoch takes the head below the lead's epoch (FAIL 962s5t): "
       + tPlant.detail + ", sha " + (tPlant.back ? "restored" : "differs"));
+    /* ---- round two, the test architect's read of e9ed3b33 ---- */
+    const fetchOf = (b, seq) => ({ seq, ct: b.ciphertext, meta: { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId,
+      counter: b.counter, del: false, sig: b.signature, nonce: b.nonce, place: b.place, size: b.ciphertext.length } });
+    /* 962s5z4: the catch-up, two polls. The new lead's own upload of its head comes on the first page, before any team file names it;
+       the handover's team file on the next. The head shows once that file lands. Each page goes through applyBatch, as createChannel
+       hands it each page of since/<seq>. */
+    const z4Scene = mod => {
+      const m = mod || C;
+      const p = progS(m);
+      const ctx = { keyFor: e => (e === 1 ? KS : null) };
+      const head = sealS(headS(Date.now(), [edA(7, "Pebble the new lead wrote")], leadS2), 1, leadS2);
+      const first = p.applyBatch([fetchOf(head, 10)], ctx, { whole: true });
+      const between = p.headNews(Date.now());
+      const team = sealS(JSON.stringify(docS2), 2, leadS2, C.TEAM_NAME);
+      const second = p.applyBatch([fetchOf(team, 11)], ctx, { whole: true });
+      return { first: first.applied.slice(), between: between.shown, second: second.applied.slice(), pinned: p.pinned().lead.keyId === leadS2.keyId,
+        news: p.headNews(Date.now()) };
+    };
+    const z4 = z4Scene();
+    const z4Said = s => "first page " + JSON.stringify(s.first) + ", shown between " + s.between + ", second page " + JSON.stringify(s.second)
+      + ", pinned " + s.pinned + ", news " + (s.news.shown ? s.news.edition : "none");
+    check(z4.between === false && z4.pinned && z4.news.shown === true && z4.news.edition === "Pebble the new lead wrote",
+      "962s5z4 the new lead's own head on one page of the catch-up and the team file that hands over on the next: the head shows once that file lands: " + z4Said(z4));
+    const z4Held = await liftChannel("plant:item-held", async mod => { const s = z4Scene(mod); return s.pinned && s.news.shown === false; });
+    check(z4Held.turned && z4Held.back, "962s5z5 lifting plant:item-held drops the new lead's head for good (FAIL 962s5z4): " + z4Held.detail + ", sha " + (z4Held.back ? "restored" : "differs"));
+    const z4Again = await liftChannel("plant:item-again", async mod => { const s = z4Scene(mod); return s.pinned && s.news.shown === false; });
+    check(z4Again.turned && z4Again.back, "962s5z6 lifting plant:item-again never opens the kept head once its writer leads (FAIL 962s5z4): " + z4Again.detail + ", sha " + (z4Again.back ? "restored" : "differs"));
+
+    /* 962s5r5: a head refused for its time survives a restart, and shows once the clock reaches it. */
+    const r5Scene = mod => {
+      const m = mod || C;
+      let now = 20 * 24 * 3600 * 1000, kept = null;
+      const save = st => { kept = JSON.parse(JSON.stringify(st)); };
+      const before = progS(m, { clock: () => now, save, load: () => kept });
+      const ahead = putHead(before, headS(now + 11 * 60 * 1000, [edA(8, "Pebble kept across a restart")]), 1);
+      const after = progS(m, { clock: () => now, save, load: () => kept });
+      now += 12 * 60 * 1000;
+      return { ahead, news: after.headNews(now) };
+    };
+    const r5 = r5Scene();
+    check(r5.ahead.ok !== true && r5.ahead.reason === "head-ahead" && r5.news.shown === true && r5.news.edition === "Pebble kept across a restart",
+      "962s5r5 a head refused for its time is kept with the record, so after a restart it shows once the clock reaches it: refused "
+      + r5.ahead.reason + ", then " + (r5.news.shown ? r5.news.edition : "none"));
+    const r5Plant = await liftChannel("plant:held-head-load", async mod => { const s = r5Scene(mod); return s.news.shown === false; });
+    check(r5Plant.turned && r5Plant.back, "962s5r6 lifting plant:held-head-load loses the held head at the restart (FAIL 962s5r5): " + r5Plant.detail + ", sha " + (r5Plant.back ? "restored" : "differs"));
+
+    /* 962s5t3: a chain key's upload naming a high epoch raises the lead's epoch but lands no team file, and does not silence the
+       current lead's head: the floor is the newest team file held. */
+    const t3Scene = mod => {
+      const m = mod || C;
+      const s0 = JSON.parse(JSON.stringify(progS(m).state()));
+      s0.leadEpoch = 9;
+      const p = progS(m, { load: () => s0 });
+      const r = putHead(p, headS(Date.now(), [edA(3, "Pebble at the team file's epoch")], leadS1, 1), 1);
+      return { r, news: p.headNews(Date.now()) };
+    };
+    const t3 = t3Scene();
+    check(t3.r.ok === true && t3.news.edition === "Pebble at the team file's epoch",
+      "962s5t3 a lead epoch of 9 that no team file carries leaves the current lead's head at the team file's epoch 1 shown: head "
+      + (t3.r.ok === true ? "landed" : t3.r.reason) + ", news " + (t3.news.shown ? t3.news.edition : "none"));
   }
 
   const pHandover = await liftChannel("plant:team-handover", async mod => {

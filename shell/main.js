@@ -815,12 +815,13 @@ function pickEdition(found) {
     else if (best.has(id) && best.get(id) !== i) drop.add(i);
   });
   const kept = found.filter((item, i) => !drop.has(i));
-  /* Where the team lists the catalog in use, that catalog's file; on an empty desk whose team lists more than one with a
-     file, none: the Library holds the choice. */
+  /* With a lead pinned and a catalog in use, that catalog's file or none; on an empty desk whose team lists more than one
+     with a file, none: the Library holds the choice. */
   const inUse = pins.length ? inUseCatalogId() : "";
   let mine = null;
-  mine = inUse && teamCovering(catalogFolder(), inUse) ? kept.filter(item => String(item.data.id || "") === inUse)[0] : null; /* plant:pick-in-use */
+  mine = inUse ? kept.filter(item => String(item.data.id || "") === inUse)[0] : null; /* plant:pick-in-use */
   if (mine) return mine;
+  if (inUse) return null; /* plant:pick-in-use-gone */
   if (pins.length && !inUse && teamListedMany(kept)) return null; /* plant:pick-many-none */
   return kept[0] || null;
 }
@@ -1285,11 +1286,11 @@ function catalogFolderChanged() {
   armFolder(win);
 }
 
-/* True where `text` is a catalog the team lists other than the one in use, which the team also lists. */
+/* True where, with a lead pinned, `text` is another catalog than the one in use, listed or not. */
 function otherTeamCatalog(text) {
-  const doc = catalogDocIn(text), inUse = inUseCatalogId(), root = catalogFolder();
+  const doc = catalogDocIn(text), inUse = inUseCatalogId();
   const id = doc && typeof doc.id === "string" ? doc.id : "";
-  return !!id && !!inUse && id !== inUse && !!teamCovering(root, inUse) && !!teamCovering(root, id);
+  return pinnedLeadPubs().length > 0 && !!id && !!inUse && id !== inUse;
 }
 /* The engine is OFFERED the new file and never given it: replacing a catalog under somebody
    mid-chat is the one thing the offer dialog exists to prevent, and this is the third channel
@@ -1305,6 +1306,7 @@ function catalogChanged(win) {
   releaseInUse();
   tryHeldUse();
   resealHeld(win);
+  const fromWas = catalogFrom;
   const now = readCatalog();
   sayNewer(win);
   /* The owed eject is in the envelope, which the read above loads on a fresh run. */
@@ -1319,7 +1321,7 @@ function catalogChanged(win) {
   if (belowCatalogRev(now)) return;
   // Nor, with a lead pinned, bytes that lead did not sign: this send is unasked, the file this launch was opened with included.
   if (now && !unsolicitedLeadText(now)) return;
-  if (now && otherTeamCatalog(now)) return; /* plant:changed-in-use */
+  if (now && otherTeamCatalog(now)) { catalogFrom = fromWas; return; } /* plant:changed-in-use */
   catalogJson = now;
   keepCatalogRev(now);
   if (!now || !win || win.isDestroyed()) return;
@@ -3232,6 +3234,7 @@ const LINEAGE_MAX = 4096, LINEAGE_HOPS = 64;
 function lineageOf(doc) {
   const id = doc && typeof doc.id === "string" ? doc.id : "";
   const g = doc && doc.grew && typeof doc.grew === "object" ? String(doc.grew.id || "") : "";
+  if (id && g && g !== id && PIN_RE.test(String(doc.grew.sha || ""))) catalogLineageSha[id] = String(doc.grew.sha);
   if (id && g && g !== id && catalogLineage[id] !== g) {
     catalogLineage[id] = g;
     const keys = Object.keys(catalogLineage);
@@ -3275,6 +3278,43 @@ function chainListed(doc, catalogs) {
   const ids = lineageOf(doc); /* plant:s0b-root-listed */
   return ids.length > 0 && Array.isArray(catalogs) && catalogs.indexOf(ids[ids.length - 1]) >= 0; /* plant:s0b-chain-listed */
 }
+/* Listed for the answer and the working copy alike: the grew chain starts on the team's list, and at an edition the team's
+   pinned lead signed. A copy under a listed id itself must be that edition; a copy under an id of its own must have grown, at
+   its chain's first hop, from one (grew.sha). Unknown is not listed. */
+function teamListedDoc(doc, use) {
+  if (!chainListed(doc, use.catalogs)) return false;
+  const pub = String(use.seal && use.seal.lead && use.seal.lead.public || "");
+  if (use.catalogs.indexOf(String(doc.id)) >= 0) {
+    let own = true;
+    own = catalogSigValid(doc, pub) === true; /* plant:s5-listed-lead */
+    return own;
+  }
+  const ids = lineageOf(doc);
+  const hop = ids.length === 2 ? String(doc.grew && doc.grew.sha || "") : ids.length > 2 ? String(catalogLineageSha[ids[ids.length - 2]] || "") : "";
+  let first = true;
+  first = leadSignedPin(hop, pub); /* plant:s5-first-hop */
+  return first;
+}
+/* True where `pin` is the signed hash of an edition `leadPublic` signed, found among what this desk was handed or holds in its
+   catalog folder, envelopes it can open included. Kept once found; anything not found is false. */
+const leadPinsSeen = new Set();
+function leadSignedPin(pin, leadPublic) {
+  if (!PIN_RE.test(pin) || !/^[0-9a-f]{64}$/.test(leadPublic)) return false;
+  const key = pin + "|" + leadPublic;
+  if (leadPinsSeen.has(key)) return true;
+  const texts = [loadedText];
+  for (const m of [handedUse, handedAsked]) { const got = m.get(pin); if (got && typeof got.text === "string") texts.push(got.text); }
+  for (const file of ecFilesIn(catalogFolder())) {
+    try { if (fs.statSync(file).size <= BRANCH_TEXT_MAX) texts.push(catalogRead(fs.readFileSync(file, "utf8")).json); } catch { /* not one this desk opens */ }
+  }
+  for (const t of texts) {
+    const d = t ? catalogDocIn(t) : null;
+    let sha = "";
+    try { sha = d ? signedSha(d) : ""; } catch { sha = ""; }
+    if (sha === pin && catalogSigValid(d, leadPublic) === true) { leadPinsSeen.add(key); return true; }
+  }
+  return false;
+}
 /* Whether the private mark holds for `doc` against the team's list (Claude alpha's ruling of 2026-11-08 13:05, from Max's
    "catalogs the team lists stay as they are"): only for a catalog the team does not list; off a team, `catalogs` is none. */
 function privateHere(doc, catalogs) {
@@ -3298,7 +3338,7 @@ function branchGate(doc) {
   const use = teamUse(), onTeam = !!(use.member && use.seal);
   if (onTeam ? privateHere(doc, use.catalogs) : catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
   if (!onTeam) return {};
-  if (chainListed(doc, use.catalogs)) return {};
+  if (teamListedDoc(doc, use)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
   return { box: use.seal };
 }
@@ -3330,7 +3370,7 @@ function withdrawClosed() {
     if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || privateChain(lineageOfId(me.id + "-" + tail[1])).some(id => catalogPrivate.has(id));
     else {
       if (d && d.kind === SEALED_KIND) { const inner = teamOpen(d); try { d = inner === null ? null : JSON.parse(inner); } catch { d = null; } }
-      gone = !!d && typeof d === "object" && !chainListed(d, use.catalogs);
+      gone = !!d && typeof d === "object" && !teamListedDoc(d, use);
     }
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
@@ -3420,10 +3460,7 @@ function tryCatalogAsk(win) {
     let pin = "";
     try { pin = signedSha(doc); } catch { return; }
     if (!PIN_RE.test(pin)) return;
-    let listed = chainListed(doc, use.catalogs);
-    /* A copy under a listed id itself answers as listed only where it is the lead's own signed edition, by this team's pin; any
-       other answers as an unlisted one. A copy under an id of its own keeps its grew chain's answer. */
-    listed = listed && (use.catalogs.indexOf(String(doc.id)) < 0 || catalogSigValid(doc, String(use.seal.lead.public || "")) === true); /* plant:s5-listed-lead */
+    const listed = teamListedDoc(doc, use);
     if (ask.sha256 !== pin && !listed) return;
     if (privateHere(doc, use.catalogs)) return; /* plant:s0b-private */
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
@@ -3510,6 +3547,7 @@ let teamLeft = {};                             // of those, a team the agent lef
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamContentSaid = {};                      // team id -> the consent the agent was shown (consentOf): the switch applies only then
 let catalogLineage = {};                       // catalog id -> the id it grew from, each hop this desk has seen
+const catalogLineageSha = {};                  // catalog id -> the signed hash of the edition it grew from (grew.sha); this run only
 let catalogRoots = {};                         // catalog id -> the root it states (grew.root), read for the private mark alone
 let answerKept = null;                         // the answer on the share: {ids: its catalog's lineage, lead: sealed to the lead's box}
 const catalogPrivate = new Set();              // catalog ids the agent marked private: never answered to a lead, and kept on this desk alone
