@@ -1240,12 +1240,12 @@ async function parent() {
     const r75 = run(lab75, ["desk", "rows"], true);
     const rows75 = r75.rows[0] || [], deskRows = rows75.filter(r => r.desk);
     const rowOf = (rows, four) => rows.find(r => r.desk && r.fp === four) || {};
-    const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr's desk") || {};
-    check(same(rows75.map(r => r.name), ["lamp.ec", "Ola's desk", "Ola's desk", "Piotr's desk"]) && rows75[0].loaded
+    const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr, a teammate") || {};
+    check(same(rows75.map(r => r.name), ["lamp.ec", "Ola, a teammate", "Ola, a teammate", "Piotr, a teammate"]) && rows75[0].loaded
       && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["See what changed", "Work from this file"]),
       "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with Look and Work from it; this desk's own file and one claiming the id in use have no row: "
       + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
-    check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola's desk, key /.test(olaRow.tip),
+    check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola, a teammate, key /.test(olaRow.tip),
       "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
     check(same(rows75[0].mine, ["Your edits are with the team"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
       "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
@@ -1391,7 +1391,7 @@ async function parent() {
 
     const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
     const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
-    check(!!lk.title && lk.title === "Ola's desk" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola's desk"]) && lk.rows === 2
+    check(!!lk.title && lk.title === "Ola, a teammate" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola, a teammate"]) && lk.rows === 2
       && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from this file",
       "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take and no offer's pair: " + JSON.stringify(lk));
     check(same(m1.pressed, ["true"]) && same(m1.over, { en: HERS }) && m1.rebuilt === 1 && /Now in your edits/.test((m1.row || [""])[0]),
@@ -1429,17 +1429,17 @@ async function parent() {
       "75f and the take is on disk: the next launch holds it as this desk's own edit (" + JSON.stringify((rd(L4, "over") || {})["c-warm"]) + ")");
     const L5 = run(lab75, ["desk", "rows", "look:" + p75.at], true);
     const lk5 = rd(L5, "look");
-    check(!!lk5.title && same(lk5.mine, []) && lk5.heads[0] === "At Piotr's desk" && lk5.rows === 3,
+    check(!!lk5.title && same(lk5.mine, []) && lk5.heads[0] === "At Piotr, a teammate" && lk5.rows === 3,
       "75g THE CONTROL: a file compared with no catalog in use is looked at and nothing of it can be taken: " + JSON.stringify(lk5));
     /* A file grown from another catalog in the folder, not the one in use: it hangs under that one, and its changed card cannot be taken. */
     const lab75g = accepted(), otherCat = Object.assign(JSON.parse(JSON.stringify(wanted)), { id: "lamp-other" });
     fs.writeFileSync(path.join(lab75g, "catalogs", "other.ec"), JSON.stringify(otherCat), "utf8");
     const fromOther = JSON.parse(JSON.stringify(otherCat)); fromOther.grew = { id: "lamp-other", rev: 1, sha: "sha256:" + sha(V2.v2SignedBytes(otherCat)) }; fromOther.cards[0].body.en = HERS;
     deskOf(fromOther, "Bo", null, lab75g);
-    const G1 = run(lab75g, ["desk", "rows"], true), gRows = G1.rows[0] || [], gBo = gRows.find(r => r.name === "Bo's desk") || {};
+    const G1 = run(lab75g, ["desk", "rows"], true), gRows = G1.rows[0] || [], gBo = gRows.find(r => r.name === "Bo, a teammate") || {};
     const G2 = run(lab75g, ["desk", "rows", "look:" + gBo.at], true), lkG = rd(G2, "look");
-    check(gRows.map(r => r.name).join("|").indexOf("other.ec|Bo's desk") > -1 && !gBo.alone && !!lkG.title && lkG.name === "other"
-      && same(lkG.heads, ["In the team's edition", "At Bo's desk"]) && same(lkG.mine, []) && same(lkG.take, []),
+    check(gRows.map(r => r.name).join("|").indexOf("other.ec|Bo, a teammate") > -1 && !gBo.alone && !!lkG.title && lkG.name === "other"
+      && same(lkG.heads, ["In the team's edition", "At Bo, a teammate"]) && same(lkG.mine, []) && same(lkG.take, []),
       "75G THE CONTROL: a file grown from a catalog in the folder that is not in use hangs under that catalog, is compared with it, and its changed card cannot be taken: "
       + JSON.stringify([gRows.map(r => r.name), lkG]));
 
@@ -1461,7 +1461,7 @@ async function parent() {
     fs.rmSync(path.join(cyLab, "catalogs", "desks", cy.id), { recursive: true, force: true });
     const G3 = run(cyLab, ["desk", "boot", "settle", "rows", "drop", "listing", "reread"], true, { drop: { rel: cyRel, text: cyText } });
     const cyBefore = (G3.rows[0] || []).map(r => r.name), cyAfter = (G3.rows[1] || []).map(r => r.name);
-    check(cyBefore.indexOf("Cy's desk") < 0 && cyAfter.indexOf("Cy's desk") > -1,
+    check(cyBefore.indexOf("Cy, a teammate") < 0 && cyAfter.indexOf("Cy, a teammate") > -1,
       "75k a colleague's file written while the Library is open appears in it once the shell's listing arrives, with no other paint (" + JSON.stringify([cyBefore, cyAfter]) + ")");
     const errs75 = [r75, L2, L3, L4, L5, L6, L7, L8, L9, G1, G2, G3].flatMap(o => o.errors || []);
     check(!errs75.length, "75j those launches ran their acts without an error" + (errs75.length ? ": " + errs75.length + ", first " + errs75[0] : ""));
@@ -1835,7 +1835,7 @@ async function parent() {
     onRoster(lab77, ["k-" + "0".repeat(16)]);
     const off77 = run(lab77, ["deskload:" + bo77File + "," + bo77.id, "said", "settle"]);
     const o77 = off77.offers[0] || {};
-    check(o77.shown === true && same(o77.roster, ["This file comes from a desk outside the team."]) && o77.yes === "Load catalog"
+    check(o77.shown === true && same(o77.roster, ["This file comes from outside the team."]) && o77.yes === "Load catalog"
       && !off77.reloaded && off77.heldId === "" && !(off77.errors || []).length,
       "77a on an empty desk, a file asked for whose desk is off the team's roster is offered with the note rather than loaded at once: "
       + JSON.stringify({ shown: o77.shown, roster: o77.roster, yes: o77.yes, loaded: off77.reloaded, held: off77.heldId, errors: (off77.errors || []).slice(0, 2) }));
@@ -1852,7 +1852,7 @@ async function parent() {
     const ola77 = deskOf(grown77("Good day to you."), "Ola", null, lab77b), cy77 = deskOf(grown77("Good day, from Cy."), "Cy", null, lab77b);
     onRoster(lab77b, [ola77.id], own77);
     const r77 = run(lab77b, ["desk", "rows"], true), rows77 = r77.rows[0] || [];
-    check(same(rows77.map(r => r.name), ["lamp.ec", "Ola's desk"]) && same((rows77[0] || {}).mine, ["Your edits are with the team"])
+    check(same(rows77.map(r => r.name), ["lamp.ec", "Ola, a teammate"]) && same((rows77[0] || {}).mine, ["Your edits are with the team"])
       && rows77.every(r => r.fp !== cy77.four) && !(r77.errors || []).length,
       "77b the Library draws the roster's desk and not the one off it, and this desk's own file, though the roster does not list it, still says its edits are with the team: "
       + JSON.stringify({ rows: rows77.map(r => [r.name, r.fp, r.mine]), errors: (r77.errors || []).slice(0, 2) }));
@@ -1865,7 +1865,7 @@ async function parent() {
     team77.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(team77)), lead77.privateKey).toString("hex");
     const r77c = run(lab77b, ["desk", "drop", "rows"], true, { drop: { rel: "etiuda-team.json", text: JSON.stringify(team77) } });
     const rows77c = r77c.rows[0] || [];
-    check(same(rows77c.map(r => r.name).sort(), ["Cy's desk", "Ola's desk", "lamp.ec"]) && !(r77c.errors || []).length,
+    check(same(rows77c.map(r => r.name).sort(), ["Cy, a teammate", "Ola, a teammate", "lamp.ec"]) && !(r77c.errors || []).length,
       "77c a desk the lead adds to the roster at the epoch already accepted is drawn at the next listing once the team file says so: "
       + JSON.stringify({ rows: rows77c.map(r => r.name), errors: (r77c.errors || []).slice(0, 2) }));
     fs.unlinkSync(path.join(lab77b, "catalogs", "etiuda-team.json"));
@@ -1873,7 +1873,7 @@ async function parent() {
     const ola77d = deskOf(grown77("Good day to you."), "Ola", null, lab77d), cy77d = deskOf(grown77("Good day, from Cy."), "Cy", null, lab77d);
     onRoster(lab77d, [ola77d.id], null, true);
     const r77d = run(lab77d, ["desk", "rows"], true), rows77d = r77d.rows[0] || [];
-    check(same(rows77d.map(r => r.name).sort(), ["Cy's desk", "Ola's desk", "lamp.ec"]) && cy77d.id !== ola77d.id && !(r77d.errors || []).length,
+    check(same(rows77d.map(r => r.name).sort(), ["Cy, a teammate", "Ola, a teammate", "lamp.ec"]) && cy77d.id !== ola77d.id && !(r77d.errors || []).length,
       "77d a roster kept for a team whose lead this desk no longer pins, as after the lead is forgotten, draws every desk as a desk with no team does: "
       + JSON.stringify({ rows: rows77d.map(r => r.name), errors: (r77d.errors || []).slice(0, 2) }));
 
@@ -1885,7 +1885,7 @@ async function parent() {
     onRoster(lab77e, ["k-" + "0".repeat(16)]);
     const dropOff = run(lab77e, ["wire", "openpath:" + offPath(bo77e, bo77File), "said"]);
     const dOff = dropOff.offers[0] || {};
-    check(dOff.shown === true && same(dOff.roster, ["This file comes from a desk outside the team."]) && !dropOff.reloaded
+    check(dOff.shown === true && same(dOff.roster, ["This file comes from outside the team."]) && !dropOff.reloaded
       && dropOff.heldId === "" && !(dropOff.errors || []).length,
       "77e a drop of a file whose desk is off the roster is offered with the note, and an empty desk does not load it: "
       + JSON.stringify({ shown: dOff.shown, roster: dOff.roster, loaded: dropOff.reloaded, held: dropOff.heldId, errors: (dropOff.errors || []).slice(0, 2) }));
@@ -1902,7 +1902,7 @@ async function parent() {
     onRoster(lab77g, ["k-" + "0".repeat(16)]);
     const impOff = run(lab77g, ["pickpath:" + offPath(bo77g, bo77File), "said"]);
     const iOff = impOff.offers[0] || {};
-    check(iOff.shown === true && same(iOff.roster, ["This file comes from a desk outside the team."]) && !impOff.reloaded
+    check(iOff.shown === true && same(iOff.roster, ["This file comes from outside the team."]) && !impOff.reloaded
       && impOff.heldId === "" && !(impOff.errors || []).length,
       "77g Import of a file whose desk is off the roster asks, with the note, and an empty desk does not load it: "
       + JSON.stringify({ shown: iOff.shown, roster: iOff.roster, loaded: impOff.reloaded, held: impOff.heldId, errors: (impOff.errors || []).slice(0, 2) }));
@@ -1919,7 +1919,7 @@ async function parent() {
     run(lab77i, ["pickpath:" + offPath(bo77i, bo77File), "said", "settle"]);
     const histOff = run(lab77i, ["hist", "said"]);
     const hOff = histOff.offers[0] || {};
-    check(hOff.shown === true && same(hOff.roster, ["This file comes from a desk outside the team."]) && !histOff.reloaded
+    check(hOff.shown === true && same(hOff.roster, ["This file comes from outside the team."]) && !histOff.reloaded
       && !(histOff.errors || []).length,
       "77i a kept version of a file whose desk is off the roster is offered with the note, and an empty desk does not load it: "
       + JSON.stringify({ shown: hOff.shown, roster: hOff.roster, loaded: histOff.reloaded, errors: (histOff.errors || []).slice(0, 2) }));

@@ -227,7 +227,7 @@ function settingsBodyHtml(){
         '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
         +' placeholder="first name" value="'+esc(agentName())+'">')+
       row(t("Interface language"),
-          t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
+          t("The language of the buttons and menus, not of the replies: those follow EN|PL in the header"),
           langSel)+
       /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
          and the way back after leaving once, on the first row that offers Leave. */
@@ -238,7 +238,7 @@ function settingsBodyHtml(){
         ? row(t("Edit the shared catalog directly"),
             t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
             onoff("sharededit", lsGet("eSharedEdit")==="1",
-                  t("Each change goes into the shared catalog; where a colleague changed the same text first, theirs stays and yours waits in this desk's own file"),
+                  t("Each change goes into the shared catalog; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
                   t("Each change stays in this desk's own file")))
         : ""),
       personalNote(),

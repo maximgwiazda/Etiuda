@@ -24,7 +24,7 @@ import { pills } from "./dom.js";
 /* The desk's name as the agent gave it in Settings, else a colleague's. */
 function deskName(f){
   const n=String(f && f.desk && f.desk.name || "").trim();
-  return n ? t("{NAME}'s desk").split("{NAME}").join(n) : t("A colleague's desk");
+  return n ? t("{NAME}, a teammate").split("{NAME}").join(n) : t("A teammate");
 }
 // The 16 hex of the desk's id in four groups, as a lead's key is shown for comparing.
 function deskKey(f){ return leadKeyText(String(f.desk.id).slice(2)); }
@@ -307,7 +307,7 @@ function openDeskLook(f,base,name,work,back){
       return false;
     }
     const inUse=!!(base && base.held), changes=editionChanges(s.team,s.hers,inUse?pack:null,true);
-    if(!changes.items.length){ toast(t("That desk's cards match the team's edition.")); return false; }
+    if(!changes.items.length){ toast(t("That teammate's cards match the team's edition.")); return false; }
     const who=deskName(f);
     lkPick=null;
     openEditionPanel({c:s.hers, held:s.team, changes:changes, name:name, keep:back, load:work, back:back, taken:()=>{},
