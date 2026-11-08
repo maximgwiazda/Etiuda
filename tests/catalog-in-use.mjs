@@ -1823,6 +1823,27 @@ try {
       }
     }
     {
+      /* The test architect's second edit on round five: a recorded answer whose catalog is private only through a root its copy
+         stated is taken back when that root is marked private, since withdrawClosed reads the private chain. */
+      const box = await arm("r5-root-later");
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+      const c2 = catalog(6, { id: "k-fedcba9876543210-55555555", name: "Rooted copy", card: B0_MARK, unsigned: true });
+      c2.grew = { id: "k-0123456789abcdef-66666666", rev: 5, sha: "sha256:" + "ef".repeat(32), root: "quay-held" };
+      const dir = folder("r5-root-later-out");
+      put(dir, "held.ec", textOf(c2));
+      box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+      const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+      const pin = pinOf(box.D, off ? off[1] : "");
+      take(box.D, pin);
+      putAsk(box, "Askrootlater", pin);
+      box.D.api.tryCatalogAsk(box.D.win);
+      const before = fs.existsSync(answerPath(box.share, box.me.id));
+      await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+      const after = fs.existsSync(answerPath(box.share, box.me.id));
+      check(!!pin && before && !after,
+        "r5h an answer written for a copy whose stated root is marked private afterwards is taken back (" + JSON.stringify({ pin: !!pin, before, after }) + ")");
+    }
+    {
       /* Edit 2: a box answer this desk has no record of (an earlier build's) goes when the switch no longer applies; a team-key
          answer stays. */
       const unkept = async (name, src) => {

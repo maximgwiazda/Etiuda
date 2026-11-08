@@ -3270,7 +3270,7 @@ function withdrawClosed() {
   const use = teamUse();
   if (!use.member || !use.seal) return;
   const open = contentApplies(use.seal.team, use.consent);
-  if (answerKept && ((answerKept.lead && !open) || answerKept.ids.some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
+  if (answerKept && ((answerKept.lead && !open) || privateChain(answerKept.ids).some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
   /* A box answer this desk has no record of, one an earlier build wrote among them, goes too; a team-key answer stays. */
   if (!open && names.indexOf(ANSWER_NAME) >= 0 && boxAnswerHere(path.join(dir, ANSWER_NAME))) removeAnswer(); /* plant:s0b-withdraw-unkept */
   for (const n of names) {
