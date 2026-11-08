@@ -5558,6 +5558,13 @@ const CARD_B = {
       },
       querySelectorAll: () => [],
       appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.parentElement = this; return c; },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
       insertBefore(c) { return this.appendChild(c); },
       remove() { this.gone = true; }, contains: () => false, focus() {}, blur() {}, closest: () => null, dispatchEvent: () => true,
       getContext: () => ({ measureText: () => ({ width: 10 }) }),
@@ -5796,6 +5803,13 @@ const CARD_B = {
         c.parentNode = this; c.parentElement = this;
         return c;
       },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
       dispatchEvent(ev) { return true; },
       select() {},
       getContext: () => ({ measureText: () => ({ width: 10 }) }),
@@ -5812,6 +5826,10 @@ const CARD_B = {
   const tabsWrap = el({ id: "tabsWrap" });
   tabsWrap.appendChild(tabsBar);
   const screenHost = el({ id: "screenHost" });
+  const libList = el({ className: "screen-page lib-screen lib-list" });
+  screenHost.appendChild(libList);
+  const origScreenQuery = screenHost.querySelector.bind(screenHost);
+  screenHost.querySelector = s => (s === ".lib-list" ? libList : origScreenQuery(s));
   const modal = el({ id: "modal", hidden: true });
   const modalCard = el({ id: "modalCard", className: "modal-card" });
   modal.appendChild(modalCard);
@@ -6125,6 +6143,371 @@ const CARD_B = {
       tabEl.querySelector = s => (s === ".tab-label>span" ? viz : orig(s));
       T.fitTabLabels();
       return viz.textContent === "Maintenance" ? true : "label reads " + JSON.stringify(viz.textContent);
+    });
+
+  } finally {
+    STAB.clearScreenOn();
+    STAB.screens.length = 0;
+    T.tabs.splice(0, T.tabs.length);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = hadRaf;
+    if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
+    if (hadConfirm === undefined) delete globalThis.confirm; else globalThis.confirm = hadConfirm;
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ F2 renames on the desk (run D4)
+   F2 renames the focused card, intent or category by opening its editor with the name selected,
+   and in the Library a category row's name field takes focus; F2 elsewhere does nothing;
+   rebindable, listed with the "new key" chip; context-menu rows show F2. */
+{
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
+  const hadHost = globalThis.window.E_HOST, hadConfirm = globalThis.confirm, hadRaf = globalThis.requestAnimationFrame;
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const Dom = await import(MOD("dom.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const SCL = await import(MOD("shortcuts-list.js"));
+  const T = await import(MOD("tabs.js"));
+  const KD = await import(MOD("keydown.js"));
+  const RS = await import(MOD("run-shortcut.js"));
+  const STAB = await import(MOD("screen-tabs.js"));
+  const CX = await import(MOD("context-menu.js"));
+  const CE = await import(MOD("card-editor.js"));
+  const ED = await import(MOD("editors.js"));
+  const MG = await import(MOD("manage.js"));
+  const fs = await import("node:fs");
+
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+
+  const on = o => ({
+    add: c => o.add(c),
+    remove: c => o.delete(c),
+    contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : Boolean(f); if (w) o.add(c); else o.delete(c); return w; }
+  });
+
+  function matchSel(n, s) {
+    if (!n) return false;
+    s = s.trim();
+    if (s.includes(",")) return s.split(",").some(part => matchSel(n, part));
+    const parts = s.split(/\s+/);
+    if (parts.length > 1) {
+      const target = parts[parts.length - 1];
+      if (!matchSel(n, target)) return false;
+      const ancestorSel = parts.slice(0, -1).join(" ");
+      let p = n.parentNode;
+      while (p) {
+        if (matchSel(p, ancestorSel)) return true;
+        p = p.parentNode;
+      }
+      return false;
+    }
+    let sel = s;
+    const tagMatch = sel.match(/^([A-Za-z0-9]+)/);
+    if (tagMatch) {
+      if ((n.tagName || "").toUpperCase() !== tagMatch[1].toUpperCase()) return false;
+      sel = sel.slice(tagMatch[1].length);
+    }
+    const idMatch = sel.match(/#([A-Za-z0-9_-]+)/);
+    if (idMatch) {
+      if (n.id !== idMatch[1]) return false;
+    }
+    const classMatches = sel.match(/\.([A-Za-z0-9_-]+)/g);
+    if (classMatches) {
+      for (const cm of classMatches) {
+        if (!n.classList || !n.classList.contains(cm.slice(1))) return false;
+      }
+    }
+    const attrMatches = sel.match(/\[([A-Za-z0-9_-]+)(?:=["']?([^"']*)["']?)?\]/g);
+    if (attrMatches) {
+      for (const am of attrMatches) {
+        const m = am.match(/\[([A-Za-z0-9_-]+)(?:=["']?([^"']*)["']?)?\]/);
+        if (m) {
+          const attr = m[1], val = m[2];
+          if (attr.startsWith("data-")) {
+            const k = attr.slice(5).replace(/-([a-z])/g, (_, g) => g.toUpperCase());
+            if (!n.dataset || n.dataset[k] === undefined) return false;
+            if (val !== undefined && String(n.dataset[k]) !== val) return false;
+          } else {
+            if (!n.getAttribute || n.getAttribute(attr) == null) return false;
+            if (val !== undefined && n.getAttribute(attr) !== val) return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  const el = extra => {
+    const classes = new Set((extra && extra.className || "").split(/\s+/).filter(Boolean));
+    const e = Object.assign({
+      hidden: false, attrs: {}, innerHTML: "", value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
+      get textContent() {
+        if (this._text !== undefined) return this._text;
+        return (this.kids && this.kids.length) ? this.kids.map(k => k.textContent).join("") : "";
+      },
+      set textContent(v) { this._text = String(v); },
+      dataset: {},
+      get children() { return this.kids || []; },
+      classList: on(classes),
+      get className() { return [...classes].join(" "); },
+      set className(v) { classes.clear(); String(v || "").split(/\s+/).filter(Boolean).forEach(c => classes.add(c)); },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      getAttribute(k) { return k === "class" ? this.className : this.attrs[k]; },
+      removeAttribute(k) { delete this.attrs[k]; },
+      querySelector(s) {
+        if (!this.kids) return null;
+        for (const k of this.kids) {
+          if (matchSel(k, s)) return k;
+          const found = k.querySelector && k.querySelector(s);
+          if (found) return found;
+        }
+        return null;
+      },
+      querySelectorAll(s) {
+        const out = [];
+        const walk = n => {
+          if (!n || !n.kids) return;
+          for (const k of n.kids) {
+            if (matchSel(k, s)) out.push(k);
+            walk(k);
+          }
+        };
+        walk(this);
+        return out;
+      },
+      closest(s) {
+        let p = this;
+        while (p) {
+          if (matchSel(p, s)) return p;
+          p = p.parentNode;
+        }
+        return null;
+      },
+      remove() { this.gone = true; if (this.parentNode && this.parentNode.kids) { this.parentNode.kids = this.parentNode.kids.filter(x => x !== this); } },
+      contains(n) { let p = n; while (p) { if (p === this) return true; p = p.parentNode; } return false; },
+      focus() { globalThis.document.activeElement = this; this.focused = true; },
+      select() { this.selected = true; },
+      getContext: () => ({ measureText: () => ({ width: 10 }) }),
+      getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 200, height: 32 }),
+      appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.parentElement = this; return c; },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
+      dispatchEvent(ev) { return true; }
+    }, extra || {});
+    return e;
+  };
+
+  const toastEl = el({ id: "toast" });
+  const pax = el({ id: "pax", tagName: "INPUT" });
+  const box = el({ id: "intent", tagName: "INPUT", selectionStart: 0, selectionEnd: 0, blur() { this.blurred = true; }, focus() {} });
+  const tabsBar = el({ id: "tabsBar", role: "tablist" });
+  const tabsWrap = el({ id: "tabsWrap" });
+  tabsWrap.appendChild(tabsBar);
+  const screenHost = el({ id: "screenHost" });
+  const libList = el({ className: "screen-page lib-screen lib-list" });
+  screenHost.appendChild(libList);
+  const origScreenQuery = screenHost.querySelector.bind(screenHost);
+  screenHost.querySelector = s => (s === ".lib-list" ? libList : origScreenQuery(s));
+  const modal = el({ id: "modal", hidden: true });
+  const modalCard = el({ id: "modalCard", className: "modal-card" });
+  modal.appendChild(modalCard);
+  const list = el({ id: "list" });
+  const intentRail = el({ id: "intentRail" });
+  const pills = el({ id: "pills" });
+  const byId = {
+    "#toast": toastEl,
+    "#pax": pax,
+    "#roleSel": el({ id: "roleSel", tagName: "SELECT" }),
+    "#intent": box,
+    "#tabsBar": tabsBar,
+    "#tabsWrap": tabsWrap,
+    "#screenHost": screenHost,
+    "#modal": modal,
+    "#modalCard": modalCard,
+    "#list": list,
+    "#intentRail": intentRail,
+    "#pills": pills,
+    "#mgClose": el({ id: "mgClose" }),
+    "#mgAddIntent": el({ id: "mgAddIntent" }),
+    "#mgAddCat": el({ id: "mgAddCat" }),
+    "#mgImportCatalog": el({ id: "mgImportCatalog" }),
+    "#mgWipe": el({ id: "mgWipe" }),
+    "#mgCatList": el({ id: "mgCatList" })
+  };
+
+  const bodyKids = [tabsWrap, screenHost, modal, list, intentRail, pills];
+  const body = el({
+    tagName: "BODY",
+    kids: bodyKids,
+    appendChild: n => { bodyKids.push(n); n.parentNode = body; n.parentElement = body; return n; },
+    removeChild: n => { n.gone = true; }
+  });
+  bodyKids.forEach(k => { k.parentNode = body; k.parentElement = body; });
+  let pageKeys = null;
+
+  globalThis.document = {
+    querySelector: s => byId[s] || (s === "#modalCard" ? modalCard : null),
+    getElementById: id => byId["#" + id] || null,
+    querySelectorAll: s => (s === ".tab" ? tabsBar.querySelectorAll(".tab") : []),
+    activeElement: body,
+    body,
+    addEventListener(k, fn) { if (k === "keydown") pageKeys = fn; },
+    contains: () => true,
+    createElement: tag => el({ tagName: (tag || "div").toUpperCase() }),
+    createRange: () => ({}),
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} }
+  };
+  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; };
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0", marginLeft: "0" });
+  globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+  STUBS.forEach(k => { H.hooks[k] = () => {}; });
+  H.hooks.runShortcut = id => RS.runShortcut(id);
+  Dom.grabDom();
+
+  const key = o => Object.assign({
+    key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, repeat: false,
+    prevented: false, stopped: false, target: body,
+    preventDefault() { this.prevented = true; },
+    stopPropagation() {}, stopImmediatePropagation() { this.stopped = true; }
+  }, o);
+
+  const tab = (id, who) => ({ id, pax: who, title: "", lang: AS.lang, intentIdxs: [], intentText: "", intentBox: "", who: "", cats: [] });
+  const start = (listArr, active) => {
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: active, tabs: listArr.map(x => tab(x[0], x[1])) }));
+    T.initTabs();
+  };
+
+  try {
+    KD.wireGlobalKeydown();
+
+    // D4-1. F2 on a focused card opens its editor with the name selected
+    check("shortcuts.js", "D4-1 F2 on a focused card opens its editor with the name selected", () => {
+      start([["t-a", "Anna"]], "t-a");
+      let openedId = null;
+      H.hooks.openCardEditor = id => { openedId = id; };
+      AS.putEntrySel({ id: "card-99", vi: 0 });
+      const handled = RS.runShortcut("rename");
+      return handled === true && openedId === "card-99";
+    });
+
+    // D4-2. F2 on an intent row opens its editor with the name selected
+    check("shortcuts.js", "D4-2 F2 on an intent row opens its editor with the name selected", () => {
+      start([["t-a", "Anna"]], "t-a");
+      let openedIdx = null;
+      H.hooks.openIntentEditor = idx => { openedIdx = idx; };
+      const intentItem = el({ className: "rail-item", dataset: { si: "5" } });
+      intentRail.appendChild(intentItem);
+      globalThis.document.activeElement = intentItem;
+      const handled = RS.runShortcut("rename");
+      return handled === true && openedIdx === 5;
+    });
+
+    // D4-3. F2 on a category pill opens its editor with the name selected
+    check("shortcuts.js", "D4-3 F2 on a category pill opens its editor with the name selected", () => {
+      start([["t-a", "Anna"]], "t-a");
+      let openedCat = null, fromPill = null;
+      H.hooks.openCategoryEditor = (k, fp) => { openedCat = k; fromPill = fp; };
+      const pill = el({ className: "pill", dataset: { k: "orders" } });
+      pills.appendChild(pill);
+      globalThis.document.activeElement = pill;
+      const handled = RS.runShortcut("rename");
+      return handled === true && openedCat === "orders" && fromPill === true;
+    });
+
+    // D4-4. in the Library a category row's name field takes focus
+    check("manage.js", "D4-4 in the Library a category row's name field takes focus", () => {
+      start([["t-a", "Anna"]], "t-a");
+      STAB.openScreenTab("library");
+      const catRow = el({ className: "mg-cat-row", dataset: { crow: "shipping" } });
+      const nameInput = el({ tagName: "INPUT", className: "mg-cat-lab2", dataset: { rename: "shipping" }, value: "Shipping" });
+      catRow.appendChild(nameInput);
+      screenHost.appendChild(catRow);
+      globalThis.document.activeElement = catRow;
+      const handled = RS.runShortcut("rename");
+      return handled === true && nameInput.focused === true && nameInput.selected === true;
+    });
+
+    // D4-5. F2 elsewhere does nothing
+    check("shortcuts.js", "D4-5 F2 elsewhere does nothing", () => {
+      start([["t-a", "Anna"]], "t-a");
+      STAB.clearScreenOn();
+      AS.putEntrySel(null);
+      globalThis.document.activeElement = body;
+      const deskHandled = RS.runShortcut("rename");
+
+      STAB.openScreenTab("settings");
+      globalThis.document.activeElement = body;
+      const settingsHandled = RS.runShortcut("rename");
+
+      return deskHandled === false && settingsHandled === false;
+    });
+
+    // D4-6. rename is rebindable, and listed with the new key chip
+    check("shortcuts.js", "D4-6 rename is rebindable, and listed with the new key chip", () => {
+      const renameDef = SC.SC_DEFS.find(x => x.id === "rename");
+      if (!renameDef) return "rename not in SC_DEFS";
+      if (renameDef.def.code !== "F2") return "default not F2";
+      if (!renameDef.newKey) return "rename missing newKey property";
+      const maintDef = SC.SC_DEFS.find(x => x.id === "maintenance");
+      if (!maintDef || !maintDef.newKey) return "maintenance missing newKey property";
+
+      const html = SCL.shortcutsListHtml("");
+      if (html.indexOf("new key") < 0 && html.indexOf("nowy skrót") < 0) return "new key chip missing in html";
+
+      // rebindable
+      ST.lsSet("eShortcuts", JSON.stringify({ rename: { code: "KeyR", key: "r", ctrl: 1, alt: 0, shift: 0, meta: 0 } }));
+      SC.loadShortcuts();
+      const matchesF2 = SC.eventMatchesAction(key({ key: "F2", code: "F2" }), "rename");
+      const matchesRebound = SC.eventMatchesAction(key({ key: "r", code: "KeyR", ctrlKey: true }), "rename");
+      ST.lsDel("eShortcuts");
+      SC.loadShortcuts();
+      return !matchesF2 && matchesRebound;
+    });
+
+    // D4-7. context-menu rows show F2 as Studio's do
+    check("context-menu.js", "D4-7 context-menu rows show F2 as Studio's do", () => {
+      const hadCards = AS.cards;
+      AS.setCards([{ id: "c-1", p: ["hello"] }]);
+      try {
+        const cardEl = el({ dataset: { id: "c-1" }, querySelector: s => (s.includes('edit') ? el() : null) });
+        const intentElNode = el({ dataset: { si: "1" }, querySelector: s => (s.includes('edit') ? el() : null) });
+        const pillElNode = el({ dataset: { k: "cat-1" }, querySelector: s => (s.includes('editcat') ? el() : null) });
+
+        cardEl.closest = s => (s.includes(".card") ? cardEl : null);
+        intentElNode.closest = s => (s.includes(".rail-item") ? intentElNode : null);
+        pillElNode.closest = s => (s.includes(".pill") ? pillElNode : null);
+
+        const cardRows = CX.ctxRowsFor(cardEl);
+        const intentRows = CX.ctxRowsFor(intentElNode);
+        const pillRows = CX.ctxRowsFor(pillElNode);
+
+        const cardEdit = cardRows && cardRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this card"))));
+        const intentEdit = intentRows && intentRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this intent"))));
+        const pillEdit = pillRows && pillRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this category"))));
+
+        if (!cardEdit || cardEdit.key !== "F2") return "card row missing key F2";
+        if (!intentEdit || intentEdit.key !== "F2") return "intent row missing key F2";
+        if (!pillEdit || pillEdit.key !== "F2") return "pill row missing key F2";
+
+        return true;
+      } finally {
+        AS.setCards(hadCards);
+      }
     });
 
   } finally {

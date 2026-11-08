@@ -12,7 +12,7 @@ import { captureRail, railRelKeys, railEchoRedraw, railDecorate } from "./rail-l
 import { render } from "./render.js";
 import { toast } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
-import { kbdNav, railStep, markEnd } from "./mark.js";
+import { kbdNav, railStep, markEnd, markSurface } from "./mark.js";
 import { navEntry } from "./entry-walk.js";
 import { navPill, navPillEnd } from "./pill-walk.js";
 import { copyEntrySel } from "./copy-entry.js";
@@ -21,6 +21,7 @@ import { lanesKey, lanesOpen, lanesShortcut, toggleLanes } from "./lanes.js";
 import { notePaneOpen, closeNotePane } from "./note-pane.js";
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder, setRailSel, setRailMarkIdx, setSemiKind, pickRun, intentIdxs, setRailMarkUsed, setPickRun, entrySel } from "./app-state.js";
+import { hooks } from "./hooks.js";
 // One dispatcher for every bound key: it reaches the whole app, so every surface it touches
 // imports into this file rather than the other way about.
 
@@ -37,6 +38,19 @@ function runShortcut(id){
       if(!m) return false;
       if(m.hidden){ closeLooseOverlays(); openSettingsMenu(true); } else closeSettingsMenu();
       return true;
+    }
+    if(id==="rename"){
+      const a=typeof document!=="undefined" ? document.activeElement : null;
+      const row=a && a.closest ? a.closest(".mg-cat-row, .mg-cat") : null;
+      if(row){
+        const inp=row.querySelector("input.mg-cat-lab2[data-rename], input.mg-cat-lab2");
+        if(inp && inp.focus){
+          inp.focus();
+          try{ inp.select(); }catch(_){}
+          return true;
+        }
+      }
+      return false;
     }
     return false;
   }
@@ -70,6 +84,43 @@ function runShortcut(id){
     return true;
   }
   if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }
+  if(id==="rename"){
+    const a=typeof document!=="undefined" ? document.activeElement : null;
+    const card=a && a.closest ? a.closest("#list .card[data-id], .card[data-id]") : null;
+    if(card && card.dataset && card.dataset.id){
+      closeLooseOverlays();
+      hooks.openCardEditor(card.dataset.id, null, false);
+      return true;
+    }
+    const item=a && a.closest ? a.closest("#intentRail .rail-item[data-si], .rail-item[data-si]") : null;
+    if(item && item.dataset && item.dataset.si!=null){
+      closeLooseOverlays();
+      hooks.openIntentEditor(+item.dataset.si);
+      return true;
+    }
+    const pill=a && a.closest ? a.closest("#pills .pill[data-k], .pill[data-k]") : null;
+    if(pill && pill.dataset && pill.dataset.k){
+      closeLooseOverlays();
+      hooks.openCategoryEditor(pill.dataset.k, true);
+      return true;
+    }
+    if(markSurface()==="intent"){
+      const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
+      if(idx>=0){
+        closeLooseOverlays();
+        hooks.openIntentEditor(idx);
+        return true;
+      }
+    }
+    if(markSurface()==="card" || entrySel){
+      if(entrySel && entrySel.id){
+        closeLooseOverlays();
+        hooks.openCardEditor(entrySel.id, null, false);
+        return true;
+      }
+    }
+    return false;
+  }
   if(id==="selectSearch"){
     if(!intentEl) return false;
     closeLooseOverlays();

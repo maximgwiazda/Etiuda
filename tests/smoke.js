@@ -1109,14 +1109,11 @@ const t0 = Date.now();
       const page = document.getElementById("setBody");
       out[th].segs = [...page.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
       closeScreenTab("settings"); await wait(400);
-      /* A MARK AND A FILL, each painted: the empty desk's mark is a canvas that reads its colour from CSS, and a
-         selected pill is a solid fill under white words. Put on the page for the reading and taken out again. */
+      /* A FILL, painted: a selected pill is a solid fill under white words. Put on the page for the reading and
+         taken out again. */
       const paint = (cls, tag) => { const el = document.createElement(tag); el.className = cls; document.body.appendChild(el);
         const cs = getComputedStyle(el), r = { color: px(cs.color), bg: px(cs.backgroundColor) }; el.remove(); return r; };
       out[th].fill = res("var(--accent-fill)");
-      out[th].mark = (() => { const w = document.createElement("div"), c = document.createElement("canvas");
-        w.className = "empty empty-desk"; c.className = "e-fifth"; w.appendChild(c); document.body.appendChild(w);
-        const v = px(getComputedStyle(c).color); w.remove(); return v; })();
       out[th].pill = paint("pill on", "span").bg;
     }
     if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
@@ -1137,21 +1134,23 @@ const t0 = Date.now();
   /* TWO BLUES IN THE DARK THEMES, ONE IN LIGHT (Maxim, 2026-10-03 19:09 and 19:10): "we should revert to the former
      blue in case of marks of all sort, and in case of Etiuda logo in empty state", and solid blue buttons and
      such keep the darker one; "I meant the dark mode specifically. In light mode colors are peachy". So in
-     the dark themes the accent and the empty desk's mark are the mark blue, 64,154,252 (M Kin, the middle pick of 2026-10-05), while every
+     the dark themes the accent is the mark blue, 64,154,252 (M Kin, the middle pick of 2026-10-05), while every
      segmented switch's thumb in Settings, a selected pill and the fill token paint the
-     bubbles' blue, which white on reads 4.5:1 or better (WCAG's relative luminance). Light has one blue. */
+     bubbles' blue, which white on reads 4.5:1 or better (WCAG's relative luminance). Light has one blue. No mark
+     is sampled since board 957: the empty desk lost its mark, About's is white in dark on purpose (417) and the
+     opening's ink is a fixed #2881ea, so the accent is the one thing left to carry the mark blue. */
   const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
     .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
   const whiteOn = c => 1.05 / (lum(c) + .05);
   const MARK_BLUE = [64, 154, 252];
   const twoBlues = s => { const mark = s.bg[0] < 128 ? MARK_BLUE : s.bub;
-    return [s.accent, s.mark].every(c => near(c, mark) && c[3] === 1)
+    return near(s.accent, mark) && s.accent[3] === 1
       && [s.fill, s.pill].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
       && whiteOn(s.bub) >= 4.5; };
   check(["unset", "dark", "light"].every(th => twoBlues(themeColours[th])),
-    "the dark themes' accent and the empty desk's mark are the mark blue while the switches, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
+    "the dark themes' accent is the mark blue while the switches, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
     + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
-      [themeColours[th].accent, themeColours[th].mark, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
+      [themeColours[th].accent, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
         themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
 
   /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
