@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 93;
+const EXPECTED = 94;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -3129,6 +3129,25 @@ async function run() {
     const ok = r.landed && r.staysAfterOne && r.leavesAfterTwo;
     check(ok, "45o a withdrawn ask's file, missed by two listings, is gone from the desk's mirror by the end of the second: "
       + "landed " + r.landed + ", stays after 1 missing " + r.staysAfterOne + ", leaves after 2 missing " + r.leavesAfterTwo);
+  }
+  /* Board 962, stage 0b: an ask made under the lead's switch is format 2, and reaches the desk's mirror as format 1 does. */
+  {
+    const shareDir = folder("b0-asks-share");
+    const mirrorDir = folder("b0-asks-mirror");
+    fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.mkdirSync(path.join(shareDir, "catalog-asks"), { recursive: true });
+    const put = (name, doc) => fs.writeFileSync(path.join(shareDir, "catalog-asks", name), JSON.stringify(doc), "utf8");
+    put("k-0000000000000001.json", { format: 1, kind: "etiuda-catalog-ask", id: "ask-one", desk: "k-0000000000000001" });
+    put("k-0000000000000002.json", { format: 2, kind: "etiuda-catalog-ask", id: "ask-two", desk: "k-0000000000000002" });
+    put("k-0000000000000003.json", { format: 3, kind: "etiuda-catalog-ask", id: "ask-three", desk: "k-0000000000000003" });
+    put("k-0000000000000004.withdrawn.json", { format: 2, kind: "etiuda-catalog-ask-withdrawn", desk: "k-0000000000000004", ids: ["ask-four"] });
+    const prog = syncerMod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 }, checks });
+    await prog.syncOnce();
+    const has = name => fs.existsSync(path.join(mirrorDir, "catalog-asks", name));
+    const got = ["k-0000000000000001.json", "k-0000000000000002.json", "k-0000000000000003.json", "k-0000000000000004.withdrawn.json"].map(has);
+    check(got[0] && got[1] && !got[2] && !got[3],
+      "b0l an ask of format 2, made under the lead's switch, reaches the desk's mirror as format 1 does; an ask of format 3 and a withdrawal of format 2 stay out: "
+      + got.join(","));
   }
   {
     const r = PLANTS_OFF ? null : await testPlant("syncer-unlink", syncerFile, async (scratchSyncer) => {

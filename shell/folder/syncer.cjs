@@ -1215,7 +1215,9 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         let kindOk = doc && doc.kind === "etiuda-catalog-ask";
         if (doc && doc.kind === "etiuda-catalog-ask-withdrawn") kindOk = true; /* plant:syncer-ask-withdrawn */
-        if (doc && +doc.format === 1 && kindOk) {
+        /* An ask of format 2 is one made under the lead's switch (shell/main.js ASK_CONTENT_FORMAT); a withdrawal stays format 1. */
+        const formatOk = !!doc && (+doc.format === 1 || (+doc.format === 2 && doc.kind === "etiuda-catalog-ask"));
+        if (formatOk && kindOk) {
           const target = path.join(mirror, relPath);
           ensureDir(target, io);
           io.rename(tmpPath, target);
