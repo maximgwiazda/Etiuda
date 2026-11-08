@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, protocol, session,
+const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, net, protocol, session,
   safeStorage, screen, shell, systemPreferences } = require("electron");
 
 /* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint and takes neither
@@ -24,6 +24,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
+const { decideClose, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 const { readsLikeMessage, scoreSuggestions } = require(path.join(__dirname, "clip-suggest.cjs"));
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
@@ -7216,6 +7217,18 @@ function deskSetOwn(key, value) {
     deskWritten = true;
   } catch (e) { console.error("etiuda: the desk could not be written - " + e.message); }
 }
+/* The same write, taking a key away. Stay in the tray is the absence of eQuitOnClose, not a second value. */
+function deskDropOwn(key) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (!Object.prototype.hasOwnProperty.call(deskKeys, key)) return;
+  const next = Object.assign({}, deskKeys);
+  delete next[key];
+  try {
+    saveDeskFile(JSON.stringify(next));
+    deskKeys = next;
+    deskWritten = true;
+  } catch (e) { console.error("etiuda: the desk could not be written - " + e.message); }
+}
 function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
@@ -7572,8 +7585,52 @@ app.on("before-quit", (e) => {
     });
   }
 });
+/* Quit on close is the desk key eQuitOnClose === "1". Absent, the window stays in the tray. */
+const QUIT_ON_CLOSE_KEY = "eQuitOnClose";
+let quitOnClose = false;
+let quitOnCloseKnown = false;
+function readQuitOnClose() {
+  if (!quitOnCloseKnown) {
+    if (deskKeys === undefined) deskKeys = readDesk();
+    quitOnClose = !!(deskKeys && deskKeys[QUIT_ON_CLOSE_KEY] === "1");
+    quitOnCloseKnown = true;
+  }
+  return quitOnClose;
+}
+function setQuitOnClose(on) {
+  quitOnClose = !!on;
+  quitOnCloseKnown = true;
+}
+function storeQuitOnClose(on) {
+  setQuitOnClose(on);
+  if (on) deskSetOwn(QUIT_ON_CLOSE_KEY, "1");
+  else deskDropOwn(QUIT_ON_CLOSE_KEY);
+}
 function closeHeld(win, e) {
-  if (win && win.etiudaInstallerClose) return false;
+  let decision = "quit";
+  try {
+    decision = decideClose({
+      stayInTray: !readQuitOnClose(),
+      etiudaInstallerClose: !!(win && win.etiudaInstallerClose),
+      sessionEnd: !!(win && win.etiudaSessionEnd),
+      quitting: !!quitting,
+      refusalClose: !!(win && (win.etiudaRefusalClose || win.etiudaCloseOk)),
+      placedWindow: !!PLACED_ASIDE,
+    });
+  } catch (err) {
+    console.error("etiuda: the close could not be decided - " + err.message);
+    decision = "quit";
+  }
+  /* Hide does not run the window's own place-keeping: a stay is not a close, and the place file stays as it was
+     unless the first-close toast has something to remember. No tray is not a stay: hiding would leave the desk
+     running with nothing to open it, so that close falls through. */
+  if (decision === "hide" && ensureTray()) {
+    try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
+    try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
+    try { maybeFirstClose(win); } catch { /* the toast is a courtesy */ }
+    return true;
+  }
+  if (win && (win.etiudaInstallerClose || win.etiudaSessionEnd || win.etiudaRefusalClose)) return false;
   const lost = win.webContents.etiudaLost;
   if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
   e.preventDefault();
@@ -7589,9 +7646,14 @@ function wireHold(win, onClose) {
   win.on("close", (e) => { if (closeHeld(win, e)) return; onClose(e); });
   /* Windows is ending the session: nothing may hold the window then, a close already held and asking included, which
      is let go at once (Clément's read of desk-polish-1). */
-  win.on("session-end", () => { win.etiudaCloseOk = true; if (win.etiudaCloseAsking) closeNow(win); });
+  win.on("session-end", () => {
+    win.etiudaSessionEnd = true;
+    win.etiudaCloseOk = true;
+    if (win.etiudaCloseAsking) closeNow(win);
+  });
 }
 function closeFromRefusal(win) {
+  win.etiudaRefusalClose = true;
   win.etiudaCloseOk = true;
   win.close();
 }
@@ -7610,6 +7672,35 @@ function closeAnswered(win, a) {
 ipcMain.on("etiuda:close-answer", (e, a) => {
   if (!fromEngine(e)) return;
   closeAnswered(BrowserWindow.fromWebContents(e.sender), String(a || ""));
+});
+/* Start with Windows is Windows' own login item, read back from there, never a desk key. */
+ipcMain.on("etiuda:login-item-set", (e, on) => {
+  if (!fromEngine(e)) return;
+  try { setLoginItemSettings(app, !!on); }
+  catch (err) { console.error("etiuda: start with Windows could not be changed - " + err.message); }
+});
+ipcMain.on("etiuda:login-item-state", (e) => {
+  if (!fromEngine(e)) { e.returnValue = null; return; }
+  let openAtLogin = false;
+  try {
+    if (typeof app.getLoginItemSettings === "function") {
+      const got = app.getLoginItemSettings();
+      openAtLogin = !!(got && got.openAtLogin);
+    }
+  } catch { /* Windows did not answer */ }
+  e.returnValue = { openAtLogin: openAtLogin };
+});
+ipcMain.on("etiuda:close-policy-set", (e, quit) => {
+  if (!fromEngine(e)) return;
+  storeQuitOnClose(!!quit);
+});
+ipcMain.on("etiuda:tray-notes-set", (e, on) => {
+  if (!fromEngine(e)) return;
+  setTrayNotes(!!on);
+});
+ipcMain.on("etiuda:tray-notes-state", (e) => {
+  if (!fromEngine(e)) { e.returnValue = null; return; }
+  e.returnValue = { on: notesOn() };
 });
 
 ipcMain.on("etiuda:host", (e) => {
@@ -8353,6 +8444,19 @@ function offscreenAt() {
    launch, never for the harness's placed-aside window. */
 const OPEN_SIZE = { width: 1280, height: 880 };
 function windowFile() { return path.join(app.getPath("userData"), "window.json"); }
+/* The place file also remembers whether the first-close toast has been shown, and whether tray
+   notifications are on. A place write keeps those keys. A toast writes only after one was shown. */
+function readWindowMeta() {
+  try {
+    const o = JSON.parse(fs.readFileSync(windowFile(), "utf8"));
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  } catch { return {}; }
+}
+function patchWindowMeta(extra) {
+  try {
+    writeReplacing(windowFile(), JSON.stringify(Object.assign({}, readWindowMeta(), extra)));
+  } catch (e) { console.error("etiuda: the window file could not be written - " + e.message); }
+}
 /* Pure, for tests/test.js. The saved rectangle on the work area it overlaps most, moved and cut
    to lie wholly inside it; where it overlaps none, the opening size centred on the primary. */
 function windowPlace(saved, areas, primary, size) {
@@ -8393,8 +8497,8 @@ function saveWindowPlace(win, maximized, normal) {
   const b = normal || (snapped ? win.getBounds() : win.getNormalBounds());
   const file = windowFile();
   try {
-    writeReplacing(file, JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height,
-                                          maximized: !!maximized }));
+    writeReplacing(file, JSON.stringify(Object.assign({}, readWindowMeta(), {
+      x: b.x, y: b.y, width: b.width, height: b.height, maximized: !!maximized })));
   } catch (e) { console.error("etiuda: the window's place could not be written - " + e.message); }
 }
 
@@ -8419,7 +8523,16 @@ const SHELL_WORDS = {
         folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
         folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
         pickTeamFolder: "Choose the team's shared folder",
-        stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it." },
+        stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
+        trayOpen: "Open Etiuda",
+        trayReplies: "Bring the replies over any window",
+        trayNotesOn: "Notifications: on",
+        trayNotesOff: "Notifications: off",
+        traySettings: "Settings",
+        trayQuit: "Quit Etiuda",
+        trayTip: "Etiuda",
+        trayKeepsRunning: "Etiuda keeps running in the tray",
+        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this." },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
@@ -8429,7 +8542,16 @@ const SHELL_WORDS = {
         folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
         folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
         pickTeamFolder: "Wybierz wspólny folder zespołu",
-        stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył." },
+        stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
+        trayOpen: "Otwórz Etiudę",
+        trayReplies: "Przywołaj odpowiedzi nad dowolne okno",
+        trayNotesOn: "Powiadomienia: wł.",
+        trayNotesOff: "Powiadomienia: wył.",
+        traySettings: "Ustawienia",
+        trayQuit: "Zakończ Etiudę",
+        trayTip: "Etiuda",
+        trayKeepsRunning: "Etiuda działa dalej w zasobniku",
+        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka się z ikony w zasobniku, a to zachowanie zmienia się w Ustawieniach, w części Ogólne." },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -9611,6 +9733,7 @@ function createWindow() {
     win.etiudaShown = true;
     if (OFFSCREEN_SHOWN) win.showInactive();
     else if (OFFSCREEN) { win.webContents.send("etiuda:shown"); return; }
+    else if (launchHidden()) { win.webContents.send("etiuda:shown"); return; }
     else if (place && place.maximized) { win.maximize(); win.focus(); }
     else win.show();
     win.webContents.send("etiuda:shown"); /* plant:shown-told */
@@ -9847,6 +9970,161 @@ function spellingFromPackage(s) {
   return placed;
 }
 
+/* THE TRAY. One icon for the desk. A harness launch and a shell with no tray stay without one.
+   Notifications in the menu are a master switch kept in the place file; which notices fire is not this run's. */
+function launchHidden() {
+  return Array.isArray(process.argv) && process.argv.indexOf("--hidden") > -1;
+}
+function trayWords() {
+  try { return shellWords(); }
+  catch { return SHELL_WORDS.en; }
+}
+function showDesk(win) {
+  const live = (w) => w && typeof w.isDestroyed === "function" && !w.isDestroyed();
+  const w = live(win) ? win : (live(theWindow) ? theWindow : null);
+  if (!w) return;
+  try { if (typeof w.isMinimized === "function" && w.isMinimized() && typeof w.restore === "function") w.restore(); } catch { /* left as it is */ }
+  try { if (typeof w.show === "function") w.show(); } catch { /* already on screen */ }
+  try { if (typeof w.focus === "function") w.focus(); } catch { /* focus stayed */ }
+}
+function deskWindow() {
+  if (theWindow && typeof theWindow.isDestroyed === "function" && !theWindow.isDestroyed()) return theWindow;
+  try {
+    const all = BrowserWindow.getAllWindows();
+    if (all && all.length) return all[all.length - 1];
+  } catch { /* no window list */ }
+  return null;
+}
+function notesOn() {
+  return readWindowMeta().trayNotes !== false;
+}
+function setTrayNotes(on) {
+  patchWindowMeta({ trayNotes: !!on });
+  rebuildTrayMenu();
+}
+function maybeFirstClose(win) {
+  const meta = readWindowMeta();
+  const w = trayWords();
+  notifyFirstClose({
+    electron: { Notification: Notification, app: app },
+    appId: APP_IDS.desktop,
+    title: w.trayKeepsRunning,
+    body: w.trayKeepsBody,
+    told: meta.trayTold === true,
+    setTold: () => { patchWindowMeta({ trayTold: true }); },
+    onClick: () => showDesk(win),
+  });
+}
+/* Quit from the tray seals open conversations the way an installer close does, then leaves without asking.
+   Where the seal fails, the window comes back and the page is asked, and the process stays. */
+function trayQuit() {
+  const win = deskWindow();
+  const saved = writeSavedTabs(win);
+  if (saved === false) {
+    showDesk(win);
+    try {
+      if (win && win.webContents && typeof win.webContents.send === "function") win.webContents.send("etiuda:ask-close");
+    } catch { /* the page is gone */ }
+    return false;
+  }
+  quitting = true;
+  try { app.quit(); } catch { /* already leaving */ }
+  return true;
+}
+function repliesLabel(w) {
+  let shown = "";
+  try {
+    const want = hotkeyWanted();
+    if (want) shown = String(want).split("+").map(part => part === "Control" ? "Ctrl" : part).join("+");
+  } catch { shown = ""; }
+  return shown ? w.trayReplies + "\t" + shown : w.trayReplies;
+}
+function trayMenuItems() {
+  const w = trayWords();
+  return [
+    { label: repliesLabel(w), click: () => { try { pickToggle(); } catch { /* the picker can wait */ } } },
+    { label: notesOn() ? w.trayNotesOn : w.trayNotesOff, click: () => setTrayNotes(!notesOn()) },
+    { label: w.traySettings, click: () => openSettingsFromTray() },
+  ];
+}
+function openSettingsFromTray() {
+  const win = deskWindow();
+  showDesk(win);
+  try {
+    if (win && win.webContents && typeof win.webContents.send === "function")
+      win.webContents.send("etiuda:tray-go", "settings");
+  } catch { /* the page is gone */ }
+}
+let deskTray = null;
+function trayIcon() {
+  try {
+    if (!nativeImage || typeof nativeImage.createFromPath !== "function") return null;
+    const img = nativeImage.createFromPath(path.join(__dirname, "etiuda.ico"));
+    if (img && typeof img.isEmpty === "function" && img.isEmpty()) return null;
+    return img || null;
+  } catch { return null; }
+}
+function rebuildTrayMenu() {
+  if (!deskTray || typeof deskTray.setContextMenu !== "function" || !Menu || typeof Menu.buildFromTemplate !== "function") return;
+  const w = trayWords();
+  try {
+    const tpl = buildTrayMenuTemplate({
+      openLabel: w.trayOpen,
+      onOpen: () => showDesk(deskWindow()),
+      items: trayMenuItems(),
+      quitLabel: w.trayQuit,
+      onQuit: () => { trayQuit(); },
+    });
+    deskTray.setContextMenu(Menu.buildFromTemplate(tpl));
+    if (typeof deskTray.setToolTip === "function") deskTray.setToolTip(w.trayTip);
+  } catch (e) { console.error("etiuda: the tray menu could not be rebuilt - " + e.message); }
+}
+function ensureTray() {
+  if (deskTray) return deskTray;
+  if (PLACED_ASIDE) return null;
+  if (typeof Tray !== "function") return null;
+  const icon = trayIcon();
+  if (!icon) return null;
+  const w = trayWords();
+  try {
+    deskTray = createTray({
+      electronTray: Tray,
+      electronMenu: Menu,
+      icon: icon,
+      tooltip: w.trayTip,
+      onClick: () => showDesk(deskWindow()),
+      openLabel: w.trayOpen,
+      onOpen: () => showDesk(deskWindow()),
+      quitLabel: w.trayQuit,
+      onQuit: () => { trayQuit(); },
+      items: trayMenuItems(),
+    });
+  } catch (e) {
+    console.error("etiuda: the tray could not be created - " + e.message);
+    deskTray = null;
+  }
+  return deskTray;
+}
+/* A second launch hands its arguments to the one already running. --update-close seals and closes.
+   --hidden leaves a running copy where it is. Anything else brings the window forward. */
+function onSecondInstance(argv) {
+  const args = Array.isArray(argv) ? argv : [];
+  if (args.indexOf("--update-close") > -1) {
+    handleUpdateClose();
+    return;
+  }
+  const link = linkArgFrom(args);
+  if (link) acceptLink(link);
+  const file = ecFromArgv(args);
+  if (args.indexOf("--hidden") > -1) {
+    if (file) offerFile(theWindow, file);
+    return;
+  }
+  const win = theWindow;
+  if (win && typeof win.isDestroyed === "function" && !win.isDestroyed() && !PLACED_ASIDE) showDesk(win);
+  if (file) offerFile(win, file);
+}
+
 /* ONE ETIUDA AT A TIME, which is what makes the association useful rather than annoying: without
    the lock every double-clicked catalog would open a second window with its own desk file, two
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
@@ -9856,22 +10134,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   app.quit();
 } else {
   registerEtiudaLink();
-  app.on("second-instance", (e, argv) => {
-    if (Array.isArray(argv) && argv.includes("--update-close")) {
-      handleUpdateClose();
-      return;
-    }
-    const win = theWindow;
-    if (win && !win.isDestroyed() && !PLACED_ASIDE) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
-    const link = linkArgFrom(argv);
-    if (link) acceptLink(link);
-    const file = ecFromArgv(argv);
-    if (!file) return;
-    offerFile(win, file);
-  });
+  app.on("second-instance", (e, argv) => { onSecondInstance(argv); });
   const link = linkArgFrom(process.argv);
   if (link) {
     const got = linkFromArg(link);
@@ -9892,6 +10155,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
       if (!folderTeamHere() && sayJoinPolicy().folder && folderAnswers(sayJoinPolicy().folder)) heedTeam();
       return awaitFolderPrime().then(() => {
         createWindow();
+        try { ensureTray(); } catch { /* the window still opens */ }
         hotkeyReady = true; syncHotkey();
         // Asked for here: powerMonitor is not to be used before the app is ready.
         require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
@@ -9908,4 +10172,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch { /* none held */ } });
+app.on("will-quit", () => {
+  try { if (deskTray && typeof deskTray.destroy === "function") deskTray.destroy(); } catch { /* already gone */ }
+  try { globalShortcut.unregisterAll(); } catch { /* none held */ }
+});

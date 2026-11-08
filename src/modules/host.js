@@ -6,6 +6,7 @@ import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
 import { askClose } from "./tabs.js";
+import { hooks } from "./hooks.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -418,6 +419,10 @@ function wireHost(){
       if(a==="none"||a==="close") sendStats(true);
       try{ h.closeAnswer(a); }catch(e){}
     }));
+  /* The tray's Settings item. The same open the menu uses, registered on hooks at boot. */
+  if(typeof h.onTrayGo==="function") h.onTrayGo(kind=>{
+    if(kind==="settings"){ try{ hooks.openSettings(); }catch(e){} }
+  });
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };

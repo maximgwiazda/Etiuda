@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 99;
+const EXPECTED = 107;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -95,8 +95,11 @@ RecWin.prototype.setBounds = function (b) { if (b) Object.assign(this.bounds, b)
 RecWin.fromWebContents = () => inert;
 RecWin.getAllWindows = () => madeWins;
 const onHandlers = {}, invokeHandlers = {}, appOn = {};
+let appQuits = 0, loginApplied = null;
+const madeNotes = [], madeTrays = [];
 const electron = {
-  app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
+  app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: () => { appQuits++; }, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
+         getLocale: () => "en", getPreferredSystemLanguages: () => ["en"],
          whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
   BrowserWindow: RecWin, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
@@ -111,6 +114,33 @@ const safeStorage = {
   decryptString: b => { if (!sealOk || (decryptFails && Buffer.from(b).toString("base64") === decryptFails)) throw new Error("cannot decrypt for this account"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
 };
 electron.safeStorage = safeStorage;
+electron.app.getLoginItemSettings = () => loginApplied || { openAtLogin: false, args: [] };
+electron.app.setLoginItemSettings = (s) => { loginApplied = s; };
+electron.app.setAppUserModelId = (id) => { electron.app._aumid = id; };
+function FakeNotification(opts) {
+  this.opts = opts || {};
+  this.handlers = {};
+  madeNotes.push(this);
+}
+FakeNotification.prototype.on = function (ev, fn) { (this.handlers[ev] = this.handlers[ev] || []).push(fn); };
+FakeNotification.prototype.show = function () { this.shown = true; };
+FakeNotification.isSupported = () => true;
+electron.Notification = FakeNotification;
+function FakeTray(icon) {
+  if (FakeTray.throwOnCreate) throw new Error("planted tray failure");
+  this.icon = icon;
+  this.tip = "";
+  this.menu = null;
+  this.handlers = {};
+  madeTrays.push(this);
+}
+FakeTray.prototype.setToolTip = function (tip) { this.tip = tip; };
+FakeTray.prototype.setContextMenu = function (menu) { this.menu = menu; };
+FakeTray.prototype.on = function (ev, fn) { this.handlers[ev] = fn; };
+FakeTray.prototype.destroy = function () { this.dead = true; };
+electron.Tray = FakeTray;
+electron.Menu = { setApplicationMenu: noop, buildFromTemplate(tpl) { const items = tpl.slice(); return { items: items, template: items, popup() {} }; } };
+electron.nativeImage = { createFromPath(p) { return { path: p, isEmpty: () => false }; } };
 const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 /* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
@@ -119,8 +149,9 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
+const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
@@ -1283,7 +1314,9 @@ try {
       && newRO.length === 1 && newRO[0] === "Etiuda catalog-" + sha(Buffer.from(idRO)).slice(0, 8) + ".ec",
     "82h where the minted id cannot be saved the desk makes no file and keeps no id, and once it can, the next write makes one file named by the id kept (answer "
     + rRO + ", ids " + idsRO + ", then " + rBackRO + ", new files " + JSON.stringify(newRO) + ")");
-  /* ---- THE WINDOW'S CLOSE. A window as far as the hold asks of it: what it sends, and how often it is closed. */
+  /* ---- THE WINDOW'S CLOSE. A window as far as the hold asks of it: what it sends, and how often it is closed.
+     Quit on close is on for these legs: the product's default is Stay in the tray, and that would hide where these legs ask. */
+  if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(true);
   const winFor = () => {
     const id = madeWins.length + 1;
     const w = { sent: [], closes: 0, webContents: { id, send: ch => w.sent.push(ch), etiudaLost: null },
@@ -1526,6 +1559,243 @@ try {
   finally { decryptFails = null; }
   check(decryptLeavesFile,
     "1152p a failed decrypt leaves the file");
+
+  /* D6. Stay hides and tells once. Quit from the tray seals the tabs and quits. The installer's close, the end of
+     the session, a refusal and a quit never hide. A close whose tray cannot be created is not hidden. Reset of the
+     login item is the preload's send. A launch with --hidden does not show the window. The tray menu uses the desk's
+     words. */
+  const watchStub = () => ({ on() { return this; }, close() {} });
+  /* Before any successful tray: ensureTray keeps the first one it made, so a later throw would never be asked. */
+  let d6NoTray = false, d6NoTrayWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    FakeTray.throwOnCreate = true;
+    const saidBefore = said.length;
+    const notesBefore = madeNotes.length;
+    const traysBefore = madeTrays.length;
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const e = closeEv();
+    const held = mainTest.closeHeld(w, e);
+    const asked = (w.sent || []).indexOf("etiuda:ask-close") >= 0;
+    const trayErr = said.slice(saidBefore).some(s => s.indexOf("the tray could not be created") >= 0);
+    d6NoTray = held === true && e.prevented === true && w.hides === 0 && asked && trayErr
+      && madeNotes.length === notesBefore && madeTrays.length === traysBefore;
+    if (!d6NoTray) d6NoTrayWhy = JSON.stringify({ held: held, prevented: e.prevented, hides: w.hides, asked: asked, trayErr: trayErr, notes: madeNotes.length - notesBefore, trays: madeTrays.length - traysBefore });
+    mainTest.closeAnswered(w, "stay");
+  } catch (err) { d6NoTrayWhy = String(err && err.message || err).split("\n")[0]; }
+  finally { FakeTray.throwOnCreate = false; }
+  check(d6NoTray, "D6-no-tray a close is not hidden when the tray cannot be created, and the page is asked (" + d6NoTrayWhy + ")");
+  let d6Stay = false, d6StayWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    const placeFile = mainTest.windowFile();
+    fs.writeFileSync(placeFile, JSON.stringify({ x: 3, y: 4, width: 5, height: 6, maximized: false }));
+    const w = winFor();
+    w.hides = 0; w.shows = 0;
+    w.hide = () => { w.hides++; };
+    w.show = () => { w.shows++; };
+    w.focus = () => {};
+    w.isMinimized = () => false;
+    const notesBefore = madeNotes.length;
+    const e1 = closeEv();
+    const held = mainTest.closeHeld(w, e1);
+    let meta = {};
+    try { meta = JSON.parse(fs.readFileSync(placeFile, "utf8")); } catch { meta = {}; }
+    const note = madeNotes[madeNotes.length - 1];
+    const clicks = (note && note.handlers && note.handlers.click) || [];
+    clicks.forEach(fn => fn());
+    const e2 = closeEv();
+    mainTest.closeHeld(w, e2);
+    const title = note && note.opts && note.opts.title;
+    const body = note && note.opts && note.opts.body;
+    d6Stay = held === true && e1.prevented === true && w.hides === 2 && w.shows === 1
+      && madeNotes.length === notesBefore + 1 && meta.x === 3 && meta.trayTold === true
+      && title === "Etiuda keeps running in the tray"
+      && body === "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this."
+      && Array.isArray(note.opts.actions) && note.opts.actions.length === 0;
+    if (!d6Stay) d6StayWhy = JSON.stringify({ held: held, prevented: e1.prevented, hides: w.hides, shows: w.shows, notes: madeNotes.length - notesBefore, title: title, x: meta.x, told: meta.trayTold });
+  } catch (e) { d6StayWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Stay, "D6-stay the first close hides and tells once, the click opens the window, and a later close does not tell again (" + d6StayWhy + ")");
+
+  let d6Never = false, d6NeverWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const heard = {};
+    w.on = (k, fn) => { heard[k] = fn; };
+    mainTest.wireHold(w, () => {});
+    const plain = closeEv();
+    heard.close(plain);
+    const hid = w.hides === 1 && plain.prevented === true;
+    w.etiudaInstallerClose = true;
+    const inst = closeEv();
+    heard.close(inst);
+    const instOk = inst.prevented === false && w.hides === 1;
+    const sess = winFor();
+    sess.hides = 0;
+    sess.hide = () => { sess.hides++; };
+    const heardS = {};
+    sess.on = (k, fn) => { heardS[k] = fn; };
+    mainTest.wireHold(sess, () => {});
+    (heardS["session-end"] || noop)();
+    const sessEv = closeEv();
+    heardS.close(sessEv);
+    const sessOk = sessEv.prevented === false && sess.hides === 0;
+    const ref = winFor();
+    ref.hides = 0;
+    ref.hide = () => { ref.hides++; };
+    const heardR = {};
+    ref.on = (k, fn) => { heardR[k] = fn; };
+    mainTest.wireHold(ref, () => {});
+    ref.close = function () { this.closes++; const ev = closeEv(); heardR.close(ev); this.lastPrevented = ev.prevented; };
+    mainTest.closeFromRefusal(ref);
+    const refOk = ref.closes === 1 && ref.lastPrevented === false && ref.hides === 0 && ref.sent.length === 0;
+    const q = winFor();
+    q.hides = 0;
+    q.hide = () => { q.hides++; };
+    mainTest.setQuitting(true);
+    const qEv = closeEv();
+    const qHeld = mainTest.closeHeld(q, qEv);
+    const quitOk = qHeld === false && qEv.prevented === false && q.hides === 0;
+    mainTest.setQuitting(false);
+    d6Never = hid && instOk && sessOk && refOk && quitOk;
+    if (!d6Never) d6NeverWhy = JSON.stringify({ hid: hid, instOk: instOk, sessOk: sessOk, refOk: refOk, quitOk: quitOk, hides: w.hides });
+  } catch (e) { d6NeverWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Never, "D6-never-hide Stay hides an ordinary close, and the installer, the session ending, a refusal and a quit do not (" + d6NeverWhy + ")");
+
+  let d6Quit = false, d6QuitWhy = "";
+  try {
+    if (typeof mainTest.trayQuit !== "function") d6QuitWhy = "no trayQuit";
+    else {
+      const w = winFor();
+      const sm = new Map();
+      sm.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-tray", pax: "Tray Person", intentBox: "Tray draft" }], activeTabId: "t-tray" }));
+      mainTest.sessionHeld.set(w.webContents.id, sm);
+      const q0 = appQuits;
+      const asks = () => madeWins.reduce((n, win) => n + (win.sent || []).filter(ch => ch === "etiuda:ask-close").length, 0);
+      const asks0 = asks();
+      const sealed = mainTest.trayQuit() === true;
+      const tf = mainTest.tabsFile();
+      const raw = fs.existsSync(tf) ? fs.readFileSync(tf) : Buffer.alloc(0);
+      const text = raw.toString("utf8");
+      const sealedOk = sealed && appQuits === q0 + 1 && asks() === asks0 && text.indexOf("Tray draft") < 0 && text.indexOf("Tray Person") < 0 && raw.length > 0;
+      try { fs.unlinkSync(tf); } catch { /* none */ }
+      sealOk = false;
+      const q1 = appQuits;
+      const asked = mainTest.trayQuit() === false && asks() === asks0 + 1 && appQuits === q1;
+      sealOk = true;
+      mainTest.setQuitting(false);
+      mainTest.sessionHeld.delete(w.webContents.id);
+      d6Quit = sealedOk && asked;
+      if (!d6Quit) d6QuitWhy = JSON.stringify({ sealedOk: sealedOk, asked: asked, quits: appQuits - q0, bytes: raw.length });
+    }
+  } catch (e) { d6QuitWhy = String(e && e.message || e).split("\n")[0]; sealOk = true; mainTest.setQuitting(false); }
+  check(d6Quit, "D6-quit-tabs Quit from the tray seals the open tabs and quits, and where the seal fails it asks and does not quit (" + d6QuitWhy + ")");
+
+  let d6Update = false, d6UpdateWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const heard = {};
+    w.on = (k, fn) => { heard[k] = fn; };
+    mainTest.wireHold(w, () => {});
+    const plain = closeEv();
+    heard.close(plain);
+    const hid = w.hides === 1 && plain.prevented === true;
+    w.close = function () {
+      this.closes++;
+      const ev = closeEv();
+      (heard.close || noop)(ev);
+      this.lastPrevented = ev.prevented;
+      if (!ev.prevented && appOn["window-all-closed"]) appOn["window-all-closed"]();
+    };
+    const q0 = appQuits;
+    if (hid && typeof mainTest.onSecondInstance === "function") mainTest.onSecondInstance(["--update-close"]);
+    d6Update = hid && w.hides === 1 && w.lastPrevented === false && appQuits > q0;
+    if (!d6Update) d6UpdateWhy = JSON.stringify({ hid: hid, hides: w.hides, prevented: w.lastPrevented, quits: appQuits - q0, second: typeof mainTest.onSecondInstance });
+  } catch (e) { d6UpdateWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Update, "D6-update-close an installer close of a window that had hidden still ends the process (" + d6UpdateWhy + ")");
+
+  let d6Login = false, d6LoginWhy = "";
+  try {
+    if (typeof REAL_HOST.setLoginItem !== "function") d6LoginWhy = "no setLoginItem";
+    else {
+      loginApplied = { openAtLogin: true, args: ["--hidden"] };
+      REAL_HOST.setLoginItem(false);
+      d6Login = !!loginApplied && loginApplied.openAtLogin === false && Array.isArray(loginApplied.args) && loginApplied.args.length === 0;
+      if (!d6Login) d6LoginWhy = JSON.stringify(loginApplied);
+    }
+  } catch (e) { d6LoginWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Login, "D6-login Reset's turn-off reaches Windows as a login item with no hidden argument (" + d6LoginWhy + ")");
+
+  let d6Hidden = false, d6HiddenWhy = "";
+  const realWatchD6 = fs.watch;
+  fs.watch = watchStub;
+  process.argv.push("--hidden");
+  try {
+    const before = madeWins.length;
+    mainTest.createWindow();
+    const w = madeWins[madeWins.length - 1];
+    let shows = 0;
+    w.show = () => { shows++; };
+    (w.listeners["ready-to-show"] || []).forEach(fn => fn());
+    const told = (w.sent || []).indexOf("etiuda:shown") >= 0;
+    const launchShows = shows;
+    let secondHidden = false, secondOpen = false;
+    if (launchShows === 0 && told && typeof mainTest.onSecondInstance === "function") {
+      mainTest.onSecondInstance(["--hidden"]);
+      secondHidden = shows === 0;
+      mainTest.onSecondInstance(["Etiuda"]);
+      secondOpen = shows === 1;
+    }
+    d6Hidden = launchShows === 0 && told && secondHidden && secondOpen;
+    if (!d6Hidden) d6HiddenWhy = JSON.stringify({ shows: launchShows, told: told, secondHidden: secondHidden, secondOpen: secondOpen, made: madeWins.length - before });
+  } catch (e) { d6HiddenWhy = String(e && e.message || e).split("\n")[0]; }
+  finally { fs.watch = realWatchD6; process.argv.pop(); }
+  check(d6Hidden, "D6-hidden a launch with --hidden does not show the window, a second hidden launch does not either, and an ordinary second launch does (" + d6HiddenWhy + ")");
+
+  let d6Menu = false, d6MenuWhy = "";
+  const realWatchMenu = fs.watch;
+  fs.watch = watchStub;
+  try {
+    if (typeof mainTest.ensureTray !== "function") d6MenuWhy = "no ensureTray";
+    else {
+      mainTest.createWindow();
+      const w = madeWins[madeWins.length - 1];
+      let shows = 0;
+      w.show = () => { shows++; };
+      w.focus = () => {};
+      w.isMinimized = () => false;
+      const tray = mainTest.ensureTray();
+      const labels = (tray && tray.menu && tray.menu.template || []).map(item => item.type === "separator" ? "|" : item.label);
+      const want = ["Open Etiuda", "Bring the replies over any window\tCtrl+Shift+Space", "Notifications: on", "Settings", "|", "Quit Etiuda"];
+      const notes = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Notifications: on");
+      if (notes && notes.click) notes.click();
+      const labels2 = (tray && tray.menu && tray.menu.template || []).map(item => item.label);
+      let meta = {};
+      try { meta = JSON.parse(fs.readFileSync(mainTest.windowFile(), "utf8")); } catch { meta = {}; }
+      if (tray && tray.handlers && tray.handlers.click) tray.handlers.click();
+      const opened = shows === 1;
+      shows = 0;
+      const settingsItem = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Settings");
+      if (settingsItem && settingsItem.click) settingsItem.click();
+      const went = (w.sent || []).indexOf("etiuda:tray-go") >= 0 && shows === 1;
+      d6Menu = !!tray && tray.tip === "Etiuda" && JSON.stringify(labels) === JSON.stringify(want)
+        && labels2.indexOf("Notifications: off") >= 0 && meta.trayNotes === false && opened && went;
+      if (!d6Menu) d6MenuWhy = JSON.stringify({ tip: tray && tray.tip, labels: labels, labels2: labels2, notes: meta.trayNotes, opened: opened, went: went });
+    }
+  } catch (e) { d6MenuWhy = String(e && e.message || e).split("\n")[0]; }
+  finally { fs.watch = realWatchMenu; }
+  check(d6Menu, "D6-menu the tray offers Open, the replies shortcut, notifications, Settings and Quit, and a click opens the window (" + d6MenuWhy + ")");
+
+  if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(true);
+  mainTest.setQuitting(false);
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");

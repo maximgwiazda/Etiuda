@@ -260,18 +260,39 @@ function keysHtml(chord){
   return '<span class="sx-keys">'+String(chord||"").split("+").filter(Boolean).map(k=>'<kbd>'+esc(k)+'</kbd>').join("")+'</span>';
 }
 
+/* The starting and closing rows exist only where the shell can apply them. A browser, and a host
+   stub that only knows the hotkey, keeps General as the name and the language. */
+function closeHost(){
+  const h=eHost();
+  return (h && typeof h.setClosePolicy==="function" && typeof h.setLoginItem==="function" && typeof h.loginItemState==="function") ? h : null;
+}
 function generalGroups(){
   const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
   /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
-  return [{rows:[
+  const groups=[{rows:[
     row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
       +' placeholder="first name" value="'+esc(agentName())+'">'),
     row("uilang","translate",t("Interface language"),
       t("The language of the buttons and menus, not of the replies: those follow EN|PL in the header"),langSel)
   ]}];
+  const host=closeHost();
+  if(host){
+    let startOn=false;
+    try{ const s=host.loginItemState(); startOn=!!(s && s.openAtLogin); }catch(e){ startOn=false; }
+    const quit=lsGet("eQuitOnClose")==="1";
+    groups.push({head:t("Starting and closing"), rows:[
+      row("startwin","forward",t("Start with Windows"),
+        t("Etiuda starts in the tray when this Windows account signs in."),
+        onoff("startwin", startOn, "", "")),
+      row("closehow","desks",t("When the window closes"),
+        t("In the tray, Etiuda still answers its shortcut and shows notifications."),
+        seg("closehow",[{v:"stay",t:t("Stay in the tray")},{v:"quit",t:t("Quit")}], quit?"quit":"stay"))
+    ]});
+  }
+  return groups;
 }
 function appearanceGroups(){
   return [{rows:[
@@ -566,6 +587,18 @@ function wirePage(box){
         }
         else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
         else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }
+        else if(seg==="startwin"){
+          const host=closeHost();
+          if(host){ try{ host.setLoginItem(on); }catch(e){} }
+          toast(on?t("On"):t("Off"));
+        }
+        else if(seg==="closehow"){
+          const quit=v==="quit";
+          if(quit) lsSet("eQuitOnClose","1"); else lsDel("eQuitOnClose");
+          const host=closeHost();
+          if(host){ try{ host.setClosePolicy(quit); }catch(e){} }
+          toast(quit?t("Quit"):t("Stay in the tray"));
+        }
         /* No repaint: the class above is the whole visual change, and rebuilding would undo the slide it started. */
       };
     });
@@ -611,14 +644,27 @@ function resetShortcuts(){
 function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY]
+   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose"]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");
+  /* Start with Windows is not a desk key. Reset turns the login item off, and tray notices back on. */
+  const host=eHost();
+  let loginWas=false, notesWere=true;
+  if(host && typeof host.loginItemState==="function"){
+    try{ const s=host.loginItemState(); loginWas=!!(s && s.openAtLogin); }catch(e){}
+  }
+  if(host && typeof host.trayNotesState==="function"){
+    try{ const s=host.trayNotesState(); notesWere=!(s && s.on===false); }catch(e){}
+  }
+  if(host && typeof host.setLoginItem==="function"){ try{ host.setLoginItem(false); }catch(e){} }
+  if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(true); }catch(e){} }
   applyPrefs();
   repaintScreen();
   offerUndo("Settings reset", ()=>{
     Object.keys(was).forEach(k=>{ const v=was[k]; if(v==null) lsDel(k); else lsSet(k,v); });
+    if(host && typeof host.setLoginItem==="function"){ try{ host.setLoginItem(loginWas); }catch(e){} }
+    if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(notesWere); }catch(e){} }
     applyPrefs();
     repaintScreen();
   });
@@ -646,6 +692,10 @@ function applyPrefs(){
   try{ syncRailLayout(); }catch(e){}
   try{ drawPills(); }catch(e){}
   try{ render(); }catch(e){}
+  try{
+    const host=eHost();
+    if(host && typeof host.setClosePolicy==="function") host.setClosePolicy(lsGet("eQuitOnClose")==="1");
+  }catch(e){}
 }
 registerScreen("settings", {
   title: () => t("Settings"),
