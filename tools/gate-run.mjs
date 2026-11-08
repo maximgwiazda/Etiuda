@@ -150,6 +150,20 @@ export const RELEASE_ONLY_LEGS = [
   "tests/theme-roll.mjs",
 ];
 
+/* VISUAL LEGS NEVER BLOCK A MERGE (Max, 2026-11-08 18:36: "leave only whats really helpful in our situation"; his own eye
+   judges what he sees). They stay in the test chain, so the release profile runs them; a merge, area or whole, leaves them out. */
+export const VISUAL_LEGS = [
+  "tests/css-layers.js",
+  "tests/css-order.js",
+  "tests/motion-tokens.js",
+  "tests/theme-switch.mjs",
+  "tests/kin-contrast.mjs",
+  "tests/theme-flip-hold.mjs",
+  "tests/theme-continuity.mjs",
+  "tests/rail-ground.mjs",
+];
+const VISUAL_SET = new Set(VISUAL_LEGS);
+
 export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/desk-growth.mjs", args: [], cmd: "node tests/desk-growth.mjs" },
   { script: "nightly", file: "tests/leg-ids.js", args: [], cmd: "node tests/leg-ids.js" },
@@ -787,7 +801,9 @@ function appendTextScans(steps, addedFiles, windowGates, root, changed, gf) {
 }
 
 function closePlan(root, wholeChain, changed, gf, reason, extra) {
-  const steps = withFloor(root, wholeChain.slice());
+  const visualOut = wholeChain.filter(s => VISUAL_SET.has(normRel(s.file)));
+  if (visualOut.length) console.log("gate-run area: " + visualOut.length + " visual leg(s) left to the release profile");
+  const steps = withFloor(root, wholeChain.filter(s => !VISUAL_SET.has(normRel(s.file))));
   const added = new Set(steps.map(s => normRel(s.file)));
   const walled = [];
   appendTextScans(steps, added, walled, root, changed, gf);
@@ -803,8 +819,6 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
 
   const testSteps = parseStepsFromScript(pkg, "test");
   const wholeChain = testSteps.length ? testSteps : Object.keys(pkg.scripts || {}).flatMap(s => parseStepsFromScript(pkg, s));
-  const testGates = testSteps.filter(s => s.file !== "tests/plant-hold.mjs" && s.file !== "tests/plant-compare.mjs");
-  const totalGates = testGates.length;
 
   /* A diff confined to the gate tools runs their own legs and the floor (rule 1, as amended 2026-10-28), not the whole run. */
   const toolsOnly = !!(gf && typeof gf.isGateToolsOnly === "function" && gf.isGateToolsOnly(changed));
@@ -829,16 +843,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
     }
   }
 
-  for (const f of toolsOnly ? [] : changed) {
-    if (normRel(f) === "package.json" && acceptedScript) continue; /* plant:script-chain */
-    let forFile = [];
-    try { forFile = gatesFor(root, [f]); } catch { forFile = []; }
-    if (totalGates > 0 && forFile.length > totalGates / 2) {
-      return closePlan(root, wholeChain, changed, gf,
-        "fail-closed to whole chain: file " + f + " mapped to more than half the gates (" + forFile.length + " of " + totalGates + ")");
-    }
-  }
-
+  /* No "more than half" fail-close since 2026-11-08 18:36: a file runs the legs gates-for maps it to. */
   const gatedChanged = changed.filter(f => !(acceptedScript && normRel(f) === "package.json"));
   let rows = [];
   if (!toolsOnly) { try { rows = gatesFor(root, gatedChanged); } catch { rows = []; } }
@@ -981,6 +986,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
       }
     }
     if (GENERIC_SCANNERS.has(g) && !changed.includes(g)) continue;
+    if (VISUAL_SET.has(g)) { console.log("gate-run area: visual leg " + g + " left to the release profile"); continue; }
     if (!addedFiles.has(g)) {
       steps.push({ script: "area", cmd: "node " + g, file: g, args: [] });
       addedFiles.add(g);
