@@ -3205,7 +3205,16 @@ function lineageOf(doc) {
     if (keys.length > LINEAGE_MAX) delete catalogLineage[keys[0]];
     persistDeskEnvelope();
   }
-  return lineageOfId(id || g, id ? g : "");
+  const ids = lineageOfId(id || g, id ? g : "");
+  /* The first catalog of the chain as the copy carries it (grew.root), where no hop this desk stored reaches it. */
+  const root = doc && doc.grew && typeof doc.grew === "object" && typeof doc.grew.root === "string" ? doc.grew.root : "";
+  if (root && ids.indexOf(root) < 0) { /* plant:s0b-grew-root */
+    /* Kept as the last hop's parent, so a later copy that carries no root still reaches it. */
+    const last = ids[ids.length - 1];
+    if (last && catalogLineage[last] === undefined) { catalogLineage[last] = root; persistDeskEnvelope(); }
+    ids.push(root);
+  }
+  return ids;
 }
 function lineageOfId(id, parent) {
   const out = [];
@@ -3228,6 +3237,9 @@ function chainListed(doc, catalogs) {
   const ids = lineageOf(doc);
   return ids.length > 0 && Array.isArray(catalogs) && catalogs.indexOf(ids[ids.length - 1]) >= 0; /* plant:s0b-chain-listed */
 }
+function boxAnswerHere(file) {
+  try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
+}
 /* Where a working copy may go on a team this desk is on: a private one nowhere; one whose first catalog the team does not list
    to the lead's box while the lead's switch applies, else held until it does; any other as before. Off a team, as before but private. */
 function branchGate(doc) {
@@ -3248,11 +3260,13 @@ function withdrawClosed() {
   let names = [];
   try { names = fs.readdirSync(dir); } catch { names = []; }
   /* The team is heeded only where there is something to take back, so a desk with nothing on the share heeds as before. */
-  if (!answerKept && !names.some(n => /-[0-9a-f]{8}\.ec$/.test(n))) return;
+  if (!answerKept && names.indexOf(ANSWER_NAME) < 0 && !names.some(n => /-[0-9a-f]{8}\.ec$/.test(n))) return;
   const use = teamUse();
   if (!use.member || !use.seal) return;
   const open = contentApplies(use.seal.team, use.consent);
   if (answerKept && ((answerKept.lead && !open) || answerKept.ids.some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
+  /* A box answer this desk has no record of, one an earlier build wrote among them, goes too; a team-key answer stays. */
+  if (!open && names.indexOf(ANSWER_NAME) >= 0 && boxAnswerHere(path.join(dir, ANSWER_NAME))) removeAnswer(); /* plant:s0b-withdraw-unkept */
   for (const n of names) {
     const tail = /-([0-9a-f]{8})\.ec$/.exec(n);
     if (!tail) continue;
@@ -5685,8 +5699,8 @@ function lapseSeen(team, step) {
 }
 /* The lead's switch at this folder's team as the agent is to be shown it, `said` once shown (contentSaid), and the catalogs marked
    private: what the disclosure at joining, the notice of a changed switch and the private mark's control read. */
-function contentView() {
-  const doc = folderTeamDoc();
+function contentView(read) {
+  const doc = read === undefined ? folderTeamDoc() : read;
   const pin = doc ? teamPins[doc.id] : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
   const sw = team ? teamContentOf(doc) : null;
@@ -5695,8 +5709,9 @@ function contentView() {
 }
 /* The agent was shown the switch confirmed at `at`: kept only where it is this team's switch now, so no page says a later one. */
 function contentSaid(team, at) {
-  const v = contentView();
-  if (v.team && v.team === String(team || "") && v.on && v.at === String(at || "")) { teamContentSaid[v.team] = consentOf(folderTeamDoc()); persistDeskEnvelope(); } /* plant:s0b-said */
+  const doc = folderTeamDoc(), v = contentView(doc);
+  /* One read: the consent kept is that of the very file whose switch was checked. */
+  if (v.team && v.team === String(team || "") && v.on && v.at === String(at || "")) { teamContentSaid[v.team] = consentOf(doc); persistDeskEnvelope(); } /* plant:s0b-said */
   /* An ask already waiting is answered now, not at the next change of the folder. */
   tryCatalogAsk(theWindow); /* plant:s0b-said-ask */
   return contentView();

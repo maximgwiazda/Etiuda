@@ -25770,6 +25770,8 @@ What you type stays in this browser only.`;
     c.rev = 1;
     c.version = todayEdition();
     if (!origin.loose) c.grew = { id: String(origin.id), rev: +origin.rev || 0, sha: String(origin.pin) };
+    const og = !origin.loose && origin.grew && typeof origin.grew === "object" ? origin.grew : null;
+    if (og && (og.root || og.id)) c.grew.root = String(og.root || og.id);
     c.desk = { id: who.id, key: who.key, box: who.box };
     if (name) c.desk.name = name;
     return c;

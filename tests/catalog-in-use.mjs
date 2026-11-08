@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 100;
+const EXPECTED = 104;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1756,6 +1756,70 @@ try {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-chain-listed") >= 0 ? "  /* plant:s0b-chain-listed */" : l).join("\n");
         const p = planted !== SRC ? await oneTest("r2-one-test-plant", planted) : null;
         check(!!p && !p.reverse, "r2t lifting plant:s0b-chain-listed turns r2s red: the copy of a listed catalog is judged unlisted (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */
+    {
+      /* Edit 1: a copy of a copy whose middle hop this desk never saw is judged by the root it carries (grew.root). */
+      const unseen = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+        await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+        const c2 = catalog(6, { id: "k-fedcba9876543210-33333333", name: "Second copy", card: B0_MARK, unsigned: true });
+        c2.grew = { id: "k-0123456789abcdef-44444444", rev: 5, sha: "sha256:" + "ef".repeat(32), root: "quay-held" };
+        const dir = folder(name + "-out");
+        put(dir, "held.ec", textOf(c2));
+        box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+        const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        const pin = pinOf(box.D, off ? off[1] : "");
+        take(box.D, pin);
+        const lineage = box.D.envelope().catalogLineage || {};
+        putAsk(box, "Askunseen", pin);
+        box.D.api.tryCatalogAsk(box.D.win);
+        const answered = fs.existsSync(answerPath(box.share, box.me.id));
+        const copy = await writeCopy(box, "95959595", c2.id);
+        return { pin: !!pin, rootKept: lineage["k-0123456789abcdef-44444444"] === "quay-held", answered, copy };
+      };
+      const u = await unseen("r5-unseen");
+      check(u.pin && !u.answered && u.copy.withheld === true,
+        "r5a a copy of a copy whose middle hop this desk never stored is judged by the root it carries: its root private, it is not answered and no copy of it is written (" + JSON.stringify(u) + ")");
+      if (PLANTS_OFF) skip("r5b lifting plant:s0b-grew-root turns r5a red");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-grew-root") >= 0 ? "  if (false) {" : l).join("\n");
+        const p = planted !== SRC ? await unseen("r5-unseen-plant", planted) : null;
+        check(!!p && p.answered, "r5b lifting plant:s0b-grew-root turns r5a red: the copy is answered (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    {
+      /* Edit 2: a box answer this desk has no record of (an earlier build's) goes when the switch no longer applies; a team-key
+         answer stays. */
+      const unkept = async (name, src) => {
+        const a = await b0Ask(name, { src });
+        const l = await b0Ask(name + "-listed", { catalogs: ["quay-held"], format: 1, src });
+        const forget = (box) => {
+          const envPath = path.join(box.D.ud, "desk.json");
+          const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+          delete env.answerKept;
+          fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+          box.D = loadDesk(box.D.ud, src);
+        };
+        forget(a.box); forget(l.box);
+        /* The ask an earlier Studio made, format 1, still standing: only the withdrawal takes the box answer back. */
+        putAsk(a.box, a.askId, a.pin, 1);
+        relead(a.box, { rev: 1, content: null });
+        relead(l.box, { rev: 1, catalogs: ["quay-held"], content: null });
+        a.box.D.api.tryCatalogAsk(a.box.D.win);
+        l.box.D.api.tryCatalogAsk(l.box.D.win);
+        return { first: a.written && l.written, boxGone: !fs.existsSync(a.ans), teamKept: fs.existsSync(l.ans) };
+      };
+      const k = await unkept("r5-unkept");
+      check(k.first && k.boxGone && k.teamKept,
+        "r5c with the switch off, a box answer this desk holds no record of is withdrawn; a team-key answer stays (" + JSON.stringify(k) + ")");
+      if (PLANTS_OFF) skip("r5d lifting plant:s0b-withdraw-unkept turns r5c red");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-withdraw-unkept") >= 0 ? "  /* plant:s0b-withdraw-unkept */" : l).join("\n");
+        const p = planted !== SRC ? await unkept("r5-unkept-plant", planted) : null;
+        check(!!p && !p.boxGone, "r5d lifting plant:s0b-withdraw-unkept turns r5c red: the box answer stays (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     {
