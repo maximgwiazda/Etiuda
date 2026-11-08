@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 117;
+const EXPECTED = 120;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1851,6 +1851,54 @@ try {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-hop-disk") >= 0 ? "  /* plant:s5-hop-disk */" : l).join("\n");
         const p = planted !== SRC ? await chainCopy("s5u5-plant", planted) : null;
         check(!!p && p.before.c2 && !p.c2, "962s5u6 lifting plant:s5-hop-disk withdraws the copy of a copy after a restart (FAIL 962s5u5): " + (p ? JSON.stringify(p) : "plant not found"));
+      }
+    }
+    /* ---- 962 stage 5, round four: a forged intermediate, naming this desk's copy's parent and a genuine lead-signed pin, in
+       another desk's folder, or unsigned in this desk's own, leaves the copy unlisted: with the switch on it goes to the lead's box alone.
+       Read as listed, it would not go to the box. */
+    {
+      const pinV4 = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
+      const forgedHop = async (name, src, mine) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const leadEd = b0Body("quay-held");
+        put(box.share, "quay-lead.ec", leadEd);
+        const c1Id = box.me.id + "-63636363", otherDesk = "k-" + "ef".repeat(8);
+        const fake = catalog(1, { id: c1Id, name: "Planted", card: B0_MARK, unsigned: true });
+        fake.grew = { id: "quay-held", rev: 4, sha: pinV4(JSON.parse(leadEd)) };
+        /* Planted where the folder team's mirror carries the share's desk folders, as the syncer brings a teammate's files. */
+        const plantDir = path.join(box.D.ud, "folder-mirror", box.team, "desks", mine ? box.me.id : otherDesk);
+        fs.mkdirSync(plantDir, { recursive: true });
+        fs.writeFileSync(path.join(plantDir, "quay-63636363.ec"), textOf(fake), "utf8");
+        /* This desk once saw the chain from that id to the team's catalog, so the copy's chain reads three hops. */
+        const envFile = path.join(box.D.ud, "desk.json"), env = JSON.parse(fs.readFileSync(envFile, "utf8"));
+        env.catalogLineage = Object.assign({}, env.catalogLineage, { [c1Id]: "quay-held" });
+        fs.writeFileSync(envFile, JSON.stringify(env), "utf8");
+        const D = loadDesk(box.D.ud, src);
+        const c2 = branchDoc(box, "64646464", c1Id);
+        c2.grew = { id: c1Id, rev: 1, sha: pinV4(fake) };
+        const w = await D.ask("etiuda:branch-write", "quay-64646464", JSON.stringify(c2));
+        let kind = "";
+        try { kind = JSON.parse(fs.readFileSync(branchAt(box, "64646464"), "utf8")).kind; } catch { kind = ""; }
+        return { held: !!w && w.held === true, boxed: kind === "etiuda-branch-sealed" };
+      };
+      const fh = await forgedHop("s5u7"), fm = await forgedHop("s5u7-mine", undefined, true);
+      check(fh.boxed && !fh.held && fm.boxed && !fm.held,
+        "962s5u7 a forged intermediate in another desk's folder, or unsigned in this desk's own, leaves this desk's copy unlisted: it goes to the lead's box alone ("
+        + JSON.stringify({ other: fh, mine: fm }) + ")");
+      if (PLANTS_OFF) {
+        skip("962s5u8 lifting plant:s5-hop-own with plant:s5-hop-genuine reads the forged intermediate as listed");
+        skip("962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed");
+      } else {
+        const NL = String.fromCharCode(10);
+        const lift = (...tags) => SRC.split(NL).map(l => tags.some(tg => l.indexOf(tg) >= 0) ? "  /* lifted */" : l).join(NL);
+        const both = lift("plant:s5-hop-own", "plant:s5-hop-genuine"), gen = lift("plant:s5-hop-genuine");
+        const p = both !== SRC ? await forgedHop("s5u7-plant", both) : null;
+        check(!!p && !p.boxed, "962s5u8 lifting plant:s5-hop-own with plant:s5-hop-genuine reads the forged intermediate as listed (FAIL 962s5u7): "
+          + (p ? JSON.stringify(p) : "plant not found"));
+        const q = gen !== SRC ? await forgedHop("s5u7-plant-mine", gen, true) : null;
+        check(!!q && !q.boxed, "962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed (FAIL 962s5u7): "
+          + (q ? JSON.stringify(q) : "plant not found"));
       }
     }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */
