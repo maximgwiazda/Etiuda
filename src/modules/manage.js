@@ -5,7 +5,7 @@ import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouch
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { importCatalogHere, catalogFileName } from "./catalog-file.js";
 import { CATS } from "./content-model.js";
-import { catToggle, closeModal, dressDialogInputs, modalOpen, mountModalBody, openDialog, wireFolds } from "./dialog.js";
+import { catToggle, closeModal, dressDialogInputs, modalOpen, openCover, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
@@ -16,7 +16,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, counted, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast, translateTree } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatKeys, intentCardCounts } from "./card-intent.js";
@@ -25,7 +25,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
-import { modalCard, $ } from "./dom.js";
+import { $ } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -34,6 +34,7 @@ import { eHasHistory, openHistory } from "./catalog-history.js";
 import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
+import { closeScreenTab, openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
 
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
@@ -198,41 +199,35 @@ function mgSiblingIdx(el){
    across one. */
 /* Manage rebuilds its rows on every action, and a rebuilt row measures fresh. */
 function mgRefreshAround(mutate){
-  const treeBefore=modalCard.querySelector(".mg-tree");
+  const page=libPage(), host=libHost();
+  if(!page){ mutate(); return; }
+  const treeBefore=page.querySelector(".mg-tree");
   const keepTree=treeBefore?treeBefore.scrollTop:0;
-  const bodyBefore=modalCard.querySelector(".modal-body");
-  const keepCard=bodyBefore?bodyBefore.scrollTop:0;
+  const keepCard=host?host.scrollTop:0;
   /* Rows in BOTH lists: cards live in a scrolling .mg-tree, intents in a plain list that scrolls
      with the dialog. Keyed by id, since openManage replaces every element. */
   const ROWS="[data-cardrow],[data-introw]";
   const rowKey=el=>el.getAttribute("data-cardrow")||el.getAttribute("data-introw");
   const before={};
   if(!mgReduceMotion()){
-    modalCard.querySelectorAll(ROWS).forEach(el=>{
+    page.querySelectorAll(ROWS).forEach(el=>{
       if(!el.offsetParent) return;                  // inside a collapsed section
       before[rowKey(el)]=el.getBoundingClientRect().top;
     });
   }
   mutate();
-  dressDialogInputs(modalCard);
-  markCutText(modalCard);        // rebuilt rows measure fresh - see markCutText()
-  openManage();
-  /* Settle the DOM before measuring a pixel: the wrapper that moves the middle into
-     .modal-body runs from a MutationObserver - a microtask AFTER this function - so
-     measuring first read an unwrapped dialog (13px out) and then had every row
-     RE-PARENTED underneath the animation, cancelling it outright. Idempotent, so the
-     observer then finds nothing to do. */
-  mountModalBody();
-  const tree=modalCard.querySelector(".mg-tree");
+  paintLibrary();
+  const now=libPage();
+  if(!now) return;
+  const tree=now.querySelector(".mg-tree");
   if(tree) tree.scrollTop=keepTree;
-  const bodyAfter=modalCard.querySelector(".modal-body");
-  if(bodyAfter) bodyAfter.scrollTop=keepCard;
+  if(host) host.scrollTop=keepCard;
   if(mgReduceMotion()) return;
-  /* Clip each row against whatever actually scrolls around it - the tree for a card, the dialog
-     body for an intent - so a row animating in one list is never measured against the other. */
-  const bodyBox=(modalCard.querySelector(".modal-body")||modalCard).getBoundingClientRect();
+  /* Clip each row against whatever actually scrolls around it - the tree for a card, the tab's
+     page for an intent - so a row animating in one list is never measured against the other. */
+  const bodyBox=(host||now).getBoundingClientRect();
   const moved=[], dys=[];
-  modalCard.querySelectorAll(ROWS).forEach(el=>{
+  now.querySelectorAll(ROWS).forEach(el=>{
     const b=before[rowKey(el)];
     if(b==null || !el.offsetParent) return;
     const holder=el.closest(".mg-tree");
@@ -249,7 +244,7 @@ function mgRefreshAround(mutate){
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
-  void modalCard.offsetHeight;
+  void now.offsetHeight;
   const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
   moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
   setTimeout(clear,240);
@@ -358,7 +353,7 @@ function mgMoveCardOrder(fromId,toId){
 }
 function wireManageDrag(){
   addEventListener("pointerdown",e=>{
-    if(e.button!==0 || !modalOpen() || !e.target.closest) return;
+    if(e.button!==0 || !e.target.closest || !e.target.closest(".lib-list")) return;
     /* The row is the handle, minus everything that has its own job - the same rule the card list
        uses for its header. A card row is grabbable across its whole width including the title,
        which is plain text; a category row still excludes its rename field through the selector
@@ -468,7 +463,7 @@ function endMgDrag(){
       savePack(); rebuildCards();
       recountMacros();
       mgOpen.add("cat:"+dropCat);
-      render(); drawPills(); openManage();
+      render(); drawPills(); paintLibrary();
       toast(t("Moved to")+" "+(CATS[dropCat]||dropCat));
     }
     return;
@@ -492,7 +487,7 @@ function endMgDrag(){
  *  one text field. The row is appended to the tree itself so the new category appears where it
  *  will actually live, and the tree scrolls to it. */
 function startMgCatAdd(){
-  const tree=modalCard&&modalCard.querySelector(".mg-tree");
+  const page=libPage(), tree=page&&page.querySelector(".mg-tree");
   if(!tree || tree.querySelector(".mg-cat-new")) return;
   const wrap=document.createElement("div");
   wrap.className="mg-cat mg-cat-new";
@@ -513,7 +508,7 @@ function startMgCatAdd(){
     const key=ensureCustomCat(name);
     rebuildCards(); drawPills();
     mgOpen.add("cat:"+key);        // open it, so the "+" that adds its first card is right there
-    openManage();
+    paintLibrary();
     toast("Category added");
   };
   inp.focus();
@@ -690,25 +685,52 @@ function openManage(justHtml){
       dataTail
     );
   if(justHtml) return mgBody;
-  openDialog({
-    title: "Library",
-    /* Wide enough that Clear, Load, Join, Earlier versions and Close sit on one row at the
-       default window. The 560px card put Close on the row below. */
-    cls: "lib-modal",
-    /* Every section here is about one catalog, and the only place that says WHICH is inside
-       "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
-       name for the same reason the editors carry theirs: it scopes the screen you are on.
-       Nothing when there is no catalog; the empty state inside says that better. */
-    name: ()=>catalogFileName(),
-    body: mgBody,
+  /* THE LIBRARY IS A TAB: opening it fronts the one tab, and a pop-up standing over it closes back
+     onto it, which is how an editor opened from here returns. */
+  libView="list";
+  if(modalOpen()) closeModal(); /* plant:library-editor-closes-back */
+  if(screenOn===LIB_SCREEN) paintLibrary(null,mgBody);
+  else openScreenTab(LIB_SCREEN);
+}
+/* The tab's heading carries the catalog's file name for the reason an editor carries its entry's:
+   every section is about one catalog, and only "Catalog & data" otherwise says which. */
+function libraryHeadHtml(){
+  const name=catalogFileName();
+  return '<div class="screen-head"><h2>'+esc(t("Library"))+'</h2>'
+    +(name?'<span class="screen-name" data-i18n-skip>'+esc(name)+'</span>':'')+'</div>';
+}
+const LIB_SCREEN="library";
+// "list", or "history" while Earlier versions stands in the tab; a fresh open is the list.
+let libView="list";
+function libHost(){
+  if(screenOn!==LIB_SCREEN) return null;
+  const host=document.getElementById("screenHost");
+  return host && !host.hidden ? host : null;
+}
+function libPage(){ const host=libHost(); return host ? host.querySelector(".lib-list") : null; }
+function paintLibrary(host,body){
+  host=host||libHost();
+  if(!host) return;
+  if(libView==="history"){ openHistory(host); return; }
+  host.innerHTML='<div class="screen-page lib-screen lib-list" tabindex="-1">'+libraryHeadHtml()
+    +'<div class="screen-body">'+(body||openManage(true))+'</div>'
     /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
        and .mf-left is the group that carries it there. Danger kept, because this one forgets
        personal state. */
-    actions: libraryActionsHtml(),
-    wire: wireManage
-  });
-  function wireManage(){
-  $("#mgClose").onclick=closeModal;
+    +'<div class="screen-actions">'+libraryActionsHtml()+'</div></div>';
+  const page=host.querySelector(".lib-list");
+  wireLibrary(page);
+  translateTree(page);
+  dressDialogInputs(page);
+  markCutText(page);
+  // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
+  const at=document.activeElement;
+  if(!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+    try{ page.focus({preventScroll:true}); }catch(e){}
+}
+registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(host) });
+function wireLibrary(page){
+  $("#mgClose").onclick=()=>closeScreenTab(LIB_SCREEN);
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
   /* Commit on change (blur or Enter), not per keystroke - a half-typed word is not a list.
@@ -724,8 +746,8 @@ function openManage(justHtml){
   $("#mgImportCatalog").onclick=importCatalogHere;
   /* Join sits beside Load. It does not replace the catalog this desk has open. */
   const joinBtn=$("#mgJoinTeam");
-  if(joinBtn) joinBtn.onclick=()=>{ closeModal(); openJoinPaste(); };
-  if($("#mgHistory")) $("#mgHistory").onclick=openHistory;
+  if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
+  if($("#mgHistory")) $("#mgHistory").onclick=()=>{ libView="history"; paintLibrary(); };
   paintCatalogList();
   /* BOTH LIVE INSIDE A SUMMARY, where a click is the browser's own way of folding the section:
      each stops the event before that happens. The path answers Enter and Space as well, the way
@@ -743,18 +765,18 @@ function openManage(justHtml){
   if($("#mgCatFolder")) $("#mgCatFolder").onclick=e=>{
     e.preventDefault(); e.stopPropagation();
     eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
-      if(dir) openManage();
+      if(dir) paintLibrary();
     });
   };
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;
   /* Remember which groups are open, so the re-render after every edit does not shut them.
      Written on toggle rather than read back later because openManage() replaces the nodes. */
-  wireFolds(modalCard,"details[data-mg]","details.manage-sec",
+  wireFolds(page,"details[data-mg]","details.manage-sec",
     d=>{ const k=d.getAttribute("data-mg"); if(d.open) mgOpen.add(k); else mgOpen.delete(k); });
   /* Expand / collapse a category. Only this button toggles - clicking the name edits it, and
      the row itself is a drag handle, so there is no ambiguous "click anywhere" target. */
-  modalCard.querySelectorAll("[data-toggle]").forEach(btn=>{
+  page.querySelectorAll("[data-toggle]").forEach(btn=>{
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();
       // pinned like the sections; catToggle does its own measuring inside modalResize
@@ -766,7 +788,7 @@ function openManage(justHtml){
   // ---- card rows in the category tree
   /* Role toggles. Both repaint the pills and the cards, because the rings they control are on
      screen behind the dialog - the point of the toggle is watching that change. */
-  modalCard.querySelectorAll("[data-role-always]").forEach(btn=>{
+  page.querySelectorAll("[data-role-always]").forEach(btn=>{
     btn.onclick=()=>{
       const k=btn.getAttribute("data-role-always");
       mgRefreshAround(()=>{
@@ -777,18 +799,18 @@ function openManage(justHtml){
       });
     };
   });
-  modalCard.querySelectorAll("[data-add-card]").forEach(btn=>{
+  page.querySelectorAll("[data-add-card]").forEach(btn=>{
     // New cards are created inside a category, so the editor needs no category picker
     btn.onclick=()=>openCardEditor(null, btn.getAttribute("data-add-card"), true);
   });
-  modalCard.querySelectorAll("[data-edit-card]").forEach(btn=>{
+  page.querySelectorAll("[data-edit-card]").forEach(btn=>{
     btn.onclick=()=>openCardEditor(btn.getAttribute("data-edit-card"), null, true);
   });
-  modalCard.querySelectorAll("[data-editcat]").forEach(btn=>{
+  page.querySelectorAll("[data-editcat]").forEach(btn=>{
     btn.onclick=()=>openCategoryEditor(btn.getAttribute("data-editcat"));
   });
   // hideCard is the same toggle the card uses, so the un-favourite rule cannot drift apart
-  modalCard.querySelectorAll("[data-hide-card],[data-show-card]").forEach(btn=>{
+  page.querySelectorAll("[data-hide-card],[data-show-card]").forEach(btn=>{
     btn.onclick=()=>{
       /* No render()/openManage() after this: mgRefreshAround() rebuilds the dialog itself,
          and a SECOND rebuild replaced every row the animation had just set up -
@@ -798,19 +820,19 @@ function openManage(justHtml){
       mgRefreshAround(()=>hideCard(btn.getAttribute("data-hide-card")||btn.getAttribute("data-show-card")));
     };
   });
-  modalCard.querySelectorAll("[data-remove-card]").forEach(btn=>{
+  page.querySelectorAll("[data-remove-card]").forEach(btn=>{
     btn.onclick=()=>{ const id=btn.getAttribute("data-remove-card");
       // Confirm FIRST, outside the animation: a cancelled delete must not re-render anything.
       if(!findCard(id)) return;
       mgRefreshAround(()=>{ removeCard(id); }); };   // removeCard ends in rebuildCards()
   });
-  modalCard.querySelectorAll("[data-fav-card]").forEach(btn=>{
+  page.querySelectorAll("[data-fav-card]").forEach(btn=>{
     btn.onclick=()=>mgRefreshAround(()=>toggleFavourite(btn.getAttribute("data-fav-card")));
   });
-  modalCard.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
+  page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
   });
-  modalCard.querySelectorAll("[data-fav-intent-mg]").forEach(btn=>{
+  page.querySelectorAll("[data-fav-intent-mg]").forEach(btn=>{
     // Starring lifts an intent to the top of the list, so it animates like every other move.
     btn.onclick=()=>mgRefreshAround(()=>toggleIntentFavourite(btn.getAttribute("data-fav-intent-mg")));
   });
@@ -821,7 +843,7 @@ function openManage(justHtml){
      and each one can be hidden again with the eye it came from. Routed through the SAME
      per-item functions the eye buttons call - hideCard also clears the runtime flag,
      setIntentHidden also touches the order - reproducing either here is how paths drift. */
-  modalCard.querySelectorAll("[data-show-hidden]").forEach(btn=>{
+  page.querySelectorAll("[data-show-hidden]").forEach(btn=>{
     btn.onclick=()=>{
       const kind=btn.getAttribute("data-show-hidden");
       if(kind==="cards"){
@@ -837,30 +859,29 @@ function openManage(justHtml){
         toast(ids.length===1?t("1 intent shown again")
                     :t("{N} intents shown again").replace("{N}",ids.length));
       }
-      openManage();
+      paintLibrary();
     };
   });
-  modalCard.querySelectorAll("[data-hide-intent]").forEach(btn=>{
+  page.querySelectorAll("[data-hide-intent]").forEach(btn=>{
     btn.onclick=()=>mgRefreshAround(()=>setIntentHidden(btn.getAttribute("data-hide-intent"), true));
   });
-  modalCard.querySelectorAll("[data-show-intent]").forEach(btn=>{
+  page.querySelectorAll("[data-show-intent]").forEach(btn=>{
     btn.onclick=()=>mgRefreshAround(()=>setIntentHidden(btn.getAttribute("data-show-intent"), false));
   });
-  modalCard.querySelectorAll("[data-remove-intent]").forEach(btn=>{
-    btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) openManage(); };
+  page.querySelectorAll("[data-remove-intent]").forEach(btn=>{
+    btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary(); };
   });
   /* One deletion path for categories everywhere: removeCategory() owns the empty-only rule,
      the built-in / custom split, so the pill and this button cannot
      disagree about what is deletable. Look's Give it back removes only a category Look added (desk-look.js). */
-  modalCard.querySelectorAll("[data-delcat]").forEach(btn=>{
+  page.querySelectorAll("[data-delcat]").forEach(btn=>{
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();
       const k=btn.getAttribute("data-delcat");
       if(cardCounts[k]){ toast("Move or delete cards in this category first"); return; }
-      if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); openManage(); }
+      if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); paintLibrary(); }
     };
   });
-  }
 }
 
 function libraryBodyHtml(){ return openManage(true); }
@@ -880,6 +901,7 @@ function libraryActionsHtml(){
 }
 
 export {
+  libraryHeadHtml,
   mgCardRow,
   mgCardsIn,
   mgUsesTip,

@@ -32,12 +32,13 @@ import { forgetEditionMarks } from "./edition-marks.js";
 import { syncRoleWheel } from "./agent.js";
 import { applyPrefs } from "./settings.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
-import { openManage } from "./manage.js";
+import { screenOn, screens, frontScreenTab } from "./screen-tabs.js";
 import { mtRefreshLive } from "./maintenance.js";
 import { tourAfterRestart, maybeStartTour } from "./tour.js";
 import { paintJoin, teamJoinShown } from "./team-join.js";
 
 function restartDesk(){
+  const wasScreen=screenOn;
   // The Undo of an act before this one has nothing left to undo.
   const u=document.getElementById("eUndo");
   if(u) u.remove();
@@ -76,8 +77,8 @@ function restartDesk(){
   translateChrome();
   placeRailNow();
   focusFirstEntryOnOpen();
-  // A dialog standing over the desk shows the new one.
-  if(document.getElementById("mgCatList")) openManage();
+  // The screen tab that was in front comes back in front over the new catalog: initTabs fronted a conversation.
+  if(wasScreen && screens.includes(wasScreen)) frontScreenTab(wasScreen); /* plant:restart-keeps-screen */
   mtRefreshLive();
   tourAfterRestart();
   maybeStartTour();

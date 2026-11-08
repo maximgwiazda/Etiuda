@@ -706,9 +706,9 @@ const t0 = Date.now();
   await p.keyboard.press("Escape"); await sleep(400);
   const kept = await tourShot();
   await p.evaluate(() => { const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
-    const item = document.querySelector('#settingsMenu [data-act="manage"]'); if (item) item.click(); });
+    const item = document.querySelector('#settingsMenu [data-act="about"]'); if (item) item.click(); });
   await sleep(900);
-  const behind = await p.evaluate(() => ({ lib: !!document.getElementById("mgCatList") || !document.getElementById("modal").hidden,
+  const behind = await p.evaluate(() => ({ lib: !document.getElementById("modal").hidden,
     z: getComputedStyle(document.getElementById("tourRoot")).zIndex }));
   await p.evaluate(() => closeModal()); await sleep(600);
   const front = await p.evaluate(() => getComputedStyle(document.getElementById("tourRoot")).zIndex);
@@ -719,7 +719,7 @@ const t0 = Date.now();
     + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, at: kept.at }) + ")");
   check(behind.lib && behind.z === "190" && front === "240",
     "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
-    + behind.z + " with the Library open, " + front + " after)");
+    + behind.z + " with About open, " + front + " after)");
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
@@ -1522,16 +1522,16 @@ const t0 = Date.now();
      264's fault. What is on screen is details[open] after a redraw, so that is what is read, and
      the section is put back the way it was found. */
   await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(900);
-  const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#modalCard details[data-mg]")];
+  const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#screenHost details[data-mg]")];
     const d = ds.find(x => !x.open); if (!d) return { n: ds.length, key: null };
     d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
     return { n: ds.length, key: d.getAttribute("data-mg"), toggled: d.open }; });
-  const reopen = k => p.evaluate(async key => { dismissModal(); await new Promise(r => setTimeout(r, 400));
+  const reopen = k => p.evaluate(async key => { closeScreenTab("library"); await new Promise(r => setTimeout(r, 400));
     document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700));
-    const d = document.querySelector('#modalCard details[data-mg="' + key + '"]');
+    const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
     return d ? d.open : null; }, k);
   const mgAfter = mgKey.key === null ? null : await reopen(mgKey.key);
-  if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#modalCard details[data-mg="' + key + '"]');
+  if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
     if (d && d.open) d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
   const mgBack = mgKey.key === null ? null : await reopen(mgKey.key);
   check(mgKey.n > 0 && mgKey.key !== null && mgKey.toggled === true,
@@ -1544,9 +1544,9 @@ const t0 = Date.now();
      asserted here is that there are none of them and that the one row is still drawn. */
   const mgList = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    dismissModal(); await wait(400);
+    dismissModal(); closeScreenTab("library"); await wait(400);
     document.querySelector('[data-act="manage"]').click(); await wait(800);
-    const d = document.querySelector('#modalCard details[data-mg="data"]');
+    const d = document.querySelector('#screenHost details[data-mg="data"]');
     if (!d) return { step: "no data fold" };
     if (!d.open) d.querySelector("summary").click();
     await wait(800);
@@ -1568,7 +1568,7 @@ const t0 = Date.now();
     out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null;
     delete window.pack.who; window.savePack(); window.paintCatalogList();
     await wait(400);
-    dismissModal(); await wait(300);
+    closeScreenTab("library"); await wait(300);
     return out;
   });
   check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Eject"
@@ -1589,11 +1589,11 @@ const t0 = Date.now();
     await p.setViewport({ width, height: 880 }); await sleep(500);
     return p.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      dismissModal(); await wait(300);
+      closeScreenTab("library"); await wait(300);
       setUiLang("pl"); await wait(400);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
-      const card = document.getElementById("modalCard"), load = document.getElementById("mgImportCatalog");
-      const acts = card && card.querySelector(".modal-actions");
+      const card = document.querySelector("#screenHost .lib-list"), load = document.getElementById("mgImportCatalog");
+      const acts = card && card.querySelector(".screen-actions");
       if (!acts || !load) return { step: "missing" };
       for (const [id, label] of [["mgJoinTeam", "Dołącz do zespołu"], ["mgHistory", "Zapisane kopie…"]]) {
         if (document.getElementById(id)) continue;
@@ -1611,7 +1611,7 @@ const t0 = Date.now();
       });
       const rows = new Set(btns.map(b => Math.round(b.getBoundingClientRect().top))).size;
       const res = { step: "read", width: innerWidth, lang: document.documentElement.lang, n: out.length, rows, out };
-      dismissModal(); await wait(300);
+      closeScreenTab("library"); await wait(300);
       setUiLang("en"); await wait(400);
       return res;
     });
@@ -1693,11 +1693,11 @@ const t0 = Date.now();
                                     label + ": the Manage door", 20000);
       if (!canManage) return { step: "no manage" };
       await q.evaluate(() => document.querySelector('[data-act="manage"]').click());
-      if (!await untilHere(q, () => !!document.querySelector('#modalCard details[data-mg="data"]'),
+      if (!await untilHere(q, () => !!document.querySelector('#screenHost details[data-mg="data"]'),
                        label + ": the data fold", 20000))
         return { step: "no data fold" };
       await q.evaluate(() => {
-        const fold = document.querySelector('#modalCard details[data-mg="data"]');
+        const fold = document.querySelector('#screenHost details[data-mg="data"]');
         if (fold && !fold.open) fold.querySelector("summary").click();
       });
       await untilHere(q, () => document.querySelectorAll("#mgCatList .ec-row").length > 0,
@@ -2056,18 +2056,18 @@ const t0 = Date.now();
     const read = async (folder) => {
       window.E_HOST = { catalogFolder: folder, catalogFile: "", openCatalogFolder: () => true,
                         catalogFiles: () => [] };
-      dismissModal(); await wait(350);
+      closeScreenTab("library"); await wait(350);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
       const el = document.getElementById("mgCatFolderPath");
       if (!el) return null;
-      const cs = getComputedStyle(el), card = document.querySelector(".modal-card");
+      const cs = getComputedStyle(el), card = document.querySelector("#screenHost .lib-list");
       return { over: el.scrollWidth - Math.round(el.getBoundingClientRect().width),
                dir: cs.direction, ell: cs.textOverflow, txt: el.textContent,
                cardOver: card.scrollWidth - card.clientWidth };
     };
     const short = await read("C:\\Users\\x\\Documents\\Etiuda");
     const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later\\Etiuda live desk for the whole team");
-    dismissModal(); await wait(300);
+    closeScreenTab("library"); await wait(300);
     delete window.E_HOST;
     return { short, long };
   });
@@ -2669,21 +2669,21 @@ const t0 = Date.now();
      a bulk unhide and would also raise cards the catalog itself put away. */
   const unhid = await p.evaluate(async i => {
     document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 900));
-    const b = document.querySelector('#modalCard [data-show-card="' + CSS.escape(i) + '"]');
-    if (!b) { dismissModal(); return { found: false }; }
+    const b = document.querySelector('#screenHost [data-show-card="' + CSS.escape(i) + '"]');
+    if (!b) { closeScreenTab("library"); return { found: false }; }
     b.click(); await new Promise(r => setTimeout(r, 900));
-    dismissModal(); await new Promise(r => setTimeout(r, 500));
+    closeScreenTab("library"); await new Promise(r => setTimeout(r, 500));
     return { found: true }; }, pick.id);
   const h2 = await readStar(pick.id);
   check(unhid.found && h2.present && h2.n === h0.n, "and the Library puts it back (" + h2.n + " cards)");
   const r0 = await readStar(pick.id);
   const rm = await p.evaluate(async i => {
     document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 900));
-    const b = document.querySelector('#modalCard [data-remove-card="' + CSS.escape(i) + '"]');
-    if (!b) { dismissModal(); return { found: false }; }
+    const b = document.querySelector('#screenHost [data-remove-card="' + CSS.escape(i) + '"]');
+    if (!b) { closeScreenTab("library"); return { found: false }; }
     b.click(); await new Promise(r => setTimeout(r, 1200));
-    const still = !!document.querySelector('#modalCard [data-remove-card="' + CSS.escape(i) + '"]');
-    dismissModal(); await new Promise(r => setTimeout(r, 500));
+    const still = !!document.querySelector('#screenHost [data-remove-card="' + CSS.escape(i) + '"]');
+    closeScreenTab("library"); await new Promise(r => setTimeout(r, 500));
     return { found: true, still }; }, pick.id);
   const r1 = await readStar(pick.id);
   check(rm.found && !rm.still, "a removal takes the card out of the Library too");
@@ -3216,8 +3216,8 @@ const t0 = Date.now();
   const mgNav = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     document.querySelector('[data-act="manage"]').click(); await wait(1000);
-    const cat = [...document.querySelectorAll("#modalCard .mg-cat")].find(c => c.querySelectorAll("[data-edit-card]").length >= 2);
-    if (!cat) { dismissModal(); return { found: false }; }
+    const cat = [...document.querySelectorAll("#screenHost .mg-cat")].find(c => c.querySelectorAll("[data-edit-card]").length >= 2);
+    if (!cat) { closeScreenTab("library"); return { found: false }; }
     const tw = cat.querySelector("[data-toggle]");
     if (tw && tw.getAttribute("aria-expanded") !== "true") { tw.click(); await wait(600); }
     const btns = [...cat.querySelectorAll("[data-edit-card]")];
@@ -3226,8 +3226,9 @@ const t0 = Date.now();
     return { found: true, n: btns.length, up: !!document.getElementById("modalCard").offsetParent,
       prev: prev ? prev.disabled : null, next: next ? next.disabled : null };
   });
+  // Escape takes the editor back to the Library's tab, and the tab is closed by its own act.
   await p.keyboard.press("Escape"); await sleep(500);
-  await p.keyboard.press("Escape"); await sleep(500);
+  await p.evaluate(() => closeScreenTab("library")); await sleep(500);
   check(mgNav.found && mgNav.up && mgNav.prev === true && mgNav.next === false,
     "the Library's edit opens the card editor walking that category alone (" + JSON.stringify(mgNav) + ")");
 

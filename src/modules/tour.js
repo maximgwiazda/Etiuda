@@ -21,6 +21,7 @@ import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, na
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { joinStands, onJoinPainted } from "./team-join.js";
+import { closeScreenTab, screenOn } from "./screen-tabs.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
@@ -147,7 +148,7 @@ function menuTarget(act){
 const menuSide=()=>menuOpen() ? "left" : null;
 // The window each inside step stands in.
 const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
-const libraryOpen=()=>modalOpen() && !!document.querySelector("#modalCard details.manage-sec");
+const libraryOpen=()=>screenOn==="library" && !!document.querySelector("#screenHost details.manage-sec");
 const settingsOpen=()=>modalOpen() && !!document.getElementById("setBody");
 /* NEXT PRESSES THE STEP'S OWN CONTROL for the person, and only where it stands on screen: never the
    card or the list a step falls back to ringing. */
@@ -155,7 +156,8 @@ function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getCli
 // A Menu row, with the Menu opened first where it is shut.
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
 // The window an inside step stands in, closed as the person would close it.
-function shutTourWindow(){ if(modalOpen()) closeModal(); if(factsPanelOpen()) closeFactsPanel(); }
+// The Library's tab is a window the tour went into as well, and leaving it closes the tab.
+function shutTourWindow(){ if(modalOpen()) closeModal(); else if(screenOn==="library") closeScreenTab("library"); if(factsPanelOpen()) closeFactsPanel(); }
 /* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
    says when it does), and Next opens it by the pointer. */
 let tourPicks=0, tourStepPicks=0;
@@ -358,8 +360,7 @@ const TOUR_STEPS=[
   },
   {
     id:"libraryIn",
-    sel:"#modalCard",
-    modal:true,
+    sel:"#screenHost",
     inside:true,
     when:libraryOpen,
     pad:4,
@@ -843,6 +844,8 @@ function wireTourUi(){
       mo.observe(document.body,{childList:true});
       const shared=$("#modal");
       if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden"]});
+      const screen=$("#screenHost");
+      if(screen) mo.observe(screen,{attributes:true, attributeFilter:["hidden"]});
       // The menu opening or shutting moves a Menu step's ring between the button and its rows.
       const menu=$("#settingsMenu");
       if(menu) mo.observe(menu,{attributes:true, attributeFilter:["hidden"]});

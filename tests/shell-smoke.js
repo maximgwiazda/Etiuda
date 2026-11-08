@@ -547,8 +547,8 @@ function folderMember(ud, share, teamId, lead) {
    content box rather than against each other, because two buttons merely far apart pass a gap
    test and still fail the promise. */
 const BAR_ENDS = (leftId, rightId) => {
-  const acts = document.querySelector("#modalCard .modal-actions");
   const a = document.getElementById(leftId), b = document.getElementById(rightId);
+  const acts = a && a.closest(".modal-actions, .screen-actions");
   if (!acts || !a || !b) return { step: "missing", acts: !!acts, left: !!a, right: !!b };
   const cs = getComputedStyle(acts);
   const r = acts.getBoundingClientRect();
@@ -1243,7 +1243,7 @@ const placeEc = (dir, from, as, minutesOld) => {
       return true;
     };
     if (!(await menu("manage"))) return { step: "no Library item in the menu" };
-    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(800);
@@ -1261,7 +1261,7 @@ const placeEc = (dir, from, as, minutesOld) => {
                   inSummary: !!pathEl && !!pathEl.closest("summary") && !!change.closest("summary"),
                   loadedRow: !!document.querySelector("#mgCatList .ec-row.is-loaded"),
                   exportInRow: !!exp && !!exp.closest(".ec-row.is-loaded"),
-                  importInBar: !!imp && !!imp.closest(".modal-actions .mf-left"),
+                  importInBar: !!imp && !!imp.closest(".screen-actions .mf-left"),
                   closeAlone: !!close && !close.closest(".mf-left"),
                   oldOnes: ["#mgCatOpen"].filter(x => !!q(x)).length,
                   strays: [...document.querySelectorAll('details.manage-sec[data-mg="data"] .manage-secbody > *')]
@@ -1495,15 +1495,16 @@ const placeEc = (dir, from, as, minutesOld) => {
     return pg.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       if (!document.getElementById("modal").hidden) closeModal();
+      if (document.getElementById("mgCatList")) closeScreenTab("library");
       await wait(300);
       document.getElementById("settingsBtn").click(); await wait(300);
       document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1200);
-      const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+      const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
       if (fold && !fold.open) { fold.querySelector("summary").click(); await wait(1200); }
       const rows = Array.from(document.querySelectorAll("#mgCatList .ec-row")).map(r => ({
         name: (r.querySelector(".ec-name b") || {}).textContent || "",
         copy: (r.querySelector("[data-ec-copy]") || { getAttribute: () => "" }).getAttribute("data-ec-copy") }));
-      closeModal();
+      closeScreenTab("library");
       return rows;
     });
   };
@@ -1817,7 +1818,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     const item = document.querySelector('#settingsMenu [data-act="manage"]');
     if (!item) return { step: "no Library item in the menu" };
     item.click(); await wait(1200);
-    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(1200);
@@ -1934,7 +1935,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     document.getElementById("settingsBtn").click(); await wait(400);
     document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1200);
-    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(1200);
@@ -2168,7 +2169,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(6000);
   const libL = await (await s.b.pages())[0].evaluate(OPEN_LIB);
   const summary = await (await s.b.pages())[0].evaluate(() =>
-    Array.from(document.querySelectorAll('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty'))
+    Array.from(document.querySelectorAll('#screenHost details[data-mg="data"] .manage-secbody > p.manage-empty'))
       .map(p => p.textContent));
   const onRow = (libL.rows || []).filter(r => r.loaded)[0] || {};
   const offRow = (libL.rows || []).filter(r => !r.loaded)[0] || {};
@@ -2217,7 +2218,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      and the same file comes in again through the import. The eject asks nothing (2026-09-27 23:28),
      and a confirm standing after the call fails 2q11's premise. */
   // Read as ejAsk1 reads it.
-  const ejAsk2 = await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
+  const ejAsk2 = await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeScreenTab("library");
     const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
     const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
   await sleep(6000);
@@ -2229,7 +2230,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   await sleep(6000);
   const impPage = (await s.b.pages())[0];
-  await impPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await impPage.evaluate(() => { if (document.getElementById("mgCatList")) closeScreenTab("library"); });
   await sleep(600);
   const libImp = await impPage.evaluate(OPEN_LIB);
   const impKeys = deskKeys(udLE);
@@ -2258,7 +2259,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   }, ctrlDoc);
   await sleep(6000);
   const ctrlPage = (await s.b.pages())[0];
-  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeScreenTab("library"); });
   await sleep(600);
   const libCtrl = await ctrlPage.evaluate(OPEN_LIB);
   const ctrlOn = (libCtrl.rows || []).filter(r => r.loaded);
@@ -2277,7 +2278,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      heading are the file's, and the name is nowhere in its text. Then another catalog is offered over this one, and
      neither the offer nor the band says it either. Read as booleans and file names; the fixture prints nothing. */
   const STALE = "Probe catalog";
-  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeScreenTab("library"); });
   await sleep(600);
   const seeding = await ctrlPage.evaluate(name => {
     const c = storedCatalog();
@@ -2291,7 +2292,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     head: (document.querySelector("#modalCard h2 .modal-name") || {}).textContent || "",
     says: (document.body.innerText || "").indexOf(name) > -1 }), STALE);
   const seedOn = (libSeed.rows || []).filter(r => r.loaded);
-  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeScreenTab("library"); });
   await sleep(600);
   const seedOffer = await ctrlPage.evaluate(async name => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -2331,12 +2332,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   phase("[2f/7] the Library stays open");
   const LIB_STATE = () => {
     const m = document.getElementById("modal");
-    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     const rows = Array.from(document.querySelectorAll("#mgCatList .ec-row"));
     return { open: !!m && !m.hidden && !!fold, foldOpen: !!fold && fold.open, rows: rows.length,
              loaded: rows.filter(r => r.classList.contains("is-loaded"))
                .map(r => (r.querySelector(".ec-name b") || {}).textContent || ""),
-             empty: (document.querySelector('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty')
+             empty: (document.querySelector('#screenHost details[data-mg="data"] .manage-secbody > p.manage-empty')
                      || {}).textContent || "",
              over: !!document.getElementById("eCatalogOffer") };
   };
@@ -2401,7 +2402,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!b) return { there: false };
     const name = String(window.nsGet("CatalogFrom") || "").replace(/\.(ec|json|js)$/i, "");
     b.click(); await wait(1500);
-    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     return { there: true, name, asked: !!document.getElementById("eNameModal"), lib: !!fold,
              foldOpen: !!fold && fold.open };
   });
@@ -2422,11 +2423,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     + ") which the engine's reader takes whole (" + JSON.stringify(readBack) + " cards): "
     + JSON.stringify({ asked: stacked.asked, lib: stacked.lib, foldOpen: stacked.foldOpen }));
 
-  /* An editor opened from the Library takes the screen and hands it back, which is a different
-     promise from the four above and was already built: it is read here so that it stays built. */
+  /* An editor opened from the Library is a pop-up over its tab and closes back onto it, at the same fold,
+     which is a different promise from the four above: it is read here so that it stays built. */
   const edTrip = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const lib = () => document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const lib = () => document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     const before = !!lib();
     const add = document.getElementById("mgAddIntent");
     if (!add) return { step: "no New intent button" };
@@ -2437,9 +2438,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     return { step: "read", before, during, editor, after: !!lib(),
              foldOpen: !!lib() && lib().open };
   });
-  check(edTrip.step === "read" && edTrip.before && !edTrip.during && edTrip.editor
+  check(edTrip.step === "read" && edTrip.before && edTrip.during && edTrip.editor
         && edTrip.after && edTrip.foldOpen,
-    "2s4 an editor opened from the Library replaces it and gives it back on closing, at the same"
+    "2s4 an editor opened from the Library stands over its tab and closes back onto it, at the same"
     + " fold - the promise Maxim says was already built: " + JSON.stringify(edTrip));
 
   /* Board 412: the section's red Eject is gone; the loaded row's is the one that stays. */
@@ -2458,11 +2459,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2s8 the Library open has no #mgExportHtml, and Export catalog is still there: "
     + JSON.stringify(noBuild));
   const wipeBar = await (await s.b.pages())[0].evaluate(() => {
-    const acts = document.querySelector("#modalCard .modal-actions");
+    const acts = document.querySelector("#screenHost .screen-actions");
     const ids = acts ? Array.from(acts.querySelectorAll("button")).map(b => b.id) : [];
     const wipe = document.getElementById("mgWipe");
     const close = document.getElementById("mgClose");
-    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     return {
       wipeInBar: !!(acts && wipe && acts.contains(wipe)),
       closeInBar: !!(acts && close && acts.contains(close)),
@@ -2489,8 +2490,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.p.setViewport({ width: 600, height: 880 });
   await sleep(400);
   const narrowBar = await s.p.evaluate(() => {
-    const card = document.getElementById("modalCard");
-    const acts = card && card.querySelector(".modal-actions");
+    const card = document.querySelector("#screenHost .lib-list");
+    const acts = card && card.querySelector(".screen-actions");
     if (!card || !acts) return { step: "missing" };
     const c = card.getBoundingClientRect();
     const btns = Array.from(acts.querySelectorAll("button")).filter(b => b.offsetParent);
@@ -2535,40 +2536,40 @@ const placeEc = (dir, from, as, minutesOld) => {
      the legs here are about a dialog that has to still be standing afterwards. */
 
   /* THE CONTROL, and the whole reason the legs above are not vacuous: the three ways a person
-     closes this dialog still close it. */
+     closes the Library's tab still close it, its Close, its cross and Ctrl+W. */
   closed = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const out = {};
     const open = async () => {
       document.getElementById("settingsBtn").click(); await wait(400);
       document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1000);
-      return !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+      return !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     };
     out.openedA = await open();
     document.getElementById("mgClose").click(); await wait(700);
-    out.afterClose = !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    out.afterClose = !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     out.openedB = await open();
-    const x = document.getElementById("modalX") || document.querySelector("#modalCard .modal-x");
+    const x = document.querySelector('#tabsBar .tab.screen[data-sid="library"] .tab-x');
     out.hasX = !!x;
     if (x) { x.click(); await wait(700); }
-    out.afterX = !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    out.afterX = !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     return out;
   });
   const reopened = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     document.getElementById("settingsBtn").click(); await wait(400);
     document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1000);
-    return !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    return !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
   });
-  await (await s.b.pages())[0].keyboard.press("Escape");
+  { const kb = (await s.b.pages())[0].keyboard; await kb.down("Control"); await kb.press("KeyW"); await kb.up("Control"); }
   await sleep(900);
   const afterEsc = await (await s.b.pages())[0].evaluate(() =>
-    !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]'));
+    !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]'));
   check(closed.openedA && !closed.afterClose && closed.openedB && closed.hasX && !closed.afterX
         && reopened && !afterEsc,
-    "2s6 control: Close, the X and Esc all still close it, so 2s to 2s5 are a dialog that stays"
+    "2s6 control: Close, the tab's cross and Ctrl+W all still close it, so 2s to 2s5 are a tab that stays"
     + " open rather than one nothing can shut: " + JSON.stringify(closed)
-    + ", reopened " + reopened + ", after Esc " + afterEsc);
+    + ", reopened " + reopened + ", after Ctrl+W " + afterEsc);
   await s.stop();
 
   /* ---- 2w to 2w3: CLEAR LOCAL MEMORY KEEPS THE CATALOG FOLDER, board item 410 --------------

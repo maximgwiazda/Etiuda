@@ -2862,16 +2862,6 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
-/* THE LIBRARY'S BAR HOLDS EVERY BUTTON ON ONE ROW at the default window, 1280 by 880: the
-   Polish labels need about 645px inside the padding, so the card is 720px, nowrap, and 2s9
-   reads the gap between the ends. Only from 760px wide: below it the bar and its left group
-   wrap rather than push a button off the card (2s9w, at 600px). Other dialogs stay at 560. */
-.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:wrap}
-@media (min-width:760px){
-.modal-card.lib-modal{max-width:720px}
-.modal-card.lib-modal .modal-actions,
-.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:nowrap}
-}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
@@ -2880,6 +2870,13 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
   border-radius:1px}
+/* A SCREEN TAB'S HEADING AND BAR keep the dialog's: the file's name beside the title, and the bar's left group with
+   its hairline, as the Library's bar had them. */
+.screen-head{display:flex;align-items:baseline;gap:.7ch;min-width:0}
+.screen-head .screen-name{font-weight:400;color:var(--dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.screen-actions .mf-left{display:flex;gap:8px;margin-right:auto;flex-wrap:wrap}
+.screen-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);border-radius:1px}
+.screen-page:focus{outline:none}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
    specificity and beats it on source order alone, so anything that reorders the sheet - a
@@ -8189,6 +8186,7 @@ What you type stays in this browser only.`;
       "header",
       "#settingsMenu",
       "#modalCard",
+      "#screenHost",
       "footer",
       "#tourRoot",
       "#intentRail",
@@ -12040,7 +12038,7 @@ What you type stays in this browser only.`;
       hooks.drawPillsCore();
       hooks.render();
       hooks.drawIntentRail();
-      if (document.getElementById("mgCatList")) hooks.openManage();
+      if (document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
     });
     return true;
   }
@@ -20687,7 +20685,7 @@ What you type stays in this browser only.`;
       rebuildCards();
       hooks.render();
       drawPills();
-      if (document.getElementById("mgCatList")) hooks.openManage();
+      if (document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
     });
     return true;
   }
@@ -20738,7 +20736,7 @@ What you type stays in this browser only.`;
         saveIntentOrder();
       }
       refreshAfterIntents();
-      if (document.getElementById("mgCatList")) hooks.openManage();
+      if (document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
     });
     return true;
   }
@@ -24294,7 +24292,7 @@ What you type stays in this browser only.`;
   }
   var menuSide = () => menuOpen() ? "left" : null;
   var cardEditorOpen = () => modalOpen() && !!document.getElementById("meCancel");
-  var libraryOpen = () => modalOpen() && !!document.querySelector("#modalCard details.manage-sec");
+  var libraryOpen = () => screenOn === "library" && !!document.querySelector("#screenHost details.manage-sec");
   var settingsOpen = () => modalOpen() && !!document.getElementById("setBody");
   function tourPress(el, sel) {
     if (el && el.matches && el.matches(sel) && el.getClientRects().length) el.click();
@@ -24305,6 +24303,7 @@ What you type stays in this browser only.`;
   }
   function shutTourWindow() {
     if (modalOpen()) closeModal();
+    else if (screenOn === "library") closeScreenTab("library");
     if (factsPanelOpen()) closeFactsPanel();
   }
   var tourPicks = 0;
@@ -24507,8 +24506,7 @@ What you type stays in this browser only.`;
     },
     {
       id: "libraryIn",
-      sel: "#modalCard",
-      modal: true,
+      sel: "#screenHost",
       inside: true,
       when: libraryOpen,
       pad: 4,
@@ -25012,6 +25010,8 @@ What you type stays in this browser only.`;
         mo.observe(document.body, { childList: true });
         const shared = $("#modal");
         if (shared) mo.observe(shared, { attributes: true, attributeFilter: ["hidden"] });
+        const screen = $("#screenHost");
+        if (screen) mo.observe(screen, { attributes: true, attributeFilter: ["hidden"] });
         const menu = $("#settingsMenu");
         if (menu) mo.observe(menu, { attributes: true, attributeFilter: ["hidden"] });
       } catch (_) {
@@ -26521,8 +26521,8 @@ What you type stays in this browser only.`;
   }
   function deskMarkTarget() {
     const open = !document.getElementById("modal").hidden;
-    if (open && document.querySelector("#modalCard details.manage-sec")) {
-      const d = document.querySelector('#modalCard details[data-mg="data"]');
+    if (!open && document.querySelector("#screenHost:not([hidden]) details.manage-sec")) {
+      const d = document.querySelector('#screenHost details[data-mg="data"]');
       if (!d) return null;
       if (!d.open) return { el: deskMarkInView(d.querySelector("summary")), prefer: "right" };
       return { el: deskMarkInView(d.querySelector(".ec-row.is-loaded")), prefer: "right" };
@@ -28891,6 +28891,7 @@ What you type stays in this browser only.`;
   __export(manage_exports, {
     libraryActionsHtml: () => libraryActionsHtml,
     libraryBodyHtml: () => libraryBodyHtml,
+    libraryHeadHtml: () => libraryHeadHtml,
     mgCardRow: () => mgCardRow,
     mgCardsIn: () => mgCardsIn,
     mgUsesTip: () => mgUsesTip,
@@ -30439,27 +30440,28 @@ What you type stays in this browser only.`;
       }));
     }).catch(refuse);
   }
-  function openHistory() {
+  function openHistory(host) {
     const h = historyHost();
     if (!h) return;
+    const box = host || document.getElementById("screenHost");
+    if (!box) return;
     Promise.resolve(h.historyList()).then((list2) => {
+      if (box.hidden || screenOn && screenOn !== "library") return;
       const groups = historyGroups(list2), flat = [].concat.apply([], groups);
-      openDialog({
-        title: "Saved copies",
-        back: () => hooks.openManage(),
-        body: '<div id="ehView">' + historyBodyHtml(groups) + "</div>",
-        actions: '<button type="button" class="btn" id="ehClose">' + esc(t("Close")) + "</button>",
-        wire: () => {
-          const box = document.getElementById("ehView");
-          box.querySelectorAll("[data-eh-open]").forEach((b) => {
-            b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
-          });
-          box.querySelectorAll("[data-eh-put]").forEach((b) => {
-            b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
-          });
-          document.getElementById("ehClose").onclick = () => hooks.openManage();
-        }
+      box.innerHTML = '<div class="screen-page lib-screen lib-history" tabindex="-1"><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="screen-body"><div id="ehView">' + historyBodyHtml(groups) + '</div></div><div class="screen-actions"><button type="button" class="btn" id="ehClose">' + esc(t("Back to the Library")) + "</button></div></div>";
+      const view = document.getElementById("ehView");
+      view.querySelectorAll("[data-eh-open]").forEach((b) => {
+        b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
       });
+      view.querySelectorAll("[data-eh-put]").forEach((b) => {
+        b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
+      });
+      const back = document.getElementById("ehClose");
+      back.onclick = () => hooks.openManage();
+      try {
+        back.focus({ preventScroll: true });
+      } catch (e) {
+      }
     }).catch(() => {
     });
   }
@@ -30529,32 +30531,34 @@ What you type stays in this browser only.`;
     return el && el.parentNode ? Array.prototype.indexOf.call(el.parentNode.children, el) : -1;
   }
   function mgRefreshAround(mutate) {
-    const treeBefore = modalCard.querySelector(".mg-tree");
+    const page = libPage(), host = libHost();
+    if (!page) {
+      mutate();
+      return;
+    }
+    const treeBefore = page.querySelector(".mg-tree");
     const keepTree = treeBefore ? treeBefore.scrollTop : 0;
-    const bodyBefore = modalCard.querySelector(".modal-body");
-    const keepCard = bodyBefore ? bodyBefore.scrollTop : 0;
+    const keepCard = host ? host.scrollTop : 0;
     const ROWS = "[data-cardrow],[data-introw]";
     const rowKey = (el) => el.getAttribute("data-cardrow") || el.getAttribute("data-introw");
     const before = {};
     if (!mgReduceMotion()) {
-      modalCard.querySelectorAll(ROWS).forEach((el) => {
+      page.querySelectorAll(ROWS).forEach((el) => {
         if (!el.offsetParent) return;
         before[rowKey(el)] = el.getBoundingClientRect().top;
       });
     }
     mutate();
-    dressDialogInputs(modalCard);
-    markCutText(modalCard);
-    openManage();
-    mountModalBody();
-    const tree = modalCard.querySelector(".mg-tree");
+    paintLibrary();
+    const now = libPage();
+    if (!now) return;
+    const tree = now.querySelector(".mg-tree");
     if (tree) tree.scrollTop = keepTree;
-    const bodyAfter = modalCard.querySelector(".modal-body");
-    if (bodyAfter) bodyAfter.scrollTop = keepCard;
+    if (host) host.scrollTop = keepCard;
     if (mgReduceMotion()) return;
-    const bodyBox = (modalCard.querySelector(".modal-body") || modalCard).getBoundingClientRect();
+    const bodyBox = (host || now).getBoundingClientRect();
     const moved = [], dys = [];
-    modalCard.querySelectorAll(ROWS).forEach((el) => {
+    now.querySelectorAll(ROWS).forEach((el) => {
       const b = before[rowKey(el)];
       if (b == null || !el.offsetParent) return;
       const holder = el.closest(".mg-tree");
@@ -30572,7 +30576,7 @@ What you type stays in this browser only.`;
       el.style.willChange = "transform";
       el.style.transform = "translateY(" + dys[i] + "px)";
     });
-    void modalCard.offsetHeight;
+    void now.offsetHeight;
     const clear = () => moved.forEach((el) => {
       el.style.transition = "";
       el.style.transform = "";
@@ -30680,7 +30684,7 @@ What you type stays in this browser only.`;
   }
   function wireManageDrag() {
     addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || !modalOpen() || !e.target.closest) return;
+      if (e.button !== 0 || !e.target.closest || !e.target.closest(".lib-list")) return;
       if (e.target.closest("input,button,select,textarea,a")) return;
       const crow = e.target.closest(".mg-cat-row[data-crow]");
       const mrow = e.target.closest(".manage-row.mg-card[data-cardrow]");
@@ -30779,7 +30783,7 @@ What you type stays in this browser only.`;
         mgOpen.add("cat:" + dropCat);
         render();
         drawPills();
-        openManage();
+        paintLibrary();
         toast(t("Moved to") + " " + (CATS[dropCat] || dropCat));
       }
       return;
@@ -30794,7 +30798,7 @@ What you type stays in this browser only.`;
     render();
   }
   function startMgCatAdd() {
-    const tree = modalCard && modalCard.querySelector(".mg-tree");
+    const page = libPage(), tree = page && page.querySelector(".mg-tree");
     if (!tree || tree.querySelector(".mg-cat-new")) return;
     const wrap = document.createElement("div");
     wrap.className = "mg-cat mg-cat-new";
@@ -30814,7 +30818,7 @@ What you type stays in this browser only.`;
       rebuildCards();
       drawPills();
       mgOpen.add("cat:" + key);
-      openManage();
+      paintLibrary();
       toast("Category added");
     };
     inp.focus();
@@ -30927,170 +30931,193 @@ What you type stays in this browser only.`;
       dataTail
     );
     if (justHtml) return mgBody;
-    openDialog({
-      title: "Library",
-      /* Wide enough that Clear, Load, Join, Earlier versions and Close sit on one row at the
-         default window. The 560px card put Close on the row below. */
-      cls: "lib-modal",
-      /* Every section here is about one catalog, and the only place that says WHICH is inside
-         "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
-         name for the same reason the editors carry theirs: it scopes the screen you are on.
-         Nothing when there is no catalog; the empty state inside says that better. */
-      name: () => catalogFileName(),
-      body: mgBody,
-      /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
-         and .mf-left is the group that carries it there. Danger kept, because this one forgets
-         personal state. */
-      actions: libraryActionsHtml(),
-      wire: wireManage
-    });
-    function wireManage() {
-      $("#mgClose").onclick = closeModal;
-      $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
-      $("#mgAddCat").onclick = () => startMgCatAdd();
-      if ($("#mgWho")) $("#mgWho").onchange = function() {
-        const next = normWhoList(this.value);
-        pack.who = next.join("\0") === WHO_BASE.join("\0") ? null : next;
-        savePack();
-        this.value = whoOptions().join(", ");
-        syncRoleDrum();
-      };
-      $("#mgImportCatalog").onclick = importCatalogHere;
-      const joinBtn = $("#mgJoinTeam");
-      if (joinBtn) joinBtn.onclick = () => {
-        closeModal();
-        openJoinPaste();
-      };
-      if ($("#mgHistory")) $("#mgHistory").onclick = openHistory;
-      paintCatalogList();
-      const fpath = $("#mgCatFolderPath");
-      if (fpath) {
-        const open = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          eOpenCatalogFolder();
-        };
-        fpath.onclick = open;
-        fpath.onkeydown = (e) => {
-          if (e.key === "Enter" || e.key === " ") open(e);
-        };
+    libView = "list";
+    if (modalOpen()) closeModal();
+    if (screenOn === LIB_SCREEN) paintLibrary(null, mgBody);
+    else openScreenTab(LIB_SCREEN);
+  }
+  function libraryHeadHtml() {
+    const name = catalogFileName();
+    return '<div class="screen-head"><h2>' + esc(t("Library")) + "</h2>" + (name ? '<span class="screen-name" data-i18n-skip>' + esc(name) + "</span>" : "") + "</div>";
+  }
+  var LIB_SCREEN = "library";
+  var libView = "list";
+  function libHost() {
+    if (screenOn !== LIB_SCREEN) return null;
+    const host = document.getElementById("screenHost");
+    return host && !host.hidden ? host : null;
+  }
+  function libPage() {
+    const host = libHost();
+    return host ? host.querySelector(".lib-list") : null;
+  }
+  function paintLibrary(host, body) {
+    host = host || libHost();
+    if (!host) return;
+    if (libView === "history") {
+      openHistory(host);
+      return;
+    }
+    host.innerHTML = '<div class="screen-page lib-screen lib-list" tabindex="-1">' + libraryHeadHtml() + '<div class="screen-body">' + (body || openManage(true)) + '</div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
+    const page = host.querySelector(".lib-list");
+    wireLibrary(page);
+    translateTree(page);
+    dressDialogInputs(page);
+    markCutText(page);
+    const at = document.activeElement;
+    if (!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+      try {
+        page.focus({ preventScroll: true });
+      } catch (e) {
       }
-      if ($("#mgCatFolder")) $("#mgCatFolder").onclick = (e) => {
+  }
+  registerScreen(LIB_SCREEN, { title: () => t("Library"), render: (host) => paintLibrary(host) });
+  function wireLibrary(page) {
+    $("#mgClose").onclick = () => closeScreenTab(LIB_SCREEN);
+    $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
+    $("#mgAddCat").onclick = () => startMgCatAdd();
+    if ($("#mgWho")) $("#mgWho").onchange = function() {
+      const next = normWhoList(this.value);
+      pack.who = next.join("\0") === WHO_BASE.join("\0") ? null : next;
+      savePack();
+      this.value = whoOptions().join(", ");
+      syncRoleDrum();
+    };
+    $("#mgImportCatalog").onclick = importCatalogHere;
+    const joinBtn = $("#mgJoinTeam");
+    if (joinBtn) joinBtn.onclick = () => openJoinPaste();
+    if ($("#mgHistory")) $("#mgHistory").onclick = () => {
+      libView = "history";
+      paintLibrary();
+    };
+    paintCatalogList();
+    const fpath = $("#mgCatFolderPath");
+    if (fpath) {
+      const open = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
-          if (dir) openManage();
+        eOpenCatalogFolder();
+      };
+      fpath.onclick = open;
+      fpath.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") open(e);
+      };
+    }
+    if ($("#mgCatFolder")) $("#mgCatFolder").onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
+        if (dir) paintLibrary();
+      });
+    };
+    $("#mgWipe").onclick = clearLocalMemory;
+    wireFolds(
+      page,
+      "details[data-mg]",
+      "details.manage-sec",
+      (d) => {
+        const k = d.getAttribute("data-mg");
+        if (d.open) mgOpen.add(k);
+        else mgOpen.delete(k);
+      }
+    );
+    page.querySelectorAll("[data-toggle]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        mgPinCard();
+        catToggle(btn.closest(".mg-cat"), btn.getAttribute("data-toggle"));
+      };
+    });
+    page.querySelectorAll("[data-role-always]").forEach((btn) => {
+      btn.onclick = () => {
+        const k = btn.getAttribute("data-role-always");
+        mgRefreshAround(() => {
+          setCatAlways(k, !isAlwaysCat(k));
+          rebuildCards();
+          drawPills();
+          render();
+          toast((CATS[k] || k) + " " + t(isAlwaysCat(k) ? "is now a supporting category" : "is an ordinary category"));
         });
       };
-      $("#mgWipe").onclick = clearLocalMemory;
-      wireFolds(
-        modalCard,
-        "details[data-mg]",
-        "details.manage-sec",
-        (d) => {
-          const k = d.getAttribute("data-mg");
-          if (d.open) mgOpen.add(k);
-          else mgOpen.delete(k);
+    });
+    page.querySelectorAll("[data-add-card]").forEach((btn) => {
+      btn.onclick = () => openCardEditor(null, btn.getAttribute("data-add-card"), true);
+    });
+    page.querySelectorAll("[data-edit-card]").forEach((btn) => {
+      btn.onclick = () => openCardEditor(btn.getAttribute("data-edit-card"), null, true);
+    });
+    page.querySelectorAll("[data-editcat]").forEach((btn) => {
+      btn.onclick = () => openCategoryEditor(btn.getAttribute("data-editcat"));
+    });
+    page.querySelectorAll("[data-hide-card],[data-show-card]").forEach((btn) => {
+      btn.onclick = () => {
+        mgRefreshAround(() => hideCard(btn.getAttribute("data-hide-card") || btn.getAttribute("data-show-card")));
+      };
+    });
+    page.querySelectorAll("[data-remove-card]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.getAttribute("data-remove-card");
+        if (!findCard(id)) return;
+        mgRefreshAround(() => {
+          removeCard(id);
+        });
+      };
+    });
+    page.querySelectorAll("[data-fav-card]").forEach((btn) => {
+      btn.onclick = () => mgRefreshAround(() => toggleFavourite(btn.getAttribute("data-fav-card")));
+    });
+    page.querySelectorAll("[data-edit-intent-mg]").forEach((btn) => {
+      btn.onclick = () => openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
+    });
+    page.querySelectorAll("[data-fav-intent-mg]").forEach((btn) => {
+      btn.onclick = () => mgRefreshAround(() => toggleIntentFavourite(btn.getAttribute("data-fav-intent-mg")));
+    });
+    page.querySelectorAll("[data-show-hidden]").forEach((btn) => {
+      btn.onclick = () => {
+        const kind = btn.getAttribute("data-show-hidden");
+        if (kind === "cards") {
+          const ids = (cards || []).filter((m) => m && m._hidden).map((m) => m.id);
+          if (!ids.length) return;
+          ids.forEach((id) => hideCard(id));
+          toast(ids.length === 1 ? t("1 card shown again") : t("{N} cards shown again").replace("{N}", ids.length));
+        } else {
+          const ids = (pack.intentHidden || []).slice();
+          if (!ids.length) return;
+          ids.forEach((id) => setIntentHidden(id, false));
+          toast(ids.length === 1 ? t("1 intent shown again") : t("{N} intents shown again").replace("{N}", ids.length));
         }
-      );
-      modalCard.querySelectorAll("[data-toggle]").forEach((btn) => {
-        btn.onclick = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          mgPinCard();
-          catToggle(btn.closest(".mg-cat"), btn.getAttribute("data-toggle"));
-        };
-      });
-      modalCard.querySelectorAll("[data-role-always]").forEach((btn) => {
-        btn.onclick = () => {
-          const k = btn.getAttribute("data-role-always");
-          mgRefreshAround(() => {
-            setCatAlways(k, !isAlwaysCat(k));
-            rebuildCards();
-            drawPills();
-            render();
-            toast((CATS[k] || k) + " " + t(isAlwaysCat(k) ? "is now a supporting category" : "is an ordinary category"));
-          });
-        };
-      });
-      modalCard.querySelectorAll("[data-add-card]").forEach((btn) => {
-        btn.onclick = () => openCardEditor(null, btn.getAttribute("data-add-card"), true);
-      });
-      modalCard.querySelectorAll("[data-edit-card]").forEach((btn) => {
-        btn.onclick = () => openCardEditor(btn.getAttribute("data-edit-card"), null, true);
-      });
-      modalCard.querySelectorAll("[data-editcat]").forEach((btn) => {
-        btn.onclick = () => openCategoryEditor(btn.getAttribute("data-editcat"));
-      });
-      modalCard.querySelectorAll("[data-hide-card],[data-show-card]").forEach((btn) => {
-        btn.onclick = () => {
-          mgRefreshAround(() => hideCard(btn.getAttribute("data-hide-card") || btn.getAttribute("data-show-card")));
-        };
-      });
-      modalCard.querySelectorAll("[data-remove-card]").forEach((btn) => {
-        btn.onclick = () => {
-          const id = btn.getAttribute("data-remove-card");
-          if (!findCard(id)) return;
-          mgRefreshAround(() => {
-            removeCard(id);
-          });
-        };
-      });
-      modalCard.querySelectorAll("[data-fav-card]").forEach((btn) => {
-        btn.onclick = () => mgRefreshAround(() => toggleFavourite(btn.getAttribute("data-fav-card")));
-      });
-      modalCard.querySelectorAll("[data-edit-intent-mg]").forEach((btn) => {
-        btn.onclick = () => openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
-      });
-      modalCard.querySelectorAll("[data-fav-intent-mg]").forEach((btn) => {
-        btn.onclick = () => mgRefreshAround(() => toggleIntentFavourite(btn.getAttribute("data-fav-intent-mg")));
-      });
-      modalCard.querySelectorAll("[data-show-hidden]").forEach((btn) => {
-        btn.onclick = () => {
-          const kind = btn.getAttribute("data-show-hidden");
-          if (kind === "cards") {
-            const ids = (cards || []).filter((m) => m && m._hidden).map((m) => m.id);
-            if (!ids.length) return;
-            ids.forEach((id) => hideCard(id));
-            toast(ids.length === 1 ? t("1 card shown again") : t("{N} cards shown again").replace("{N}", ids.length));
-          } else {
-            const ids = (pack.intentHidden || []).slice();
-            if (!ids.length) return;
-            ids.forEach((id) => setIntentHidden(id, false));
-            toast(ids.length === 1 ? t("1 intent shown again") : t("{N} intents shown again").replace("{N}", ids.length));
-          }
-          openManage();
-        };
-      });
-      modalCard.querySelectorAll("[data-hide-intent]").forEach((btn) => {
-        btn.onclick = () => mgRefreshAround(() => setIntentHidden(btn.getAttribute("data-hide-intent"), true));
-      });
-      modalCard.querySelectorAll("[data-show-intent]").forEach((btn) => {
-        btn.onclick = () => mgRefreshAround(() => setIntentHidden(btn.getAttribute("data-show-intent"), false));
-      });
-      modalCard.querySelectorAll("[data-remove-intent]").forEach((btn) => {
-        btn.onclick = () => {
-          if (removeIntent(btn.getAttribute("data-remove-intent"))) openManage();
-        };
-      });
-      modalCard.querySelectorAll("[data-delcat]").forEach((btn) => {
-        btn.onclick = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const k = btn.getAttribute("data-delcat");
-          if (cardCounts[k]) {
-            toast("Move or delete cards in this category first");
-            return;
-          }
-          if (removeCategory(k)) {
-            mgOpen.delete("cat:" + k);
-            drawPills();
-            render();
-            openManage();
-          }
-        };
-      });
-    }
+        paintLibrary();
+      };
+    });
+    page.querySelectorAll("[data-hide-intent]").forEach((btn) => {
+      btn.onclick = () => mgRefreshAround(() => setIntentHidden(btn.getAttribute("data-hide-intent"), true));
+    });
+    page.querySelectorAll("[data-show-intent]").forEach((btn) => {
+      btn.onclick = () => mgRefreshAround(() => setIntentHidden(btn.getAttribute("data-show-intent"), false));
+    });
+    page.querySelectorAll("[data-remove-intent]").forEach((btn) => {
+      btn.onclick = () => {
+        if (removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary();
+      };
+    });
+    page.querySelectorAll("[data-delcat]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const k = btn.getAttribute("data-delcat");
+        if (cardCounts[k]) {
+          toast("Move or delete cards in this category first");
+          return;
+        }
+        if (removeCategory(k)) {
+          mgOpen.delete("cat:" + k);
+          drawPills();
+          render();
+          paintLibrary();
+        }
+      };
+    });
   }
   function libraryBodyHtml() {
     return openManage(true);
@@ -34061,6 +34088,7 @@ What you type stays in this browser only.`;
     restartDesk: () => restartDesk
   });
   function restartDesk() {
+    const wasScreen = screenOn;
     const u = document.getElementById("eUndo");
     if (u) u.remove();
     closeNotePane();
@@ -34098,7 +34126,7 @@ What you type stays in this browser only.`;
     translateChrome();
     placeRailNow();
     focusFirstEntryOnOpen();
-    if (document.getElementById("mgCatList")) openManage();
+    if (wasScreen && screens.includes(wasScreen)) frontScreenTab(wasScreen);
     mtRefreshLive();
     tourAfterRestart();
     maybeStartTour();
