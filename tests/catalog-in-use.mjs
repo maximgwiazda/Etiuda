@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 104;
+const EXPECTED = 106;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1778,16 +1778,48 @@ try {
         box.D.api.tryCatalogAsk(box.D.win);
         const answered = fs.existsSync(answerPath(box.share, box.me.id));
         const copy = await writeCopy(box, "95959595", c2.id);
-        return { pin: !!pin, rootKept: lineage["k-0123456789abcdef-44444444"] === "quay-held", answered, copy };
+        return { pin: !!pin, rootKept: (box.D.envelope().catalogRoots || {})["k-fedcba9876543210-33333333"] === "quay-held", answered, copy };
       };
       const u = await unseen("r5-unseen");
       check(u.pin && !u.answered && u.copy.withheld === true,
         "r5a a copy of a copy whose middle hop this desk never stored is judged by the root it carries: its root private, it is not answered and no copy of it is written (" + JSON.stringify(u) + ")");
       if (PLANTS_OFF) skip("r5b lifting plant:s0b-grew-root turns r5a red");
       else {
-        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-grew-root") >= 0 ? "  if (false) {" : l).join("\n");
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-grew-root") >= 0 ? "  /* plant:s0b-grew-root */" : l).join("\n");
         const p = planted !== SRC ? await unseen("r5-unseen-plant", planted) : null;
         check(!!p && p.answered, "r5b lifting plant:s0b-grew-root turns r5a red: the copy is answered (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    {
+      /* The test architect's edit on round five: grew.root may widen "private", never "listed". A copy grown from an unlisted
+         catalog that names a listed one as its root, the switch off: no team-key answer, no copy in the clear, nothing stored. */
+      const claimed = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"], null);
+        const c = catalog(6, { id: "k-fedcba9876543210-77777777", name: "Claimed copy", card: B0_MARK, unsigned: true });
+        c.grew = { id: "harbour-board", rev: 5, sha: "sha256:" + "ef".repeat(32), root: "quay-held" };
+        const dir = folder(name + "-out");
+        put(dir, "held.ec", textOf(c));
+        box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+        const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        const pin = pinOf(box.D, off ? off[1] : "");
+        take(box.D, pin);
+        putAsk(box, "Askclaimed", pin, 1);
+        box.D.api.tryCatalogAsk(box.D.win);
+        const ans = answerPath(box.share, box.me.id);
+        const copy = await writeCopy(box, "97979797", c.id);
+        return { pin: !!pin, teamAnswer: !!openSealedDoc(box.D, ans, box.key), copyInClear: fs.existsSync(branchAt(box, "97979797")),
+          stored: (box.D.envelope().catalogLineage || {})["harbour-board"] };
+      };
+      const c = await claimed("r5-claimed");
+      check(c.pin && !c.teamAnswer && !c.copyInClear && c.stored === undefined,
+        "r5f a copy grown from an unlisted catalog that names a listed one as its root is not listed: with the switch off no team-key answer, no copy in the clear, and the claim is not stored (" + JSON.stringify(c) + ")");
+      if (PLANTS_OFF) skip("r5g letting the root decide listed turns r5f red");
+      else {
+        const NL = String.fromCharCode(10);
+        const planted = SRC.split(NL).map(l => l.indexOf("plant:s0b-root-listed") >= 0 ? "  const ids = privateChain(lineageOf(doc));" : l).join(NL);
+        const p = planted !== SRC ? await claimed("r5-claimed-plant", planted) : null;
+        check(!!p && p.teamAnswer, "r5g letting the root decide listed turns r5f red: a team-key answer is written (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     {

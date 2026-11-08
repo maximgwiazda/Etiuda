@@ -1690,6 +1690,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamContentSaid).length ? ',"teamContentSaid":' + JSON.stringify(teamContentSaid) : "")
     + (catalogPrivate.size ? ',"catalogPrivate":' + JSON.stringify(Array.from(catalogPrivate).sort()) : "")
     + (Object.keys(catalogLineage).length ? ',"catalogLineage":' + JSON.stringify(catalogLineage) : "")
+    + (Object.keys(catalogRoots).length ? ',"catalogRoots":' + JSON.stringify(catalogRoots) : "")
     + (answerKept ? ',"answerKept":' + JSON.stringify(answerKept) : "")
     + (Object.keys(teamRelayGone).length ? ',"teamRelayGone":' + JSON.stringify(teamRelayGone) : "")
     + (Object.keys(teamWas).length ? ',"teamWas":' + JSON.stringify(teamWas) : "")
@@ -3205,16 +3206,21 @@ function lineageOf(doc) {
     if (keys.length > LINEAGE_MAX) delete catalogLineage[keys[0]];
     persistDeskEnvelope();
   }
-  const ids = lineageOfId(id || g, id ? g : "");
-  /* The first catalog of the chain as the copy carries it (grew.root), where no hop this desk stored reaches it. */
+  /* The root a copy states for itself (grew.root) is kept apart (catalogRoots): it may widen the private mark, never "listed". */
   const root = doc && doc.grew && typeof doc.grew === "object" && typeof doc.grew.root === "string" ? doc.grew.root : "";
-  if (root && ids.indexOf(root) < 0) { /* plant:s0b-grew-root */
-    /* Kept as the last hop's parent, so a later copy that carries no root still reaches it. */
-    const last = ids[ids.length - 1];
-    if (last && catalogLineage[last] === undefined) { catalogLineage[last] = root; persistDeskEnvelope(); }
-    ids.push(root);
+  if (id && root && root !== id && catalogRoots[id] !== root) {
+    catalogRoots[id] = root;
+    const keys = Object.keys(catalogRoots);
+    if (keys.length > LINEAGE_MAX) delete catalogRoots[keys[0]];
+    persistDeskEnvelope();
   }
-  return ids;
+  return lineageOfId(id || g, id ? g : "");
+}
+/* The ids the private mark reads: the stored chain and every root a copy along it has stated. */
+function privateChain(ids) {
+  const out = ids.slice();
+  ids.forEach(c => { const r = catalogRoots[c]; if (r && out.indexOf(r) < 0) out.push(r); }); /* plant:s0b-grew-root */
+  return out;
 }
 function lineageOfId(id, parent) {
   const out = [];
@@ -3229,12 +3235,12 @@ function lineageOfId(id, parent) {
 /* A catalog the agent marked private, or a copy grown from one by any number of hops: never answered or written, listed or not. */
 function catalogMarkedPrivate(doc) {
   if (!doc || typeof doc !== "object") return false;
-  return lineageOf(doc).some(id => catalogPrivate.has(id));
+  return privateChain(lineageOf(doc)).some(id => catalogPrivate.has(id));
 }
 /* Whether the team lists a catalog, judged by the first catalog of its grew chain (Claude alpha's ruling of 12:04): the one test
    the answer and the working copy both take, so a copy is never shared in one and private in the other. */
 function chainListed(doc, catalogs) {
-  const ids = lineageOf(doc);
+  const ids = lineageOf(doc); /* plant:s0b-root-listed */
   return ids.length > 0 && Array.isArray(catalogs) && catalogs.indexOf(ids[ids.length - 1]) >= 0; /* plant:s0b-chain-listed */
 }
 function boxAnswerHere(file) {
@@ -3274,7 +3280,7 @@ function withdrawClosed() {
     let d = null;
     try { d = JSON.parse(fs.readFileSync(file, "utf8")); } catch { continue; }
     let gone = false;
-    if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || lineageOfId(me.id + "-" + tail[1]).some(id => catalogPrivate.has(id));
+    if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || privateChain(lineageOfId(me.id + "-" + tail[1])).some(id => catalogPrivate.has(id));
     else {
       if (d && d.kind === SEALED_KIND) { const inner = teamOpen(d); try { d = inner === null ? null : JSON.parse(inner); } catch { d = null; } }
       gone = !!d && typeof d === "object" && (catalogMarkedPrivate(d) || !chainListed(d, use.catalogs));
@@ -3454,6 +3460,7 @@ let teamLeft = {};                             // of those, a team the agent lef
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamContentSaid = {};                      // team id -> the consent the agent was shown (consentOf): the switch applies only then
 let catalogLineage = {};                       // catalog id -> the id it grew from, each hop this desk has seen
+let catalogRoots = {};                         // catalog id -> the root it states (grew.root), read for the private mark alone
 let answerKept = null;                         // the answer on the share: {ids: its catalog's lineage, lead: sealed to the lead's box}
 const catalogPrivate = new Set();              // catalog ids the agent marked private: never answered to a lead, and kept on this desk alone
 let teamRelayGone = {};                        // team id -> true: the relay refused this desk as removed, so the desk stops asking and says so
@@ -6914,6 +6921,10 @@ function readDesk() {
     if (doc && table(doc.catalogLineage)) Object.keys(doc.catalogLineage).slice(-LINEAGE_MAX).forEach(c => {
       const g = doc.catalogLineage[c];
       if (typeof c === "string" && c && typeof g === "string" && g && g !== c) catalogLineage[c] = g;
+    });
+    if (doc && table(doc.catalogRoots)) Object.keys(doc.catalogRoots).slice(-LINEAGE_MAX).forEach(c => {
+      const g = doc.catalogRoots[c];
+      if (typeof c === "string" && c && typeof g === "string" && g && g !== c) catalogRoots[c] = g;
     });
     if (doc && table(doc.answerKept) && Array.isArray(doc.answerKept.ids))
       answerKept = { ids: doc.answerKept.ids.filter(c => typeof c === "string" && c).slice(0, LINEAGE_HOPS), lead: doc.answerKept.lead === true };
