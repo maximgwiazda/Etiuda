@@ -3166,6 +3166,7 @@ try {
     const modal = new DoorEl("div"); modal.id = "modal"; modal.hidden = true;
     const card = new DoorEl("div"); card.id = "modalCard";
     modal.appendChild(card); doc.body.appendChild(modal);
+    const screenHost = new DoorEl("div"); screenHost.id = "screenHost"; screenHost.hidden = true; doc.body.appendChild(screenHost);
     globalThis.document = doc;
     globalThis.innerWidth = 1280; globalThis.innerHeight = 800;
     globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {};
@@ -3185,14 +3186,19 @@ try {
     /* A paste left open by an earlier leg must not count as this click opening it. */
     try { await press("back"); } catch (e) { doorErr = doorErr || String(e && e.message || e); }
     const settingsClosed = TJ.inviteHeld().mode !== "paste";
-    SET.openSettings();
+    SET.openSettings("teams");
     click(doc.getElementById("setJoinTeam"));
     settingsOpened = settingsClosed && TJ.inviteHeld().mode === "paste";
+    const STB = await import(MOD("screen-tabs.js"));
+    STB.clearScreenOn(); STB.screens.length = 0;
     try { await press("back"); leftPaste = TJ.inviteHeld().mode !== "paste"; }
     catch (e) { doorErr = doorErr || String(e && e.message || e); }
+    // The Library is a screen tab, painted into the screen tabs' host, and closed again once read.
+    if (!doc.getElementById("screenHost")) doc.body.appendChild(new DoorEl("div", { id: "screenHost" }));
     MG.openManage();
     click(doc.getElementById("mgJoinTeam"));
     libraryOpened = leftPaste && TJ.inviteHeld().mode === "paste";
+    (await import(MOD("screen-tabs.js"))).closeScreenTab("library");
     const offerEl = new DoorEl("div", { id: "eCatalogOffer", class: "bub bub-ask e-offer" });
     doc.body.appendChild(offerEl);
     TJ.openJoinPaste();

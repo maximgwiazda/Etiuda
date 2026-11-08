@@ -25,9 +25,11 @@ let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
 
 wireScreenTabsChange(() => drawTabs());
+/* A closed screen hands the keyboard to the search box, so typing lands there at once. */
 wireScreenTabsReturn(id => {
   if (id && tabs.some(x => x.id === id)) switchTab(id);
   else if (tabs[0]) switchTab(tabs[0].id);
+  try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
 });
 
 function blankTab(){

@@ -7,7 +7,7 @@ import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
 import { offerUndo, toastRefusal } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 
-/* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
+/* Clearing opens from the Library and from Settings, the eject from Maintenance. FORGETTING WHAT YOU MADE AND
    PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
    price of the rare one. The prefix filter is load-bearing - file:// pages can share one
    storage area, and another local page's keys must be left alone. */

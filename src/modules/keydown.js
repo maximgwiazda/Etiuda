@@ -7,7 +7,7 @@ import { openMaintenance } from "./maintenance.js";
 import { openSettings } from "./settings.js";
 import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatchesAction,
   formatChord, saveShortcuts, scMap2, scTake } from "./shortcuts.js";
-import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcuts-list.js";
+import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture, scListShown } from "./shortcuts-list.js";
 import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } from "./tour.js";
 import { noteUndoTyping, t, takeStandingUndo, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
@@ -44,10 +44,12 @@ function typingInField(){
   return tag==="input"||tag==="textarea"||tag==="select";
 }
 
-// Capture rebinds while the shortcuts modal is open (capture phase)
+// Capture rebinds while the shortcuts list is on screen (capture phase)
 function wireCaptureKeydown(){
   addEventListener("keydown",e=>{
-    if(!scCaptureId||!modalOpen()) return;
+    /* A capture whose list has left the screen ends here, or every key after it would be swallowed. */
+    if(scCaptureId && !modalOpen() && !scListShown()) scStopCapture();
+    if(!scCaptureId) return;
     if(e.key==="Escape"){
       e.preventDefault(); e.stopPropagation();
       scStopCapture();

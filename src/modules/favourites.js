@@ -91,7 +91,7 @@ function removeCard(id){
   const back=packUndoFor(was);
   offerUndo("Card deleted", ()=>{
     back(); hooks.cardOrderTouched(); rebuildCards(); hooks.render(); drawPills();
-    if(document.getElementById("mgCatList")) hooks.openManage();
+    if(document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
   });
   return true;
 }
@@ -148,7 +148,7 @@ function removeIntent(id){
       saveTabSession(); saveIntentOrder();
     }
     refreshAfterIntents();
-    if(document.getElementById("mgCatList")) hooks.openManage();
+    if(document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
   });
   return true;
 }

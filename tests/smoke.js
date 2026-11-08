@@ -491,9 +491,15 @@ const t0 = Date.now();
   let opened = 0;
   for (const act of acts.filter(a => a !== "tour")) {
     await p.evaluate(a => { const x = document.querySelector('[data-act="' + a + '"]'); if (x) x.click(); }, act); await sleep(600);
-    const modal = await p.evaluate(() => { const m = document.getElementById("modalCard"); return !!(m && m.offsetParent); });
+    const modal = await p.evaluate(() => {
+      const m = document.getElementById("modalCard");
+      const dialog = !!(m && m.offsetParent);
+      const tab = document.body.classList.contains("screen-on");
+      return dialog || tab;
+    });
     if (modal) opened++;
     await p.keyboard.press("Escape"); await sleep(350);
+    await p.evaluate(() => { if (screenOn) closeScreenTab(screenOn); });
     if (toggles.has(act)) { await p.evaluate(a => { const x = document.querySelector('[data-act="' + a + '"]'); if (x) x.click(); }, act); await sleep(500); await p.keyboard.press("Escape"); await sleep(200); }
   }
   check(acts.length >= 6 && opened >= 2, acts.length + " menu actions exercised, " + opened + " opened a dialog");
@@ -501,8 +507,8 @@ const t0 = Date.now();
 
   /* The maintenance panel, which nothing above opens. It is not a menu item - the loop over
      [data-act] walks straight past it - and until 2026-09-13 no check in this file touched it:
-     `grep -iE "mt-|maintenance"` over any smoke log returned nothing. F2 is the only way in
-     that a person has, so F2 is the way in here.
+     `grep -iE "mt-|maintenance"` over any smoke log returned nothing. Ctrl+Shift+M is the way in
+     a person has, so it is the way in here.
 
      It earns its own checks for one reason. Every reading in the panel is wrapped in mtSafe,
      which turns any throw into the literal string "unavailable" and prints it in the cell.
@@ -520,11 +526,14 @@ const t0 = Date.now();
      the engine what its own word for it renders as in the current language and counting cells
      equal to that, so no wording is written down here either. */
   e = since();
-  await p.keyboard.press("F2"); await sleep(800);
+  await p.keyboard.down("Control"); await p.keyboard.down("Shift");
+  await p.keyboard.press("KeyM");
+  await p.keyboard.up("Shift"); await p.keyboard.up("Control");
+  await sleep(800);
   const mt = await p.evaluate(() => {
-    const m = document.getElementById("modalCard");
-    const grid = m && m.offsetParent && m.querySelector(".mt-grid");
-    if (!grid) return { open: false, secs: 0, rows: 0, unavailable: -1, blank: -1, controls: 0 };
+    const host = document.getElementById("screenHost");
+    const grid = host && !host.hidden && host.querySelector(".mt-grid");
+    if (!grid) return { open: false, secs: 0, rows: 0, unavailable: -1, blank: -1, present: [], gone: [], moved: false };
     const word = (typeof tc === "function") ? tc("maintenance", "unavailable") : "unavailable";
     const vals = [...grid.querySelectorAll(".mt-row .v")].map(x => (x.textContent || "").trim());
     return { open: true,
@@ -532,17 +541,20 @@ const t0 = Date.now();
       rows: vals.length,
       unavailable: vals.filter(v => v === word).length,
       blank: vals.filter(v => v === "-").length,
-      controls: ["mtShortcuts", "mtClear", "mtEject", "mtCopy", "mtClose"]
-        .filter(id => !!document.getElementById(id)).length };
+      present: ["mtEject", "mtCopy", "mtClose"].filter(id => !!document.getElementById(id)),
+      gone: ["mtShortcuts", "mtClear"].filter(id => !!document.getElementById(id)),
+      moved: !!document.getElementById("mtMoved") };
   });
   /* Floors rather than the measured 7 and 38: a reading added on purpose must not fail a run,
      and a section or a whole block of readings going missing must. */
   check(mt.open && mt.secs >= 6 && mt.rows >= 30,
-    "maintenance panel opens on F2: " + mt.secs + " sections, " + mt.rows + " readings");
+    "maintenance panel opens on Ctrl+Shift+M: " + mt.secs + " sections, " + mt.rows + " readings");
   /* The one that is the point. Zero, not a floor: mtSafe has exactly one way to print this. */
   check(mt.open && mt.unavailable === 0,
     "every maintenance reading answered: " + mt.unavailable + " unavailable, " + mt.blank + " blank");
-  check(mt.controls === 5, "the panel's rescues and copy are wired: " + mt.controls + " of 5 controls");
+  check(mt.present.join(",") === "mtEject,mtCopy,mtClose" && mt.gone.length === 0 && mt.moved,
+    "the panel's rescues and copy are wired, and Reset and Clear local memory are named as moved: "
+    + JSON.stringify({ present: mt.present, gone: mt.gone, moved: mt.moved }));
   /* ONE SCREEN, NO SCROLLING, at the two windows the panel was sized for: 1280 x 880, and 959 x 586,
      which is a 1438 x 879 window at 150 per cent. The panel rebuilds itself on a resize. */
   const mtFit = [];
@@ -550,15 +562,16 @@ const t0 = Date.now();
     await sized(p, w, h, "maintenance " + w + "x" + h);
     await sleep(300);
     mtFit.push(await p.evaluate(() => {
-      const body = document.querySelector("#modalCard.mt-modal .modal-body");
-      return body ? [innerWidth, innerHeight, body.scrollHeight, body.clientHeight] : null;
+      const host = document.getElementById("screenHost");
+      return host && !host.hidden ? [innerWidth, innerHeight, host.scrollHeight, host.clientHeight] : null;
     }));
   }
   await sized(p, 1500, 950, "maintenance back");
   check(mtFit.every(f => f && f[2] <= f[3] + 1),
-    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (body scroll height against its height): "
+    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (screen scroll height against its height): "
     + JSON.stringify(mtFit));
-  await p.keyboard.press("Escape"); await sleep(500);
+  await p.evaluate(() => { const b = document.getElementById("mtClose"); if (b) b.click(); });
+  await sleep(500);
   clean(e, "the maintenance panel");
 
   /* THE TOUR, WALKED AS A PERSON WALKS IT, and watched through what a person sees.
@@ -706,9 +719,9 @@ const t0 = Date.now();
   await p.keyboard.press("Escape"); await sleep(400);
   const kept = await tourShot();
   await p.evaluate(() => { const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
-    const item = document.querySelector('#settingsMenu [data-act="manage"]'); if (item) item.click(); });
+    const item = document.querySelector('#settingsMenu [data-act="about"]'); if (item) item.click(); });
   await sleep(900);
-  const behind = await p.evaluate(() => ({ lib: !!document.getElementById("mgCatList") || !document.getElementById("modal").hidden,
+  const behind = await p.evaluate(() => ({ lib: !document.getElementById("modal").hidden,
     z: getComputedStyle(document.getElementById("tourRoot")).zIndex }));
   await p.evaluate(() => closeModal()); await sleep(600);
   const front = await p.evaluate(() => getComputedStyle(document.getElementById("tourRoot")).zIndex);
@@ -719,7 +732,7 @@ const t0 = Date.now();
     + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, at: kept.at }) + ")");
   check(behind.lib && behind.z === "190" && front === "240",
     "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
-    + behind.z + " with the Library open, " + front + " after)");
+    + behind.z + " with About open, " + front + " after)");
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
@@ -758,7 +771,7 @@ const t0 = Date.now();
     check(en0[k].length > 0 && plSurf[k] !== en0[k], "and the " + k + " surface repainted, so "
       + REPAINT[k] + " ran (" + en0[k].length + " chars to " + plSurf[k].length + ")");
   }
-  for (const act of ["settings", "manage"]) { await p.evaluate(a => document.querySelector('[data-act="' + a + '"]').click(), act); await sleep(700); await p.keyboard.press("Escape"); await sleep(300); }
+  for (const act of ["settings", "manage"]) { await p.evaluate(a => document.querySelector('[data-act="' + a + '"]').click(), act); await sleep(700); await p.keyboard.press("Escape"); await sleep(300); await p.evaluate(() => { if (screenOn) closeScreenTab(screenOn); }); await sleep(300); }
   await p.evaluate(async () => { setUiLang("en"); await new Promise(r => setTimeout(r, 400)); });
   await sleep(400);
   const en1 = await surfaces();
@@ -1028,7 +1041,7 @@ const t0 = Date.now();
     document.documentElement.dataset.theme = "light"; await new Promise(r => setTimeout(r, 150)); const l = bg();
     document.body.classList.add("glass-off"); await new Promise(r => setTimeout(r, 100));
     const off = getComputedStyle(document.body).getPropertyValue("--glass-mid-filter").trim();   // the docked panel is solid, so the token the switch sets on body is what to read
-    openSettings(); await new Promise(r => setTimeout(r, 300));
+    openAbout(); await new Promise(r => setTimeout(r, 300));
     const scrimOff = getComputedStyle(document.querySelector(".modal-bg")).backdropFilter;
     document.body.classList.remove("glass-off"); await new Promise(r => setTimeout(r, 100));
     const scrimOn = getComputedStyle(document.querySelector(".modal-bg")).backdropFilter;
@@ -1088,12 +1101,14 @@ const t0 = Date.now();
       const sc = getComputedStyle(document.querySelector(".scroller")).scrollbarColor, cut = sc.indexOf(")") + 1;
       out[th] = { bg: res("var(--bg)"), thumb: res("var(--scroll-thumb)"), hover: res("var(--scroll-thumb-hover)"),
         bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()), accent: res("var(--accent)"), bub: res("var(--bub)") };
-      /* Settings holds the segmented switches and the Close button the blue was judged by. */
+      /* Settings' Appearance holds the segmented switches the blue was judged by. The screen has no Close. */
       hooks.openSettings(); await wait(700);
-      const card = document.getElementById("modalCard");
-      out[th].segs = [...card.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
-      out[th].close = px(getComputedStyle([...card.querySelectorAll(".modal-actions .btn.primary")].pop()).backgroundColor);
-      dismissModal(); await wait(400);
+      const app = document.querySelector('#screenHost [data-sx="appearance"]');
+      if (app) app.click();
+      await wait(200);
+      const page = document.getElementById("setBody");
+      out[th].segs = [...page.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
+      closeScreenTab("settings"); await wait(400);
       /* A MARK AND A FILL, each painted: the empty desk's mark is a canvas that reads its colour from CSS, and a
          selected pill is a solid fill under white words. Put on the page for the reading and taken out again. */
       const paint = (cls, tag) => { const el = document.createElement(tag); el.className = cls; document.body.appendChild(el);
@@ -1123,7 +1138,7 @@ const t0 = Date.now();
      blue in case of marks of all sort, and in case of Etiuda logo in empty state", and solid blue buttons and
      such keep the darker one; "I meant the dark mode specifically. In light mode colors are peachy". So in
      the dark themes the accent and the empty desk's mark are the mark blue, 64,154,252 (M Kin, the middle pick of 2026-10-05), while every
-     segmented switch's thumb in Settings, its Close button, a selected pill and the fill token paint the
+     segmented switch's thumb in Settings, a selected pill and the fill token paint the
      bubbles' blue, which white on reads 4.5:1 or better (WCAG's relative luminance). Light has one blue. */
   const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
     .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
@@ -1131,10 +1146,10 @@ const t0 = Date.now();
   const MARK_BLUE = [64, 154, 252];
   const twoBlues = s => { const mark = s.bg[0] < 128 ? MARK_BLUE : s.bub;
     return [s.accent, s.mark].every(c => near(c, mark) && c[3] === 1)
-      && [s.fill, s.close, s.pill].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
+      && [s.fill, s.pill].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
       && whiteOn(s.bub) >= 4.5; };
   check(["unset", "dark", "light"].every(th => twoBlues(themeColours[th])),
-    "the dark themes' accent and the empty desk's mark are the mark blue while the switches, Close, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
+    "the dark themes' accent and the empty desk's mark are the mark blue while the switches, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
     + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
       [themeColours[th].accent, themeColours[th].mark, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
         themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
@@ -1492,29 +1507,44 @@ const t0 = Date.now();
   /* The dialogs' folds and the editor's Save. */
   e = since();
   await p.evaluate(() => document.querySelector('[data-act="settings"]').click()); await sleep(700);
-  const acc = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#modalCard details.acc")]; if (ds.length < 2) return { n: ds.length };
-    const a = ds[0], c = ds[1]; const was = a.open; a.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
-    const t1 = a.open; c.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
-    return { n: ds.length, toggled: t1 !== was, cOpen: c.open, setOk: accOpen.has(c.getAttribute("data-acc")) === c.open && accOpen.has(a.getAttribute("data-acc")) === a.open }; });
-  check(acc.n >= 2 && acc.toggled && acc.cOpen && acc.setOk, "Settings folds toggle, accordion, open-set true (" + acc.n + " folds)");
+  const acc = await p.evaluate(async () => {
+    const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
+    if (nav.length < 2) return { n: nav.length };
+    const general = document.querySelector('#screenHost [data-sx="general"]');
+    /* The tab reopens at the section last shown (the theme leg leaves it at Appearance), and each click redraws the list. */
+    if (general) general.click();
+    await new Promise(r => setTimeout(r, 450));
+    const hadName = !!document.getElementById("setAgentName");
+    document.querySelector('#screenHost [data-sx="appearance"]').click();
+    await new Promise(r => setTimeout(r, 450));
+    const appOn = !!document.querySelector('#screenHost [data-sx="appearance"].on');
+    const nameGone = !document.getElementById("setAgentName");
+    const glass = !!document.querySelector('#setBody [data-seg="glass"]');
+    const back = document.querySelector('#screenHost [data-sx="general"]');
+    if (back) back.click();
+    await new Promise(r => setTimeout(r, 450));
+    return { n: nav.length, hadName, appOn, nameGone, glass,
+      genOn: !!document.querySelector('#screenHost [data-sx="general"].on'),
+      nameBack: !!document.getElementById("setAgentName") };
+  });
+  check(acc.n >= 2 && acc.hadName && acc.appOn && acc.nameGone && acc.glass && acc.genOn && acc.nameBack,
+    "Settings shows one section at a time, and Appearance is the one that holds Blur (" + acc.n + " sections)");
   /* WHAT THE SCREEN IS MADE OF, board 452: the sections it holds, in order, and the two rows the
-     first of them merged. Read as a list rather than asserted one at a time, so a section
+     first of them holds. Read as a list rather than asserted one at a time, so a section
      arriving as well as a section leaving is a failure. */
   const setSecs = await p.evaluate(() => {
-    const ds = [...document.querySelectorAll("#modalCard details.acc")];
-    const first = ds[0], rows = first ? [...first.querySelectorAll(".set-row")] : [];
-    const name = ((document.getElementById("setAgentName") || {}).value || "").trim();
-    return { ids: ds.map(d => d.getAttribute("data-acc")),
-             title: first ? first.querySelector(".acc-title").textContent : "",
-             rows: rows.map(r => (r.querySelector("input,select") || {}).id || ""),
-             note: first ? first.querySelector(".acc-note").textContent : "",
-             want: name ? name + ", English" : "English" };
+    const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
+    const rows = [...document.querySelectorAll("#setBody .set-row")];
+    const h2 = document.querySelector("#setBody h2");
+    return { ids: nav.map(d => d.getAttribute("data-sx")),
+             title: h2 ? h2.textContent : "",
+             rows: rows.map(r => (r.querySelector("input,select") || {}).id || "").filter(Boolean) };
   });
-  check(setSecs.ids.join(",") === "personal,appearance,layout,keys" && setSecs.title === "Personal"
-        && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.note === setSecs.want,
-    "Settings holds Personal, Appearance, Layout and Keyboard shortcuts, the name above the"
+  check(setSecs.ids.join(",") === "general,appearance,layout,keys,data,about" && setSecs.title === "General"
+        && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.ids.indexOf("catalog") < 0,
+    "Settings holds General, Appearance, Layout, Keyboard shortcuts, Data and defaults and About, the name above the"
     + " language and nothing about catalogs: " + JSON.stringify(setSecs));
-  await p.keyboard.press("Escape"); await sleep(400);
+  await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
   /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
      fact worth asserting is the one the app owns: that the fold a person left open is still open
      when Manage is drawn again. This read mgOpen until 2026-09-13 - the module's own Set, reached
@@ -1522,16 +1552,16 @@ const t0 = Date.now();
      264's fault. What is on screen is details[open] after a redraw, so that is what is read, and
      the section is put back the way it was found. */
   await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(900);
-  const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#modalCard details[data-mg]")];
+  const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#screenHost details[data-mg]")];
     const d = ds.find(x => !x.open); if (!d) return { n: ds.length, key: null };
     d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
     return { n: ds.length, key: d.getAttribute("data-mg"), toggled: d.open }; });
-  const reopen = k => p.evaluate(async key => { dismissModal(); await new Promise(r => setTimeout(r, 400));
+  const reopen = k => p.evaluate(async key => { closeScreenTab("library"); await new Promise(r => setTimeout(r, 400));
     document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700));
-    const d = document.querySelector('#modalCard details[data-mg="' + key + '"]');
+    const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
     return d ? d.open : null; }, k);
   const mgAfter = mgKey.key === null ? null : await reopen(mgKey.key);
-  if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#modalCard details[data-mg="' + key + '"]');
+  if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
     if (d && d.open) d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
   const mgBack = mgKey.key === null ? null : await reopen(mgKey.key);
   check(mgKey.n > 0 && mgKey.key !== null && mgKey.toggled === true,
@@ -1544,9 +1574,9 @@ const t0 = Date.now();
      asserted here is that there are none of them and that the one row is still drawn. */
   const mgList = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    dismissModal(); await wait(400);
+    dismissModal(); closeScreenTab("library"); await wait(400);
     document.querySelector('[data-act="manage"]').click(); await wait(800);
-    const d = document.querySelector('#modalCard details[data-mg="data"]');
+    const d = document.querySelector('#screenHost details[data-mg="data"]');
     if (!d) return { step: "no data fold" };
     if (!d.open) d.querySelector("summary").click();
     await wait(800);
@@ -1568,7 +1598,7 @@ const t0 = Date.now();
     out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null;
     delete window.pack.who; window.savePack(); window.paintCatalogList();
     await wait(400);
-    dismissModal(); await wait(300);
+    closeScreenTab("library"); await wait(300);
     return out;
   });
   check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Eject"
@@ -1589,11 +1619,11 @@ const t0 = Date.now();
     await p.setViewport({ width, height: 880 }); await sleep(500);
     return p.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      dismissModal(); await wait(300);
+      closeScreenTab("library"); await wait(300);
       setUiLang("pl"); await wait(400);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
-      const card = document.getElementById("modalCard"), load = document.getElementById("mgImportCatalog");
-      const acts = card && card.querySelector(".modal-actions");
+      const card = document.querySelector("#screenHost .lib-list"), load = document.getElementById("mgImportCatalog");
+      const acts = card && card.querySelector(".screen-actions");
       if (!acts || !load) return { step: "missing" };
       for (const [id, label] of [["mgJoinTeam", "Dołącz do zespołu"], ["mgHistory", "Zapisane kopie…"]]) {
         if (document.getElementById(id)) continue;
@@ -1611,7 +1641,7 @@ const t0 = Date.now();
       });
       const rows = new Set(btns.map(b => Math.round(b.getBoundingClientRect().top))).size;
       const res = { step: "read", width: innerWidth, lang: document.documentElement.lang, n: out.length, rows, out };
-      dismissModal(); await wait(300);
+      closeScreenTab("library"); await wait(300);
       setUiLang("en"); await wait(400);
       return res;
     });
@@ -1693,11 +1723,11 @@ const t0 = Date.now();
                                     label + ": the Manage door", 20000);
       if (!canManage) return { step: "no manage" };
       await q.evaluate(() => document.querySelector('[data-act="manage"]').click());
-      if (!await untilHere(q, () => !!document.querySelector('#modalCard details[data-mg="data"]'),
+      if (!await untilHere(q, () => !!document.querySelector('#screenHost details[data-mg="data"]'),
                        label + ": the data fold", 20000))
         return { step: "no data fold" };
       await q.evaluate(() => {
-        const fold = document.querySelector('#modalCard details[data-mg="data"]');
+        const fold = document.querySelector('#screenHost details[data-mg="data"]');
         if (fold && !fold.open) fold.querySelector("summary").click();
       });
       await untilHere(q, () => document.querySelectorAll("#mgCatList .ec-row").length > 0,
@@ -2056,18 +2086,20 @@ const t0 = Date.now();
     const read = async (folder) => {
       window.E_HOST = { catalogFolder: folder, catalogFile: "", openCatalogFolder: () => true,
                         catalogFiles: () => [] };
-      dismissModal(); await wait(350);
+      closeScreenTab("library"); await wait(350);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
       const el = document.getElementById("mgCatFolderPath");
       if (!el) return null;
-      const cs = getComputedStyle(el), card = document.querySelector(".modal-card");
+      const cs = getComputedStyle(el), card = document.querySelector("#screenHost .lib-list");
       return { over: el.scrollWidth - Math.round(el.getBoundingClientRect().width),
                dir: cs.direction, ell: cs.textOverflow, txt: el.textContent,
                cardOver: card.scrollWidth - card.clientWidth };
     };
     const short = await read("C:\\Users\\x\\Documents\\Etiuda");
-    const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later\\Etiuda live desk for the whole team");
-    dismissModal(); await wait(300);
+    /* The title line spans the Library's tab, so the long folder is long against a full window. */
+    const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later, kept for every desk of the support team"
+      + " in each of its offices\\Etiuda live desk for the whole team and every colleague who answers by telephone, by chat and by mail");
+    closeScreenTab("library"); await wait(300);
     delete window.E_HOST;
     return { short, long };
   });
@@ -2282,7 +2314,7 @@ const t0 = Date.now();
   const l3 = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
   await p.keyboard.press("Backquote"); await sleep(500);
   const l4 = await p.evaluate(() => lang);
-  const keyRows = await p.evaluate(() => { openSettings("keys"); return new Promise(r => setTimeout(() => { const altN =document.querySelectorAll("#setBody .sc-row .sc-bind.sc-alt").length, fixedN = document.querySelectorAll("#setBody .sc-row .sc-bind.fixed").length, tilde = [...document.querySelectorAll('#setBody .sc-row[data-sc="langToggle"] .sc-bind')].map(b => b.textContent.trim()); dismissModal(); r({ alt: altN, fixed: fixedN, tilde }); }, 400)); });
+  const keyRows = await p.evaluate(() => { openSettings("keys"); return new Promise(r => setTimeout(() => { const altN =document.querySelectorAll("#setBody .sc-row .sc-bind.sc-alt").length, fixedN = document.querySelectorAll("#setBody .sc-row .sc-bind.fixed").length, tilde = [...document.querySelectorAll('#setBody .sc-row[data-sc="langToggle"] .sc-bind')].map(b => b.textContent.trim()); closeScreenTab("settings"); r({ alt: altN, fixed: fixedN, tilde }); }, 400)); });
   check(l3.l !== l0 && l4 === l0 && l3.v === "probe" && keyRows.alt > 10 && keyRows.tilde.join(" ") === "/ ~", "the tilde is the language toggle's alternative, every rebindable row has an alternative slot (" + keyRows.alt + "), fixed rows none (" + keyRows.fixed + " fixed, " + JSON.stringify(keyRows.tilde) + ")");
   await chord("KeyT", "t", false); await sleep(900);
   const n2 = await p.evaluate(() => document.querySelectorAll(".tab").length);
@@ -2304,7 +2336,7 @@ const t0 = Date.now();
       "a capture refuses a fixed key and says which (" + JSON.stringify(kept.said.slice(0, 40)) + ")");
     await p.keyboard.press("Escape"); await sleep(300);
   } else check(false, "the shortcuts list offered no capture to arm");
-  await p.evaluate(() => dismissModal()); await sleep(500);
+  await p.evaluate(() => { if (screenOn === "settings") closeScreenTab("settings"); }); await sleep(500);
 
   check(n2 === n1 + 1, "Ctrl+T opens a tab (" + n1 + " > " + n2 + ")");
   for (let k = n2; k > n0; k--) {
@@ -2669,21 +2701,21 @@ const t0 = Date.now();
      a bulk unhide and would also raise cards the catalog itself put away. */
   const unhid = await p.evaluate(async i => {
     document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 900));
-    const b = document.querySelector('#modalCard [data-show-card="' + CSS.escape(i) + '"]');
-    if (!b) { dismissModal(); return { found: false }; }
+    const b = document.querySelector('#screenHost [data-show-card="' + CSS.escape(i) + '"]');
+    if (!b) { closeScreenTab("library"); return { found: false }; }
     b.click(); await new Promise(r => setTimeout(r, 900));
-    dismissModal(); await new Promise(r => setTimeout(r, 500));
+    closeScreenTab("library"); await new Promise(r => setTimeout(r, 500));
     return { found: true }; }, pick.id);
   const h2 = await readStar(pick.id);
   check(unhid.found && h2.present && h2.n === h0.n, "and the Library puts it back (" + h2.n + " cards)");
   const r0 = await readStar(pick.id);
   const rm = await p.evaluate(async i => {
     document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 900));
-    const b = document.querySelector('#modalCard [data-remove-card="' + CSS.escape(i) + '"]');
-    if (!b) { dismissModal(); return { found: false }; }
+    const b = document.querySelector('#screenHost [data-remove-card="' + CSS.escape(i) + '"]');
+    if (!b) { closeScreenTab("library"); return { found: false }; }
     b.click(); await new Promise(r => setTimeout(r, 1200));
-    const still = !!document.querySelector('#modalCard [data-remove-card="' + CSS.escape(i) + '"]');
-    dismissModal(); await new Promise(r => setTimeout(r, 500));
+    const still = !!document.querySelector('#screenHost [data-remove-card="' + CSS.escape(i) + '"]');
+    closeScreenTab("library"); await new Promise(r => setTimeout(r, 500));
     return { found: true, still }; }, pick.id);
   const r1 = await readStar(pick.id);
   check(rm.found && !rm.still, "a removal takes the card out of the Library too");
@@ -3216,8 +3248,8 @@ const t0 = Date.now();
   const mgNav = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     document.querySelector('[data-act="manage"]').click(); await wait(1000);
-    const cat = [...document.querySelectorAll("#modalCard .mg-cat")].find(c => c.querySelectorAll("[data-edit-card]").length >= 2);
-    if (!cat) { dismissModal(); return { found: false }; }
+    const cat = [...document.querySelectorAll("#screenHost .mg-cat")].find(c => c.querySelectorAll("[data-edit-card]").length >= 2);
+    if (!cat) { closeScreenTab("library"); return { found: false }; }
     const tw = cat.querySelector("[data-toggle]");
     if (tw && tw.getAttribute("aria-expanded") !== "true") { tw.click(); await wait(600); }
     const btns = [...cat.querySelectorAll("[data-edit-card]")];
@@ -3226,8 +3258,9 @@ const t0 = Date.now();
     return { found: true, n: btns.length, up: !!document.getElementById("modalCard").offsetParent,
       prev: prev ? prev.disabled : null, next: next ? next.disabled : null };
   });
+  // Escape takes the editor back to the Library's tab, and the tab is closed by its own act.
   await p.keyboard.press("Escape"); await sleep(500);
-  await p.keyboard.press("Escape"); await sleep(500);
+  await p.evaluate(() => closeScreenTab("library")); await sleep(500);
   check(mgNav.found && mgNav.up && mgNav.prev === true && mgNav.next === false,
     "the Library's edit opens the card editor walking that category alone (" + JSON.stringify(mgNav) + ")");
 
@@ -3682,7 +3715,7 @@ const t0 = Date.now();
       const c = window.__firstLight = { mark: -1, landed: -1, tour: -1, err: "" };
       new MutationObserver(() => {
         const now = performance.now();
-        if (c.mark < 0 && document.querySelector(".empty-desk>canvas.e-fifth")) {
+        if (c.mark < 0 && document.querySelector(".e-launch-veil>canvas.e-opening")) {
           c.mark = now;
           try { whenLaunchLanded(() => { c.landed = performance.now(); }); } catch (x) { c.err = String(x && x.message || x); }
         }

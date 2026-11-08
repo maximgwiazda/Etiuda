@@ -631,9 +631,9 @@ try {
         && hostSrc.indexOf("eLastSync") < 0
         && langSrc.indexOf('"Last sync"') < 0;
     };
-    const needle = 'row(t("Your name"), "",';
+    const needle = 'row("name","user",t("Your name"),"",';
     const planted = settingsGood.toString("utf8").replace(needle,
-      'row(t("Last sync"), "", \'<span>1970-01-01</span>\')+\n      ' + needle);
+      'row("lastsync","about",t("Last sync"),"",\'<span>1970-01-01</span>\'),\n    ' + needle);
     if (planted === settingsGood.toString("utf8")) throw new Error("plant missed: 891p");
     fs.writeFileSync(settingsCopy, planted);
     const red = !rowGone(fs.readFileSync(settingsCopy, "utf8"));

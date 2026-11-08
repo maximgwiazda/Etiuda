@@ -743,7 +743,7 @@ function tourActTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "tour.js"), "utf8");
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const timers = [];
-  /* The page: which window stands (`win`: the card editor, the Library or Settings), Quick facts, the Menu,
+  /* The page: which window stands (`win`: the card editor, the Library's tab or Settings), Quick facts, the Menu,
      and whether the controls a step presses are on screen. Each control opens what a person's click opens. */
   const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, facts: false, menu: false, shown: true, moved: [], ends: [] };
   const control = (sel, open) => ({ matches: s => s === sel, getClientRects: () => (page.shown ? [{}] : []), click: open });
@@ -761,9 +761,18 @@ function tourActTests() {
     cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" } })[sel],
     menuOpen: () => page.menu, openSettingsMenu: () => { page.menu = true; },
     menuTarget: act => (page.menu ? rows[act] || {} : {}),
-    modalOpen: () => !!page.win, closeModal: () => { page.win = null; },
+    /* The card editor is the pop-up. The Library and Settings are screen tabs: libraryOpen and
+       settingsOpen are the module's own, over this page, so a tab that is not the window they
+       name leaves their inside step off. */
+    modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; },
+    get screenOn() { return page.win === "library" || page.win === "settings" ? page.win : ""; },
+    closeScreenTab: id => { if (page.win === id) page.win = null; },
+    document: {
+      getElementById: id => (id === "setBody" && page.win === "settings") || (id === "meCancel" && page.win === "editor") ? { id } : null,
+      querySelector: sel => sel === "#screenHost details.manage-sec" && page.win === "library" ? {} : null
+    },
     factsPanelOpen: () => page.facts, closeFactsPanel: () => { page.facts = false; },
-    cardEditorOpen: () => page.win === "editor", libraryOpen: () => page.win === "library", settingsOpen: () => page.win === "settings",
+    cardEditorOpen: () => page.win === "editor",
     agentName: () => "", wholeThingEmpty: () => page.empty
   };
   const scope = new Proxy({}, {
@@ -775,7 +784,7 @@ function tourActTests() {
   let T = null;
   try {
     T = new Function("scope", "with(scope){\n" + ["function tourPress(", "function tourPressRow(", "function shutTourWindow(",
-      "function loadStepBody(", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
+      "function loadStepBody(", "const libraryOpen=", "const settingsOpen=", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
       "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
       "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
@@ -834,6 +843,21 @@ function tourActTests() {
   eq("inside a window Next closes it and moves on, and Back closes it and returns to the step that opens it",
     [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>settings", "settingsIn>done"],
       ["editor<buttons", "addIn<add", "factsIn<facts", "libraryIn<library", "settingsIn<settings"]]);
+
+  /* Closing the tab is the act that moves an inside step on. While the tab stands, an act leaves
+     the step where it is; once the tab is gone, the same act moves on. Next above closes the tab
+     itself, which is the other way out. */
+  reset("settingsIn", { win: "settings" }); T.tourActSoon(); fire();
+  const settingsStays = where();
+  page.win = null; T.tourActSoon(); fire();
+  const settingsClosed = where();
+  reset("libraryIn", { win: "library" }); T.tourActSoon(); fire();
+  const libraryStays = where();
+  page.win = null; T.tourActSoon(); fire();
+  const libraryClosed = where();
+  eq("the tour reaches settingsIn and stays while the Settings tab is open, moves on to done when it closes, and the Library step stays while its tab is open and moves on when it closes",
+    [settingsStays, settingsClosed, libraryStays, libraryClosed],
+    ["settingsIn [settings]", "done", "libraryIn [library]", "settings"]);
 
   /* The load step: Next does nothing while the desk is empty and its control stands, and Finish ends the tour done. */
   reset("load", { empty: true }); T.tourNext();
@@ -996,7 +1020,7 @@ function catNowTests() {
 }
 
 /* THE LIBRARY'S HEADING NAMES THE FILE THE TOP BAR NAMES, never the name a stored copy still carries inside it, as
-   a desk's store written before the name left the format does. The dialog's call is sliced out of manage.js and run
+   a desk's store written before the name left the format does. The tab's heading is sliced out of manage.js and run
    in a scope where every free name it might read answers with that stored copy, name and all. */
 function libraryHeadTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "manage.js"), "utf8");
@@ -1004,10 +1028,10 @@ function libraryHeadTests() {
   const held = { name: "Invented shop", id: "invented-shop", cards: [1] };
   const anyHeld = () => held;
   Object.defineProperty(anyHeld, "name", { value: held.name });
-  const marker = 'openDialog({\n    title: "Library",';
-  const ns = {}, world = { file: "", opts: null };
+  const marker = "function libraryHeadHtml(";
+  const ns = {}, world = { file: "" };
   const own = { storedCatalog: () => held, catalogLoaded: () => true, nsGet: k => (k in ns ? ns[k] : null),
-    eLoadedCatalogFile: () => world.file, openDialog: o => { world.opts = o; } };
+    eLoadedCatalogFile: () => world.file, esc: x => String(x), t: x => x };
   /* A read through the global object is a read of the same scope, the way a page's window is its globals: without
      this, `globalThis` resolved to Node's own and `window` to a bare function, so a guarded read such as
      `(window.storedCatalog && window.storedCatalog()).name` found nothing and fell back to the file, green (board 817).
@@ -1022,17 +1046,18 @@ function libraryHeadTests() {
   });
   let open = null;
   try {
-    if (src.split(marker).length !== 2) throw new Error("the Library's openDialog call is not there exactly once");
+    if (src.split(marker).length !== 2) throw new Error("the Library's heading is not there exactly once");
     open = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function catalogFileName(") + "\n"
-      + "return () => { " + extractDecl(src, marker) + " };\n}")(scope);
-  } catch (e) { eq("manage.js carries the Library's dialog call", e.message, "sliced"); return; }
+      + extractDecl(src, marker) + "\nreturn libraryHeadHtml;\n}")(scope);
+  } catch (e) { eq("manage.js carries the Library's heading", e.message, "sliced"); return; }
   const head = (from, file) => {
     Object.keys(ns).forEach(k => { delete ns[k]; });
     if (from != null) ns.CatalogFrom = from;
-    world.file = file; world.opts = null;
-    try { open(); } catch (e) { return "threw " + e.message; }
-    const n = world.opts && world.opts.name;
-    return typeof n === "function" ? n() : n;
+    world.file = file;
+    let html = "";
+    try { html = String(open()); } catch (e) { return "threw " + e.message; }
+    const m = /<span class="screen-name"[^>]*>([^<]*)<\/span>/.exec(html);
+    return m ? m[1] : "";
   };
   eq("the Library's heading names the file the catalog was loaded from, as the top bar does, and never the name a stored copy carries inside it",
     [head("team.ec", "team.ec"), head("Spring team.ec", ""), head(null, "team.ec"), head("", "")],
@@ -1704,7 +1729,7 @@ function deskMarkTests() {
     },
     querySelector(sel) {
       if (!world.library) return null;
-      if (sel === "#modalCard details.manage-sec" || sel === '#modalCard details[data-mg="data"]') return dataDetails;
+      if (sel === "#screenHost:not([hidden]) details.manage-sec" || sel === '#screenHost details[data-mg="data"]') return dataDetails;
       return null;
     },
     createElement: (tag) => makeEl(tag),
@@ -1892,7 +1917,7 @@ function deskMarkTests() {
     open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
     const pathSeen = [whereOf(placed[placed.length - 1])];
     settingsMenu.hidden = false; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
-    modal.hidden = false; world.library = true; dataDetails.open = false; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
+    world.library = true; dataDetails.open = false; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
     dataDetails.open = true; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
     modal.hidden = true; world.library = false; settingsMenu.hidden = true; fireMutations(); pathSeen.push(whereOf(placed[placed.length - 1]));
     eq("desk mark the bubble points at the Menu button, then Library, then Catalog and data, then the loaded row",
@@ -1902,11 +1927,14 @@ function deskMarkTests() {
     modal.hidden = true; settingsBtn.rect = box(12, 1100, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
     settingsBtn.rect = box(12, 1100, 36, 36); settingsMenu.hidden = false; libraryBtn.rect = box(48, 1100, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
     settingsMenu.hidden = true; libraryBtn.rect = box(48, 1100, 160, 28);
-    modal.hidden = false; world.library = true; dataDetails.open = false; summary.rect = box(96, 40, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    world.library = true; dataDetails.open = false; summary.rect = box(96, 40, 0, 0); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
     summary.rect = box(96, 40, 180, 28); dataDetails.open = true; loadedRow.rect = box(700, 40, 240, 32); fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
     loadedRow.rect = box(140, 40, 240, 32); world.rowMissing = true; fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    // A pop-up standing over the Library's tab hides the way, so the band's name stands in.
+    world.rowMissing = false; modal.hidden = false; fireMutations(); fell.push(whereOf(placed[placed.length - 1]));
+    modal.hidden = true; world.library = false;
     eq("desk mark a step that cannot be done points at the file name in the band",
-      fell.join(", "), "filename below, filename below, filename below, filename below, filename below, filename below");
+      fell.join(", "), "filename below, filename below, filename below, filename below, filename below, filename below, filename below");
   }
 
   open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
@@ -5815,8 +5843,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1238;
-const UI_STRINGS_SHA256 = "69a0bd704698a71210f9e8bc928143ef9ffbb1e21012974aebc4e23718ba5a84";
+const UI_STRINGS_COUNT = 1262;
+const UI_STRINGS_SHA256 = "3288c51693c79f704b47c4e0b44fdcfd0544d585a3f5051d5320ef8ee1443b7f";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

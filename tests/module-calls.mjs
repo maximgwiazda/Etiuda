@@ -4318,6 +4318,7 @@ const CARD_B = {
        and one of steps, and stand here as their replies laid one below the other, 50 apart; the switch is the stored
        eDeckOff, which Settings' own row writes when its button is pressed. Every global and key set here is put back. */
     const CB = await import(MOD("card-body.js")), SET = await import(MOD("settings.js")), DLG = await import(MOD("dialog.js"));
+    const STB = await import(MOD("screen-tabs.js"));
     const AS = await import(MOD("app-state.js")), ST = UILANG_STORE;
     const flip = s => Object.assign(cls(s), { toggle(c, f) { const w = f === undefined ? !s.has(c) : !!f; if (w) s.add(c); else s.delete(c); return w; } });
     const part = (o = {}) => Object.assign({ attrs: {}, style: {}, classList: flip(new Set()), textContent: "", hidden: true, value: "",
@@ -4345,14 +4346,15 @@ const CARD_B = {
       const heard = {}, on = (k, f) => { (heard[k] = heard[k] || []).push(f); }, fire = (k, e) => (heard[k] || []).forEach(f => f(e || {}));
       g.addEventListener = on; doc.addEventListener = on;
       const body = part({ hidden: false, appendChild: n => { made.push(n); return n; } }), made = [], toastEl = part(), segs = [];
-      const setBody = part({ querySelectorAll: s => (s === ".set-seg" ? segs : []) });
+      const setBody = part({ querySelectorAll: s => (s === ".set-seg" ? segs : []),
+        querySelector: s => (s === "#setReset" && (setBody.h || "").indexOf('id="setReset"') >= 0 ? byId["#setReset"] : null) });
       Object.defineProperty(setBody, "innerHTML", { get() { return this.h || ""; }, set(h) { this.h = h; segs.length = 0;
         for (const m of h.matchAll(SEG)) {
           const btns = [...m[2].matchAll(BTN)].map(b => { const n = part({ attrs: { "data-val": b[1] } }); if (/class="on"/.test(b[2])) n.classList.add("on"); return n; });
           segs.push(part({ attrs: { "data-seg": m[1] }, btns, querySelectorAll: s => (s === "button" ? btns : []) }));
         } } });
       const byId = { "#pax": part(), "#roleSel": part(), "#intent": part(), "#toast": toastEl, "#modal": part(), "#setReset": part(),
-        "#modalCard": part({ querySelector: s => (s === "#setBody" ? setBody : null) }) };
+        "#modalCard": part(), "#screenHost": part({ querySelector: s => (s === "#setBody" ? setBody : null) }) };
       doc.body = body; doc.activeElement = body; doc.querySelector = s => byId[s] || null; doc.querySelectorAll = () => []; doc.getElementById = id => byId["#" + id] || null;
       doc.createElement = () => { const btn = part(); return part({ btn, getContext: () => ({}), querySelector: s => (s === "#eUndoBtn" ? btn : null) }); };
       g.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
@@ -4405,6 +4407,7 @@ const CARD_B = {
         wire: () => DK.wireDeck(), cls: () => [...body.classList.s].filter(k => k.startsWith("deck")).join("+"),
         watched: () => rig.mo + "/" + rig.ro,
         restore() {
+          STB.clearScreenOn(); STB.screens.length = 0;
           try { rig.restore(); } finally {
             g.setTimeout = had.st; g.clearTimeout = had.ct; doc.addEventListener = had.add; doc.querySelector = had.q; doc.createElement = had.make;
             for (const [k, v] of [["body", had.body], ["getElementById", had.gid], ["querySelectorAll", had.all], ["activeElement", had.active]]) if (v === undefined) delete doc[k]; else doc[k] = v;
@@ -4482,6 +4485,7 @@ const CARD_B = {
           const row = w.settings(), rows = [row.names(), row.shown("deck")];
           row.press("deck", "off");
           rows.push(w.settings().shown("deck"));
+          SET.openSettings("data");
           w.byId["#setReset"].onclick();
           const reset = [String(ST.lsGet("eDeckOff")), w.says(w.alt), w.cls() || "none", w.watched()];
           const bubble = w.made.filter(n => n.btn && typeof n.btn.onclick === "function").pop();
@@ -4502,7 +4506,7 @@ const CARD_B = {
           const main = fs.readFileSync(join(MODDIR, "..", "main.js"), "utf8"), boot = main.slice(main.indexOf("function boot("));
           const order = boot.indexOf("deck.wireDeck();") > -1 && boot.indexOf("deck.wireDeck();") < boot.indexOf("rebuild.rebuildCards();");
           return eq([rows.join("/"), reset.join(","), undone.join(","), start("1"), start(null), order].join(" || "),
-            "theme,glass,motion,cols,raillock,pillslock,notehover,deck/on/off || null,2 alternatives:tucked,none,true/true || 1,2 alternatives:flat,deck-off,false/false"
+            "cols,raillock,pillslock,notehover,deck/on/off || null,2 alternatives:tucked,none,true/true || 1,2 alternatives:flat,deck-off,false/false"
             + " || deck-off,false/false,2 alternatives:flat,3 steps:flat || none,true/true,2 alternatives:tucked,3 steps:tucked || true");
         } finally { if (fresh) fresh.restore(); if (w) w.restore(); }
       });
@@ -5505,6 +5509,203 @@ const CARD_B = {
     globalThis.requestAnimationFrame = hadRaf;
     if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
     if (hadLoc === undefined) delete globalThis.location; else globalThis.location = hadLoc;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ settings.js as a screen tab (run D3)
+   Settings B in a tab: the Menu's Settings opens a tab named Settings, a section is opened by name, every row of the
+   dialog it replaced is on it once, no AI and no empty section in the list, the search and its empty line, Reset
+   defaults' keys, and Reset shortcuts and Clear local memory moved out of Maintenance into Settings. */
+{
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
+  const hadHost = globalThis.window.E_HOST, hadRaf = globalThis.requestAnimationFrame;
+  const H = await import(MOD("hooks.js"));
+  const Dom = await import(MOD("dom.js"));
+  const ST = await import(MOD("storage.js"));
+  const T = await import(MOD("tabs.js"));
+  const SET = await import(MOD("settings.js"));
+  const MN = await import(MOD("maintenance.js"));
+  const HM = await import(MOD("header-menus.js"));
+  const STAB = await import(MOD("screen-tabs.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "openSettings", "shedWordmarkW",
+    "startTour", "restartDesk", "flushPillState", "tourActive", "endTour"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : !!f; if (w) o.add(c); else o.delete(c); return w; } });
+  /* An element that answers "#id" out of the markup it was given, so a page drawn as a string is a page its wiring
+     can find buttons on; kids are for the tab strip, which is built element by element. */
+  const el = extra => {
+    const classes = new Set(), made = {};
+    const e = Object.assign({
+      hidden: false, attrs: {}, value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV", dataset: {}, kids: null, _html: "",
+      get innerHTML() { return this._html; }, set innerHTML(v) { this._html = String(v); this.kids = null; for (const k of Object.keys(made)) delete made[k]; },
+      get textContent() { return this._text !== undefined ? this._text : (this.kids || []).map(k => k.textContent).join(""); },
+      set textContent(v) { this._text = String(v); },
+      get children() { return this.kids || []; },
+      classList: on(classes),
+      get className() { return [...classes].join(" "); },
+      set className(v) { classes.clear(); String(v || "").split(/\s+/).filter(Boolean).forEach(c => classes.add(c)); },
+      setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; },
+      querySelector(s) {
+        const m = /^#([\w-]+)$/.exec(s);
+        if (m && this._html.indexOf('id="' + m[1] + '"') >= 0) return made[m[1]] || (made[m[1]] = el({ id: m[1] }));
+        for (const k of this.kids || []) { if (m && k.id === m[1]) return k; const f = k.querySelector && k.querySelector(s); if (f) return f; }
+        return null;
+      },
+      querySelectorAll: () => [],
+      appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.parentElement = this; return c; },
+      insertBefore(c) { return this.appendChild(c); },
+      remove() { this.gone = true; }, contains: () => false, focus() {}, blur() {}, closest: () => null, dispatchEvent: () => true,
+      getContext: () => ({ measureText: () => ({ width: 10 }) }),
+      getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 200, height: 32 }),
+      addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); }, removeEventListener() {}
+    }, extra || {});
+    return e;
+  };
+  const toastEl = el({ id: "toast" }), screenHost = el({ id: "screenHost", hidden: true }), modal = el({ id: "modal", hidden: true });
+  const modalCard = el({ id: "modalCard" }), tabsBar = el({ id: "tabsBar" }), tabsWrap = el({ id: "tabsWrap" });
+  tabsWrap.appendChild(tabsBar);
+  const byId = { "#toast": toastEl, "#screenHost": screenHost, "#modal": modal, "#modalCard": modalCard, "#tabsBar": tabsBar, "#tabsWrap": tabsWrap,
+    "#settingsBtn": el({ id: "settingsBtn" }), "#settingsMenu": el({ id: "settingsMenu", hidden: true }), "#moreBtn": el({ id: "moreBtn" }),
+    "#moreMenu": el({ id: "moreMenu", hidden: true }), "#pax": el({ id: "pax" }), "#roleSel": el({ id: "roleSel" }), "#intent": el({ id: "intent" }) };
+  const body = el({ tagName: "BODY" });
+  globalThis.document = {
+    querySelector: s => byId[s] || null, getElementById: id => byId["#" + id] || null, querySelectorAll: () => [],
+    activeElement: body, body, addEventListener() {}, contains: () => true, createElement: tag => el({ tagName: String(tag || "div").toUpperCase() }),
+    createRange: () => ({}), documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), setAttribute() {}, getAttribute: () => null, addEventListener() {} }
+  };
+  globalThis.addEventListener = () => {};
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0", marginLeft: "0" });
+  globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+  STUBS.forEach(k => { H.hooks[k] = () => {}; });
+  H.hooks.openSettings = SET.openSettings;
+  H.hooks.tourActive = () => false;
+  /* A host with every door the dialog's rows wait for: the hotkey, the shared folder, and the join. */
+  globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", taken: false, def: "Control+Shift+Space" }),
+    setHotkey: () => ({ ok: true }), sharedRead: () => null, sharedWrite: () => null, teamJoin: () => Promise.resolve({}) };
+  Dom.grabDom();
+  /* What the dialog held, by the mark each row's control carries in its markup: the rows of today's dialog. */
+  const DIALOG_ROWS = ['id="setAgentName"', 'id="setUiLang"', 'id="setJoinTeam"', 'data-seg="sharededit"', 'data-seg="theme"',
+    'data-seg="glass"', 'data-seg="motion"', 'data-seg="cols"', 'id="setColFloor"', 'data-seg="raillock"', 'data-seg="pillslock"',
+    'data-seg="notehover"', 'data-seg="deck"', 'id="setHotkey"', 'id="scListInline"', 'id="setReset"'];
+  const count = (h, s) => h.split(s).length - 1;
+  const page = () => (screenHost.querySelector("#setBody") || { innerHTML: "" }).innerHTML;
+  const nav = () => screenHost.innerHTML;
+  const shutAll = () => { STAB.clearScreenOn(); STAB.screens.length = 0; };
+  try {
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "t-a", tabs: [{ id: "t-a", pax: "Anna", title: "", intentIdxs: [], intentText: "", intentBox: "", who: "", cats: [] }] }));
+    T.initTabs();
+    HM.wireHeaderMenus();
+
+    check("settings.js", "D3-1 the Menu's Settings opens a tab named Settings, and a second open fronts the one tab", () => {
+      shutAll();
+      const menu = byId["#settingsMenu"];
+      const press = () => menu.onclick({ target: { closest: () => ({ dataset: { act: "settings" } }) } });
+      press();
+      const tab = (tabsBar.kids || []).find(k => k.dataset && k.dataset.sid === "settings");
+      const first = STAB.screenOn === "settings" && !!tab && tab.textContent === "Settings" && STAB.getScreenDef("settings").title() === "Settings"
+        && page().indexOf("<h2>") >= 0;
+      STAB.clearScreenOn();
+      press();
+      return first && STAB.screenOn === "settings" && STAB.screens.filter(x => x === "settings").length === 1
+        || "screenOn " + STAB.screenOn + ", tab " + (tab ? tab.textContent : "none") + ", screens " + STAB.screens.join(",");
+    });
+
+    check("settings.js", "D3-2 openSettings(\"keys\") lands on Keyboard shortcuts, its list drawn and the section marked in the list", () => {
+      shutAll();
+      SET.openSettings("keys");
+      const h = page();
+      return (h.indexOf("<h2>Keyboard shortcuts</h2>") >= 0 && /class="sx-sec on" data-sx="keys"/.test(nav())
+        && h.indexOf('id="scListInline"') >= 0 && h.indexOf('id="setResetKeys"') >= 0) || h.slice(0, 200);
+    });
+
+    check("settings.js", "D3-3 every row of today's Settings dialog is on the screen once, and reached through the section list once", () => {
+      const all = SET.settingsBodyHtml();
+      const pages = SET.settingsSections().map(s => SET.settingsPageHtml(s.id, "")).join("");
+      const bad = DIALOG_ROWS.filter(k => count(all, k) !== 1 || count(pages, k) !== 1);
+      return !bad.length || "not once: " + bad.map(k => k + " " + count(all, k) + "/" + count(pages, k)).join(", ");
+    });
+
+    check("settings.js", "D3-4 no AI in the section list, and no section listed without a row", () => {
+      const n = SET.settingsNavHtml("general");
+      const ids = [...n.matchAll(/data-sx="([^"]+)"/g)].map(m => m[1]);
+      const empty = SET.settingsSections().filter(s => !/class="sx-card"><div class="(set-row|sc-list)/.test(SET.settingsPageHtml(s.id, ""))).map(s => s.id);
+      return (ids.indexOf("ai") < 0 && !/>AI</.test(n) && ids.indexOf("notifications") < 0 && !empty.length
+        && ids.join(",") === "general,appearance,layout,keys,teams,data,about") || ids.join(",") + " empty " + empty.join(",");
+    });
+
+    check("settings.js", "D3-5 searching \"blur\" finds Blur effects, and \"zzz\" shows the empty line in both languages", () => {
+      const blur = SET.settingsPageHtml("general", "blur");
+      const zzz = SET.settingsPageHtml("general", "zzz");
+      ST.lsSet("eUiLang", "pl");
+      const zzzPl = SET.settingsPageHtml("general", "zzz");
+      ST.lsDel("eUiLang");
+      const ok = blur.indexOf('data-seg="glass"') >= 0 && blur.indexOf("Blur effects") >= 0 && blur.indexOf('data-seg="theme"') < 0
+        && zzz.indexOf("No setting matches this search.") >= 0 && zzz.indexOf("set-row") < 0 && zzz.indexOf("zzz") < 0
+        && zzzPl.indexOf("Żadne ustawienie nie pasuje do tego wyszukiwania.") >= 0;
+      return ok || [blur.slice(0, 120), zzz.slice(0, 120), zzzPl.slice(0, 120)].join(" | ");
+    });
+
+    check("settings.js", "D3-6 Reset defaults clears the same keys as the dialog's did, and leaves the name, the reply language and the tabs", () => {
+      const TODAY = ["eTheme", "eGlassOff", "eMotionOff", "eUiLang", "ePillsLock", "eRailLock", "ePills", "eRail", "eShortcuts", "eHdrPills",
+        "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed", "eSharedEdit", "eHotkey"];
+      const KEEP = ["eAgent", "eLang", "eTourSeen", "eCatalogFolder"];
+      const was = TODAY.concat(KEEP).map(k => [k, ST.lsGet(k)]), wasNs = [["Cols", ST.nsGet("Cols")], ["Floor", ST.nsGet("Floor")]];
+      try {
+      TODAY.concat(KEEP).forEach(k => ST.lsSet(k, k === "eUiLang" ? "en" : k === "eShortcuts" ? "{}" : "1"));
+      ST.nsSet("Cols", "2"); ST.nsSet("Floor", "30");
+      SET.resetAllSettings();
+      const left = TODAY.filter(k => ST.lsGet(k) != null).concat(ST.nsGet("Cols") != null ? ["ns:Cols"] : [], ST.nsGet("Floor") != null ? ["ns:Floor"] : []);
+      const lost = KEEP.filter(k => ST.lsGet(k) == null);
+      return (!left.length && !lost.length) || "still there " + left.join(",") + "; lost " + lost.join(",");
+      } finally {
+        was.forEach(([k, v]) => { if (v == null) ST.lsDel(k); else ST.lsSet(k, v); });
+        wasNs.forEach(([k, v]) => { if (v == null) ST.nsDel(k); else ST.nsSet(k, v); });
+      }
+    });
+
+    check("maintenance.js", "D3-7 Clear local memory and Reset shortcuts are no longer in Maintenance, tab or rescue window, which says where they went; Settings has both", () => {
+      shutAll();
+      MN.openMaintenance();
+      const tab = screenHost.innerHTML;
+      shutAll();
+      modal.hidden = true;
+      MN.openMaintenanceModal();
+      const rescue = modalCard.innerHTML + " " + (byId["#modalCard"].innerHTML || "");
+      const said = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+      const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local memory<") < 0 && h.indexOf(">Reset shortcuts<") < 0;
+      const all = SET.settingsBodyHtml();
+      return (gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') >= 0 && gone(modalCard.innerHTML + rescue)
+        && all.indexOf('id="setClear"') >= 0 && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
+    });
+
+    check("settings.js", "D3-8 Reset shortcuts on the Keyboard shortcuts page puts every rebinding back, with an Undo", () => {
+      shutAll();
+      ST.lsSet("eShortcuts", JSON.stringify({ maintenance: { code: "F2", key: "F2", ctrl: 0, alt: 0, shift: 0, meta: 0 } }));
+      SC.loadShortcuts();
+      SET.openSettings("keys");
+      const b = page() && screenHost.querySelector("#setBody").querySelector("#setResetKeys");
+      if (!b || typeof b.onclick !== "function") return "no Reset shortcuts button wired";
+      b.onclick();
+      const ok = ST.lsGet("eShortcuts") == null && SC.formatActionChord("maintenance") === "Ctrl+Shift+M";
+      SC.loadShortcuts();
+      return ok || "eShortcuts " + ST.lsGet("eShortcuts") + ", maintenance " + SC.formatActionChord("maintenance");
+    });
+  } finally {
+    shutAll();
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    ST.lsDel("eShortcuts"); SC.loadShortcuts();
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = hadRaf;
+    if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
   }

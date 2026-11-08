@@ -1,4 +1,4 @@
-// The timing legs refuse on a busy machine (tests/quiet-lane.mjs). In a lab of three slot files beside its own
+// The timing legs refuse on a busy machine (tests/quiet-lane.mjs). In a lab of four slot files beside its own
 // ETIUDA_LOCK_PATH, never the office's: a live holder on a second lane makes theme-presses and theme-roll each refuse
 // with 78 and `#refused machine-busy` before a browser starts; the leg's own run holding a lane, or a dead holder,
 // lets it through.

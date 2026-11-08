@@ -412,13 +412,20 @@ try {
     await q.evaluate(() => { lsSet("eTheme", "light"); lsSet("eNoteHover", "0"); applyPrefs(); });
     await sleep(400);
     const had = await q.evaluate(() => document.documentElement.dataset.theme || "");
-    await q.evaluate(() => openSettings()); await sleep(600);
-    // Settings itself stands before the press, which is what shows the reading can see a window.
-    const settingsUp = await q.evaluate(STANDING);
+    await q.evaluate(() => openSettings("data")); await sleep(600);
+    // The Data section stands before the press. A confirm would be a window over it.
+    const settingsUp = await q.evaluate(() => {
+      const host = document.getElementById("screenHost");
+      const tab = !!(host && !host.hidden && document.getElementById("setBody") && document.getElementById("setReset"));
+      const over = [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")]
+        .filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+      return { tab, over };
+    });
     await q.evaluate(() => document.getElementById("setReset").click()); await sleep(600);
     const reset = await q.evaluate(() => ({ theme: lsGet("eTheme"), hover: document.body.classList.contains("note-hover"),
       undo: !!document.getElementById("eUndoBtn") }));
-    reset.asked = !/modal/.test(settingsUp) || (await q.evaluate(STANDING)) !== settingsUp;
+    const settingsAfter = await q.evaluate(STANDING);
+    reset.asked = !settingsUp.tab || settingsAfter !== settingsUp.over;
     await q.evaluate(() => { const b = document.getElementById("eUndoBtn"); if (b) b.click(); }); await sleep(600);
     const back = await q.evaluate(() => ({ theme: lsGet("eTheme"), hover: document.body.classList.contains("note-hover"),
       shown: document.documentElement.dataset.theme || "" }));

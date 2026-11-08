@@ -770,8 +770,8 @@ function deskMarkInView(e){
 }
 function deskMarkTarget(){
   const open=!document.getElementById("modal").hidden;
-  if(open && document.querySelector("#modalCard details.manage-sec")){
-    const d=document.querySelector('#modalCard details[data-mg="data"]');
+  if(!open && document.querySelector("#screenHost:not([hidden]) details.manage-sec")){
+    const d=document.querySelector('#screenHost details[data-mg="data"]');
     if(!d) return null;
     if(!d.open) return {el:deskMarkInView(d.querySelector("summary")), prefer:"right"};
     return {el:deskMarkInView(d.querySelector(".ec-row.is-loaded")), prefer:"right"};

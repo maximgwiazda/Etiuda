@@ -10,13 +10,12 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
 import { E_VERSION } from "./env.js";
 import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
-import { lsGet, lsSet, lsDel, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
+import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
   eDeskRefused } from "./storage.js";
-import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
-import { loadShortcuts } from "./shortcuts.js";
+import { ejectCatalog } from "./local-memory.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
-import { offerUndo, tc, fileStamp, t } from "./ui-lang.js";
+import { tc, fileStamp, t } from "./ui-lang.js";
 import { openScreenTab, registerScreen } from "./screen-tabs.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
@@ -371,28 +370,21 @@ function mtGridHtml(){
 
 function wireMaintenanceActions(root, closeFn){
   const $q = s => root ? root.querySelector(s) : $(s);
-  const sc = $q("#mtShortcuts");
-  if(sc) sc.onclick=()=>{
-    const was=lsGet("eShortcuts");
-    lsDel("eShortcuts"); loadShortcuts();
-    offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); } });
-  };
-  const cl = $q("#mtClear"); if(cl) cl.onclick=clearLocalMemory;
   const ej = $q("#mtEject"); if(ej) ej.onclick=ejectCatalog;
   const cp = $q("#mtCopy"); if(cp) cp.onclick=()=>copy(mtReportText(),"Report copied");
   const cls = $q("#mtClose"); if(cls) cls.onclick=()=>{ if(closeFn) closeFn(); else dismissModal(); };
 }
 
+const MT_MOVED="Reset defaults and Clear local memory are in Settings, under Data and defaults.";
 registerScreen("maintenance", {
   title: () => t("Maintenance"),
   render: (host, closeFn) => {
     host.innerHTML = '<div class="screen-page mt-screen">'
       + '<div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div>'
       + '<div class="screen-body">' + mtGridHtml() + '</div>'
+      + '<p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + '</p>'
       + '<div class="screen-actions">'
       + '<div class="mf-left">'
-      + '<button type="button" class="btn" id="mtShortcuts">' + esc(t("Reset shortcuts")) + '</button>'
-      + '<button type="button" class="btn danger" id="mtClear">' + esc(t("Clear local memory")) + '</button>'
       + '<button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button>'
       + '</div>'
       + '<button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button>'
@@ -408,10 +400,8 @@ function openMaintenanceModal(backFn){
     cls: "mt-modal",
     back: backFn||null,
     title: "Maintenance",
-    body: html,
+    body: html+'<p class="mt-moved" id="mtMoved">'+esc(MT_MOVED)+'</p>',
     actions: '<div class="mf-left">'
-      +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
-      +'<button type="button" class="btn danger" id="mtClear">Clear local memory</button>'
       +'<button type="button" class="btn danger" id="mtEject">Eject catalog</button>'
       +'</div>'
       +'<button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button>'

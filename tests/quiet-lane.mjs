@@ -1,7 +1,7 @@
 // A LOAD-SENSITIVE LEG DECIDES ON A QUIET MACHINE OR NOT AT ALL (the test architect, 2026-11-03 01:23). A leg that
 // measures time (theme-presses, theme-roll) reads another run's load as its own failure, so a busy night would hold
 // a release on noise. Before it presses anything it reads machine-lock's slots beside the lock in use (the office's
-// three, or a lab's three beside ETIUDA_LOCK_PATH): if a live holder that is not this leg's own run holds a lane,
+// four, or a lab's four beside ETIUDA_LOCK_PATH): if a live holder that is not this leg's own run holds a lane,
 // it refuses with 78 and `#refused machine-busy`, which gate-run records as refused, not failed. Its own run is
 // any holder among this process's ancestors, so the leg under gate-run's own lane still runs.
 import path from "node:path";
@@ -39,7 +39,7 @@ function lineage() {
 /** The lanes other runs hold right now: live holders outside this leg's own lineage. */
 export function otherLanes() {
   const dir = path.dirname(LOCK_PATH);
-  const slots = ["machine.lock", "machine-2.lock", "machine-3.lock"].map((f) => path.join(dir, f));
+  const slots = ["machine.lock", "machine-2.lock", "machine-3.lock", "machine-4.lock"].map((f) => path.join(dir, f));
   const live = status(LOCK_PATH, slots).slots.filter((s) => s.held && s.alive && s.holder && s.holder.pid);
   if (!live.length) return [];
   const mine = lineage();

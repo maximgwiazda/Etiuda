@@ -619,6 +619,7 @@ async function stillSweep(p) {
     const s = Object.assign({ shown: await shown(p) }, await p.evaluate(() => window.__mtStill));
     out.push(Object.assign({ name }, s));
     for (let i = 0; i < 3; i++) { await p.keyboard.press("Escape"); await sleep(150); }
+    await p.evaluate(() => { if (screenOn) closeScreenTab(screenOn); });
     await sleep(300);
   }
   return out;
@@ -637,6 +638,8 @@ async function openSettingsPage(p) {
   await p.click("#settingsBtn"); await sleep(150);
   await p.evaluate(() => document.querySelector('#settingsMenu [data-act="settings"]').click());
   await sleep(400);
+  await p.evaluate(() => { const b = document.querySelector('#screenHost [data-sx="appearance"]'); if (b) b.click(); });
+  await sleep(300);
 }
 
 leg("m14", "with the Animations switch off, opening the Menu, Settings and the card editor runs no animation, and the switch follows Settings, the system and a reload", async p => {
@@ -669,6 +672,7 @@ leg("m14", "with the Animations switch off, opening the Menu, Settings and the c
     say(!!r1 && !r1.still && r1.stored === null && r2.still && r2.stored === "1" && !r3.still && r3.stored === null,
       "the Settings row: on " + JSON.stringify(r1) + ", off " + JSON.stringify(r2) + ", on " + JSON.stringify(r3));
     for (let i = 0; i < 3; i++) { await p.keyboard.press("Escape"); await sleep(150); }
+    await p.evaluate(() => { if (screenOn) closeScreenTab(screenOn); });
   } finally {
     await p.emulateMediaFeatures().catch(() => {});
     /* A leg that stopped half way must not leave the legs after it running still. */

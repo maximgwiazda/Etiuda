@@ -1,13 +1,13 @@
-/* THE MACHINE LOCK: two heavy runs at a time on the laptop (Core's test regimen, rule 13), three while Max is away
- * (2026-11-02), the same file in the engine's tree and in Studio's, and the one writer of the lock files.
+/* THE MACHINE LOCK: two heavy runs at a time on the laptop (Core's test regimen, rule 13), four while Max is away
+ * (2026-11-08), the same file in the engine's tree and in Studio's, and the one writer of the lock files.
  *
  *   node tools/machine-lock.mjs run [--exclusive] -- <command> [args]   take a slot as this process, run the command, free it
  *   node tools/machine-lock.mjs wait [--exclusive]                      wait until a slot is free (taking and freeing it at once)
  *   node tools/machine-lock.mjs status                                  say who holds each slot, and whether that holder is alive
  *
- * THREE SLOTS: machine.lock, machine-2.lock and machine-3.lock. machine-3.lock is taken only while Max is not using the
- * laptop (idle input >= 20 min) or when the lane file sets 3. A taker takes the first free slot up to the active count,
- * or waits; release frees its own slot; status lists all three. --exclusive (exclusive: true to acquire) waits until all
+ * FOUR SLOTS: machine.lock, machine-2.lock, machine-3.lock and machine-4.lock. machine-3.lock and machine-4.lock are taken
+ * only while Max is not using the laptop (idle input >= 20 min) or when the lane file sets 3 or 4. A taker takes the
+ * first free slot up to the active count, or waits; release frees its own slot; status lists all four. --exclusive (exclusive: true to acquire) waits until all
  * active slots are free and holds them, for a run that must not share the machine; nothing uses it by default. An exclusive
  * taker takes the slots in order and holds each as it gets it, and a plain taker leaves a free slot alone while any slot
  * carries a live exclusive record, so a waiting exclusive taker is not starved by plain ones. ETIUDA_LOCK_PATH, when set,
@@ -31,9 +31,9 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_LOCK_PATH = "C:/Users/maxim/Workspace/etiuda-runs/machine.lock";
 export const LOCK_PATH = path.resolve(process.env.ETIUDA_LOCK_PATH || DEFAULT_LOCK_PATH);
-/* The slots, in the order they are taken: with ETIUDA_LOCK_PATH set the one file it names, otherwise the office's three. */
+/* The slots, in the order they are taken: with ETIUDA_LOCK_PATH set the one file it names, otherwise the office's four. */
 export const LOCK_PATHS = process.env.ETIUDA_LOCK_PATH ? [LOCK_PATH]
-  : [LOCK_PATH, path.join(path.dirname(LOCK_PATH), "machine-2.lock"), path.join(path.dirname(LOCK_PATH), "machine-3.lock")];
+  : [LOCK_PATH, path.join(path.dirname(LOCK_PATH), "machine-2.lock"), path.join(path.dirname(LOCK_PATH), "machine-3.lock"), path.join(path.dirname(LOCK_PATH), "machine-4.lock")];
 
 /** The slot files a call works on: `slots` if given (a lab's own set), the tool's slots for the tool's own LOCK_PATH,
  *  otherwise the one file `lockPath` names, as before. */
@@ -113,7 +113,7 @@ function resolveLanePolicy(paths, opts = {}) {
   try {
     if (fs.existsSync(lanesFile)) {
       const val = fs.readFileSync(lanesFile, "utf8").trim();
-      if (val === "2" || val === "3") {
+      if (val === "2" || val === "3" || val === "4") {
         return { count: Number(val), reason: "the lane file" };
       }
     }
@@ -122,7 +122,7 @@ function resolveLanePolicy(paths, opts = {}) {
   }
   const idle = opts.idleMinutes !== undefined ? opts.idleMinutes : readIdleMinutes(opts);
   if (idle !== null && idle >= 20) {
-    return { count: 3, reason: "idle for " + Math.floor(idle) + " minutes" };
+    return { count: 4, reason: "idle for " + Math.floor(idle) + " minutes" };
   }
   return { count: 2, reason: "in use" };
 }
@@ -246,7 +246,7 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
       try {
         if (fs.existsSync(lanesFile)) {
           const val = fs.readFileSync(lanesFile, "utf8").trim();
-          if (val === "2" || val === "3") hasLaneFile = true;
+          if (val === "2" || val === "3" || val === "4") hasLaneFile = true;
         }
       } catch (e) {}
 
