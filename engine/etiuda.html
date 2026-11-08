@@ -3430,6 +3430,20 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --glass-mid:var(--panel-raised);--glass-mid-filter:none;
   --glass-thin:var(--panel-raised);--glass-thin-filter:none;
   --scrim-filter:none;--mark-filter:none}
+/* ---------- Screen tabs & host (boards 965, 967, 969) ---------- */
+body.screen-on .fab-stack,
+body.screen-on .fills,
+body.screen-on .pills-slot,
+body.screen-on .pills-probe,
+body.screen-on .stage,
+body.screen-on #railHit,
+body.screen-on #lanes { display: none !important; }
+#screenHost{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
+#screenHost[hidden]{display:none!important}
+.screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
+.screen-head h2{margin:0;font-size:20px;font-weight:600}
+.screen-body{flex:1 1 auto;min-height:0}
+.screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)}
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
@@ -4155,6 +4169,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   </div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
+
+<div id="screenHost" class="screen-host" hidden></div>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">
@@ -11286,6 +11302,7 @@ What you type stays in this browser only.`;
     tabPathNow: () => tabPathNow,
     tabPathStep: () => tabPathStep,
     tabSaveTimer: () => tabSaveTimer,
+    tabSessionPayload: () => tabSessionPayload,
     tabs: () => tabs,
     watchTabPath: () => watchTabPath,
     wireTabDrag: () => wireTabDrag
@@ -11499,13 +11516,13 @@ What you type stays in this browser only.`;
       hold: 1,
       display: "Hold Ctrl"
     },
-    /* F2: the cleanest unclaimed key at the time the panel was designed. inField on
-       purpose - a rescue has to fire from wherever the trouble found you. */
+    /* Ctrl+Shift+M: the desk's chord for Maintenance, freeing F2 for rename (board 965).
+       inField on purpose - a rescue has to fire from wherever the trouble found you. */
     {
       id: "maintenance",
       label: "Maintenance panel",
       hint: "Readings about this machine, and rescue switches",
-      def: { code: "F2", key: "F2", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      def: { code: "KeyM", key: "m", ctrl: 1, alt: 0, shift: 1, meta: 0 },
       inField: 1
     },
     /* Ctrl+A reaches the search box without the caret being in it - after a pick the box
@@ -12093,11 +12110,115 @@ What you type stays in this browser only.`;
     d.setAttribute("aria-valuetext", lab(opts[i]));
   }
 
+  // src/modules/screen-tabs.js
+  var screen_tabs_exports = {};
+  __export(screen_tabs_exports, {
+    _setThrowForTest: () => _setThrowForTest,
+    clearScreenOn: () => clearScreenOn,
+    closeScreenTab: () => closeScreenTab,
+    frontScreenTab: () => frontScreenTab,
+    getScreenDef: () => getScreenDef,
+    isScreenOn: () => isScreenOn,
+    openScreenTab: () => openScreenTab,
+    registerScreen: () => registerScreen,
+    screenOn: () => screenOn,
+    screens: () => screens,
+    setPrevTabId: () => setPrevTabId,
+    wireScreenTabsChange: () => wireScreenTabsChange,
+    wireScreenTabsReturn: () => wireScreenTabsReturn
+  });
+  var REGISTRY = {};
+  var screens = [];
+  var screenOn = "";
+  var prevTabId = null;
+  var _throwForTest = false;
+  var onScreenChange = null;
+  var onScreenReturn = null;
+  function _setThrowForTest(v) {
+    _throwForTest = Boolean(v);
+  }
+  function registerScreen(id, def) {
+    REGISTRY[id] = def;
+  }
+  function getScreenDef(id) {
+    return REGISTRY[id] || null;
+  }
+  function wireScreenTabsChange(fn) {
+    onScreenChange = fn;
+  }
+  function wireScreenTabsReturn(fn) {
+    onScreenReturn = fn;
+  }
+  function setPrevTabId(id) {
+    if (id && !screens.includes(id)) prevTabId = id;
+  }
+  function isScreenOn() {
+    return Boolean(screenOn);
+  }
+  function openScreenTab(id) {
+    if (_throwForTest) throw new Error("screen tabs throw simulation");
+    if (!screens.includes(id)) {
+      screens.push(id);
+    }
+    frontScreenTab(id);
+  }
+  function frontScreenTab(id) {
+    screenOn = id;
+    if (typeof document !== "undefined" && document.body && document.body.classList) {
+      document.body.classList.add("screen-on");
+    }
+    renderScreenHost(id);
+    if (onScreenChange) onScreenChange();
+  }
+  function closeScreenTab(id) {
+    const idx = screens.indexOf(id);
+    if (idx >= 0) screens.splice(idx, 1);
+    if (screenOn === id) {
+      screenOn = "";
+      if (typeof document !== "undefined" && document.body && document.body.classList) {
+        document.body.classList.remove("screen-on");
+      }
+      const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+      if (sh) {
+        sh.innerHTML = "";
+        sh.hidden = true;
+      }
+      if (onScreenReturn) onScreenReturn(prevTabId);
+    }
+    if (onScreenChange) onScreenChange();
+  }
+  function clearScreenOn() {
+    screenOn = "";
+    if (typeof document !== "undefined" && document.body && document.body.classList) {
+      document.body.classList.remove("screen-on");
+    }
+    const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+    if (sh) {
+      sh.innerHTML = "";
+      sh.hidden = true;
+    }
+    if (onScreenChange) onScreenChange();
+  }
+  function renderScreenHost(id) {
+    const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+    if (!sh) return;
+    sh.hidden = false;
+    const def = REGISTRY[id];
+    if (def && typeof def.render === "function") {
+      def.render(sh, () => closeScreenTab(id));
+    }
+  }
+
   // src/modules/tabs.js
   var TAB_KEY = "eSessionTabs";
   var tabs = [];
   var activeTabId = null;
   var tabSaveTimer = null;
+  wireScreenTabsChange(() => drawTabs());
+  wireScreenTabsReturn((id) => {
+    if (id && tabs.some((x) => x.id === id)) switchTab(id);
+    else if (tabs[0]) switchTab(tabs[0].id);
+  });
   function blankTab() {
     return {
       id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -12217,10 +12338,16 @@ What you type stays in this browser only.`;
     t2.entrySel = entrySel ? { id: entrySel.id, vi: entrySel.vi } : null;
     t2.scrollY = pageScrollY();
   }
-  function saveTabSession() {
+  function tabSessionPayload() {
     snapshotActiveTab();
+    const convTabs = tabs.filter((t2) => !t2.id.startsWith("screen-") && t2.id !== "maintenance");
+    const active = screenOn ? convTabs[0] ? convTabs[0].id : activeTabId : activeTabId;
+    return { v: 1, tabs: convTabs, activeTabId: active };
+  }
+  function saveTabSession() {
     try {
-      ssSet(TAB_KEY, JSON.stringify({ v: 1, tabs, activeTabId }));
+      const payload = tabSessionPayload();
+      ssSet(TAB_KEY, JSON.stringify(payload));
     } catch (e) {
     }
     noteActive();
@@ -12260,6 +12387,7 @@ What you type stays in this browser only.`;
     sayLive(words);
   }
   function sayLive(words) {
+    if (typeof document === "undefined" || !document || typeof document.getElementById !== "function") return;
     const out = document.getElementById("eSay");
     if (!words || !out) return;
     if (out.textContent === words) {
@@ -12370,7 +12498,9 @@ What you type stays in this browser only.`;
   }
   function applyTab(tb) {
     if (!tb) return;
+    if (screenOn) clearScreenOn();
     activeTabId = tb.id;
+    setPrevTabId(tb.id);
     if (pax) pax.value = tb.pax || "";
     if (roleSel) roleSel.value = tb.who || "";
     putHandGender(tb.gender);
@@ -12410,6 +12540,7 @@ What you type stays in this browser only.`;
     });
   }
   function switchTab(id) {
+    if (screenOn) clearScreenOn();
     if (!id || id === activeTabId) return;
     snapshotActiveTab();
     endPaxConversation(tabs.find((x) => x.id === activeTabId));
@@ -12419,9 +12550,24 @@ What you type stays in this browser only.`;
     saveTabSession();
   }
   function stepTab(dir) {
-    if (tabs.length < 2) return;
-    const i = tabs.findIndex((x) => x.id === activeTabId);
-    switchTab(tabs[(i + dir + tabs.length) % tabs.length].id);
+    const allScreens = screens || [];
+    const total = tabs.length + allScreens.length;
+    if (total < 2) return;
+    let cur = 0;
+    if (screenOn) {
+      const sidx = allScreens.indexOf(screenOn);
+      cur = tabs.length + (sidx >= 0 ? sidx : 0);
+    } else {
+      const tidx = tabs.findIndex((x) => x.id === activeTabId);
+      cur = tidx >= 0 ? tidx : 0;
+    }
+    const next = (cur + dir + total) % total;
+    if (next < tabs.length) {
+      switchTab(tabs[next].id);
+    } else {
+      const target = allScreens[next - tabs.length];
+      if (target) frontScreenTab(target);
+    }
   }
   var tabInsertAnimating = false;
   function tabGrow() {
@@ -12518,6 +12664,7 @@ What you type stays in this browser only.`;
     }));
   }
   function addTab() {
+    if (screenOn) clearScreenOn();
     snapshotActiveTab();
     const t2 = blankTab();
     animateTabInsert(() => {
@@ -12615,6 +12762,10 @@ What you type stays in this browser only.`;
     return closedTabs.length;
   }
   function closeActiveTab() {
+    if (screenOn) {
+      closeScreenTab(screenOn);
+      return;
+    }
     if (activeTabId) closeTab(activeTabId);
   }
   var tabWipeArmedAt = 0;
@@ -12893,7 +13044,8 @@ What you type stays in this browser only.`;
     const addW = add ? add.getBoundingClientRect().width + (parseFloat(getComputedStyle(add).marginLeft) || 0) : 24;
     const margins = n > 0 ? (n - 1) * tabMargin : 0;
     const NAV_W = 40;
-    const wCap = Math.min(210, Math.floor(innerWidth * 0.15));
+    const winW = typeof innerWidth !== "undefined" ? innerWidth : typeof window !== "undefined" && window.innerWidth || 1280;
+    const wCap = Math.min(210, Math.floor(winW * 0.15));
     const boundW = (share) => Math.max(TAB_FLOOR_W, Math.min(wCap, share));
     bar.style.transition = "";
     const stash = typeof drawTabs !== "undefined" && drawTabs._keepScroll != null ? drawTabs._keepScroll : null;
@@ -12909,18 +13061,20 @@ What you type stays in this browser only.`;
     bar.style.minWidth = "0px";
     bar.style.maxWidth = "0px";
     const askGrant = () => {
-      const rowEl = $(".row") || wrap.parentElement;
+      const rowEl = $(".row") || wrap && wrap.parentElement;
+      if (!rowEl || typeof rowEl.getBoundingClientRect !== "function") return wrap ? wrap.clientWidth || 800 : 800;
       const rowRect = rowEl.getBoundingClientRect();
       const rowPadR = parseFloat(getComputedStyle(rowEl).paddingRight) || 0;
       let lastRight = 0;
-      for (const c of rowEl.children) {
+      const kids = rowEl.children || rowEl.kids || [];
+      for (const c of kids) {
         const r = c.getBoundingClientRect();
         if (r.right > lastRight) lastRight = r.right;
       }
       return Math.floor(wrap.clientWidth + Math.max(0, rowRect.right - rowPadR - lastRight));
     };
     let grantW = askGrant();
-    const wmW = hooks.shedWordmarkW();
+    const wmW = typeof hooks.shedWordmarkW === "function" ? hooks.shedWordmarkW() : 0;
     const wasTight = document.body.classList.contains("strip-tight");
     let shedOwn = null;
     if (wmW > 0) {
@@ -13061,8 +13215,10 @@ What you type stays in this browser only.`;
     drawTabs._keepScroll = bar.scrollLeft;
     drawTabs._keepAtEnd = bar.scrollWidth - bar.clientWidth > 1 && bar.scrollLeft >= bar.scrollWidth - bar.clientWidth - 1;
     bar.innerHTML = "";
+    const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
+    const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
     tabs.forEach((tb, i) => {
-      const b = document.createElement("div"), on = tb.id === activeTabId;
+      const b = document.createElement("div"), on = !curScreen && tb.id === activeTabId;
       b.className = "tab" + (on ? " on" : "") + (tabDrag && tabDrag.moved && tabDrag.key === tb.id ? " dragging" : "");
       b.dataset.tid = tb.id;
       b.title = t("Click to switch, or drag to reorder");
@@ -13113,6 +13269,47 @@ What you type stays in this browser only.`;
       };
       b.onauxclick = (e) => {
         if (e.button === 1) closeTab(tb.id, e);
+      };
+      bar.appendChild(b);
+    });
+    screenList.forEach((sid) => {
+      const b = document.createElement("div"), on = sid === curScreen;
+      b.className = "tab screen" + (on ? " on" : "");
+      b.dataset.sid = sid;
+      const def = typeof getScreenDef === "function" ? getScreenDef(sid) : null;
+      const name = def && typeof def.title === "function" ? def.title() : sid === "maintenance" ? t("Maintenance") : sid;
+      b.title = name;
+      const lab = document.createElement("span");
+      lab.className = "tab-label";
+      lab.setAttribute("role", "tab");
+      lab.setAttribute("aria-selected", on ? "true" : "false");
+      lab.tabIndex = 0;
+      lab.setAttribute("aria-label", name);
+      lab.onkeydown = (e) => {
+        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof frontScreenTab === "function") frontScreenTab(sid);
+      };
+      const labViz = document.createElement("span");
+      labViz.textContent = name;
+      lab.appendChild(labViz);
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "tab-x";
+      x.title = t("Close tab");
+      x.setAttribute("aria-label", t("Close tab"));
+      x.innerHTML = ICON_TAB_X;
+      x.onclick = (e) => {
+        e.stopPropagation();
+        if (typeof closeScreenTab === "function") closeScreenTab(sid);
+      };
+      b.appendChild(lab);
+      b.appendChild(x);
+      b.onclick = (e) => {
+        if (e.target.closest && e.target.closest(".tab-x")) return;
+        if (typeof frontScreenTab === "function") frontScreenTab(sid);
       };
       bar.appendChild(b);
     });
@@ -14080,8 +14277,11 @@ What you type stays in this browser only.`;
   // src/modules/maintenance.js
   var maintenance_exports = {};
   __export(maintenance_exports, {
+    mtGridHtml: () => mtGridHtml,
     mtRefreshLive: () => mtRefreshLive,
     openMaintenance: () => openMaintenance,
+    openMaintenanceModal: () => openMaintenanceModal,
+    wireMaintenanceActions: () => wireMaintenanceActions,
     wireMaintenanceWatch: () => wireMaintenanceWatch
   });
 
@@ -16250,6 +16450,7 @@ What you type stays in this browser only.`;
     closeModal: () => closeModal,
     dismissModal: () => dismissModal,
     dressDialogInputs: () => dressDialogInputs,
+    edDirty: () => edDirty,
     edMarkClean: () => edMarkClean,
     edNavHtml: () => edNavHtml,
     edStepLang: () => edStepLang,
@@ -16581,10 +16782,14 @@ What you type stays in this browser only.`;
     modalBack = typeof fn === "function" ? fn : null;
   }
   function dismissModal() {
+    if (edDirty() && typeof confirm === "function" && !confirm(t("Discard changes"))) {
+      return false;
+    }
     const back = modalBack;
     modalBack = null;
     if (back) back();
     else closeModal();
+    return true;
   }
   function mountModalBody() {
     if (!modalCard.firstElementChild) return;
@@ -26854,14 +27059,25 @@ What you type stays in this browser only.`;
     return lines.join("\n");
   }
   var mtLiveT = 0;
+  function mtGridEl() {
+    if (modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal")) {
+      return modalCard.querySelector(".mt-grid");
+    }
+    const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+    if (sh && !sh.hidden) {
+      return sh.querySelector(".mt-grid");
+    }
+    return null;
+  }
   function mtPanelOpen() {
-    return !!(modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal") && modalCard.querySelector(".mt-grid"));
+    return !!mtGridEl();
   }
   function mtRefreshLive() {
     if (mtLiveT || !mtPanelOpen()) return;
     mtLiveT = setTimeout(() => {
       mtLiveT = 0;
-      if (mtPanelOpen()) modalCard.querySelector(".mt-grid").outerHTML = mtGridHtml();
+      const g = mtGridEl();
+      if (g) g.outerHTML = mtGridHtml();
     }, 120);
   }
   function wireMaintenanceWatch() {
@@ -26897,36 +27113,57 @@ What you type stays in this browser only.`;
     html += "</div>";
     return html;
   }
-  function openMaintenance(backFn) {
+  function wireMaintenanceActions(root, closeFn) {
+    const $q = (s) => root ? root.querySelector(s) : $(s);
+    const sc = $q("#mtShortcuts");
+    if (sc) sc.onclick = () => {
+      const was = lsGet("eShortcuts");
+      lsDel("eShortcuts");
+      loadShortcuts();
+      offerUndo("Shortcuts reset", () => {
+        if (was != null) {
+          lsSet("eShortcuts", was);
+          loadShortcuts();
+        }
+      });
+    };
+    const cl2 = $q("#mtClear");
+    if (cl2) cl2.onclick = clearLocalMemory;
+    const ej = $q("#mtEject");
+    if (ej) ej.onclick = ejectCatalog;
+    const cp = $q("#mtCopy");
+    if (cp) cp.onclick = () => copy(mtReportText(), "Report copied");
+    const cls = $q("#mtClose");
+    if (cls) cls.onclick = () => {
+      if (closeFn) closeFn();
+      else dismissModal();
+    };
+  }
+  registerScreen("maintenance", {
+    title: () => t("Maintenance"),
+    render: (host, closeFn) => {
+      host.innerHTML = '<div class="screen-page mt-screen"><div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div><div class="screen-body">' + mtGridHtml() + '</div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn" id="mtShortcuts">' + esc(t("Reset shortcuts")) + '</button><button type="button" class="btn danger" id="mtClear">' + esc(t("Clear local memory")) + '</button><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+      wireMaintenanceActions(host, closeFn);
+    }
+  });
+  function openMaintenanceModal(backFn) {
     const html = mtGridHtml();
     openDialog({
       cls: "mt-modal",
       back: backFn || null,
       title: "Maintenance",
       body: html,
-      /* The rescues belong in the row that never scrolls: they are what the panel is FOR, and a
-         section at the foot of the readings slid away exactly when a stuck app needed it. Grouped
-         left, away from Done, as the card and category editors place their own destructive controls. */
       actions: '<div class="mf-left"><button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button><button type="button" class="btn danger" id="mtClear">Clear local memory</button><button type="button" class="btn danger" id="mtEject">Eject catalog</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
-      wire: wireMaintenance
+      wire: () => wireMaintenanceActions(null, () => dismissModal())
     });
-    function wireMaintenance() {
-      $("#mtShortcuts").onclick = () => {
-        const was = lsGet("eShortcuts");
-        lsDel("eShortcuts");
-        loadShortcuts();
-        offerUndo("Shortcuts reset", () => {
-          if (was != null) {
-            lsSet("eShortcuts", was);
-            loadShortcuts();
-          }
-        });
-      };
-      $("#mtClear").onclick = clearLocalMemory;
-      $("#mtEject").onclick = ejectCatalog;
-      $("#mtCopy").onclick = () => copy(mtReportText(), "Report copied");
-      $("#mtClose").onclick = () => dismissModal();
+  }
+  function openMaintenance(backFn) {
+    try {
+      openScreenTab("maintenance");
+      return;
+    } catch (_) {
     }
+    openMaintenanceModal(backFn);
   }
 
   // src/modules/editors.js
@@ -30721,6 +30958,7 @@ What you type stays in this browser only.`;
     hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings,
     settingsBodyHtml: () => settingsBodyHtml,
+    wireHotkeyRow: () => wireHotkeyRow,
     wireTeamRows: () => wireTeamRows
   });
   function curLangLabel() {
@@ -30792,6 +31030,11 @@ What you type stays in this browser only.`;
   function hotkeyTry(box, accel, said) {
     const h = hotkeyHost();
     const want = accel == null ? hotkeyState().def : accel;
+    if (want === "Control+Shift+M" || accel === "Control+Shift+M") {
+      toast(hotkeyWhy("used", want));
+      hotkeyListen(box, false);
+      return;
+    }
     Promise.resolve(h.setHotkey(want)).then((r) => {
       if (!(r && r.ok)) {
         toast(hotkeyWhy(r && r.why, want));
@@ -32570,7 +32813,9 @@ What you type stays in this browser only.`;
         } else if (eventMatchesAction(e, "maintenance")) {
           e.preventDefault();
           const back = $("#mgClose") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
-          openMaintenance(back);
+          if (dismissModal() !== false) {
+            openMaintenance(back);
+          }
         } else if (eventMatchesAction(e, "edPrevEntry")) {
           e.preventDefault();
           hooks.runShortcut("edPrevEntry");
@@ -32632,6 +32877,9 @@ What you type stays in this browser only.`;
       if (eHost() && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code === "KeyT" || e.key === "t" || e.key === "T")) {
         e.preventDefault();
         hooks.runShortcut("tabReopen");
+        return;
+      }
+      if (typeof document !== "undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")) {
         return;
       }
       if (!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyC" || e.key === "c" || e.key === "C") && !String(window.getSelection && window.getSelection() || "")) {
@@ -33209,6 +33457,39 @@ What you type stays in this browser only.`;
     runShortcut: () => runShortcut
   });
   function runShortcut(id) {
+    if (typeof document !== "undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")) {
+      if (id === "tabNext") {
+        stepTab(1);
+        return true;
+      }
+      if (id === "tabPrev") {
+        stepTab(-1);
+        return true;
+      }
+      if (id === "tabNew") {
+        addTab();
+        return true;
+      }
+      if (id === "tabClose") {
+        closeActiveTab();
+        return true;
+      }
+      if (id === "maintenance") {
+        closeLooseOverlays();
+        openMaintenance();
+        return true;
+      }
+      if (id === "openMenu") {
+        const m = $("#settingsMenu");
+        if (!m) return false;
+        if (m.hidden) {
+          closeLooseOverlays();
+          openSettingsMenu(true);
+        } else closeSettingsMenu();
+        return true;
+      }
+      return false;
+    }
     if (id === "lanes") return lanesKey();
     if (lanesOpen()) {
       const r = lanesShortcut(id);
@@ -34019,7 +34300,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -34053,6 +34334,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => E_CATALOG_VERSION });
   Object.defineProperty(globalThis, "E_CATALOG_REV", { get: () => E_CATALOG_REV });
   Object.defineProperty(globalThis, "tabs", { get: () => tabs });
+  Object.defineProperty(globalThis, "screenOn", { get: () => screenOn });
   Object.defineProperty(globalThis, "tabSaveTimer", { get: () => tabSaveTimer });
   Object.defineProperty(globalThis, "tabInsertAnimating", { get: () => tabInsertAnimating });
   Object.defineProperty(globalThis, "cardDrag", { get: () => cardDrag });

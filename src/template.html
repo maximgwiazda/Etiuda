@@ -3430,6 +3430,20 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --glass-mid:var(--panel-raised);--glass-mid-filter:none;
   --glass-thin:var(--panel-raised);--glass-thin-filter:none;
   --scrim-filter:none;--mark-filter:none}
+/* ---------- Screen tabs & host (boards 965, 967, 969) ---------- */
+body.screen-on .fab-stack,
+body.screen-on .fills,
+body.screen-on .pills-slot,
+body.screen-on .pills-probe,
+body.screen-on .stage,
+body.screen-on #railHit,
+body.screen-on #lanes { display: none !important; }
+#screenHost{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
+#screenHost[hidden]{display:none!important}
+.screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
+.screen-head h2{margin:0;font-size:20px;font-weight:600}
+.screen-body{flex:1 1 auto;min-height:0}
+.screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)}
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
@@ -4155,6 +4169,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   </div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
+
+<div id="screenHost" class="screen-host" hidden></div>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">

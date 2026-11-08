@@ -361,9 +361,14 @@ function setModalBack(fn){ modalBack=(typeof fn==="function")?fn:null; }
  *  Consumed on use: the parent redraws and sets its own, and a hook that survived its screen
  *  would be worse than none. */
 function dismissModal(){
+  /* plant:maintenance-unsaved-edit-guard */
+  if(edDirty() && typeof confirm==="function" && !confirm(t("Discard changes"))){
+    return false;
+  }
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
+  return true;
 }
 /* A flex column with a scrolling middle, so the scrollbar sits beside the content it
    moves - not running past the pinned heading and actions where nothing scrolls. Wrapped
@@ -451,5 +456,5 @@ export {
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,
-  edNavHtml, edWireNav, edMarkClean, edStepLang,
+  edNavHtml, edWireNav, edMarkClean, edDirty, edStepLang,
 };

@@ -16,7 +16,8 @@ import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
-import { offerUndo, tc, fileStamp } from "./ui-lang.js";
+import { offerUndo, tc, fileStamp, t } from "./ui-lang.js";
+import { openScreenTab, registerScreen } from "./screen-tabs.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
@@ -303,15 +304,25 @@ function mtReportText(){
    during a drag and still lands on the size the drag ended at. Rebuilding is safe only because
    nothing in the readings can hold focus - the buttons sit in the pinned row. */
 let mtLiveT=0;
+function mtGridEl(){
+  if(modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal")){
+    return modalCard.querySelector(".mt-grid");
+  }
+  const sh=typeof document!=="undefined"?document.getElementById("screenHost"):null;
+  if(sh && !sh.hidden){
+    return sh.querySelector(".mt-grid");
+  }
+  return null;
+}
 function mtPanelOpen(){
-  return !!(modalEl && !modalEl.hidden && modalCard
-    && modalCard.classList.contains("mt-modal") && modalCard.querySelector(".mt-grid"));
+  return !!mtGridEl();
 }
 function mtRefreshLive(){
   if(mtLiveT || !mtPanelOpen()) return;
   mtLiveT=setTimeout(()=>{
     mtLiveT=0;
-    if(mtPanelOpen()) modalCard.querySelector(".mt-grid").outerHTML=mtGridHtml();
+    const g=mtGridEl();
+    if(g) g.outerHTML=mtGridHtml();
   },120);
 }
 /* Width crossings arrive as resize, which the one listener already carries. These are the
@@ -357,19 +368,47 @@ function mtGridHtml(){
   html+='</div>';
   return html;
 }
-function openMaintenance(backFn){
-  /* Closing returns wherever you came from - the same contract every sub-dialog keeps.
-     Opened over the Library, the X and Done go back to the Library; opened from the bare
-     page, they just close. The caller says which, because only the caller knows. */
+
+function wireMaintenanceActions(root, closeFn){
+  const $q = s => root ? root.querySelector(s) : $(s);
+  const sc = $q("#mtShortcuts");
+  if(sc) sc.onclick=()=>{
+    const was=lsGet("eShortcuts");
+    lsDel("eShortcuts"); loadShortcuts();
+    offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); } });
+  };
+  const cl = $q("#mtClear"); if(cl) cl.onclick=clearLocalMemory;
+  const ej = $q("#mtEject"); if(ej) ej.onclick=ejectCatalog;
+  const cp = $q("#mtCopy"); if(cp) cp.onclick=()=>copy(mtReportText(),"Report copied");
+  const cls = $q("#mtClose"); if(cls) cls.onclick=()=>{ if(closeFn) closeFn(); else dismissModal(); };
+}
+
+registerScreen("maintenance", {
+  title: () => t("Maintenance"),
+  render: (host, closeFn) => {
+    host.innerHTML = '<div class="screen-page mt-screen">'
+      + '<div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div>'
+      + '<div class="screen-body">' + mtGridHtml() + '</div>'
+      + '<div class="screen-actions">'
+      + '<div class="mf-left">'
+      + '<button type="button" class="btn" id="mtShortcuts">' + esc(t("Reset shortcuts")) + '</button>'
+      + '<button type="button" class="btn danger" id="mtClear">' + esc(t("Clear local memory")) + '</button>'
+      + '<button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button>'
+      + '</div>'
+      + '<button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button>'
+      + '<button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + '</button>'
+      + '</div></div>';
+    wireMaintenanceActions(host, closeFn);
+  }
+});
+
+function openMaintenanceModal(backFn){
   const html=mtGridHtml();
   openDialog({
     cls: "mt-modal",
     back: backFn||null,
     title: "Maintenance",
     body: html,
-    /* The rescues belong in the row that never scrolls: they are what the panel is FOR, and a
-       section at the foot of the readings slid away exactly when a stuck app needed it. Grouped
-       left, away from Done, as the card and category editors place their own destructive controls. */
     actions: '<div class="mf-left">'
       +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
       +'<button type="button" class="btn danger" id="mtClear">Clear local memory</button>'
@@ -377,25 +416,23 @@ function openMaintenance(backFn){
       +'</div>'
       +'<button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button>'
       +'<button type="button" class="btn primary" id="mtClose">Done</button>',
-    wire: wireMaintenance
+    wire: () => wireMaintenanceActions(null, () => dismissModal())
   });
-  function wireMaintenance(){
-  /* No glass switch here any more: it tunes rather than rescues, and Settings owns it. */
-  $("#mtShortcuts").onclick=()=>{
-    const was=lsGet("eShortcuts");
-    lsDel("eShortcuts"); loadShortcuts();
-    offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); } });
-  };
-  $("#mtClear").onclick=clearLocalMemory;
-  $("#mtEject").onclick=ejectCatalog;
-  $("#mtCopy").onclick=()=>copy(mtReportText(),"Report copied");
-  // Done goes where the X goes - back one screen, then out - not straight out.
-  $("#mtClose").onclick=()=>dismissModal();
-  }
+}
+
+function openMaintenance(backFn){
+  try {
+    openScreenTab("maintenance");
+    return;
+  } catch (_) {}
+  openMaintenanceModal(backFn);
 }
 
 export {
   wireMaintenanceWatch,
   mtRefreshLive,
-  openMaintenance
+  openMaintenance,
+  openMaintenanceModal,
+  mtGridHtml,
+  wireMaintenanceActions
 };
