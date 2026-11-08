@@ -45,7 +45,15 @@ function applyLangHeavy(){
   drawIntentRail();    // the rail lists clauses in the language on screen
   recountMacros();   // segment counts are per-language
 }
-function applyLangUI(l){ cancelLangTail(); applyLangState(l); applyLangHeavy(); }
+/* `tail` cancels a language change still in flight and does nothing else. A tab that
+   already speaks the language on screen asks for that: the heavy half would redraw the
+   rail and recount every card, and a tab switch cancels the deferred rebuild. */
+function applyLangUI(l, mode){
+  cancelLangTail();
+  if(mode==="tail") return;
+  applyLangState(l);
+  applyLangHeavy();
+}
 /* THE THUMB FIRST, THE LANGUAGE UNDER IT. The .on toggle is the whole receipt and the CSS
    slides the thumb for .18s; the rest of a switch is ~200ms of synchronous work in Firefox,
    which ate the slide whole and left it snapping (Chrome is fast enough that it never

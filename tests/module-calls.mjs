@@ -5176,7 +5176,164 @@ const CARD_B = {
     Object.assign(AS.cardCounts, hadCounts);
     hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
     globalThis.requestAnimationFrame = hadRaf;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
     globalThis.setTimeout = hadSt;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+    if (hadLoc === undefined) delete globalThis.location; else globalThis.location = hadLoc;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ card-pool.js (board 952, waste finding 6)
+   A card edit rebuilds that card, not all 258. savePack keeps the pool across a save (keepPoolAcross)
+   unless category or catalog-wide definitions changed, and cardSig carries a narrower counter. */
+{
+  const POOL = await import(MOD("card-pool.js"));
+  const PK = await import(MOD("pack.js"));
+  const RB = await import(MOD("rebuild.js"));
+  const RD = await import(MOD("render.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CM = await import(MOD("content-model.js"));
+  const CAT = await import(MOD("catalog.js"));
+  const IID = await import(MOD("intent-id.js"));
+  const H = await import(MOD("hooks.js"));
+  const Dom = await import(MOD("dom.js"));
+
+  const hadDoc = globalThis.document, hadLoc = globalThis.location, hadRaf = globalThis.requestAnimationFrame, hadCs = globalThis.getComputedStyle;
+  const hadCards = AS.cards, hadPack = PK.packSnapshot();
+  const hadBaseM = PK.BASE_M.slice(), hadBaseCats = Object.assign({}, PK.BASE_CATS), hadCats = Object.assign({}, CM.CATS);
+  const hadHooks = ["render", "rebuildCards", "keepPoolAcross", "syncAddFab", "syncNextDock", "syncSampleMark", "syncFavouritesMeta", "syncIntentOrder", "drawPillsCore", "drawIntentRail"]
+    .map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+
+  let rebuildCount = 0;
+  const makeEl = tag => ({
+    tagName: tag.toUpperCase(),
+    style: { setProperty() {}, removeProperty() {} },
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    setAttribute() {},
+    getAttribute() { return ""; },
+    replaceWith() {},
+    replaceChildren() {},
+    appendChild() {},
+    insertAdjacentElement() {},
+    remove() {},
+    textContent: "",
+    value: "",
+    querySelector: sel => (sel === ".chead" ? null : makeEl("span")),
+    querySelectorAll: () => [],
+    getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 200, height: 100 }),
+    getContext: () => ({ measureText: () => ({ width: 10 }) }),
+    children: [],
+    isConnected: true
+  });
+  const listEl = makeEl("div");
+  let tplChildren = [];
+  const templateEl = {
+    content: {
+      get firstElementChild() { return tplChildren[0] || null; },
+      get firstChild() { return tplChildren[0] || null; },
+      removeChild(c) {
+        const i = tplChildren.indexOf(c);
+        if (i >= 0) tplChildren.splice(i, 1);
+        return c;
+      }
+    },
+    set innerHTML(h) {
+      if (h && typeof h === "string" && h.includes('class="card')) {
+        rebuildCount++;
+      }
+      const el = makeEl("div");
+      el.parentNode = this.content;
+      tplChildren = [el];
+    }
+  };
+
+  try {
+    globalThis.location = { protocol: "file:" };
+    globalThis.requestAnimationFrame = () => 1;
+    globalThis.getComputedStyle = () => ({ fontSize: "16px", getPropertyValue: () => "16px" });
+    globalThis.document = {
+      querySelector: s => (s === "#list" ? listEl : makeEl("div")),
+      getElementById: id => (id === "list" ? listEl : makeEl("div")),
+      querySelectorAll: () => [],
+      createElement: tag => (tag === "template" ? templateEl : makeEl(tag)),
+      createDocumentFragment: () => ({
+        appendChild(c) {
+          if (c && c.parentNode && c.parentNode.removeChild) {
+            c.parentNode.removeChild(c);
+          }
+        }
+      }),
+      createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) }),
+      documentElement: { dataset: {}, classList: { contains: () => false } },
+      body: makeEl("body"),
+      addEventListener() {}, removeEventListener() {},
+      visibilityState: "visible"
+    };
+    Dom.grabDom();
+
+    H.hooks.render = RD.render;
+    H.hooks.rebuildCards = RB.rebuildCards;
+    H.hooks.keepPoolAcross = POOL.keepPoolAcross;
+    H.hooks.syncAddFab = () => {};
+    H.hooks.syncNextDock = () => {};
+    H.hooks.syncSampleMark = () => {};
+    H.hooks.syncFavouritesMeta = () => {};
+    H.hooks.syncIntentOrder = () => {};
+    H.hooks.drawPillsCore = () => {};
+    H.hooks.drawIntentRail = () => {};
+
+    const cat = {
+      format: 2, kind: "etiuda-catalog", id: "test-pool-cat", rev: 1, name: "Test Pool", date: "2026-11-04",
+      langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+      categories: { "c-first": "First Cat", "c-second": "Second Cat" },
+      cards: [
+        { id: "c-p1", c: "c-first", t: "Card One", en: "Body one." },
+        { id: "c-p2", c: "c-first", t: "Card Two", en: "Body two." },
+        { id: "c-p3", c: "c-second", t: "Card Three", en: "Body three." },
+        { id: "c-p4", c: "c-second", t: "Card Four", en: "Body four." }
+      ]
+    };
+    CAT.eApplyCatalog(cat);
+    IID.snapshotBaseIntents();
+    PK.resetPack();
+    RB.rebuildCards();
+
+    // Warm render so all card nodes are populated in pool
+    rebuildCount = 0;
+    RD.render();
+
+    check("card-pool.js", "952w6 One card's edit rebuilds exactly 1 node, counted",
+      () => {
+        const sampleCardId = AS.cards[0].id;
+        rebuildCount = 0;
+        PK.pack.overrides[sampleCardId] = { t: "Edited title" };
+        PK.savePack([sampleCardId]);
+        RB.rebuildCards();
+        return eq(rebuildCount, 1);
+      });
+
+    check("card-pool.js", "952w6 CONTROL: a category rename still rebuilds all",
+      () => {
+        rebuildCount = 0;
+        const firstCat = Object.keys(CM.CATS)[0];
+        PK.pack.catLabels[firstCat] = "Renamed Category";
+        PK.savePack();
+        RB.rebuildCards();
+        return eq(rebuildCount, AS.cards.length);
+      });
+  } finally {
+    PK.packUndoFor(hadPack)();
+    PK.BASE_M.length = 0;
+    hadBaseM.forEach(m => PK.BASE_M.push(m));
+    Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
+    Object.assign(PK.BASE_CATS, hadBaseCats);
+    Object.keys(CM.CATS).forEach(k => delete CM.CATS[k]);
+    Object.assign(CM.CATS, hadCats);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    globalThis.requestAnimationFrame = hadRaf;
     if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
     if (hadLoc === undefined) delete globalThis.location; else globalThis.location = hadLoc;
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
