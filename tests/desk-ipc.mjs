@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 106;
+const EXPECTED = 107;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -127,6 +127,7 @@ FakeNotification.prototype.show = function () { this.shown = true; };
 FakeNotification.isSupported = () => true;
 electron.Notification = FakeNotification;
 function FakeTray(icon) {
+  if (FakeTray.throwOnCreate) throw new Error("planted tray failure");
   this.icon = icon;
   this.tip = "";
   this.menu = null;
@@ -1560,9 +1561,32 @@ try {
     "1152p a failed decrypt leaves the file");
 
   /* D6. Stay hides and tells once. Quit from the tray seals the tabs and quits. The installer's close, the end of
-     the session, a refusal and a quit never hide. Reset of the login item is the preload's send. A launch with
-     --hidden does not show the window. The tray menu uses the desk's words. */
+     the session, a refusal and a quit never hide. A close whose tray cannot be created is not hidden. Reset of the
+     login item is the preload's send. A launch with --hidden does not show the window. The tray menu uses the desk's
+     words. */
   const watchStub = () => ({ on() { return this; }, close() {} });
+  /* Before any successful tray: ensureTray keeps the first one it made, so a later throw would never be asked. */
+  let d6NoTray = false, d6NoTrayWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    FakeTray.throwOnCreate = true;
+    const saidBefore = said.length;
+    const notesBefore = madeNotes.length;
+    const traysBefore = madeTrays.length;
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const e = closeEv();
+    const held = mainTest.closeHeld(w, e);
+    const asked = (w.sent || []).indexOf("etiuda:ask-close") >= 0;
+    const trayErr = said.slice(saidBefore).some(s => s.indexOf("the tray could not be created") >= 0);
+    d6NoTray = held === true && e.prevented === true && w.hides === 0 && asked && trayErr
+      && madeNotes.length === notesBefore && madeTrays.length === traysBefore;
+    if (!d6NoTray) d6NoTrayWhy = JSON.stringify({ held: held, prevented: e.prevented, hides: w.hides, asked: asked, trayErr: trayErr, notes: madeNotes.length - notesBefore, trays: madeTrays.length - traysBefore });
+    mainTest.closeAnswered(w, "stay");
+  } catch (err) { d6NoTrayWhy = String(err && err.message || err).split("\n")[0]; }
+  finally { FakeTray.throwOnCreate = false; }
+  check(d6NoTray, "D6-no-tray a close is not hidden when the tray cannot be created, and the page is asked (" + d6NoTrayWhy + ")");
   let d6Stay = false, d6StayWhy = "";
   try {
     if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);

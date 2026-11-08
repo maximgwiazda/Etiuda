@@ -7481,8 +7481,9 @@ function closeHeld(win, e) {
     decision = "quit";
   }
   /* Hide does not run the window's own place-keeping: a stay is not a close, and the place file stays as it was
-     unless the first-close toast has something to remember. */
-  if (decision === "hide") {
+     unless the first-close toast has something to remember. No tray is not a stay: hiding would leave the desk
+     running with nothing to open it, so that close falls through. */
+  if (decision === "hide" && ensureTray()) {
     try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
     try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
     try { maybeFirstClose(win); } catch { /* the toast is a courtesy */ }
