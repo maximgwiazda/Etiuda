@@ -4,7 +4,7 @@
  *   node tests/eject-desk.js
  *
  * WHAT IT PROVES. A real window, a sandbox profile, two catalogs in the folder and one loaded: the row's Eject answers, the
- * page still runs a script within the bound, the Library stays with no row marked, and F2 still opens the maintenance
+ * page still runs a script within the bound, the Library stays with no row marked, and Ctrl+Shift+M still opens the maintenance
  * screen, which is what Max found dead.
  *
  * WALLED BEHIND THE WINDOW WALL. Never opens a window when the variable is not set.
@@ -98,10 +98,14 @@ async function main() {
       check(left === 0, "1c no row is marked as loaded after it: " + JSON.stringify(left));
       await within(page.keyboard.press("Escape"), 5000);
       await sleep(400);
-      await within(page.keyboard.press("F2"), 5000);
+      await within(page.keyboard.down("Control"), 5000);
+      await within(page.keyboard.down("Shift"), 5000);
+      await within(page.keyboard.press("KeyM"), 5000);
+      await within(page.keyboard.up("Shift"), 5000);
+      await within(page.keyboard.up("Control"), 5000);
       await sleep(800);
       const mt = await within(page.evaluate(() => !!document.getElementById("mtEject")), 10000);
-      check(mt === true, "1d and F2 opens the maintenance screen: " + JSON.stringify(mt));
+      check(mt === true, "1d and Ctrl+Shift+M opens the maintenance screen: " + JSON.stringify(mt));
     }
   } finally {
     if (browser) { try { browser.disconnect(); } catch {} }

@@ -138,7 +138,8 @@ function LOOK() {
     up: !!root && !root.hidden && getComputedStyle(root).display !== "none" && root.getBoundingClientRect().width > 0,
     next: shown(q("tourNext")), held: !!q("tourNext") && q("tourNext").disabled, back: shown(q("tourPrev")),
     z: root ? getComputedStyle(root).zIndex : "", behind: !!root && root.classList.contains("behind"),
-    window: !!document.querySelector("body > .modal:not([hidden]):not(.e-gone)"),
+    window: !!document.querySelector("body > .modal:not([hidden]):not(.e-gone)")
+      || document.body.classList.contains("screen-on"),
     facts: shown(q("factsPanel")),
     menu: !!m,
     clear: !m || !c || c.right <= m.left || c.left >= m.right || c.bottom <= m.top || c.top >= m.bottom,

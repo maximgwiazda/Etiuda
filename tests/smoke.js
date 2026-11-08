@@ -491,9 +491,15 @@ const t0 = Date.now();
   let opened = 0;
   for (const act of acts.filter(a => a !== "tour")) {
     await p.evaluate(a => { const x = document.querySelector('[data-act="' + a + '"]'); if (x) x.click(); }, act); await sleep(600);
-    const modal = await p.evaluate(() => { const m = document.getElementById("modalCard"); return !!(m && m.offsetParent); });
+    const modal = await p.evaluate(() => {
+      const m = document.getElementById("modalCard");
+      const dialog = !!(m && m.offsetParent);
+      const tab = document.body.classList.contains("screen-on");
+      return dialog || tab;
+    });
     if (modal) opened++;
     await p.keyboard.press("Escape"); await sleep(350);
+    await p.evaluate(() => { if (screenOn) closeScreenTab(screenOn); });
     if (toggles.has(act)) { await p.evaluate(a => { const x = document.querySelector('[data-act="' + a + '"]'); if (x) x.click(); }, act); await sleep(500); await p.keyboard.press("Escape"); await sleep(200); }
   }
   check(acts.length >= 6 && opened >= 2, acts.length + " menu actions exercised, " + opened + " opened a dialog");
@@ -501,8 +507,8 @@ const t0 = Date.now();
 
   /* The maintenance panel, which nothing above opens. It is not a menu item - the loop over
      [data-act] walks straight past it - and until 2026-09-13 no check in this file touched it:
-     `grep -iE "mt-|maintenance"` over any smoke log returned nothing. F2 is the only way in
-     that a person has, so F2 is the way in here.
+     `grep -iE "mt-|maintenance"` over any smoke log returned nothing. Ctrl+Shift+M is the way in
+     a person has, so it is the way in here.
 
      It earns its own checks for one reason. Every reading in the panel is wrapped in mtSafe,
      which turns any throw into the literal string "unavailable" and prints it in the cell.
@@ -520,11 +526,14 @@ const t0 = Date.now();
      the engine what its own word for it renders as in the current language and counting cells
      equal to that, so no wording is written down here either. */
   e = since();
-  await p.keyboard.press("F2"); await sleep(800);
+  await p.keyboard.down("Control"); await p.keyboard.down("Shift");
+  await p.keyboard.press("KeyM");
+  await p.keyboard.up("Shift"); await p.keyboard.up("Control");
+  await sleep(800);
   const mt = await p.evaluate(() => {
-    const m = document.getElementById("modalCard");
-    const grid = m && m.offsetParent && m.querySelector(".mt-grid");
-    if (!grid) return { open: false, secs: 0, rows: 0, unavailable: -1, blank: -1, controls: 0 };
+    const host = document.getElementById("screenHost");
+    const grid = host && !host.hidden && host.querySelector(".mt-grid");
+    if (!grid) return { open: false, secs: 0, rows: 0, unavailable: -1, blank: -1, present: [], gone: [], moved: false };
     const word = (typeof tc === "function") ? tc("maintenance", "unavailable") : "unavailable";
     const vals = [...grid.querySelectorAll(".mt-row .v")].map(x => (x.textContent || "").trim());
     return { open: true,
@@ -532,17 +541,20 @@ const t0 = Date.now();
       rows: vals.length,
       unavailable: vals.filter(v => v === word).length,
       blank: vals.filter(v => v === "-").length,
-      controls: ["mtShortcuts", "mtClear", "mtEject", "mtCopy", "mtClose"]
-        .filter(id => !!document.getElementById(id)).length };
+      present: ["mtEject", "mtCopy", "mtClose"].filter(id => !!document.getElementById(id)),
+      gone: ["mtShortcuts", "mtClear"].filter(id => !!document.getElementById(id)),
+      moved: !!document.getElementById("mtMoved") };
   });
   /* Floors rather than the measured 7 and 38: a reading added on purpose must not fail a run,
      and a section or a whole block of readings going missing must. */
   check(mt.open && mt.secs >= 6 && mt.rows >= 30,
-    "maintenance panel opens on F2: " + mt.secs + " sections, " + mt.rows + " readings");
+    "maintenance panel opens on Ctrl+Shift+M: " + mt.secs + " sections, " + mt.rows + " readings");
   /* The one that is the point. Zero, not a floor: mtSafe has exactly one way to print this. */
   check(mt.open && mt.unavailable === 0,
     "every maintenance reading answered: " + mt.unavailable + " unavailable, " + mt.blank + " blank");
-  check(mt.controls === 5, "the panel's rescues and copy are wired: " + mt.controls + " of 5 controls");
+  check(mt.present.join(",") === "mtEject,mtCopy,mtClose" && mt.gone.length === 0 && mt.moved,
+    "the panel's rescues and copy are wired, and Reset and Clear local memory are named as moved: "
+    + JSON.stringify({ present: mt.present, gone: mt.gone, moved: mt.moved }));
   /* ONE SCREEN, NO SCROLLING, at the two windows the panel was sized for: 1280 x 880, and 959 x 586,
      which is a 1438 x 879 window at 150 per cent. The panel rebuilds itself on a resize. */
   const mtFit = [];
@@ -550,15 +562,16 @@ const t0 = Date.now();
     await sized(p, w, h, "maintenance " + w + "x" + h);
     await sleep(300);
     mtFit.push(await p.evaluate(() => {
-      const body = document.querySelector("#modalCard.mt-modal .modal-body");
-      return body ? [innerWidth, innerHeight, body.scrollHeight, body.clientHeight] : null;
+      const host = document.getElementById("screenHost");
+      return host && !host.hidden ? [innerWidth, innerHeight, host.scrollHeight, host.clientHeight] : null;
     }));
   }
   await sized(p, 1500, 950, "maintenance back");
   check(mtFit.every(f => f && f[2] <= f[3] + 1),
-    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (body scroll height against its height): "
+    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (screen scroll height against its height): "
     + JSON.stringify(mtFit));
-  await p.keyboard.press("Escape"); await sleep(500);
+  await p.evaluate(() => { const b = document.getElementById("mtClose"); if (b) b.click(); });
+  await sleep(500);
   clean(e, "the maintenance panel");
 
   /* THE TOUR, WALKED AS A PERSON WALKS IT, and watched through what a person sees.
@@ -1028,7 +1041,7 @@ const t0 = Date.now();
     document.documentElement.dataset.theme = "light"; await new Promise(r => setTimeout(r, 150)); const l = bg();
     document.body.classList.add("glass-off"); await new Promise(r => setTimeout(r, 100));
     const off = getComputedStyle(document.body).getPropertyValue("--glass-mid-filter").trim();   // the docked panel is solid, so the token the switch sets on body is what to read
-    openSettings(); await new Promise(r => setTimeout(r, 300));
+    openAbout(); await new Promise(r => setTimeout(r, 300));
     const scrimOff = getComputedStyle(document.querySelector(".modal-bg")).backdropFilter;
     document.body.classList.remove("glass-off"); await new Promise(r => setTimeout(r, 100));
     const scrimOn = getComputedStyle(document.querySelector(".modal-bg")).backdropFilter;
@@ -1088,12 +1101,14 @@ const t0 = Date.now();
       const sc = getComputedStyle(document.querySelector(".scroller")).scrollbarColor, cut = sc.indexOf(")") + 1;
       out[th] = { bg: res("var(--bg)"), thumb: res("var(--scroll-thumb)"), hover: res("var(--scroll-thumb-hover)"),
         bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()), accent: res("var(--accent)"), bub: res("var(--bub)") };
-      /* Settings holds the segmented switches and the Close button the blue was judged by. */
+      /* Settings' Appearance holds the segmented switches the blue was judged by. The screen has no Close. */
       hooks.openSettings(); await wait(700);
-      const card = document.getElementById("modalCard");
-      out[th].segs = [...card.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
-      out[th].close = px(getComputedStyle([...card.querySelectorAll(".modal-actions .btn.primary")].pop()).backgroundColor);
-      dismissModal(); await wait(400);
+      const app = document.querySelector('#screenHost [data-sx="appearance"]');
+      if (app) app.click();
+      await wait(200);
+      const page = document.getElementById("setBody");
+      out[th].segs = [...page.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
+      closeScreenTab("settings"); await wait(400);
       /* A MARK AND A FILL, each painted: the empty desk's mark is a canvas that reads its colour from CSS, and a
          selected pill is a solid fill under white words. Put on the page for the reading and taken out again. */
       const paint = (cls, tag) => { const el = document.createElement(tag); el.className = cls; document.body.appendChild(el);
@@ -1123,7 +1138,7 @@ const t0 = Date.now();
      blue in case of marks of all sort, and in case of Etiuda logo in empty state", and solid blue buttons and
      such keep the darker one; "I meant the dark mode specifically. In light mode colors are peachy". So in
      the dark themes the accent and the empty desk's mark are the mark blue, 64,154,252 (M Kin, the middle pick of 2026-10-05), while every
-     segmented switch's thumb in Settings, its Close button, a selected pill and the fill token paint the
+     segmented switch's thumb in Settings, a selected pill and the fill token paint the
      bubbles' blue, which white on reads 4.5:1 or better (WCAG's relative luminance). Light has one blue. */
   const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
     .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
@@ -1131,10 +1146,10 @@ const t0 = Date.now();
   const MARK_BLUE = [64, 154, 252];
   const twoBlues = s => { const mark = s.bg[0] < 128 ? MARK_BLUE : s.bub;
     return [s.accent, s.mark].every(c => near(c, mark) && c[3] === 1)
-      && [s.fill, s.close, s.pill].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
+      && [s.fill, s.pill].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
       && whiteOn(s.bub) >= 4.5; };
   check(["unset", "dark", "light"].every(th => twoBlues(themeColours[th])),
-    "the dark themes' accent and the empty desk's mark are the mark blue while the switches, Close, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
+    "the dark themes' accent and the empty desk's mark are the mark blue while the switches, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
     + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
       [themeColours[th].accent, themeColours[th].mark, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
         themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
@@ -1492,29 +1507,42 @@ const t0 = Date.now();
   /* The dialogs' folds and the editor's Save. */
   e = since();
   await p.evaluate(() => document.querySelector('[data-act="settings"]').click()); await sleep(700);
-  const acc = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#modalCard details.acc")]; if (ds.length < 2) return { n: ds.length };
-    const a = ds[0], c = ds[1]; const was = a.open; a.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
-    const t1 = a.open; c.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
-    return { n: ds.length, toggled: t1 !== was, cOpen: c.open, setOk: accOpen.has(c.getAttribute("data-acc")) === c.open && accOpen.has(a.getAttribute("data-acc")) === a.open }; });
-  check(acc.n >= 2 && acc.toggled && acc.cOpen && acc.setOk, "Settings folds toggle, accordion, open-set true (" + acc.n + " folds)");
+  const acc = await p.evaluate(async () => {
+    const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
+    if (nav.length < 2) return { n: nav.length };
+    const general = document.querySelector('#screenHost [data-sx="general"]');
+    const appearance = document.querySelector('#screenHost [data-sx="appearance"]');
+    const hadName = !!document.getElementById("setAgentName");
+    appearance.click();
+    await new Promise(r => setTimeout(r, 450));
+    const appOn = !!document.querySelector('#screenHost [data-sx="appearance"].on');
+    const nameGone = !document.getElementById("setAgentName");
+    const glass = !!document.querySelector('#setBody [data-seg="glass"]');
+    const back = document.querySelector('#screenHost [data-sx="general"]');
+    if (back) back.click();
+    await new Promise(r => setTimeout(r, 450));
+    return { n: nav.length, hadName, appOn, nameGone, glass,
+      genOn: !!document.querySelector('#screenHost [data-sx="general"].on'),
+      nameBack: !!document.getElementById("setAgentName") };
+  });
+  check(acc.n >= 2 && acc.hadName && acc.appOn && acc.nameGone && acc.glass && acc.genOn && acc.nameBack,
+    "Settings shows one section at a time, and Appearance is the one that holds Blur (" + acc.n + " sections)");
   /* WHAT THE SCREEN IS MADE OF, board 452: the sections it holds, in order, and the two rows the
-     first of them merged. Read as a list rather than asserted one at a time, so a section
+     first of them holds. Read as a list rather than asserted one at a time, so a section
      arriving as well as a section leaving is a failure. */
   const setSecs = await p.evaluate(() => {
-    const ds = [...document.querySelectorAll("#modalCard details.acc")];
-    const first = ds[0], rows = first ? [...first.querySelectorAll(".set-row")] : [];
-    const name = ((document.getElementById("setAgentName") || {}).value || "").trim();
-    return { ids: ds.map(d => d.getAttribute("data-acc")),
-             title: first ? first.querySelector(".acc-title").textContent : "",
-             rows: rows.map(r => (r.querySelector("input,select") || {}).id || ""),
-             note: first ? first.querySelector(".acc-note").textContent : "",
-             want: name ? name + ", English" : "English" };
+    const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
+    const rows = [...document.querySelectorAll("#setBody .set-row")];
+    const h2 = document.querySelector("#setBody h2");
+    return { ids: nav.map(d => d.getAttribute("data-sx")),
+             title: h2 ? h2.textContent : "",
+             rows: rows.map(r => (r.querySelector("input,select") || {}).id || "").filter(Boolean) };
   });
-  check(setSecs.ids.join(",") === "personal,appearance,layout,keys" && setSecs.title === "Personal"
-        && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.note === setSecs.want,
-    "Settings holds Personal, Appearance, Layout and Keyboard shortcuts, the name above the"
+  check(setSecs.ids.join(",") === "general,appearance,layout,keys,data,about" && setSecs.title === "General"
+        && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.ids.indexOf("catalog") < 0,
+    "Settings holds General, Appearance, Layout, Keyboard shortcuts, Data and defaults and About, the name above the"
     + " language and nothing about catalogs: " + JSON.stringify(setSecs));
-  await p.keyboard.press("Escape"); await sleep(400);
+  await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
   /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
      fact worth asserting is the one the app owns: that the fold a person left open is still open
      when Manage is drawn again. This read mgOpen until 2026-09-13 - the module's own Set, reached
@@ -2282,7 +2310,7 @@ const t0 = Date.now();
   const l3 = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
   await p.keyboard.press("Backquote"); await sleep(500);
   const l4 = await p.evaluate(() => lang);
-  const keyRows = await p.evaluate(() => { openSettings("keys"); return new Promise(r => setTimeout(() => { const altN =document.querySelectorAll("#setBody .sc-row .sc-bind.sc-alt").length, fixedN = document.querySelectorAll("#setBody .sc-row .sc-bind.fixed").length, tilde = [...document.querySelectorAll('#setBody .sc-row[data-sc="langToggle"] .sc-bind')].map(b => b.textContent.trim()); dismissModal(); r({ alt: altN, fixed: fixedN, tilde }); }, 400)); });
+  const keyRows = await p.evaluate(() => { openSettings("keys"); return new Promise(r => setTimeout(() => { const altN =document.querySelectorAll("#setBody .sc-row .sc-bind.sc-alt").length, fixedN = document.querySelectorAll("#setBody .sc-row .sc-bind.fixed").length, tilde = [...document.querySelectorAll('#setBody .sc-row[data-sc="langToggle"] .sc-bind')].map(b => b.textContent.trim()); closeScreenTab("settings"); r({ alt: altN, fixed: fixedN, tilde }); }, 400)); });
   check(l3.l !== l0 && l4 === l0 && l3.v === "probe" && keyRows.alt > 10 && keyRows.tilde.join(" ") === "/ ~", "the tilde is the language toggle's alternative, every rebindable row has an alternative slot (" + keyRows.alt + "), fixed rows none (" + keyRows.fixed + " fixed, " + JSON.stringify(keyRows.tilde) + ")");
   await chord("KeyT", "t", false); await sleep(900);
   const n2 = await p.evaluate(() => document.querySelectorAll(".tab").length);
@@ -2304,7 +2332,7 @@ const t0 = Date.now();
       "a capture refuses a fixed key and says which (" + JSON.stringify(kept.said.slice(0, 40)) + ")");
     await p.keyboard.press("Escape"); await sleep(300);
   } else check(false, "the shortcuts list offered no capture to arm");
-  await p.evaluate(() => dismissModal()); await sleep(500);
+  await p.evaluate(() => { if (screenOn === "settings") closeScreenTab("settings"); }); await sleep(500);
 
   check(n2 === n1 + 1, "Ctrl+T opens a tab (" + n1 + " > " + n2 + ")");
   for (let k = n2; k > n0; k--) {

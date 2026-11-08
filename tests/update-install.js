@@ -250,11 +250,10 @@ const DRIVE_BLUR_OFF = async () => {
   const item = document.querySelector('#settingsMenu [data-act="settings"]');
   if (!item) return { step: "no Settings item in the menu" };
   item.click(); await wait(900);
-  const fold = document.querySelector('#modalCard details.acc[data-acc="appearance"]');
-  if (!fold) return { step: "no appearance fold" };
-  if (!fold.open) fold.querySelector("summary").click();
-  await wait(500);
-  const off = document.querySelector('#modalCard [data-seg="glass"] button[data-val="off"]');
+  const sec = document.querySelector('#screenHost [data-sx="appearance"]');
+  if (!sec) return { step: "no appearance section" };
+  sec.click(); await wait(500);
+  const off = document.querySelector('#screenHost [data-seg="glass"] button[data-val="off"]');
   if (!off) return { step: "no Off in the blur segment" };
   off.click(); await wait(700);
   return { step: "clicked", glass: document.body.classList.contains("glass-off") };

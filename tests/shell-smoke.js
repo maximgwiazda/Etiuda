@@ -803,11 +803,10 @@ const placeEc = (dir, from, as, minutesOld) => {
     const item = document.querySelector('#settingsMenu [data-act="settings"]');
     if (!item) return { step: "no Settings item in the menu" };
     item.click(); await wait(900);
-    const fold = document.querySelector('#modalCard details.acc[data-acc="appearance"]');
-    if (!fold) return { step: "no appearance fold" };
-    if (!fold.open) fold.querySelector("summary").click();
-    await wait(500);
-    const off = document.querySelector('#modalCard [data-seg="glass"] button[data-val="off"]');
+    const sec = document.querySelector('#screenHost [data-sx="appearance"]');
+    if (!sec) return { step: "no appearance section" };
+    sec.click(); await wait(500);
+    const off = document.querySelector('#screenHost [data-seg="glass"] button[data-val="off"]');
     if (!off) return { step: "no Off in the blur segment" };
     const r = off.getBoundingClientRect();
     if (!(r.width > 0 && r.height > 0)) return { step: "the Off button has no box", r: [r.width, r.height] };
@@ -818,7 +817,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(700);
   after = deskKeys(udA);
   check(drive.step === "clicked" && drive.glass === true,
-    "3b the drive went through the menu, the fold and the segment, and the body changed: "
+    "3b the drive went through the menu, the section and the segment, and the body changed: "
     + JSON.stringify(drive));
   check(after.eGlassOff === "1",
     "3c the key is in desk.json on disk, read by this process: eGlassOff " + JSON.stringify(after.eGlassOff)
@@ -1270,8 +1269,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     /* Settings is opened last and left open: the leg below reads its actions bar. */
     if (!(await menu("settings"))) return { step: "no Settings item in the menu" };
     return Object.assign({ step: "open" }, got,
-      { setFolds: [...document.querySelectorAll("#modalCard details.acc")]
-                    .map(d => d.getAttribute("data-acc")) });
+      { setFolds: [...document.querySelectorAll("#screenHost [data-sx]")]
+                    .map(d => d.getAttribute("data-sx")) });
   });
   check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
         && row.button && row.pencil && row.inSummary && row.exportInRow === row.loadedRow
@@ -1280,11 +1279,22 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2h the folder is named and changed in the Library alone, on its title line, with each act in"
     + " the home it belongs to and nothing floating in the body; Settings offers no catalog"
     + " section at all (452): " + JSON.stringify(row));
-  const setBar = await s.p.evaluate(BAR_ENDS, "setReset", "setClose");
-  check(setBar.step === "read" && Math.abs(setBar.leftGap) <= 1 && Math.abs(setBar.rightGap) <= 1
-        && Math.abs(setBar.topDelta) <= 1 && setBar.between > 0,
-    "2h2 Settings' Reset defaults starts at the left edge of the actions bar and Close ends at"
-    + " its right, on one line (415): " + JSON.stringify(setBar));
+  const setBar = await s.p.evaluate(() => {
+    const data = document.querySelector('#screenHost [data-sx="data"]');
+    if (data) data.click();
+    const reset = document.getElementById("setReset");
+    const body = document.getElementById("setBody");
+    const cross = document.querySelector('#tabsBar .tab.screen[data-sid="settings"] .tab-x');
+    return {
+      step: reset && body && body.contains(reset) ? "read" : "missing",
+      inBody: !!(reset && body && body.contains(reset)),
+      close: !!document.getElementById("setClose"),
+      cross: !!(cross && cross.offsetParent)
+    };
+  });
+  check(setBar.step === "read" && setBar.inBody && setBar.close === false && setBar.cross,
+    "2h2 Settings' Reset defaults is a row inside Data and defaults, the screen has no Close, and the tab has its cross: "
+    + JSON.stringify(setBar));
   moved = await s.p.evaluate(dir => window.lsSet("eCatalogFolder", dir), other);
   await sleep(4000);
   const afterMove = await (await s.b.pages())[0].evaluate(SEEN);
@@ -1955,8 +1965,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     document.getElementById("settingsBtn").click(); await wait(400);
     document.querySelector('#settingsMenu [data-act="settings"]').click(); await wait(900);
     return { step: "open", path,
-             folds: [...document.querySelectorAll("#modalCard details.acc")]
-                      .map(d => d.getAttribute("data-acc")) };
+             folds: [...document.querySelectorAll("#screenHost [data-sx]")]
+                      .map(d => d.getAttribute("data-sx")) };
   });
   check(noRows.step === "open" && noRows.rows === 0 && !noCard.dialog && !noCard.offerBox
         && noCard.says.indexOf("Etiuda is ready for its first replies.") === 0
@@ -2289,7 +2299,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   }, STALE);
   const libSeed = await ctrlPage.evaluate(OPEN_LIB);
   const seedLib = await ctrlPage.evaluate(name => ({
-    head: (document.querySelector("#modalCard h2 .modal-name") || {}).textContent || "",
+    head: (document.querySelector("#screenHost .screen-head .screen-name") || {}).textContent || "",
     says: (document.body.innerText || "").indexOf(name) > -1 }), STALE);
   const seedOn = (libSeed.rows || []).filter(r => r.loaded);
   await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeScreenTab("library"); });
@@ -2331,10 +2341,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   await step("[2f/7] the Library stays open", async () => {
   phase("[2f/7] the Library stays open");
   const LIB_STATE = () => {
-    const m = document.getElementById("modal");
+    const host = document.getElementById("screenHost");
     const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     const rows = Array.from(document.querySelectorAll("#mgCatList .ec-row"));
-    return { open: !!m && !m.hidden && !!fold, foldOpen: !!fold && fold.open, rows: rows.length,
+    return { open: !!(host && !host.hidden && fold && screenOn === "library"), foldOpen: !!fold && fold.open, rows: rows.length,
              loaded: rows.filter(r => r.classList.contains("is-loaded"))
                .map(r => (r.querySelector(".ec-name b") || {}).textContent || ""),
              empty: (document.querySelector('#screenHost details[data-mg="data"] .manage-secbody > p.manage-empty')
