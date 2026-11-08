@@ -17,7 +17,7 @@ import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
-import { eHost, eHasShared } from "./host.js";
+import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi } from "./host.js";
 import { hooks } from "./hooks.js";
 import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
 import { pack } from "./pack.js";
@@ -221,7 +221,8 @@ const SX_ICONS={
   "desks":'<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
   "delete":'<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
   "forward":'<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
-  "statistics":'<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>'
+  "statistics":'<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+  "ai":'<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
 };
 function sxIcon(name){
   const body=SX_ICONS[name];
@@ -351,6 +352,21 @@ function teamsGroups(){
       t("Each change stays in this desk's own file"))));
   return rows.length ? [{rows}] : [];
 }
+/* Drawn only where the desk carries the model: off, the picker suggests by words alone and the model is never loaded. */
+function aiGroups(){
+  if(!eAiModel()) return [];
+  return [{rows:[
+    // placeholder: Claudette
+    row("aisuggest","ai",t("Suggest intents with the built-in model"),
+      // placeholder: Claudette
+      t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+      onoff("aisuggest", eAiOn(),
+        // placeholder: Claudette
+        t("The model ranks the suggestions; nothing leaves this computer"),
+        // placeholder: Claudette
+        t("Suggestions come from matching words, and the model stays unloaded")))
+  ]}];
+}
 function dataGroups(){
   return [{rows:[
     row("reset","refresh",t("Reset defaults"),t("Puts every setting back as it ships. Cards and your edits are not touched."),
@@ -370,8 +386,7 @@ function aboutGroups(){
       '<button type="button" class="btn" id="setMaint">'+esc(t("Open"))+'</button>'+keysHtml(formatActionChord("maintenance")))
   ]}];
 }
-/* Every section in its order, each with the groups it holds now; a section without a row is left out.
-   AI has no row on this desk, so it is not among them. */
+/* Every section in its order, each with the groups it holds now; a section without a row is left out. */
 function settingsSections(){
   return [
     {id:"general", icon:"general", name:t("General"), lede:t("Your name, the language, and how Etiuda starts and closes."), groups:generalGroups()},
@@ -381,7 +396,9 @@ function settingsSections(){
     {id:"notifications", icon:"notifications", name:t("Notifications"), lede:t("What the app tells you, also while its window is closed."), groups:[]},
     {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsGroups()},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
-    {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()}
+    {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()},
+    // placeholder: Claudette (the lede; "AI" is hers)
+    {id:"ai", icon:"ai", name:t("AI"), lede:t("The model built into Etiuda, which works on this computer alone."), groups:aiGroups()}
   ].filter(s=>s.groups.some(g=>g.rows.length));
 }
 function groupHtml(g){
@@ -559,6 +576,12 @@ function wirePage(box){
           hooks.syncSampleMark();
           toast(on?t("From now on, changes go into the shared catalog"):t("From now on, changes stay in this desk's own file"));
         }
+        else if(seg==="aisuggest"){
+          if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");
+          eTellAi();
+          // placeholder: Claudette
+          toast(on?t("Suggestions from the built-in model"):t("Suggestions from matching words"));
+        }
         else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
         else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }
         /* No repaint: the class above is the whole visual change, and rebuilding would undo the slide it started. */
@@ -606,7 +629,7 @@ function resetShortcuts(){
 function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY]
+   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY,E_AI_OFF_KEY]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");
@@ -641,6 +664,7 @@ function applyPrefs(){
   try{ syncRailLayout(); }catch(e){}
   try{ drawPills(); }catch(e){}
   try{ render(); }catch(e){}
+  eTellAi();
 }
 registerScreen("settings", {
   title: () => t("Settings"),

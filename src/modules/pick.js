@@ -1,4 +1,4 @@
-import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
+import { eHost, eHotkey, eHotkeyLabel, eAiOn } from "./host.js";
 import { cards, intentIdxs, lang, wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms, catalogVocab } from "./spell.js";
 import { rankedCards } from "./render.js";
@@ -350,11 +350,18 @@ function answerPick(op,argText){
     try{ tourHeardPick(); }catch(e){}
     const paxVal=pickDeskPax();
     const curEpoch = suggestEpoch();
-    const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, picked:intentIdxs.map(i=>intentIdAt(i)), epoch:curEpoch}, pickFound(""));
+    const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, picked:intentIdxs.map(i=>intentIdAt(i)), epoch:curEpoch, ai:eAiOn()}, pickFound(""));
     if(a.profiles || (a.epoch !== undefined && a.epoch !== curEpoch)){
       try{ out.profiles=suggestModel(); }catch(e){}
     }
     return withIndex(out, "");
+  }
+  /* The shell warming the model asks for the catalog's passages alone: no opening, so the tour hears nothing. */
+  if(op==="suggest-profiles"){
+    const on=eAiOn();
+    const out={ai:on, epoch:suggestEpoch()};
+    if(on){ try{ out.profiles=suggestModel(); }catch(e){} }
+    return out;
   }
   if(op==="suggest-open"){
     bumpSuggestOpen(pack);

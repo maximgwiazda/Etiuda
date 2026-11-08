@@ -1,7 +1,7 @@
 "use strict";
 
 const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, protocol, session,
-  safeStorage, screen, shell, systemPreferences } = require("electron");
+  safeStorage, screen, shell, systemPreferences, utilityProcess } = require("electron");
 
 /* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint and takes neither
    ETIUDA_TEST_DOCUMENTS nor ETIUDA_TEST_SAVE_AS unless ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js
@@ -25,6 +25,9 @@ const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { readsLikeMessage, scoreSuggestions } = require(path.join(__dirname, "clip-suggest.cjs"));
+/* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
+let embedLib = null;
+try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
 function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
@@ -9234,6 +9237,34 @@ function focusDesk() {
 /* The clipboard, read once when the picker opens and kept in this function only. */
 let lastOwnText = "", lastCountedText = "";
 let lastProfiles = null, lastProfilesEpoch = null;
+/* THE MODEL'S HALF OF THE STRIP. The words decide whether a strip shows; the model, while it is on, carried, checked and
+   warm for this catalog, fills that strip with its five instead, if they come within EMBED_BUDGET_MS of the press. */
+const EMBED_BUDGET_MS = 250;
+const EMBED_WARM_DELAY_MS = 15000;
+const embedSuggest = (() => {
+  if (!embedLib) return null;
+  const base = INSTALLED ? path.join(String(process.resourcesPath || ""), "embed") : "";
+  return embedLib.createEmbedSuggest({
+    dir: INSTALLED ? path.join(base, "model") : String(process.env.ETIUDA_EMBED_MODEL || ""),
+    runtime: INSTALLED ? path.join(base, "runtime") : String(process.env.ETIUDA_EMBED_RUNTIME || ""),
+    fork: file => {
+      const c = utilityProcess.fork(file, [], { serviceName: "Etiuda suggestions", stdio: "ignore" });
+      return { post: m => c.postMessage(m), onMessage: fn => c.on("message", fn), onExit: fn => c.on("exit", fn), kill: () => c.kill() };
+    }
+  });
+})();
+function warmSuggest(passages, epoch, on) {
+  if (!embedSuggest) return;
+  embedSuggest.setOn(on);
+  if (on && Array.isArray(passages)) embedSuggest.warm(passages, epoch);
+}
+/* After the page loads, where the hotkey is held and the model is carried, so the first opening finds it warm. */
+function warmSuggestSoon() {
+  if (!embedSuggest || !hotkeyHeld || !embedSuggest.installed()) return;
+  askDesk("suggest-profiles", {}).then(r => {
+    if (r) warmSuggest(r.profiles && r.profiles.passages, r.epoch, r.ai !== false);
+  }).catch(() => {});
+}
 
 function noteOwnText(text) {
   if (!text) return;
@@ -9267,6 +9298,7 @@ function pickToggle() {
   const want = !isOwn && readsLikeMessage(clip);
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
   const req = want ? (lastProfiles ? { epoch: lastProfilesEpoch } : { profiles: 1 }) : {};
+  const ranked = want && embedSuggest ? embedSuggest.rank(clip, EMBED_BUDGET_MS) : Promise.resolve(null);
   askDesk("open", req).then(open => {
     if (!open) { focusDesk(); return null; }
     if (open.epoch != null && open.epoch !== lastProfilesEpoch) {
@@ -9295,26 +9327,35 @@ function pickToggle() {
     }
     delete open.profiles;
     clip = "";
-    if (showed && clipHash !== lastCountedText) {
-      lastCountedText = clipHash;
-      askDesk("suggest-open", {}).catch(() => {});
-    }
-    if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
-    pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
-    return ensurePicker().then(() => {
-      if (!pickWin || pickWin.isDestroyed()) return null;
-      let at = null;
-      try {
-        const pt = screen.getCursorScreenPoint();
-        at = pickerPlace(pt, screen.getDisplayNearestPoint(pt).workArea, PICK_SIZE);
-      } catch (e) { console.error("etiuda: the pointer could not be read, so the picker is centred - " + e.message); }
-      if (at) pickWin.setBounds(at);
-      else pickWin.center();
-      const win = pickWin;
-      const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
-      win.webContents.send("etiuda:pick-open", JSON.stringify(open));
-      const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
-      return Promise.all([drawn, asked]).then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
+    const aiOn = open.ai !== false;
+    delete open.ai;
+    const byModel = showed && aiOn && !!embedSuggest && embedSuggest.readyFor(open.epoch);
+    if (embedSuggest) warmSuggest(profiles && profiles.passages, open.epoch, aiOn);
+    return (byModel ? ranked : Promise.resolve(null)).then(rows => {
+      const names = new Map(((profiles && profiles.intents) || []).map(p => [String(p.id), String(p.name || "")]));
+      const mine = (Array.isArray(rows) ? rows : []).filter(r => r && names.has(String(r.id)));
+      if (mine.length) open.suggest = mine.map(r => ({ id: String(r.id), name: names.get(String(r.id)), score: r.score }));
+      if (showed && clipHash !== lastCountedText) {
+        lastCountedText = clipHash;
+        askDesk("suggest-open", {}).catch(() => {});
+      }
+      if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
+      pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
+      return ensurePicker().then(() => {
+        if (!pickWin || pickWin.isDestroyed()) return null;
+        let at = null;
+        try {
+          const pt = screen.getCursorScreenPoint();
+          at = pickerPlace(pt, screen.getDisplayNearestPoint(pt).workArea, PICK_SIZE);
+        } catch (e) { console.error("etiuda: the pointer could not be read, so the picker is centred - " + e.message); }
+        if (at) pickWin.setBounds(at);
+        else pickWin.center();
+        const win = pickWin;
+        const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
+        win.webContents.send("etiuda:pick-open", JSON.stringify(open));
+        const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
+        return Promise.all([drawn, asked]).then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
+      });
     });
   }).catch(e => console.error("etiuda: the picker could not open - " + e.message))
     .then(() => { pickOpening = false; });
@@ -9372,6 +9413,14 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
     if (v && v.ask) { hidePicker(false); focusDesk(); askDesk("ask", v.ask); }
     return false;
   });
+});
+/* The embedded model's switch as Settings shows it: whether this desk carries the model, and the person turning it off or on. */
+ipcMain.on("etiuda:ai-state", (e) => {
+  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()) } : null;
+});
+ipcMain.on("etiuda:ai-set", (e, on) => {
+  if (!fromEngine(e) || !embedSuggest) return;
+  if (on) { embedSuggest.setOn(true); warmSuggestSoon(); } else embedSuggest.setOn(false);
 });
 /* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
    nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */
@@ -9568,6 +9617,7 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryLiveStats(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
   win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
+  win.webContents.on("did-finish-load", () => { setTimeout(warmSuggestSoon, EMBED_WARM_DELAY_MS); });
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom

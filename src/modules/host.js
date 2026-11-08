@@ -381,6 +381,19 @@ function eHotkey(){
 }
 // A combination in the host's spelling as the desk names keys: Control reads Ctrl.
 function eHotkeyLabel(accel){ return String(accel||"").split("+").map(k=>k==="Control"?"Ctrl":k).join("+"); }
+/* THE EMBEDDED MODEL'S SWITCH, on unless the person turned it off; the shell loads the model only while it is on. */
+const E_AI_OFF_KEY="eAiOff";
+function eAiOn(){ return lsGet(E_AI_OFF_KEY)!=="1"; }
+// Whether this desk carries the model at all: false in a browser, and where the package holds none.
+function eAiModel(){
+  const h=eHost();
+  if(!h || typeof h.aiState!=="function") return false;
+  try{ const st=h.aiState(); return !!(st && st.model); }catch(e){ return false; }
+}
+function eTellAi(){
+  const h=eHost();
+  try{ if(h && typeof h.setAi==="function") h.setAi(eAiOn()); }catch(e){}
+}
 // The picker brought forward from the desk itself, by the pointer: false where the host has none.
 function eOpenPicker(){
   const h=eHost();
@@ -464,6 +477,10 @@ export {
   eHost,
   eHotkey,
   eHotkeyLabel,
+  E_AI_OFF_KEY,
+  eAiOn,
+  eAiModel,
+  eTellAi,
   eOpenPicker,
   eOpenCatalogFolder,
   wireFolderLink,

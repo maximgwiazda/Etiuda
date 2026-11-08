@@ -251,6 +251,25 @@ function applyBodyFilter(profiles, weights) {
   }
 }
 
+/* What the embedded model knows an intent by: its topic and its clause, joined, once per language the intent has. */
+function intentPassages(catalog) {
+  const tags = (Array.isArray(catalog && catalog.tags) ? catalog.tags : []).filter(t => t && t.kind === "request");
+  const out = [];
+  for (const req of tags) {
+    const id = String(req.id || "");
+    if (!id) continue;
+    const topic = req.topic && typeof req.topic === "object" ? req.topic : { "": req.topic };
+    const clause = req.clause && typeof req.clause === "object" ? req.clause : { "": req.clause };
+    const texts = [];
+    for (const code of new Set([...Object.keys(topic), ...Object.keys(clause)])) {
+      const text = [topic[code], clause[code]].map(x => String(x || "").trim()).filter(Boolean).join(" - ");
+      if (text && texts.indexOf(text) < 0) texts.push(text);
+    }
+    if (texts.length) out.push({ id, texts });
+  }
+  return out;
+}
+
 function buildSuggestModel(catalog, labels) {
   const weights = buildAffinityWordWeights(catalog || {});
   const profiles = buildProfiles(catalog || {});
@@ -268,6 +287,7 @@ function buildSuggestModel(catalog, labels) {
       topic: p.topicWords,
       clause: p.clauseWords
     })),
+    passages: intentPassages(catalog || {}),
     labels: {
       suggest: String(labels && labels.suggest || ""),
       suggestTip: String(labels && labels.suggestTip || "")
@@ -441,5 +461,6 @@ export {
   readsLikeMessage,
   messageWords,
   buildSuggestModel,
+  intentPassages,
   scoreSuggestions
 };

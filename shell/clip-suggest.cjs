@@ -25,6 +25,7 @@ __export(clip_suggest_exports, {
   SUGGEST_LIMIT: () => SUGGEST_LIMIT,
   SUGGEST_SCORE_FLOOR: () => SUGGEST_SCORE_FLOOR,
   buildSuggestModel: () => buildSuggestModel,
+  intentPassages: () => intentPassages,
   messageWords: () => messageWords,
   readsLikeMessage: () => readsLikeMessage,
   scoreSuggestions: () => scoreSuggestions
@@ -342,7 +343,7 @@ function buildProfiles(catalog) {
         for (const id of reqs) s.add(id);
       }
     }
-    const titles = (m["title"] && typeof m["title"] === "object") ? Object.values(m["title"]) : (typeof m["title"] === "string" ? [m["title"]] : []);
+    const titles = m["title"] && typeof m["title"] === "object" ? Object.values(m["title"]) : typeof m["title"] === "string" ? [m["title"]] : [];
     for (const title of titles) {
       if (!title) continue;
       for (const w of splitWords(title)) {
@@ -365,7 +366,7 @@ function buildProfiles(catalog) {
     const topicWords = [];
     const clauseWords = [];
     for (const f of ["topic", "clause", "action"]) {
-      const texts = (req[f] && typeof req[f] === "object") ? Object.values(req[f]) : (typeof req[f] === "string" ? [req[f]] : []);
+      const texts = req[f] && typeof req[f] === "object" ? Object.values(req[f]) : typeof req[f] === "string" ? [req[f]] : [];
       for (const txt of texts) {
         if (!txt) continue;
         for (const w of splitWords(txt)) {
@@ -383,7 +384,7 @@ function buildProfiles(catalog) {
           if (reach <= 2 && !tier1.has(w)) tier2.add(w);
         }
       }
-      const titles = (m["title"] && typeof m["title"] === "object") ? Object.values(m["title"]) : (typeof m["title"] === "string" ? [m["title"]] : []);
+      const titles = m["title"] && typeof m["title"] === "object" ? Object.values(m["title"]) : typeof m["title"] === "string" ? [m["title"]] : [];
       for (const title of titles) {
         if (!title) continue;
         for (const w of splitWords(title)) {
@@ -392,7 +393,7 @@ function buildProfiles(catalog) {
         }
       }
       if ((m.requests || []).length <= 2) {
-        const bodies = (m.body && typeof m.body === "object") ? Object.values(m.body) : (typeof m.body === "string" ? [m.body] : []);
+        const bodies = m.body && typeof m.body === "object" ? Object.values(m.body) : typeof m.body === "string" ? [m.body] : [];
         for (const body of bodies) {
           if (!body) continue;
           for (const w of splitWords(body)) {
@@ -416,6 +417,23 @@ function applyBodyFilter(profiles, weights) {
     p.tier3 = next;
   }
 }
+function intentPassages(catalog) {
+  const tags = (Array.isArray(catalog && catalog.tags) ? catalog.tags : []).filter((t) => t && t.kind === "request");
+  const out = [];
+  for (const req of tags) {
+    const id = String(req.id || "");
+    if (!id) continue;
+    const topic = req.topic && typeof req.topic === "object" ? req.topic : { "": req.topic };
+    const clause = req.clause && typeof req.clause === "object" ? req.clause : { "": req.clause };
+    const texts = [];
+    for (const code of /* @__PURE__ */ new Set([...Object.keys(topic), ...Object.keys(clause)])) {
+      const text = [topic[code], clause[code]].map((x) => String(x || "").trim()).filter(Boolean).join(" - ");
+      if (text && texts.indexOf(text) < 0) texts.push(text);
+    }
+    if (texts.length) out.push({ id, texts });
+  }
+  return out;
+}
 function buildSuggestModel(catalog, labels) {
   const weights = buildAffinityWordWeights(catalog || {});
   const profiles = buildProfiles(catalog || {});
@@ -433,6 +451,7 @@ function buildSuggestModel(catalog, labels) {
       topic: p.topicWords,
       clause: p.clauseWords
     })),
+    passages: intentPassages(catalog || {}),
     labels: {
       suggest: String(labels && labels.suggest || ""),
       suggestTip: String(labels && labels.suggestTip || "")
@@ -543,10 +562,16 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
     for (const term of corrected) {
       let base = 0;
       let tier = 0;
-      if (p.tier1.has(term)) { base = 4; tier = 1; }
-      else if (p.tier2.has(term)) { base = 2.5; tier = 2; }
-      else if (p.tier3.has(term)) { base = 1 * p.tier3.get(term); tier = 3; }
-      else {
+      if (p.tier1.has(term)) {
+        base = 4;
+        tier = 1;
+      } else if (p.tier2.has(term)) {
+        base = 2.5;
+        tier = 2;
+      } else if (p.tier3.has(term)) {
+        base = 1 * p.tier3.get(term);
+        tier = 3;
+      } else {
         for (const w of p.tier1) if (wordMatchesTerm(w, term)) {
           base = 2.8;
           tier = 1;
@@ -568,7 +593,7 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
         }
       }
       if (base > 0) {
-        const weight = (tier === 3 && weightOf.has(term)) ? weightOf.get(term) : 1;
+        const weight = tier === 3 && weightOf.has(term) ? weightOf.get(term) : 1;
         const score = base * weight;
         if (score > 0) {
           termMatches.push({ term, score });
@@ -622,6 +647,7 @@ function scoreSuggestions(text, model) {
   SUGGEST_LIMIT,
   SUGGEST_SCORE_FLOOR,
   buildSuggestModel,
+  intentPassages,
   messageWords,
   readsLikeMessage,
   scoreSuggestions
