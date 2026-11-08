@@ -3236,16 +3236,18 @@ function branchGate(doc) {
 /* What this desk put on the share that the lead may no longer read (board 962, stage 0b, Claude alpha's ruling B): an answer to
    the lead's box once the switch no longer applies, any answer about a catalog now private, and working copies likewise. */
 function withdrawClosed() {
-  const use = teamUse();
-  if (!use.member || !use.seal) return;
-  const open = contentApplies(use.seal.team, use.consent);
-  if (answerKept && ((answerKept.lead && !open) || answerKept.ids.some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
   const me = branchIdentity(false);
   const root = sharedFolderForWrite();
   if (!me || !folderAnswers(root)) return;
   const dir = path.join(root, "desks", me.id);
   let names = [];
-  try { names = fs.readdirSync(dir); } catch { return; }
+  try { names = fs.readdirSync(dir); } catch { names = []; }
+  /* The team is heeded only where there is something to take back, so a desk with nothing on the share heeds as before. */
+  if (!answerKept && !names.some(n => /-[0-9a-f]{8}\.ec$/.test(n))) return;
+  const use = teamUse();
+  if (!use.member || !use.seal) return;
+  const open = contentApplies(use.seal.team, use.consent);
+  if (answerKept && ((answerKept.lead && !open) || answerKept.ids.some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
   for (const n of names) {
     const tail = /-([0-9a-f]{8})\.ec$/.exec(n);
     if (!tail) continue;
