@@ -1538,12 +1538,15 @@ async function main() {
   });
   const areaPkg = JSON.parse(fs.readFileSync(path.join(areaLab.lab, "package.json"), "utf8"));
   areaPkg.scripts = {
-    test: "node tests/plant-hold.mjs && node tests/g1.mjs && node tests/g2.mjs && node tests/plant-compare.mjs",
+    test: "node tests/plant-hold.mjs && node tests/g1.mjs && node tests/g2.mjs && node tests/kin-contrast.mjs && node tests/plant-compare.mjs",
     g1: "node tests/g1.mjs",
     g2: "node tests/g2.mjs",
+    package: "node tools/package.mjs",
   };
   fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(areaPkg, null, 2) + "\n");
+  fs.writeFileSync(path.join(areaLab.lab, "tools", "package.mjs"), 'import fs from "node:fs";\nfs.readFileSync("src/major.mjs");\nconsole.log("  ok   package");\nprocess.exit(0);\n');
   fs.writeFileSync(path.join(areaLab.lab, "tests", "plant-hold.mjs"), 'console.log("  ok   plant-hold");\nprocess.exit(0);\n');
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "kin-contrast.mjs"), 'console.log("  ok   kin-contrast");\nprocess.exit(0);\n');
   fs.writeFileSync(path.join(areaLab.lab, "tests", "plant-compare.mjs"), 'console.log("  ok   plant-compare");\nprocess.exit(0);\n');
   spawnSync("git", ["add", "."], { cwd: areaLab.lab });
   spawnSync("git", ["commit", "-q", "-m", "initial"], { cwd: areaLab.lab });
@@ -1583,23 +1586,30 @@ async function main() {
   const areaRunShared2 = run(areaLab, ["area", "HEAD"], null, {
     ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
   });
-  check(areaRunShared2.out.indexOf("fail-closed to whole chain: change in shared code") >= 0,
-    "16d a change to a SHARED file runs the whole run: "
+  check(areaRunShared2.out.indexOf("fail-closed to whole chain: change in shared code") >= 0
+      && areaRunShared2.out.indexOf("> node tests/kin-contrast.mjs") < 0 && areaRunShared2.out.indexOf("visual leg(s) left to the release profile") >= 0,
+    "16d a change to a SHARED file runs the whole run, its visual legs left to the release profile: "
     + areaRunShared2.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
   fs.unlinkSync(path.join(areaLab.lab, "electron-builder.js"));
 
   fs.writeFileSync(path.join(areaLab.lab, "src", "major.mjs"), "export const m = 1;\n");
   fs.writeFileSync(path.join(areaLab.lab, "tests", "g1.mjs"), 'import fs from "node:fs";\nfs.readFileSync("src/major.mjs");\nconsole.log("  ok   g1");\nprocess.exit(0);\n');
   fs.writeFileSync(path.join(areaLab.lab, "tests", "g2.mjs"), 'import fs from "node:fs";\nfs.readFileSync("src/major.mjs");\nconsole.log("  ok   g2");\nprocess.exit(0);\n');
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "kin-contrast.mjs"), 'import fs from "node:fs";\nfs.readFileSync("src/major.mjs");\nconsole.log("  ok   kin-contrast");\nprocess.exit(0);\n');
   const areaRunHalf = run(areaLab, ["area", "HEAD"], null, {
     ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
   });
-  check(areaRunHalf.out.indexOf("more than half") >= 0 && areaRunHalf.out.indexOf("fail-closed to whole chain") >= 0,
-    "16e a change to a file mapped to more than half the gates runs the whole run: "
-    + areaRunHalf.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
+  /* Since 2026-11-08 18:36 a file runs the legs gates-for maps it to, however many, and a visual leg never blocks a merge. */
+  check(areaRunHalf.out.indexOf("fail-closed") < 0 && areaRunHalf.out.indexOf("> node tests/g1.mjs") >= 0
+      && areaRunHalf.out.indexOf("> node tests/g2.mjs") >= 0 && areaRunHalf.out.indexOf("> node tests/kin-contrast.mjs") < 0
+      && areaRunHalf.out.indexOf("visual leg tests/kin-contrast.mjs left to the release profile") >= 0
+      && areaRunHalf.out.indexOf("> node tools/package.mjs") < 0 && areaRunHalf.out.indexOf("tools/package.mjs is a packaging tool, not a merge gate") >= 0,
+    "16e a file mapped to most gates runs exactly those it maps, the visual one left to the release profile: "
+    + areaRunHalf.out.trim().split(/\r?\n/).filter(l => /fail-closed|visual|> node tests\/(g1|g2|kin)/i.test(l)).join(" | "));
   fs.unlinkSync(path.join(areaLab.lab, "src", "major.mjs"));
   fs.writeFileSync(path.join(areaLab.lab, "tests", "g1.mjs"), 'console.log("  ok   g1");\nprocess.exit(0);\n');
   fs.writeFileSync(path.join(areaLab.lab, "tests", "g2.mjs"), 'console.log("  ok   g2");\nprocess.exit(0);\n');
+  fs.writeFileSync(path.join(areaLab.lab, "tests", "kin-contrast.mjs"), 'console.log("  ok   kin-contrast");\nprocess.exit(0);\n');
 
   fs.writeFileSync(path.join(areaLab.lab, "src", "gap.mjs"), "export const gap = 1;\n");
   const areaRunGap = run(areaLab, ["area", "HEAD"], null, {
