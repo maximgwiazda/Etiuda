@@ -1144,7 +1144,9 @@ function fitTabLabels(){
     /* `tb`, not `t`: t() is the translation function, and a local of that name breaks
        every translated string in the same scope rather than the line that declares it. */
     const tb=idx>=0?tabs[idx]:null;
-    const name=tabLabel(tb, ti);
+    // A screen tab keeps its screen's name: it is no conversation and has no number.
+    const def=el.dataset.sid ? getScreenDef(el.dataset.sid) : null;
+    const name=def&&typeof def.title==="function" ? def.title() : tabLabel(tb, ti);
     const span=el.querySelector(".tab-label>span");
     if(!span) return;
     if(span.textContent!==name) span.textContent=name;
