@@ -162,6 +162,8 @@ export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/storage-carry.js", args: [], cmd: "node tests/storage-carry.js" },
   { script: "nightly", file: "tests/theme-presses.mjs", args: [], cmd: "node tests/theme-presses.mjs" },
   { script: "nightly", file: "tests/theme-roll.mjs", args: [], cmd: "node tests/theme-roll.mjs" },
+  /* A browser leg: the desk swapped in place held to a fresh start, driven in headless Chrome (the test architect, 2026-11-08). */
+  { script: "nightly", file: "tests/swap.mjs", args: [], cmd: "node tests/swap.mjs" },
 ];
 
 export const FLOOR = [
@@ -305,8 +307,11 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
     /* The window gates this run's diff reached and left out: a merge that needs an argued window run, counted by the week review. */
     walled: record.walled || [],
   };
-  /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree and the files that did run. */
-  if (record.inherits) { line.inherits = record.inherits; line.ran = record.ran || []; }
+  /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree. */
+  if (record.inherits) line.inherits = record.inherits;
+  /* Every run records which files ran, so an area run can check coverage (the test architect's criterion, 2026-11-08). */
+  if (Array.isArray(record.ran)) line.ran = record.ran;
+  else if (record.inherits) line.ran = [];
   fs.appendFileSync(chainsPath, JSON.stringify(line) + "\n", "utf8");
   return line;
 }
@@ -1388,15 +1393,22 @@ async function main() {
   if (mode === "area" && fs.existsSync(CHAINS_PATH)) {
     try {
       const lines = fs.readFileSync(CHAINS_PATH, "utf8").split(/\r?\n/).filter(Boolean);
+      const areaFiles = [...new Set(steps.map(s => stepFile(s)).filter(Boolean))];
       for (let i = lines.length - 1; i >= 0; i--) {
         try {
           const rec = JSON.parse(lines[i]);
-          if (rec.counts && rec.counts.exitCode === 0 && (!rec.reds || rec.reds.length === 0)) {
-            if (rec.treeSha === before.hash || (tree !== "no git" && tree !== "uncommitted changes" && rec.gitTree === tree)) {
-              console.log("gate-run area: tree " + before.hash + " equals recorded green tree (" + (rec.head || rec.treeSha) + "), rerunning nothing");
-              if (isHeavy) releaseLock();
-              process.exit(0);
-            }
+          const sameTree = rec.treeSha === before.hash || (tree !== "no git" && tree !== "uncommitted changes" && rec.gitTree === tree);
+          if (!sameTree) continue;
+          /* An area run inherits green only from a covering run: area, whole-chain, release or nightly, never a file run;
+             completed with no reds, covering every gate this area would run (the test architect's criterion, 2026-11-08). */
+          const isCoveringMode = (rec.gate === "area" || rec.gate === "test" || rec.gate === "whole-chain" || rec.gate === "release" || rec.gate === "nightly") && !rec.gate.startsWith("file");
+          const isGreen = rec.counts && rec.counts.exitCode === 0 && Array.isArray(rec.reds) && rec.reds.length === 0 && !rec.holds;
+          const coversAll = Array.isArray(rec.ran) && areaFiles.every(f => rec.ran.includes(f));
+          if (!isCoveringMode || !coversAll) continue; /* plant:area-coverage */
+          if (isGreen) {
+            console.log("gate-run area: tree " + before.hash + " equals recorded green tree (" + (rec.head || rec.treeSha) + "), rerunning nothing: inherited from " + rec.gate + " (" + (rec.head || rec.treeSha) + ") which covers all " + areaFiles.length + " gate file(s)");
+            if (isHeavy) releaseLock();
+            process.exit(0);
           }
         } catch {}
       }
