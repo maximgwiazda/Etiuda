@@ -761,12 +761,18 @@ function tourActTests() {
     cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" } })[sel],
     menuOpen: () => page.menu, openSettingsMenu: () => { page.menu = true; },
     menuTarget: act => (page.menu ? rows[act] || {} : {}),
-    // The Library is a screen tab, not a pop-up: its step is left by closing the tab.
-    modalOpen: () => !!page.win && page.win !== "library", closeModal: () => { page.win = null; },
-    get screenOn() { return page.win === "library" ? "library" : ""; },
+    /* The card editor is the pop-up. The Library and Settings are screen tabs: libraryOpen and
+       settingsOpen are the module's own, over this page, so a tab that is not the window they
+       name leaves their inside step off. */
+    modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; },
+    get screenOn() { return page.win === "library" || page.win === "settings" ? page.win : ""; },
     closeScreenTab: id => { if (page.win === id) page.win = null; },
+    document: {
+      getElementById: id => (id === "setBody" && page.win === "settings") || (id === "meCancel" && page.win === "editor") ? { id } : null,
+      querySelector: sel => sel === "#screenHost details.manage-sec" && page.win === "library" ? {} : null
+    },
     factsPanelOpen: () => page.facts, closeFactsPanel: () => { page.facts = false; },
-    cardEditorOpen: () => page.win === "editor", libraryOpen: () => page.win === "library", settingsOpen: () => page.win === "settings",
+    cardEditorOpen: () => page.win === "editor",
     agentName: () => "", wholeThingEmpty: () => page.empty
   };
   const scope = new Proxy({}, {
@@ -778,7 +784,7 @@ function tourActTests() {
   let T = null;
   try {
     T = new Function("scope", "with(scope){\n" + ["function tourPress(", "function tourPressRow(", "function shutTourWindow(",
-      "function loadStepBody(", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
+      "function loadStepBody(", "const libraryOpen=", "const settingsOpen=", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
       "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
       "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
@@ -837,6 +843,21 @@ function tourActTests() {
   eq("inside a window Next closes it and moves on, and Back closes it and returns to the step that opens it",
     [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>settings", "settingsIn>done"],
       ["editor<buttons", "addIn<add", "factsIn<facts", "libraryIn<library", "settingsIn<settings"]]);
+
+  /* Closing the tab is the act that moves an inside step on. While the tab stands, an act leaves
+     the step where it is; once the tab is gone, the same act moves on. Next above closes the tab
+     itself, which is the other way out. */
+  reset("settingsIn", { win: "settings" }); T.tourActSoon(); fire();
+  const settingsStays = where();
+  page.win = null; T.tourActSoon(); fire();
+  const settingsClosed = where();
+  reset("libraryIn", { win: "library" }); T.tourActSoon(); fire();
+  const libraryStays = where();
+  page.win = null; T.tourActSoon(); fire();
+  const libraryClosed = where();
+  eq("the tour reaches settingsIn and stays while the Settings tab is open, moves on to done when it closes, and the Library step stays while its tab is open and moves on when it closes",
+    [settingsStays, settingsClosed, libraryStays, libraryClosed],
+    ["settingsIn [settings]", "done", "libraryIn [library]", "settings"]);
 
   /* The load step: Next does nothing while the desk is empty and its control stands, and Finish ends the tour done. */
   reset("load", { empty: true }); T.tourNext();
@@ -5822,8 +5843,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1249;
-const UI_STRINGS_SHA256 = "50ec088d1e1972c7db8dfb2564b7257c4e777724bfaeb718f5389c1dfb279706";
+const UI_STRINGS_COUNT = 1254;
+const UI_STRINGS_SHA256 = "62bda2b643f3ffccf48273d9eacc8a1fa8ea7a23b9aa3573c1818eb12df75f8e";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

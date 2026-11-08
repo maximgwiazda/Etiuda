@@ -149,15 +149,15 @@ const menuSide=()=>menuOpen() ? "left" : null;
 // The window each inside step stands in.
 const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
 const libraryOpen=()=>screenOn==="library" && !!document.querySelector("#screenHost details.manage-sec");
-const settingsOpen=()=>modalOpen() && !!document.getElementById("setBody");
+const settingsOpen=()=>screenOn==="settings" && !!document.getElementById("setBody");
 /* NEXT PRESSES THE STEP'S OWN CONTROL for the person, and only where it stands on screen: never the
    card or the list a step falls back to ringing. */
 function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getClientRects().length) el.click(); }
 // A Menu row, with the Menu opened first where it is shut.
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
 // The window an inside step stands in, closed as the person would close it.
-// The Library's tab is a window the tour went into as well, and leaving it closes the tab.
-function shutTourWindow(){ if(modalOpen()) closeModal(); else if(screenOn==="library") closeScreenTab("library"); if(factsPanelOpen()) closeFactsPanel(); }
+// A screen tab the tour went into closes with the step. A pop-up over it closes first.
+function shutTourWindow(){ if(modalOpen()) closeModal(); else if(screenOn==="library") closeScreenTab("library"); else if(screenOn==="settings") closeScreenTab("settings"); if(factsPanelOpen()) closeFactsPanel(); }
 /* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
    says when it does), and Next opens it by the pointer. */
 let tourPicks=0, tourStepPicks=0;
@@ -352,7 +352,7 @@ const TOUR_STEPS=[
     title:"Library",
     body:()=>t("Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.")
       +" "+t("Click <b>Library</b> in the Menu: the whole catalog is there.")
-      +" "+t("Once the window is open, the tour goes inside with it."),
+      +" "+t("It opens in a tab of its own, and the tour goes there with it."),
     opens:"libraryIn",
     open:()=>tourPressRow("manage"),
     menu:true,
@@ -366,15 +366,15 @@ const TOUR_STEPS=[
     pad:4,
     title:"Library",
     body:()=>t("<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.")
-      +" "+t("The tour carries on once this window is closed.")
+      +" "+t("The tour carries on once this tab is closed.")
   },
   {
     id:"settings",
     sel:()=>menuTarget("settings"),
     side:menuSide,
     title:"Settings",
-    body:()=>t("One more window: open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>.")
-      +" "+t("Once the window is open, the tour goes inside with it."),
+    body:()=>t("One more tab: open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>.")
+      +" "+t("It opens in a tab of its own, and the tour goes there with it."),
     opens:"settingsIn",
     open:()=>tourPressRow("settings"),
     menu:true,
@@ -382,14 +382,13 @@ const TOUR_STEPS=[
   },
   {
     id:"settingsIn",
-    sel:"#modalCard",
-    modal:true,
+    sel:"#screenHost",
     inside:true,
     when:settingsOpen,
     pad:4,
     title:"Settings",
     body:()=>t("<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.")
-      +" "+t("The tour carries on once this window is closed.")
+      +" "+t("The tour carries on once this tab is closed.")
   },
   {
     id:"done",

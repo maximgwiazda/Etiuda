@@ -6786,6 +6786,7 @@ What you type stays in this browser only.`;
     "maintenance␟not needed": "niepotrzebna",
     "maintenance␟statistics": "statystyki",
     "Columns": "Kolumny",
+    "What stays docked": "Co pozostaje zadokowane",
     "Auto": "Auto",
     "How many columns of cards to show. Auto fits as many as the window has room for.": "Liczba kolumn z kartami. Auto pokazuje tyle, ile zmieści okno.",
     "Always a single column": "Zawsze jedna kolumna",
@@ -7286,6 +7287,7 @@ What you type stays in this browser only.`;
     "Delete this intent": "Usuń tę intencję",
     "Export…": "Eksportuj…",
     "Clear local memory": "Wyczyść pamięć lokalną",
+    "Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back.": "Usuwa z tego komputera ustawienia i otwarte rozmowy. Katalog, imię agenta i własne zmiany w kartach zostają, a Cofnij przywraca resztę.",
     "Eject catalog": "Odłącz katalog",
     "Catalog ejected": "Odłączono katalog",
     "Local memory cleared": "Wyczyszczono pamięć lokalną",
@@ -7609,7 +7611,8 @@ What you type stays in this browser only.`;
     "Data and defaults": "Dane i ustawienia domyślne",
     "About": "O programie",
     "Search settings": "Szukaj w ustawieniach",
-    'No setting found for "{TEXT}".': 'Nie znaleziono ustawienia: "{TEXT}".',
+    "No setting matches this search.": "Żadne ustawienie nie pasuje do tego wyszukiwania.",
+    "Open": "Otwórz",
     "Your name, the language, and how Etiuda starts and closes.": "Imię agenta, język oraz sposób uruchamiania i zamykania Etiudy.",
     "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
     "How the screen is laid out.": "Jak rozłożony jest ekran.",
@@ -7739,9 +7742,11 @@ What you type stays in this browser only.`;
     "Click <b>Library</b> in the Menu: the whole catalog is there.": "Cały katalog jest w <b>Bibliotece</b>; proszę ją otworzyć z Menu.",
     '<b><span data-icon="settings"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.': '<b><span data-icon="settings"></span> → Biblioteka</b> mieści każdą kartę, intencję i kategorię, do dodania, edycji, ukrycia albo przeniesienia. Tu wczytuje się też katalogi i stąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.',
     '<b><span data-icon="settings"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.': '<b><span data-icon="settings"></span> → Ustawienia</b>: imię agenta, język przycisków, wygląd i skróty. Nic tutaj nie zmienia kart.',
-    'One more window: open the <span data-icon="settings"></span> Menu again and click <b>Settings</b>.': 'Jeszcze jedno okno: proszę znów otworzyć <span data-icon="settings"></span> Menu i wybrać <b>Ustawienia</b>.',
+    'One more tab: open the <span data-icon="settings"></span> Menu again and click <b>Settings</b>.': 'Jeszcze jedna zakładka: wystarczy znów otworzyć <span data-icon="settings"></span> Menu i wybrać <b>Ustawienia</b>.',
+    "It opens in a tab of its own, and the tour goes there with it.": "Otworzy się we własnej zakładce, a przewodnik przejdzie tam razem z nią.",
     "Once the window is open, the tour goes inside with it.": "Po otwarciu okna przewodnik zajrzy do środka.",
     "The tour carries on once this window is closed.": "Przewodnik ruszy dalej, gdy to okno się zamknie.",
+    "The tour carries on once this tab is closed.": "Przewodnik ruszy dalej, gdy ta zakładka się zamknie.",
     'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.',
     "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
@@ -24293,7 +24298,7 @@ What you type stays in this browser only.`;
   var menuSide = () => menuOpen() ? "left" : null;
   var cardEditorOpen = () => modalOpen() && !!document.getElementById("meCancel");
   var libraryOpen = () => screenOn === "library" && !!document.querySelector("#screenHost details.manage-sec");
-  var settingsOpen = () => modalOpen() && !!document.getElementById("setBody");
+  var settingsOpen = () => screenOn === "settings" && !!document.getElementById("setBody");
   function tourPress(el, sel) {
     if (el && el.matches && el.matches(sel) && el.getClientRects().length) el.click();
   }
@@ -24304,6 +24309,7 @@ What you type stays in this browser only.`;
   function shutTourWindow() {
     if (modalOpen()) closeModal();
     else if (screenOn === "library") closeScreenTab("library");
+    else if (screenOn === "settings") closeScreenTab("settings");
     if (factsPanelOpen()) closeFactsPanel();
   }
   var tourPicks = 0;
@@ -24498,7 +24504,7 @@ What you type stays in this browser only.`;
       sel: () => menuTarget("manage"),
       side: menuSide,
       title: "Library",
-      body: () => t("Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.") + " " + t("Click <b>Library</b> in the Menu: the whole catalog is there.") + " " + t("Once the window is open, the tour goes inside with it."),
+      body: () => t("Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.") + " " + t("Click <b>Library</b> in the Menu: the whole catalog is there.") + " " + t("It opens in a tab of its own, and the tour goes there with it."),
       opens: "libraryIn",
       open: () => tourPressRow("manage"),
       menu: true,
@@ -24511,14 +24517,14 @@ What you type stays in this browser only.`;
       when: libraryOpen,
       pad: 4,
       title: "Library",
-      body: () => t('<b><span data-icon="settings"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.') + " " + t("The tour carries on once this window is closed.")
+      body: () => t('<b><span data-icon="settings"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.') + " " + t("The tour carries on once this tab is closed.")
     },
     {
       id: "settings",
       sel: () => menuTarget("settings"),
       side: menuSide,
       title: "Settings",
-      body: () => t('One more window: open the <span data-icon="settings"></span> Menu again and click <b>Settings</b>.') + " " + t("Once the window is open, the tour goes inside with it."),
+      body: () => t('One more tab: open the <span data-icon="settings"></span> Menu again and click <b>Settings</b>.') + " " + t("It opens in a tab of its own, and the tour goes there with it."),
       opens: "settingsIn",
       open: () => tourPressRow("settings"),
       menu: true,
@@ -24526,13 +24532,12 @@ What you type stays in this browser only.`;
     },
     {
       id: "settingsIn",
-      sel: "#modalCard",
-      modal: true,
+      sel: "#screenHost",
       inside: true,
       when: settingsOpen,
       pad: 4,
       title: "Settings",
-      body: () => t('<b><span data-icon="settings"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.') + " " + t("The tour carries on once this window is closed.")
+      body: () => t('<b><span data-icon="settings"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.') + " " + t("The tour carries on once this tab is closed.")
     },
     {
       id: "done",
@@ -31408,7 +31413,7 @@ What you type stays in this browser only.`;
   }
   function layoutGroups() {
     return [
-      { rows: [
+      { head: t("Columns"), rows: [
         row(
           "cols",
           "layout",
@@ -31428,7 +31433,7 @@ What you type stays in this browser only.`;
           '<div class="set-slider"><input type="range" id="setColFloor" min="' + COL_FLOOR_MIN + '" max="' + COL_FLOOR_MAX + '" step="' + COL_FLOOR_STEP + '" value="' + colFloor() + '" aria-label="' + esc(t("Narrowest column")) + '"><output id="setColFloorOut">' + Math.round(colFloor() * remPx()) + "px</output></div>"
         )
       ] },
-      { rows: [
+      { head: t("What stays docked"), rows: [
         row(
           "raillock",
           "intents",
@@ -31454,7 +31459,7 @@ What you type stays in this browser only.`;
           )
         )
       ] },
-      { rows: [
+      { head: t("Cards"), rows: [
         row(
           "notehover",
           "note",
@@ -31521,7 +31526,7 @@ What you type stays in this browser only.`;
         "clear",
         "delete",
         t("Clear local memory"),
-        "",
+        t("Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back."),
         '<button type="button" class="btn danger" id="setClear">' + esc(t("Clear local memory")) + "</button>"
       )
     ] }];
@@ -31547,7 +31552,7 @@ What you type stays in this browser only.`;
         "statistics",
         t("Maintenance"),
         t("What this computer reports, and ways to set things right."),
-        '<button type="button" class="btn sx-keys-btn" id="setMaint" title="' + esc(t("Maintenance")) + '">' + keysHtml(formatActionChord("maintenance")) + "</button>"
+        '<button type="button" class="btn" id="setMaint">' + esc(t("Open")) + "</button>" + keysHtml(formatActionChord("maintenance"))
       )
     ] }];
   }
@@ -31564,7 +31569,7 @@ What you type stays in this browser only.`;
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
-    return '<div class="sx-group">' + (g.rows.length ? '<div class="sx-card">' + g.rows.map(rowHtml).join("") + "</div>" : "") + (g.after || "") + "</div>";
+    return '<div class="sx-group">' + (g.head ? "<h3>" + esc(g.head) + "</h3>" : "") + (g.rows.length ? '<div class="sx-card">' + g.rows.map(rowHtml).join("") + "</div>" : "") + (g.after || "") + "</div>";
   }
   function settingsBodyHtml() {
     return settingsSections().map((s) => s.groups.map(groupHtml).join("")).join("");
@@ -31584,7 +31589,7 @@ What you type stays in this browser only.`;
     const q = String(query || "").trim();
     if (q) {
       const found = settingsFound(q);
-      return '<div class="sx-crumb">' + esc(t("Settings")) + "</div>" + (found.length ? found.map((f) => '<div class="sx-group"><h3>' + esc(f.sec.name) + '</h3><div class="sx-card">' + f.rows.map(rowHtml).join("") + "</div></div>").join("") : '<p class="sx-none">' + esc(t('No setting found for "{TEXT}".').split("{TEXT}").join(q)) + "</p>");
+      return '<div class="sx-crumb">' + esc(t("Settings")) + "</div>" + (found.length ? found.map((f) => '<div class="sx-group"><h3>' + esc(f.sec.name) + '</h3><div class="sx-card">' + f.rows.map(rowHtml).join("") + "</div></div>").join("") : '<p class="sx-none">' + esc(t("No setting matches this search.")) + "</p>");
     }
     const secs = settingsSections(), s = secs.find((x) => x.id === on) || secs[0];
     return '<div class="sx-crumb">' + esc(t("Settings")) + "</div><h2>" + esc(s.name) + '</h2><p class="lede">' + esc(s.lede) + "</p>" + s.groups.map(groupHtml).join("");

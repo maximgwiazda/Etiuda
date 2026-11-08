@@ -5646,8 +5646,8 @@ const CARD_B = {
       const zzzPl = SET.settingsPageHtml("general", "zzz");
       ST.lsDel("eUiLang");
       const ok = blur.indexOf('data-seg="glass"') >= 0 && blur.indexOf("Blur effects") >= 0 && blur.indexOf('data-seg="theme"') < 0
-        && zzz.indexOf("No setting found for &quot;zzz&quot;.") >= 0 && zzz.indexOf("set-row") < 0
-        && zzzPl.indexOf("Nie znaleziono ustawienia: &quot;zzz&quot;.") >= 0;
+        && zzz.indexOf("No setting matches this search.") >= 0 && zzz.indexOf("set-row") < 0 && zzz.indexOf("zzz") < 0
+        && zzzPl.indexOf("Żadne ustawienie nie pasuje do tego wyszukiwania.") >= 0;
       return ok || [blur.slice(0, 120), zzz.slice(0, 120), zzzPl.slice(0, 120)].join(" | ");
     });
 

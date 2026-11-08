@@ -290,7 +290,7 @@ function appearanceGroups(){
 }
 function layoutGroups(){
   return [
-    {rows:[
+    {head:t("Columns"), rows:[
       row("cols","layout",t("Columns"),t("How many columns of cards to show. Auto fits as many as the window has room for."),
         seg("cols",[{v:"1",t:t("1"),tip:t("Always a single column")},
                     {v:"2",t:t("2"),tip:t("Always two columns, however wide the window is")},
@@ -302,7 +302,7 @@ function layoutGroups(){
           '" aria-label="'+esc(t("Narrowest column"))+'">'+
           '<output id="setColFloorOut">'+Math.round(colFloor()*remPx())+'px</output></div>')
     ]},
-    {rows:[
+    {head:t("What stays docked"), rows:[
       row("raillock","intents",t("Lock the intent panel"),
         t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
         onoff("raillock", railLocked(),
@@ -314,7 +314,7 @@ function layoutGroups(){
           t("Every category row stays visible"),
           t("The bar keeps two rows, and Ctrl peeks at the others")))
     ]},
-    {rows:[
+    {head:t("Cards"), rows:[
       row("notehover","note",t("Notes on hover"),
         t("Open a card's internal note when the pointer rests on the card."),
         onoff("notehover", document.body.classList.contains("note-hover"),
@@ -355,7 +355,8 @@ function dataGroups(){
   return [{rows:[
     row("reset","refresh",t("Reset defaults"),t("Puts every setting back as it ships. Cards and your edits are not touched."),
       '<button type="button" class="btn" id="setReset">'+esc(t("Reset defaults"))+'</button>'),
-    row("clear","delete",t("Clear local memory"),"",
+    row("clear","delete",t("Clear local memory"),
+      t("Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back."),
       '<button type="button" class="btn danger" id="setClear">'+esc(t("Clear local memory"))+'</button>')
   ]}];
 }
@@ -366,7 +367,7 @@ function aboutGroups(){
     row("tour","forward",t("Show tour…"),t("The tour of Etiuda's controls, one at a time"),
       '<button type="button" class="btn" id="setTour">'+esc(t("Show tour…"))+'</button>'),
     row("maintenance","statistics",t("Maintenance"),t("What this computer reports, and ways to set things right."),
-      '<button type="button" class="btn sx-keys-btn" id="setMaint" title="'+esc(t("Maintenance"))+'">'+keysHtml(formatActionChord("maintenance"))+'</button>')
+      '<button type="button" class="btn" id="setMaint">'+esc(t("Open"))+'</button>'+keysHtml(formatActionChord("maintenance")))
   ]}];
 }
 /* Every section in its order, each with the groups it holds now; a section without a row is left out.
@@ -384,7 +385,8 @@ function settingsSections(){
   ].filter(s=>s.groups.some(g=>g.rows.length));
 }
 function groupHtml(g){
-  return '<div class="sx-group">'+(g.rows.length?'<div class="sx-card">'+g.rows.map(rowHtml).join("")+'</div>':'')+(g.after||"")+'</div>';
+  return '<div class="sx-group">'+(g.head?'<h3>'+esc(g.head)+'</h3>':'')
+    +(g.rows.length?'<div class="sx-card">'+g.rows.map(rowHtml).join("")+'</div>':'')+(g.after||"")+'</div>';
 }
 /* Every row of every section, the whole screen's controls in one reading. */
 function settingsBodyHtml(){
@@ -414,7 +416,7 @@ function settingsPageHtml(on,query){
     return '<div class="sx-crumb">'+esc(t("Settings"))+'</div>'
       +(found.length ? found.map(f=>'<div class="sx-group"><h3>'+esc(f.sec.name)+'</h3><div class="sx-card">'
           +f.rows.map(rowHtml).join("")+'</div></div>').join("")
-        : '<p class="sx-none">'+esc(t('No setting found for "{TEXT}".').split("{TEXT}").join(q))+'</p>');
+        : '<p class="sx-none">'+esc(t("No setting matches this search."))+'</p>');
   }
   const secs=settingsSections(), s=secs.find(x=>x.id===on)||secs[0];
   return '<div class="sx-crumb">'+esc(t("Settings"))+'</div><h2>'+esc(s.name)+'</h2><p class="lede">'+esc(s.lede)+'</p>'
