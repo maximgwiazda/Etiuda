@@ -27,6 +27,7 @@ import { systemTheme, themeChoice, themeTrace, traceNote } from "./theme.js";
 import { copy } from "./mark.js";
 import { pillsLocked } from "./pills-box.js";
 import { cards, lang } from "./app-state.js";
+import { teamLeads } from "./team-join.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that
@@ -297,6 +298,141 @@ function mtReportText(){
   lines.push("","[Browser]","user agent: "+navigator.userAgent);
   return lines.join("\n");
 }
+/* Six tiles above the readings. Each source sits in its own try, so one throw prints
+   unavailable and the other five still draw. The strip is not part of the report, and it
+   never prints a catalog file name or card text. */
+const MT_HEALTH_IDS=["catalog","saving","watch","team","start","crash"];
+function mtHealthLabel(id){
+  if(id==="catalog") return t("Catalog");
+  if(id==="saving") return t("Saving");
+  if(id==="watch") return t("File watch");
+  if(id==="team") return t("Team");
+  if(id==="start") return t("Last start");
+  if(id==="crash") return t("Last crash");
+  return id;
+}
+function mtPiece(p){
+  const time=p.fill && p.fill["{TIME}"]!=null ? String(p.fill["{TIME}"]) : "";
+  if(p.en==="saved {TIME}") return t("saved {TIME}").split("{TIME}").join(time);
+  if(p.en==="synced {TIME}") return t("synced {TIME}").split("{TIME}").join(time);
+  if(p.en==="relay reachable") return t("relay reachable");
+  if(p.en==="relay out of reach") return t("relay out of reach");
+  if(p.en==="none recorded") return t("none recorded");
+  return tc("maintenance", p.en);
+}
+function mtHealthSay(tile){
+  if(tile.v==="unavailable") return t("unavailable");
+  if(tile.parts && tile.parts.length) return tile.parts.map(mtPiece).filter(Boolean).join(" \u00b7 ") || "-";
+  if(tile.v==="none recorded") return t("none recorded");
+  if(tile.v==null || tile.v==="" || tile.v==="-") return "-";
+  return tc("maintenance", tile.v);
+}
+function mtHealthCatalog(){
+  if(!catalogLoaded() && !storedCatalog()) return {v:"(none loaded)"};
+  const n=editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV});
+  const edition=(n && n.e) ? String(n.e) : (n && n.r!=null ? String(n.r) : "");
+  const sig=mtSignature();
+  const word=(sig && sig!=="-") ? sig.replace(/\s*\([^)]*\)\s*$/,"") : "";
+  const parts=[];
+  if(edition) parts.push({en:edition});
+  if(word) parts.push({en:word});
+  if(!parts.length) return {v:"-"};
+  return {parts:parts};
+}
+/* A save that did not land warns with the time alone. The path stays off this tile. */
+function mtHealthSaving(){
+  const trouble=eSaveTrouble();
+  if(trouble){
+    const stamp=fileStamp(trouble.since);
+    return stamp ? {v:stamp, warn:true} : {v:"-", warn:true};
+  }
+  const stamp=eLastSaved() ? fileStamp(eLastSaved()) : "";
+  if(stamp) return {parts:[{en:"saved {TIME}", fill:{"{TIME}":stamp}}]};
+  if(E_LS_OK===false) return {v:"IN-MEMORY ONLY", warn:true};
+  return {v:"-"};
+}
+function mtHealthWatch(){
+  const v=!eWatchSupported() ? "not supported here" : (eWatchName() ? "on" : "off");
+  return {v:v};
+}
+/* Leads the page already holds. A folder team is not called a relay. No lead is a dash. */
+function mtTeamLine(leads){
+  const list=(Array.isArray(leads)?leads:[]).filter(l=>l && !l.removed);
+  if(!list.length) return {v:"-", warn:false, parts:null};
+  const relay=list.filter(l=>l.relay || l.relayRemoved);
+  const parts=[];
+  let warn=false;
+  if(relay.length){
+    const out=relay.every(l=>l.relayRemoved===true || (l.lapse && /^(unknown|lapsed|gone)$/.test(String(l.lapse.step||""))));
+    parts.push({en: out ? "relay out of reach" : "relay reachable"});
+    if(out) warn=true;
+  }
+  let newest=0;
+  list.forEach(l=>{
+    const at=l.head && +l.head.t || 0;
+    if(at>newest) newest=at;
+  });
+  const stamp=newest ? fileStamp(newest) : "";
+  if(stamp) parts.push({en:"synced {TIME}", fill:{"{TIME}":stamp}});
+  if(!parts.length) return {v:"-", warn:false, parts:null};
+  return {v:"", warn:warn, parts:parts};
+}
+function mtHealthTeam(){ return mtTeamLine(teamLeads()); }
+function mtHealthStart(){
+  const crash=!!(eHost() && eHost().recovering);
+  return {v:crash ? "after a crash" : "ordinary", warn:crash};
+}
+function mtHealthCrash(){
+  const l=themeTrace().filter(x=>x[1]==="lost").pop();
+  if(!l) return {v:"none recorded"};
+  const when=fileStamp(l[4]||l[0]);
+  const why=l[2]!=null ? String(l[2]) : "";
+  const exit=l[3]!=null ? " ("+l[3]+")" : "";
+  const text=[when, why].filter(Boolean).join(", ")+exit;
+  return {v:text || "-", warn:true};
+}
+function mtHealthRead(id){
+  if(id==="catalog") return mtHealthCatalog();
+  if(id==="saving") return mtHealthSaving();
+  if(id==="watch") return mtHealthWatch();
+  if(id==="team") return mtHealthTeam();
+  if(id==="start") return mtHealthStart();
+  if(id==="crash") return mtHealthCrash();
+  return {v:"-"};
+}
+function mtHealthTiles(plant){
+  return MT_HEALTH_IDS.map(id=>{
+    let v="-", warn=false, parts=null;
+    try{
+      const src=(plant && typeof plant[id]==="function") ? plant[id] : ()=>mtHealthRead(id);
+      const got=src();
+      if(got && typeof got==="object"){
+        v=(got.v!=null && got.v!=="") ? String(got.v) : (got.parts ? "" : "-");
+        warn=!!got.warn;
+        parts=got.parts || null;
+      }else if(got==null || got===""){
+        v="-";
+      }else{
+        v=String(got);
+      }
+    }catch(e){
+      v="unavailable"; warn=true; parts=null;
+    }
+    return {id:id, v:v, warn:warn, parts:parts};
+  });
+}
+function mtHealthHtml(plant){
+  return '<div class="mt-health">'+mtHealthTiles(plant).map(tile=>
+    '<div class="mt-h'+(tile.warn?" mt-bad":"")+'" data-mt-h="'+tile.id+'"><i></i><div><b>'
+    +esc(mtHealthLabel(tile.id))+'</b><small>'+esc(mtHealthSay(tile))+'</small></div></div>'
+  ).join("")+'</div>';
+}
+function mtMaintBody(){
+  return '<p class="mt-sub">'+esc(t("What this computer reports, and ways to set things right."))+'</p>'
+    +mtHealthHtml()
+    +'<h3 class="mt-readings">'+esc(t("Readings"))+'</h3>'
+    +mtGridHtml();
+}
 /* THE READINGS GO STALE WHILE YOU WATCH: half of Layout is the window itself and the rest
    answers to the system, so a panel left open across a resize, a theme switch or an edit made
    in another tab described a machine that had moved on. Throttled, not deferred: it keeps up
@@ -321,7 +457,15 @@ function mtRefreshLive(){
   mtLiveT=setTimeout(()=>{
     mtLiveT=0;
     const g=mtGridEl();
-    if(g) g.outerHTML=mtGridHtml();
+    if(!g) return;
+    const root=g.parentNode;
+    if(root && typeof root.querySelector==="function"){
+      const strip=root.querySelector(".mt-health");
+      if(strip) strip.outerHTML=mtHealthHtml();
+      const head=root.querySelector(".mt-readings");
+      if(head) head.textContent=t("Readings");
+    }
+    g.outerHTML=mtGridHtml();
   },120);
 }
 /* Width crossings arrive as resize, which the one listener already carries. These are the
@@ -381,7 +525,7 @@ registerScreen("maintenance", {
   render: (host, closeFn) => {
     host.innerHTML = '<div class="screen-page mt-screen">'
       + '<div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div>'
-      + '<div class="screen-body">' + mtGridHtml() + '</div>'
+      + '<div class="screen-body">' + mtMaintBody() + '</div>'
       + '<p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + '</p>'
       + '<div class="screen-actions">'
       + '<div class="mf-left">'
@@ -395,17 +539,16 @@ registerScreen("maintenance", {
 });
 
 function openMaintenanceModal(backFn){
-  const html=mtGridHtml();
   openDialog({
     cls: "mt-modal",
     back: backFn||null,
     title: "Maintenance",
-    body: html+'<p class="mt-moved" id="mtMoved">'+esc(MT_MOVED)+'</p>',
+    body: mtMaintBody()+'<p class="mt-moved" id="mtMoved">'+esc(t(MT_MOVED))+'</p>',
     actions: '<div class="mf-left">'
-      +'<button type="button" class="btn danger" id="mtEject">Eject catalog</button>'
+      +'<button type="button" class="btn danger" id="mtEject">'+esc(t("Eject catalog"))+'</button>'
       +'</div>'
-      +'<button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button>'
-      +'<button type="button" class="btn primary" id="mtClose">Done</button>',
+      +'<button type="button" class="btn" id="mtCopy" title="'+esc(t("Copy the report: counts and environment only, never your content"))+'">'+esc(t("Copy report"))+'</button>'
+      +'<button type="button" class="btn primary" id="mtClose">'+esc(t("Done"))+'</button>',
     wire: () => wireMaintenanceActions(null, () => dismissModal())
   });
 }
@@ -424,5 +567,10 @@ export {
   openMaintenance,
   openMaintenanceModal,
   mtGridHtml,
-  wireMaintenanceActions
+  wireMaintenanceActions,
+  mtHealthTiles,
+  mtHealthHtml,
+  mtReportText,
+  mtTeamLine,
+  mtMaintBody
 };

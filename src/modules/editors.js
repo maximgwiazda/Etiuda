@@ -224,7 +224,10 @@ function openCategoryEditor(k,fromPill){
             kk=>openCategoryEditor(kk,fromPill));
   drawPrev();
   const firstEl=nameEls[primary];
-  if(firstEl && firstEl.focus) firstEl.focus();
+  if(firstEl && firstEl.focus){
+    firstEl.focus();
+    try{ firstEl.select(); }catch(_){}
+  }
 }
 /* The example belongs in the PLACEHOLDER, not the label: it differs per language, and a shared
    label cannot say two things. The Polish pair names its CASE beside the example - the clause
@@ -368,9 +371,15 @@ function openIntentEditor(idx, fromManage){
     } else { edMarkClean(); refreshDialogChrome(); }   // renamed, and now resettable
   };
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
-  setTimeout(()=>{
-    const el=$("#"+langFieldId("ie","clause",CONTENT_LANGS[0])); if(el) el.focus();
-  },30);
+  const focusClause=()=>{
+    const el=$("#"+langFieldId("ie","clause",CONTENT_LANGS[0]));
+    if(el && el.focus){
+      el.focus();
+      try{ el.select(); }catch(_){}
+    }
+  };
+  focusClause();
+  setTimeout(focusClause,30);
 }
 
 export {

@@ -58,11 +58,13 @@ const PLAN = [
   { id: "menu", next: true, aim: "#settingsBtn" },
   { id: "picker", host: true, next: true, aim: '#settingsMenu [data-act="picker"]' },
   { id: "library", click: ['#settingsMenu [data-act="manage"]'], into: "libraryIn", again: { next: true } },
-  { id: "libraryIn", inside: true, back: true, again: { close: "#mgClose" } },
+  { id: "libraryIn", inside: true, aim: "#screenHost details.manage-sec", back: true, again: { close: "#mgClose" } },
   { id: "settings", click: ["#settingsBtn", '#settingsMenu [data-act="settings"]'], into: "settingsIn" },
-  { id: "settingsIn", inside: true, next: true },
+  { id: "settingsIn", inside: true, aim: "#setBody", next: true },
   { id: "done", next: true }
 ];
+/* The Library and Settings are screen tabs: each inside step's aim is the tab's own content, so a step that
+   follows the tab in but rings nothing, or rings the page under it, is a missed aim. */
 
 /** The row for a step, on the walk's `visit` to it (1 the first): a second visit takes `again`. */
 function rowOf(id, visit) {
