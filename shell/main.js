@@ -7143,10 +7143,23 @@ ipcMain.on("etiuda:host", (e) => {
     return;
   }
   const win = BrowserWindow.fromWebContents(e.sender);
+  const senderId = e.sender.id;
+  if (!sessionHeld.has(senderId)) {
+    const sm = new Map();
+    sessionHeld.set(senderId, sm);
+    e.sender.once("destroyed", () => sessionHeld.delete(senderId));
+    if (pendingSavedTabs === null) pendingSavedTabs = readSavedTabs();
+    if (pendingSavedTabs) {
+      sm.set("eSessionTabs", pendingSavedTabs);
+      pendingSavedTabs = "";
+    }
+  }
+  const sessionEntries = sessionHeld.has(senderId) ? Object.fromEntries(sessionHeld.get(senderId)) : {};
   e.returnValue = {
     platform: process.platform,
     backdrop: hostBackdrop(),
     maximized: !!(win && win.isMaximized()),
+    session: sessionEntries,
     // Whether the window is on screen yet, or never will be: a first load is answered before ready-to-show.
     shown: !!(win && (win.etiudaShown || (typeof win.isVisible === "function" && win.isVisible()))),
     /* Which file is loaded and where it was found, because the page cannot look: About prints
