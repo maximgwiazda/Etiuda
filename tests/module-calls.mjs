@@ -5790,26 +5790,59 @@ const CARD_B = {
       }
     });
 
-    // 11. Claude alpha's ruling on question 10: Ctrl+Shift+M inside a pop-up never discards an unsaved edit
-    check("screen-tabs.js", "D1-11 Ctrl+Shift+M inside a pop-up asks before discarding unsaved edits and fronts Maintenance only after that", () => {
+    // 11. Ctrl+Shift+M inside a pop-up leaves at once and keeps the edit on Undo,
+    // the same way the editor's own next-entry path does. The mock does not parse
+    // innerHTML, so the Undo button is supplied when the bubble asks for it.
+    check("screen-tabs.js", "D1-11 Ctrl+Shift+M inside a pop-up keeps an unsaved edit and fronts Maintenance", () => {
       start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
       modal.hidden = false;
       modalCard.className = "modal-card me-card";
       const inp = el({ tagName: "INPUT", value: "init" });
       modalCard.kids = [inp];
-      DL.edMarkClean();
-      inp.value = "dirty edit";
-
+      inp.parentNode = modalCard;
+      inp.parentElement = modalCard;
+      let undoBtn = null;
+      const prevCreate = document.createElement;
+      document.createElement = tag => {
+        const node = prevCreate(tag);
+        const orig = node.querySelector.bind(node);
+        node.querySelector = s => {
+          if (s === "#eUndoBtn") {
+            if (!node._undoBtn) {
+              node._undoBtn = prevCreate("button");
+              node._undoBtn.id = "eUndoBtn";
+              node.appendChild(node._undoBtn);
+            }
+            undoBtn = node._undoBtn;
+            return node._undoBtn;
+          }
+          return orig(s);
+        };
+        return node;
+      };
       let asked = 0;
-      globalThis.confirm = () => { asked++; return false; }; // user says stay / cancel
-      const chordEv = key({ key: "m", code: "KeyM", ctrlKey: true, shiftKey: true });
-      if (pageKeys) pageKeys(chordEv);
-      const cancelOk = asked === 1 && modal.hidden === false && STAB.screenOn !== "maintenance";
-
-      globalThis.confirm = () => { asked++; return true; }; // user says proceed / discard
-      if (pageKeys) pageKeys(chordEv);
-      const confirmOk = asked === 2 && modal.hidden === true && STAB.screenOn === "maintenance";
-      return cancelOk && confirmOk;
+      globalThis.confirm = () => { asked++; return false; };
+      try {
+        DL.edWireNav(["card-1"], "card-1", () => {
+          modal.hidden = false;
+          modalCard.kids = [inp];
+          inp.parentNode = modalCard;
+          inp.parentElement = modalCard;
+        });
+        inp.value = "dirty edit";
+        const chordEv = key({ key: "m", code: "KeyM", ctrlKey: true, shiftKey: true });
+        if (pageKeys) pageKeys(chordEv);
+        if (asked !== 0 || modal.hidden !== true || STAB.screenOn !== "maintenance" || !undoBtn || typeof undoBtn.onclick !== "function") {
+          return "left asked=" + asked + " hidden=" + modal.hidden + " screen=" + STAB.screenOn + " undo=" + (undoBtn ? typeof undoBtn.onclick : "none");
+        }
+        undoBtn.onclick();
+        if (modal.hidden !== false || inp.value !== "dirty edit") {
+          return "undo hidden=" + modal.hidden + " value=" + JSON.stringify(inp.value);
+        }
+        return true;
+      } finally {
+        document.createElement = prevCreate;
+      }
     });
 
     // 11plant: planted removal for unsaved-edit guard

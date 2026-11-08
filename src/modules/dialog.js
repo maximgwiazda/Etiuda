@@ -140,7 +140,7 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
-  edBaseline=null;
+  edForget();
   cutLeaves();
   /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
      and the next Tab starts from the top of the document. A dialog opened over another keeps
@@ -219,6 +219,9 @@ function edNavHtml(){
 /* Null outside an editor. An editor sets it when it wires; any other dialog is not an
    edit, and must not be compared with the editor that stood here before. */
 let edBaseline=null;
+/* The editor's own way back, the go edWireNav already undoes through. */
+let edReturn=null;
+function edForget(){ edBaseline=null; edReturn=null; }
 function edFormState(){
   if(!modalCard) return "";
   const out=[];
@@ -271,6 +274,7 @@ function edNavTo(run){
 }
 function edWireNav(list,cur,go){
   edMarkClean();
+  edReturn={go:go, cur:cur};
   const i=list.indexOf(cur);
   const step=d=>{
     const j=i+d;
@@ -365,13 +369,14 @@ function setModalBack(fn){ modalBack=(typeof fn==="function")?fn:null; }
  *  would be worse than none. */
 function dismissModal(){
   /* plant:maintenance-unsaved-edit-guard */
-  if(edDirty() && typeof confirm==="function" && !confirm(t("Discard changes"))){
-    return false;
-  }
-  edBaseline=null;
+  /* Leaving keeps the edit the way the next entry does: go back, and retype. */
+  const was=edDirty()?edTyped():null;
+  const ret=was?edReturn:null;
+  edForget();
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
+  if(was && ret) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ ret.go(ret.cur); edRetype(was); }));
   return true;
 }
 /* A flex column with a scrolling middle, so the scrollbar sits beside the content it
@@ -411,7 +416,7 @@ function leaveModal(){
   dismissNode(g);
 }
 function closeModal(){
-  edBaseline=null;
+  edForget();
   scStopCapture();
   modalBack=null;
   leaveModal();
