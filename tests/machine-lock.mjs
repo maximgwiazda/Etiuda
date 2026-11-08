@@ -8,7 +8,7 @@
  *   ml5  run frees the lock when its command ends, a failing command included, and passes its exit on
  *   ml6  a record written before this rule (no creation time) is held while any process has its PID
  *
- * The two slots (machine.lock and machine-2.lock; a lab names its own pair through `slots`, with `lockPath` always set too
+ * The four slots (machine.lock, machine-2.lock, machine-3.lock and machine-4.lock; a lab names its own pair through `slots`, with `lockPath` always set too
  * so that a tool without slots can never reach the office's lock):
  *   ml7  two takers hold the two slots, one each
  *   ml8  a third taker waits until one frees; release frees its own slot only, and the third takes the freed one
@@ -23,13 +23,17 @@
  *   ml17 gate-run waits up to 4 h when every lane is held and prints the wait line, taking a freed slot
  *   ml18 count 2 from the lane file leaves a third taker waiting
  *   ml19 count 3 from the lane file lets the third taker take machine-3.lock
- *   ml20 idle and active: 25 minutes gives 3, 1 minute gives 2, honoured only in lab
+ *   ml20 idle and active: 25 minutes gives 4, 1 minute gives 2, honoured only in lab
  *   ml21 a failed idle read gives 2
  *   ml22 lifting plant:lane-count gives 3 lanes always and turns count-2 red
  *   ml23 lifting plant:wait-ceiling restores 5-minute refusal and turns wait leg red
  *   ml24 session0 idle reading gives count 2 in lab and SessionId 0 check is present
  *   ml25 waiter idle reads cached for 60 s, and none while a lane is free or lane file stands
- *   ml26 wait line ceiling: actual ceiling for finite waitMs and with no ceiling for Infinity */
+ *   ml26 wait line ceiling: actual ceiling for finite waitMs and with no ceiling for Infinity
+ *   ml27 idle for 20 minutes or more: four slots active, fourth taker gets machine-4.lock while three are held
+ *   ml28 in use: two active, a third taker waits (the control)
+ *   ml29 lane file 4 gives four, 3 gives three, 2 gives two, 5 or junk ignored and idle rule decides
+ *   ml30 a planted change of the idle count back to 3 turns leg 1 red, honours ETIUDA_PLANTS=off */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,7 +45,7 @@ const TOOL = path.join(ROOT, "tools", "machine-lock.mjs");
 const GATE_RUN = path.join(ROOT, "tools", "gate-run.mjs");
 const L = await import(pathToFileURL(TOOL).href);
 const G = await import(pathToFileURL(GATE_RUN).href);
-const EXPECTED = 26;
+const EXPECTED = 30;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "machine-lock-legs-"));
 let asserted = 0, failed = 0, skipped = 0;
@@ -247,7 +251,7 @@ const rec = (h, extra) => Object.assign({ pid: h.pid, started: h.started, what: 
   const keys = Object.keys(who(file) || {}).join(",");
   const r2 = L.acquire({ lockPath: file, what: "ml12", holder: h2, waitMs: 400, say: quiet });
   const files = fs.readdirSync(folder).join(",");
-  check(set.n === 1 && set.names[0] === "only.lock" && unset.n === 3 && unset.names.join(",") === "machine.lock,machine-2.lock,machine-3.lock"
+  check(set.n === 1 && set.names[0] === "only.lock" && unset.n === 4 && unset.names.join(",") === "machine.lock,machine-2.lock,machine-3.lock,machine-4.lock"
     && r1.ok && !r2.ok && keys === "pid,started,host,tree,what,since" && files === "only.lock",
     "ml12 ETIUDA_LOCK_PATH keeps today's single file: slots set " + set.n + ", unset " + unset.names.join("+") + ", second taker " + (r2.ok ? "took" : "waited")
     + ", keys " + keys + ", files " + files);
@@ -410,7 +414,7 @@ process.exit(r.ok ? 0 : 1);
 /* ml20 */
 {
   const labDir = fs.mkdtempSync(path.join(LAB, "ml20-"));
-  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock")];
+  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock"), path.join(labDir, "machine-4.lock")];
   const oldEnv = process.env.ETIUDA_LOCK_PATH;
   try {
     process.env.ETIUDA_LOCK_PATH = slots[0];
@@ -418,10 +422,10 @@ process.exit(r.ok ? 0 : 1);
     const p1 = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0, reason: "" };
     delete process.env.ETIUDA_LOCK_PATH;
     const pReal = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 25 }) : { count: 0, reason: "" };
-    check(p25.count === 3 && p25.reason === "idle for 25 minutes"
+    check(p25.count === 4 && p25.reason === "idle for 25 minutes"
       && p1.count === 2 && p1.reason === "in use"
       && pReal.reason !== "idle for 25 minutes",
-      "ml20 idle and active: test-only idle 25m gives 3, 1m gives 2, honoured only in lab: p25=" + p25.count + " (" + p25.reason + "), p1=" + p1.count + " (" + p1.reason + "), real ignores test reading " + (pReal.reason !== "idle for 25 minutes"));
+      "ml20 idle and active: test-only idle 25m gives 4, 1m gives 2, honoured only in lab: p25=" + p25.count + " (" + p25.reason + "), p1=" + p1.count + " (" + p1.reason + "), real ignores test reading " + (pReal.reason !== "idle for 25 minutes"));
   } finally {
     if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
     else delete process.env.ETIUDA_LOCK_PATH;
@@ -431,7 +435,7 @@ process.exit(r.ok ? 0 : 1);
 /* ml21 */
 {
   const labDir = fs.mkdtempSync(path.join(LAB, "ml21-"));
-  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock")];
+  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock"), path.join(labDir, "machine-4.lock")];
   const oldEnv = process.env.ETIUDA_LOCK_PATH;
   try {
     process.env.ETIUDA_LOCK_PATH = slots[0];
@@ -507,7 +511,7 @@ process.exit(r.ok ? 0 : 1);
 /* ml24 */
 {
   const labDir = fs.mkdtempSync(path.join(LAB, "ml24-"));
-  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock")];
+  const slots = [path.join(labDir, "machine.lock"), path.join(labDir, "machine-2.lock"), path.join(labDir, "machine-3.lock"), path.join(labDir, "machine-4.lock")];
   const oldEnv = process.env.ETIUDA_LOCK_PATH;
   try {
     process.env.ETIUDA_LOCK_PATH = slots[0];
@@ -602,6 +606,159 @@ process.exit(r.ok ? 0 : 1);
     + infCorrect + " (" + infLine.trim() + "), 5h=" + fiveHCorrect + " (" + fiveHLine.trim() + ")");
 
   h1.kill(); h2.kill(); h3.kill();
+}
+
+/* Helper for leg 1: returns whether a fourth taker gets machine-4.lock while three are held under idle >= 20 min */
+async function runLeg1(lockModule) {
+  const labDir = fs.mkdtempSync(path.join(LAB, "leg1-"));
+  const slots = [
+    path.join(labDir, "machine.lock"),
+    path.join(labDir, "machine-2.lock"),
+    path.join(labDir, "machine-3.lock"),
+    path.join(labDir, "machine-4.lock")
+  ];
+  const oldEnv = process.env.ETIUDA_LOCK_PATH;
+  const h1 = await live(), h2 = await live(), h3 = await live(), h4 = await live();
+  try {
+    process.env.ETIUDA_LOCK_PATH = slots[0];
+    const pol = lockModule.lanePolicy ? lockModule.lanePolicy(slots, { testIdleMinutes: 25 }) : { count: 0, reason: "" };
+    const takeWith = (holder) => lockModule.acquire({
+      lockPath: slots[0],
+      slots,
+      what: "leg1",
+      holder,
+      waitMs: 0,
+      testIdleMinutes: 25,
+      say: quiet
+    });
+    const r1 = takeWith(h1);
+    const r2 = takeWith(h2);
+    const r3 = takeWith(h3);
+    const r4 = takeWith(h4);
+    const s4Taken = r4.ok && fs.existsSync(slots[3]) && pidAt(slots[3]) === h4.pid;
+    const ok = pol.count === 4 && r1.ok && r2.ok && r3.ok && s4Taken;
+    return { ok, pol, r1, r2, r3, r4, s4Taken };
+  } finally {
+    if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
+    else delete process.env.ETIUDA_LOCK_PATH;
+    h1.kill(); h2.kill(); h3.kill(); h4.kill();
+  }
+}
+
+/* ml27 */
+{
+  const res = await runLeg1(L);
+  check(res.ok,
+    "ml27 idle for 20 minutes or more: four slots active, fourth taker gets machine-4.lock while three are held: count "
+    + res.pol.count + ", slot 4 taken " + res.s4Taken);
+}
+
+/* ml28 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml28-"));
+  const slots = [
+    path.join(labDir, "machine.lock"),
+    path.join(labDir, "machine-2.lock"),
+    path.join(labDir, "machine-3.lock"),
+    path.join(labDir, "machine-4.lock")
+  ];
+  const oldEnv = process.env.ETIUDA_LOCK_PATH;
+  const h1 = await live(), h2 = await live(), h3 = await live();
+  try {
+    process.env.ETIUDA_LOCK_PATH = slots[0];
+    const pol = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0, reason: "" };
+    const takeWith = (holder, waitMs) => L.acquire({
+      lockPath: slots[0],
+      slots,
+      what: "ml28",
+      holder,
+      waitMs,
+      testIdleMinutes: 1,
+      say: quiet
+    });
+    const r1 = takeWith(h1, 0);
+    const r2 = takeWith(h2, 0);
+    const r3 = takeWith(h3, 600);
+    const slot3Free = !fs.existsSync(slots[2]);
+    const slot4Free = !fs.existsSync(slots[3]);
+    const ok = pol.count === 2 && r1.ok && r2.ok && !r3.ok && slot3Free && slot4Free;
+    check(ok,
+      "ml28 in use: two active; a third taker waits (the control): count " + pol.count + ", third waited " + !r3.ok
+      + ", slot 3 free " + slot3Free + ", slot 4 free " + slot4Free);
+  } finally {
+    if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
+    else delete process.env.ETIUDA_LOCK_PATH;
+    h1.kill(); h2.kill(); h3.kill();
+  }
+}
+
+/* ml29 */
+{
+  const labDir = fs.mkdtempSync(path.join(LAB, "ml29-"));
+  const lanesFile = path.join(labDir, "lanes");
+  const slots = [
+    path.join(labDir, "machine.lock"),
+    path.join(labDir, "machine-2.lock"),
+    path.join(labDir, "machine-3.lock"),
+    path.join(labDir, "machine-4.lock")
+  ];
+  const oldEnv = process.env.ETIUDA_LOCK_PATH;
+  try {
+    process.env.ETIUDA_LOCK_PATH = slots[0];
+
+    fs.writeFileSync(lanesFile, "4\n");
+    const p4 = L.lanePolicy ? L.lanePolicy(slots) : { count: 0, reason: "" };
+
+    fs.writeFileSync(lanesFile, "3\n");
+    const p3 = L.lanePolicy ? L.lanePolicy(slots) : { count: 0, reason: "" };
+
+    fs.writeFileSync(lanesFile, "2\n");
+    const p2 = L.lanePolicy ? L.lanePolicy(slots) : { count: 0, reason: "" };
+
+    fs.writeFileSync(lanesFile, "5\n");
+    const p5Idle = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 25 }) : { count: 0, reason: "" };
+    const p5InUse = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0, reason: "" };
+
+    fs.writeFileSync(lanesFile, "not-a-number\n");
+    const pJunkIdle = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 25 }) : { count: 0, reason: "" };
+    const pJunkInUse = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0, reason: "" };
+
+    const ok = p4.count === 4 && p4.reason === "the lane file"
+      && p3.count === 3 && p3.reason === "the lane file"
+      && p2.count === 2 && p2.reason === "the lane file"
+      && p5Idle.count === 4 && p5InUse.count === 2
+      && pJunkIdle.count === 4 && pJunkInUse.count === 2;
+
+    check(ok,
+      "ml29 lane file 4: four; 3: three; 2: two; 5 or junk: ignored, the idle rule decides: "
+      + "4=" + p4.count + ", 3=" + p3.count + ", 2=" + p2.count + ", 5(idle)=" + p5Idle.count + ", 5(use)=" + p5InUse.count
+      + ", junk(idle)=" + pJunkIdle.count + ", junk(use)=" + pJunkInUse.count);
+  } finally {
+    if (oldEnv !== undefined) process.env.ETIUDA_LOCK_PATH = oldEnv;
+    else delete process.env.ETIUDA_LOCK_PATH;
+  }
+}
+
+/* ml30 */
+{
+  if (PLANTS_OFF) {
+    skip("ml30 a planted change of the idle count back to 3 turns leg 1 red (ETIUDA_PLANTS=off)");
+  } else {
+    const labDir = fs.mkdtempSync(path.join(LAB, "ml30-plant-"));
+    const src = fs.readFileSync(TOOL, "utf8");
+    const plantedSrc = src.replace(
+      /\/\* plant:lane-count \*\/[\s\S]*?return\s+res;/,
+      "/* plant:lane-count */ if (res.reason && res.reason.startsWith('idle for')) return { count: 3, reason: res.reason }; return res;"
+    );
+    const plantedTool = path.join(labDir, "machine-lock-planted.mjs");
+    fs.writeFileSync(plantedTool, plantedSrc);
+    const PL = await import(pathToFileURL(plantedTool).href);
+    const res = await runLeg1(PL);
+    const turnedRed = !res.ok && res.pol.count === 3 && !res.s4Taken;
+    check(turnedRed,
+      "ml30 a planted change of the idle count back to 3 turns leg 1 red: leg 1 failed as expected: ok="
+      + res.ok + ", count=" + res.pol.count + ", slot 4 taken=" + res.s4Taken);
+  }
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* the system's to clear */ }
