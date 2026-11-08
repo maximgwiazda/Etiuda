@@ -4427,18 +4427,22 @@ function shippedFlagTests() {
       .map(m => extractDecl(shell, m)).join("\n") + "\nreturn {isBuiltIn,folderShown};")(path.win32, inAsar);
   } catch (e) { S = null; }
   const answer = (from) => {
-    let handler = null;
+    let handler = null, ev = null;
     try {
+      /* The slice has no module scope. The host seeds the session from these three, so the
+         stand-in supplies them: an empty map, no saved tabs yet, and a read that finds none. */
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
         "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
         "openedRefused", "recovering", "deskFile", "os", "hostAccent", "catalogWaitNewer", "newerKey", "catalogNewerSaid",
+        "sessionHeld", "pendingSavedTabs", "readSavedTabs",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
         () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
-        null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "");
+        null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "",
+        new Map(), null, () => null);
+      ev = { sender: { id: 1, once() {} } };
+      handler(ev);
     } catch (e) { return "the host answer did not run: " + e.message; }
-    const ev = { sender: { id: 1 } };
-    handler(ev);
     return [ev.returnValue.catalogBuiltIn, ev.returnValue.catalogIn];
   };
   eq("the host answer flags the shipped sample and hands no folder for it, and a folder file is unflagged with its folder",

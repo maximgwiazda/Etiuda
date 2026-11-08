@@ -523,7 +523,8 @@ function keepEditBases(){
   });
   pack.editBases=keep;
 }
-function savePack(){
+function savePack(dirtyIds){
+  const was=ePackEpoch;
   ePackEpoch++;
   keepEditBases();
   if(eStatsT){ clearTimeout(eStatsT); eStatsT=0; }
@@ -532,6 +533,9 @@ function savePack(){
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
   hooks.syncSampleMark();
+  if(Array.isArray(dirtyIds) && typeof hooks.keepPoolAcross==="function"){
+    hooks.keepPoolAcross(was,dirtyIds);
+  }
   return ok;
 }
 /* A COUNT CHANGES NO CARD'S MARKUP, and ePackEpoch heads every card's pool signature, so a count

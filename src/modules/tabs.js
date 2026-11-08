@@ -289,6 +289,24 @@ function loadTabSession(){
     return true;
   }catch(e){ return false; }
 }
+function syncTabActive(id){
+  const bar=$("#tabsBar");
+  if(!bar) return false;
+  const tabEls=bar.querySelectorAll(".tab");
+  if(tabEls.length!==tabs.length) return false;
+  let matched=true;
+  tabEls.forEach((el,i)=>{
+    if(!tabs[i] || el.dataset.tid!==tabs[i].id){ matched=false; return; }
+    const on=tabs[i].id===id;
+    el.classList.toggle("on",on);
+    const lab=el.querySelector(".tab-label");
+    if(lab) lab.setAttribute("aria-selected",on?"true":"false");
+  });
+  if(!matched) return false;
+  syncTabAccent();
+  syncTabBeads();
+  return true;
+}
 function applyTab(tb){
   if(!tb) return;
   activeTabId=tb.id;
@@ -306,7 +324,9 @@ function applyTab(tb){
   setPickRun(false);   // a run does not span tabs
 
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
-  hooks.applyLangUI(tb.lang);
+  const langChanged=!!(tb.lang && tb.lang!==lang);
+  if(langChanged) hooks.applyLangUI(tb.lang);
+  else hooks.applyLangUI(tb.lang, "tail");
   hooks.updateIntentPlaceholder();
   if(intentEl){
     intentEl.value=tb.intentBox||"";
@@ -320,9 +340,9 @@ function applyTab(tb){
   const paxClear=$("#paxClear"); if(paxClear) paxClear.disabled=!String(pax&&pax.value||"").length;
 
   drawPills();
-  hooks.drawIntentRail();
+  if(!langChanged) hooks.drawIntentRail();
   hooks.render();
-  drawTabs();
+  if(!syncTabActive(tb.id)) drawTabs();
   requestAnimationFrame(()=>{
     try{ pageScroller().scrollTop=tb.scrollY||0; }catch(_){}
     hooks.scheduleRailGeometry();
@@ -849,6 +869,26 @@ function bindTabScroll(){
     const wrap=$("#tabsWrap"); if(wrap) ro.observe(wrap);
   }
 }
+/* One measured step, then the staircase's later steps in arithmetic. Flex hands most of a
+   shrink back to the other children, and the probe reads that ratio, so the width returned
+   is the one the ten-step loop would have stopped on. `from` is the width before the probe. */
+function settleBarWidth(from, o0, probed, o1, floor){
+  if(!(o0>0.5)) return from;
+  const moved=from-probed;
+  if(!(moved>0)) return from;
+  if(!(o1>0.5)) return probed;
+  const alpha=(o0-o1)/moved;
+  if(!(alpha>0)) return probed;
+  let bw=probed, o=o1;
+  for(let i=1;i<10 && o>0.5 && bw>floor;i++){
+    const step=Math.ceil(o*1.5);
+    const next=Math.max(floor, bw-step);
+    if(next===bw) break;
+    o-=alpha*(bw-next);
+    bw=next;
+  }
+  return bw;
+}
 function applyTabWidths(){
   const bar=$("#tabsBar");
   const wrap=$("#tabsWrap")||(bar&&bar.parentElement);
@@ -995,25 +1035,22 @@ function applyTabWidths(){
      narrower bar is simply more scrolling); _wrapW records the corrected state, which
      keeps the ResizeObserver quiet. */
   if(add){
-    /* A STAIRCASE, NOT A STEP. Shrinking the bar by the overhang does not remove the
-       overhang: the smaller request lets every sibling reclaim a share of what was
-       released, and ~0.7 of it survives each exact step - the row's geometry, not a bug.
-       Eight steps bound the remainder below sub-pixel for anything a header can produce;
-       the loop also stops the moment the overhang is under half a pixel, and in the wide
-       case the first measurement is already there. */
     let bw=barW;
-    for(let i=0;i<10;i++){
-      const overhang=add.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
-      if(overhang<=0.5) break;
-      /* 1.5x, not 1x: an exact step leaves ~0.7 of the overhang behind, so eight exact steps
-         still carried pixels across a large resize. Overshooting by half kills the tail in
-         two or three steps; the worst case is a bar a couple of pixels narrower than
-         optimum - a sliver more scrolling inside the strip, invisible - where the
-         undershoot's failure was chrome outside the wrap. Err toward the failure that
-         cannot be seen. */
-      bw=Math.max(40, bw-Math.ceil(overhang*1.5));
-      bar.style.flex="0 0 "+bw+"px"; bar.style.width=bw+"px";
-      bar.style.minWidth=bw+"px";    bar.style.maxWidth=bw+"px";
+    const o0=add.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
+    if(o0>0.5){
+      const probed=Math.max(40, bw-Math.ceil(o0*1.5));
+      if(probed<bw){
+        bw=probed;
+        bar.style.flex="0 0 "+bw+"px"; bar.style.width=bw+"px";
+        bar.style.minWidth=bw+"px";    bar.style.maxWidth=bw+"px";
+        const o1=add.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
+        const settled=settleBarWidth(barW, o0, probed, o1, 40);
+        if(settled!==bw){
+          bw=settled;
+          bar.style.flex="0 0 "+bw+"px"; bar.style.width=bw+"px";
+          bar.style.minWidth=bw+"px";    bar.style.maxWidth=bw+"px";
+        }
+      }
     }
     if(bw!==barW) updateTabOverflow();
     /* THE SHARE ANSWERS TO THE SETTLED BAR. The tab widths above were computed against the
@@ -1319,6 +1356,7 @@ export {
   escCloseAllTabsStep,
   escapeLadderStep,
   applyTabWidths,
+  settleBarWidth,
   fitTabLabels,
   drawPills,
   drawTabs,
