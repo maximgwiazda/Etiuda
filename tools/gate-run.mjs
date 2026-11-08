@@ -1101,8 +1101,20 @@ function movedFiles(before, after) {
 
 const gateName = file => file.replace(/\\/g, "/").replace(/\.(mjs|js|cjs)$/, "").replace(/[^A-Za-z0-9]+/g, "-");
 const pad = (n, w) => String(n).padStart(w || 2, "0");
-const stamp = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
+export const stamp = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
   + "T" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + "-" + pad(d.getMilliseconds(), 3);
+
+export function profileSummaryFileName(profile = "release", date = new Date()) {
+  return `${profile}-summary-${stamp(date)}.json`;
+}
+
+export function writeProfileSummary(runsDir, data) {
+  const profile = data.profile || "release";
+  const d = data.time ? new Date(data.time) : new Date();
+  const file = path.join(runsDir, profileSummaryFileName(profile, d));
+  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+  return file;
+}
 
 const RESERVED = ["ok", "fail", "exitCode"];
 
@@ -1218,6 +1230,7 @@ async function main() {
 
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   let steps = [];
+  let initialProfileSteps = [];
   let isHeavy = process.env.ETIUDA_HEAVY === "1";
   let customEnv = {};
   let gateLabel = asked.join(" ");
@@ -1244,11 +1257,13 @@ async function main() {
     gateLabel = "release";
     customEnv.ETIUDA_PROFILE = "release";
     steps = profileSteps(ROOT, pkg);
+    initialProfileSteps = [...steps];
   } else if (mode === "nightly") {
     isHeavy = true;
     gateLabel = "nightly";
     customEnv.ETIUDA_PROFILE = "nightly";
     steps = profileSteps(ROOT, pkg);
+    initialProfileSteps = [...steps];
   } else if (mode === "file") {
     const fileArgs = asked.slice(1).filter(a => !a.startsWith("--"));
     if (!fileArgs.length) refuse("no test file was named", "node tools/gate-run.mjs file tests/<path>");
@@ -1522,6 +1537,37 @@ async function main() {
     inherits,
     ran: ranFiles,
   }, CHAINS_PATH);
+
+  /* Whole-run summary for a release or nightly profile run (state/briefs/reform-2026-10-27/test-regimen.md rule 4, decisions 2026-11-05 11:43). */
+  if (inProfile) {
+    const profileGateNames = initialProfileSteps.map(s => s.gate || gateName(s.file || s.cmd));
+    const ranGateNames = gatesList.map(g => g.gate);
+    const holdReds = redsList.filter(r => r.class !== "warn");
+    const summary = {
+      kind: "profile-summary",
+      profile: mode,
+      gitTree: tree,
+      commit: COMMIT || "no commit",
+      gates: {
+        profile: profileGateNames,
+        ran: ranGateNames,
+        total: profileGateNames.length,
+        completed: ranGateNames.length,
+      },
+      reds: {
+        holds: holdReds,
+        warns,
+      },
+      holds,
+      inherits: inherits || "",
+      start: runStart,
+      end: runEnd,
+      time: runEnd,
+    };
+    const summaryFile = path.join(RUNS, profileSummaryFileName(mode, new Date(runEnd)));
+    fs.writeFileSync(summaryFile, JSON.stringify(summary, null, 2) + "\n", "utf8");
+    console.log("  gate-run: whole-run summary in " + path.basename(summaryFile));
+  }
 
   if (isHeavy) releaseLock();
 

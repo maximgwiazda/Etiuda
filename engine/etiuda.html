@@ -7736,10 +7736,11 @@ What you type stays in this browser only.`;
     "To join, a new invitation from the team's lead is needed.": "Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
     /* Claudette's words, 2026-10-27 01:23. */
     "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.": "Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",
-    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
-    "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
+    "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.": "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.",
     "The team's relay is due for renewal": "Przekaźnik zespołu czeka na odnowienie",
     "It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.": "Termin odnowienia minął dnia {DATE}. Do dnia {READONLY} wszystko działa jak dotąd; potem katalogi na tym stanowisku zostaną bez zmian, ale do czasu odnowienia nic nowego nie przejdzie już między stanowiskiem a zespołem. Przekaźnik odnawia lider zespołu w Studiu; tutaj nic nie trzeba robić.",
     "The team's relay is read-only until renewed": "Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",
@@ -14953,9 +14954,9 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h || typeof h.onCatalogCopy !== "function" || typeof fn !== "function") return;
     try {
-      h.onCatalogCopy(() => {
+      h.onCatalogCopy((m) => {
         try {
-          fn();
+          fn(m);
         } catch (e) {
         }
       });
@@ -15641,8 +15642,8 @@ What you type stays in this browser only.`;
     if (changed === true || JSON.stringify(joinNow) !== was || askWhy !== hadAskWhy) paintJoin();
     return joinNow;
   }
-  function noteCatalogCopy() {
-    toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
+  function noteCatalogCopy(m) {
+    toast(m && m.lead === true ? "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone." : "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
   }
   function wireTeamJoin() {
     if (!eHasJoin()) return;
@@ -15701,7 +15702,7 @@ What you type stays in this browser only.`;
     return '<button type="button" class="btn" id="' + esc(id) + '" title="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(t("Join a team")) + "</button>";
   }
   function joinDisclosure() {
-    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
+    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
   }
   function joinKindWord(kind) {
     return kind === "onedrive" ? t("OneDrive") : kind === "onedrive-business" ? t("OneDrive for Business") : kind === "dropbox" ? t("Dropbox") : kind === "gdrive" ? t("Google Drive") : kind === "mapped" ? t("a mapped network drive") : t("a shared network folder");
@@ -30907,7 +30908,7 @@ What you type stays in this browser only.`;
         langSel
       ) + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
          and the way back after leaving once, on the first row that offers Leave. */
-      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
+      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),
         t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),

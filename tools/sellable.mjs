@@ -25,7 +25,7 @@
  * signing that was asked for and did not come out Valid is a fault whoever the build is for. */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 /** Is this version a customer's? Bare x.y.z, major 1 or more. */
 export function customerVersion(version) {
@@ -184,4 +184,78 @@ export function beforeBuild({ version, customer, licenceDir, win }) {
     .concat(licenceProblems(licenceDir))
     .concat(signingConfigured(win) ? [] : [NO_ROUTE]);
   return { customer: asCustomer, problems };
+}
+
+/* WHETHER A CUSTOMER BUILD HAS A GREEN RELEASE PROFILE FOR THIS SAME TREE
+   (state/briefs/reform-2026-10-27/test-regimen.md rule 4, amended for decisions 2026-11-05 11:43).
+   Whatever reaches a customer (a customer's or a pilot's installer, a tag, a live deploy)
+   ships only from a tree whose release profile is green on that same tree, with no red of
+   class hold. A test build for Maxim alone needs no release profile, and no tool refuses it. */
+
+export function readReleaseSummaries(runsDir) {
+  if (!runsDir || !existsSync(runsDir)) return [];
+  const files = readdirSync(runsDir).filter(f => /^(release|nightly)-summary-.*\.json$/.test(f));
+  const summaries = [];
+  for (const f of files) {
+    try {
+      const full = join(runsDir, f);
+      const text = readFileSync(full, 'utf8');
+      const data = JSON.parse(text);
+      if (data && (data.kind === 'profile-summary' || data.profile === 'release')) {
+        summaries.push({ file: f, path: full, ...data });
+      }
+    } catch {}
+  }
+  return summaries.sort((a, b) => String(b.time || b.end || '').localeCompare(String(a.time || a.end || '')));
+}
+
+export function customerReleaseProfileVerdict({ root, tree, runsDir, summaries: givenSummaries }) {
+  const dir = runsDir || process.env.ETIUDA_RUNS || (root ? resolve(root, '..', 'etiuda-runs') : '');
+  const all = givenSummaries || readReleaseSummaries(dir);
+  const releaseSummaries = all.filter(s => (s.profile === 'release' || !s.profile) && s.kind === 'profile-summary');
+
+  if (!releaseSummaries.length) {
+    return 'no release profile summary found in ' + (dir || 'etiuda-runs') + ' for tree ' + tree
+      + '. Run \'node tools/gate-run.mjs release\' on this commit to produce a green release profile summary'
+      + ' (test-regimen.md rule 4, decisions 2026-11-05 11:43).';
+  }
+
+  const forTree = releaseSummaries.filter(s => s.gitTree === tree);
+  if (!forTree.length) {
+    const others = [...new Set(releaseSummaries.map(s => s.gitTree).filter(Boolean))];
+    return 'no release profile summary for tree ' + tree + ' in ' + (dir || 'etiuda-runs')
+      + (others.length ? ' (found summary for tree ' + others.slice(0, 3).join(', ') + ', but a different tree is not the same tree)' : '')
+      + '. Run \'node tools/gate-run.mjs release\' on this commit to produce a green release profile summary'
+      + ' (test-regimen.md rule 4, decisions 2026-11-05 11:43).';
+  }
+
+  const latest = forTree[0];
+
+  /* The regimen\'s test-only inheritance: honours inheritance if gate-run recorded it */
+  const inherits = latest.inherits && typeof latest.inherits === 'string' && latest.inherits !== '';
+  const profileCount = latest.gates && latest.gates.profile ? latest.gates.profile.length : 0;
+  const ranCount = latest.gates && latest.gates.ran ? latest.gates.ran.length : 0;
+  /* A summary that lists no profile cannot show it covered the profile. */
+  const covers = inherits || (profileCount > 0 && ranCount >= profileCount);
+
+  if (!covers) {
+    return 'release profile summary for tree ' + tree + ' does not cover the whole profile: ran '
+      + ranCount + ' of ' + profileCount + ' gates without inheritance.'
+      + ' Run \'node tools/gate-run.mjs release\' to run the full profile'
+      + ' (test-regimen.md rule 4, decisions 2026-11-05 11:43).';
+  }
+
+  const holdReds = (latest.reds && Array.isArray(latest.reds.holds) ? latest.reds.holds : [])
+    .concat(latest.reds && Array.isArray(latest.reds) ? latest.reds.filter(r => r.class !== 'warn') : [])
+    .concat(latest.holds === true && (!latest.reds || !latest.reds.holds) ? [{ gate: 'hold' }] : []);
+
+  if (holdReds.length > 0) {
+    const names = holdReds.map(r => r.gate || r.cmd || 'hold').join(', ');
+    return 'release profile for tree ' + tree + ' has ' + holdReds.length
+      + ' red(s) of class hold: ' + names
+      + '. Fix the failures and run \'node tools/gate-run.mjs release\' to achieve a green release profile'
+      + ' (test-regimen.md rule 4, decisions 2026-11-05 11:43).';
+  }
+
+  return true;
 }
