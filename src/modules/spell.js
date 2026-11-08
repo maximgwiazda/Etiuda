@@ -105,6 +105,7 @@ function cardSearchTerms(q){
 
 export {
   dropCatalogVocab,
+  catalogVocab,
   cardSearchTerms,
   eSpellFix
 };

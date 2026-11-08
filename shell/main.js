@@ -8430,6 +8430,230 @@ function pickPage() {
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   let suggest = [], sgAt = -1, picked = [];
+  /* THE KEYSTROKE FILTERS HERE, on the rows the open handed over. The order is the desk's
+     search: the same terms, the same tiers, the same lift. An open without that index still
+     asks the desk. */
+  let bank = null, vocab = [], tally = null, cap = 50, restRows = [], restSaid = "";
+  const FOLD = {
+    "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n", "ó": "o", "ś": "s", "ź": "z", "ż": "z",
+    "Ą": "a", "Ć": "c", "Ę": "e", "Ł": "l", "Ń": "n", "Ó": "o", "Ś": "s", "Ź": "z", "Ż": "z",
+    "à": "a", "á": "a", "â": "a", "ã": "a", "ä": "a", "å": "a", "è": "e", "é": "e", "ê": "e", "ë": "e",
+    "ì": "i", "í": "i", "î": "i", "ï": "i", "ò": "o", "ô": "o", "õ": "o", "ö": "o", "ø": "o",
+    "ù": "u", "ú": "u", "û": "u", "ü": "u", "ý": "y", "ÿ": "y", "ñ": "n", "ç": "c",
+    "š": "s", "ž": "z", "č": "c", "ř": "r", "ů": "u", "ě": "e", "ť": "t", "ď": "d", "ň": "n",
+    "ā": "a", "ē": "e", "ī": "i", "ō": "o", "ū": "u", "æ": "ae", "œ": "oe", "ß": "ss", "đ": "d", "þ": "th",
+    "À": "a", "Á": "a", "Â": "a", "Ä": "a", "È": "e", "É": "e", "Ê": "e", "Ë": "e", "Í": "i", "Î": "i",
+    "Ò": "o", "Ô": "o", "Ö": "o", "Ù": "u", "Ú": "u", "Ü": "u", "Ñ": "n", "Ç": "c", "Š": "s", "Ž": "z"
+  };
+  const FOLD_RE = new RegExp("[" + Object.keys(FOLD).join("") + "]", "g");
+  const FIELDS = ["title", "keys", "meta", "body"];
+  const WEIGHT = { title: 10, keys: 6, meta: 3, body: 1 }; /* plant:pick-weight */
+  const Q_EXACT = 3, Q_PREFIX = 2, Q_LOOSE = 1;
+  const SAME_FIELD = 1.5, ADJACENT = 8, TITLE_START = 4, PROX = 6;
+  const PROX_FIELD = { title: 1, keys: 0.8, meta: 0.6, body: 0.5 };
+  const WORD_PREFIX_MIN = 5, WORD_STEM_MIN = 4;
+  const fold = s => {
+    const t = String(s == null ? "" : s);
+    for (let i = 0; i < t.length; i++) if (t.charCodeAt(i) > 127) return t.replace(FOLD_RE, ch => FOLD[ch] || ch);
+    return t;
+  };
+  const sharedPrefixLen = (a, b) => {
+    const n = Math.min(a.length, b.length);
+    let i = 0;
+    while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+    return i;
+  };
+  const wordMatchesTerm = (word, term) => {
+    if (!word || !term) return false;
+    if (word.indexOf(term) === 0) return true;
+    if (word.length >= WORD_STEM_MIN && term.indexOf(word) === 0) return true;
+    if (term.length < WORD_PREFIX_MIN) return false;
+    return sharedPrefixLen(word, term) >= WORD_PREFIX_MIN;
+  };
+  const editDistance1 = (a, b) => {
+    if (a === b) return false;
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > 1) return false;
+    let i = 0;
+    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+    if (la === lb) {
+      if (a.slice(i + 1) === b.slice(i + 1)) return true;
+      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+    }
+    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
+  };
+  const reaches = term => {
+    for (let i = 0; i < vocab.length; i++) {
+      const w = vocab[i][0];
+      if (w.indexOf(term) !== -1) return true;
+      if (wordMatchesTerm(w, term)) return true;
+    }
+    return false;
+  };
+  const correctTerm = term => {
+    if (term.length < 5 || reaches(term)) return "";
+    let fix = "", bestN = 0;
+    for (let i = 0; i < vocab.length; i++) {
+      const w = vocab[i][0], n = vocab[i][1];
+      if (w.length < 5 || !editDistance1(term, w)) continue;
+      if (n > bestN) { bestN = n; fix = w; }
+    }
+    return fix;
+  };
+  const termsOf = q => {
+    const raw = String(q == null ? "" : q).slice(0, 200);
+    const t = fold(raw.trim().toLowerCase());
+    if (!t) return [];
+    return t.split(/\s+/).filter(Boolean).map(term => correctTerm(term) || term);
+  };
+  const cardMatches = (card, terms) => {
+    if (!terms.length) return true;
+    const hay = card.hay || "";
+    if (terms.every(t => hay.indexOf(t) !== -1)) return true;
+    const uniq = card.uniq || [];
+    return terms.every(t => hay.indexOf(t) !== -1 || uniq.some(w => wordMatchesTerm(w, t)));
+  };
+  const termWordQuality = (word, term) => {
+    if (word === term) return Q_EXACT;
+    if (word.indexOf(term) === 0) return Q_PREFIX;
+    if (word.length >= WORD_STEM_MIN && term.indexOf(word) === 0) return Q_PREFIX;
+    if (term.length >= WORD_PREFIX_MIN && sharedPrefixLen(word, term) >= WORD_PREFIX_MIN) return Q_PREFIX;
+    return wordMatchesTerm(word, term) ? Q_LOOSE : 0;
+  };
+  const termFieldQuality = (idx, field, term) => {
+    const words = (idx.words && idx.words[field]) || [];
+    let best = 0;
+    for (let i = 0; i < words.length; i++) {
+      const qv = termWordQuality(words[i], term);
+      if (qv > best) { best = qv; if (best === Q_EXACT) break; }
+    }
+    const text = (idx.fields && idx.fields[field]) || "";
+    if (!best && text.indexOf(term) !== -1) best = Q_LOOSE;
+    return best;
+  };
+  const termPositions = (idx, field, term) => {
+    const words = (idx.words && idx.words[field]) || [], out = [];
+    for (let i = 0; i < words.length; i++) if (termWordQuality(words[i], term)) out.push(i);
+    return out;
+  };
+  const minWindowSpan = lists => {
+    for (let i = 0; i < lists.length; i++) if (!lists[i].length) return -1;
+    const ptr = new Array(lists.length).fill(0);
+    let best = Infinity;
+    for (;;) {
+      let lo = Infinity, hi = -Infinity, loIdx = 0;
+      for (let i = 0; i < lists.length; i++) {
+        const v = lists[i][ptr[i]];
+        if (v < lo) { lo = v; loIdx = i; }
+        if (v > hi) hi = v;
+      }
+      const span = hi - lo + 1;
+      if (span < best) best = span;
+      if (best === lists.length) break;
+      ptr[loIdx]++;
+      if (ptr[loIdx] >= lists[loIdx].length) break;
+    }
+    return best === Infinity ? -1 : best;
+  };
+  const proximityBonus = (idx, terms) => {
+    if (!terms || terms.length < 2) return 0;
+    let best = 0;
+    for (let f = 0; f < FIELDS.length; f++) {
+      const field = FIELDS[f];
+      const span = minWindowSpan(terms.map(t => termPositions(idx, field, t)));
+      if (span < 0) continue;
+      const gap = Math.max(0, span - terms.length);
+      const v = PROX * (PROX_FIELD[field] || 0.5) / (1 + gap);
+      if (v > best) best = v;
+    }
+    return best;
+  };
+  const queryScore = (idx, terms) => {
+    const fieldHasAll = { title: true, keys: true, meta: true, body: true };
+    let score = 0, strong = true;
+    for (let i = 0; i < terms.length; i++) {
+      const term = terms[i];
+      let best = 0, inStrong = false;
+      for (let f = 0; f < FIELDS.length; f++) {
+        const field = FIELDS[f];
+        const qv = termFieldQuality(idx, field, term);
+        if (!qv) { fieldHasAll[field] = false; continue; }
+        const v = qv * WEIGHT[field];
+        if (v > best) best = v;
+        if (field !== "body") inStrong = true;
+      }
+      if (!inStrong) strong = false;
+      score += best;
+    }
+    if (FIELDS.some(f => fieldHasAll[f])) score *= SAME_FIELD;
+    score += proximityBonus(idx, terms);
+    const title = (idx.fields && idx.fields.title) || "";
+    if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT;
+    if (title.indexOf(terms[0]) === 0) score += TITLE_START;
+    return { tier: strong ? 0 : 1, score: score };
+  };
+  const liftByUse = hits => {
+    let from = 0;
+    while (from < hits.length) {
+      const g = hits[from];
+      let end = from + 1;
+      while (end < hits.length && hits[end].band === g.band && hits[end].tier === g.tier) end++;
+      const run = hits.slice(from, end).map((m, i) => ({ m: m, i: i, k: i - (m.lift | 0) }));
+      if (run.some(o => o.k !== o.i)) {
+        run.sort((a, b) => a.k - b.k || a.i - b.i);
+        run.forEach((o, i) => { hits[from + i] = o.m; });
+      }
+      from = end;
+    }
+  };
+  const pickCountText = (shown, total) => {
+    if (!total || !tally) return "";
+    const phrase = n => {
+      if (n === 1) return String(tally.one).replace("{N}", n);
+      const ten = n % 10, hundred = n % 100;
+      const few = ten >= 2 && ten <= 4 && !(hundred >= 12 && hundred <= 14);
+      return String(few ? tally.few : tally.many).replace("{N}", n);
+    };
+    const all = phrase(total);
+    return shown < total ? String(tally.shown).split("{SHOWN}").join(String(shown)).split("{COUNT}").join(all) : all;
+  };
+  const pickQueryRows = q => {
+    const terms = termsOf(q);
+    if (!terms.length) return { rows: restRows.slice(), count: restSaid };
+    const hits = [];
+    for (let i = 0; i < bank.length; i++) {
+      const card = bank[i];
+      if (!cardMatches(card, terms)) continue;
+      const sc = queryScore(card, terms);
+      const mul = card.favMul == null ? 1 : card.favMul;
+      let score = sc.score + (card.aff || 0);
+      score *= mul;
+      hits.push({ band: card.band | 0, tier: sc.tier, score: score, ord: card.ord | 0, lift: card.lift | 0, rows: card.rows || [] });
+    }
+    hits.sort((a, b) => a.band - b.band || a.tier - b.tier || b.score - a.score || a.ord - b.ord);
+    liftByUse(hits);
+    const out = [];
+    let total = 0;
+    const limit = cap > 0 ? cap : 50;
+    for (let i = 0; i < hits.length; i++) {
+      const rs = hits[i].rows;
+      total += rs.length;
+      for (let vi = 0; vi < rs.length && out.length < limit; vi++) out.push(rs[vi]);
+    }
+    return { rows: out, count: pickCountText(out.length, total) };
+  };
+  function takeIndex(o, full) {
+    if (!o) return;
+    if (Array.isArray(o.bank)) {
+      bank = o.bank;
+      vocab = Array.isArray(o.vocab) ? o.vocab : [];
+      tally = o.tally || null;
+      cap = (o.cap | 0) > 0 ? (o.cap | 0) : 50;
+    } else if (full) {
+      bank = null; vocab = []; tally = null;
+    }
+    if (Array.isArray(o.rest)) { restRows = o.rest; restSaid = o.restCount || ""; }
+  }
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
@@ -8452,6 +8676,8 @@ function pickPage() {
       if (!Array.isArray(o.rows)) return;
       rows = o.rows;
       said = o.count || "";
+      takeIndex(o, false);
+      if (!Array.isArray(o.rest) && !String(q.value || "").trim()) { restRows = rows.slice(); restSaid = said; }
       if ("last" in o) last = o.last || null;
       if (Array.isArray(o.picked)) picked = o.picked;
       sgAt = -1;
@@ -8607,6 +8833,8 @@ function pickPage() {
     }
     rows = Array.isArray(o.rows) ? o.rows : [];
     said = o.count || "";
+    takeIndex(o, true);
+    if (!Array.isArray(o.rest)) { restRows = rows.slice(); restSaid = said; }
     last = o.last || null;
     suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
     picked = Array.isArray(o.picked) ? o.picked : [];
@@ -8654,6 +8882,21 @@ function pickPage() {
   });
   q.addEventListener("input", () => {
     paintStrip();
+    if (bank) {
+      asked++;
+      if (typeof performance !== "undefined" && performance.mark) performance.mark("pick-key-start");
+      const found = pickQueryRows(q.value);
+      rows = found.rows;
+      said = found.count;
+      at = 0;
+      box.scrollTop = 0;
+      paint(false);
+      if (typeof performance !== "undefined" && performance.mark && performance.measure) {
+        performance.mark("pick-key-frame");
+        try { performance.measure("pick-answer", "pick-key-start", "pick-key-frame"); } catch (e) {}
+      }
+      return;
+    }
     const mine = ++asked;
     P.find(q.value).then(text => {
       if (mine !== asked) return;
@@ -8728,6 +8971,8 @@ function pickPage() {
         try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
         rows = Array.isArray(o.rows) ? o.rows : [];
         said = o.count || "";
+        takeIndex(o, false);
+        if (!Array.isArray(o.rest) && !String(q.value || "").trim()) { restRows = rows.slice(); restSaid = said; }
         paintLang(o);
         paint(false);
         if (o.name != null) { who.value = o.name; sent = who.value; }

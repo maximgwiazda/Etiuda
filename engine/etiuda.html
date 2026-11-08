@@ -11086,6 +11086,7 @@ What you type stays in this browser only.`;
   var spell_exports = {};
   __export(spell_exports, {
     cardSearchTerms: () => cardSearchTerms,
+    catalogVocab: () => catalogVocab,
     dropCatalogVocab: () => dropCatalogVocab,
     eSpellFix: () => eSpellFix
   });
@@ -34459,6 +34460,59 @@ What you type stays in this browser only.`;
     const f = pickList(q);
     return { rows: f.rows, count: pickCount(f.rows.length, f.total) };
   }
+  function pickTally() {
+    return { one: t("{N} reply"), many: t("{N} replies"), few: tc("few", "{N} replies"), shown: t("{SHOWN} of {COUNT}") };
+  }
+  function pickIndex() {
+    ensureCardOrder();
+    const use = statsRecentUse(pack);
+    const groups = intentAffinityGroups();
+    const have = groups.length > 0;
+    const list2 = (cards || []).filter((m) => m && !m._hidden);
+    const order = list2.slice().sort(cmpCardDisplay);
+    const place = /* @__PURE__ */ new Map();
+    order.forEach((m, i) => place.set(m, i));
+    const bank = [];
+    list2.forEach((m) => {
+      const idx = cardSearchIndex(m);
+      const l = cardLang(m), ps = parts(m, l), rows = [];
+      for (let vi = 0; vi < ps.length; vi++) rows.push(pickRow(m, l, ps, vi));
+      const words = {};
+      ["title", "keys", "meta", "body"].forEach((f) => {
+        words[f] = (idx.words[f] || []).slice();
+      });
+      bank.push({
+        band: intentIdxs.length && cardHitsSelectedIntent(m) ? 0 : 1,
+        ord: place.has(m) ? place.get(m) : 0,
+        lift: use.size ? statsLift(use.get(String(m.id)) | 0) : 0,
+        aff: have ? cardIntentAffinity(m, groups) * AFFINITY_W : 0,
+        favMul: isFavourite(m && m.id) ? FAV_BONUS : 1,
+        hay: idx.hay,
+        fields: { title: idx.fields.title, keys: idx.fields.keys, meta: idx.fields.meta, body: idx.fields.body },
+        words,
+        uniq: [...new Set(idx.allWords)],
+        rows
+      });
+    });
+    const vocab = [];
+    catalogVocab().forEach((n, w) => vocab.push([w, n]));
+    return { bank, vocab, tally: pickTally(), cap: PICK_ROWS };
+  }
+  function withIndex(out, q) {
+    if (!out) return out;
+    const ix = pickIndex();
+    out.bank = ix.bank;
+    out.vocab = ix.vocab;
+    out.tally = ix.tally;
+    out.cap = ix.cap;
+    const query = String(q == null ? "" : q);
+    if (query.trim()) {
+      const rest = pickFound("");
+      out.rest = rest.rows;
+      out.restCount = rest.count;
+    }
+    return out;
+  }
   function pickLastRow() {
     const r = eLastRecent(), m = r && findCard(r.id);
     if (!m) return null;
@@ -34644,7 +34698,7 @@ What you type stays in this browser only.`;
         } catch (e) {
         }
       }
-      return out;
+      return withIndex(out, "");
     }
     if (op === "suggest-open") {
       bumpSuggestOpen(pack);
@@ -34664,7 +34718,7 @@ What you type stays in this browser only.`;
       }
       const paxVal = pickDeskPax();
       const picked = intentIdxs.map((i) => intentIdAt(i));
-      return Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, last: pickLastRow(), picked }, pickFound(""));
+      return withIndex(Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, last: pickLastRow(), picked }, pickFound("")), "");
     }
     if (op === "tab") {
       if (a.id !== "tabNext" && a.id !== "tabPrev" && a.id !== "tabNew") return null;
@@ -34672,16 +34726,16 @@ What you type stays in this browser only.`;
       const paxVal = pickDeskPax();
       const out = Object.assign({ who: activeTabName(), name: paxVal, last: pickLastRow(), lang, langs: CONTENT_LANGS.length }, pickFound(""));
       if (a.id === "tabNew") out.fresh = true;
-      return out;
+      return withIndex(out, "");
     }
     if (op === "who") {
       const paxVal = pickDeskPax(String(a.name == null ? "" : a.name));
-      return Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound(a.q));
+      return withIndex(Object.assign({ who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound(a.q)), a.q);
     }
     if (op === "lang") {
       runShortcut("langToggle");
       const paxVal = pickDeskPax();
-      return Object.assign({ words: pickWords(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound(""));
+      return withIndex(Object.assign({ words: pickWords(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound("")), "");
     }
     if (op === "find") return pickFound(a.q);
     if (op === "copy") {

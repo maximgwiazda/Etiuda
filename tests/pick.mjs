@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 130;
+const EXPECTED = 133;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -978,6 +978,33 @@ try {
   reopen();
   pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
   check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
+
+  /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;
+     a keystroke in the picker sends no IPC, by count. The answer's first frame is measured. */
+  let findCalls = 0;
+  const origFind = pWin.E_PICK.find;
+  pWin.E_PICK.find = (q) => { findCalls++; return origFind(q); };
+  const bankCard = (id, hay, ord) => ({ band: 1, ord: ord, lift: 0, aff: 0, favMul: 1, hay: hay,
+    fields: { title: hay, keys: "", meta: "", body: "" },
+    words: { title: [hay], keys: [], meta: [], body: [] }, uniq: [hay], rows: [R(id)] });
+  if (performance.clearMarks) performance.clearMarks();
+  if (performance.clearMeasures) performance.clearMeasures();
+  pcalls.length = 0; qEl.value = "";
+  pOpen(JSON.stringify({ rows: [R("brass"), R("linen")], words: { again: "again" }, cap: 50,
+    bank: [bankCard("brass", "brass", 0), bankCard("linen", "linen", 1)],
+    vocab: [["brass", 1], ["linen", 1]],
+    tally: { one: "{N} reply", many: "{N} replies", few: "{N} replies", shown: "{SHOWN} of {COUNT}" } }));
+  findCalls = 0;
+  qEl.value = "br";
+  pageL["q:input"]();
+  const marked = performance.getEntriesByName ? performance.getEntriesByName("pick-answer") : [];
+  const answerMs = marked.length ? marked[marked.length - 1].duration : -1;
+  console.log("4t pick-answer " + (answerMs >= 0 ? answerMs.toFixed(4) : "n/a") + " ms, calls " + findCalls);
+  check(findCalls === 0 && /T brass/.test(boxHtml) && !/T linen/.test(boxHtml),
+    "4t a keystroke in the picker sends no IPC, by count: " + findCalls + " call(s), " + (answerMs >= 0 ? answerMs.toFixed(4) : "n/a") + " ms");
+  pWin.E_PICK.find = origFind;
+  reopen();
+
   reopen(); qEl.value = "br"; pFound = [R("c"), R("a")]; pageL["q:input"]();
   await tick(5);
   press("Enter", "Enter");
@@ -1443,11 +1470,12 @@ try {
   els7.lang.addEventListener = (t, fn) => { pg["lang:" + t] = fn; };
   const sent7 = [];
   let open7 = null, found7 = { rows: [], count: "" };
-  new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve(JSON.stringify(found7)),
+  const pick7 = { find: () => Promise.resolve(JSON.stringify(found7)),
     tab: id => Promise.resolve(JSON.stringify(pickAnswer("tab", { id }))),
     who: (name, q) => Promise.resolve(JSON.stringify(pickAnswer("who", { name, q }))),
     lang: () => Promise.resolve(JSON.stringify(pickAnswer("lang", {}))),
-    copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } } },
+    copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } };
+  new Function("window", "document", script)({ E_PICK: pick7 },
     { getElementById: id => els7[id] || null, documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
   const row = (id, vi, extra) => Object.assign({ id: id, vi: vi, t: "T " + id, x: "x " + id + vi, tag: "" }, extra || {});
   const W7 = { again: "again", stamp: "Commits the firm", who: "Filled for", langTitle: "Click to switch replies to the next language", keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes" };
@@ -1726,6 +1754,193 @@ try {
   check(els7.q.value === "/" && AS.lang === "en",
     "7u the slash typed into #q stays in #q and switches nothing: "
     + JSON.stringify([els7.q.value, AS.lang]));
+
+  /* The keystroke's rows are the desk's own find: the same excerpts and the same count, and the find is not asked. */
+  els["#intent"].value = "";
+  AS.putLang("en");
+  AS.setIntentIdxs([]);
+  const xOf = html => [...String(html || "").matchAll(/<span class="x">([^<]*)<\/span>/g)].map(m => m[1]);
+  let hops = 0;
+  const findWas = pick7.find;
+  pick7.find = q => { hops++; return findWas(q); };
+  const mismatches = [];
+  const expectFind = (label, q) => {
+    const want = pickAnswer("find", { q: q });
+    const before = hops;
+    els7.q.value = q;
+    pg["q:input"]();
+    const gotX = xOf(els7.rows.innerHTML).join(" | ");
+    const wantX = (want.rows || []).map(r => r.x).join(" | ");
+    const gotC = els7.count.textContent;
+    if (gotX !== wantX || gotC !== (want.count || "") || hops !== before)
+      mismatches.push(label + " [" + gotC + " / " + (want.count || "") + "] " + gotX + " != " + wantX + " hops " + (hops - before));
+  };
+  const prep = list => { PK.resetPack(); AS.setCats([]); AS.setIntentIdxs([]); AS.setCards(list.map(c => Object.assign({}, c))); };
+  const openNow = () => { SP.dropCatalogVocab(); open7(JSON.stringify(pickAnswer("open"))); };
+  const bagPl = { id: "c-bag", c: "orders", t: "Bagaz", en: "Bagaż travels today." };
+  const sampleCards = CARDS.map(c => Object.assign({}, c)).concat([bagPl]);
+  prep(sampleCards);
+  openNow();
+  let queries7w = 0;
+  const trackFind = (label, q) => { queries7w++; expectFind(label, q); };
+  const typoOf = w => {
+    if (w.length >= 2) {
+      const i = w.length >= 3 ? 1 : 0;
+      const ch = w.split("");
+      const tmp = ch[i]; ch[i] = ch[i + 1]; ch[i + 1] = tmp;
+      const s = ch.join("");
+      if (s !== w) return s;
+    }
+    return w.slice(0, -1) + (w.endsWith("x") ? "y" : "x");
+  };
+  const sampleVocab = [...SP.catalogVocab().keys()].sort();
+  sampleVocab.forEach(w => {
+    trackFind("vocab:" + w, w);
+    trackFind("typo:" + w, typoOf(w));
+  });
+  ["zzqx"].forEach(q => trackFind(q, q));
+  if (!pickAnswer("find", { q: "dleivery" }).rows.some(r => r.id === "c-lamp")) mismatches.push("dleivery missed the lamp");
+  if (!pickAnswer("find", { q: "bagaz" }).rows.some(r => r.id === "c-bag")) mismatches.push("bagaz missed the bag");
+  queries7w++;
+  const emptyWant = pickAnswer("find", { q: "" });
+  const emptyHops = hops;
+  els7.q.value = "";
+  pg["q:input"]();
+  if (els7.count.textContent !== (emptyWant.count || "") || hops !== emptyHops) mismatches.push("empty count " + els7.count.textContent + " != " + (emptyWant.count || ""));
+  els7.who.value = "Zofia Zielinska";
+  pg["who:blur"]();
+  await tick(0);
+  trackFind("who", "zofia");
+  const six = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].map((w, i) => ({ id: "c-r" + (i + 1), c: "orders", t: "Refund " + w, en: "Reply " + (i + 1) + "." }));
+  prep(six);
+  copies("c-r5", 38);
+  openNow();
+  trackFind("lift", "refund");
+  if (ids(pickAnswer("find", { q: "refund" }).rows) !== "c-r1/0 c-r2/0 c-r5/0 c-r3/0 c-r4/0 c-r6/0") mismatches.push("lift order " + ids(pickAnswer("find", { q: "refund" }).rows));
+  const tiered = [{ id: "c-t1", c: "orders", t: "Refund timing", en: "Reply one." }, { id: "c-t2", c: "orders", t: "Refund steps", en: "Reply two." },
+    { id: "c-body", c: "orders", t: "Delivery note", en: "Ask about the refund when it arrives." }];
+  prep(tiered);
+  copies("c-body", 500);
+  openNow();
+  trackFind("tier", "refund");
+  if (ids(pickAnswer("find", { q: "refund" }).rows) !== "c-t1/0 c-t2/0 c-body/0") mismatches.push("tier order " + ids(pickAnswer("find", { q: "refund" }).rows));
+  const banded = [{ id: "c-l1", c: "orders", t: "Refund one", allIntents: true, en: "Reply one." }, { id: "c-l2", c: "orders", t: "Refund two", allIntents: true, en: "Reply two." },
+    { id: "c-u", c: "orders", t: "Refund three", en: "Reply three." }];
+  prep(banded);
+  AS.setIntentIdxs([0]);
+  copies("c-u", 500);
+  openNow();
+  trackFind("band", "refund");
+  if (ids(pickAnswer("find", { q: "refund" }).rows) !== "c-l1/0 c-l2/0 c-u/0") mismatches.push("band order " + ids(pickAnswer("find", { q: "refund" }).rows));
+  AS.setIntentIdxs([]);
+  const kettles = Array.from({ length: 60 }, (_, i) => ({ id: "c-k" + i, c: "orders", t: "Kettle " + i, en: "Kettle reply " + i + "." }));
+  prep(kettles);
+  openNow();
+  trackFind("cap", "kettle");
+  const capDesk = pickAnswer("find", { q: "kettle" });
+  if (capDesk.rows.length !== 50 || capDesk.count !== "50 of 60 replies") mismatches.push("cap desk " + capDesk.rows.length + " " + capDesk.count);
+  ST.lsSet("eUiLang", "pl");
+  openNow();
+  trackFind("pl", "kettle");
+  if (pickAnswer("find", { q: "kettle" }).count !== "50 z 60 odpowiedzi") mismatches.push("pl desk " + pickAnswer("find", { q: "kettle" }).count);
+  ST.lsDel("eUiLang");
+  AS.putLang("en");
+  AS.setCards(CARDS.map(c => Object.assign({}, c)));
+  SP.dropCatalogVocab();
+  pick7.find = findWas;
+  check(mismatches.length === 0 && hops === 0,
+    "7w a keystroke filters on the rows the open handed over, the same excerpts and the same count as the desk, and still no IPC: "
+    + (mismatches.length ? mismatches.slice(0, 3).join(" || ") : "matched (" + queries7w + " queries)") + ", hops " + hops);
+
+  /* 7x ranking constants (weights, tiers, PROX, fold table) in shell/main.js match src/modules */
+  {
+    const parseObj = txt => {
+      try { return (new Function("return (" + txt + ")"))(); } catch { return null; }
+    };
+    const readConstantsDiffs = (shellSrc, wordsSrc, scoringSrc, scoreSrc) => {
+      const deskFoldMatch = wordsSrc.match(/const\s+FOLD\s*=\s*(\{[\s\S]*?\n\s*\};)/);
+      const deskFold = deskFoldMatch ? parseObj(deskFoldMatch[1].replace(/;\s*$/, "")) : null;
+      const pageFoldMatch = shellSrc.match(/const\s+FOLD\s*=\s*(\{[\s\S]*?\n\s*\};)/);
+      const pageFold = pageFoldMatch ? parseObj(pageFoldMatch[1].replace(/;\s*$/, "")) : null;
+
+      const deskWeightMatch = scoringSrc.match(/const\s+FIELD_WEIGHT\s*=\s*(\{[\s\S]*?\});/);
+      const deskWeights = deskWeightMatch ? parseObj(deskWeightMatch[1].replace(/;\s*$/, "")) : null;
+      const pageWeightMatch = shellSrc.match(/const\s+WEIGHT\s*=\s*(\{[\s\S]*?\});/);
+      const pageWeights = pageWeightMatch ? parseObj(pageWeightMatch[1].replace(/;\s*$/, "")) : null;
+
+      const deskProxBonusMatch = scoringSrc.match(/const\s+PROX_BONUS\s*=\s*(\d+);/);
+      const deskProxBonus = deskProxBonusMatch ? +deskProxBonusMatch[1] : null;
+      const deskProxFieldMatch = scoringSrc.match(/const\s+PROX_FIELD\s*=\s*(\{[\s\S]*?\});/);
+      const deskProxField = deskProxFieldMatch ? parseObj(deskProxFieldMatch[1].replace(/;\s*$/, "")) : null;
+
+      const pageProxBonusMatch = shellSrc.match(/\bPROX\s*=\s*(\d+)/);
+      const pageProxBonus = pageProxBonusMatch ? +pageProxBonusMatch[1] : null;
+      const pageProxFieldMatch = shellSrc.match(/const\s+PROX_FIELD\s*=\s*(\{[\s\S]*?\});/);
+      const pageProxField = pageProxFieldMatch ? parseObj(pageProxFieldMatch[1].replace(/;\s*$/, "")) : null;
+
+      const deskQual = {
+        exact: +(scoringSrc.match(/\bQ_EXACT\s*=\s*(\d+)/) || [])[1],
+        prefix: +(scoringSrc.match(/\bQ_PREFIX\s*=\s*(\d+)/) || [])[1],
+        loose: +(scoringSrc.match(/\bQ_LOOSE\s*=\s*(\d+)/) || [])[1],
+        sameField: +(scoringSrc.match(/\bSAME_FIELD_BONUS\s*=\s*([\d.]+)/) || [])[1],
+        adjacent: +(scoringSrc.match(/\bADJACENT_BONUS\s*=\s*(\d+)/) || [])[1],
+        titleStart: +(scoringSrc.match(/\bTITLE_START_BONUS\s*=\s*(\d+)/) || [])[1],
+        tierRule: /tier:\s*strong\s*\?\s*0\s*:\s*1/.test(scoreSrc)
+      };
+
+      const pageQual = {
+        exact: +(shellSrc.match(/\bQ_EXACT\s*=\s*(\d+)/) || [])[1],
+        prefix: +(shellSrc.match(/\bQ_PREFIX\s*=\s*(\d+)/) || [])[1],
+        loose: +(shellSrc.match(/\bQ_LOOSE\s*=\s*(\d+)/) || [])[1],
+        sameField: +(shellSrc.match(/\bSAME_FIELD\s*=\s*([\d.]+)/) || [])[1],
+        adjacent: +(shellSrc.match(/\bADJACENT\s*=\s*(\d+)/) || [])[1],
+        titleStart: +(shellSrc.match(/\bTITLE_START\s*=\s*(\d+)/) || [])[1],
+        tierRule: /tier:\s*strong\s*\?\s*0\s*:\s*1/.test(shellSrc)
+      };
+
+      const diffs = [];
+      if (JSON.stringify(deskFold) !== JSON.stringify(pageFold)) diffs.push("fold table differs");
+      if (JSON.stringify(deskWeights) !== JSON.stringify(pageWeights)) diffs.push("weights differ: " + JSON.stringify(deskWeights) + " vs " + JSON.stringify(pageWeights));
+      if (deskProxBonus !== pageProxBonus || JSON.stringify(deskProxField) !== JSON.stringify(pageProxField)) {
+        diffs.push("PROX differs: desk bonus=" + deskProxBonus + " field=" + JSON.stringify(deskProxField) + " vs page bonus=" + pageProxBonus + " field=" + JSON.stringify(pageProxField));
+      }
+      if (JSON.stringify(deskQual) !== JSON.stringify(pageQual)) diffs.push("tiers/qualities differ: " + JSON.stringify(deskQual) + " vs " + JSON.stringify(pageQual));
+
+      return diffs;
+    };
+
+    const mainPath = path.join(ROOT, "shell", "main.js");
+    const shellBytes = fs.readFileSync(mainPath);
+    const shellSrc = shellBytes.toString("utf8");
+    const wordsSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "words.js"), "utf8");
+    const scoringSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "scoring.js"), "utf8");
+    const scoreSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "card-score.js"), "utf8");
+
+    const realDiffs = readConstantsDiffs(shellSrc, wordsSrc, scoringSrc, scoreSrc);
+
+    // Scratch plant test: modify page copy WEIGHT in a temp copy, never in checkout
+    let plantTurned = false;
+    const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), "plant-pick-const-"));
+    try {
+      const scratchFile = path.join(scratchDir, "main.js");
+      const lines = shellSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:pick-weight") >= 0);
+      if (at >= 0) {
+        lines[at] = lines[at].replace(/title:\s*10/, "title: 99");
+        fs.writeFileSync(scratchFile, lines.join("\n"), "utf8");
+        const plantedSrc = fs.readFileSync(scratchFile, "utf8");
+        const plantedDiffs = readConstantsDiffs(plantedSrc, wordsSrc, scoringSrc, scoreSrc);
+        plantTurned = plantedDiffs.length > 0 && /weights differ/.test(plantedDiffs[0]);
+      }
+    } finally {
+      try { fs.rmSync(scratchDir, { recursive: true, force: true }); } catch {}
+    }
+
+    const sameFile = fs.readFileSync(mainPath).equals(shellBytes);
+    check(realDiffs.length === 0 && plantTurned && sameFile,
+      "7x ranking constants in shell/main.js match src/modules (and lifting plant:pick-weight turns red): "
+      + (realDiffs.length ? realDiffs.join("; ") : "matched") + ", plant " + (plantTurned ? "turned" : "missed") + ", sha " + (sameFile ? "restored" : "differs"));
+  }
   }
 } catch (e) {
   failed++;
