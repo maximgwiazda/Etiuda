@@ -17,11 +17,18 @@ import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js"
 import { pax, intentEl, roleSel, $ } from "./dom.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="eSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
+
+wireScreenTabsChange(() => drawTabs());
+wireScreenTabsReturn(id => {
+  if (id && tabs.some(x => x.id === id)) switchTab(id);
+  else if (tabs[0]) switchTab(tabs[0].id);
+});
 
 function blankTab(){
   return {
@@ -155,10 +162,17 @@ function snapshotActiveTab(){
   t.entrySel=entrySel?{id:entrySel.id, vi:entrySel.vi}:null;
   t.scrollY=pageScrollY();
 }
-function saveTabSession(){
+function tabSessionPayload(){
   snapshotActiveTab();
+  /* plant:screen-tabs-session-exclusion */
+  const convTabs=tabs.filter(t=>!t.id.startsWith("screen-") && t.id!=="maintenance");
+  const active=screenOn ? (convTabs[0] ? convTabs[0].id : activeTabId) : activeTabId;
+  return {v:1, tabs:convTabs, activeTabId:active};
+}
+function saveTabSession(){
   try{
-    ssSet(TAB_KEY, JSON.stringify({v:1, tabs:tabs, activeTabId:activeTabId}));
+    const payload=tabSessionPayload();
+    ssSet(TAB_KEY, JSON.stringify(payload));
   }catch(e){}
   noteActive();
 }
@@ -202,6 +216,7 @@ function sayActive(){
 }
 // Words into the polite region. It speaks only a change, and the same words again are still news: two customers of one name.
 function sayLive(words){
+  if(typeof document==="undefined" || !document || typeof document.getElementById!=="function") return;
   const out=document.getElementById("eSay");
   if(!words||!out) return;
   if(out.textContent===words){ out.textContent=""; setTimeout(()=>{ out.textContent=words; },60); }
@@ -309,7 +324,9 @@ function syncTabActive(id){
 }
 function applyTab(tb){
   if(!tb) return;
+  if(screenOn) clearScreenOn();
   activeTabId=tb.id;
+  setPrevTabId(tb.id);
   if(pax) pax.value=tb.pax||"";
   if(roleSel) roleSel.value=tb.who||"";
   putHandGender(tb.gender);
@@ -354,6 +371,7 @@ function applyTab(tb){
   });
 }
 function switchTab(id){
+  if(screenOn) clearScreenOn();
   if(!id||id===activeTabId) return;
   snapshotActiveTab();
   endPaxConversation(tabs.find(x=>x.id===activeTabId));
@@ -365,9 +383,24 @@ function switchTab(id){
 /* Wraps, and a lone tab is a handled no-op rather than a fall-through: the key must never
    walk focus on one tab and switch on two. */
 function stepTab(dir){
-  if(tabs.length<2) return;
-  const i=tabs.findIndex(x=>x.id===activeTabId);
-  switchTab(tabs[(i+dir+tabs.length)%tabs.length].id);
+  const allScreens=screens||[];
+  const total=tabs.length+allScreens.length;
+  if(total<2) return;
+  let cur=0;
+  if(screenOn){
+    const sidx=allScreens.indexOf(screenOn);
+    cur=tabs.length+(sidx>=0?sidx:0);
+  } else {
+    const tidx=tabs.findIndex(x=>x.id===activeTabId);
+    cur=tidx>=0?tidx:0;
+  }
+  const next=(cur+dir+total)%total;
+  if(next<tabs.length){
+    switchTab(tabs[next].id);
+  } else {
+    const target=allScreens[next-tabs.length];
+    if(target) frontScreenTab(target);
+  }
 }
 /* A new tab GROWS into place - WIDTH, not transform. The tabs do not merely move, they
    RESIZE: applyTabWidths divides the strip evenly, and scaling a tab horizontally would
@@ -481,6 +514,7 @@ function animateTabInsert(mutate){
   }));
 }
 function addTab(){
+  if(screenOn) clearScreenOn();
   snapshotActiveTab();
   const t=blankTab();
   // applyTab() redraws the strip, so the whole insert happens inside the one capture
@@ -569,6 +603,10 @@ function closedTabCount(){ return closedTabs.length; }
 /* What the tab's own x does, for the key that means the same thing everywhere else. The last
    tab is cleared rather than removed, which is closeTab's rule and not a second one. */
 function closeActiveTab(){
+  if(screenOn){
+    closeScreenTab(screenOn);
+    return;
+  }
   if(activeTabId) closeTab(activeTabId);
 }
 /* THE LAST THING ESCAPE CAN SHED IS THE DESK, AND IT ASKS FIRST. Every rung above this one
@@ -925,7 +963,8 @@ function applyTabWidths(){
   /* The CAP breathes with the window: 15% is 210 exactly at the app's own 1400px ceiling,
      so wide screens see no change and narrowing ones watch the tabs ease down in step
      rather than resist and snap. */
-  const wCap=Math.min(210, Math.floor(innerWidth*0.15));
+  const winW=typeof innerWidth!=="undefined"?innerWidth:(typeof window!=="undefined"&&window.innerWidth)||1280;
+  const wCap=Math.min(210, Math.floor(winW*0.15));
   /* THE CAP MAY NEVER UNDERCUT THE FLOOR. Below ~667px the 15% cap falls under TAB_FLOOR_W,
      and a min() applied last let it win: tabs sank beneath the floor and labels truncated
      where the floor promises they never do. Cap first, floor last, and only here - the three
@@ -953,11 +992,13 @@ function applyTabWidths(){
   /* Asked twice when the wordmark moves, so the second answer is the settled one. Valid to
      repeat only because the bar is still at zero: the zero-pressure layout is unique. */
   const askGrant=()=>{
-    const rowEl=$(".row")||wrap.parentElement;
+    const rowEl=$(".row")||(wrap&&wrap.parentElement);
+    if(!rowEl||typeof rowEl.getBoundingClientRect!=="function") return wrap ? (wrap.clientWidth||800) : 800;
     const rowRect=rowEl.getBoundingClientRect();
     const rowPadR=parseFloat(getComputedStyle(rowEl).paddingRight)||0;
     let lastRight=0;
-    for(const c of rowEl.children){ const r=c.getBoundingClientRect(); if(r.right>lastRight) lastRight=r.right; }
+    const kids=rowEl.children||rowEl.kids||[];
+    for(const c of kids){ const r=c.getBoundingClientRect(); if(r.right>lastRight) lastRight=r.right; }
     return Math.floor(wrap.clientWidth+Math.max(0,(rowRect.right-rowPadR)-lastRight));
   };
   let grantW=askGrant();
@@ -967,7 +1008,7 @@ function applyTabWidths(){
      took the name when the insert animation ended, and the arrows left again - 56 frames of
      it. ASKED WITH THE WORDMARK SHOWN whatever is on screen, since its own width is what the
      strip would gain; a live reading fits, hands it back, stops fitting, and rings. */
-  const wmW=hooks.shedWordmarkW();
+  const wmW=typeof hooks.shedWordmarkW==="function" ? hooks.shedWordmarkW() : 0;
   const wasTight=document.body.classList.contains("strip-tight");
   let shedOwn=null;
   if(wmW>0){
@@ -1103,7 +1144,13 @@ function fitTabLabels(){
     /* `tb`, not `t`: t() is the translation function, and a local of that name breaks
        every translated string in the same scope rather than the line that declares it. */
     const tb=idx>=0?tabs[idx]:null;
-    const name=tabLabel(tb, ti);
+    /* A screen tab has data-sid and no conversation row. tabLabel would number it. */
+    let name;
+    if(el.dataset&&el.dataset.sid){
+      const def=getScreenDef(el.dataset.sid);
+      name=def&&typeof def.title==="function"?def.title()
+        :(el.dataset.sid==="maintenance"?t("Maintenance"):el.dataset.sid);
+    }else name=tabLabel(tb, ti);
     const span=el.querySelector(".tab-label>span");
     if(!span) return;
     if(span.textContent!==name) span.textContent=name;
@@ -1175,8 +1222,10 @@ function drawTabsCore(){
      at its end. */
   drawTabs._keepAtEnd=(bar.scrollWidth-bar.clientWidth>1)&&(bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-1);
   bar.innerHTML="";
+  const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
+  const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
   tabs.forEach((tb,i)=>{
-    const b=document.createElement("div"), on=tb.id===activeTabId;
+    const b=document.createElement("div"), on=!curScreen && tb.id===activeTabId;
     b.className="tab"
       +(on?" on":"")
       +(tabDrag&&tabDrag.moved&&tabDrag.key===tb.id?" dragging":"");
@@ -1229,6 +1278,47 @@ function drawTabsCore(){
        page's own scrolling by drag. */
     b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
     b.onauxclick=e=>{ if(e.button===1) closeTab(tb.id,e); };
+    bar.appendChild(b);
+  });
+  screenList.forEach(sid => {
+    const b=document.createElement("div"), on=sid===curScreen;
+    b.className="tab screen"
+      +(on?" on":"");
+    b.dataset.sid=sid;
+    const def=typeof getScreenDef === "function" ? getScreenDef(sid) : null;
+    const name=def&&typeof def.title==="function"?def.title():(sid==="maintenance"?t("Maintenance"):sid);
+    b.title=name;
+    const lab=document.createElement("span");
+    lab.className="tab-label";
+    lab.setAttribute("role","tab");
+    lab.setAttribute("aria-selected",on?"true":"false");
+    lab.tabIndex=0;
+    lab.setAttribute("aria-label",name);
+    lab.onkeydown=e=>{
+      if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
+      if(e.key!=="Enter") return;
+      e.preventDefault(); e.stopPropagation();
+      if(typeof frontScreenTab === "function") frontScreenTab(sid);
+    };
+    const labViz=document.createElement("span");
+    labViz.textContent=name;
+    lab.appendChild(labViz);
+    const x=document.createElement("button");
+    x.type="button";
+    x.className="tab-x";
+    x.title=t("Close tab");
+    x.setAttribute("aria-label", t("Close tab"));
+    x.innerHTML=ICON_TAB_X;
+    x.onclick=e=>{
+      e.stopPropagation();
+      if(typeof closeScreenTab === "function") closeScreenTab(sid);
+    };
+    b.appendChild(lab);
+    b.appendChild(x);
+    b.onclick=e=>{
+      if(e.target.closest && e.target.closest(".tab-x")) return;
+      if(typeof frontScreenTab === "function") frontScreenTab(sid);
+    };
     bar.appendChild(b);
   });
   const wrap=$("#tabsWrap")||bar.parentElement;
@@ -1344,6 +1434,7 @@ let tabSaveWired=false;
 
 export {
   saveTabSession,
+  tabSessionPayload,
   scheduleTabSave,
   noteActive,
   activeHeard,

@@ -143,7 +143,9 @@ function wireGlobalKeydown(){
         const back=$("#mgClose")?(()=>hooks.openManage())
           :$("#setBody")?(()=>openSettings("keys"))
           :null;
-        openMaintenance(back);
+        if(dismissModal()!==false){
+          openMaintenance(back);
+        }
       }
       /* AND THE EDITORS KEEP THEIR OWN ARROWS. Everything else stays suppressed - a dialog
          holds unsaved work and the main screen's keys have no meaning over it - but walking
@@ -200,6 +202,9 @@ function wireGlobalKeydown(){
     if(eHost() && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code==="KeyT" || e.key==="t" || e.key==="T")){
       e.preventDefault();
       hooks.runShortcut("tabReopen");
+      return;
+    }
+    if(typeof document!=="undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")){
       return;
     }
     /* CTRL+C COPIES THE MARKED REPLY, as Enter does, where nothing is selected and nothing is being typed; a selection or

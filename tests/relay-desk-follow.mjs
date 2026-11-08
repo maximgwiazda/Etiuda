@@ -275,6 +275,14 @@ async function launch(plan) {
   if (invokeHandlers["etiuda:open-catalog-folder"]) {
     await invokeHandlers["etiuda:open-catalog-folder"](ev);
   }
+  /* Board 962, stage 0b: the lead's switch on a relay team, in the relay's mirror where the desk reads its team file. */
+  let contentViews = null;
+  if (plan.contentSwitch && invokeHandlers["etiuda:team-join"]) {
+    fs.writeFileSync(path.join(MIRROR, "etiuda-team.json"), plan.contentSwitch.text);
+    const before = await invokeHandlers["etiuda:team-join"](ev, "content");
+    const shown = await invokeHandlers["etiuda:team-join"](ev, "content-said", plan.contentSwitch.team, plan.contentSwitch.at);
+    contentViews = { before, shown };
+  }
 
   const normShared = path.resolve(SHARED);
   const normMirror = path.resolve(MIRROR);
@@ -301,6 +309,7 @@ async function launch(plan) {
     answerSurvived: mirrorFiles.includes("catalog-answer.ec"),
     heldBranchReached: plan.holdBranch ? mirrorFiles.includes(plan.holdBranch.stem + ".ec") : false,
     said,
+    contentViews,
   };
 
   return res;
@@ -691,8 +700,20 @@ async function main() {
     );
   }
 
+  /* Scenario 7: the lead's switch is shown and applies on a relay team (board 962, stage 0b, round five) */
+  const s7 = makeScenario("rostered-follow");
+  fs.writeFileSync(path.join(s7.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s7.movedTeamDoc, s7.lead), null, 2));
+  const at7 = "2026-11-01T09:00:00.000Z";
+  const switched = Object.assign(JSON.parse(JSON.stringify(s7.movedTeamDoc)), { rev: (s7.movedTeamDoc.rev || 0) + 1,
+    content: { format: 1, on: true, by: "Quay lead", at: at7 } });
+  const r7 = runScenario(Object.assign({}, s7, { contentSwitch: { text: JSON.stringify(signTeamDoc(switched, s7.lead), null, 2), team: s7.movedTeamDoc.id, at: at7 } }));
+  const cv = r7.contentViews || {};
+  check(r7.openedDir === s7.mirrorFolder && !!cv.before && cv.before.team === s7.movedTeamDoc.id && cv.before.on === true && cv.before.said === false
+      && !!cv.shown && cv.shown.said === true,
+    "945s16 on a relay team the lead's switch is read from the relay's mirror, shown and then applies: " + JSON.stringify({ opened: r7.openedDir === s7.mirrorFolder, before: cv.before, shown: cv.shown && cv.shown.said }));
+
   // Clean up scenario temp dirs
-  [s1, s2, s3, s4, s6].forEach(s => {
+  [s1, s2, s3, s4, s6, s7].forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 

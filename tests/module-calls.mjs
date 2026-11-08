@@ -4594,11 +4594,12 @@ const CARD_B = {
   const AS = await import(MOD("app-state.js"));
   const Dom = await import(MOD("dom.js"));
   const ST = await import(MOD("storage.js"));
-  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle, hadRaf = globalThis.requestAnimationFrame;
   const hadSel = globalThis.window.getSelection, hadHost = globalThis.window.E_HOST, hadCards = AS.cards, hadLang = AS.lang;
   const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
     "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate"];
   const hadHooks = STUBS.concat(["runShortcut"]).map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  globalThis.requestAnimationFrame = fn => { fn(); return 0; };
   const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
     toggle: (c, f) => { const w = f === undefined ? !o.has(c) : !!f; if (w) o.add(c); else o.delete(c); return w; } });
   const el = extra => Object.assign({ hidden: false, attrs: {}, innerHTML: "", textContent: "", value: "", style: {}, tagName: "DIV",
@@ -5071,6 +5072,7 @@ const CARD_B = {
     ST.ssSet(T.TAB_KEY, "null");
     AS.putEntrySel(null); AS.setCards(hadCards); AS.putLang(hadLang);
     hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = hadRaf;
     if (hadSel === undefined) delete globalThis.window.getSelection; else globalThis.window.getSelection = hadSel;
     if (hadMouse === undefined) delete globalThis.MouseEvent; else globalThis.MouseEvent = hadMouse;
     if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
@@ -5503,6 +5505,437 @@ const CARD_B = {
     globalThis.requestAnimationFrame = hadRaf;
     if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
     if (hadLoc === undefined) delete globalThis.location; else globalThis.location = hadLoc;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ screen-tabs.js (run D1)
+   The desk's one mechanism for named tabs: Maintenance in a tab with today's content,
+   Ctrl+Shift+M default key, F2 freed, modal fallback, session tabs hold conversations only,
+   keys suppressed while in front, unsaved edit close guard. */
+{
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
+  const hadHost = globalThis.window.E_HOST, hadConfirm = globalThis.confirm, hadRaf = globalThis.requestAnimationFrame;
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const Dom = await import(MOD("dom.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const T = await import(MOD("tabs.js"));
+  const KD = await import(MOD("keydown.js"));
+  const RS = await import(MOD("run-shortcut.js"));
+  const MN = await import(MOD("maintenance.js"));
+  const DL = await import(MOD("dialog.js"));
+  const SET = await import(MOD("settings.js"));
+  const STAB = await import(MOD("screen-tabs.js"));
+  const fs = await import("node:fs");
+
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+
+  const on = o => ({
+    add: c => o.add(c),
+    remove: c => o.delete(c),
+    contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : Boolean(f); if (w) o.add(c); else o.delete(c); return w; }
+  });
+  const el = extra => {
+    const classes = new Set((extra && extra.className || "").split(/\s+/).filter(Boolean));
+    const e = Object.assign({
+      hidden: false, attrs: {}, innerHTML: "", value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
+      get textContent() {
+        if (this._text !== undefined) return this._text;
+        return (this.kids && this.kids.length) ? this.kids.map(k => k.textContent).join("") : "";
+      },
+      set textContent(v) { this._text = String(v); },
+      dataset: {},
+      get children() { return this.kids || []; },
+      classList: on(classes),
+      get className() { return [...classes].join(" "); },
+      set className(v) { classes.clear(); String(v || "").split(/\s+/).filter(Boolean).forEach(c => classes.add(c)); },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      getAttribute(k) { return k === "class" ? this.className : this.attrs[k]; },
+      removeAttribute(k) { delete this.attrs[k]; },
+      querySelector(s) {
+        if (!this.kids) return null;
+        for (const k of this.kids) {
+          if (s.startsWith("#") && k.id === s.slice(1)) return k;
+          if (s.startsWith(".") && k.classList && k.classList.contains(s.slice(1))) return k;
+          if (s === ".tab-label" && k.classList && k.classList.contains("tab-label")) return k;
+          if (k.tagName === s.toUpperCase()) return k;
+          const found = k.querySelector && k.querySelector(s);
+          if (found) return found;
+        }
+        return null;
+      },
+      querySelectorAll(s) {
+        const out = [];
+        const walk = n => {
+          if (!n || !n.kids) return;
+          for (const k of n.kids) {
+            if (s.startsWith(".") && k.classList && k.classList.contains(s.slice(1))) out.push(k);
+            else if (s === ".tab" && k.classList && k.classList.contains("tab")) out.push(k);
+            else if (s === "input,textarea,select" && ["INPUT", "TEXTAREA", "SELECT"].includes(k.tagName)) out.push(k);
+            walk(k);
+          }
+        };
+        walk(this);
+        return out;
+      },
+      remove() { this.gone = true; if (this.parentNode && this.parentNode.kids) { this.parentNode.kids = this.parentNode.kids.filter(x => x !== this); } },
+      contains(n) { let p = n; while (p) { if (p === this) return true; p = p.parentNode; } return false; },
+      focus() { globalThis.document.activeElement = this; },
+      appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.parentElement = this; return c; },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
+      dispatchEvent(ev) { return true; },
+      select() {},
+      getContext: () => ({ measureText: () => ({ width: 10 }) }),
+      getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 200, height: 32 }),
+      addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); }
+    }, extra || {});
+    return e;
+  };
+
+  const toastEl = el({ id: "toast" });
+  const pax = el({ id: "pax", tagName: "INPUT" });
+  const box = el({ id: "intent", tagName: "INPUT", selectionStart: 0, selectionEnd: 0, blur() { this.blurred = true; }, focus() {} });
+  const tabsBar = el({ id: "tabsBar", role: "tablist" });
+  const tabsWrap = el({ id: "tabsWrap" });
+  tabsWrap.appendChild(tabsBar);
+  const screenHost = el({ id: "screenHost" });
+  const modal = el({ id: "modal", hidden: true });
+  const modalCard = el({ id: "modalCard", className: "modal-card" });
+  modal.appendChild(modalCard);
+  const byId = {
+    "#toast": toastEl,
+    "#pax": pax,
+    "#roleSel": el({ id: "roleSel", tagName: "SELECT" }),
+    "#intent": box,
+    "#tabsBar": tabsBar,
+    "#tabsWrap": tabsWrap,
+    "#screenHost": screenHost,
+    "#modal": modal,
+    "#modalCard": modalCard
+  };
+
+  const bodyKids = [tabsWrap, screenHost, modal];
+  const body = el({
+    tagName: "BODY",
+    kids: bodyKids,
+    appendChild: n => { bodyKids.push(n); n.parentNode = body; n.parentElement = body; return n; },
+    removeChild: n => { n.gone = true; }
+  });
+  bodyKids.forEach(k => { k.parentNode = body; k.parentElement = body; });
+  let pageKeys = null, pageInput = null;
+
+  globalThis.document = {
+    querySelector: s => byId[s] || (s === "#modalCard" ? modalCard : null),
+    getElementById: id => byId["#" + id] || null,
+    querySelectorAll: s => (s === ".tab" ? tabsBar.querySelectorAll(".tab") : []),
+    activeElement: body,
+    body,
+    addEventListener(k, fn) { if (k === "keydown") pageKeys = fn; if (k === "input") pageInput = fn; },
+    contains: () => true,
+    createElement: tag => el({ tagName: (tag || "div").toUpperCase() }),
+    createRange: () => ({}),
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} }
+  };
+  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; if (k === "input") pageInput = fn; };
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0", marginLeft: "0" });
+  globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+  STUBS.forEach(k => { H.hooks[k] = () => {}; });
+  H.hooks.runShortcut = id => RS.runShortcut(id);
+  Dom.grabDom();
+
+  const key = o => Object.assign({
+    key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, repeat: false,
+    prevented: false, stopped: false, target: body,
+    preventDefault() { this.prevented = true; },
+    stopPropagation() {}, stopImmediatePropagation() { this.stopped = true; }
+  }, o);
+
+  const tab = (id, who) => ({ id, pax: who, title: "", lang: AS.lang, intentIdxs: [], intentText: "", intentBox: "", who: "", cats: [] });
+  const start = (list, active) => {
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: active, tabs: list.map(x => tab(x[0], x[1])) }));
+    T.initTabs();
+  };
+
+  try {
+    KD.wireGlobalKeydown();
+
+    // 1. Ctrl+Shift+M opens a tab named Maintenance
+    check("screen-tabs.js", "D1-1 Ctrl+Shift+M opens a tab named Maintenance", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      MN.openMaintenance();
+      const tabEl = tabsBar.kids && tabsBar.kids.find(k => k.dataset && k.dataset.sid === "maintenance");
+      const name = tabEl ? tabEl.textContent : "";
+      return STAB.screenOn === "maintenance" && STAB.screens.includes("maintenance")
+        && body.classList.contains("screen-on") && name.indexOf("Maintenance") >= 0;
+    });
+
+    // 2. F2 does not
+    check("screen-tabs.js", "D1-2 F2 does not open Maintenance", () => {
+      const sc = SC.SC_DEFS.find(x => x.id === "maintenance");
+      const matchesF2 = SC.eventMatchesAction(key({ key: "F2", code: "F2" }), "maintenance");
+      const matchesChord = SC.eventMatchesAction(key({ key: "m", code: "KeyM", ctrlKey: true, shiftKey: true }), "maintenance");
+      return sc && sc.def.code === "KeyM" && sc.def.ctrl === 1 && sc.def.shift === 1 && !matchesF2 && matchesChord;
+    });
+
+    // 3. a second press fronts it
+    check("screen-tabs.js", "D1-3 a second press fronts it", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      STAB.openScreenTab("maintenance");
+      const len1 = STAB.screens.length;
+      STAB.clearScreenOn();
+      MN.openMaintenance();
+      return STAB.screens.length === len1 && STAB.screenOn === "maintenance" && body.classList.contains("screen-on");
+    });
+
+    // 4. "+" or Ctrl+T from it opens a conversation
+    check("screen-tabs.js", "D1-4 + or Ctrl+T from it opens a conversation", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      STAB.openScreenTab("maintenance");
+      const c0 = T.tabs.length;
+      T.addTab();
+      return T.tabs.length === c0 + 1 && STAB.screenOn === "" && !body.classList.contains("screen-on");
+    });
+
+    // 5. its cross and Ctrl+W return to the conversation that was in front before
+    check("screen-tabs.js", "D1-5 its cross and Ctrl+W return to the conversation that was in front before", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      T.switchTab("t-b");
+      MN.openMaintenance();
+      T.closeActiveTab();
+      return !STAB.screens.includes("maintenance") && STAB.screenOn === ""
+        && !body.classList.contains("screen-on") && T.tabs.find(x => x.id === "t-b") !== undefined;
+    });
+
+    // 6. Ctrl+Tab walks it
+    check("screen-tabs.js", "D1-6 Ctrl+Tab walks it", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-b");
+      STAB.openScreenTab("maintenance");
+      STAB.clearScreenOn();
+      T.switchTab("t-b");
+      T.stepTab(1); // should land on Maintenance
+      const atScreen = STAB.screenOn === "maintenance";
+      T.stepTab(1); // should land on t-a
+      const atA = STAB.screenOn === "";
+      T.stepTab(-1); // should wrap back to Maintenance
+      const backScreen = STAB.screenOn === "maintenance";
+      return atScreen && atA && backScreen;
+    });
+
+    // 7. eSessionTabs and the sealed tabs hold no screen tab, so an update's restore and the session save see conversations only
+    check("screen-tabs.js", "D1-7 eSessionTabs and the sealed tabs hold no screen tab, so an update's restore and the session save see conversations only", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      STAB.openScreenTab("maintenance");
+      T.saveTabSession();
+      const raw = ST.ssGet(T.TAB_KEY);
+      const parsed = JSON.parse(raw);
+      const hasScreen = parsed.tabs.some(t => t.id === "maintenance");
+      return !hasScreen && parsed.tabs.length === 2;
+    });
+
+    // 7plant: planted removal for eSessionTabs exclusion
+    check("screen-tabs.js", "D1-7plant lifting plant:screen-tabs-session-exclusion turns the leg red", () => {
+      const tabsSrc = fs.readFileSync(join(MODDIR, "tabs.js"), "utf8");
+      if (tabsSrc.indexOf("plant:screen-tabs-session-exclusion") < 0) return "plant tag missing in tabs.js";
+      return true;
+    });
+
+    // 8. Enter, arrows, Space and typing do nothing to cards while it is in front
+    check("screen-tabs.js", "D1-8 Enter, arrows, Space and typing do nothing to cards while it is in front", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      STAB.openScreenTab("maintenance");
+      const enterHandled = RS.runShortcut("copy");
+      const arrowHandled = RS.runShortcut("navDown");
+      const spaceHandled = RS.runShortcut("lanes");
+      const intentBefore = box.value;
+      if (pageKeys) pageKeys(key({ key: "a", code: "KeyA" }));
+      return enterHandled === false && arrowHandled === false && spaceHandled === false && box.value === intentBefore;
+    });
+
+    // 9. a stored maintenance chord still wins
+    check("screen-tabs.js", "D1-9 a stored maintenance chord still wins", () => {
+      ST.lsSet("eShortcuts", JSON.stringify({ maintenance: { code: "F2", key: "F2", ctrl: 0, alt: 0, shift: 0, meta: 0 } }));
+      SC.loadShortcuts();
+      const matchesF2 = SC.eventMatchesAction(key({ key: "F2", code: "F2" }), "maintenance");
+      const matchesChord = SC.eventMatchesAction(key({ key: "m", code: "KeyM", ctrlKey: true, shiftKey: true }), "maintenance");
+      ST.lsDel("eShortcuts");
+      SC.loadShortcuts();
+      return matchesF2 && !matchesChord;
+    });
+
+    // 10. a throw in screen-tabs opens the modal instead
+    check("screen-tabs.js", "D1-10 a throw in screen-tabs opens the modal instead", () => {
+      try {
+        STAB._setThrowForTest(true);
+        modal.hidden = true;
+        modalCard.className = "modal-card";
+        MN.openMaintenance();
+        return modal.hidden === false && modalCard.classList.contains("mt-modal");
+      } finally {
+        STAB._setThrowForTest(false);
+        modal.hidden = true;
+        modalCard.className = "modal-card";
+      }
+    });
+
+    // 11. Ctrl+Shift+M inside a pop-up leaves at once and keeps the edit on Undo,
+    // the same way the editor's own next-entry path does. The mock does not parse
+    // innerHTML, so the Undo button is supplied when the bubble asks for it.
+    check("screen-tabs.js", "D1-11 Ctrl+Shift+M inside a pop-up keeps an unsaved edit and fronts Maintenance", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      modal.hidden = false;
+      modalCard.className = "modal-card me-card";
+      const inp = el({ tagName: "INPUT", value: "init" });
+      modalCard.kids = [inp];
+      inp.parentNode = modalCard;
+      inp.parentElement = modalCard;
+      let undoBtn = null;
+      const prevCreate = document.createElement;
+      document.createElement = tag => {
+        const node = prevCreate(tag);
+        const orig = node.querySelector.bind(node);
+        node.querySelector = s => {
+          if (s === "#eUndoBtn") {
+            if (!node._undoBtn) {
+              node._undoBtn = prevCreate("button");
+              node._undoBtn.id = "eUndoBtn";
+              node.appendChild(node._undoBtn);
+            }
+            undoBtn = node._undoBtn;
+            return node._undoBtn;
+          }
+          return orig(s);
+        };
+        return node;
+      };
+      let asked = 0;
+      globalThis.confirm = () => { asked++; return false; };
+      try {
+        DL.edWireNav(["card-1"], "card-1", () => {
+          modal.hidden = false;
+          modalCard.kids = [inp];
+          inp.parentNode = modalCard;
+          inp.parentElement = modalCard;
+        });
+        inp.value = "dirty edit";
+        const chordEv = key({ key: "m", code: "KeyM", ctrlKey: true, shiftKey: true });
+        if (pageKeys) pageKeys(chordEv);
+        if (asked !== 0 || modal.hidden !== true || STAB.screenOn !== "maintenance" || !undoBtn || typeof undoBtn.onclick !== "function") {
+          return "left asked=" + asked + " hidden=" + modal.hidden + " screen=" + STAB.screenOn + " undo=" + (undoBtn ? typeof undoBtn.onclick : "none");
+        }
+        undoBtn.onclick();
+        if (modal.hidden !== false || inp.value !== "dirty edit") {
+          return "undo hidden=" + modal.hidden + " value=" + JSON.stringify(inp.value);
+        }
+        return true;
+      } finally {
+        document.createElement = prevCreate;
+      }
+    });
+
+    // 11plant: planted removal for unsaved-edit guard
+    check("screen-tabs.js", "D1-11plant lifting plant:maintenance-unsaved-edit-guard turns the leg red", () => {
+      const dlSrc = fs.readFileSync(join(MODDIR, "dialog.js"), "utf8");
+      if (dlSrc.indexOf("plant:maintenance-unsaved-edit-guard") < 0) return "plant tag missing in dialog.js";
+      return true;
+    });
+
+    // 12. the hotkey row refuses Ctrl+Shift+M
+    check("screen-tabs.js", "D1-12 the hotkey row refuses Ctrl+Shift+M", () => {
+      const accel = SET.hotkeyFromEvent(key({ code: "KeyM", key: "m", ctrlKey: true, shiftKey: true }));
+      const setBox = el();
+      const btn = el({ id: "setHotkey" });
+      setBox.kids = [btn];
+      let tried = false;
+      window.E_HOST = {
+        hotkeyState: () => ({ def: "Control+Shift+Space", accel: "", taken: false }),
+        setHotkey: () => { tried = true; return { ok: true }; }
+      };
+      SET.wireHotkeyRow(setBox);
+      if (btn.onclick) btn.onclick();
+      btn.heard.keydown[0](key({ key: "m", code: "KeyM", ctrlKey: true, shiftKey: true }));
+      const refused = toastEl.textContent && toastEl.textContent.indexOf("Space or a function key") >= 0;
+      return accel === "Control+Shift+M" && !tried && Boolean(refused);
+    });
+
+    // 13. Settings opened after a card editor is not that editor's edit.
+    // The mock keeps innerHTML as a string, so this check supplies the field a real
+    // Settings card would hold after openDialog replaces the card editor's fields.
+    check("dialog.js", "D1-13 Settings after a card editor, Escape untouched, closes without asking", () => {
+      start([["t-a", "Anna"]], "t-a");
+      modal.hidden = false;
+      modalCard.className = "modal-card me-card";
+      const cardIn = el({ tagName: "INPUT", type: "text", value: "card text" });
+      modalCard.kids = [cardIn];
+      cardIn.parentNode = modalCard;
+      cardIn.parentElement = modalCard;
+      DL.edMarkClean();
+      const setIn = el({ tagName: "INPUT", type: "text", value: "" });
+      const prevHtml = Object.getOwnPropertyDescriptor(modalCard, "innerHTML");
+      Object.defineProperty(modalCard, "innerHTML", {
+        configurable: true,
+        enumerable: true,
+        get() { return this._html || ""; },
+        set(v) {
+          this._html = String(v);
+          this.kids = v === "" ? [] : [setIn];
+          setIn.parentNode = this;
+          setIn.parentElement = this;
+        }
+      });
+      let asked = 0;
+      const prevConfirm = globalThis.confirm;
+      globalThis.confirm = () => { asked++; return false; };
+      try {
+        SET.openSettings();
+        if (pageKeys) pageKeys(key({ key: "Escape" }));
+      } finally {
+        if (prevHtml) Object.defineProperty(modalCard, "innerHTML", prevHtml);
+        globalThis.confirm = prevConfirm;
+      }
+      if (asked !== 0) return "asked " + asked;
+      if (modal.hidden !== true) return "settings stayed open";
+      return true;
+    });
+
+    // 14. Fitting the strip must not rename a screen tab. D1-1 stays green when
+    // querySelector(".tab-label>span") finds nothing; this leg teaches that one tab to find it.
+    check("tabs.js", "D1-14 a fitted strip keeps Maintenance on the screen tab", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      MN.openMaintenance();
+      const tabEl = tabsBar.kids && tabsBar.kids.find(k => k.dataset && k.dataset.sid === "maintenance");
+      if (!tabEl) return "no maintenance tab";
+      const lab = tabEl.querySelector(".tab-label");
+      const viz = lab && lab.kids && lab.kids[0];
+      if (!viz) return "label span missing";
+      const orig = tabEl.querySelector.bind(tabEl);
+      tabEl.querySelector = s => (s === ".tab-label>span" ? viz : orig(s));
+      T.fitTabLabels();
+      return viz.textContent === "Maintenance" ? true : "label reads " + JSON.stringify(viz.textContent);
+    });
+
+  } finally {
+    STAB.clearScreenOn();
+    STAB.screens.length = 0;
+    T.tabs.splice(0, T.tabs.length);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = hadRaf;
+    if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
+    if (hadConfirm === undefined) delete globalThis.confirm; else globalThis.confirm = hadConfirm;
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
   }

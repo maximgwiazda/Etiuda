@@ -76,10 +76,10 @@ const SC_DEFS=[
     hint:"Hold Ctrl (Cmd on Mac): show the pills when hidden, or expand them past two rows",
     def:{code:"ControlLeft",key:"Control",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1,hold:1,
     display:"Hold Ctrl"},
-  /* F2: the cleanest unclaimed key at the time the panel was designed. inField on
-     purpose - a rescue has to fire from wherever the trouble found you. */
+  /* Ctrl+Shift+M: the desk's chord for Maintenance, freeing F2 for rename (board 965).
+     inField on purpose - a rescue has to fire from wherever the trouble found you. */
   {id:"maintenance",label:"Maintenance panel",hint:"Readings about this machine, and rescue switches",
-    def:{code:"F2",key:"F2",ctrl:0,alt:0,shift:0,meta:0},inField:1},
+    def:{code:"KeyM",key:"m",ctrl:1,alt:0,shift:1,meta:0},inField:1},
   /* Ctrl+A reaches the search box without the caret being in it - after a pick the box
      is deliberately blurred, and the natural way to replace a query is Ctrl+A and type.
      inField:0 keeps the ordinary Ctrl+A in dialog fields, the facts editor, and the box. */

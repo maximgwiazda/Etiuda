@@ -605,6 +605,14 @@ function createFolderProgram(opts) {
     ok = ok && typeof doc.keyId === "string" && !!doc.keyId && /^[0-9a-f]{64}$/.test(String(doc.enc)) && /^(?:[0-9a-f]{2}){16,}$/.test(String(doc.ct)); /* plant:s0-syncer-shape */
     return ok;
   }
+  /* A desk's working copy sealed to the lead's box for this team (board 962, stage 0b): judged as leadAnswerAt judges an answer. */
+  function leadBranchAt(relPath, doc) {
+    const parts = normRel(relPath).split("/");
+    let ok = parts.length === 3 && parts[0] === "desks" && /^k-[0-9a-f]{16}$/.test(parts[1]) && /-[0-9a-f]{8}\.ec$/.test(parts[2]);
+    ok = ok && !!doc && +doc.format === 1 && doc.kind === "etiuda-branch-sealed" && doc.team === team; /* plant:s0b-syncer-branch */
+    ok = ok && typeof doc.keyId === "string" && !!doc.keyId && /^[0-9a-f]{64}$/.test(String(doc.enc)) && /^(?:[0-9a-f]{2}){16,}$/.test(String(doc.ct));
+    return ok;
+  }
   /* The catalog a staged or mirrored .ec holds, opened where sealed, or null. */
   function catalogIn(text) {
     let doc = null;
@@ -817,8 +825,10 @@ function createFolderProgram(opts) {
               let olderEpoch = false, olderRevAtEpoch = false;
               let compEpoch = mirrorEpoch, compRev = mirrorRev;
               if (floor) {
-                compEpoch = floor.epoch;
-                compRev = floor.rev;
+                /* The higher of the floor handed in and the file the mirror holds. */
+                const above = floor.epoch > mirrorEpoch || (floor.epoch === mirrorEpoch && floor.rev > mirrorRev);
+                compEpoch = above ? floor.epoch : mirrorEpoch;
+                compRev = above ? floor.rev : mirrorRev;
                 olderEpoch = doc.epoch < compEpoch;
                 olderRevAtEpoch = doc.epoch === compEpoch && rev < compRev;
               } else if (floor === null) {
@@ -1106,7 +1116,7 @@ function createFolderProgram(opts) {
             io.rename(tmpPath, target);
             applied.push(relPath);
           }
-        } else if (leadAnswerAt(relPath, doc)) {
+        } else if (leadAnswerAt(relPath, doc) || leadBranchAt(relPath, doc)) {
           /* Sealed to the lead's box, so no desk opens it: it lands unread, as stats.estat does. */
           const target = path.join(mirror, relPath);
           ensureDir(target, io);
@@ -1215,7 +1225,9 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         let kindOk = doc && doc.kind === "etiuda-catalog-ask";
         if (doc && doc.kind === "etiuda-catalog-ask-withdrawn") kindOk = true; /* plant:syncer-ask-withdrawn */
-        if (doc && +doc.format === 1 && kindOk) {
+        /* An ask of format 2 is one made under the lead's switch (shell/main.js ASK_CONTENT_FORMAT); a withdrawal stays format 1. */
+        const formatOk = !!doc && (+doc.format === 1 || (+doc.format === 2 && doc.kind === "etiuda-catalog-ask"));
+        if (formatOk && kindOk) {
           const target = path.join(mirror, relPath);
           ensureDir(target, io);
           io.rename(tmpPath, target);
@@ -1386,6 +1398,7 @@ class FolderSyncerController {
       pin: this.pin,
       keyFor: this.keyFor,
       checks: this.checks,
+      floor: opts.floor, /* plant:s0b-controller-floor */
       logger: opts.logger,
       onStatus: this.onStatus,
       onChange: this.onChange
