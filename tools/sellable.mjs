@@ -235,7 +235,8 @@ export function customerReleaseProfileVerdict({ root, tree, runsDir, summaries: 
   const inherits = latest.inherits && typeof latest.inherits === 'string' && latest.inherits !== '';
   const profileCount = latest.gates && latest.gates.profile ? latest.gates.profile.length : 0;
   const ranCount = latest.gates && latest.gates.ran ? latest.gates.ran.length : 0;
-  const covers = inherits || (profileCount > 0 && ranCount >= profileCount) || (profileCount === 0 && ranCount > 0);
+  /* A summary that lists no profile cannot show it covered the profile. */
+  const covers = inherits || (profileCount > 0 && ranCount >= profileCount);
 
   if (!covers) {
     return 'release profile summary for tree ' + tree + ' does not cover the whole profile: ran '
