@@ -1595,7 +1595,7 @@ const t0 = Date.now();
       const card = document.getElementById("modalCard"), load = document.getElementById("mgImportCatalog");
       const acts = card && card.querySelector(".modal-actions");
       if (!acts || !load) return { step: "missing" };
-      for (const [id, label] of [["mgJoinTeam", "Dołącz do zespołu"], ["mgHistory", "Historia wersji…"]]) {
+      for (const [id, label] of [["mgJoinTeam", "Dołącz do zespołu"], ["mgHistory", "Zapisane kopie…"]]) {
         if (document.getElementById(id)) continue;
         const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.id = id; b.textContent = label;
         load.parentNode.appendChild(b);

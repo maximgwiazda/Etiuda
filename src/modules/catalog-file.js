@@ -453,7 +453,7 @@ function writeShared(loose,origin,holds,layer){
         if(loose){ lySet("SharedFile",name); lySet("Exported",looseMark()); }
         sharedSaid=false;
       }
-      if(r.fresh && r.fresh.length) toast(t("A colleague changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file."));
+      if(r.fresh && r.fresh.length) toast(t("A teammate changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file."));
       else if(r.why==="sealed" && !sharedSaid){
         sharedSaid=true;
         toast(t("This team's catalogs stay sealed, so this change stays in this desk's own file."));

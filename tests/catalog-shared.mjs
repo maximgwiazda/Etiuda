@@ -464,7 +464,7 @@ try {
       + (hub && hub.kind || "none") + ")");
 
     const EN = "This team's catalogs stay sealed, so this change stays in this desk's own file.";
-    const PL = "Katalogi tego zespołu pozostają zaszyfrowane, więc ta zmiana zostaje we własnym pliku stanowiska.";
+    const PL = "Katalogi tego zespołu pozostają zapieczętowane, więc ta zmiana zostaje we własnym pliku stanowiska.";
     const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
     const page = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-file.js"), "utf8");
     check(lang.indexOf('"' + EN + '":"' + PL + '"') >= 0 && page.indexOf('t("' + EN + '")') >= 0,

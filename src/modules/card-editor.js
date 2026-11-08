@@ -207,7 +207,7 @@ function meLangPanel(m,l,i){
       +'<input id="'+id("t")+'" value="'+v("t")+'"'
       +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'">'
       +'<p class="me-stamp-note" data-i18n-skip hidden></p></div>'
-    +'<div class="mf"><label>'+esc(t("Macro"))+'</label>'
+    +'<div class="mf"><label>'+esc(t("Reply"))+'</label>'
     +'<div class="me-macro"><textarea id="'+id("body")+'" spellcheck="true"'
       +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea><div class="me-mirror" aria-hidden="true" data-i18n-skip></div></div></div>'
     +'<div class="mf"><label>Note</label>'
@@ -424,9 +424,9 @@ function openCardEditor(id, presetCat, fromManage){
           +'<input type="checkbox" id="'+id+'"'+(on?" checked":"")+(dis?" disabled":"")+'> '
           +esc(t(label)).split("{PAX}").join(paxTag).split("{INT}").join(intTag)+'</label>');
         box("meAlt",m.alt,false,"Blank lines split the text into separately copyable alternatives.",
-            "Split by blank lines into alternatives");
+            "Alternatives, split by blank lines");
         box("meSeq",m.seq,!m.alt,"Numbers the alternatives as ordered steps.",
-            "Ordered sequence (STEP badges)");
+            "Steps, in order (STEP badges)");
         /* THE MANUAL OVERRIDE: a switch, since it reveals the forms and two boxes rather than setting one.
            Off, the line under it says where the address comes from; on, Studio's forms of address, then the
            boxes as they always worked. */
@@ -623,7 +623,7 @@ function openCardEditor(id, presetCat, fromManage){
       mark:()=>markMissing($("#"+meFieldId(field,primary))),
       land:()=>meFocusField(field,primary)});
     if(!t) need.push(fld("t","Title is required"));
-    if(!text[cardFieldKey("body",primary)]) need.push(fld("body","Macro text is required"));
+    if(!text[cardFieldKey("body",primary)]) need.push(fld("body","Reply text is required"));
     if(!c||!CATS[c]) need.push({msg:"Pick a category",
       mark:()=>markMissing($("#meCatPick"),"click"), land:meFocusCat});
     if(edReportMissing(need)) return;

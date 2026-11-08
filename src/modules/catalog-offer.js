@@ -213,7 +213,7 @@ function ecExportHtml(){
    catalog wears its key, Look, and Work from it where Load would be. `at` is the row's place in the list of desks. */
 function ecDeskRowHtml(f,o){
   const who=deskName(f);
-  const tip=t("Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.")
+  const tip=t("Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.")
     .split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
   return '<div class="ec-row ec-desk'+(o.nested?'':' ec-alone')+(o.loaded?' is-loaded':'')+'" data-ec-desk="'+o.at+'">'
     +'<span class="ec-name"><b>'+esc(who)+(o.twin?'<span class="ec-fp">'+esc(o.twin)+'</span>':'')+'</b>'
@@ -626,7 +626,7 @@ function eOfferCatalogDialog(c,src){
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="ec-sub">'+src.foundHtml
     +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
-    +(src.offTeam?'<p class="ec-roster">'+esc(t("This file comes from a desk outside the team."))+'</p>':'')
+    +(src.offTeam?'<p class="ec-roster">'+esc(t("This file comes from outside the team."))+'</p>':'')
     +trustHtml(trustOfferLine(trustSettled(c),updating))
     // Only a file nobody asked for, which may arrive mid-chat: the promise that the chat can go on.
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
