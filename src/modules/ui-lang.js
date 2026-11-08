@@ -1155,6 +1155,8 @@ UI_STRINGS.pl={
   "Newest edition {E}, published {WHEN}. The team's news: {AGE}.":"Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
   "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.":"Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
   "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.":"Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.",
+  /* Board 962, stage 0b: said where a catalog is marked private or the lead's switch goes off. The copywriter's to write. */
+  "Withdrawn from the share; what the team's lead has already read cannot be unread (placeholder: Claudette).":"placeholder: Claudette",
   "The team's relay is due for renewal":"Przekaźnik zespołu czeka na odnowienie",
   "It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.":"Termin odnowienia minął dnia {DATE}. Do dnia {READONLY} wszystko działa jak dotąd; potem katalogi na tym stanowisku zostaną bez zmian, ale do czasu odnowienia nic nowego nie przejdzie już między stanowiskiem a zespołem. Przekaźnik odnawia lider zespołu w Studiu; tutaj nic nie trzeba robić.",
   "The team's relay is read-only until renewed":"Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",

@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 94;
+const EXPECTED = 100;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -3148,6 +3148,84 @@ async function run() {
     check(got[0] && got[1] && !got[2] && !got[3],
       "b0l an ask of format 2, made under the lead's switch, reaches the desk's mirror as format 1 does; an ask of format 3 and a withdrawal of format 2 stay out: "
       + got.join(","));
+  }
+  /* Board 962, stage 0b, round two: the floor of a heeded team file reaches the syncer, so an older team file put back on the
+     share never reaches the mirror, a restart included; and a working copy sealed to the lead's box reaches the mirror unopened. */
+  {
+    const floorScene = (mod, name) => {
+      const shareDir = folder(name + "-share"), mirrorDir = folder(name + "-mirror");
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      const ctl = new mod.FolderSyncerController({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keyFor: e => (e === 1 ? K1 : null),
+        checks, useWorker: false, floor: (t, pub) => (t === TEAM && pub === LEAD.public ? { epoch: 1, rev: 2 } : undefined) });
+      ctl.program.syncOnce();
+      const refused = !fs.existsSync(path.join(mirrorDir, "etiuda-team.json"));
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 3 })), "utf8");
+      ctl.program.syncOnce();
+      let rev = null;
+      try { rev = JSON.parse(fs.readFileSync(path.join(mirrorDir, "etiuda-team.json"), "utf8")).rev; } catch { rev = null; }
+      return { refused, taken: rev === 3 };
+    };
+    const f = floorScene(syncerMod, "b0m");
+    check(f.refused && f.taken, "b0m the folder syncer's controller hands its floor to the program: a team file below it stays out of the mirror, one above lands: " + JSON.stringify(f));
+    const r = PLANTS_OFF ? null : await testPlant("s0b-controller-floor", syncerFile, async (scratch) => !floorScene(nodeRequire(scratch), "b0m-plant").refused);
+    if (r) check(r.ok, "b0m2 lifting plant:s0b-controller-floor lets the team file below the floor into the mirror: " + JSON.stringify(r));
+    else skip("b0m2 lifting plant:s0b-controller-floor lets the team file below the floor into the mirror");
+  }
+  {
+    /* The desk's own syncer, as the shell starts it, over a desk that has heeded rev 2: the share's rev 1 stays out. */
+    const deskScene = (name, src) => {
+      const share = folder(name + "-share");
+      const T = "t-" + crypto.randomBytes(8).toString("hex");
+      const d0 = newDesk(name + "-desk", share);
+      const envPath = path.join(d0.ud, "desk.json");
+      const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+      env.teamPins = { [T]: LEAD };
+      env.teamShown = { [T]: { lead: "Lead", folder: share } };
+      env.teamKeys = { [T]: { 1: d0.electron.safeStorage.encryptString(K1.toString("base64")).toString("base64") } };
+      env.teamRevSeen = { [T]: { [LEAD.public]: { epoch: 1, rev: 2 } } };
+      fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+      fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })), "utf8");
+      const d = loadDesk(d0.ud, src ? { src } : {});
+      const syncer = d.api.folderSyncerRun(null);
+      if (syncer && syncer.program) syncer.program.syncOnce();
+      const mirrorTeam = path.join(d0.ud, "folder-mirror", T, "etiuda-team.json");
+      const refused = !!syncer && !fs.existsSync(mirrorTeam);
+      if (syncer) syncer.stop();
+      return { started: !!syncer, refused };
+    };
+    const g = deskScene("b0n");
+    check(g.started && g.refused, "b0n the desk's syncer is handed the floor of the team file it has heeded: an older one on the share stays out of the mirror: " + JSON.stringify(g));
+    const r = PLANTS_OFF ? null : await testPlant("s0b-syncer-floor", mainFile, async (scratch) => {
+      const h = deskScene("b0n-plant", fs.readFileSync(scratch, "utf8"));
+      return h.started && !h.refused;
+    });
+    if (r) check(r.ok, "b0n2 lifting plant:s0b-syncer-floor lets the older team file into the desk's mirror: " + JSON.stringify(r));
+    else skip("b0n2 lifting plant:s0b-syncer-floor lets the older team file into the desk's mirror");
+  }
+  {
+    const branchScene = (mod, name) => {
+      const shareDir = folder(name + "-share"), mirrorDir = folder(name + "-mirror");
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      const desk = "k-00000000000000a1", dir = path.join(shareDir, "desks", desk);
+      fs.mkdirSync(dir, { recursive: true });
+      const env = (o) => JSON.stringify(Object.assign({ format: 1, kind: "etiuda-branch-sealed", team: TEAM, keyId: LEAD.keyId,
+        enc: "ab".repeat(32), ct: "cd".repeat(40) }, o));
+      fs.writeFileSync(path.join(dir, "quay-11111111.ec"), env({}), "utf8");
+      fs.writeFileSync(path.join(dir, "quay-22222222.ec"), env({ team: "t-" + "0".repeat(16) }), "utf8");
+      fs.writeFileSync(path.join(dir, "quay-33333333.ec"), env({ kind: "etiuda-answer-sealed" }), "utf8");
+      fs.writeFileSync(path.join(dir, "notes.ec"), env({}), "utf8");
+      fs.writeFileSync(path.join(dir, "quay-44444444.ec"), env({ ct: "" }), "utf8");
+      const prog = mod.createFolderProgram({ team: TEAM, folder: shareDir, mirror: mirrorDir, pin: LEAD, keys: { 1: K1 }, checks });
+      prog.syncOnce();
+      return ["quay-11111111.ec", "quay-22222222.ec", "quay-33333333.ec", "notes.ec", "quay-44444444.ec"]
+        .map(n => fs.existsSync(path.join(mirrorDir, "desks", desk, n)));
+    };
+    const got = branchScene(syncerMod, "b0o");
+    check(got[0] && !got[1] && !got[2] && !got[3] && !got[4],
+      "b0o a working copy sealed to the lead's box for this team reaches the mirror unopened; another team's, another kind, a name that is no working copy's and a stub stay out: " + got.join(","));
+    const r = PLANTS_OFF ? null : await testPlant("s0b-syncer-branch", syncerFile, async (scratch) => branchScene(nodeRequire(scratch), "b0o-plant")[1]);
+    if (r) check(r.ok, "b0o2 lifting plant:s0b-syncer-branch lets another team's sealed copy into the mirror: " + JSON.stringify(r));
+    else skip("b0o2 lifting plant:s0b-syncer-branch lets another team's sealed copy into the mirror");
   }
   {
     const r = PLANTS_OFF ? null : await testPlant("syncer-unlink", syncerFile, async (scratchSyncer) => {
