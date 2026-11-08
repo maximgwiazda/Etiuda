@@ -216,21 +216,10 @@ function edNavHtml(){
    different shapes all answer "has anything been typed" the same way, and a field added
    later is covered without being registered anywhere. */
 let edBaseline="";
-function edFields(){
-  if(!modalCard) return [];
-  const out=[];
-  ["input","textarea","select"].forEach(tag=>{
-    try {
-      const list=modalCard.querySelectorAll(tag);
-      if(list) for(let i=0;i<list.length;i++) out.push(list[i]);
-    } catch {}
-  });
-  return out;
-}
 function edFormState(){
   if(!modalCard) return "";
   const out=[];
-  edFields().forEach(el=>{
+  modalCard.querySelectorAll("input,textarea,select").forEach(el=>{
     out.push((el.type==="checkbox"||el.type==="radio")?(el.checked?"1":"0"):String(el.value||""));
   });
   // segmented controls are buttons, not fields - the chosen one carries .on and its value
@@ -242,7 +231,7 @@ function edMarkClean(){ edBaseline=edFormState(); }
    segmented buttons carried .on. The same entry reopens in the same shape, so order is identity. */
 function edTyped(){
   if(!modalCard) return null;
-  return { fields:edFields()
+  return { fields:Array.from(modalCard.querySelectorAll("input,textarea,select"))
              .map(el=>(el.type==="checkbox"||el.type==="radio")?el.checked:String(el.value||"")),
            segs:Array.from(modalCard.querySelectorAll("[data-v]")).map(el=>el.classList.contains("on")) };
 }
@@ -250,7 +239,7 @@ function edRetype(was){
   if(!was || !modalCard) return;
   const segs=Array.from(modalCard.querySelectorAll("[data-v]"));
   segs.forEach((el,i)=>{ if(was.segs[i] && !el.classList.contains("on")) el.click(); });
-  edFields().forEach((el,i)=>{
+  Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el,i)=>{
     if(i>=was.fields.length) return;
     const v=was.fields[i];
     if(el.type==="checkbox"||el.type==="radio"){ if(el.checked!==v){ el.checked=v; el.dispatchEvent(new Event("change",{bubbles:true})); } }
