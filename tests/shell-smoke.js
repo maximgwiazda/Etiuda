@@ -1398,7 +1398,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     return Object.assign({ tourAt }, await p.evaluate(() => {
       const box = el => { if (!el) return null; const r = el.getBoundingClientRect();
         return r.width ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null; };
-      const mark = box(document.querySelector(".empty-desk>.e-fifth-spot")), bub = box(document.getElementById("tourCard"));
+      const mark = box(document.querySelector(".brand svg")), bub = box(document.getElementById("tourCard"));
       const apart = !!mark && !!bub && (bub[2] <= mark[0] || bub[0] >= mark[2] || bub[3] <= mark[1] || bub[1] >= mark[3]);
       return { cards: document.querySelectorAll("#list .card").length, offer: !!document.querySelector("#eCatalogOffer"),
         window: !!document.querySelector("body > .modal:not([hidden])"), mark: !!mark, tour: !!bub, apart,
@@ -1788,7 +1788,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* A ROW\'S SMALL PRINT, read as the parts it is built from rather than as one string: the
      separator is a middot between ordinary spaces, and every count holds its number to its noun
      with a no-break space, so a part is "258\u00a0cards" and each is named one at a time. Five
-     parts: the edition, then cards, macros, intents and categories, board 425. */
+     parts: the edition, then cards, replies, intents and categories, board 425. */
   const NBSP = String.fromCharCode(160);
   const metaParts = m => String(m || "").split(" " + String.fromCharCode(183) + " ");
   const fiveCounts = m => {
@@ -1796,7 +1796,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     const has = re => p.filter(x => re.test(x)).length;
     return p.length === 5
       && has(new RegExp("^[0-9]+" + NBSP + "cards?$")) === 1
-      && has(new RegExp("^[0-9]+" + NBSP + "macros?$")) === 1
+      && has(new RegExp("^[0-9]+" + NBSP + "(reply|replies)$")) === 1
       && has(new RegExp("^[0-9]+" + NBSP + "intents?$")) === 1
       && has(new RegExp("^[0-9]+" + NBSP + "(categories|category)$")) === 1;
   };
@@ -1811,7 +1811,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
         && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
         && bareEmpty.says.indexOf("Etiuda is ready for its first replies.") === 0
-        && bareEmpty.says.indexOf("load a catalog") > -1,
+        && bareEmpty.says.indexOf("Load catalog") > -1,
     "2p2 and the page the decline leaves behind carries none of it: no offer box ("
     + bareEmpty.offerBox + "), no row (" + bareEmpty.rows + "), no Load button (" + bareEmpty.load
     + ") and the words " + JSON.stringify("Load catalog?") + " nowhere in its markup ("
@@ -2937,7 +2937,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      window's own width, and how wide it would be on one line, which is the number that says at
      what width it starts to wrap. */
   line = await s.p.evaluate(() => {
-    const span = document.querySelector("#list .empty span");
+    const span = document.querySelector("#list .empty .mid-folder");
     if (!span) return { step: "no folder line" };
     const code = span.querySelector("code.open-folder");
     const lh = parseFloat(getComputedStyle(span).lineHeight) || 0;

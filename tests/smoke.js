@@ -3716,7 +3716,7 @@ const t0 = Date.now();
       const c = window.__firstLight = { mark: -1, landed: -1, tour: -1, err: "" };
       new MutationObserver(() => {
         const now = performance.now();
-        if (c.mark < 0 && document.querySelector(".empty-desk>canvas.e-fifth")) {
+        if (c.mark < 0 && document.querySelector(".e-launch-veil>canvas.e-opening")) {
           c.mark = now;
           try { whenLaunchLanded(() => { c.landed = performance.now(); }); } catch (x) { c.err = String(x && x.message || x); }
         }
