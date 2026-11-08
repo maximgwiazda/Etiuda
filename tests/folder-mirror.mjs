@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 89;
+const EXPECTED = 91;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -55,7 +55,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead"];
 const noop = () => {};
 const inert = new Proxy(function () {}, {
   get: (target, prop) => {
@@ -1756,6 +1756,56 @@ async function run() {
       return fs.existsSync(path.join(mirrorDir, "lamp-e2.ec"));
     });
     check(r.ok, "41k lifting plant:syncer-epoch-pending drops or prematurely applies an edition above the mirror's epoch: " + JSON.stringify(r));
+  }
+
+  /* Board 962, stage 0: a desk's catalog answer sealed to the lead's box lands in the mirror unopened, as stats.estat does;
+     at that name nothing else lands that the team key cannot open: not an answer in the clear, not another team's box answer,
+     and a box answer under any other name is no answer. */
+  {
+    const boxS0 = pubHex(crypto.generateKeyPairSync("x25519").publicKey);
+    const TEAM_S0 = "t-" + crypto.randomBytes(8).toString("hex");
+    const deskAt = () => "k-" + crypto.randomBytes(8).toString("hex");
+    const D_OK = deskAt(), D_CLEAR = deskAt(), D_OTHER = deskAt(), D_NAME = deskAt();
+    const inner = JSON.stringify({ format: 1, kind: "etiuda-catalog-answer", sha256: "sha256:" + "ab".repeat(32),
+      catalog: catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01") });
+    const boxed = (team, desk) => JSON.stringify(initDesk.api.sealAnswerLead(boxS0, team, LEAD.keyId, desk, inner), null, 1) + "\n";
+    const okText = boxed(TEAM_S0, D_OK);
+    const s0Scene = async (mod, name) => {
+      const shareDir = folder(name + "-share"), mirrorDir = folder(name + "-mirror");
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_S0, epoch: 1, rev: 1 })), "utf8");
+      const place = (desk, file, body) => {
+        fs.mkdirSync(path.join(shareDir, "desks", desk), { recursive: true });
+        fs.writeFileSync(path.join(shareDir, "desks", desk, file), body, "utf8");
+      };
+      place(D_OK, "catalog-answer.ec", okText);
+      place(D_CLEAR, "catalog-answer.ec", inner);
+      place(D_OTHER, "catalog-answer.ec", boxed("t-" + crypto.randomBytes(8).toString("hex"), D_OTHER));
+      place(D_NAME, "notes.ec", boxed(TEAM_S0, D_NAME));
+      let boxOpened = 0;
+      const spied = Object.assign({}, checks, { openSealed: (k, d) => {
+        if (d && d.kind === "etiuda-answer-sealed") boxOpened++;
+        return checks.openSealed(k, d);
+      } });
+      const prog = mod.createFolderProgram({ team: TEAM_S0, folder: shareDir, mirror: mirrorDir, pin: LEAD,
+        keyFor: e => (e === 1 ? K1 : null), checks: spied });
+      await prog.syncOnce();
+      const at = (desk, file) => path.join(mirrorDir, "desks", desk, file);
+      return {
+        ok: fs.existsSync(at(D_OK, "catalog-answer.ec")) && fs.readFileSync(at(D_OK, "catalog-answer.ec"), "utf8") === okText,
+        clear: fs.existsSync(at(D_CLEAR, "catalog-answer.ec")), other: fs.existsSync(at(D_OTHER, "catalog-answer.ec")),
+        named: fs.existsSync(at(D_NAME, "notes.ec")), boxOpened,
+      };
+    };
+    const got = await s0Scene(syncerMod, "s0-box-answer");
+    check(got.ok && !got.clear && !got.other && !got.named && got.boxOpened === 0,
+      "s0g the syncer admits a lead's-box answer unopened and byte for byte, and refuses one in the clear, another team's, and a box envelope under another name: "
+      + JSON.stringify(got));
+    const r = PLANTS_OFF ? null : await testPlant("s0-syncer-lead", syncerFile, async (scratchSyncer) => {
+      const planted = await s0Scene(nodeRequire(scratchSyncer), "plant-s0-box-answer");
+      return planted.clear;
+    });
+    if (r) check(r.ok, "s0h lifting plant:s0-syncer-lead lets an answer in the clear into the mirror: " + JSON.stringify(r));
+    else skip("s0h lifting plant:s0-syncer-lead lets an answer in the clear into the mirror");
   }
 
   // 42b: plant:syncer-live-key

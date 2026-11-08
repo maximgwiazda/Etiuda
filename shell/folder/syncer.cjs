@@ -596,6 +596,13 @@ function createFolderProgram(opts) {
     }
     if (changed) { try { writeOutbox(mirror, st, io); } catch {} }
   }
+  /* A desk's catalog answer sealed to the lead's box for this team: judged by its place and its envelope alone, never opened. */
+  function leadAnswerAt(relPath, doc) {
+    const parts = normRel(relPath).split("/");
+    let ok = parts.length === 3 && parts[0] === "desks" && /^k-[0-9a-f]{16}$/.test(parts[1]) && parts[2] === "catalog-answer.ec";
+    ok = ok && !!doc && +doc.format === 1 && doc.kind === "etiuda-answer-sealed" && doc.team === team; /* plant:s0-syncer-lead */
+    return ok;
+  }
   /* The catalog a staged or mirrored .ec holds, opened where sealed, or null. */
   function catalogIn(text) {
     let doc = null;
@@ -1097,6 +1104,12 @@ function createFolderProgram(opts) {
             io.rename(tmpPath, target);
             applied.push(relPath);
           }
+        } else if (leadAnswerAt(relPath, doc)) {
+          /* Sealed to the lead's box, so no desk opens it: it lands unread, as stats.estat does. */
+          const target = path.join(mirror, relPath);
+          ensureDir(target, io);
+          io.rename(tmpPath, target);
+          applied.push(relPath);
         } else {
           // Invalid or corrupt .ec file: drop copy
           try { io.unlink(tmpPath); } catch {}
