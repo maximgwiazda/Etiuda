@@ -206,7 +206,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     String(check || "")),
   onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),
   /* The shell has sent the lead a copy of the catalog in use. The page says so; nothing here asks the agent. */
-  onCatalogCopy: (fn) => ipcRenderer.on("etiuda:catalog-copy", () => { try { fn(); } catch { /* the page has gone */ } }),
+  onCatalogCopy: (fn) => ipcRenderer.on("etiuda:catalog-copy", (_e, m) => { try { fn({ lead: !!(m && m.lead === true) }); } catch { /* the page has gone */ } }),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
      the text a copy puts on the clipboard, which the shell writes. */

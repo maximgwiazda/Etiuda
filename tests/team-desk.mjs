@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 89;
+const EXPECTED = 90;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -48,6 +48,7 @@ function skip(line) {
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
+if (process.env.ETIUDA_SHELL_MAIN) fs.copyFileSync(process.env.ETIUDA_SHELL_MAIN, path.join(APP, "shell", "main.js"));
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "deskTrustChecks", "folderAnswers", "catalogFolder", "folderSyncerRun"];
 const noop = () => {};
@@ -183,7 +184,14 @@ function loadDesk(ud, flaky, plant) {
     return e.returnValue;
   };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, syncer: plant && plant.syncer };
+  const close = () => {
+    const idx = allDesks.indexOf(deskObj);
+    if (idx >= 0) allDesks.splice(idx, 1);
+    for (const k of Array.from(deskProgs.keys())) {
+      if (k.startsWith(ud + ":")) deskProgs.delete(k);
+    }
+  };
+  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, syncer: plant && plant.syncer, close };
   allDesks.push(deskObj);
   return deskObj;
 }
@@ -260,7 +268,7 @@ try {
   put(SHARE, "etiuda-ring.json", JSON.stringify(ring));
 
   const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
-  const K1 = crypto.randomBytes(32), K2 = crypto.randomBytes(32), KF = crypto.randomBytes(32);
+  const K1 = crypto.randomBytes(32), K2 = crypto.randomBytes(32), K3 = crypto.randomBytes(32), KF = crypto.randomBytes(32);
   const seal = (key, epoch, t, team) => {
     if (key) knownTeamKeys.set((team || TEAM) + ":" + epoch, key);
     return JSON.stringify(D1.api.sealCatalog(key, team || TEAM, epoch, t));
@@ -506,7 +514,9 @@ try {
   const signed9 = inner9 ? JSON.parse(inner9) : {};
   const again = await D9.ask("etiuda:branch-write", lamps.stem, lamps.text);
   const edited = JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: "Lamp Shop, edited" }));
-  const freshW = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem, edited);
+  const freshDesk = loadDesk(D9.ud);
+  const freshW = await freshDesk.ask("etiuda:branch-write", lamps.stem, edited);
+  freshDesk.close();
   const env9b = landed(), inTeam = await ownRow(D12), outside = await ownRow(D13);
   check(JSON.parse(lamps.text).grew.id === "lamp-shop" && said(sealedW) === said({ ok: true, rev: 1 })
     && env9.team === TEAM && env9.epoch === 1 && inner9 === JSON.stringify(Object.assign(JSON.parse(lamps.text),
@@ -542,9 +552,11 @@ try {
 
   /* ---- the desk removed at that epoch writes nothing, in this run or a fresh one, until the lead lets it in again -- */
   {
+    const d12b = loadDesk(D12.ud);
     const out12 = [await D12.ask("etiuda:branch-write", lamps12.stem, lamps12.text),
-      await loadDesk(D12.ud).ask("etiuda:branch-write", lamps12.stem, lamps12.text)];
-    const none12 = !fs.existsSync(file12), K3 = crypto.randomBytes(32);
+      await d12b.ask("etiuda:branch-write", lamps12.stem, lamps12.text)];
+    d12b.close();
+    const none12 = !fs.existsSync(file12);
     put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me12, K3, 3)] })));
     const back12 = await D12.ask("etiuda:branch-write", lamps12.stem, lamps12.text);
     const env12 = fs.existsSync(file12) ? JSON.parse(fs.readFileSync(file12, "utf8")) : {};
@@ -575,7 +587,8 @@ try {
     put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], exportsSealed: true })));
     const sealedOut = await exportAs(D9, "Lamp Shop.ec", lampFrom), env = sealedOut.text ? JSON.parse(sealedOut.text) : {};
     const byMember = env.kind === "etiuda-sealed" ? (await (async () => { put(OWN, "lamp-copy.ec", sealedOut.text);
-      const t = await read(loadDesk(D9.ud), "lamp-copy.ec"); fs.unlinkSync(path.join(OWN, "lamp-copy.ec")); return t; })()) : "";
+      const d578 = loadDesk(D9.ud);
+      const t = await read(d578, "lamp-copy.ec"); d578.close(); fs.unlinkSync(path.join(OWN, "lamp-copy.ec")); return t; })()) : "";
     check(said(sealedOut.r) === said({ name: "Lamp Shop.ec", ok: true, sealed: true }) && env.team === TEAM && env.epoch === 2
       && D1.api.openSealed(K2, env) === made && byMember === made.trim() && inSaved("Good day, Lamp Shop.") === 0,
       "14ao an export the page made from a catalog that came sealed is written sealed for that team under the newest key the"
@@ -605,7 +618,7 @@ try {
     const bentOut = await exportAs(D9, "Bent.ec", lampFrom);
     put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [], exportsSealed: false })));
     const leftOut = await exportAs(D9, "Left.ec", lampFrom);
-    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)] })));
     /* The bent file never reaches the mirror, so the export follows the last genuine file, which says sealed. */
     const bentSealed = !!bentOut.text && bentOut.text !== made && (() => { try { return JSON.parse(bentOut.text).kind === "etiuda-sealed"; } catch { return false; } })();
     check(((said(bentOut.r) === said({ name: "Bent.ec", ok: false, sealed: true }) && bentOut.text === null)
@@ -819,14 +832,16 @@ try {
   }
 
   /* ---- the folder's team file no longer lists the catalog: no team covers it where the file is written ---------- */
-  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], catalogs: ["tea-room"] })));
-  const unsure = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem,
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)], catalogs: ["tea-room"] })));
+  const d824 = loadDesk(D9.ud);
+  const unsure = await d824.ask("etiuda:branch-write", lamps.stem,
     JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: "Lamp Shop, edited twice" })));
+  d824.close();
   check(D9.envelope().teamOpened.indexOf("lamp-shop") >= 0 && said(unsure) === said({ ok: false, held: true })
     && landed().epoch === 2 && holding("Good day, Lamp Shop.") === 0 && holding("edited twice") === 0,
     "14ad where the team file at the folder written to does not list the catalog, the desk holds its file and writes nothing"
     + " in the clear: " + said(unsure) + ", the share's file still the epoch " + landed().epoch + " envelope");
-  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)] })));
 
   /* ---- two teams, one catalog id: the desk lists the other team's folder, then writes in its own --------------- */
   {
@@ -835,15 +850,18 @@ try {
       const e = D.envelope();
       e.keys = Object.assign({}, e.keys, { eCatalogFolder: dir });
       fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(e), "utf8");
+      D.close();
       return loadDesk(D.ud);
     };
     const name = n => JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: n }));
     const who = t => t === TEAM ? "A" : t === TB ? "B" : t ? "X, a third" : "none";
+    check(((D9.envelope().teamEpochSeen || {})[TEAM] || 0) >= 3,
+      "14AEs desk nine's seen epoch after 14aR is still at least 3 at 14AE's start: " + ((D9.envelope().teamEpochSeen || {})[TEAM] || 0));
     let P = point(D9, OWN);
     const r0 = await read(P, "lamps.ec");
     const w0 = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, before the other folder"));
     const e0 = landed();
-    check(r0 === A2.trim() && !!w0.ok && e0.team === TEAM && e0.epoch === 2 && D1.api.openSealed(K2, e0) !== null,
+    check(r0 === A2.trim() && !!w0.ok && e0.team === TEAM && e0.epoch === 3 && D1.api.openSealed(K3, e0) !== null,
       "14AE THE CONTROL: one team, in its own folder, the desk's own file lands sealed for that team: " + said(w0) + ", team "
       + who(e0.team) + ", epoch " + e0.epoch);
     fs.writeFileSync(path.join(OTHER, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
@@ -855,7 +873,7 @@ try {
     const w1 = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, after the other folder"));
     const e1 = landed();
     const byB = e1.kind === "etiuda-sealed" ? D1.api.openSealed(KB, e1) : null;
-    check(!!listed && listed.id === "lamp-shop" && !!w1.ok && e1.team === TEAM && D1.api.openSealed(K2, e1) !== null && byB === null,
+    check(!!listed && listed.id === "lamp-shop" && !!w1.ok && e1.team === TEAM && D1.api.openSealed(K3, e1) !== null && byB === null,
       "14ae a desk in two teams that each have a catalog of one id lists the other team's folder, then writes its own file in"
       + " its own team's folder: it lands sealed for the team covering it there, " + said(w1) + ", team " + who(e1.team)
       + ", the other team's key opens it " + (byB !== null ? "yes" : "no"));
@@ -868,9 +886,9 @@ try {
       planted.push(await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, under a planted team file")));
     }
     const e2 = landed();
-    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)] })));
     check(planted.every(r => said(r) === said({ ok: false, held: true }) || r.ok === true) && e2.team === TEAM
-      && (D1.api.openSealed(K2, e2) || "").indexOf("Lamp Shop") >= 0
+      && (D1.api.openSealed(K3, e2) || "").indexOf("Lamp Shop") >= 0
       && D1.api.openSealed(KB, e2) === null && holding("planted team file") === 0,
       "14af a team file in the folder naming the other team, under a key other than its pinned lead's or changed after signing,"
       + " moves nothing: the desk holds its file, " + planted.map(said).join(", ") + ", and the share's file stays team "
@@ -878,7 +896,7 @@ try {
 
     /* A team file planted at the folder for a team nobody pinned, wrapping a key for this desk, admits it at once. */
     const TX = "t-" + crypto.randomBytes(8).toString("hex"), KX = crypto.randomBytes(32);
-    const restoreA = () => put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    const restoreA = () => put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)] })));
     const teamX = JSON.stringify(teamFile({ team: TX, epoch: 1, roster: [entry(me9, KX, 1, TX)], public: pubHex(forger.publicKey),
       signer: forger.privateKey }));
     const openedBy = (e, k) => (e.kind === "etiuda-sealed" ? D1.api.openSealed(k, e) : null) || "";
@@ -906,10 +924,10 @@ try {
       JSON.stringify(Object.assign(JSON.parse(bEdition.text), { name: "Other Shop, edited" })));
     const eB = landed();
     check(JSON.parse(bEdition.text).grew.id === "lamp-shop" && said(wB) === said({ ok: false, held: true })
-      && openedBy(eB, K2).indexOf("Other Shop") < 0 && holding("Other Shop") === 0,
+      && openedBy(eB, K3).indexOf("Other Shop") < 0 && holding("Other Shop") === 0,
       "14ah a desk holding team B's edition of an id team A also covers, its folder moved to team A's share in the same run,"
       + " does not seal B's catalog for team A: " + said(wB) + ", team A's key opens B's text in the share's file "
-      + (openedBy(eB, K2).indexOf("Other Shop") >= 0 ? "yes" : "no"));
+      + (openedBy(eB, K3).indexOf("Other Shop") >= 0 ? "yes" : "no"));
 
     /* The same signed edition in the folder twice, sealed for team A and for a team planted beside it. */
     put(OWN, "etiuda-team.json", teamX);
@@ -922,6 +940,7 @@ try {
       const Q = loadDesk(P.ud);
       await Q.ask("etiuda:catalog-files");
       wAX.push(await Q.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, beside a copy")));
+      Q.close();
     }
     const eAX = landed();
     fs.unlinkSync(copyX);
@@ -1039,8 +1058,7 @@ try {
       };
       /* The desk's shell started afresh over its own record; the syncer of the run before goes with it. */
       w.restart = () => {
-        allDesks.splice(allDesks.indexOf(w.D), 1);
-        for (const k of Array.from(deskProgs.keys())) if (k.startsWith(w.D.ud + ":")) deskProgs.delete(k);
+        w.D.close();
         w.D = loadDesk(w.D.ud, null, plant);
         return w.D;
       };

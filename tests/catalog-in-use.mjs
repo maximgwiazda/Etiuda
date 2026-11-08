@@ -22,21 +22,29 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 61;
+const EXPECTED = 72;
 
-const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
-const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
-const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
-const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
+const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
+const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
+const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
+const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
 const SENT_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.";
+const SENT_LEAD_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.";
+const SENT_LEAD_PL = "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.";
 const SENT_PL = "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.";
 const CARD = "The quay lamp is wrapped for the crossing.";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+/* A planted fault is proof, not a gate: the plants of stage 0 are skipped where ETIUDA_PLANTS is off, and count toward the floor. */
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-catalog-in-use-"));
@@ -44,7 +52,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
-  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt"];
+  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt", "openAnswerLead", "answerLeadGenuine"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -78,12 +86,12 @@ function loadDesk(ud, src) {
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
   return { api, ask, said, ud, envelope, sent, win, sync };
 }
-function newDesk(name, folder) {
+function newDesk(name, folder, src) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
     keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }), "utf8");
-  return loadDesk(ud);
+  return loadDesk(ud, src);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
 const boxMap = new Map();
@@ -115,6 +123,9 @@ try {
   const lead = crypto.generateKeyPairSync("ed25519");
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  /* The lead's box, the X25519 key an answer about a catalog the team does not list is sealed to (board 962, stage 0). */
+  const leadBox = crypto.generateKeyPairSync("x25519");
+  const BOX = pubHex(leadBox.publicKey);
   syncMirror = (box) => {
     const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
     const prog = syncerMod.createFolderProgram({
@@ -153,7 +164,7 @@ try {
   const RING = { format: 1, kind: "etiuda-ring", keys: [
     { catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
   const teamFile = (D, id, epoch, roster, catalogs) => textOf(sign({
-    format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: LEAD,
+    format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: Object.assign({}, LEAD, { box: BOX }),
     sealed: true, exportsSealed: false, epoch, roster,
   }, lead.privateKey, LEAD));
   const entry = (D, who, key, team, epoch) => ({
@@ -176,10 +187,18 @@ try {
     try { return JSON.parse(D.api.openSealed(key, JSON.parse(fs.readFileSync(file, "utf8")))); }
     catch { return null; }
   };
-  const arm = async (name) => {
+  /* The lead's view of an answer: the team key where it opens, else the lead's box, bound to the folder's desk id. */
+  const openLeadDoc = (D, file) => {
+    try {
+      const t = D.api.openAnswerLead(leadBox.privateKey, JSON.parse(fs.readFileSync(file, "utf8")), path.basename(path.dirname(file)));
+      return t ? JSON.parse(t) : null;
+    } catch { return null; }
+  };
+  const openAnswerDoc = (D, file, key) => openSealedDoc(D, file, key) || openLeadDoc(D, file);
+  const arm = async (name, src) => {
     const share = folder(name + "-share");
     put(share, "etiuda-ring.json", RING);
-    const D = newDesk(name, share);
+    const D = newDesk(name, share, src);
     const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
     const key = crypto.randomBytes(32);
@@ -465,7 +484,7 @@ try {
     putAsk(box, "Askstale", pin);
     box.D.api.tryCatalogAsk(box.D.win);
     const ans = answerPath(box.share, box.me.id);
-    const openedOld = openSealedDoc(box.D, ans, box.key);
+    const openedOld = openAnswerDoc(box.D, ans, box.key);
     check(use.member === true && use.stale === true && use.seal && use.seal.epoch === 1
         && !fs.existsSync(ans) && !openedOld && Buffer.compare(before, fs.readFileSync(file)) === 0,
       "890ac a team file whose new key this desk cannot open seals nothing under the older key");
@@ -480,7 +499,7 @@ try {
     putAsk(held, "Askjoin1", pinH);
     held.D.api.catalogChanged(held.D.win);
     const joined = openSealedDoc(held.D, inUsePath(held.share, held.me.id), held.key);
-    const joinedAns = openSealedDoc(held.D, answerPath(held.share, held.me.id), held.key);
+    const joinedAns = openAnswerDoc(held.D, answerPath(held.share, held.me.id), held.key);
     check(missing && pinH && joined && joined.catalog.source === "folder" && joined.catalog.rev === 2
         && joinedAns && joinedAns.kind === "etiuda-catalog-answer" && JSON.stringify(joinedAns).indexOf(CARD) >= 0,
       "890ae a desk that joins with its catalog already loaded names that catalog and answers the ask, with no second take");
@@ -513,7 +532,7 @@ try {
     late.D.api.tryCatalogAsk(late.D.win);
     const lateUse = inUsePath(late.share, late.me.id);
     const lateNew = openSealedDoc(late.D, lateUse, keyL);
-    const lateAns = openSealedDoc(late.D, answerPath(late.share, late.me.id), keyL);
+    const lateAns = openAnswerDoc(late.D, answerPath(late.share, late.me.id), keyL);
     check(pinL && lateNew && lateNew.catalog.sha256 === pinL && !openSealedDoc(late.D, lateUse, late.key)
         && lateAns && lateAns.kind === "etiuda-catalog-answer",
       "890aj an ask that arrives before any folder change after the epoch moves finds the loaded catalog sealed again");
@@ -557,7 +576,7 @@ try {
     putAsk({ share: box.share, D: again, me: box.me }, "Askferry1", outsidePin);
     again.api.tryCatalogAsk(again.win);
     const ans = answerPath(box.share, box.me.id);
-    const answered = openSealedDoc(again, ans, box.key);
+    const answered = openAnswerDoc(again, ans, box.key);
     const answeredText = answered ? JSON.stringify(answered) : "";
     const shareHas = (dir, needle) => {
       let hit = false;
@@ -589,7 +608,7 @@ try {
     const third = loadDesk(box.D.ud);
     putAsk({ share: box.share, D: third, me: box.me }, "Askstray1", outsidePin);
     third.api.tryCatalogAsk(third.win);
-    const strayAns = openSealedDoc(third, ans, box.key);
+    const strayAns = openAnswerDoc(third, ans, box.key);
     const still = openSealedDoc(third, useFile, box.key);
     const strayInShare = shareHas(box.share, STRAY) || (strayAns && JSON.stringify(strayAns).indexOf(STRAY) >= 0);
     check(strayPin && strayPin !== outsidePin && still && still.catalog.sha256 === outsidePin
@@ -625,7 +644,7 @@ try {
     const pin3 = pinOf(again, b3 || "");
     putAsk({ share: box.share, D: again, me: box.me }, "Askq3a", pin2);
     again.api.tryCatalogAsk(again.win);
-    const ans = openSealedDoc(again, answerPath(box.share, box.me.id), box.key);
+    const ans = openAnswerDoc(again, answerPath(box.share, box.me.id), box.key);
     check(pin3 && pin3 !== pin2 && ans && ans.sha256 === pin2,
       "895d a folder that has moved on to a newer edition leaves a restarted desk answering the edition it holds (answered "
       + (ans ? ans.sha256.slice(7, 15) : "none") + ")");
@@ -659,7 +678,7 @@ try {
     const again = loadDesk(box.D.ud);
     putAsk({ share: box.share, D: again, me: box.me }, "Askq7a", pinA);
     again.api.tryCatalogAsk(again.win);
-    const ans = openSealedDoc(again, answerPath(box.share, box.me.id), box.key);
+    const ans = openAnswerDoc(again, answerPath(box.share, box.me.id), box.key);
     check(!ans || ans.sha256 === pinB,
       "895f a take held while the share is down does not leave the previous catalog to be answered after a restart (answered "
       + (ans ? ans.sha256.slice(7, 15) : "none") + ", kept " + (keptPin ? keptPin.slice(7, 15) : "none")
@@ -679,14 +698,14 @@ try {
     const ans = answerPath(box.share, box.me.id);
     putAsk(box, "Ask906a", pin);
     box.D.api.tryCatalogAsk(box.D.win);
-    const before = openSealedDoc(box.D, ans, box.key);
+    const before = openAnswerDoc(box.D, ans, box.key);
     const envBefore = box.D.envelope();
     const leadPub = envBefore.teamPins && envBefore.teamPins[box.team] && envBefore.teamPins[box.team].public;
     const deskPub = envBefore.branch && envBefore.branch.sign && envBefore.branch.sign.pub;
     box.D.sync("etiuda:catalog-eject");
     putAsk(box, "Ask906b", pin);
     box.D.api.tryCatalogAsk(box.D.win);
-    const after = fs.existsSync(ans) ? openSealedDoc(box.D, ans, box.key) : null;
+    const after = fs.existsSync(ans) ? openAnswerDoc(box.D, ans, box.key) : null;
     const named = fs.existsSync(useFile) ? openSealedDoc(box.D, useFile, box.key) : null;
     check(!!pin && before && before.kind === "etiuda-catalog-answer" && JSON.stringify(before).indexOf(CARD) >= 0
         && !after && !fs.existsSync(ans) && !fs.existsSync(useFile) && !named && !fs.existsSync(kept),
@@ -697,7 +716,7 @@ try {
     const again = loadDesk(box.D.ud);
     putAsk({ share: box.share, D: again, me: box.me }, "Ask906c", pin);
     again.api.tryCatalogAsk(again.win);
-    const restarted = fs.existsSync(ans) ? openSealedDoc(again, ans, box.key) : null;
+    const restarted = fs.existsSync(ans) ? openAnswerDoc(again, ans, box.key) : null;
     const keptAgain = fs.existsSync(path.join(again.ud, "catalog-loaded.txt"));
     const namedAgain = fs.existsSync(useFile) ? openSealedDoc(again, useFile, box.key) : null;
     check(!restarted && !fs.existsSync(ans) && !keptAgain && !namedAgain,
@@ -727,7 +746,7 @@ try {
     putAsk(box, "Ask906e", pin);
     box.D.api.tryCatalogAsk(box.D.win);
     const hadUse = fs.existsSync(useFile);
-    const hadAns = fs.existsSync(ans) && !!openSealedDoc(box.D, ans, box.key);
+    const hadAns = fs.existsSync(ans) && !!openAnswerDoc(box.D, ans, box.key);
     box.D.api.setDown(box.share);
     box.D.sync("etiuda:catalog-eject");
     /* On a folder team the eject lands in the mirror and its outbox owes the share the two removals, across a relaunch. */
@@ -913,7 +932,7 @@ try {
     let bootErr = "";
     try { Offer.eOfferCatalogAtBoot(); }
     catch (e) { bootErr = e && e.message ? e.message : String(e); }
-    const bootAns = openSealedDoc(again, answerPath(boot.share, boot.me.id), boot.key);
+    const bootAns = openAnswerDoc(again, answerPath(boot.share, boot.me.id), boot.key);
     const offerSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-offer.js"), "utf8");
     const bootAt = offerSrc.indexOf("function eOfferCatalogAtBoot");
     const bootFn = offerSrc.slice(bootAt, offerSrc.indexOf("function toastIfSameCatalog", bootAt));
@@ -1033,6 +1052,16 @@ try {
     TJ.noteCatalogCopy();
     check(enToast === SENT_EN && toastEl.textContent === SENT_PL,
       "890aa the quiet note is shown, in the desk's language, when a copy was sent");
+    mem.eUiLang = "en";
+    toastEl.classList.remove("show");
+    TJ.noteCatalogCopy({ lead: true });
+    const enLead = toastEl.textContent;
+    mem.eUiLang = "pl";
+    toastEl.classList.remove("show");
+    TJ.noteCatalogCopy({ lead: true });
+    check(enLead === SENT_LEAD_EN && toastEl.textContent === SENT_LEAD_PL
+        && lang.indexOf("\"" + SENT_LEAD_EN + "\":\"" + SENT_LEAD_PL + "\"") >= 0,
+      "890s0t a copy of a catalog the team does not list says it went to the team's lead alone, in the desk's language (stage 0)");
 
     /* The page's eject, through the real preload, on a channel named as the preload's others are. */
     const savedWindow = globalThis.window;
@@ -1127,19 +1156,174 @@ try {
       "890ak in-use for a catalog the team file does not name carries "
       + (inUse && inUse.catalog ? Object.keys(inUse.catalog).sort().join(",") : "nothing")
       + " and not the card");
-    const answer = openSealedDoc(box.D, ans, box.key);
+    const answer = openAnswerDoc(box.D, ans, box.key);
     const answerText = answer ? JSON.stringify(answer) : "";
     const uploaded = !!(answer && answer.catalog && answer.catalog.id === "private-lamps" && answerText.indexOf(MARK) >= 0);
     check(!uploaded && !fs.existsSync(ans),
       "890al an ask for another hash writes no answer for a catalog the team file does not name");
     putAsk(box, "Askmatch", pin);
     box.D.api.tryCatalogAsk(box.D.win);
-    const matched = openSealedDoc(box.D, ans, box.key);
+    const matched = openLeadDoc(box.D, ans);
     const matchedText = matched ? JSON.stringify(matched) : "";
     const raw = fs.existsSync(ans) ? fs.readFileSync(ans, "utf8") : "";
+    let env = null;
+    try { env = JSON.parse(raw); } catch { env = null; }
     check(!!matched && matched.kind === "etiuda-catalog-answer" && matched.sha256 === pin
-        && matchedText.indexOf(MARK) >= 0 && raw.indexOf(MARK) < 0,
-      "890am THE CONTROL: an ask naming the loaded catalog's hash is answered, sealed, and the share does not hold the card in the clear");
+        && matchedText.indexOf(MARK) >= 0 && raw.indexOf(MARK) < 0
+        && !!env && env.kind === "etiuda-answer-sealed" && env.team === box.team && env.keyId === LEAD.keyId
+        && !openSealedDoc(box.D, ans, box.key),
+      "890am THE CONTROL: an ask naming the loaded catalog's hash is answered, sealed to the lead's box alone: the lead's box opens it, the team key does not, and the share holds no card in the clear");
+  }
+
+  /* ---- board 962, stage 0: who can open an answer ------------------------------------------------------
+     A catalog the team lists is answered under the team key; one it does not list, to the lead's box alone; one this desk
+     opened from another team's envelope, to nobody. A team file with no box takes no answer for a catalog it does not list. */
+  {
+    const S0_MARK = "marker-stage0-quay-71d2";
+    /* The desk joins a team at its share and holds the key of a second team, as one that left it would. */
+    const twoTeams = async (name, src) => {
+      const box = await arm(name, src);
+      const other = { team: "t-" + crypto.randomBytes(8).toString("hex"), key: crypto.randomBytes(32) };
+      const dj = JSON.parse(fs.readFileSync(path.join(box.D.ud, "desk.json"), "utf8"));
+      const enc = Buffer.from(Buffer.from(other.key.toString("base64"), "utf8").map(b => b ^ 0x5a)).toString("base64");
+      dj.teamKeys = Object.assign({}, dj.teamKeys || {}, { [other.team]: { "1": enc } });
+      fs.writeFileSync(path.join(box.D.ud, "desk.json"), JSON.stringify(dj), "utf8");
+      box.D = loadDesk(box.D.ud, src);
+      return { box, other };
+    };
+    /* Takes a catalog from outside the share, `sealedBy` sealing it for the other team where given, and asks for its pin. */
+    const askFor = (box, name, body, sealedBy) => {
+      const dir = folder(name + "-out");
+      const text = sealedBy ? JSON.stringify(box.D.api.sealCatalog(sealedBy.key, sealedBy.team, 1, body), null, 1) + "\n" : body;
+      put(dir, "held.ec", text);
+      box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+      const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+      const pin = pinOf(box.D, off ? off[1] : "");
+      take(box.D, pin);
+      putAsk(box, "Ask" + name.replace(/[^A-Za-z0-9]/g, ""), pin);
+      box.D.api.tryCatalogAsk(box.D.win);
+      return pin;
+    };
+    const quayBody = textOf(catalog(4, { id: "quay-held", name: "Quay held", card: S0_MARK }));
+
+    {
+      const box = await arm("s0-listed");
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+      const pin = askFor(box, "s0-listed", quayBody, null);
+      const ans = answerPath(box.share, box.me.id);
+      const viaTeam = openSealedDoc(box.D, ans, box.key);
+      let env = null;
+      try { env = JSON.parse(fs.readFileSync(ans, "utf8")); } catch { env = null; }
+      check(!!pin && !!viaTeam && viaTeam.sha256 === pin && JSON.stringify(viaTeam).indexOf(S0_MARK) >= 0
+          && !!env && env.kind === "etiuda-sealed" && env.team === box.team && !openLeadDoc(box.D, ans),
+        "s0a an answer about a catalog the team lists stays sealed under the team key, and is not a lead's-box envelope");
+    }
+
+    const unlisted = async (name, src) => {
+      const box = await arm(name, src);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+      const pin = askFor(box, name, quayBody, null);
+      const ans = answerPath(box.share, box.me.id);
+      return { pin, ans, box, askId: "Ask" + name.replace(/[^A-Za-z0-9]/g, ""), viaTeam: openSealedDoc(box.D, ans, box.key),
+        viaLead: openLeadDoc(box.D, ans), raw: fs.existsSync(ans) ? fs.readFileSync(ans, "utf8") : "" };
+    };
+    {
+      const u = await unlisted("s0-unlisted");
+      const sv = u.viaLead || {};
+      const genuine = u.box.D.api.answerLeadGenuine(sv, u.box.me.id, u.box.me.key);
+      const strayKey = crypto.generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+      const moved = JSON.parse(JSON.stringify(sv));
+      moved.ask = "Askelsewhere";
+      check(genuine && sv.ask === u.askId && sv.team === u.box.team && !!sv.sig && sv.sig.keyId === u.box.me.id
+          && !u.box.D.api.deskFileGenuine(sv, u.box.me.id) && !u.box.D.api.answerLeadGenuine(sv, u.box.me.id, strayKey)
+          && !u.box.D.api.answerLeadGenuine(moved, u.box.me.id, u.box.me.key),
+        "s0g the box answer is signed by this desk's key under the answer's own prefix, over the ask and the team it answers: it is no desk file, no other key verifies it, and it does not hold for another ask");
+      const listedBox = await arm("s0-listed-unsigned");
+      join(listedBox, 1, [entry(listedBox.D, listedBox.me, listedBox.key, listedBox.team, 1)], ["quay-held"]);
+      askFor(listedBox, "s0-listed-unsigned", quayBody, null);
+      const listedInner = openSealedDoc(listedBox.D, answerPath(listedBox.share, listedBox.me.id), listedBox.key);
+      check(!!listedInner && Object.keys(listedInner).sort().join(",") === "catalog,format,kind,sha256",
+        "s0i an answer under the team key keeps today's shape, unsigned, with no ask or team field (got "
+        + (listedInner ? Object.keys(listedInner).sort().join(",") : "nothing") + ")");
+      check(!!u.pin && !u.viaTeam && !!u.viaLead && u.viaLead.sha256 === u.pin && JSON.stringify(u.viaLead).indexOf(S0_MARK) >= 0
+          && u.raw.indexOf(S0_MARK) < 0,
+        "s0b an answer about a catalog the team does not list is sealed to the lead's box: the lead opens it, a teammate's team key does not");
+      if (PLANTS_OFF) skip("s0c lifting plant:s0-answer-lead turns s0b red: the unlisted answer opens under the team key");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0-answer-lead") >= 0 ? "  /* plant:s0-answer-lead */" : l).join("\n");
+        const p = planted !== SRC ? await unlisted("s0-unlisted-plant", planted) : null;
+        check(!!p && !!p.viaTeam && JSON.stringify(p.viaTeam).indexOf(S0_MARK) >= 0,
+          "s0c lifting plant:s0-answer-lead turns s0b red: the unlisted answer opens under the team key ("
+          + (p ? (p.viaTeam ? "team key opens it" : "team key does not open it") : "plant not found") + ")");
+      }
+    }
+
+    const otherTeam = async (name, sealed, src) => {
+      const { box, other } = await twoTeams(name, src);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+      const pin = askFor(box, name, quayBody, sealed ? other : null);
+      const ans = answerPath(box.share, box.me.id);
+      return { pin, written: fs.existsSync(ans), use: openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key) };
+    };
+    {
+      const sealed = await otherTeam("s0-other", true);
+      const plain = await otherTeam("s0-other-plain", false);
+      check(!!sealed.pin && !!sealed.use && sealed.use.catalog.sha256 === sealed.pin && !sealed.written
+          && !!plain.pin && plain.pin === sealed.pin && plain.written,
+        "s0d a catalog this desk opened from another team's envelope is not answered, though this team lists it; the same catalog in the clear is");
+      if (PLANTS_OFF) skip("s0e lifting plant:s0-other-team turns s0d red: another team's catalog is answered");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0-other-team") >= 0 ? "    /* plant:s0-other-team */" : l).join("\n");
+        const p = planted !== SRC ? await otherTeam("s0-other-plant", true, planted) : null;
+        check(!!p && p.written,
+          "s0e lifting plant:s0-other-team turns s0d red: another team's catalog is answered ("
+          + (p ? (p.written ? "answered" : "not answered") : "plant not found") + ")");
+      }
+    }
+
+    /* A working copy grown from another team's catalog carries that team's cards under an id of its own (Argon's finding 1). */
+    const grownFrom = async (name, sealed, src) => {
+      const { box, other } = await twoTeams(name, src);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+      const basePin = askFor(box, name, quayBody, sealed ? other : null);
+      const grown = catalog(5, { id: box.me.id + "-1a2b3c4d", name: "Quay held, grown", card: S0_MARK, unsigned: true });
+      grown.grew = { id: "quay-held", rev: 4, sha: basePin };
+      const grownText = textOf(grown);
+      const pin = pinOf(box.D, grownText);
+      const ans = answerPath(box.share, box.me.id);
+      if (fs.existsSync(ans)) fs.unlinkSync(ans);
+      take(box.D, pin, grownText);
+      putAsk(box, "Askgrown" + name.replace(/[^A-Za-z0-9]/g, ""), pin);
+      box.D.api.tryCatalogAsk(box.D.win);
+      const use = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+      return { pin, named: !!use && use.catalog.sha256 === pin, written: fs.existsSync(ans), lead: openLeadDoc(box.D, ans) };
+    };
+    {
+      const sealed = await grownFrom("s0-grown", true);
+      const plain = await grownFrom("s0-grown-plain", false);
+      check(!!sealed.pin && sealed.named && !sealed.written
+          && plain.named && plain.written && !!plain.lead && JSON.stringify(plain.lead).indexOf(S0_MARK) >= 0,
+        "s0j a working copy grown from another team's sealed catalog is not answered; one grown from the same catalog in the clear is, to the lead's box");
+      if (PLANTS_OFF) skip("s0k lifting plant:s0-grew turns s0j red: the grown copy of another team's catalog is answered");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0-grew") >= 0 ? "  /* plant:s0-grew */" : l).join("\n");
+        const p = planted !== SRC ? await grownFrom("s0-grown-plant", true, planted) : null;
+        check(!!p && p.written,
+          "s0k lifting plant:s0-grew turns s0j red: the grown copy of another team's catalog is answered ("
+          + (p ? (p.written ? "answered" : "not answered") : "plant not found") + ")");
+      }
+    }
+
+    {
+      const box = await arm("s0-nobox");
+      put(box.share, "etiuda-team.json", textOf(sign({
+        format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: LEAD,
+        sealed: true, exportsSealed: false, epoch: 1, roster: [entry(box.D, box.me, box.key, box.team, 1)],
+      }, lead.privateKey, LEAD)));
+      const pin = askFor(box, "s0-nobox", quayBody, null);
+      check(!!pin && !fs.existsSync(answerPath(box.share, box.me.id)),
+        "s0f a team file that names no lead's box takes no answer for a catalog it does not list");
+    }
   }
 
   /* ---- Board 945 item 9, Part B: in-use counter n, cleared: true on release, and withdrawn asks ---- */
@@ -1658,9 +1842,9 @@ try {
 }
 
 check(regStand.held(), "890ab every reg call was answered by the stand-in (" + regStand.said() + ")");
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

@@ -61,8 +61,8 @@ function noteRoll(){
 }
 /* THE THEME LANDS AT ONCE, as Studio's does: the attribute in the press's own task, and each control
    eases its own colours on the sheet's tiers. Nothing waits on the host. */
-/* The flip starts no transition on the repeating rows: the sheet #eFlipHold is on for the press's
-   own frame and the next, then off. A later press re-arms it; only the last lets go. */
+/* The flip starts no transition on controls and repeating rows: the sheet #eFlipHold is on for the
+   press's own frame and the next, then off. A later press re-arms it; only the last lets go. */
 let flipHeld=0;
 function flipHoldSheet(){
   const el=typeof document.getElementById==="function" ? document.getElementById("eFlipHold") : null;
