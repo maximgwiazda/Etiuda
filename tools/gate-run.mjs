@@ -164,6 +164,11 @@ export const VISUAL_LEGS = [
 ];
 const VISUAL_SET = new Set(VISUAL_LEGS);
 
+/* PACKAGING AND RELEASE TOOLS ARE NEVER MERGE GATES (the test architect, 2026-11-08): npm scripts make gates-for name them,
+   but they build installers or release, and package-linux cannot build on Windows. The installer test covers packaging. */
+export const NOT_MERGE_GATES = ["tools/package.mjs", "tools/package-linux.mjs", "tools/release.mjs"];
+const NOT_MERGE_SET = new Set(NOT_MERGE_GATES);
+
 export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/desk-growth.mjs", args: [], cmd: "node tests/desk-growth.mjs" },
   { script: "nightly", file: "tests/leg-ids.js", args: [], cmd: "node tests/leg-ids.js" },
@@ -986,6 +991,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
       }
     }
     if (GENERIC_SCANNERS.has(g) && !changed.includes(g)) continue;
+    if (NOT_MERGE_SET.has(g)) { console.log("gate-run area: " + g + " is a packaging tool, not a merge gate"); continue; }
     if (VISUAL_SET.has(g)) { console.log("gate-run area: visual leg " + g + " left to the release profile"); continue; }
     if (!addedFiles.has(g)) {
       steps.push({ script: "area", cmd: "node " + g, file: g, args: [] });
