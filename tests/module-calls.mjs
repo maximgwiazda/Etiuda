@@ -5558,6 +5558,13 @@ const CARD_B = {
       },
       querySelectorAll: () => [],
       appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.parentElement = this; return c; },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
       insertBefore(c) { return this.appendChild(c); },
       remove() { this.gone = true; }, contains: () => false, focus() {}, blur() {}, closest: () => null, dispatchEvent: () => true,
       getContext: () => ({ measureText: () => ({ width: 10 }) }),
@@ -5666,6 +5673,45 @@ const CARD_B = {
       } finally {
         was.forEach(([k, v]) => { if (v == null) ST.lsDel(k); else ST.lsSet(k, v); });
         wasNs.forEach(([k, v]) => { if (v == null) ST.nsDel(k); else ST.nsSet(k, v); });
+      }
+    });
+
+    check("settings.js", "D6 reset defaults turns start-with-Windows off and clears quit-on-close", () => {
+      const calls = [];
+      const prev = globalThis.window.E_HOST;
+      /* Reset clears the motion key the later screen-tab checks still need reduced, so put every key back. */
+      const KEYS = ["eTheme", "eGlassOff", "eMotionOff", "eUiLang", "ePillsLock", "eRailLock", "ePills", "eRail",
+        "eShortcuts", "eHdrPills", "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed",
+        "eSharedEdit", "eHotkey", "eQuitOnClose"];
+      const was = KEYS.map(k => [k, ST.lsGet(k)]);
+      const wasNs = [["Cols", ST.nsGet("Cols")], ["Floor", ST.nsGet("Floor")]];
+      globalThis.window.E_HOST = Object.assign({}, prev, {
+        loginItemState: () => ({ openAtLogin: true }),
+        setLoginItem: (on) => { calls.push(["login", !!on]); },
+        setClosePolicy: (quit) => { calls.push(["close", !!quit]); },
+        trayNotesState: () => ({ on: false }),
+        setTrayNotes: (on) => { calls.push(["notes", !!on]); },
+      });
+      try {
+        ST.lsSet("eQuitOnClose", "1");
+        const html = SET.settingsPageHtml("general", "");
+        const rows = html.indexOf("Starting and closing") >= 0 && html.indexOf("Start with Windows") >= 0
+          && html.indexOf("Stay in the tray") >= 0 && html.indexOf("When the window closes") >= 0
+          && html.indexOf(">Quit<") >= 0;
+        SET.resetAllSettings();
+        const ok = rows && ST.lsGet("eQuitOnClose") == null
+          && calls.some(c => c[0] === "login" && c[1] === false)
+          && calls.some(c => c[0] === "close" && c[1] === false)
+          && calls.some(c => c[0] === "notes" && c[1] === true);
+        ST.lsSet("eUiLang", "pl");
+        const pl = SET.settingsPageHtml("general", "");
+        const plOk = pl.indexOf("Uruchamiaj razem z systemem Windows") >= 0 && pl.indexOf("Zostaje w zasobniku") >= 0
+          && pl.indexOf("Uruchamianie i zamykanie") >= 0 && pl.indexOf("Po zamknięciu okna") >= 0;
+        return (ok && plOk) || JSON.stringify({ rows: rows, key: ST.lsGet("eQuitOnClose"), calls: calls, plOk: plOk });
+      } finally {
+        was.forEach(([k, v]) => { if (v == null) ST.lsDel(k); else ST.lsSet(k, v); });
+        wasNs.forEach(([k, v]) => { if (v == null) ST.nsDel(k); else ST.nsSet(k, v); });
+        globalThis.window.E_HOST = prev;
       }
     });
 
@@ -5796,6 +5842,13 @@ const CARD_B = {
         c.parentNode = this; c.parentElement = this;
         return c;
       },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
       dispatchEvent(ev) { return true; },
       select() {},
       getContext: () => ({ measureText: () => ({ width: 10 }) }),
@@ -5812,6 +5865,10 @@ const CARD_B = {
   const tabsWrap = el({ id: "tabsWrap" });
   tabsWrap.appendChild(tabsBar);
   const screenHost = el({ id: "screenHost" });
+  const libList = el({ className: "screen-page lib-screen lib-list" });
+  screenHost.appendChild(libList);
+  const origScreenQuery = screenHost.querySelector.bind(screenHost);
+  screenHost.querySelector = s => (s === ".lib-list" ? libList : origScreenQuery(s));
   const modal = el({ id: "modal", hidden: true });
   const modalCard = el({ id: "modalCard", className: "modal-card" });
   modal.appendChild(modalCard);
@@ -6140,6 +6197,495 @@ const CARD_B = {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
   }
+}
+
+/* ------------------------------------------------------------------ F2 renames on the desk (run D4)
+   F2 renames the focused card, intent or category by opening its editor with the name selected,
+   and in the Library a category row's name field takes focus; F2 elsewhere does nothing;
+   rebindable, listed with the "new key" chip; context-menu rows show F2. */
+{
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
+  const hadHost = globalThis.window.E_HOST, hadConfirm = globalThis.confirm, hadRaf = globalThis.requestAnimationFrame;
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const Dom = await import(MOD("dom.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const SCL = await import(MOD("shortcuts-list.js"));
+  const T = await import(MOD("tabs.js"));
+  const KD = await import(MOD("keydown.js"));
+  const RS = await import(MOD("run-shortcut.js"));
+  const STAB = await import(MOD("screen-tabs.js"));
+  const CX = await import(MOD("context-menu.js"));
+  const CE = await import(MOD("card-editor.js"));
+  const ED = await import(MOD("editors.js"));
+  const MG = await import(MOD("manage.js"));
+  const fs = await import("node:fs");
+
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+
+  const on = o => ({
+    add: c => o.add(c),
+    remove: c => o.delete(c),
+    contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : Boolean(f); if (w) o.add(c); else o.delete(c); return w; }
+  });
+
+  function matchSel(n, s) {
+    if (!n) return false;
+    s = s.trim();
+    if (s.includes(",")) return s.split(",").some(part => matchSel(n, part));
+    const parts = s.split(/\s+/);
+    if (parts.length > 1) {
+      const target = parts[parts.length - 1];
+      if (!matchSel(n, target)) return false;
+      const ancestorSel = parts.slice(0, -1).join(" ");
+      let p = n.parentNode;
+      while (p) {
+        if (matchSel(p, ancestorSel)) return true;
+        p = p.parentNode;
+      }
+      return false;
+    }
+    let sel = s;
+    const tagMatch = sel.match(/^([A-Za-z0-9]+)/);
+    if (tagMatch) {
+      if ((n.tagName || "").toUpperCase() !== tagMatch[1].toUpperCase()) return false;
+      sel = sel.slice(tagMatch[1].length);
+    }
+    const idMatch = sel.match(/#([A-Za-z0-9_-]+)/);
+    if (idMatch) {
+      if (n.id !== idMatch[1]) return false;
+    }
+    const classMatches = sel.match(/\.([A-Za-z0-9_-]+)/g);
+    if (classMatches) {
+      for (const cm of classMatches) {
+        if (!n.classList || !n.classList.contains(cm.slice(1))) return false;
+      }
+    }
+    const attrMatches = sel.match(/\[([A-Za-z0-9_-]+)(?:=["']?([^"']*)["']?)?\]/g);
+    if (attrMatches) {
+      for (const am of attrMatches) {
+        const m = am.match(/\[([A-Za-z0-9_-]+)(?:=["']?([^"']*)["']?)?\]/);
+        if (m) {
+          const attr = m[1], val = m[2];
+          if (attr.startsWith("data-")) {
+            const k = attr.slice(5).replace(/-([a-z])/g, (_, g) => g.toUpperCase());
+            if (!n.dataset || n.dataset[k] === undefined) return false;
+            if (val !== undefined && String(n.dataset[k]) !== val) return false;
+          } else {
+            if (!n.getAttribute || n.getAttribute(attr) == null) return false;
+            if (val !== undefined && n.getAttribute(attr) !== val) return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  const el = extra => {
+    const classes = new Set((extra && extra.className || "").split(/\s+/).filter(Boolean));
+    const e = Object.assign({
+      hidden: false, attrs: {}, innerHTML: "", value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
+      get textContent() {
+        if (this._text !== undefined) return this._text;
+        return (this.kids && this.kids.length) ? this.kids.map(k => k.textContent).join("") : "";
+      },
+      set textContent(v) { this._text = String(v); },
+      dataset: {},
+      get children() { return this.kids || []; },
+      classList: on(classes),
+      get className() { return [...classes].join(" "); },
+      set className(v) { classes.clear(); String(v || "").split(/\s+/).filter(Boolean).forEach(c => classes.add(c)); },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      getAttribute(k) { return k === "class" ? this.className : this.attrs[k]; },
+      removeAttribute(k) { delete this.attrs[k]; },
+      querySelector(s) {
+        if (!this.kids) return null;
+        for (const k of this.kids) {
+          if (matchSel(k, s)) return k;
+          const found = k.querySelector && k.querySelector(s);
+          if (found) return found;
+        }
+        return null;
+      },
+      querySelectorAll(s) {
+        const out = [];
+        const walk = n => {
+          if (!n || !n.kids) return;
+          for (const k of n.kids) {
+            if (matchSel(k, s)) out.push(k);
+            walk(k);
+          }
+        };
+        walk(this);
+        return out;
+      },
+      closest(s) {
+        let p = this;
+        while (p) {
+          if (matchSel(p, s)) return p;
+          p = p.parentNode;
+        }
+        return null;
+      },
+      remove() { this.gone = true; if (this.parentNode && this.parentNode.kids) { this.parentNode.kids = this.parentNode.kids.filter(x => x !== this); } },
+      contains(n) { let p = n; while (p) { if (p === this) return true; p = p.parentNode; } return false; },
+      focus() { globalThis.document.activeElement = this; this.focused = true; },
+      select() { this.selected = true; },
+      getContext: () => ({ measureText: () => ({ width: 10 }) }),
+      getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 200, height: 32 }),
+      appendChild(c) { (this.kids = this.kids || []).push(c); c.parentNode = this; c.parentElement = this; return c; },
+      insertBefore(c, ref) {
+        this.kids = this.kids || [];
+        const idx = this.kids.indexOf(ref);
+        if (idx >= 0) this.kids.splice(idx, 0, c); else this.kids.push(c);
+        c.parentNode = this; c.parentElement = this;
+        return c;
+      },
+      dispatchEvent(ev) { return true; }
+    }, extra || {});
+    return e;
+  };
+
+  const toastEl = el({ id: "toast" });
+  const pax = el({ id: "pax", tagName: "INPUT" });
+  const box = el({ id: "intent", tagName: "INPUT", selectionStart: 0, selectionEnd: 0, blur() { this.blurred = true; }, focus() {} });
+  const tabsBar = el({ id: "tabsBar", role: "tablist" });
+  const tabsWrap = el({ id: "tabsWrap" });
+  tabsWrap.appendChild(tabsBar);
+  const screenHost = el({ id: "screenHost" });
+  const libList = el({ className: "screen-page lib-screen lib-list" });
+  screenHost.appendChild(libList);
+  const origScreenQuery = screenHost.querySelector.bind(screenHost);
+  screenHost.querySelector = s => (s === ".lib-list" ? libList : origScreenQuery(s));
+  const modal = el({ id: "modal", hidden: true });
+  const modalCard = el({ id: "modalCard", className: "modal-card" });
+  modal.appendChild(modalCard);
+  const list = el({ id: "list" });
+  const intentRail = el({ id: "intentRail" });
+  const pills = el({ id: "pills" });
+  const byId = {
+    "#toast": toastEl,
+    "#pax": pax,
+    "#roleSel": el({ id: "roleSel", tagName: "SELECT" }),
+    "#intent": box,
+    "#tabsBar": tabsBar,
+    "#tabsWrap": tabsWrap,
+    "#screenHost": screenHost,
+    "#modal": modal,
+    "#modalCard": modalCard,
+    "#list": list,
+    "#intentRail": intentRail,
+    "#pills": pills,
+    "#mgClose": el({ id: "mgClose" }),
+    "#mgAddIntent": el({ id: "mgAddIntent" }),
+    "#mgAddCat": el({ id: "mgAddCat" }),
+    "#mgImportCatalog": el({ id: "mgImportCatalog" }),
+    "#mgWipe": el({ id: "mgWipe" }),
+    "#mgCatList": el({ id: "mgCatList" })
+  };
+
+  const bodyKids = [tabsWrap, screenHost, modal, list, intentRail, pills];
+  const body = el({
+    tagName: "BODY",
+    kids: bodyKids,
+    appendChild: n => { bodyKids.push(n); n.parentNode = body; n.parentElement = body; return n; },
+    removeChild: n => { n.gone = true; }
+  });
+  bodyKids.forEach(k => { k.parentNode = body; k.parentElement = body; });
+  let pageKeys = null;
+
+  globalThis.document = {
+    querySelector: s => byId[s] || (s === "#modalCard" ? modalCard : null),
+    getElementById: id => byId["#" + id] || null,
+    querySelectorAll: s => (s === ".tab" ? tabsBar.querySelectorAll(".tab") : []),
+    activeElement: body,
+    body,
+    addEventListener(k, fn) { if (k === "keydown") pageKeys = fn; },
+    contains: () => true,
+    createElement: tag => el({ tagName: (tag || "div").toUpperCase() }),
+    createRange: () => ({}),
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} }
+  };
+  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; };
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0", marginLeft: "0" });
+  globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+  STUBS.forEach(k => { H.hooks[k] = () => {}; });
+  H.hooks.runShortcut = id => RS.runShortcut(id);
+  Dom.grabDom();
+
+  const key = o => Object.assign({
+    key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, repeat: false,
+    prevented: false, stopped: false, target: body,
+    preventDefault() { this.prevented = true; },
+    stopPropagation() {}, stopImmediatePropagation() { this.stopped = true; }
+  }, o);
+
+  const tab = (id, who) => ({ id, pax: who, title: "", lang: AS.lang, intentIdxs: [], intentText: "", intentBox: "", who: "", cats: [] });
+  const start = (listArr, active) => {
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: active, tabs: listArr.map(x => tab(x[0], x[1])) }));
+    T.initTabs();
+  };
+
+  try {
+    KD.wireGlobalKeydown();
+
+    // D4-1. F2 on a focused card opens its editor with the name selected
+    check("shortcuts.js", "D4-1 F2 on a focused card opens its editor with the name selected", () => {
+      start([["t-a", "Anna"]], "t-a");
+      let openedId = null;
+      H.hooks.openCardEditor = id => { openedId = id; };
+      AS.putEntrySel({ id: "card-99", vi: 0 });
+      const handled = RS.runShortcut("rename");
+      return handled === true && openedId === "card-99";
+    });
+
+    // D4-2. F2 on an intent row opens its editor with the name selected
+    check("shortcuts.js", "D4-2 F2 on an intent row opens its editor with the name selected", () => {
+      start([["t-a", "Anna"]], "t-a");
+      let openedIdx = null;
+      H.hooks.openIntentEditor = idx => { openedIdx = idx; };
+      const intentItem = el({ className: "rail-item", dataset: { si: "5" } });
+      intentRail.appendChild(intentItem);
+      globalThis.document.activeElement = intentItem;
+      const handled = RS.runShortcut("rename");
+      return handled === true && openedIdx === 5;
+    });
+
+    // D4-3. F2 on a category pill opens its editor with the name selected
+    check("shortcuts.js", "D4-3 F2 on a category pill opens its editor with the name selected", () => {
+      start([["t-a", "Anna"]], "t-a");
+      let openedCat = null, fromPill = null;
+      H.hooks.openCategoryEditor = (k, fp) => { openedCat = k; fromPill = fp; };
+      const pill = el({ className: "pill", dataset: { k: "orders" } });
+      pills.appendChild(pill);
+      globalThis.document.activeElement = pill;
+      const handled = RS.runShortcut("rename");
+      return handled === true && openedCat === "orders" && fromPill === true;
+    });
+
+    // D4-4. in the Library a category row's name field takes focus
+    check("manage.js", "D4-4 in the Library a category row's name field takes focus", () => {
+      start([["t-a", "Anna"]], "t-a");
+      STAB.openScreenTab("library");
+      const catRow = el({ className: "mg-cat-row", dataset: { crow: "shipping" } });
+      const nameInput = el({ tagName: "INPUT", className: "mg-cat-lab2", dataset: { rename: "shipping" }, value: "Shipping" });
+      catRow.appendChild(nameInput);
+      screenHost.appendChild(catRow);
+      globalThis.document.activeElement = catRow;
+      const handled = RS.runShortcut("rename");
+      return handled === true && nameInput.focused === true && nameInput.selected === true;
+    });
+
+    // D4-5. F2 elsewhere does nothing
+    check("shortcuts.js", "D4-5 F2 elsewhere does nothing", () => {
+      start([["t-a", "Anna"]], "t-a");
+      STAB.clearScreenOn();
+      AS.putEntrySel(null);
+      globalThis.document.activeElement = body;
+      const deskHandled = RS.runShortcut("rename");
+
+      STAB.openScreenTab("settings");
+      globalThis.document.activeElement = body;
+      const settingsHandled = RS.runShortcut("rename");
+
+      return deskHandled === false && settingsHandled === false;
+    });
+
+    // D4-6. rename is rebindable, and listed with the new key chip
+    check("shortcuts.js", "D4-6 rename is rebindable, and listed with the new key chip", () => {
+      const renameDef = SC.SC_DEFS.find(x => x.id === "rename");
+      if (!renameDef) return "rename not in SC_DEFS";
+      if (renameDef.def.code !== "F2") return "default not F2";
+      if (!renameDef.newKey) return "rename missing newKey property";
+      const maintDef = SC.SC_DEFS.find(x => x.id === "maintenance");
+      if (!maintDef || !maintDef.newKey) return "maintenance missing newKey property";
+
+      const html = SCL.shortcutsListHtml("");
+      if (html.indexOf("new key") < 0 && html.indexOf("nowy skrót") < 0) return "new key chip missing in html";
+
+      // rebindable
+      ST.lsSet("eShortcuts", JSON.stringify({ rename: { code: "KeyR", key: "r", ctrl: 1, alt: 0, shift: 0, meta: 0 } }));
+      SC.loadShortcuts();
+      const matchesF2 = SC.eventMatchesAction(key({ key: "F2", code: "F2" }), "rename");
+      const matchesRebound = SC.eventMatchesAction(key({ key: "r", code: "KeyR", ctrlKey: true }), "rename");
+      ST.lsDel("eShortcuts");
+      SC.loadShortcuts();
+      return !matchesF2 && matchesRebound;
+    });
+
+    // D4-7. context-menu rows show F2 as Studio's do
+    check("context-menu.js", "D4-7 context-menu rows show F2 as Studio's do", () => {
+      const hadCards = AS.cards;
+      AS.setCards([{ id: "c-1", p: ["hello"] }]);
+      try {
+        const cardEl = el({ dataset: { id: "c-1" }, querySelector: s => (s.includes('edit') ? el() : null) });
+        const intentElNode = el({ dataset: { si: "1" }, querySelector: s => (s.includes('edit') ? el() : null) });
+        const pillElNode = el({ dataset: { k: "cat-1" }, querySelector: s => (s.includes('editcat') ? el() : null) });
+
+        cardEl.closest = s => (s.includes(".card") ? cardEl : null);
+        intentElNode.closest = s => (s.includes(".rail-item") ? intentElNode : null);
+        pillElNode.closest = s => (s.includes(".pill") ? pillElNode : null);
+
+        const cardRows = CX.ctxRowsFor(cardEl);
+        const intentRows = CX.ctxRowsFor(intentElNode);
+        const pillRows = CX.ctxRowsFor(pillElNode);
+
+        const cardEdit = cardRows && cardRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this card"))));
+        const intentEdit = intentRows && intentRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this intent"))));
+        const pillEdit = pillRows && pillRows.find(r => r !== "-" && (r.key === "F2" || (r.label && r.label.includes("Edit this category"))));
+
+        if (!cardEdit || cardEdit.key !== "F2") return "card row missing key F2";
+        if (!intentEdit || intentEdit.key !== "F2") return "intent row missing key F2";
+        if (!pillEdit || pillEdit.key !== "F2") return "pill row missing key F2";
+
+        return true;
+      } finally {
+        AS.setCards(hadCards);
+      }
+    });
+
+  } finally {
+    STAB.clearScreenOn();
+    STAB.screens.length = 0;
+    T.tabs.splice(0, T.tabs.length);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = hadRaf;
+    if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
+    if (hadConfirm === undefined) delete globalThis.confirm; else globalThis.confirm = hadConfirm;
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ maintenance.js (run D5)
+   The health strip's six sources are each guarded: a planted throw on one tile reads
+   "unavailable" and the other five still draw. The report and the strip stay content-free:
+   a planted file name and a planted card token may show on the panel's file row, and neither
+   may show in the report or the strip. */
+{
+  const MN = await import(MOD("maintenance.js"));
+  const ST = await import(MOD("storage.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CAT = await import(MOD("catalog.js"));
+  const UL = await import(MOD("ui-lang.js"));
+  const STAB = await import(MOD("screen-tabs.js"));
+  const IDS = ["catalog", "saving", "watch", "team", "start", "crash"];
+  const TOKEN = "qxcatalogtexttoken";
+  const FILE = "qx-secret-file.ec";
+
+  check("maintenance.js", "D5-1 each health tile reads unavailable when its source throws, and the other five still draw", () => {
+    if (typeof MN.mtHealthTiles !== "function" || typeof MN.mtHealthHtml !== "function")
+      return "mtHealthTiles is not there";
+    for (const id of IDS) {
+      let html = "";
+      try { html = MN.mtHealthHtml({ [id]: () => { throw new Error("plant"); } }); }
+      catch (e) { return id + " html threw"; }
+      const tiles = MN.mtHealthTiles({ [id]: () => { throw new Error("plant"); } });
+      if (!Array.isArray(tiles) || tiles.length !== 6) return id + " count";
+      const hit = tiles.filter(tile => tile.id === id)[0];
+      if (!hit || hit.v !== "unavailable") return id + " not unavailable";
+      if (tiles.some(tile => tile.id !== id && tile.v === "unavailable")) return id + " blanked another";
+      if (html.indexOf('data-mt-h="' + id + '"') < 0 || html.indexOf("unavailable") < 0) return id + " html";
+      if (IDS.some(x => html.indexOf('data-mt-h="' + x + '"') < 0)) return id + " missing a tile";
+    }
+    const quiet = MN.mtHealthTiles();
+    if (!Array.isArray(quiet) || quiet.length !== 6) return "empty desk count";
+    if (quiet.some(tile => tile.v === "unavailable")) return "empty desk threw";
+    return true;
+  });
+
+  check("maintenance.js", "D5-2 the report and the health strip stay free of a planted file name and catalog text", () => {
+    if (typeof MN.mtReportText !== "function" || typeof MN.mtHealthHtml !== "function")
+      return "mtReportText is not there";
+    const hadHost = Object.prototype.hasOwnProperty.call(globalThis.window, "E_HOST");
+    const prevHost = globalThis.window.E_HOST;
+    const prevCards = AS.cards.slice();
+    const prevFile = ST.nsGet("CatalogFile");
+    const prevStore = ST.lsGet(CAT.E_CATALOG_STORE);
+    try {
+      globalThis.window.E_HOST = {};
+      AS.setCards([{ id: "qx", body: TOKEN, t: TOKEN, title: TOKEN }]);
+      ST.nsSet("CatalogFile", FILE);
+      ST.lsSet(CAT.E_CATALOG_STORE, JSON.stringify({ id: "qxcat", cards: [{ body: TOKEN, t: TOKEN }] }));
+      const report = MN.mtReportText();
+      const health = MN.mtHealthHtml();
+      const grid = MN.mtGridHtml();
+      if (typeof report !== "string" || report.indexOf("Etiuda maintenance report") !== 0) return "report heading";
+      if (grid.indexOf(FILE) < 0) return "plant did not reach the panel";
+      if (report.indexOf(FILE) >= 0 || report.indexOf(TOKEN) >= 0) return "report leaked";
+      if (health.indexOf(FILE) >= 0 || health.indexOf(TOKEN) >= 0) return "strip leaked";
+      if (grid.indexOf(TOKEN) >= 0) return "grid printed catalog text";
+      return true;
+    } finally {
+      AS.setCards(prevCards);
+      if (prevFile == null) ST.nsDel("CatalogFile"); else ST.nsSet("CatalogFile", prevFile);
+      if (prevStore == null) ST.lsDel(CAT.E_CATALOG_STORE); else ST.lsSet(CAT.E_CATALOG_STORE, prevStore);
+      if (hadHost) globalThis.window.E_HOST = prevHost; else delete globalThis.window.E_HOST;
+    }
+  });
+
+  check("maintenance.js", "D5-3 the Maintenance screen carries the six tiles, the subtitle and Readings, and no log folder", () => {
+    const def = STAB.getScreenDef("maintenance");
+    if (!def || typeof def.render !== "function") return "no maintenance screen";
+    const host = { innerHTML: "", querySelector() { return null; } };
+    def.render(host, () => {});
+    const html = host.innerHTML;
+    if (IDS.some(id => html.indexOf('data-mt-h="' + id + '"') < 0)) return "tiles missing";
+    if (html.indexOf("What this computer reports, and ways to set things right.") < 0) return "subtitle";
+    if (html.indexOf("Readings") < 0) return "readings heading";
+    if (html.indexOf("Open the log folder") >= 0) return "log folder was built";
+    if (typeof MN.openMaintenanceModal === "function" && MN.openMaintenanceModal.toString().indexOf("mtMaintBody") < 0)
+      return "rescue window does not use the screen body";
+    ST.lsSet("eUiLang", "pl");
+    try {
+      const plHost = { innerHTML: "", querySelector() { return null; } };
+      def.render(plHost, () => {});
+      const pl = plHost.innerHTML;
+      const want = ["Odczyty", "Zapisywanie", "Obserwacja pliku", "Ostatnie uruchomienie", "Ostatnia awaria",
+        "Katalog", "Zespół", "Co raportuje ten komputer i jak przywrócić porządek."];
+      const miss = want.filter(w => pl.indexOf(w) < 0);
+      return miss.length ? "polish missing " + miss.length : true;
+    } finally {
+      ST.lsDel("eUiLang");
+    }
+  });
+
+  check("maintenance.js", "D5-4 a team line says relay reachable, out of reach, or only the sync time, and never No team", () => {
+    if (typeof MN.mtTeamLine !== "function") return "mtTeamLine is not there";
+    const ens = row => (row && row.parts || []).map(p => p.en);
+    const empty = MN.mtTeamLine([]);
+    if (!empty || empty.v !== "-" || ens(empty).length) return "empty";
+    const removed = MN.mtTeamLine([{ team: "qx", removed: true, relay: "relay.example" }]);
+    if (!removed || removed.v !== "-") return "removed";
+    const stamp = UL.fileStamp(1700000000000);
+    const reach = MN.mtTeamLine([{ team: "qx", relay: "relay.example", head: { t: 1700000000000 } }]);
+    const reachFill = (reach.parts || []).filter(p => p.en === "synced {TIME}")[0];
+    if (ens(reach).indexOf("relay reachable") < 0 || !reachFill || !reachFill.fill || reachFill.fill["{TIME}"] !== stamp || reach.warn)
+      return "reachable";
+    const out = MN.mtTeamLine([{ team: "qx", relay: "relay.example", relayRemoved: true }]);
+    if (ens(out).indexOf("relay out of reach") < 0 || !out.warn) return "out of reach";
+    const lapsed = MN.mtTeamLine([{ team: "qx", relay: "relay.example", lapse: { step: "lapsed" } }]);
+    if (ens(lapsed).indexOf("relay out of reach") < 0 || !lapsed.warn) return "lapsed";
+    const grace = MN.mtTeamLine([{ team: "qx", relay: "relay.example", lapse: { step: "grace" } }]);
+    if (ens(grace).indexOf("relay reachable") < 0 || grace.warn) return "grace";
+    const folder = MN.mtTeamLine([{ team: "qx", folder: "C:/qx", head: { t: 1700000000000 } }]);
+    if (ens(folder).indexOf("relay reachable") >= 0 || ens(folder).indexOf("relay out of reach") >= 0 || ens(folder).indexOf("synced {TIME}") < 0)
+      return "folder";
+    const said = MN.mtHealthHtml({ team: () => MN.mtTeamLine([{ team: "qx", relay: "relay.example", relayRemoved: true }]) });
+    if (said.indexOf("relay out of reach") < 0 || said.indexOf('data-mt-h="team"') < 0 || said.indexOf("mt-bad") < 0)
+      return "tile words";
+    if (said.indexOf("No team") >= 0) return "variant C words";
+    const saved = MN.mtHealthHtml({ saving: () => ({ parts: [{ en: "saved {TIME}", fill: { "{TIME}": "01.01.2026 00:00" } }] }) });
+    if (saved.indexOf("saved 01.01.2026 00:00") < 0 || saved.indexOf("{TIME}") >= 0) return "saved time";
+    return true;
+  });
 }
 
 /* ------------------------------------------------------------------ the count, and this

@@ -6,6 +6,7 @@
    Fields and selected text keep the shell's edit menu, and anything else keeps the page's silence. */
 import { list } from "./dom.js";
 import { cssEsc } from "./css-esc.js";
+import { esc } from "./esc.js";
 import { t } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { cardLang, findCard } from "./card-model.js";
@@ -58,7 +59,7 @@ function replyRows(card, target){
   const btn=a=>card.querySelector('.cacts [data-act="'+a+'"]');
   const note=btn("note"), edit=btn("edit"), fav=btn("fav"), hide=btn("hide");
   rows.push("-");
-  if(edit) rows.push({ label:label(edit, t("Edit this card")), act:()=>press(edit) });
+  if(edit) rows.push({ label:label(edit, t("Edit this card")), act:()=>press(edit), key:"F2" });
   if(fav) rows.push({ label:label(fav, t("Add to Favourites")), act:()=>press(fav) });
   if(note) rows.push({ label:t("Show the note"), act:()=>press(note) });
   if(hide) rows.push({ label:t(card.classList.contains("is-hidden") ? "Show this card again" : "Put this card away"), act:()=>press(hide) });
@@ -87,7 +88,7 @@ function intentRows(row){
   if(show){ rows.push({ label:label(show, t("Show this intent again")), act:()=>press(show) }); return rows; }
   const fav=row.querySelector("[data-fav-intent]"), edit=row.querySelector("[data-edit-intent]"), hide=row.querySelector("[data-hide-intent]");
   if(fav) rows.push({ label:label(fav, t("Add to Favourites")), act:()=>press(fav) });
-  if(edit) rows.push({ label:label(edit, t("Edit this intent")), act:()=>press(edit, { ctrlKey:true }) });
+  if(edit) rows.push({ label:label(edit, t("Edit this intent")), act:()=>press(edit, { ctrlKey:true }), key:"F2" });
   if(hide) rows.push({ label:label(hide, t("Hide this intent")), act:()=>press(hide, { shiftKey:true }) });
   return rows;
 }
@@ -97,7 +98,7 @@ function pillRows(pill){
   const rows=[{ label:t(only ? "Show every category" : "Show only this category"), act:()=>press(pill) }];
   if(cats.length && !only) rows.push({ label:t(inFilter ? "Take it out of the filter" : "Add it to the filter"), act:()=>press(pill, { ctrlKey:true }) });
   const ed=pill.querySelector("[data-editcat]");
-  if(ed){ rows.push("-"); rows.push({ label:t("Edit this category"), act:()=>press(ed) }); }
+  if(ed){ rows.push("-"); rows.push({ label:t("Edit this category"), act:()=>press(ed), key:"F2" }); }
   return rows;
 }
 
@@ -131,7 +132,11 @@ function openCtxMenu(rows, x, y, byKey){
     const b=document.createElement("button");
     b.type="button";
     b.setAttribute("role","menuitem");
-    b.textContent=r.label;
+    if(r.key){
+      b.innerHTML='<span>'+esc(r.label)+'</span><small>'+esc(r.key)+'</small>';
+    } else {
+      b.textContent=r.label;
+    }
     b.onclick=e=>{ e.preventDefault(); e.stopPropagation(); closeCtxMenu(false); r.act(); };
     m.appendChild(b);
     items.push(b);

@@ -129,8 +129,11 @@ function mgCatTree(){
     const nMac=rows.reduce((sum,o)=>sum+macroBlockCount(o.m),0);   // cards - what the badge shows
     const key="cat:"+k;
     const op=mgOpen.has(key);
-    /* Text, not a rename field - the pencil's editor owns name, icon and colour together. */
-    const name='<span class="mg-cat-fixed">'+esc(label)+'</span>';
+    /* In the Library a category row's name field takes focus on F2, and inline renaming
+       updates the category directly. Fixed / orphan categories use a span. */
+    const name=(fixed || k==="__orphan")
+      ? '<span class="mg-cat-fixed">'+esc(label)+'</span>'
+      : '<input type="text" class="mg-cat-lab2" data-rename="'+esc(k)+'" value="'+esc(label)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">';
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
@@ -870,6 +873,27 @@ function wireLibrary(page){
   });
   page.querySelectorAll("[data-remove-intent]").forEach(btn=>{
     btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary(); };
+  });
+  page.querySelectorAll("input.mg-cat-lab2[data-rename]").forEach(inp=>{
+    const k=inp.getAttribute("data-rename");
+    const orig=()=>CATS[k]||k;
+    const apply=()=>{
+      const name=inp.value.trim();
+      if(!name || name===orig()){ inp.value=orig(); return; }
+      if(!pack.catLabels) pack.catLabels={};
+      pack.catLabels[k]=name;
+      if(pack.customCats && pack.customCats[k]) pack.customCats[k]=name;
+      savePack(); applyCatsToGlobal(); drawPills(); render();
+      if(typeof drawIntentRail==="function") drawIntentRail();
+      inp.value=name;
+      toast("Category updated");
+    };
+    inp.addEventListener("focus",()=>{ try{ inp.select(); }catch(_){} });
+    inp.addEventListener("keydown",e=>{
+      if(e.key==="Enter"){ e.preventDefault(); inp.blur(); }
+      else if(e.key==="Escape"){ e.preventDefault(); inp.value=orig(); inp.blur(); }
+    });
+    inp.addEventListener("blur",apply);
   });
   /* One deletion path for categories everywhere: removeCategory() owns the empty-only rule,
      the built-in / custom split, so the pill and this button cannot

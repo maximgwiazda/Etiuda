@@ -698,7 +698,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   const inTree = E.sha256(E.ENGINE_PATH);
   console.log("       built in " + built + "s into " + LAB);
-  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/clip-suggest.cjs,shell/folder/syncer-worker.cjs,shell/folder/syncer.cjs,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/relay/blob.cjs,shell/relay/channel.cjs,shell/sample-catalog.ec,shell/win-proxy.cjs",
+  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/clip-suggest.cjs,shell/folder/syncer-worker.cjs,shell/folder/syncer.cjs,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/relay/blob.cjs,shell/relay/channel.cjs,shell/sample-catalog.ec,shell/tray.cjs,shell/win-proxy.cjs",
     "the asar holds the thirteen allowlisted files and nothing else: " + names.join(", "));
   check(inAsar === inTree,
     "the engine inside the asar is the engine in the tree, sha256 " + inAsar.slice(0, 16)
