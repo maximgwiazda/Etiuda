@@ -195,6 +195,7 @@ export const SCANS = {
   "tests/relay-workerd.mjs": ["relay/wrangler.toml", "relay/worker.mjs", "relay/team.cjs"],
   "tests/relay-unit.mjs": ["relay/wrangler.toml", "relay/core.cjs", "relay/team.cjs", "relay/worker.mjs", "relay/test/grant-vector.json"],
   "tests/relay-channel.mjs": ["shell/relay/channel.cjs"],
+  "tests/tray.mjs": ["shell/tray.cjs"],
   "tests/no-crash-dialog.mjs": ["tests/**/*.{js,mjs,cjs}"],
 };
 
