@@ -84,11 +84,11 @@ const SC_DEFS=[
      is deliberately blurred, and the natural way to replace a query is Ctrl+A and type.
      inField:0 keeps the ordinary Ctrl+A in dialog fields, the facts editor, and the box. */
   {id:"selectSearch",label:"Select search text",
-    hint:"Select everything in the INTENT / MACRO box, without clicking into it first",
+    hint:"Select everything in the search box, without clicking into it first",
     def:{code:"KeyA",key:"a",ctrl:1,alt:0,shift:0,meta:0},inField:0},
-  {id:"navUp",label:"Previous card",hint:"Move focus to the previous copyable macro (alt / step / single)",
+  {id:"navUp",label:"Previous card",hint:"Move focus to the previous reply to copy (alternative, step or single)",
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"navDown",label:"Next card",hint:"Move focus to the next copyable macro (alt / step / single)",
+  {id:"navDown",label:"Next card",hint:"Move focus to the next reply to copy (alternative, step or single)",
     def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"markTop",label:"Top of the list",
     hint:"Move the mark to the top of its list, then across to the other one",
@@ -106,9 +106,9 @@ const SC_DEFS=[
   {id:"navPillLast",label:"Last category",
     hint:"Select the last category, skipping any the search has emptied",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
-  {id:"copy",label:"Copy focused card",hint:"Copy the focused macro in the active language",
+  {id:"copy",label:"Copy focused card",hint:"Copy the focused reply in the active language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"copyOther",label:"Copy other language",hint:"Copy the focused macro in the other language",
+  {id:"copyOther",label:"Copy other language",hint:"Copy the focused reply in the other language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
   /* The platform's own undo, so fixed: the Undo bubble's while one stands (keydown.js), a field's own otherwise.
      The bubble's button names it as ui-lang.js UNDO_KEY. */

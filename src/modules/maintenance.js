@@ -111,7 +111,7 @@ function mtReadings(){
   const edName=(()=>{ try{ return editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV}); }catch(e){ return undefined; } })();
   if(edName && edName.r!=null) row("rev",String(edName.r));
   if(!edName || edName.e || edName.r==null) row("edition",edName===undefined ? "unavailable" : (edName && edName.e) || "-");
-  row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
+  row("cards / replies",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
   row("content languages",S(()=>CONTENT_LANGS.join(", ")+" (primary "+CONTENT_LANGS[0]+")"));
   row("showing",S(()=>lang));

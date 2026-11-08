@@ -874,7 +874,7 @@ function libraryActionsHtml(){
     '<span class="mf-sep" aria-hidden="true"></span>'+
     '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
     joinDoorButton("mgJoinTeam")+
-    (eHasHistory()?'<button type="button" class="btn" id="mgHistory">'+esc(t("Earlier versions…"))+'</button>':'')+
+    (eHasHistory()?'<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>':'')+
     '</div>'+
     '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>';
 }

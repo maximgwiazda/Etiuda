@@ -97,13 +97,15 @@ function decode(text) {
    so it fails the rule above as "intencje" does. */
 /* "druga" left the list on 2026-10-13: it is a word in its own right, the nominative ("Druga wartość
    ustawiona obok"), so it fails the rule above as "wersje" does. */
+/* "kopie" left the list on 2026-11-08: it is a word in its own right, the plural ("Zapisane kopie"),
+   so it fails the rule above as "wersje" does. */
 const REFUSED = new Set([
   "agentow angielska bedzie bezplatnie blekitu blokuja byc cala calkowicie calosc chipow chowac",
   "chowal czolo czynnosc czysci dokladnie dol domyslne domyslny dostepnych dowolna duzo",
   "dwoch dziala dziela edytowac etiude faktow filtrowac filtruja glowne glownych gora gore",
   "gorze grupe gwiazdke ida ikone imie inicjalami inicjaly inna jednoczesnie jesli",
   "jezyk jezykach jezyki jezyku juz karte katalogow kazda kazde kazdej kazdy klikniecie",
-  "kliknieciu kogos kolejna kolejnosc kolko kombinacje kompilacje koncu kontynuowac kopie",
+  "kliknieciu kogos kolejna kolejnosc kolko kombinacje kompilacje koncu kontynuowac",
   "kopiuja krawedz krotka krotki ktora ktore ktorego ktorej ktory ktorym laduje lewa lezacy",
   "lezy liste maja miedzy miesci moga mogla mowi mowia moze mozesz mozna nacisniecie nacisnij",
   "naglowek naglowkiem naglowku najedz najwezsza nakladka nakladke naleza nalezy narzedzi",
