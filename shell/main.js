@@ -3243,15 +3243,29 @@ function chainListed(doc, catalogs) {
   const ids = lineageOf(doc); /* plant:s0b-root-listed */
   return ids.length > 0 && Array.isArray(catalogs) && catalogs.indexOf(ids[ids.length - 1]) >= 0; /* plant:s0b-chain-listed */
 }
+/* Whether the private mark holds for `doc` against the team's list (Claude alpha's ruling of 2026-11-08 13:05, from Max's
+   "catalogs the team lists stay as they are"): only for a catalog the team does not list; off a team, `catalogs` is none. */
+function privateHere(doc, catalogs) {
+  if (chainListed(doc, catalogs)) return false; /* plant:s0b-private-listed */
+  return catalogMarkedPrivate(doc);
+}
+/* Whether the team at this folder lists catalog `id`, by its stored chain. */
+function idListedHere(id) {
+  const doc = folderTeamDoc();
+  const pin = doc ? teamPins[doc.id] : null;
+  if (!pin || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public || !Array.isArray(doc.catalogs)) return false;
+  const ids = lineageOfId(id);
+  return ids.length > 0 && doc.catalogs.map(String).indexOf(ids[ids.length - 1]) >= 0;
+}
 function boxAnswerHere(file) {
   try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
 }
-/* Where a working copy may go on a team this desk is on: a private one nowhere; one whose first catalog the team does not list
-   to the lead's box while the lead's switch applies, else held until it does; any other as before. Off a team, as before but private. */
+/* Where a working copy may go on a team this desk is on: one the team lists as before; a private one nowhere; any other to the lead's
+   box while the lead's switch applies, else held until it does. Off a team, as before but private. */
 function branchGate(doc) {
-  if (catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
-  const use = teamUse();
-  if (!use.member || !use.seal) return {};
+  const use = teamUse(), onTeam = !!(use.member && use.seal);
+  if (onTeam ? privateHere(doc, use.catalogs) : catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
+  if (!onTeam) return {};
   if (chainListed(doc, use.catalogs)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
   return { box: use.seal };
@@ -3270,7 +3284,8 @@ function withdrawClosed() {
   const use = teamUse();
   if (!use.member || !use.seal) return;
   const open = contentApplies(use.seal.team, use.consent);
-  if (answerKept && ((answerKept.lead && !open) || privateChain(answerKept.ids).some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
+  /* Only an answer sealed to the lead's box was about a catalog the team does not list, so only it answers to the private mark. */
+  if (answerKept && answerKept.lead && (!open || privateChain(answerKept.ids).some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
   /* A box answer this desk has no record of, one an earlier build wrote among them, goes too; a team-key answer stays. */
   if (!open && names.indexOf(ANSWER_NAME) >= 0 && boxAnswerHere(path.join(dir, ANSWER_NAME))) removeAnswer(); /* plant:s0b-withdraw-unkept */
   for (const n of names) {
@@ -3283,7 +3298,7 @@ function withdrawClosed() {
     if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || privateChain(lineageOfId(me.id + "-" + tail[1])).some(id => catalogPrivate.has(id));
     else {
       if (d && d.kind === SEALED_KIND) { const inner = teamOpen(d); try { d = inner === null ? null : JSON.parse(inner); } catch { d = null; } }
-      gone = !!d && typeof d === "object" && (catalogMarkedPrivate(d) || !chainListed(d, use.catalogs));
+      gone = !!d && typeof d === "object" && !chainListed(d, use.catalogs);
     }
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
@@ -3292,7 +3307,7 @@ function writeAnswer(use, pin, catalogDoc, toLead, askId) {
   const me = branchIdentity(true);
   const seal = use && use.seal;
   if (!me || !seal) return false;
-  if (catalogMarkedPrivate(catalogDoc)) return false; /* plant:s0b-private */
+  if (privateHere(catalogDoc, use.catalogs)) return false; /* plant:s0b-private */
   if (toLead && !contentApplies(seal.team, use.consent)) return false; /* plant:s0b-switch */
   const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return false;
@@ -3375,7 +3390,7 @@ function tryCatalogAsk(win) {
     if (!PIN_RE.test(pin)) return;
     const listed = chainListed(doc, use.catalogs);
     if (ask.sha256 !== pin && !listed) return;
-    if (catalogMarkedPrivate(doc)) return; /* plant:s0b-private */
+    if (privateHere(doc, use.catalogs)) return; /* plant:s0b-private */
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
     if (!listed && !(ask.content && contentApplies(use.seal.team, use.consent))) return; /* plant:s0b-switch */
     if (!listed && !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return;
@@ -5711,8 +5726,9 @@ function contentView(read) {
   const pin = doc ? teamPins[doc.id] : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
   const sw = team ? teamContentOf(doc) : null;
+  /* `listed`: the team's catalogs, which the private mark is never offered on. */
   return { team: team, on: !!sw, by: sw ? sw.by : "", at: sw ? sw.at : "", said: contentApplies(team, team ? consentOf(doc) : ""),
-    private: Array.from(catalogPrivate).sort() };
+    private: Array.from(catalogPrivate).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [] };
 }
 /* The agent was shown the switch confirmed at `at`: kept only where it is this team's switch now, so no page says a later one. */
 function contentSaid(team, at) {
@@ -5726,7 +5742,8 @@ function contentSaid(team, at) {
 /* The agent marks a catalog private by its id, or takes the mark off. */
 function markPrivate(id, on) {
   id = String(id || "");
-  if (CATALOG_ID_RE.test(id)) {
+  /* A catalog the team lists takes no mark: the request is ignored. */
+  if (CATALOG_ID_RE.test(id) && !(on && idListedHere(id))) { /* plant:s0b-mark-listed */
     if (on) catalogPrivate.add(id);
     else catalogPrivate.delete(id);
     persistDeskEnvelope();

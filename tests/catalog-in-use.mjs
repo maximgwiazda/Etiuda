@@ -22,12 +22,12 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 106;
+const EXPECTED = 111;
 
-const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
-const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
-const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
-const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
+const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
+const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
+const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
+const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku, bo kopie katalogów spoza listy są wyłączone. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
 const SENT_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.";
 const SENT_LEAD_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.";
 const SENT_LEAD_PL = "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.";
@@ -1431,9 +1431,9 @@ try {
       const env = unlistedP.box.D.envelope().catalogPrivate || [];
       const useDoc = openSealedDoc(unlistedP.box.D, inUsePath(unlistedP.box.share, unlistedP.box.me.id), unlistedP.box.key);
       const nowhere = !!useDoc && !/private/i.test(JSON.stringify(useDoc)) && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
-      check(!unlistedP.written && !listedP.written && !grown.written && Array.isArray(view.private) && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
+      check(!unlistedP.written && listedP.written && !grown.written && Array.isArray(view.private) && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
           && kept === 0 && env.length === 1 && env[0] === "quay-held" && nowhere,
-        "b0d a catalog the agent marked private is answered to nobody, listed or not, nor a copy grown from it; the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
+        "b0d a catalog the team does not list, marked private, is answered to nobody, nor a copy grown from it; a listed one takes no mark and is answered (round six); the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
         + [unlistedP.written, listedP.written, grown.written, freed.written, grownFreed.written].join(",") + ")");
       if (PLANTS_OFF) skip("b0j lifting plant:s0b-private turns b0d red: a catalog marked private is answered");
       else {
@@ -1692,8 +1692,8 @@ try {
         return { first: a.written && o.written && boxedBefore && listedBefore, privAnswer, privCopy, offAnswer, offCopy, listedCopy };
       };
       const w = await withdraw("r2-withdraw");
-      check(w.first && w.privAnswer && w.privCopy && w.offAnswer && w.offCopy && w.listedCopy,
-        "r2f marked private, the desk withdraws the answer and the working copies of that catalog, a listed one's too; with the switch off, the answer and the copies sealed to the lead's box (" + JSON.stringify(w) + ")");
+      check(w.first && w.privAnswer && w.privCopy && w.offAnswer && w.offCopy && !w.listedCopy,
+        "r2f marked private, the desk withdraws the answer and the working copies of a catalog the team does not list; a listed one takes no mark and its copy stays (round six); with the switch off, the answer and the copies sealed to the lead's box (" + JSON.stringify(w) + ")");
       if (PLANTS_OFF) { skip("r2o lifting plant:s0b-withdraw-answer turns r2f red"); skip("r2p lifting plant:s0b-withdraw-branch turns r2f red"); }
       else {
         const pa = SRC.split("\n").map(l => l.indexOf("plant:s0b-withdraw-answer") >= 0 ? "  /* plant:s0b-withdraw-answer */" : l).join("\n");
@@ -1701,7 +1701,7 @@ try {
         check(!!p && (!p.privAnswer || !p.offAnswer), "r2o lifting plant:s0b-withdraw-answer turns r2f red: an answer stays (" + (p ? JSON.stringify(p) : "plant not found") + ")");
         const pb = SRC.split("\n").map(l => l.indexOf("plant:s0b-withdraw-branch") >= 0 ? "    /* plant:s0b-withdraw-branch */" : l).join("\n");
         const q = pb !== SRC ? await withdraw("r2-withdraw-plant-branch", pb) : null;
-        check(!!q && (!q.privCopy || !q.offCopy || !q.listedCopy), "r2p lifting plant:s0b-withdraw-branch turns r2f red: a working copy stays (" + (q ? JSON.stringify(q) : "plant not found") + ")");
+        check(!!q && (!q.privCopy || !q.offCopy), "r2p lifting plant:s0b-withdraw-branch turns r2f red: a working copy stays (" + (q ? JSON.stringify(q) : "plant not found") + ")");
       }
     }
     {
@@ -1842,6 +1842,58 @@ try {
       const after = fs.existsSync(answerPath(box.share, box.me.id));
       check(!!pin && before && !after,
         "r5h an answer written for a copy whose stated root is marked private afterwards is taken back (" + JSON.stringify({ pin: !!pin, before, after }) + ")");
+    }
+    {
+      /* Round six, Claude alpha's ruling: the private mark belongs to catalogs the team does not list. A mark on a listed catalog
+         (one kept from before, put in the desk envelope) changes nothing: its team-key answer and its copy go as any listed one's. */
+      const listedMark = async (name, src) => {
+        const box = await arm(name, src);
+        const envPath = path.join(box.D.ud, "desk.json");
+        const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
+        env.catalogPrivate = ["quay-held"];
+        fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
+        box.D = loadDesk(box.D.ud, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const dir = folder(name + "-out");
+        put(dir, "held.ec", b0Body());
+        box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+        const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        const pin = pinOf(box.D, off ? off[1] : "");
+        take(box.D, pin);
+        putAsk(box, "Asklistedmark", pin, 1);
+        box.D.api.tryCatalogAsk(box.D.win);
+        const ans = answerPath(box.share, box.me.id);
+        await writeCopy(box, "98989898", "quay-held");
+        return { team: !!openSealedDoc(box.D, ans, box.key), copy: fs.existsSync(branchAt(box, "98989898")) };
+      };
+      const m = await listedMark("r6-listed-mark");
+      check(m.team && m.copy, "r6a a listed catalog the desk holds a private mark for is answered under the team key, and its copy written, as any listed one (" + JSON.stringify(m) + ")");
+      if (PLANTS_OFF) skip("r6b letting the mark override the list turns r6a red");
+      else {
+        const NL6 = String.fromCharCode(10);
+        const planted = SRC.split(NL6).map(l => l.indexOf("plant:s0b-private-listed") >= 0 ? "  /* plant:s0b-private-listed */" : l).join(NL6);
+        const p = planted !== SRC ? await listedMark("r6-listed-mark-plant", planted) : null;
+        check(!!p && !p.team, "r6b letting the mark override the list turns r6a red: the listed catalog is answered to nobody (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+      /* markPrivate on a listed catalog changes nothing, and the view names it among the catalogs the mark is not offered on. */
+      const markOn = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const v = await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+        const u = await box.D.ask("etiuda:team-join", "private", "harbour-board", "on");
+        return { listedTaken: v.private.indexOf("quay-held") >= 0, listedShown: Array.isArray(v.listed) && v.listed.indexOf("quay-held") >= 0,
+          unlistedTaken: u.private.indexOf("harbour-board") >= 0, stored: (box.D.envelope().catalogPrivate || []).join(",") };
+      };
+      const o = await markOn("r6-mark-on");
+      check(!o.listedTaken && o.listedShown && o.unlistedTaken && o.stored === "harbour-board",
+        "r6c the private mark is refused on a listed catalog, which the view names as listed, and taken on an unlisted one (" + JSON.stringify(o) + ")");
+      if (PLANTS_OFF) skip("r6d lifting plant:s0b-mark-listed turns r6c red");
+      else {
+        const NL6 = String.fromCharCode(10);
+        const planted = SRC.split(NL6).map(l => l.indexOf("plant:s0b-mark-listed") >= 0 ? "  if (CATALOG_ID_RE.test(id)) {" : l).join(NL6);
+        const p = planted !== SRC ? await markOn("r6-mark-on-plant", planted) : null;
+        check(!!p && p.listedTaken, "r6d lifting plant:s0b-mark-listed turns r6c red: the listed catalog takes the mark (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
     }
     {
       /* Edit 2: a box answer this desk has no record of (an earlier build's) goes when the switch no longer applies; a team-key

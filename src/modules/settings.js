@@ -231,7 +231,7 @@ function settingsBodyHtml(){
           langSel)+
       /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
          and the way back after leaving once, on the first row that offers Leave. */
-      teamLeads().map((l,i,all)=>teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))).join("")+
+      teamLeads().map((l,i,all)=>teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))).join("")+
       (joinDoor?row(t("Team"), "", joinDoor):"")+
       /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared()
