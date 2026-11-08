@@ -681,9 +681,12 @@ function openCardEditor(id, presetCat, fromManage){
             nid=>openCardEditor(nid,null,fromManage));
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
-  setTimeout(()=>{
-    const el=$("#"+meFieldId("t",CONTENT_LANGS[0])); if(el) el.focus();
-  },30);
+  const focusTitle=()=>{
+    const el=$("#"+meFieldId("t",CONTENT_LANGS[0]));
+    if(el){ el.focus(); try{ el.select(); }catch(_){} }
+  };
+  focusTitle();
+  setTimeout(focusTitle,30);
 }
 
 function ensureCustomCat(name){

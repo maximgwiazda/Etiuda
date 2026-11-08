@@ -79,7 +79,10 @@ const SC_DEFS=[
   /* Ctrl+Shift+M: the desk's chord for Maintenance, freeing F2 for rename (board 965).
      inField on purpose - a rescue has to fire from wherever the trouble found you. */
   {id:"maintenance",label:"Maintenance panel",hint:"Readings about this machine, and rescue switches",
-    def:{code:"KeyM",key:"m",ctrl:1,alt:0,shift:1,meta:0},inField:1},
+    def:{code:"KeyM",key:"m",ctrl:1,alt:0,shift:1,meta:0},inField:1,newKey:1},
+  /* F2: renames the focused card, intent or category, and in the Library a category row's name field (board 965). */
+  {id:"rename",label:"Rename",hint:"Rename the focused card, intent or category",
+    def:{code:"F2",key:"F2",ctrl:0,alt:0,shift:0,meta:0},inField:0,newKey:1},
   /* Ctrl+A reaches the search box without the caret being in it - after a pick the box
      is deliberately blurred, and the natural way to replace a query is Ctrl+A and type.
      inField:0 keeps the ordinary Ctrl+A in dialog fields, the facts editor, and the box. */
