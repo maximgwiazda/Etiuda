@@ -288,6 +288,7 @@ UI_STRINGS.pl={
   "Categories & cards":"Kategorie i karty",
   "Intent":"Intencja",
   "Intents":"Intencje",
+  "Several at once":"Kilka naraz",
   "ROLE suggestions":"Podpowiedzi ROLE",
   "Catalog & data":"Katalog i dane",
   "Content":"Treść",

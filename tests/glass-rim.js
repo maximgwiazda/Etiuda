@@ -536,8 +536,8 @@ async function readMarked(pg, three, label) {
 
     const hitMacro = await hitThrough(p, ".txt");
     const rail = (await styles(p, "#intentRail"))[0];
-    check(!!rail && rail.rim && rail.pos === "absolute" && !/255, 255, 255, 0\.16/.test(rail.shadow),
-      "9gr3 dark: the intent panel paints the rim and its bevel's bright line is off");
+    check(!!rail && !rail.rim && rail.shadow === "none",
+      "9gr3 dark: the docked intent rail stands on the ground, a column with no rim, bevel or lift (the peek's ring is 9gr16)");
 
     await p.click("#settingsBtn");
     await p.evaluate(() => [...document.querySelectorAll("#settingsMenu button")].find(x => /^settings/i.test(x.textContent.trim())).click());
@@ -652,8 +652,8 @@ async function readMarked(pg, three, label) {
     await setTheme(p, "light");
     const lt = await styles(p, ".txt");
     const lrail = (await styles(p, "#intentRail"))[0];
-    check(lt.length >= 10 && lt.every(s => !s.rim && s.shadow !== OFF) && !!lrail && !lrail.rim && /255, 255, 255\)/.test(lrail.shadow),
-      "9gr6 light: no macro and no panel paints the rim, and their bevel and lift stand as before");
+    check(lt.length >= 10 && lt.every(s => !s.rim && s.shadow !== OFF) && !!lrail && !lrail.rim && lrail.shadow === "none",
+      "9gr6 light: no macro paints the rim and their bevel and lift stand as before; the docked rail paints neither");
     let lit = { top: 99, side: 99 };
     if (three) { await markSlab(p, three[1].ord); lit = await lift(p); }
     console.log("       light: top " + lit.top + ", side " + lit.side);
