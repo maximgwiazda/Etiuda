@@ -1,7 +1,8 @@
-// The repeating rows (rail items, card buttons, category chips) ease their colours on hover and
-// start no transition on a theme flip: #eFlipHold holds them still for the press's two frames
-// (src/modules/theme.js). The leg's own sight: the same flip with the hold sheet taken out must
-// start transitions on them, or the count below proves nothing.
+// The controls and repeating rows (tabs, language switcher, buttons, pills, rail items, card
+// buttons, category chips) ease their colours on hover and start no transition on a theme flip:
+// #eFlipHold holds them still for the press's two frames (src/modules/theme.js). The leg's own sight:
+// the same flip with the hold sheet taken out must start transitions on them, or the count below
+// proves nothing.
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
@@ -17,7 +18,7 @@ const check = (ok, what, detail) => {
   console.log((ok ? "  ok   " : "  FAIL ") + what + (ok ? "" : ": " + JSON.stringify(detail)));
   if (!ok) fails++;
 };
-const SEL = ".rail-item,.cacts button,.cat-chip";
+const SEL = ".rail-item,.cacts button,.cat-chip,.pill,.btn,.tab,#seg button";
 const RUN = E.runFolder("catalogV2", "sampleV2");
 let browser = null;
 
@@ -40,20 +41,45 @@ async function boot() {
   return page;
 }
 
-// Press the theme button; count CSS transitions running on the rows three frames later.
+// Press the theme button; read computed colours in the switch's frame and count running CSS transitions three frames later.
 const flip = (page, takeHoldOut) => page.evaluate((sel, takeHoldOut) => new Promise(res => {
   if (takeHoldOut) document.getElementById("eFlipHold").remove();
   const rows = new Set(document.querySelectorAll(sel));
-  const count = () => document.getAnimations().filter(a => a instanceof CSSTransition && a.effect && rows.has(a.effect.target)).length;
+  const activeTab = document.querySelector(".tab.on");
+  const seg = document.querySelector("#seg");
+  const segOn = document.querySelector("#seg button.on");
+  const activePill = document.querySelector(".pill.on");
+  const count = () => document.getAnimations().filter(a => a instanceof CSSTransition && a.effect && (rows.has(a.effect.target) || a.effect.target === seg)).length;
   const before = count();
   const theme0 = document.documentElement.dataset.theme;
+
+  const dark = {
+    tabBg: activeTab ? getComputedStyle(activeTab).backgroundColor : null,
+    tabColor: activeTab ? getComputedStyle(activeTab).color : null,
+    segBg: seg ? getComputedStyle(seg, "::before").backgroundColor : null,
+    segColor: segOn ? getComputedStyle(segOn).color : null,
+    pillBg: activePill ? getComputedStyle(activePill).backgroundColor : null,
+  };
+
   document.querySelector("#theme").click();
+
   const h = document.getElementById("eFlipHold");
   const heldOnPress = h ? !h.sheet.disabled : null;
   const themeOnPress = document.documentElement.dataset.theme;
+
+  const frame0 = {
+    tabBg: activeTab ? getComputedStyle(activeTab).backgroundColor : null,
+    tabColor: activeTab ? getComputedStyle(activeTab).color : null,
+    segBg: seg ? getComputedStyle(seg, "::before").backgroundColor : null,
+    segColor: segOn ? getComputedStyle(segOn).color : null,
+    pillBg: activePill ? getComputedStyle(activePill).backgroundColor : null,
+  };
+
   requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => res({
     rows: rows.size, before, after: count(), heldOnPress, releasedAfter: h ? h.sheet.disabled : null,
-    landedOnPress: themeOnPress !== theme0
+    landedOnPress: themeOnPress !== theme0,
+    dark,
+    frame0,
   }))));
 }), SEL, takeHoldOut);
 
@@ -65,11 +91,25 @@ try {
     const els = [...document.querySelectorAll(sel)];
     return { rows: els.length, eased: els.filter(e => parseFloat(getComputedStyle(e).transitionDuration) > 0).length };
   }, SEL);
-  check(rest.rows > 0 && rest.eased === rest.rows, "at rest every rail item, card button and category chip eases its colours on the tone tier", rest);
+  check(rest.rows > 0 && rest.eased === rest.rows, "at rest every rail item, card button, category chip, pill, button and tab eases its colours on the tone tier", rest);
 
   const held = await flip(page, false);
+  const lightTarget = {
+    tabBg: "rgb(240, 242, 245)",
+    tabColor: "rgb(15, 23, 42)",
+    segBg: "rgb(253, 253, 253)",
+    segColor: "rgb(14, 103, 216)",
+    pillBg: "rgb(14, 103, 216)",
+  };
+  const colorsMatch = held.frame0.tabBg === lightTarget.tabBg &&
+                      held.frame0.tabColor === lightTarget.tabColor &&
+                      held.frame0.segBg === lightTarget.segBg &&
+                      held.frame0.segColor === lightTarget.segColor &&
+                      held.frame0.pillBg === lightTarget.pillBg;
+  check(colorsMatch, "in the frame of the switch the tabs, active language half and controls take their new computed colours at once", { frame0: held.frame0, expected: lightTarget, dark: held.dark });
+
   check(held.landedOnPress && held.heldOnPress === true && held.after === 0 && held.releasedAfter === true,
-    "a theme press lands the theme in its own task, holds the rows still, starts no transition on any of them, and lets go two frames later", held);
+    "a theme press lands the theme in its own task, holds controls and rows still, starts no transition on any of them, and lets go two frames later", held);
 
   const spot = await page.evaluate(() => {
     const r = [...document.querySelectorAll(".rail-item")].find(e => e.offsetParent);
@@ -86,12 +126,12 @@ try {
   await page.close();
 
   const sight = await flip(await boot(), true);
-  check(sight.after > 0, "the leg's own sight: the same flip with the hold sheet taken out starts transitions on the rows", sight);
+  check(sight.after > 0, "the leg's own sight: the same flip with the hold sheet taken out starts transitions on controls and rows", sight);
 } catch (e) {
   check(false, "the leg ran to its end", String(e && e.stack || e));
 } finally {
   if (browser) await browser.close();
 }
-console.log(`#counts checks=${checks} skipped=0 failed=${fails} expected=4`);
+console.log(`#counts checks=${checks} skipped=0 failed=${fails} expected=5`);
 console.log(`${checks} checks, ${fails} failed`);
 process.exit(fails ? 1 : 0);

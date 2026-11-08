@@ -201,7 +201,7 @@ function eCatalogEject(){
 function eOnCatalogCopy(fn){
   const h=eHost();
   if(!h || typeof h.onCatalogCopy!=="function" || typeof fn!=="function") return;
-  try{ h.onCatalogCopy(()=>{ try{ fn(); }catch(e){} }); }catch(e){}
+  try{ h.onCatalogCopy((m)=>{ try{ fn(m); }catch(e){} }); }catch(e){}
 }
 /* Resolves to the chosen folder, or "" for a dialog the person closed. The caption is passed in
    already translated: the shell has no t(). */

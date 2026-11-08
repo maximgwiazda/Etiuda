@@ -1710,6 +1710,15 @@ function renamePatiently(from, to) {
     }
   }
 }
+async function renamePatientlyAsync(from, to) {
+  for (let i = 1; ; i++) {
+    try { await fs.promises.rename(from, to); return; }
+    catch (e) {
+      if (i >= RENAME_RETRIES || RENAME_BUSY.indexOf(e.code) < 0) throw e; /* plant:rename-retries */
+      await new Promise(r => setTimeout(r, RENAME_WAIT_MS));
+    }
+  }
+}
 /* A temporary name no other writer can have: this process, a count of its own writes, and random bytes. The shell loads
    no module it did not have (pick 5c), so no thread id: the count and the random part already set two writers apart. */
 let tempCount = 0;
@@ -1738,6 +1747,39 @@ function writeReplacing(file, text) {
     throw e;
   }
   mirrorOwes(file);
+}
+const WRITE_DRAIN_BOUND_MS = 5000;
+const activeWrites = new Set();
+function drainWrites(boundMs) {
+  const limit = typeof boundMs === "number" ? boundMs : WRITE_DRAIN_BOUND_MS;
+  const all = Promise.allSettled(Array.from(activeWrites));
+  if (!limit || limit <= 0) return all;
+  let timer;
+  const timeout = new Promise(resolve => { timer = setTimeout(resolve, limit); });
+  return Promise.race([all, timeout]).finally(() => { clearTimeout(timer); });
+}
+async function doWriteReplacingAsync(file, text) {
+  const tmp = uniqueTempPath(file);
+  try {
+    await fs.promises.writeFile(tmp, text, typeof text === "string" ? "utf8" : undefined);
+    const handle = await fs.promises.open(tmp, "r+");
+    try {
+      await handle.sync(); /* plant:write-fsync */
+    } finally {
+      await handle.close();
+    }
+    await renamePatientlyAsync(tmp, file);
+  } catch (e) {
+    try { await fs.promises.unlink(tmp); } catch { /* never made */ }
+    throw e;
+  }
+  mirrorOwes(file);
+}
+function writeReplacingAsync(file, text) {
+  const p = doWriteReplacingAsync(file, text);
+  activeWrites.add(p);
+  p.finally(() => activeWrites.delete(p)).catch(() => {});
+  return p;
 }
 /* A file written into, or taken out of, a folder team's mirror is owed to that team's share, and the syncer's outbox
    carries it there (shell/folder/syncer.cjs). Every write and removal of the desk's own files in the mirror passes here. */
@@ -2162,6 +2204,57 @@ function openStatsSealed(skR, doc, deskId) {
     const enc = String(doc.enc), ct = String(doc.ct);
     if (!/^[0-9a-f]{64}$/.test(enc) || !/^[0-9a-f]+$/.test(ct) || (ct.length % 2) !== 0 || ct.length < 32) return null;
     const pt = hpkeOpen(skR, Buffer.from(enc, "hex"), statsSealInfo(String(doc.team), String(deskId)),
+      Buffer.alloc(0), Buffer.from(ct, "hex"));
+    return pt ? pt.toString("utf8") : null;
+  } catch { return null; }
+}
+/* ---- an answer about a catalog the team does not list, sealed to the lead's box alone ---------------------
+   The statistics' envelope under a kind and a label of its own, so neither file opens as the other. The lead's box is
+   public, so the answer inside is signed by this desk under a prefix of its own, over the ask and the team it answers. */
+const ANSWER_LEAD_KIND = "etiuda-answer-sealed";
+const ANSWER_LEAD_LABEL = "etiuda-catalog-answer-lead\n";
+function answerLeadInfo(teamId, deskId) {
+  return Buffer.from(ANSWER_LEAD_LABEL + teamId + "\n" + deskId, "utf8");
+}
+function sealAnswerLead(box, teamId, keyId, deskId, text) {
+  if (!/^[0-9a-f]{64}$/.test(String(box))) throw new Error("answer: the lead's box is 64 lower-case hex characters");
+  if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("answer: a team id is t- and 16 lower-case hex characters");
+  if (typeof keyId !== "string" || !keyId) throw new Error("answer: the lead's key id is a non-empty string");
+  if (!/^k-[0-9a-f]{16}$/.test(String(deskId))) throw new Error("answer: a desk id is k- and 16 lower-case hex characters");
+  if (typeof text !== "string") throw new Error("answer: the answer is sealed as its text");
+  const w = hpkeSeal(Buffer.from(String(box), "hex"), answerLeadInfo(teamId, deskId), Buffer.alloc(0), Buffer.from(text, "utf8"));
+  return { format: 1, kind: ANSWER_LEAD_KIND, team: String(teamId), keyId: keyId,
+    enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
+}
+const ANSWER_LEAD_PREFIX = "etiuda-catalog-answer\n";
+function answerLeadSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(ANSWER_LEAD_PREFIX, "utf8"), signedBytesOf(doc)]);
+}
+/* Whether an opened box answer is that folder's own: `keyHex` is the roster's desk.key for the folder's id, and that id,
+   the id the key makes and sig.keyId are one id. Which ask and team it answers is the reader's to compare. */
+function answerLeadGenuine(doc, folder, keyHex) {
+  const sig = doc && doc.sig;
+  try {
+    return !!folder && /^k-[0-9a-f]{16}$/.test(String(folder))
+      && /^[0-9a-f]{64}$/.test(String(keyHex)) && branchIdOf(String(keyHex)) === folder
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === folder && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && typeof doc.ask === "string" && !!doc.ask && typeof doc.team === "string" && !!doc.team
+      && crypto.verify(null, answerLeadSignedBytes(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(keyHex), "hex")]),
+        format: "der", type: "spki" }), Buffer.from(String(sig.value), "hex"));
+  } catch { return false; }
+}
+function openAnswerLead(skR, doc, deskId) {
+  try {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+    const keys = Object.keys(doc);
+    if (keys.length !== 6 || keys[0] !== "format" || keys[1] !== "kind" || keys[2] !== "team"
+      || keys[3] !== "keyId" || keys[4] !== "enc" || keys[5] !== "ct") return null;
+    if (+doc.format !== 1 || doc.kind !== ANSWER_LEAD_KIND) return null;
+    if (!SEALED_TEAM_RE.test(String(doc.team)) || typeof doc.keyId !== "string" || !doc.keyId) return null;
+    if (!/^k-[0-9a-f]{16}$/.test(String(deskId))) return null;
+    const enc = String(doc.enc), ct = String(doc.ct);
+    if (!/^[0-9a-f]{64}$/.test(enc) || !/^[0-9a-f]+$/.test(ct) || (ct.length % 2) !== 0 || ct.length < 32) return null;
+    const pt = hpkeOpen(skR, Buffer.from(enc, "hex"), answerLeadInfo(String(doc.team), String(deskId)),
       Buffer.alloc(0), Buffer.from(ct, "hex"));
     return pt ? pt.toString("utf8") : null;
   } catch { return null; }
@@ -2684,9 +2777,10 @@ function tryHeldBranches() {
 
 /* ---- the catalog this desk has loaded, named for the team, and a copy when the lead asks ------------------
    in-use.ec names the catalog (never a card) and is signed as a desk file, then sealed under the team key.
-   A desk with no team key writes nothing. catalog-answer.ec is the catalog itself, sealed the same way, and
-   only for an ask that names this desk and verifies under the lead key it joined with. One answer per ask id.
-   The answer is the loaded catalog only where the ask names that edition, or the team file lists the catalog. */
+   A desk with no team key writes nothing. catalog-answer.ec is the catalog itself, and only for an ask that names
+   this desk and verifies under the lead key it joined with. One answer per ask id. The answer is the loaded catalog
+   only where the ask names that edition, or the team file lists the catalog. Sealed under the team key where the team
+   lists it, else to the lead's box alone; a catalog another team sealed is answered to nobody. */
 function sourceOfFile(file) {
   if (!file || isBuiltIn(file)) return "opened";
   try { if (path.resolve(path.dirname(file)) === path.resolve(catalogFolder())) return "folder"; } catch { /* opened */ }
@@ -2815,11 +2909,11 @@ function liveWin(win) {
   } catch { /* gone */ }
   return null;
 }
-function tellCopy(win, id) {
+function tellCopy(win, id, lead) {
   lastCatalogCopy = String(id || "");
   const live = liveWin(win);
   if (!live) return;
-  try { live.webContents.send("etiuda:catalog-copy", { id: lastCatalogCopy }); } catch { /* the page has gone */ }
+  try { live.webContents.send("etiuda:catalog-copy", { id: lastCatalogCopy, lead: lead === true }); } catch { /* the page has gone */ }
 }
 function catalogCopyNote() { return lastCatalogCopy; }
 function asksWatching() { return !!asksWatcher; }
@@ -3027,7 +3121,15 @@ function removeAnswer() {
   catch (e) { if (e.code !== "ENOENT") { heldAnswer = { remove: true }; return; } }
   if (heldAnswer && heldAnswer.remove) heldAnswer = null;
 }
-function writeAnswer(seal, pin, catalogDoc) {
+/* The box answer's text: the catalog, the ask and the team it answers, signed by this desk. Throws where it cannot sign. */
+function signedLeadAnswer(me, team, askId, pin, catalogDoc) {
+  const doc = { format: 1, kind: ANSWER_KIND, ask: String(askId), team: String(team), sha256: pin, catalog: catalogDoc,
+    sig: { alg: "Ed25519", keyId: me.id } };
+  doc.sig.value = branchSign(doc, answerLeadSignedBytes);
+  if (!/^[0-9a-f]{128}$/.test(String(doc.sig.value))) throw new Error("the answer could not be signed");
+  return JSON.stringify(doc);
+}
+function writeAnswer(seal, pin, catalogDoc, toLead, askId) {
   const me = branchIdentity(true);
   if (!me || !seal) return false;
   const root = sharedFolderForWrite();
@@ -3038,8 +3140,25 @@ function writeAnswer(seal, pin, catalogDoc) {
   for (const dir of [path.join(at.root, "desks"), at.dir]) {
     try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
   }
-  writeReplacing(at.dest, JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, inner), null, 1) + "\n");
+  let env = null;
+  if (toLead) env = sealAnswerLead(seal.box, seal.team, String(seal.lead.keyId), me.id, signedLeadAnswer(me, seal.team, askId, pin, catalogDoc)); /* plant:s0-answer-lead */
+  if (!env) env = sealCatalog(seal.key, seal.team, seal.epoch, inner);
+  writeReplacing(at.dest, JSON.stringify(env, null, 1) + "\n");
   return true;
+}
+/* Whether the catalog in use, or the edition it grew from (doc.grew, as writeBranch judges it), is one this desk opened from an
+   envelope (teamOpened, by its id) whose edition no envelope of `team` is known to hold: another team's catalog, whatever this
+   team's file lists. Unknown counts as another's. */
+function sealedForOther(doc, pin, team) {
+  if (openedForOther(doc && typeof doc.id === "string" ? doc.id : "", pin, team)) return true;
+  const g = doc && doc.grew && typeof doc.grew === "object" ? doc.grew : null;
+  return !!g && openedForOther(String(g.id || ""), String(g.sha || ""), team); /* plant:s0-grew */
+}
+function openedForOther(id, pin, team) {
+  if (!id || !teamOpened.has(id)) return false;
+  const held = editionTeams.get(pin);
+  if (held && held.has(team)) return false;
+  return !ecFilesIn(catalogFolder()).some(f => envelopeTeam(f, pin) === team);
 }
 function checkWithdrawnAsks(root, me, lead) {
   if (!root || !me || !lead) return;
@@ -3091,10 +3210,12 @@ function tryCatalogAsk(win) {
     if (!PIN_RE.test(pin)) return;
     const listed = Array.isArray(use.catalogs) && use.catalogs.indexOf(typeof doc.id === "string" ? doc.id : "") >= 0;
     if (ask.sha256 !== pin && !listed) return;
-    if (!writeAnswer(use.seal, pin, doc)) { heldAnswer = { id: ask.id }; return; }
+    if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
+    if (!listed && !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return;
+    if (!writeAnswer(use.seal, pin, doc, !listed, ask.id)) { heldAnswer = { id: ask.id }; return; }
     rememberAsk(ask.id);
     heldAnswer = null;
-    tellCopy(win, ask.id);
+    tellCopy(win, ask.id, !listed);
   } catch (e) {
     console.error("etiuda: the catalog ask could not be answered - " + e.message);
   }
@@ -7041,7 +7162,19 @@ ipcMain.on("etiuda:window", (e, act) => {
    the Windows session, the refusal page's own Close, and the harness's placed windows. */
 const CLOSE_WAIT_MS = 1500;
 let quitting = false;
-app.on("before-quit", () => { quitting = true; try { flushHeldStats(); } catch { /* the last sealed answer stays */ } try { FolderSyncer().stopAllFolderSyncers(); } catch {} });
+let quitDrained = false;
+app.on("before-quit", (e) => {
+  quitting = true;
+  try { flushHeldStats(); } catch { /* the last sealed answer stays */ }
+  try { FolderSyncer().stopAllFolderSyncers(); } catch {}
+  if (!quitDrained && activeWrites.size > 0) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    drainWrites(WRITE_DRAIN_BOUND_MS).finally(() => {
+      quitDrained = true;
+      app.quit();
+    });
+  }
+});
 function closeHeld(win, e) {
   if (win && win.etiudaInstallerClose) return false;
   const lost = win.webContents.etiudaLost;
@@ -7679,7 +7812,7 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
     historyKeepFile(p.file);
-    writeReplacing(p.file, out);
+    await writeReplacingAsync(p.file, out);
     historyKeep(p.file, out, true);
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
   } catch (err) {

@@ -121,7 +121,8 @@ function run(l, names, cwd, extraEnv) {
     timeout: 60000,
   });
   const byGate = {};
-  const files = fs.existsSync(l.runs) ? fs.readdirSync(l.runs).filter(f => f.endsWith(".json")) : [];
+  /* A release or nightly run also writes its whole-run summary here (the customer release gate, regimen rule 4); it is no gate record. */
+  const files = fs.existsSync(l.runs) ? fs.readdirSync(l.runs).filter(f => f.endsWith(".json") && !/^(release|nightly)-summary-/.test(f)) : [];
   for (const f of files.sort()) {
     try {
       const line = JSON.parse(fs.readFileSync(path.join(l.runs, f), "utf8"));
@@ -1877,8 +1878,12 @@ async function main() {
 
   const areaChainsPath = path.join(areaLab.runs, "chains.jsonl");
   const currentTreeSha = (run(areaLab, ["test", "--dry-run"]).out.match(/tree ([0-9a-f]{16})/i) || [])[1] || "dummy-tree";
+  /* An area inherits only from a run that covered it (the test architect's criterion, 2026-11-08): the record lists every file this area would run. */
+  const areaPlan = run(areaLab, ["area", "HEAD", "--dry-run"]).out;
+  const areaRan = [...new Set([...areaPlan.matchAll(/node (\S+?\.(?:mjs|cjs|js))\b/g)].map(m => m[1]))];
   fs.writeFileSync(areaChainsPath, JSON.stringify({
     gate: "area",
+    ran: areaRan,
     tree: areaLab.lab,
     head: "HEAD",
     treeSha: currentTreeSha,

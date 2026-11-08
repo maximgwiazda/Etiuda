@@ -210,6 +210,7 @@ async function fresh(q, keepSession) {
   await settle(q);
 }
 async function settle(q) {
+  await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/swap.mjs settle" });
   await q.waitForFunction(() => typeof boot === "undefined" || document.getElementById("eBooted") || true, { timeout: 30000 });
   await sleep(1800);
   /* A desk that has forgotten its tour starts one by itself once the logo has formed: waited for,
