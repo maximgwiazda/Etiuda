@@ -187,7 +187,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7", "8"];
-const EXPECTED = KEEP ? null : 132;
+const EXPECTED = KEEP ? null : 134;
 /* 1g3 may record NOT RUN instead of calling its check (board 655). NOT RUN only when an early
    sample, taken straight after connect, was on a display and not iconic, and the late sample
    is iconic. iconic is the window pickWindow chose. Already iconic at the early sample is a
@@ -2695,24 +2695,48 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(afterLater.gone && afterLater.copied === 1 && afterLater.asked === "1" && !afterLater.name,
     "2n4 Later closes it, lets the copy through, records the answer and writes no name: " + JSON.stringify(afterLater));
 
+  /* Settings and the Library are screen tabs, not dialogs: Escape leaves a tab standing, and a tab
+     closes by its cross or Ctrl+W and hands the screen back to the conversation. So the dialog legs
+     drive the Menu's dialog, About, and the tabs are read apart: open, closed, and no outline left
+     on the Menu button or on wherever the focus lands. */
+  const SCREEN_OF = { settings: "settings", manage: "library" };
+  const isOpen = act => rp.evaluate((a, sid) => sid ? screenOn === sid : !document.getElementById("modal").hidden,
+    act, SCREEN_OF[act] || "");
+  const shut = async (act, how) => {
+    const sid = SCREEN_OF[act];
+    if (!sid) {
+      if (how === "esc") await rp.keyboard.press("Escape"); else await realClick(rp, "#modalX");
+      return how;
+    }
+    if (how === "esc") {
+      await rp.keyboard.down("Control"); await rp.keyboard.press("KeyW"); await rp.keyboard.up("Control");
+      return "ctrl+w";
+    }
+    await realClick(rp, '#tabsBar .tab.screen[data-sid="' + sid + '"] .tab-x');
+    return "cross";
+  };
+  const FOCUS_ON = () => { const a = document.activeElement;
+    return { on: a ? (a.id || a.getAttribute("data-act") || a.tagName) : null,
+             outline: a ? getComputedStyle(a).outlineStyle : "?" }; };
   const mouseTrip = async (act, how) => {
     await realClick(rp, "#settingsBtn"); await sleep(500);
     await realClick(rp, '#settingsMenu [data-act="' + act + '"]'); await sleep(1500);
-    const open = await rp.evaluate(() => !document.getElementById("modal").hidden);
-    if (how === "esc") await rp.keyboard.press("Escape");
-    else await realClick(rp, "#modalX");
+    const open = await isOpen(act);
+    const by = await shut(act, how);
     await sleep(900);
-    return { act, how, open, btn: await rp.evaluate(RING, "#settingsBtn") };
+    return { act, how: by, open, closed: !(await isOpen(act)), focus: await rp.evaluate(FOCUS_ON),
+             btn: await rp.evaluate(RING, "#settingsBtn") };
   };
-  const mLibEsc = await mouseTrip("manage", "esc");
-  const mLibX = await mouseTrip("manage", "x");
-  const mSetEsc = await mouseTrip("settings", "esc");
-  const mSetX = await mouseTrip("settings", "x");
-  const noRing = [mLibEsc, mLibX, mSetEsc, mSetX];
-  check(noRing.every(r => r.open && r.btn.active && !r.btn.ring && r.btn.outline === "none"),
+  const noRing = [await mouseTrip("about", "esc"), await mouseTrip("about", "x")];
+  check(noRing.every(r => r.open && r.closed && r.btn.active && !r.btn.ring && r.btn.outline === "none"),
     "2n a dialog opened with the mouse gives the Menu button its focus back without a ring,"
     + " whichever way it is closed - Escape is a key and used to be enough to paint one: "
     + JSON.stringify(noRing));
+  const tabRing = [await mouseTrip("manage", "esc"), await mouseTrip("manage", "x"),
+                   await mouseTrip("settings", "esc"), await mouseTrip("settings", "x")];
+  check(tabRing.every(r => r.open && r.closed && !r.btn.ring && r.btn.outline === "none" && r.focus.outline === "none"),
+    "2n6 the Library and Settings tabs opened with the mouse close by Ctrl+W and by their cross, and"
+    + " leave no ring on the Menu button nor an outline where the focus lands: " + JSON.stringify(tabRing));
 
   /* THE SAME FAULT BY THE KEYBOARD (board 766). Before 1699689 a row closed the Menu before its
      dialog opened, and the dialog then had nothing to hand the focus back to: 6 of 6 trips opened
@@ -2734,22 +2758,24 @@ const placeEc = (dir, from, as, minutesOld) => {
     }
     const reached = row === act;
     if (reached) { await rp.keyboard.press("Enter"); await sleep(1500); }
-    const open = await rp.evaluate(() => !document.getElementById("modal").hidden);
-    if (how === "esc") await rp.keyboard.press("Escape");
-    else await realClick(rp, "#modalX");
+    const open = await isOpen(act);
+    const by = await shut(act, how);
     await sleep(900);
-    const closed = await rp.evaluate(() => document.getElementById("modal").hidden);
-    const on = await rp.evaluate(() => { const a = document.activeElement;
-      return a ? (a.id || a.getAttribute("data-act") || a.tagName) : null; });
-    return { act, how, reached, open, closed, on, btn: await rp.evaluate(RING, "#settingsBtn") };
+    const closed = !(await isOpen(act));
+    const focus = await rp.evaluate(FOCUS_ON);
+    return { act, how: by, reached, open, closed, on: focus.on, focus, btn: await rp.evaluate(RING, "#settingsBtn") };
   };
-  const byKey = [];
-  for (const act of ["settings", "manage", "about"])
-    for (const how of ["esc", "x"]) byKey.push(await keyTrip(act, how));
+  const byKey = [], tabKey = [];
+  for (const how of ["esc", "x"]) byKey.push(await keyTrip("about", how));
+  for (const act of ["settings", "manage"])
+    for (const how of ["esc", "x"]) tabKey.push(await keyTrip(act, how));
   check(byKey.every(r => r.reached && r.open && r.closed && r.btn.active
                          && r.btn.outline === "none"),
     "2n5 a dialog opened from a Menu row by the keyboard gives the Menu button its focus back,"
     + " without an outline, whichever way it is closed: " + JSON.stringify(byKey));
+  check(tabKey.every(r => r.reached && r.open && r.closed && r.btn.outline === "none" && r.focus.outline === "none"),
+    "2n7 the Settings and Library tabs opened from a Menu row by the keyboard close by Ctrl+W and by"
+    + " their cross, with no outline on the Menu button nor where the focus lands: " + JSON.stringify(tabKey));
 
   /* THE OTHER HALF, and the one that makes the leg above a rule rather than a blanket
      suppression: what a dialog opened FROM THE KEYBOARD hands back. Maxim ruled on 2026-09-17
