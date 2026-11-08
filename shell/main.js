@@ -3295,8 +3295,9 @@ function teamListedDoc(doc, use) {
   first = leadSignedPin(hop, pub); /* plant:s5-first-hop */
   return first;
 }
-/* The grew.sha of the copy `id` that grew from `root`: as seen this run, else read from that copy's own file in the catalog
-   folder or under its desks/, envelopes this desk opens included. Not found is "". */
+/* The grew.sha of the copy `id` that grew from `root`: as seen this run, else read from the catalog folder's root or from this
+   desk's own desks/ folder, a file there counting only where this desk signed it; another desk's folder is that desk's to write.
+   Envelopes this desk opens included. Not found is "". */
 function firstHopSha(id, root) {
   if (catalogLineageSha[id]) return String(catalogLineageSha[id]);
   let sha = "";
@@ -3304,13 +3305,15 @@ function firstHopSha(id, root) {
   return sha;
 }
 function hopShaOnDisk(id, root) {
-  const base = catalogFolder(), files = ecFilesIn(base);
+  const base = catalogFolder(), me = branchIdentity(false), files = ecFilesIn(base).map(f => ({ f, desk: "" }));
   let dirs = [];
   try { dirs = fs.readdirSync(path.join(base, "desks")); } catch { dirs = []; }
-  for (const d of dirs) files.push(...ecFilesIn(path.join(base, "desks", d)));
-  for (const file of files) {
+  dirs = dirs.filter(d => !!me && d === me.id); /* plant:s5-hop-own */
+  for (const d of dirs) files.push(...ecFilesIn(path.join(base, "desks", d)).map(f => ({ f, desk: d })));
+  for (const { f: file, desk } of files) {
     let doc = null;
     try { if (fs.statSync(file).size <= BRANCH_TEXT_MAX) doc = catalogDocIn(catalogRead(fs.readFileSync(file, "utf8")).json); } catch { doc = null; }
+    if (doc && desk && !deskFileGenuine(doc, desk)) doc = null; /* plant:s5-hop-genuine */
     const g = doc && doc.id === id && doc.grew && typeof doc.grew === "object" ? doc.grew : null;
     if (g && String(g.id || "") === root && PIN_RE.test(String(g.sha || ""))) { catalogLineageSha[id] = String(g.sha); return String(g.sha); }
   }
