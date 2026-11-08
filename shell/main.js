@@ -3104,10 +3104,15 @@ function writeAnswer(seal, pin, catalogDoc, toLead, askId) {
   writeReplacing(at.dest, JSON.stringify(env, null, 1) + "\n");
   return true;
 }
-/* Whether the catalog in use is one this desk opened from an envelope (teamOpened, by its id) whose edition no envelope of
-   `team` is known to hold: another team's catalog, whatever this team's file lists. Unknown counts as another's. */
+/* Whether the catalog in use, or the edition it grew from (doc.grew, as writeBranch judges it), is one this desk opened from an
+   envelope (teamOpened, by its id) whose edition no envelope of `team` is known to hold: another team's catalog, whatever this
+   team's file lists. Unknown counts as another's. */
 function sealedForOther(doc, pin, team) {
-  const id = doc && typeof doc.id === "string" ? doc.id : "";
+  if (openedForOther(doc && typeof doc.id === "string" ? doc.id : "", pin, team)) return true;
+  const g = doc && doc.grew && typeof doc.grew === "object" ? doc.grew : null;
+  return !!g && openedForOther(String(g.id || ""), String(g.sha || ""), team); /* plant:s0-grew */
+}
+function openedForOther(id, pin, team) {
   if (!id || !teamOpened.has(id)) return false;
   const held = editionTeams.get(pin);
   if (held && held.has(team)) return false;

@@ -601,6 +601,8 @@ function createFolderProgram(opts) {
     const parts = normRel(relPath).split("/");
     let ok = parts.length === 3 && parts[0] === "desks" && /^k-[0-9a-f]{16}$/.test(parts[1]) && parts[2] === "catalog-answer.ec";
     ok = ok && !!doc && +doc.format === 1 && doc.kind === "etiuda-answer-sealed" && doc.team === team; /* plant:s0-syncer-lead */
+    /* The envelope's shape as openAnswerLead reads it, so a stub never takes the place of an answer still to be read. */
+    ok = ok && typeof doc.keyId === "string" && !!doc.keyId && /^[0-9a-f]{64}$/.test(String(doc.enc)) && /^(?:[0-9a-f]{2}){16,}$/.test(String(doc.ct)); /* plant:s0-syncer-shape */
     return ok;
   }
   /* The catalog a staged or mirrored .ec holds, opened where sealed, or null. */

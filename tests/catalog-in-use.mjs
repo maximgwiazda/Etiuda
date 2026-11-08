@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 70;
+const EXPECTED = 72;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1277,6 +1277,39 @@ try {
         const p = planted !== SRC ? await otherTeam("s0-other-plant", true, planted) : null;
         check(!!p && p.written,
           "s0e lifting plant:s0-other-team turns s0d red: another team's catalog is answered ("
+          + (p ? (p.written ? "answered" : "not answered") : "plant not found") + ")");
+      }
+    }
+
+    /* A working copy grown from another team's catalog carries that team's cards under an id of its own (Argon's finding 1). */
+    const grownFrom = async (name, sealed, src) => {
+      const { box, other } = await twoTeams(name, src);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+      const basePin = askFor(box, name, quayBody, sealed ? other : null);
+      const grown = catalog(5, { id: box.me.id + "-1a2b3c4d", name: "Quay held, grown", card: S0_MARK, unsigned: true });
+      grown.grew = { id: "quay-held", rev: 4, sha: basePin };
+      const grownText = textOf(grown);
+      const pin = pinOf(box.D, grownText);
+      const ans = answerPath(box.share, box.me.id);
+      if (fs.existsSync(ans)) fs.unlinkSync(ans);
+      take(box.D, pin, grownText);
+      putAsk(box, "Askgrown" + name.replace(/[^A-Za-z0-9]/g, ""), pin);
+      box.D.api.tryCatalogAsk(box.D.win);
+      const use = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+      return { pin, named: !!use && use.catalog.sha256 === pin, written: fs.existsSync(ans), lead: openLeadDoc(box.D, ans) };
+    };
+    {
+      const sealed = await grownFrom("s0-grown", true);
+      const plain = await grownFrom("s0-grown-plain", false);
+      check(!!sealed.pin && sealed.named && !sealed.written
+          && plain.named && plain.written && !!plain.lead && JSON.stringify(plain.lead).indexOf(S0_MARK) >= 0,
+        "s0j a working copy grown from another team's sealed catalog is not answered; one grown from the same catalog in the clear is, to the lead's box");
+      if (PLANTS_OFF) skip("s0k lifting plant:s0-grew turns s0j red: the grown copy of another team's catalog is answered");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0-grew") >= 0 ? "  /* plant:s0-grew */" : l).join("\n");
+        const p = planted !== SRC ? await grownFrom("s0-grown-plant", true, planted) : null;
+        check(!!p && p.written,
+          "s0k lifting plant:s0-grew turns s0j red: the grown copy of another team's catalog is answered ("
           + (p ? (p.written ? "answered" : "not answered") : "plant not found") + ")");
       }
     }

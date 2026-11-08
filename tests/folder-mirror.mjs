@@ -34,7 +34,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 91;
+const EXPECTED = 93;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -1802,10 +1802,37 @@ async function run() {
       + JSON.stringify(got));
     const r = PLANTS_OFF ? null : await testPlant("s0-syncer-lead", syncerFile, async (scratchSyncer) => {
       const planted = await s0Scene(nodeRequire(scratchSyncer), "plant-s0-box-answer");
-      return planted.clear;
+      return planted.other;
     });
-    if (r) check(r.ok, "s0h lifting plant:s0-syncer-lead lets an answer in the clear into the mirror: " + JSON.stringify(r));
-    else skip("s0h lifting plant:s0-syncer-lead lets an answer in the clear into the mirror");
+    if (r) check(r.ok, "s0h lifting plant:s0-syncer-lead lets another team's box answer into the mirror: " + JSON.stringify(r));
+    else skip("s0h lifting plant:s0-syncer-lead lets another team's box answer into the mirror");
+
+    /* A stub of the right kind and team, with no key id, enc or ct, does not take the place of a box answer the mirror already
+       holds and the lead has not read yet (Argon's finding 5). */
+    const stubScene = async (mod, name) => {
+      const shareDir = folder(name + "-share"), mirrorDir = folder(name + "-mirror");
+      fs.writeFileSync(path.join(shareDir, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_S0, epoch: 1, rev: 1 })), "utf8");
+      const rel = path.join("desks", D_OK, "catalog-answer.ec");
+      fs.mkdirSync(path.dirname(path.join(mirrorDir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(mirrorDir, rel), okText, "utf8");
+      fs.mkdirSync(path.dirname(path.join(shareDir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(shareDir, rel), JSON.stringify({ format: 1, kind: "etiuda-answer-sealed", team: TEAM_S0 }), "utf8");
+      const prog = mod.createFolderProgram({ team: TEAM_S0, folder: shareDir, mirror: mirrorDir, pin: LEAD,
+        keyFor: e => (e === 1 ? K1 : null), checks });
+      await prog.syncOnce();
+      let now = "";
+      try { now = fs.readFileSync(path.join(mirrorDir, rel), "utf8"); } catch { now = ""; }
+      return { kept: now === okText, stub: now.indexOf("\"enc\"") < 0 && now.length > 0 };
+    };
+    const kept = await stubScene(syncerMod, "s0-stub");
+    check(kept.kept && !kept.stub,
+      "s0l a stub with the box kind and this team but no key id, enc or ct does not take the place of the box answer the mirror holds: " + JSON.stringify(kept));
+    const r2 = PLANTS_OFF ? null : await testPlant("s0-syncer-shape", syncerFile, async (scratchSyncer) => {
+      const planted = await stubScene(nodeRequire(scratchSyncer), "plant-s0-stub");
+      return planted.stub;
+    });
+    if (r2) check(r2.ok, "s0m lifting plant:s0-syncer-shape lets the stub replace the mirror's box answer: " + JSON.stringify(r2));
+    else skip("s0m lifting plant:s0-syncer-shape lets the stub replace the mirror's box answer");
   }
 
   // 42b: plant:syncer-live-key
