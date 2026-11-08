@@ -6142,6 +6142,130 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ maintenance.js (run D5)
+   The health strip's six sources are each guarded: a planted throw on one tile reads
+   "unavailable" and the other five still draw. The report and the strip stay content-free:
+   a planted file name and a planted card token may show on the panel's file row, and neither
+   may show in the report or the strip. */
+{
+  const MN = await import(MOD("maintenance.js"));
+  const ST = await import(MOD("storage.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CAT = await import(MOD("catalog.js"));
+  const UL = await import(MOD("ui-lang.js"));
+  const STAB = await import(MOD("screen-tabs.js"));
+  const IDS = ["catalog", "saving", "watch", "team", "start", "crash"];
+  const TOKEN = "qxcatalogtexttoken";
+  const FILE = "qx-secret-file.ec";
+
+  check("maintenance.js", "D5-1 each health tile reads unavailable when its source throws, and the other five still draw", () => {
+    if (typeof MN.mtHealthTiles !== "function" || typeof MN.mtHealthHtml !== "function")
+      return "mtHealthTiles is not there";
+    for (const id of IDS) {
+      let html = "";
+      try { html = MN.mtHealthHtml({ [id]: () => { throw new Error("plant"); } }); }
+      catch (e) { return id + " html threw"; }
+      const tiles = MN.mtHealthTiles({ [id]: () => { throw new Error("plant"); } });
+      if (!Array.isArray(tiles) || tiles.length !== 6) return id + " count";
+      const hit = tiles.filter(tile => tile.id === id)[0];
+      if (!hit || hit.v !== "unavailable") return id + " not unavailable";
+      if (tiles.some(tile => tile.id !== id && tile.v === "unavailable")) return id + " blanked another";
+      if (html.indexOf('data-mt-h="' + id + '"') < 0 || html.indexOf("unavailable") < 0) return id + " html";
+      if (IDS.some(x => html.indexOf('data-mt-h="' + x + '"') < 0)) return id + " missing a tile";
+    }
+    const quiet = MN.mtHealthTiles();
+    if (!Array.isArray(quiet) || quiet.length !== 6) return "empty desk count";
+    if (quiet.some(tile => tile.v === "unavailable")) return "empty desk threw";
+    return true;
+  });
+
+  check("maintenance.js", "D5-2 the report and the health strip stay free of a planted file name and catalog text", () => {
+    if (typeof MN.mtReportText !== "function" || typeof MN.mtHealthHtml !== "function")
+      return "mtReportText is not there";
+    const hadHost = Object.prototype.hasOwnProperty.call(globalThis.window, "E_HOST");
+    const prevHost = globalThis.window.E_HOST;
+    const prevCards = AS.cards.slice();
+    const prevFile = ST.nsGet("CatalogFile");
+    const prevStore = ST.lsGet(CAT.E_CATALOG_STORE);
+    try {
+      globalThis.window.E_HOST = {};
+      AS.setCards([{ id: "qx", body: TOKEN, t: TOKEN, title: TOKEN }]);
+      ST.nsSet("CatalogFile", FILE);
+      ST.lsSet(CAT.E_CATALOG_STORE, JSON.stringify({ id: "qxcat", cards: [{ body: TOKEN, t: TOKEN }] }));
+      const report = MN.mtReportText();
+      const health = MN.mtHealthHtml();
+      const grid = MN.mtGridHtml();
+      if (typeof report !== "string" || report.indexOf("Etiuda maintenance report") !== 0) return "report heading";
+      if (grid.indexOf(FILE) < 0) return "plant did not reach the panel";
+      if (report.indexOf(FILE) >= 0 || report.indexOf(TOKEN) >= 0) return "report leaked";
+      if (health.indexOf(FILE) >= 0 || health.indexOf(TOKEN) >= 0) return "strip leaked";
+      if (grid.indexOf(TOKEN) >= 0) return "grid printed catalog text";
+      return true;
+    } finally {
+      AS.setCards(prevCards);
+      if (prevFile == null) ST.nsDel("CatalogFile"); else ST.nsSet("CatalogFile", prevFile);
+      if (prevStore == null) ST.lsDel(CAT.E_CATALOG_STORE); else ST.lsSet(CAT.E_CATALOG_STORE, prevStore);
+      if (hadHost) globalThis.window.E_HOST = prevHost; else delete globalThis.window.E_HOST;
+    }
+  });
+
+  check("maintenance.js", "D5-3 the Maintenance screen carries the six tiles, the subtitle and Readings, and no log folder", () => {
+    const def = STAB.getScreenDef("maintenance");
+    if (!def || typeof def.render !== "function") return "no maintenance screen";
+    const host = { innerHTML: "", querySelector() { return null; } };
+    def.render(host, () => {});
+    const html = host.innerHTML;
+    if (IDS.some(id => html.indexOf('data-mt-h="' + id + '"') < 0)) return "tiles missing";
+    if (html.indexOf("What this computer reports, and ways to set things right.") < 0) return "subtitle";
+    if (html.indexOf("Readings") < 0) return "readings heading";
+    if (html.indexOf("Open the log folder") >= 0) return "log folder was built";
+    if (typeof MN.openMaintenanceModal === "function" && MN.openMaintenanceModal.toString().indexOf("mtMaintBody") < 0)
+      return "rescue window does not use the screen body";
+    ST.lsSet("eUiLang", "pl");
+    try {
+      const plHost = { innerHTML: "", querySelector() { return null; } };
+      def.render(plHost, () => {});
+      const pl = plHost.innerHTML;
+      const want = ["Odczyty", "Zapisywanie", "Obserwacja pliku", "Ostatnie uruchomienie", "Ostatnia awaria",
+        "Katalog", "Zespół", "Co raportuje ten komputer i jak przywrócić porządek."];
+      const miss = want.filter(w => pl.indexOf(w) < 0);
+      return miss.length ? "polish missing " + miss.length : true;
+    } finally {
+      ST.lsDel("eUiLang");
+    }
+  });
+
+  check("maintenance.js", "D5-4 a team line says relay reachable, out of reach, or only the sync time, and never No team", () => {
+    if (typeof MN.mtTeamLine !== "function") return "mtTeamLine is not there";
+    const ens = row => (row && row.parts || []).map(p => p.en);
+    const empty = MN.mtTeamLine([]);
+    if (!empty || empty.v !== "-" || ens(empty).length) return "empty";
+    const removed = MN.mtTeamLine([{ team: "qx", removed: true, relay: "relay.example" }]);
+    if (!removed || removed.v !== "-") return "removed";
+    const stamp = UL.fileStamp(1700000000000);
+    const reach = MN.mtTeamLine([{ team: "qx", relay: "relay.example", head: { t: 1700000000000 } }]);
+    const reachFill = (reach.parts || []).filter(p => p.en === "synced {TIME}")[0];
+    if (ens(reach).indexOf("relay reachable") < 0 || !reachFill || !reachFill.fill || reachFill.fill["{TIME}"] !== stamp || reach.warn)
+      return "reachable";
+    const out = MN.mtTeamLine([{ team: "qx", relay: "relay.example", relayRemoved: true }]);
+    if (ens(out).indexOf("relay out of reach") < 0 || !out.warn) return "out of reach";
+    const lapsed = MN.mtTeamLine([{ team: "qx", relay: "relay.example", lapse: { step: "lapsed" } }]);
+    if (ens(lapsed).indexOf("relay out of reach") < 0 || !lapsed.warn) return "lapsed";
+    const grace = MN.mtTeamLine([{ team: "qx", relay: "relay.example", lapse: { step: "grace" } }]);
+    if (ens(grace).indexOf("relay reachable") < 0 || grace.warn) return "grace";
+    const folder = MN.mtTeamLine([{ team: "qx", folder: "C:/qx", head: { t: 1700000000000 } }]);
+    if (ens(folder).indexOf("relay reachable") >= 0 || ens(folder).indexOf("relay out of reach") >= 0 || ens(folder).indexOf("synced {TIME}") < 0)
+      return "folder";
+    const said = MN.mtHealthHtml({ team: () => MN.mtTeamLine([{ team: "qx", relay: "relay.example", relayRemoved: true }]) });
+    if (said.indexOf("relay out of reach") < 0 || said.indexOf('data-mt-h="team"') < 0 || said.indexOf("mt-bad") < 0)
+      return "tile words";
+    if (said.indexOf("No team") >= 0) return "variant C words";
+    const saved = MN.mtHealthHtml({ saving: () => ({ parts: [{ en: "saved {TIME}", fill: { "{TIME}": "01.01.2026 00:00" } }] }) });
+    if (saved.indexOf("saved 01.01.2026 00:00") < 0 || saved.indexOf("{TIME}") >= 0) return "saved time";
+    return true;
+  });
+}
+
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print
    a green line, so the floor is frozen here and a drop reddens the file. */
