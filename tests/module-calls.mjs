@@ -5577,7 +5577,7 @@ const CARD_B = {
           for (const k of n.kids) {
             if (s.startsWith(".") && k.classList && k.classList.contains(s.slice(1))) out.push(k);
             else if (s === ".tab" && k.classList && k.classList.contains("tab")) out.push(k);
-            else if ((s === "input,textarea,select" || s === "input" || s === "textarea" || s === "select") && (s === "input,textarea,select" ? ["INPUT", "TEXTAREA", "SELECT"].includes(k.tagName) : k.tagName === s.toUpperCase())) out.push(k);
+            else if (s === "input,textarea,select" && ["INPUT", "TEXTAREA", "SELECT"].includes(k.tagName)) out.push(k);
             walk(k);
           }
         };
