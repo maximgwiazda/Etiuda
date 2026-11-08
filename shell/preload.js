@@ -223,6 +223,15 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* The picker opened from the desk itself, by the pointer, as the hotkey opens it. */
   openPicker: () => ipcRenderer.send("etiuda:pick-show"),
   noteOwnText: (text) => ipcRenderer.send("etiuda:own-text", String(text || "")),
+  /* Start with Windows, quit on close, and the tray's notification switch. The login item is read
+     back from Windows. The page stores quit on close itself and tells the shell, so a close before
+     the next read still follows the row. */
+  setLoginItem: (on) => ipcRenderer.send("etiuda:login-item-set", !!on),
+  loginItemState: () => ipcRenderer.sendSync("etiuda:login-item-state"),
+  setClosePolicy: (quit) => ipcRenderer.send("etiuda:close-policy-set", !!quit),
+  setTrayNotes: (on) => ipcRenderer.send("etiuda:tray-notes-set", !!on),
+  trayNotesState: () => ipcRenderer.sendSync("etiuda:tray-notes-state"),
+  onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
 });
 
 if (json) {
