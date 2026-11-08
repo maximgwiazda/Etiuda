@@ -49,7 +49,7 @@ function historyRowHtml(v,key){
   const meta=[(ed.r!=null || ed.e) ? editionLabel(ed) : "",
     +v.cards>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",+v.cards,+v.macros,+v.intents,+v.cats) : ""]
     .filter(Boolean).map(esc).join(" · ");
-  const acts=historyActs(v), open=t("Open this version");
+  const acts=historyActs(v), open=t("Open this copy");
   return '<div class="ec-row'+(v.current?" is-current":"")+'">'
     +'<span class="ec-name"><b>'+esc(fileStamp(v.first))+'</b>'+(meta?'<small class="ec-meta">'+meta+'</small>':'')+'</span>'
     +(v.current?'<span class="ec-tag">'+esc(t("Current"))+'</span>':'')
@@ -63,7 +63,7 @@ function historyRowHtml(v,key){
 function historyBodyHtml(groups){
   if(!groups.length)
     return '<div class="ec-list"><div class="ec-row ec-empty">'
-      +esc(t("Each catalog this desk opens or saves leaves its versions here, kept for 30 days."))+'</div></div>';
+      +esc(t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."))+'</div></div>';
   let n=0;
   return groups.map(g=>historyHeadHtml(g)+'<div class="ec-list">'+g.map(v=>historyRowHtml(v,n++)).join("")+'</div>').join("");
 }
@@ -102,7 +102,7 @@ function openHistory(){
   Promise.resolve(h.historyList()).then(list=>{
     const groups=historyGroups(list), flat=[].concat.apply([],groups);
     openDialog({
-      title:"Earlier versions",
+      title:"Saved copies",
       back:()=>hooks.openManage(),
       body:'<div id="ehView">'+historyBodyHtml(groups)+'</div>',
       actions:'<button type="button" class="btn" id="ehClose">'+esc(t("Close"))+'</button>',

@@ -135,9 +135,9 @@ function marginHeading(f,known){
 }
 function marginLine(f){
   if(f.kind==="lang") return t("Copied in that language, the card goes out as it was before this edit.");
-  if(f.sug) return t("{TOKEN} is not a field this catalog fills, so the customer would see it as typed, braces and all.")
+  if(f.sug) return t("{TOKEN} is not a variable this catalog fills, so the customer would see it as typed, braces and all.")
     .replace("{TOKEN}",()=>f.raw);
-  return t("This catalog fills no field by that name.");
+  return t("This catalog fills no variable by that name.");
 }
 // esc() first and the tokens after, so a token's braces and the code tag survive as written.
 function marginCode(words,tok,val){ return esc(words).split(tok).join("<code>"+esc(val)+"</code>"); }
@@ -151,7 +151,7 @@ function marginBubbleHtml(f,at,all,known){
   } else if(f.sug){
     head=esc(t("Perhaps {SUGGESTED}, {WHAT}?")).replace(/\{SUGGESTED\}|\{WHAT\}/g,
       k=>k==="{WHAT}" ? esc(marginWhat(marginSugName(f.sug),known)) : "<code>"+esc(f.sug)+"</code>");
-    line=marginCode(t("{TOKEN} is not a field this catalog fills, so the customer would see it as typed, braces and all."),"{TOKEN}",f.raw);
+    line=marginCode(t("{TOKEN} is not a variable this catalog fills, so the customer would see it as typed, braces and all."),"{TOKEN}",f.raw);
     acts='<button type="button" class="btn primary" data-act="fix">'
       +esc(t("Change it to {SUGGESTED}").replace("{SUGGESTED}",()=>f.sug))+'</button>';
   } else {
