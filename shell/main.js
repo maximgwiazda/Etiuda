@@ -2850,11 +2850,11 @@ function liveWin(win) {
   } catch { /* gone */ }
   return null;
 }
-function tellCopy(win, id) {
+function tellCopy(win, id, lead) {
   lastCatalogCopy = String(id || "");
   const live = liveWin(win);
   if (!live) return;
-  try { live.webContents.send("etiuda:catalog-copy", { id: lastCatalogCopy }); } catch { /* the page has gone */ }
+  try { live.webContents.send("etiuda:catalog-copy", { id: lastCatalogCopy, lead: lead === true }); } catch { /* the page has gone */ }
 }
 function catalogCopyNote() { return lastCatalogCopy; }
 function asksWatching() { return !!asksWatcher; }
@@ -3142,7 +3142,7 @@ function tryCatalogAsk(win) {
     if (!writeAnswer(use.seal, pin, doc, !listed)) { heldAnswer = { id: ask.id }; return; }
     rememberAsk(ask.id);
     heldAnswer = null;
-    tellCopy(win, ask.id);
+    tellCopy(win, ask.id, !listed);
   } catch (e) {
     console.error("etiuda: the catalog ask could not be answered - " + e.message);
   }
