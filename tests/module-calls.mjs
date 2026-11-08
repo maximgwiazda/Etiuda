@@ -5877,6 +5877,22 @@ const CARD_B = {
       return true;
     });
 
+    // 14. Fitting the strip must not rename a screen tab. D1-1 stays green when
+    // querySelector(".tab-label>span") finds nothing; this leg teaches that one tab to find it.
+    check("tabs.js", "D1-14 a fitted strip keeps Maintenance on the screen tab", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      MN.openMaintenance();
+      const tabEl = tabsBar.kids && tabsBar.kids.find(k => k.dataset && k.dataset.sid === "maintenance");
+      if (!tabEl) return "no maintenance tab";
+      const lab = tabEl.querySelector(".tab-label");
+      const viz = lab && lab.kids && lab.kids[0];
+      if (!viz) return "label span missing";
+      const orig = tabEl.querySelector.bind(tabEl);
+      tabEl.querySelector = s => (s === ".tab-label>span" ? viz : orig(s));
+      T.fitTabLabels();
+      return viz.textContent === "Maintenance" ? true : "label reads " + JSON.stringify(viz.textContent);
+    });
+
   } finally {
     STAB.clearScreenOn();
     STAB.screens.length = 0;
