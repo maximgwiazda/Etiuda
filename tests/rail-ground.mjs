@@ -4,13 +4,18 @@
  *
  * Headless Chrome on the built page and the fixtures' sample catalog, docked at 1600 x 1000, two
  * intents chosen. What the eye sees is read as area, in pixels, in light and in dark:
- *   1a  the rail's area outside its rows, its head and its foot, from the window's edge to where
- *       the dot field begins, is painted the header's own ground: at least 97 per cent of it.
+ *   1a  the rail's area outside its rows and its head, from the window's edge to where the dot
+ *       field begins, is painted the header's own ground: at least 97 per cent of it.
  *   2a  each chosen row keeps the mint fill, the green name, its check and its green mark: the
  *       computed colours are the ones the panel's chosen row had, and the mint covers at least
  *       75 per cent of each row's box. Both chosen rows show, one above the other, inside the rail.
  *   3a  a theme press starts no transition anywhere in the rail, and 3b in the press's own task the
  *       rail's ground is the header's new ground, so the two change in the same frame.
+ *   4a  a click on the lock's glyph raises no page error and plays the lock's turn.
+ *   5a  with the cards scrolled, the column's 12px strip under the header is still its ground (at
+ *       least 97 per cent), so no shadow or seam crosses it, and 5b over the cards the header's
+ *       scrolled shadow still falls: the 3px strip under the header differs by at least 2 levels on
+ *       average from the same photograph with the header's shadows taken out.
  * Each read has its control in the same launch: a panel painted back behind the rows (1A), the
  * chosen row greyed (2A), and the flip hold taken out (3A), each of which the read must catch.
  */
@@ -96,7 +101,7 @@ async function read(page) {
        edge less one 12px pitch), from under the header to the window's foot. */
     const x1 = Math.floor(document.querySelector("main").getBoundingClientRect().left) - 14;
     const y0 = Math.ceil(header.getBoundingClientRect().bottom), y1 = innerHeight;
-    const holes = [...rail.querySelectorAll(".rail-item, .rail-head, .side-foot")].map(box);
+    const holes = [...rail.querySelectorAll(".rail-item, .rail-head")].map(box);
     const D = g.getImageData(0, y0, x1, y1 - y0).data;
     let n = 0, hit = 0;
     for (let y = y0; y < y1; y++) for (let x = 0; x < x1; x++) {
@@ -125,6 +130,49 @@ async function read(page) {
     });
     return { groundCss, region: [x1, y1 - y0], groundShare: n ? Math.round(hit / n * 1000) / 1000 : 0, counted: n, rows };
   }, png);
+}
+
+/* The strips under the header: the column's (12px, from the window's edge to two pixels short of the dot field) as a
+   share of the header's ground, and the cards' (3px, 400px wide from 16px past the column) as a mean level. */
+async function strips(page) {
+  const png = await page.screenshot({ captureBeyondViewport: false, encoding: "base64" });
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = "data:image/png;base64," + b64;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const header = document.querySelector("header");
+    const ground = (getComputedStyle(header).backgroundColor.match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+    const x1 = Math.floor(document.querySelector("main").getBoundingClientRect().left) - 14;
+    const hb = Math.ceil(header.getBoundingClientRect().bottom);
+    const C = g.getImageData(0, hb, x1, 12).data;
+    let n = 0, hit = 0;
+    for (let i = 0; i < C.length; i += 4) {
+      n++;
+      if (Math.abs(C[i] - ground[0]) <= 2 && Math.abs(C[i + 1] - ground[1]) <= 2 && Math.abs(C[i + 2] - ground[2]) <= 2) hit++;
+    }
+    const K = g.getImageData(x1 + 16, hb, 400, 3).data;
+    let sum = 0;
+    for (let i = 0; i < K.length; i += 4) sum += (K[i] + K[i + 1] + K[i + 2]) / 3;
+    return { colShare: Math.round(hit / n * 1000) / 1000, colPx: n, cardMean: Math.round(sum / (K.length / 4) * 10) / 10 };
+  }, png);
+}
+async function scrolledStrips(page) {
+  await page.evaluate(() => { const s = document.getElementById("pageScroll"); s.scrollTop = 600; s.dispatchEvent(new Event("scroll")); });
+  await page.waitForFunction(() => document.body.classList.contains("e-scrolled"), { timeout: 10000 });
+  await sleep(700);
+  const on = await strips(page);
+  await inject(page, "header,header::after,header::before{box-shadow:none!important}");
+  await sleep(100);
+  const off = await strips(page);
+  await uninject(page);
+  await page.evaluate(() => { const s = document.getElementById("pageScroll"); s.scrollTop = 0; s.dispatchEvent(new Event("scroll")); });
+  await page.waitForFunction(() => !document.body.classList.contains("e-scrolled"), { timeout: 10000 });
+  await sleep(500);
+  return { on, off, cardDiff: Math.round(Math.abs(on.cardMean - off.cardMean) * 10) / 10 };
 }
 
 const chosenOk = (r, theme) => r.rows.length === 2 && r.rows.every(x => x.bg === CHOSEN[theme].bg && x.ink === CHOSEN[theme].ink
@@ -165,6 +213,12 @@ try {
     check(chosenOk(r, theme),
       "2a " + theme + ": two chosen rows show, one above the other, each in today's mint, green name, check and green mark (mint over "
       + r.rows.map(x => Math.round(x.mintShare * 100) + "%").join(" and ") + " of the row)", r.rows);
+    const sh = await scrolledStrips(page);
+    check(sh.on.colShare >= GROUND_SHARE,
+      "5a " + theme + ": scrolled, the column's strip under the header is still its ground, no shadow or seam across it ("
+      + Math.round(sh.on.colShare * 100) + " per cent of " + sh.on.colPx + " px)", sh);
+    check(sh.cardDiff >= 2,
+      "5b " + theme + ": scrolled, the header's shadow still falls over the cards (" + sh.cardDiff + " levels against the same photograph without it)", sh);
     if (theme === "light") {
       await inject(page, "#intentRail,body #intentRail{background:#fff!important}");
       const c = await read(page);
@@ -180,6 +234,24 @@ try {
   const f = await flip(page, false);
   check(f.theme === "light" && f.running === 0, "3a a theme press starts no transition anywhere in the rail", f);
   check(f.frame0.rail === f.frame0.header, "3b in the press's own task the rail's ground is the header's new ground (" + f.frame0.rail + ")", f.frame0);
+
+  /* The lock's glyph is what a hand clicks, and the button redraws it on the toggle. */
+  const errs = [];
+  page.on("pageerror", e => errs.push(String(e.message || e)));
+  await sleep(300);
+  await page.evaluate(() => {
+    const b = document.getElementById("railPinBtn");
+    window.__lockTurn = false;
+    new MutationObserver(() => { if (/e-lock-(shut|open)/.test(b.className)) window.__lockTurn = true; }).observe(b, { attributes: true, attributeFilter: ["class"] });
+  });
+  const glyph = await page.evaluate(() => { const r = document.querySelector("#railPinBtn svg").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await page.mouse.click(glyph.x, glyph.y);
+  await sleep(400);
+  const lock = await page.evaluate(() => ({ turn: window.__lockTurn, locked: document.getElementById("railPinBtn").classList.contains("on") }));
+  await page.mouse.click(glyph.x, glyph.y);
+  await sleep(400);
+  check(errs.length === 0 && lock.turn === true && lock.locked === true,
+    "4a a click on the lock's glyph locks the rail, plays the lock's turn and raises no page error", { lock, errs });
   await page.close();
 
   const sight = await boot("light");
@@ -193,6 +265,6 @@ try {
   if (browser) await browser.close();
   try { RUN.drop(); } catch (e) {}
 }
-console.log(`#counts checks=${checks} skipped=0 failed=${fails} expected=9`);
+console.log(`#counts checks=${checks} skipped=0 failed=${fails} expected=14`);
 console.log(`${checks} checks, ${fails} failed`);
 process.exit(fails ? 1 : 0);

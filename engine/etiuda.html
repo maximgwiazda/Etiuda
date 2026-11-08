@@ -382,7 +382,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      short of the cards - see .dotfield>div. */
   --rail-col-w:calc(var(--rail-left,14px) + var(--rail-max) + var(--rail-gap) - 12px);
   /* THE SIDE AREA'S LANGUAGE: a column on the header's own ground, a hairline to the cards, a light
-     title, quiet rows, a foot line. The docked intent rail wears it; Settings' side area is to share it. */
+     title, quiet rows. The docked intent rail wears it; Settings' side area is to share it. */
   --side-ground:var(--header-bg);
   --side-edge:var(--line);
   --side-dim:var(--dim);
@@ -2548,12 +2548,13 @@ body.rail-col #intentRailList{padding-bottom:var(--side-veil)}
 body.rail-col .rail-body::after{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--side-veil);
   z-index:4;pointer-events:none;
   background:linear-gradient(color-mix(in srgb,var(--side-ground) 0%,transparent),var(--side-ground))}
-.side-foot{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:11px 10px 13px;
-  border-top:1px solid var(--side-edge);color:var(--side-dim);font:12.5px var(--sans)}
-.side-foot .side-keys{margin-left:auto;display:inline-flex;align-items:center;gap:4px}
-.side-foot kbd{font:11.5px var(--mono);padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px}
-#intentRail .side-foot{display:none}
-body.rail-col #intentRail .side-foot{display:flex}
+/* Docked, the scrolled shadow starts at the column's edge and falls over the cards alone: the column and the
+   header are one ground, so nothing may cross between them. The pseudo is the header's own box clipped to
+   what lies below it from that edge; the flip holds it with the header (#eFlipHold). */
+body.rail-on.rail-col.e-scrolled header{box-shadow:none}
+body.rail-on.rail-col header::after{content:"";position:absolute;top:0;bottom:-1px;left:var(--rail-col-w);right:0;
+  pointer-events:none;clip-path:inset(100% 0 -40px 0);box-shadow:none;transition:box-shadow var(--m-tone) ease}
+body.rail-on.rail-col.e-scrolled header::after{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
 /* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
@@ -4075,7 +4076,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <!-- THE FLIP'S HOLD: enabled by theme.js for a theme press's own two frames and disabled otherwise.
      A sheet toggled through the CSSOM touches no element and wakes no observer, and the browser
      restyles only what its one rule matches. Unlayered, so it outranks the tone tier. -->
-<style id="eFlipHold">.rail-item,.cacts button,.cat-chip,.pill,.btn,.seg button,.seg::before,.tab,.tab-x,.menu button,.field-clear,.combo-clear,.rail-lock,.mg-tw,.me-stamp,.fab,.fab-clear,.card.deck>.txt,header{transition:none}</style>
+<style id="eFlipHold">.rail-item,.cacts button,.cat-chip,.pill,.btn,.seg button,.seg::before,.tab,.tab-x,.menu button,.field-clear,.combo-clear,.rail-lock,.mg-tw,.me-stamp,.fab,.fab-clear,.card.deck>.txt,header,header::after{transition:none}</style>
 
 <header>
   <div class="row">
@@ -4228,7 +4229,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     </div>
   </div>
   <div class="rail-body"><div id="intentRailList"></div></div>
-  <div class="side-foot"><span>Several at once</span><span class="side-keys"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span></div>
 </aside>
 </div>
 <main>
@@ -6930,7 +6930,6 @@ What you type stays in this browser only.`;
     "Categories & cards": "Kategorie i karty",
     "Intent": "Intencja",
     "Intents": "Intencje",
-    "Several at once": "Kilka naraz",
     "ROLE suggestions": "Podpowiedzi ROLE",
     "Catalog & data": "Katalog i dane",
     "Content": "Treść",
@@ -20115,11 +20114,11 @@ What you type stays in this browser only.`;
           railSuppressClick = false;
           return;
         }
-        if (e.target.closest("#railPinBtn")) {
+        const b = e.target.closest("#railPinBtn");
+        if (b) {
           e.preventDefault();
           e.stopPropagation();
           toggleRailLock();
-          const b = e.target.closest("#railPinBtn");
           b.classList.remove("e-lock-shut", "e-lock-open");
           void b.offsetWidth;
           b.classList.add(railLocked() ? "e-lock-shut" : "e-lock-open");
