@@ -43,9 +43,7 @@ function toggleFavourite(id){
        and unstarring puts the card back exactly where it was. */
     toast("Added to Favourites");
   }
-  const was=ePackEpoch;
-  savePack();
-  hooks.keepPoolAcross(was,[id]);   // a star rewrites this card alone
+  savePack([id]);   // a star rewrites this card alone
   /* Prune and recount without a full rebuild: a star changes no pill - not a count, not a
      ring - so redrawing the bar could only cost (a pill mid-drag, a FLIP mid-flight). */
   syncFavouritesMeta();
