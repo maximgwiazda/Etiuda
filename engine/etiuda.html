@@ -16655,10 +16655,22 @@ What you type stays in this browser only.`;
     return '<span class="modal-nav"><button type="button" class="modal-x nav-up" id="edPrev" title="' + esc(lp) + '" aria-label="' + esc(t("Previous")) + '">' + ICON_CHEVRON_R + '</button><button type="button" class="modal-x nav-dn" id="edNext" title="' + esc(ln) + '" aria-label="' + esc(tc("editor", "Next")) + '">' + ICON_CHEVRON_R + "</button></span>";
   }
   var edBaseline = "";
+  function edFields() {
+    if (!modalCard) return [];
+    const out = [];
+    ["input", "textarea", "select"].forEach((tag) => {
+      try {
+        const list2 = modalCard.querySelectorAll(tag);
+        if (list2) for (let i = 0; i < list2.length; i++) out.push(list2[i]);
+      } catch {
+      }
+    });
+    return out;
+  }
   function edFormState() {
     if (!modalCard) return "";
     const out = [];
-    modalCard.querySelectorAll("input,textarea,select").forEach((el) => {
+    edFields().forEach((el) => {
       out.push(el.type === "checkbox" || el.type === "radio" ? el.checked ? "1" : "0" : String(el.value || ""));
     });
     modalCard.querySelectorAll(".on[data-v]").forEach((el) => out.push(String(el.dataset.v || "")));
@@ -16670,7 +16682,7 @@ What you type stays in this browser only.`;
   function edTyped() {
     if (!modalCard) return null;
     return {
-      fields: Array.from(modalCard.querySelectorAll("input,textarea,select")).map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
+      fields: edFields().map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
       segs: Array.from(modalCard.querySelectorAll("[data-v]")).map((el) => el.classList.contains("on"))
     };
   }
@@ -16680,7 +16692,7 @@ What you type stays in this browser only.`;
     segs.forEach((el, i) => {
       if (was.segs[i] && !el.classList.contains("on")) el.click();
     });
-    Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el, i) => {
+    edFields().forEach((el, i) => {
       if (i >= was.fields.length) return;
       const v = was.fields[i];
       if (el.type === "checkbox" || el.type === "radio") {
