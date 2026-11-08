@@ -140,7 +140,8 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
-  edForget();
+  /* Null outside an editor. Written in place: this function is sliced out and run on its own. */
+  edBaseline=null; edReturn=null;
   cutLeaves();
   /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
      and the next Tab starts from the top of the document. A dialog opened over another keeps
@@ -221,7 +222,6 @@ function edNavHtml(){
 let edBaseline=null;
 /* The editor's own way back, the go edWireNav already undoes through. */
 let edReturn=null;
-function edForget(){ edBaseline=null; edReturn=null; }
 function edFormState(){
   if(!modalCard) return "";
   const out=[];
@@ -372,7 +372,7 @@ function dismissModal(){
   /* Leaving keeps the edit the way the next entry does: go back, and retype. */
   const was=edDirty()?edTyped():null;
   const ret=was?edReturn:null;
-  edForget();
+  edBaseline=null; edReturn=null;
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
@@ -416,7 +416,7 @@ function leaveModal(){
   dismissNode(g);
 }
 function closeModal(){
-  edForget();
+  edBaseline=null; edReturn=null;
   scStopCapture();
   modalBack=null;
   leaveModal();
