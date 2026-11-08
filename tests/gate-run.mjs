@@ -18,7 +18,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-let asserted = 0, failed = 0;
+/* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
+const EXPECTED = 5;
+let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
   if (cond) process.stdout.write("  ok   " + line + "\n");
@@ -26,7 +28,7 @@ function check(cond, line) {
 }
 
 function skip(line) {
-  asserted++;
+  skipped++;
   process.stdout.write("  SKIP " + line + "\n");
 }
 
@@ -240,7 +242,11 @@ function main() {
     cleanLab(lab);
   }
 
-  process.stdout.write("#counts checks=" + asserted + " failures=" + failed + "\n");
+  process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failures=" + failed + " expected=" + EXPECTED + "\n");
+  if (asserted + skipped !== EXPECTED) {
+    process.stdout.write("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " leg(s)\n");
+    process.exit(78);
+  }
   process.stdout.write("gate-run " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted + " check(s)\n");
   process.exit(failed ? 1 : 0);
 }
