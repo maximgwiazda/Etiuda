@@ -140,6 +140,7 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
+  edBaseline=null;
   cutLeaves();
   /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
      and the next Tab starts from the top of the document. A dialog opened over another keeps
@@ -215,7 +216,9 @@ function edNavHtml(){
 /* Read off the CONTROLS rather than from each editor's own fields: three editors with
    different shapes all answer "has anything been typed" the same way, and a field added
    later is covered without being registered anywhere. */
-let edBaseline="";
+/* Null outside an editor. An editor sets it when it wires; any other dialog is not an
+   edit, and must not be compared with the editor that stood here before. */
+let edBaseline=null;
 function edFormState(){
   if(!modalCard) return "";
   const out=[];
@@ -246,7 +249,7 @@ function edRetype(was){
     else if(String(el.value||"")!==v){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); }
   });
 }
-function edDirty(){ return edFormState()!==edBaseline; }
+function edDirty(){ return edBaseline!==null && edFormState()!==edBaseline; }
 /* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
    ends disable rather than wrap, so a dead arrow is how you know you are at one. */
 /* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves: the
@@ -365,6 +368,7 @@ function dismissModal(){
   if(edDirty() && typeof confirm==="function" && !confirm(t("Discard changes"))){
     return false;
   }
+  edBaseline=null;
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
@@ -407,6 +411,7 @@ function leaveModal(){
   dismissNode(g);
 }
 function closeModal(){
+  edBaseline=null;
   scStopCapture();
   modalBack=null;
   leaveModal();

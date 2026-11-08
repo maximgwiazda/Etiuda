@@ -5837,6 +5837,46 @@ const CARD_B = {
       return accel === "Control+Shift+M" && !tried && Boolean(refused);
     });
 
+    // 13. Settings opened after a card editor is not that editor's edit.
+    // The mock keeps innerHTML as a string, so this check supplies the field a real
+    // Settings card would hold after openDialog replaces the card editor's fields.
+    check("dialog.js", "D1-13 Settings after a card editor, Escape untouched, closes without asking", () => {
+      start([["t-a", "Anna"]], "t-a");
+      modal.hidden = false;
+      modalCard.className = "modal-card me-card";
+      const cardIn = el({ tagName: "INPUT", type: "text", value: "card text" });
+      modalCard.kids = [cardIn];
+      cardIn.parentNode = modalCard;
+      cardIn.parentElement = modalCard;
+      DL.edMarkClean();
+      const setIn = el({ tagName: "INPUT", type: "text", value: "" });
+      const prevHtml = Object.getOwnPropertyDescriptor(modalCard, "innerHTML");
+      Object.defineProperty(modalCard, "innerHTML", {
+        configurable: true,
+        enumerable: true,
+        get() { return this._html || ""; },
+        set(v) {
+          this._html = String(v);
+          this.kids = v === "" ? [] : [setIn];
+          setIn.parentNode = this;
+          setIn.parentElement = this;
+        }
+      });
+      let asked = 0;
+      const prevConfirm = globalThis.confirm;
+      globalThis.confirm = () => { asked++; return false; };
+      try {
+        SET.openSettings();
+        if (pageKeys) pageKeys(key({ key: "Escape" }));
+      } finally {
+        if (prevHtml) Object.defineProperty(modalCard, "innerHTML", prevHtml);
+        globalThis.confirm = prevConfirm;
+      }
+      if (asked !== 0) return "asked " + asked;
+      if (modal.hidden !== true) return "settings stayed open";
+      return true;
+    });
+
   } finally {
     STAB.clearScreenOn();
     STAB.screens.length = 0;
