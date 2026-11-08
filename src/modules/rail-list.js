@@ -651,11 +651,12 @@ function wireRailPointer(){
   if(intentRailEl){
     intentRailEl.addEventListener("click",e=>{
       if(railSuppressClick){ railSuppressClick=false; return; }
-      if(e.target.closest("#railPinBtn")){
+      /* Taken before the toggle: it redraws the glyph, and a click on the glyph leaves e.target detached. */
+      const b=e.target.closest("#railPinBtn");
+      if(b){
         e.preventDefault(); e.stopPropagation();
         toggleRailLock();
         // The click that changes the state is the one that plays it - boot's sync stays still.
-        const b=e.target.closest("#railPinBtn");
         b.classList.remove("e-lock-shut","e-lock-open");
         void b.offsetWidth;
         b.classList.add(railLocked()?"e-lock-shut":"e-lock-open");

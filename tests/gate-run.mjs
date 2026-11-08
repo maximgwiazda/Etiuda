@@ -8,6 +8,13 @@
  * 3. A complete green area record on the tree whose ran misses one of this area's files: the area runs.
  * 4. A complete green whole-chain record covering every file: the area skips, naming the record.
  * 5. A planted removal of the coverage check turns leg 1 red, by the tree's plant convention, and honours ETIUDA_PLANTS=off.
+ *
+ * File mode profiles and fingerprint method checks (2026-11-08):
+ * 6. File mode on a lab leg named only by the release profile runs it and writes a record with ETIUDA_PROFILE=release seen by the leg. A file named nowhere is still refused.
+ * 7. A fingerprint stub that fails git once, then answers: no moved-tree verdict, and the gate's own exit stands.
+ * 8. A stub where git never answers: the run stops with the "git did not answer" reason, and no moved-tree line.
+ * 9. A real file written by a gate under the tree: still a moved-tree verdict (the control).
+ * 10. A planted removal of the method check turns leg 7 red, by the tree's plant convention, and honours ETIUDA_PLANTS=off.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -19,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 5;
+const EXPECTED = 10;
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -87,6 +94,9 @@ function setupLab() {
   fs.writeFileSync(path.join(lab, "src", "leaf.mjs"), "export const leaf = 1;\n");
   fs.writeFileSync(path.join(lab, "tests", "a.mjs"), "import \"../src/leaf.mjs\";\nconsole.log(\"  ok   leg a\");\nprocess.exit(0);\n");
   fs.writeFileSync(path.join(lab, "tests", "b.mjs"), "import \"../src/leaf.mjs\";\nconsole.log(\"  ok   leg b\");\nprocess.exit(0);\n");
+  fs.mkdirSync(path.join(lab, "ignored"), { recursive: true });
+  fs.writeFileSync(path.join(lab, ".gitignore"), "ignored/\n");
+  fs.writeFileSync(path.join(lab, "ignored", "drift.txt"), "ignored drift content\n");
 
   const gitEnv = { ...process.env };
   delete gitEnv.GIT_DIR;
@@ -237,6 +247,73 @@ function main() {
 
       const leg1TurnedRed = plantedSrc !== toolSrc && hasPlant && rPlant.exit === 0 && rPlant.out.indexOf("rerunning nothing") >= 0;
       check(leg1TurnedRed, "5 planted removal of coverage check turns leg 1 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
+    }
+
+    /* 6 (1). File mode on a lab leg named only by the release profile runs it and writes a record with ETIUDA_PROFILE=release seen by the leg. A file named nowhere is still refused */
+    const relFile = path.join(lab.lab, "tests", "release-only.mjs");
+    fs.writeFileSync(relFile, "console.log('  ok   profile ' + process.env.ETIUDA_PROFILE);\nprocess.exit(0);\n", "utf8");
+    const pkgObj = JSON.parse(fs.readFileSync(path.join(lab.lab, "package.json"), "utf8"));
+    pkgObj.scripts.release = "node tests/release-only.mjs";
+    fs.writeFileSync(path.join(lab.lab, "package.json"), JSON.stringify(pkgObj, null, 2) + "\n", "utf8");
+    gitCmd(["add", "."], lab.lab, lab.gitEnv);
+    gitCmd(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "add release-only leg"], lab.lab, lab.gitEnv);
+
+    const rRel = runTool(lab, ["file", "tests/release-only.mjs"]);
+    const runsFiles = fs.existsSync(lab.runs) ? fs.readdirSync(lab.runs).filter(f => f.startsWith("tests-release-only-") && f.endsWith(".json")) : [];
+    const relRecord = runsFiles.length ? JSON.parse(fs.readFileSync(path.join(lab.runs, runsFiles[0]), "utf8")) : null;
+
+    fs.writeFileSync(path.join(lab.lab, "tests", "unnamed.mjs"), "console.log('unnamed');\nprocess.exit(0);\n", "utf8");
+    const rUnnamed = runTool(lab, ["file", "tests/unnamed.mjs"]);
+    const leg6Ok = rRel.exit === 0
+      && rRel.out.indexOf("profile release") >= 0
+      && !!relRecord
+      && relRecord.exit === 0
+      && rUnnamed.exit === 78
+      && rUnnamed.out.indexOf("no chain or gates-for names") >= 0;
+    check(leg6Ok, "6 (1) file mode on a lab leg named only by release profile runs with ETIUDA_PROFILE=release and writes record; unnamed refused");
+
+    /* 7 (2). A fingerprint stub that fails git once, then answers: no moved-tree verdict, and the gate's own exit stands */
+    const rStubOnce = runTool(lab, ["file", "tests/a.mjs"], { ETIUDA_GIT_STUB: "fail-once" });
+    const leg7Ok = rStubOnce.exit === 0 && rStubOnce.out.indexOf("the tree moved") < 0;
+    check(leg7Ok, "7 (2) fingerprint stub that fails git once then answers: no moved-tree verdict and gate exit stands");
+
+    /* 8 (3). A stub where git never answers: the run stops with the 'git did not answer' reason, and no moved-tree line */
+    const rStubNever = runTool(lab, ["file", "tests/a.mjs"], { ETIUDA_GIT_STUB: "never-after" });
+    const leg8Ok = rStubNever.exit === 78
+      && rStubNever.out.indexOf("git did not answer") >= 0
+      && rStubNever.out.indexOf("the tree moved") < 0;
+    check(leg8Ok, "8 (3) stub where git never answers: stops with git did not answer reason and no moved-tree line");
+
+    /* 9 (4). A real file written by a gate under the tree: still a moved-tree verdict (the control) */
+    const mutatorFile = path.join(lab.lab, "tests", "mutator.mjs");
+    fs.writeFileSync(mutatorFile,
+      "import fs from 'node:fs';\nfs.writeFileSync('tests/moved-sample.txt', 'mutated');\nconsole.log('  ok   mutator');\nprocess.exit(0);\n", "utf8");
+    pkgObj.scripts.mutator = "node tests/mutator.mjs";
+    fs.writeFileSync(path.join(lab.lab, "package.json"), JSON.stringify(pkgObj, null, 2) + "\n", "utf8");
+    gitCmd(["add", "."], lab.lab, lab.gitEnv);
+    gitCmd(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "add mutator"], lab.lab, lab.gitEnv);
+
+    const rMutator = runTool(lab, ["file", "tests/mutator.mjs"]);
+    try { fs.rmSync(path.join(lab.lab, "tests", "moved-sample.txt"), { force: true }); } catch {}
+    const leg9Ok = rMutator.exit === 78 && rMutator.out.indexOf("the tree moved") >= 0;
+    check(leg9Ok, "9 (4) a real file written by a gate under the tree: still a moved-tree verdict (the control)");
+
+    /* 10 (5). A planted removal of the method check turns leg 2 red, by the tree's plant convention, and honours ETIUDA_PLANTS=off */
+    if (PLANTS_OFF) {
+      skip("10 (5) planted removal of method check turns leg 7 red (ETIUDA_PLANTS=off)");
+    } else {
+      const toolFile = path.join(lab.lab, "tools", "gate-run.mjs");
+      const toolSrc = fs.readFileSync(toolFile, "utf8");
+      const PLANT_TAG = "/* plant:method-check */";
+      const hasPlant = toolSrc.includes(PLANT_TAG);
+      const plantedSrc = toolSrc.replace(/^[^\n]*\/\*\s*plant:method-check\s*\*\/[^\n]*$/m, "/* plant:method-check removed */");
+      fs.writeFileSync(toolFile, plantedSrc);
+
+      const rPlantMethod = runTool(lab, ["file", "tests/a.mjs"], { ETIUDA_GIT_STUB: "fail-once" });
+      fs.writeFileSync(toolFile, toolSrc);
+
+      const leg2TurnedRed = plantedSrc !== toolSrc && hasPlant && rPlantMethod.exit === 78 && rPlantMethod.out.indexOf("the tree moved") >= 0;
+      check(leg2TurnedRed, "10 (5) planted removal of method check turns leg 7 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
     }
   } finally {
     cleanLab(lab);

@@ -1054,17 +1054,47 @@ function walkInto(dir, prefix, out) {
   }
 }
 
-function treeFiles() {
-  let listed = "";
-  try {
-    listed = execFileSync("git", ["ls-files", "-z", "-c", "-o", "--exclude-standard"],
-      { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
-  } catch (e) { listed = ""; }
-  const names = [...new Set(listed.split("\0").filter(Boolean))];
-  if (names.length) return { how: "git ls-files -co --exclude-standard", files: names.sort(), unmerged: unmergedPaths() };
+function treeFiles(opts = {}) {
+  const retries = opts.retries || 0;
+  const delayMs = opts.delayMs || 250;
+  let listed = null;
+  let attempts = 0;
+  while (attempts <= retries) {
+    attempts++;
+    try {
+      if (process.env.ETIUDA_GIT_STUB) {
+        if (process.env.ETIUDA_GIT_STUB === "fail-once") {
+          if (!treeFiles._failedOnce) {
+            treeFiles._failedOnce = true;
+            throw new Error("stub: git failed once");
+          }
+        } else if (process.env.ETIUDA_GIT_STUB === "retry-after") {
+          if (opts.isAfterGate && attempts === 1) {
+            throw new Error("stub: git failed first attempt after gate");
+          }
+        } else if (process.env.ETIUDA_GIT_STUB === "never" || process.env.ETIUDA_GIT_STUB === "never-after") {
+          if (process.env.ETIUDA_GIT_STUB === "never" || opts.isAfterGate) {
+            throw new Error("stub: git never answers");
+          }
+        }
+      }
+      listed = execFileSync("git", ["ls-files", "-z", "-c", "-o", "--exclude-standard"],
+        { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+      break;
+    } catch (e) {
+      listed = null;
+      if (attempts <= retries) {
+        try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs); } catch (_) {}
+      }
+    }
+  }
+  if (listed !== null) {
+    const names = [...new Set(listed.split("\0").filter(Boolean))];
+    if (names.length) return { how: "git ls-files -co --exclude-standard", files: names.sort(), unmerged: unmergedPaths(), gitOk: true };
+  }
   const out = [];
   walkInto(ROOT, "", out);
-  return { how: "walk skipping .git, node_modules and .plant-hold", files: out.sort(), unmerged: 0 };
+  return { how: "walk skipping .git, node_modules and .plant-hold", files: out.sort(), unmerged: 0, gitOk: false };
 }
 
 function unmergedPaths() {
@@ -1075,8 +1105,8 @@ function unmergedPaths() {
   return new Set(listed.split("\0").filter(Boolean).map(l => l.slice(l.indexOf("\t") + 1))).size;
 }
 
-function fingerprint() {
-  const { how, files, unmerged } = treeFiles();
+function fingerprint(opts = {}) {
+  const { how, files, unmerged, gitOk } = treeFiles(opts);
   const per = new Map();
   const whole = crypto.createHash("sha256");
   let bytes = 0;
@@ -1088,7 +1118,7 @@ function fingerprint() {
     per.set(f, d);
     whole.update(f); whole.update("\0"); whole.update(d); whole.update("\0");
   }
-  return { how, hash: whole.digest("hex").slice(0, 16), count: files.length, bytes, per, unmerged };
+  return { how, hash: whole.digest("hex").slice(0, 16), count: files.length, bytes, per, unmerged, gitOk };
 }
 
 function movedFiles(before, after) {
@@ -1275,17 +1305,74 @@ async function main() {
 
     const gf = await loadGatesFor();
     const named = new Set();
+    const regularNamed = new Set();
     if (pkg && pkg.scripts) {
       for (const scriptName of Object.keys(pkg.scripts)) {
         for (const step of parseStepsFromScript(pkg, scriptName)) {
-          if (step.file) named.add(normRel(step.file).replace(/^\.\//, ""));
+          if (step.file) {
+            const norm = normRel(step.file).replace(/^\.\//, "");
+            named.add(norm);
+            if (scriptName !== "release" && scriptName !== "nightly") regularNamed.add(norm);
+          }
         }
       }
     }
     if (gf && gf.SCANS) {
       for (const key of Object.keys(gf.SCANS)) {
-        named.add(normRel(key).replace(/^\.\//, ""));
+        const norm = normRel(key).replace(/^\.\//, "");
+        named.add(norm);
+        regularNamed.add(norm);
       }
+    }
+
+    const profileNamed = new Set();
+    const nightlyOnlyNamed = new Set();
+    for (const n of NIGHTLY_LEGS) {
+      if (n.file) {
+        const norm = normRel(n.file).replace(/^\.\//, "");
+        profileNamed.add(norm);
+      }
+    }
+    for (const r of RELEASE_ONLY_LEGS) {
+      profileNamed.add(normRel(r).replace(/^\.\//, ""));
+    }
+    try {
+      for (const s of profileSteps(ROOT, pkg)) {
+        if (s.file) profileNamed.add(normRel(s.file).replace(/^\.\//, ""));
+      }
+    } catch {}
+    if (pkg && pkg.scripts) {
+      if (pkg.scripts.release) {
+        for (const step of parseStepsFromScript(pkg, "release")) {
+          if (step.file) profileNamed.add(normRel(step.file).replace(/^\.\//, ""));
+        }
+      }
+      if (pkg.scripts.nightly) {
+        for (const step of parseStepsFromScript(pkg, "nightly")) {
+          if (step.file) {
+            const norm = normRel(step.file).replace(/^\.\//, "");
+            profileNamed.add(norm);
+            if (!profileSteps(ROOT, pkg).some(s => normRel(s.file).replace(/^\.\//, "") === norm)) {
+              nightlyOnlyNamed.add(norm);
+            }
+          }
+        }
+      }
+    }
+    for (const f of profileNamed) named.add(f);
+
+    let hasProfileOnlyLeg = false;
+    let onlyNightlyLeg = false;
+    for (const raw of fileArgs) {
+      const slashNorm = raw.replace(/\\/g, "/");
+      const normPath = path.posix.normalize(slashNorm).replace(/^\.\//, "");
+      if (profileNamed.has(normPath) && !regularNamed.has(normPath)) {
+        hasProfileOnlyLeg = true;
+        if (nightlyOnlyNamed.has(normPath)) onlyNightlyLeg = true;
+      }
+    }
+    if (hasProfileOnlyLeg && !customEnv.ETIUDA_PROFILE) {
+      customEnv.ETIUDA_PROFILE = process.env.ETIUDA_PROFILE || (onlyNightlyLeg ? "nightly" : "release");
     }
 
     for (const raw of fileArgs) {
@@ -1388,7 +1475,7 @@ async function main() {
 
   const runStart = new Date().toISOString();
   const ordered = deferAlone(steps);
-  let worst = 0, written = 0, treeMoved = false, refusedAt = null;
+  let worst = 0, written = 0, treeMoved = false, refusedAt = null, gitFailedAt = null;
 
   if (mode === "area" && fs.existsSync(CHAINS_PATH)) {
     try {
@@ -1426,9 +1513,59 @@ async function main() {
     console.log("\n> " + step.cmd);
     if (!ranFiles.includes(stepFile(step))) ranFiles.push(stepFile(step));
     const res = await runStep(step, customEnv);
-    const after = fingerprint();
+    const after = fingerprint({ retries: 3, delayMs: 250, isAfterGate: true });
     tree = gitTree();
-    const moved = after.hash === before.hash ? [] : movedFiles(before, after);
+    const gitNoAnswer = before.gitOk && !after.gitOk;
+    if (gitNoAnswer) {
+      console.log("  FAIL git did not answer while " + gateName(step.file) + " ran");
+      worst = NO_VERDICT;
+      const { counts, from, clashed } = countsOf(res.out, NO_VERDICT);
+      const line = {
+        gate: gateName(step.file),
+        script: step.script,
+        cmd: step.cmd,
+        exit: NO_VERDICT,
+        gateExit: res.exit,
+        counts: counts,
+        countsFrom: from,
+        clash: clashed.length,
+        refused: "",
+        treeHash: after.hash,
+        treeFiles: after.count,
+        treeHow: after.how,
+        treeChanged: 0,
+        unmerged: after.unmerged,
+        gitTree: tree,
+        wallMs: res.wallMs,
+        commit: COMMIT,
+        dirty: DIRTY,
+        time: now.toISOString(),
+        run: runStart,
+        cause: "git did not answer while " + gateName(step.file) + " ran",
+      };
+      if (step.filePath) {
+        line.filePath = step.filePath;
+        line.fileBlob = gitBlobHash(step.filePath);
+      }
+      gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit });
+      redsList.push({
+        gate: gateName(step.file),
+        cmd: step.cmd,
+        exit: NO_VERDICT,
+        cause: "git did not answer while " + gateName(step.file) + " ran",
+        class: "hold",
+      });
+      const file = path.join(RUNS, line.gate + "-" + stamp(now) + ".json");
+      fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
+      written++;
+      console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
+                  + " exit " + line.exit + " in " + line.wallMs + " ms, tree " + line.treeHash + ", git tree " + line.gitTree);
+      gitFailedAt = { gate: line.gate, reason: "git did not answer while " + line.gate + " ran" };
+      break;
+    }
+
+    let moved = after.hash === before.hash ? [] : movedFiles(before, after);
+    if (before.how !== after.how) moved = []; /* plant:method-check */
     const verdict = moved.length ? NO_VERDICT : res.exit;
     const refused = res.exit === NO_VERDICT ? (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "" : "";
     const { counts, from, clashed } = countsOf(res.out, verdict);
@@ -1587,6 +1724,7 @@ async function main() {
               + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
               + ", tree " + before.hash + ", git tree " + tree
               + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
+                 : gitFailedAt ? ", NO VERDICT: " + gitFailedAt.reason
                  : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
                    + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
                  : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"

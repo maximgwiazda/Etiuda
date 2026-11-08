@@ -140,6 +140,8 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
+  /* Null outside an editor. Written in place: this function is sliced out and run on its own. */
+  edBaseline=null; edReturn=null;
   cutLeaves();
   /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
      and the next Tab starts from the top of the document. A dialog opened over another keeps
@@ -215,22 +217,15 @@ function edNavHtml(){
 /* Read off the CONTROLS rather than from each editor's own fields: three editors with
    different shapes all answer "has anything been typed" the same way, and a field added
    later is covered without being registered anywhere. */
-let edBaseline="";
-function edFields(){
-  if(!modalCard) return [];
-  const out=[];
-  ["input","textarea","select"].forEach(tag=>{
-    try {
-      const list=modalCard.querySelectorAll(tag);
-      if(list) for(let i=0;i<list.length;i++) out.push(list[i]);
-    } catch {}
-  });
-  return out;
-}
+/* Null outside an editor. An editor sets it when it wires; any other dialog is not an
+   edit, and must not be compared with the editor that stood here before. */
+let edBaseline=null;
+/* The editor's own way back, the go edWireNav already undoes through. */
+let edReturn=null;
 function edFormState(){
   if(!modalCard) return "";
   const out=[];
-  edFields().forEach(el=>{
+  modalCard.querySelectorAll("input,textarea,select").forEach(el=>{
     out.push((el.type==="checkbox"||el.type==="radio")?(el.checked?"1":"0"):String(el.value||""));
   });
   // segmented controls are buttons, not fields - the chosen one carries .on and its value
@@ -242,7 +237,7 @@ function edMarkClean(){ edBaseline=edFormState(); }
    segmented buttons carried .on. The same entry reopens in the same shape, so order is identity. */
 function edTyped(){
   if(!modalCard) return null;
-  return { fields:edFields()
+  return { fields:Array.from(modalCard.querySelectorAll("input,textarea,select"))
              .map(el=>(el.type==="checkbox"||el.type==="radio")?el.checked:String(el.value||"")),
            segs:Array.from(modalCard.querySelectorAll("[data-v]")).map(el=>el.classList.contains("on")) };
 }
@@ -250,14 +245,14 @@ function edRetype(was){
   if(!was || !modalCard) return;
   const segs=Array.from(modalCard.querySelectorAll("[data-v]"));
   segs.forEach((el,i)=>{ if(was.segs[i] && !el.classList.contains("on")) el.click(); });
-  edFields().forEach((el,i)=>{
+  Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el,i)=>{
     if(i>=was.fields.length) return;
     const v=was.fields[i];
     if(el.type==="checkbox"||el.type==="radio"){ if(el.checked!==v){ el.checked=v; el.dispatchEvent(new Event("change",{bubbles:true})); } }
     else if(String(el.value||"")!==v){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); }
   });
 }
-function edDirty(){ return edFormState()!==edBaseline; }
+function edDirty(){ return edBaseline!==null && edFormState()!==edBaseline; }
 /* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
    ends disable rather than wrap, so a dead arrow is how you know you are at one. */
 /* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves: the
@@ -279,6 +274,7 @@ function edNavTo(run){
 }
 function edWireNav(list,cur,go){
   edMarkClean();
+  edReturn={go:go, cur:cur};
   const i=list.indexOf(cur);
   const step=d=>{
     const j=i+d;
@@ -373,12 +369,14 @@ function setModalBack(fn){ modalBack=(typeof fn==="function")?fn:null; }
  *  would be worse than none. */
 function dismissModal(){
   /* plant:maintenance-unsaved-edit-guard */
-  if(edDirty() && typeof confirm==="function" && !confirm(t("Discard changes"))){
-    return false;
-  }
+  /* Leaving keeps the edit the way the next entry does: go back, and retype. */
+  const was=edDirty()?edTyped():null;
+  const ret=was?edReturn:null;
+  edBaseline=null; edReturn=null;
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
+  if(was && ret) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ ret.go(ret.cur); edRetype(was); }));
   return true;
 }
 /* A flex column with a scrolling middle, so the scrollbar sits beside the content it
@@ -418,6 +416,7 @@ function leaveModal(){
   dismissNode(g);
 }
 function closeModal(){
+  edBaseline=null; edReturn=null;
   scStopCapture();
   modalBack=null;
   leaveModal();
