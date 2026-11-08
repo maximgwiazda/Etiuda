@@ -2167,8 +2167,8 @@ function openStatsSealed(skR, doc, deskId) {
   } catch { return null; }
 }
 /* ---- an answer about a catalog the team does not list, sealed to the lead's box alone ---------------------
-   The statistics' envelope under a kind and a label of its own, so neither file opens as the other. Nothing in it is
-   signed: Studio lands an answer only where the catalog's own pin is one the lead asked for or the desk names in use. */
+   The statistics' envelope under a kind and a label of its own, so neither file opens as the other. The lead's box is
+   public, so the answer inside is signed by this desk under a prefix of its own, over the ask and the team it answers. */
 const ANSWER_LEAD_KIND = "etiuda-answer-sealed";
 const ANSWER_LEAD_LABEL = "etiuda-catalog-answer-lead\n";
 function answerLeadInfo(teamId, deskId) {
@@ -2183,6 +2183,23 @@ function sealAnswerLead(box, teamId, keyId, deskId, text) {
   const w = hpkeSeal(Buffer.from(String(box), "hex"), answerLeadInfo(teamId, deskId), Buffer.alloc(0), Buffer.from(text, "utf8"));
   return { format: 1, kind: ANSWER_LEAD_KIND, team: String(teamId), keyId: keyId,
     enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
+}
+const ANSWER_LEAD_PREFIX = "etiuda-catalog-answer\n";
+function answerLeadSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(ANSWER_LEAD_PREFIX, "utf8"), signedBytesOf(doc)]);
+}
+/* Whether an opened box answer is that folder's own: `keyHex` is the roster's desk.key for the folder's id, and that id,
+   the id the key makes and sig.keyId are one id. Which ask and team it answers is the reader's to compare. */
+function answerLeadGenuine(doc, folder, keyHex) {
+  const sig = doc && doc.sig;
+  try {
+    return !!folder && /^k-[0-9a-f]{16}$/.test(String(folder))
+      && /^[0-9a-f]{64}$/.test(String(keyHex)) && branchIdOf(String(keyHex)) === folder
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === folder && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && typeof doc.ask === "string" && !!doc.ask && typeof doc.team === "string" && !!doc.team
+      && crypto.verify(null, answerLeadSignedBytes(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(keyHex), "hex")]),
+        format: "der", type: "spki" }), Buffer.from(String(sig.value), "hex"));
+  } catch { return false; }
 }
 function openAnswerLead(skR, doc, deskId) {
   try {
@@ -3062,7 +3079,15 @@ function removeAnswer() {
   catch (e) { if (e.code !== "ENOENT") { heldAnswer = { remove: true }; return; } }
   if (heldAnswer && heldAnswer.remove) heldAnswer = null;
 }
-function writeAnswer(seal, pin, catalogDoc, toLead) {
+/* The box answer's text: the catalog, the ask and the team it answers, signed by this desk. Throws where it cannot sign. */
+function signedLeadAnswer(me, team, askId, pin, catalogDoc) {
+  const doc = { format: 1, kind: ANSWER_KIND, ask: String(askId), team: String(team), sha256: pin, catalog: catalogDoc,
+    sig: { alg: "Ed25519", keyId: me.id } };
+  doc.sig.value = branchSign(doc, answerLeadSignedBytes);
+  if (!/^[0-9a-f]{128}$/.test(String(doc.sig.value))) throw new Error("the answer could not be signed");
+  return JSON.stringify(doc);
+}
+function writeAnswer(seal, pin, catalogDoc, toLead, askId) {
   const me = branchIdentity(true);
   if (!me || !seal) return false;
   const root = sharedFolderForWrite();
@@ -3073,8 +3098,9 @@ function writeAnswer(seal, pin, catalogDoc, toLead) {
   for (const dir of [path.join(at.root, "desks"), at.dir]) {
     try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
   }
-  let env = sealCatalog(seal.key, seal.team, seal.epoch, inner);
-  if (toLead) env = sealAnswerLead(seal.box, seal.team, String(seal.lead.keyId), me.id, inner); /* plant:s0-answer-lead */
+  let env = null;
+  if (toLead) env = sealAnswerLead(seal.box, seal.team, String(seal.lead.keyId), me.id, signedLeadAnswer(me, seal.team, askId, pin, catalogDoc)); /* plant:s0-answer-lead */
+  if (!env) env = sealCatalog(seal.key, seal.team, seal.epoch, inner);
   writeReplacing(at.dest, JSON.stringify(env, null, 1) + "\n");
   return true;
 }
@@ -3139,7 +3165,7 @@ function tryCatalogAsk(win) {
     if (ask.sha256 !== pin && !listed) return;
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
     if (!listed && !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return;
-    if (!writeAnswer(use.seal, pin, doc, !listed)) { heldAnswer = { id: ask.id }; return; }
+    if (!writeAnswer(use.seal, pin, doc, !listed, ask.id)) { heldAnswer = { id: ask.id }; return; }
     rememberAsk(ask.id);
     heldAnswer = null;
     tellCopy(win, ask.id, !listed);

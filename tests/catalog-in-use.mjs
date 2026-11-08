@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 67;
+const EXPECTED = 70;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -52,7 +52,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
-  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt", "openAnswerLead"];
+  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt", "openAnswerLead", "answerLeadGenuine"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -1224,11 +1224,27 @@ try {
       join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
       const pin = askFor(box, name, quayBody, null);
       const ans = answerPath(box.share, box.me.id);
-      return { pin, ans, viaTeam: openSealedDoc(box.D, ans, box.key), viaLead: openLeadDoc(box.D, ans),
-        raw: fs.existsSync(ans) ? fs.readFileSync(ans, "utf8") : "" };
+      return { pin, ans, box, askId: "Ask" + name.replace(/[^A-Za-z0-9]/g, ""), viaTeam: openSealedDoc(box.D, ans, box.key),
+        viaLead: openLeadDoc(box.D, ans), raw: fs.existsSync(ans) ? fs.readFileSync(ans, "utf8") : "" };
     };
     {
       const u = await unlisted("s0-unlisted");
+      const sv = u.viaLead || {};
+      const genuine = u.box.D.api.answerLeadGenuine(sv, u.box.me.id, u.box.me.key);
+      const strayKey = crypto.generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+      const moved = JSON.parse(JSON.stringify(sv));
+      moved.ask = "Askelsewhere";
+      check(genuine && sv.ask === u.askId && sv.team === u.box.team && !!sv.sig && sv.sig.keyId === u.box.me.id
+          && !u.box.D.api.deskFileGenuine(sv, u.box.me.id) && !u.box.D.api.answerLeadGenuine(sv, u.box.me.id, strayKey)
+          && !u.box.D.api.answerLeadGenuine(moved, u.box.me.id, u.box.me.key),
+        "s0g the box answer is signed by this desk's key under the answer's own prefix, over the ask and the team it answers: it is no desk file, no other key verifies it, and it does not hold for another ask");
+      const listedBox = await arm("s0-listed-unsigned");
+      join(listedBox, 1, [entry(listedBox.D, listedBox.me, listedBox.key, listedBox.team, 1)], ["quay-held"]);
+      askFor(listedBox, "s0-listed-unsigned", quayBody, null);
+      const listedInner = openSealedDoc(listedBox.D, answerPath(listedBox.share, listedBox.me.id), listedBox.key);
+      check(!!listedInner && Object.keys(listedInner).sort().join(",") === "catalog,format,kind,sha256",
+        "s0i an answer under the team key keeps today's shape, unsigned, with no ask or team field (got "
+        + (listedInner ? Object.keys(listedInner).sort().join(",") : "nothing") + ")");
       check(!!u.pin && !u.viaTeam && !!u.viaLead && u.viaLead.sha256 === u.pin && JSON.stringify(u.viaLead).indexOf(S0_MARK) >= 0
           && u.raw.indexOf(S0_MARK) < 0,
         "s0b an answer about a catalog the team does not list is sealed to the lead's box: the lead opens it, a teammate's team key does not");
