@@ -12360,6 +12360,10 @@ What you type stays in this browser only.`;
   wireScreenTabsReturn((id) => {
     if (id && tabs.some((x) => x.id === id)) switchTab(id);
     else if (tabs[0]) switchTab(tabs[0].id);
+    try {
+      intentEl && intentEl.focus({ preventScroll: true });
+    } catch (_) {
+    }
   });
   function blankTab() {
     return {

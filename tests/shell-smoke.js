@@ -2697,8 +2697,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* Settings and the Library are screen tabs, not dialogs: Escape leaves a tab standing, and a tab
      closes by its cross or Ctrl+W and hands the screen back to the conversation. So the dialog legs
-     drive the Menu's dialog, About, and the tabs are read apart: open, closed, and no outline left
-     on the Menu button or on wherever the focus lands. */
+     drive the Menu's dialog, About, and the tabs are read apart: open, closed, the focus handed to
+     the search box so typing lands there, and no outline on the Menu button or on the box. */
   const SCREEN_OF = { settings: "settings", manage: "library" };
   const isOpen = act => rp.evaluate((a, sid) => sid ? screenOn === sid : !document.getElementById("modal").hidden,
     act, SCREEN_OF[act] || "");
@@ -2734,9 +2734,10 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(noRing));
   const tabRing = [await mouseTrip("manage", "esc"), await mouseTrip("manage", "x"),
                    await mouseTrip("settings", "esc"), await mouseTrip("settings", "x")];
-  check(tabRing.every(r => r.open && r.closed && !r.btn.ring && r.btn.outline === "none" && r.focus.outline === "none"),
-    "2n6 the Library and Settings tabs opened with the mouse close by Ctrl+W and by their cross, and"
-    + " leave no ring on the Menu button nor an outline where the focus lands: " + JSON.stringify(tabRing));
+  check(tabRing.every(r => r.open && r.closed && r.focus.on === "intent" && !r.btn.ring && r.btn.outline === "none"
+                           && r.focus.outline === "none"),
+    "2n6 the Library and Settings tabs opened with the mouse close by Ctrl+W and by their cross, hand the focus to"
+    + " the search box, and leave no ring on the Menu button nor an outline on the box: " + JSON.stringify(tabRing));
 
   /* THE SAME FAULT BY THE KEYBOARD (board 766). Before 1699689 a row closed the Menu before its
      dialog opened, and the dialog then had nothing to hand the focus back to: 6 of 6 trips opened
@@ -2773,9 +2774,11 @@ const placeEc = (dir, from, as, minutesOld) => {
                          && r.btn.outline === "none"),
     "2n5 a dialog opened from a Menu row by the keyboard gives the Menu button its focus back,"
     + " without an outline, whichever way it is closed: " + JSON.stringify(byKey));
-  check(tabKey.every(r => r.reached && r.open && r.closed && r.btn.outline === "none" && r.focus.outline === "none"),
+  check(tabKey.every(r => r.reached && r.open && r.closed && r.focus.on === "intent" && r.btn.outline === "none"
+                         && r.focus.outline === "none"),
     "2n7 the Settings and Library tabs opened from a Menu row by the keyboard close by Ctrl+W and by"
-    + " their cross, with no outline on the Menu button nor where the focus lands: " + JSON.stringify(tabKey));
+    + " their cross and hand the focus to the search box, with no outline on the Menu button nor on the box: "
+    + JSON.stringify(tabKey));
 
   /* THE OTHER HALF, and the one that makes the leg above a rule rather than a blanket
      suppression: what a dialog opened FROM THE KEYBOARD hands back. Maxim ruled on 2026-09-17
