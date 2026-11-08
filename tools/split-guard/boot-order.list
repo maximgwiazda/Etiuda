@@ -96,6 +96,8 @@ pick.wirePick()
 catalogFile.wireCatalogDrop()
 setTimeout()
 pops.wirePops()
+assign:let resizeRaf
+runResize()
 addEventListener:"resize"
 uiLang.translateChrome()
 railPanel.placeRailNow()
