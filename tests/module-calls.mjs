@@ -967,7 +967,7 @@ const CARD_B = {
         const plBubble = made.filter(n => n.id === "eTeamJoin" && !n.gone).pop();
         const plHtml = plBubble ? plBubble.innerHTML : "";
         const plHasName = plHtml.includes("Settings");
-        const plHasWords = plHtml.includes("zaszyfrowany") && plHtml.includes("Ukryj");
+        const plHasWords = plHtml.includes("zapieczętowany") && plHtml.includes("Ukryj");
 
         return eq(enHasName && enHasWords && plHasName && plHasWords, true);
       } finally {
