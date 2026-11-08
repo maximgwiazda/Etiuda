@@ -124,11 +124,13 @@ function deckDrawnBy(r, made){
    `made`, every card it drew, is what the records are held against, `drawn` where it is left out. */
 function deckSettle(drawn, made){
   if(!list||!deckOn()) return;
+  deckInitIO();
   const ms=deckObs ? deckObs.takeRecords() : [];
   if(!drawn){
     if(deckRaf){ cancelAnimationFrame(deckRaf); deckRaf=0; }
     deckScan();
   }else{
+    if(deckIO&&made) made.filter(c=>deckSlabs(c).length>1).forEach(c=>deckIO.observe(c)); /* plant:deck-io-rebuilt */
     deckMeasure(drawn.filter(c=>deckSlabs(c).length>1));
     if(ms.some(r=>r.type==="childList" && !deckDrawnBy(r, made||drawn))) deckLater();
   }
@@ -336,6 +338,8 @@ function wireDeck(){
 let deckSizeObs=null, deckWatching=false, deckIO=null;
 function deckInitIO(){
   if(typeof IntersectionObserver!=="function"||deckIO) return;
+  let ioOpts={root:null, rootMargin:"0px"};
+  if(list&&list.closest) ioOpts={root:list.closest(".scroller"), rootMargin:"100% 0px"}; /* plant:deck-io-root */
   deckIO=new IntersectionObserver(entries=>{
     const todo=[];
     for(const entry of entries){
@@ -343,7 +347,7 @@ function deckInitIO(){
       if(entry.isIntersecting){
         if(!c.classList.contains("deck-near")){
           c.classList.add("deck-near");
-          if(deckSlabs(c).length>=2) todo.push(c);
+          if(deckSlabs(c).length>=2) todo.push(c); /* plant:deck-io-measure */
         }
       }else{
         if(!c.classList.contains("deck-open")&&!c.classList.contains("deck-up")){
@@ -352,7 +356,10 @@ function deckInitIO(){
       }
     }
     if(todo.length) deckMeasure(todo);
-  },{rootMargin:"800px 0px"});
+  },ioOpts);
+}
+function deckUnobserve(el){
+  if(deckIO&&el) deckIO.unobserve(el);
 }
 // The sheet's half of the switch: body.deck-off takes the fade's transition off every card.
 function deckClass(on){ try{ document.body.classList.toggle("deck-off",!on); }catch(e){} }
@@ -395,6 +402,7 @@ export {
   deckFade,
   deckScan,
   deckSettle,
+  deckUnobserve,
   deckOn,
   syncDeck,
   wireDeck,

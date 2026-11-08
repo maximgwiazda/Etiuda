@@ -2,7 +2,7 @@ import { nextContentLang } from "./content-model.js";
 import { cardBodyHtml } from "./card-body.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
-import { deckSettle } from "./deck.js";
+import { deckSettle, deckUnobserve } from "./deck.js";
 import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
@@ -79,6 +79,7 @@ function rebuildCardInPlace(id,near){
     +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
+  deckUnobserve(el);
   el.replaceWith(fresh);
   if(near) holdFresh(fresh);   // see the note at holdFresh()
   cardPool.set(id,fresh);

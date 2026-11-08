@@ -9100,7 +9100,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-04";
+  var E_BUILT = "2026-11-08";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -10268,6 +10268,7 @@ What you type stays in this browser only.`;
     deckReach: () => deckReach,
     deckScan: () => deckScan,
     deckSettle: () => deckSettle,
+    deckUnobserve: () => deckUnobserve,
     syncDeck: () => syncDeck,
     wireDeck: () => wireDeck
   });
@@ -10415,6 +10416,7 @@ What you type stays in this browser only.`;
   }
   function deckSettle(drawn, made) {
     if (!list || !deckOn()) return;
+    deckInitIO();
     const ms = deckObs ? deckObs.takeRecords() : [];
     if (!drawn) {
       if (deckRaf) {
@@ -10423,6 +10425,7 @@ What you type stays in this browser only.`;
       }
       deckScan();
     } else {
+      if (deckIO && made) made.filter((c) => deckSlabs(c).length > 1).forEach((c) => deckIO.observe(c));
       deckMeasure(drawn.filter((c) => deckSlabs(c).length > 1));
       if (ms.some((r) => r.type === "childList" && !deckDrawnBy(r, made || drawn))) deckLater();
     }
@@ -10623,6 +10626,8 @@ What you type stays in this browser only.`;
   var deckIO = null;
   function deckInitIO() {
     if (typeof IntersectionObserver !== "function" || deckIO) return;
+    let ioOpts = { root: null, rootMargin: "0px" };
+    if (list && list.closest) ioOpts = { root: list.closest(".scroller"), rootMargin: "100% 0px" };
     deckIO = new IntersectionObserver((entries) => {
       const todo = [];
       for (const entry of entries) {
@@ -10639,7 +10644,10 @@ What you type stays in this browser only.`;
         }
       }
       if (todo.length) deckMeasure(todo);
-    }, { rootMargin: "800px 0px" });
+    }, ioOpts);
+  }
+  function deckUnobserve(el) {
+    if (deckIO && el) deckIO.unobserve(el);
   }
   function deckClass(on) {
     try {
@@ -21409,6 +21417,7 @@ What you type stays in this browser only.`;
     fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
+    deckUnobserve(el);
     el.replaceWith(fresh);
     if (near) holdFresh(fresh);
     cardPool.set(id, fresh);
