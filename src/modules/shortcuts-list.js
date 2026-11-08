@@ -3,9 +3,12 @@ import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 
 /* The list, its capture handling and its reset are ONE component, rendered into whatever
-   container asks - the Settings accordion today, any future surface tomorrow - so a
-   rebinding made anywhere behaves identically. */
-function shortcutsListHtml(){
+   container asks, so a rebinding made anywhere behaves identically. A search narrows it to
+   the actions whose name or hint holds the words, already folded to lower case without accents. */
+function scFold(s){ return String(s||"").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function scMatch(d,q){ return !q || scFold(t(d.label)+" "+(d.hint?t(d.hint):"")).indexOf(q)>=0; }
+function shortcutsShown(q){ return SC_DEFS.filter(d=>scMatch(d,q)).length; }
+function shortcutsListHtml(q){
   const bind=(d,slot)=>{
     const fixed=!!d.fixed, listening=scCaptureId===d.id&&scCaptureSlot===slot;
     const c=slot===2?scChord2(d.id):scChord(d.id), empty=!c||(!c.code&&!c.key);
@@ -26,11 +29,11 @@ function shortcutsListHtml(){
      explanation a per-row tooltip could not give: tooltips on disabled buttons never reach
      keyboard or touch users, and the WHY is one fact shared by all of these, so it is said
      once, visibly, where the group starts. Render-level split only; SC_DEFS keeps its order. */
-  return SC_DEFS.filter(d=>!d.fixed).map(row).join("")+
-    '<div class="sc-sep">'+esc(t("Fixed keys"))+
+  const fixed=SC_DEFS.filter(d=>d.fixed && scMatch(d,q));
+  return SC_DEFS.filter(d=>!d.fixed && scMatch(d,q)).map(row).join("")+
+    (fixed.length ? '<div class="sc-sep">'+esc(t("Fixed keys"))+
       '<small>'+esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord."))+'</small>'+
-    '</div>'+
-    SC_DEFS.filter(d=>d.fixed).map(row).join("");
+    '</div>'+fixed.map(row).join("") : "");
 }
 /* The capture state is the list's rather than the chord model's: what it is listening
    for, and for which of the two slots. */
@@ -40,10 +43,10 @@ var scCaptureId=null, scCaptureSlot=1;
 /* Whichever surface last painted the list owns the repaint - a rebinding must repaint in
    place, never throw the user into a different screen on a keystroke. */
 let scRepaint=null;
-function wireShortcutsList(box, repaint){
+function wireShortcutsList(box, repaint, q){
   if(!box) return;
   scRepaint=repaint;
-  box.innerHTML=shortcutsListHtml();
+  box.innerHTML=shortcutsListHtml(q||"");
   box.querySelectorAll("[data-bind]").forEach(btn=>{
     if(btn.disabled) return;
     btn.onclick=()=>{
@@ -59,11 +62,16 @@ function wireShortcutsList(box, repaint){
    that ends a capture asks for it here. It stops the listening and nothing else - the repaint
    belongs to whoever is painting, and two of the five callers do not repaint. */
 function scStopCapture(){ scCaptureId=null; }
+/* Whether a list is on screen to capture into: the Settings tab draws it, and leaving the tab removes it. */
+function scListShown(){ return typeof document!=="undefined" && !!document.getElementById("scListInline"); }
 
 export {
   scCaptureId,
   scCaptureSlot,
   scRepaint,
   scStopCapture,
+  scFold,
+  scListShown,
+  shortcutsShown,
   wireShortcutsList
 };

@@ -3444,6 +3444,59 @@ body.screen-on #lanes { display: none !important; }
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
 .screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)}
+/* ---------- The Settings screen tab: the section list beside one section's page ---------- */
+/* On the desk's own tokens, never glass. The selected section is one class and the three --sx-sel tokens, so its
+   treatment changes in one place: a soft fill of the accent with a fine ring of it, the name bold, the icon in the accent. */
+.sx{--sx-acc:var(--accent);--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 11%,transparent);
+  --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 16%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 3.5%,transparent);
+  flex:1 1 auto;min-height:0;display:flex;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
+:root:not([data-theme=light]) .sx{--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 20%,transparent);
+  --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 26%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 4%,transparent)}
+.sx *{box-sizing:border-box}
+.sx-ic{display:block;width:18px;height:18px;flex:0 0 auto}
+.sx-nav{flex:0 0 248px;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
+  background:var(--header-bg);border-right:1px solid var(--line)}
+.sx-nav h1{font:300 26px/1.1 var(--sans-display);margin:4px 10px 14px}
+.sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--field-line);
+  border-bottom-color:var(--field-edge);border-radius:var(--radius-xs);background:var(--field);color:var(--dim)}
+.sx-search:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
+.sx-search .sx-ic{width:15px;height:15px}
+.sx-search input{flex:1 1 auto;min-width:0;padding:7px 0;border:0;outline:0;background:transparent;color:var(--ink);
+  font:13.5px var(--sans);cursor:text}
+.sx-secs{display:flex;flex-direction:column;gap:2px}
+.sx-sec{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-xs);
+  background:transparent;color:var(--ink);font:14px var(--sans);text-align:left}
+.sx-sec .sx-ic{color:var(--dim)}
+.sx-sec:hover{background:var(--sx-hover)}
+.sx-sec.on{background:var(--sx-sel-fill);box-shadow:inset 0 0 0 1px var(--sx-sel-ring);font-weight:600}
+.sx-sec.on .sx-ic{color:var(--sx-acc)}
+.sx-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.sx-maint{padding:6px 10px;border:0;border-radius:var(--radius-xs);background:transparent;color:var(--dim);font:12.5px var(--sans)}
+.sx-maint:hover{background:var(--sx-hover);color:var(--ink)}
+.sx kbd{font:11.5px var(--mono);padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px}
+.sx-page{flex:1 1 auto;min-width:0;overflow-y:auto;padding:24px 32px 32px}
+.sx-crumb{color:var(--dim);font-size:13px;margin-bottom:2px}
+.sx-page h2{font:300 30px/1.15 var(--sans-display);margin:0 0 4px}
+.sx-page .lede{color:var(--dim);font-size:14px;margin:0 0 20px}
+.sx-group{margin:0 0 20px}
+.sx-group h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+.sx-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
+.sx .set-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:4px 14px;min-height:60px;
+  padding:12px 16px;border:0;border-top:1px solid var(--line)}
+.sx .set-row:first-child{border-top:0}
+.sx .set-row>.sx-ic{grid-column:1;width:20px;height:20px;color:var(--dim)}
+.sx .set-label{grid-column:2;font-weight:600}
+.sx .set-label small{font-weight:400}
+.sx .set-ctl{grid-column:3;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
+.sx .sc-list{max-height:none;overflow:visible;gap:0;margin:0}
+.sx .sc-row{padding:10px 16px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+.sx .sc-list>.sc-row:first-child{border-top:0}
+.sx .sc-sep{margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
+.sx-note{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 2px 0;color:var(--dim);font-size:12.5px}
+.sx-keys{display:inline-flex;gap:4px}
+.sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
+.sx-none{margin:12px 0;color:var(--dim)}
+.mt-moved{margin:12px 0 0;color:var(--dim);font-size:12.5px}
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
@@ -6556,8 +6609,8 @@ What you type stays in this browser only.`;
     return { l: boxL - ink.left > CUT_EPS, r: ink.right - boxR > CUT_EPS };
   }
   function titleSides(el, acts, ink, cs) {
-    const row = el.parentNode, rs = getComputedStyle(row), gap = parseFloat(rs.columnGap) || 0;
-    let end = row.getBoundingClientRect().right - parseFloat(rs.borderRightWidth) - parseFloat(rs.paddingRight);
+    const row2 = el.parentNode, rs = getComputedStyle(row2), gap = parseFloat(rs.columnGap) || 0;
+    let end = row2.getBoundingClientRect().right - parseFloat(rs.borderRightWidth) - parseFloat(rs.paddingRight);
     for (let n = el.nextElementSibling; n && n !== acts; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
     const card = el.closest(".card");
     const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden"));
@@ -7498,6 +7551,25 @@ What you type stays in this browser only.`;
     "Hide categories": "Ukryj kategorie",
     "Show categories": "Pokaż kategorie",
     "Settings": "Ustawienia",
+    "General": "Ogólne",
+    "Notifications": "Powiadomienia",
+    "Teams and keys": "Zespoły i klucze",
+    "Data and defaults": "Dane i ustawienia domyślne",
+    "About": "O programie",
+    "Search settings": "Szukaj w ustawieniach",
+    'No setting found for "{TEXT}".': 'Nie znaleziono ustawienia: "{TEXT}".',
+    "Your name, the language, and how Etiuda starts and closes.": "Imię agenta, język oraz sposób uruchamiania i zamykania Etiudy.",
+    "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
+    "How the screen is laid out.": "Jak rozłożony jest ekran.",
+    "Every shortcut, and how to change it.": "Wszystkie skróty i sposób ich zmiany.",
+    "What the app tells you, also while its window is closed.": "O czym program powiadamia, także gdy jego okno jest zamknięte.",
+    "The team this desk is on, and how its changes reach the team.": "Zespół tego stanowiska i sposób, w jaki jego zmiany trafiają do zespołu.",
+    "Putting settings back, and what the app keeps on this computer.": "Przywracanie ustawień i to, co program przechowuje na tym komputerze.",
+    "The version, the licence and the tour.": "Wersja, licencja i przewodnik.",
+    "Any shortcut can be changed; the keys Etiuda itself needs are shown as fixed.": "Każdy skrót można zmienić; klawisze, których Etiuda potrzebuje sama, są oznaczone jako stałe.",
+    "Puts every setting back as it ships. Cards and your edits are not touched.": "Przywraca wszystkie ustawienia do stanu wyjściowego. Karty i własne zmiany zostają bez zmian.",
+    "What this computer reports, and ways to set things right.": "Co raportuje ten komputer i jak przywrócić porządek.",
+    "Reset defaults and Clear local memory are in Settings, under Data and defaults.": "Przywróć domyślne i Wyczyść pamięć lokalną są w Ustawieniach, w części Dane i ustawienia domyślne.",
     "The language of the buttons and menus, not of the replies: those follow EN|PL in the header": "Język przycisków i menu, nie odpowiedzi: ich język zmienia przełącznik EN|PL w nagłówku",
     "Appearance": "Wygląd",
     "Theme": "Motyw",
@@ -8150,11 +8222,11 @@ What you type stays in this browser only.`;
     pairs((b) => {
       const out = {};
       Object.keys(b.p).forEach((a) => {
-        const row = b.p[a];
-        if (!(a in to) || !row || typeof row !== "object") return;
+        const row2 = b.p[a];
+        if (!(a in to) || !row2 || typeof row2 !== "object") return;
         const r = out[to[a]] = {};
-        Object.keys(row).forEach((z) => {
-          if (z in to) r[to[z]] = row[z];
+        Object.keys(row2).forEach((z) => {
+          if (z in to) r[to[z]] = row2[z];
         });
       });
       b.p = out;
@@ -8183,8 +8255,8 @@ What you type stays in this browser only.`;
     if (!from || !to || String(from) === String(to)) return;
     const b = statsDay(pack2, at), a = statsIdAt(pack2, String(from)), z = statsIdAt(pack2, String(to));
     if (!b.p || typeof b.p !== "object" || Array.isArray(b.p)) b.p = {};
-    const row = b.p[a] && typeof b.p[a] === "object" ? b.p[a] : b.p[a] = {};
-    row[z] = (row[z] | 0) + 1;
+    const row2 = b.p[a] && typeof b.p[a] === "object" ? b.p[a] : b.p[a] = {};
+    row2[z] = (row2[z] | 0) + 1;
   }
   function bumpIntent(pack2, id, at) {
     if (!id) return;
@@ -8234,15 +8306,15 @@ What you type stays in this browser only.`;
         }
       });
       if (p && typeof p === "object") Object.keys(p).forEach((a) => {
-        const row = p[a];
-        if (row && typeof row === "object" && keep(ids[a])) {
-          Object.keys(row).forEach((z) => {
+        const row2 = p[a];
+        if (row2 && typeof row2 === "object" && keep(ids[a])) {
+          Object.keys(row2).forEach((z) => {
             if (!keep(ids[z])) {
-              delete row[z];
+              delete row2[z];
               n++;
             }
           });
-          if (!Object.keys(row).length) delete p[a];
+          if (!Object.keys(row2).length) delete p[a];
         } else {
           delete p[a];
           n++;
@@ -8292,9 +8364,9 @@ What you type stays in this browser only.`;
     const a = ids.indexOf(String(from)), first = statsDayBefore(day, STATS_PAIR_DAYS - 1), seen = /* @__PURE__ */ new Map();
     if (a < 0) return [];
     Object.keys(days).forEach((d) => {
-      const p = STATS_YMD.test(d) && d >= first && d <= day && days[d] && days[d].p, row = p && p[a];
-      if (row && typeof row === "object") Object.keys(row).forEach((z) => {
-        const id = ids[z], n = row[z] | 0;
+      const p = STATS_YMD.test(d) && d >= first && d <= day && days[d] && days[d].p, row2 = p && p[a];
+      if (row2 && typeof row2 === "object") Object.keys(row2).forEach((z) => {
+        const id = ids[z], n = row2[z] | 0;
         if (id == null || n <= 0 || String(id) === String(from)) return;
         const o = seen.get(String(id)) || { id: String(id), n: 0, last: "" };
         o.n += n;
@@ -8345,9 +8417,9 @@ What you type stays in this browser only.`;
         misses += b.m | 0;
         const bp = b.p && typeof b.p === "object" ? b.p : {};
         Object.keys(bp).forEach((a) => {
-          const row = bp[a] && typeof bp[a] === "object" ? bp[a] : {};
-          Object.keys(row).forEach((z) => {
-            const f = ids[a], t2 = ids[z], n = row[z] | 0;
+          const row2 = bp[a] && typeof bp[a] === "object" ? bp[a] : {};
+          Object.keys(row2).forEach((z) => {
+            const f = ids[a], t2 = ids[z], n = row2[z] | 0;
             if (f == null || t2 == null || n <= 0 || String(f) === String(t2)) return;
             const k = JSON.stringify([String(f), String(t2)]);
             const o = pr.get(k) || { from: String(f), to: String(t2), n: 0 };
@@ -8362,9 +8434,9 @@ What you type stays in this browser only.`;
     Object.keys(uc).forEach((id) => {
       const n = uc[id] | 0;
       if (!n) return;
-      const row = { id: String(id), n };
-      if (at[id]) row.at = String(at[id]);
-      cards2.push(row);
+      const row2 = { id: String(id), n };
+      if (at[id]) row2.at = String(at[id]);
+      cards2.push(row2);
     });
     const intents = [];
     Object.keys(ic).forEach((id) => {
@@ -8494,8 +8566,8 @@ What you type stays in this browser only.`;
     lead.textContent = t("The saved card arrangement could not be read.");
     const body = document.createElement("span");
     body.textContent = " " + t("This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh.");
-    const row = document.createElement("div");
-    row.style.marginTop = "10px";
+    const row2 = document.createElement("div");
+    row2.style.marginTop = "10px";
     const reset = document.createElement("button");
     reset.id = "eMigrateReset";
     reset.textContent = t("Reset personal data");
@@ -8504,11 +8576,11 @@ What you type stays in this browser only.`;
     hide.id = "eMigrateHide";
     hide.textContent = t("Dismiss");
     hide.style.cssText = "font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px";
-    row.appendChild(reset);
-    row.appendChild(hide);
+    row2.appendChild(reset);
+    row2.appendChild(hide);
     d.appendChild(lead);
     d.appendChild(body);
-    d.appendChild(row);
+    d.appendChild(row2);
     (document.body || document.documentElement).appendChild(d);
     reset.onclick = () => {
       try {
@@ -8571,8 +8643,8 @@ What you type stays in this browser only.`;
     say.appendChild(b);
     say.appendChild(document.createTextNode(" " + body));
     d.appendChild(say);
-    const row = document.createElement("div");
-    row.className = "tour-actions";
+    const row2 = document.createElement("div");
+    row2.className = "tour-actions";
     if (act) {
       const go = document.createElement("button");
       go.type = "button";
@@ -8582,7 +8654,7 @@ What you type stays in this browser only.`;
         dropNotice(d);
         act.run();
       };
-      row.appendChild(go);
+      row2.appendChild(go);
     }
     const x = document.createElement("button");
     x.type = "button";
@@ -8592,8 +8664,8 @@ What you type stays in this browser only.`;
       dropNotice(d);
       if (onDismiss) onDismiss();
     };
-    row.appendChild(x);
-    d.appendChild(row);
+    row2.appendChild(x);
+    d.appendChild(row2);
     box.appendChild(d);
     return d;
   }
@@ -9936,7 +10008,7 @@ What you type stays in this browser only.`;
       taken[t2.id] = 1;
     });
     for (let i = 0; i < n; i++) {
-      const row = {};
+      const row2 = {};
       Object.keys(REQ_KEY).forEach((f) => {
         const map = {};
         codes.forEach((code) => {
@@ -9944,7 +10016,7 @@ What you type stays in this browser only.`;
           const v = key && Array.isArray(iv[key]) ? v2Str(iv[key][i]).trim() : "";
           if (v) map[code] = v;
         });
-        if (Object.keys(map).length) row[f] = map;
+        if (Object.keys(map).length) row2[f] = map;
       });
       let id = v2Str(declared[i]).trim();
       if (!id || taken[id]) {
@@ -9954,7 +10026,7 @@ What you type stays in this browser only.`;
       }
       taken[id] = 1;
       reqIds.push(id);
-      tags.push(Object.assign({ id, kind: "request" }, row));
+      tags.push(Object.assign({ id, kind: "request" }, row2));
     }
     const cards2 = (c.cards || []).map((m, i) => {
       const card = { id: v2Str(m.id) || "c-" + i, shelf: v2Str(m.c) };
@@ -15255,9 +15327,9 @@ What you type stays in this browser only.`;
   }
   var eBandRO = null;
   function syncBandHeight() {
-    const row = $(".row");
-    if (!row) return;
-    const h = Math.round(row.getBoundingClientRect().height);
+    const row2 = $(".row");
+    if (!row2) return;
+    const h = Math.round(row2.getBoundingClientRect().height);
     if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
   }
   function eBandPale(hex2) {
@@ -15386,8 +15458,8 @@ What you type stays in this browser only.`;
       syncBandHeight();
       try {
         eBandRO = new ResizeObserver(syncBandHeight);
-        const row = $(".row");
-        if (row) eBandRO.observe(row);
+        const row2 = $(".row");
+        if (row2) eBandRO.observe(row2);
       } catch (e) {
         addEventListener("resize", syncBandHeight, { passive: true });
       }
@@ -15590,7 +15662,7 @@ What you type stays in this browser only.`;
   }
   function joinShown(j) {
     if (!j || !(j.file || j.state)) return null;
-    const row = {
+    const row2 = {
       file: String(j.file || ""),
       state: String(j.state || ""),
       code: String(j.code || ""),
@@ -15598,20 +15670,20 @@ What you type stays in this browser only.`;
       name: String(j.name || ""),
       team: String(j.team || "")
     };
-    if (j.invite && typeof j.invite === "object") row.invite = Object.assign(
+    if (j.invite && typeof j.invite === "object") row2.invite = Object.assign(
       { lead: String(j.invite.lead || ""), relay: String(j.invite.relay || "") },
       j.invite.wrapped ? { wrapped: true } : {},
       j.invite.open === true ? { open: true } : {}
     );
-    if (j.withdrawn === true) row.withdrawn = true;
-    if (j.withdrawing === true) row.withdrawing = true;
-    if (j.unkept === true) row.unkept = true;
-    if (j.readonly === true) row.readonly = true;
-    if (j.keeps === false) row.keeps = false;
-    if (j.left === true) row.left = true;
-    if (j.doubted === true) row.doubted = true;
-    if (j.paused === true) row.paused = true;
-    return row;
+    if (j.withdrawn === true) row2.withdrawn = true;
+    if (j.withdrawing === true) row2.withdrawing = true;
+    if (j.unkept === true) row2.unkept = true;
+    if (j.readonly === true) row2.readonly = true;
+    if (j.keeps === false) row2.keeps = false;
+    if (j.left === true) row2.left = true;
+    if (j.doubted === true) row2.doubted = true;
+    if (j.paused === true) row2.paused = true;
+    return row2;
   }
   function syncJoinDoor() {
     try {
@@ -15776,7 +15848,7 @@ What you type stays in this browser only.`;
       join: joinShown(s.join),
       askRefused: s.askRefused || s.refused || null,
       leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => {
-        const row = {
+        const row2 = {
           team: String(l.team),
           print: String(l.print || ""),
           admitted: l.admitted === true,
@@ -15786,18 +15858,18 @@ What you type stays in this browser only.`;
           removed: l.removed === true,
           policy: l.policy === true
         };
-        if (typeof l.relay === "string" && l.relay) row.relay = String(l.relay);
-        if (l.relayRemoved === true) row.relayRemoved = true;
+        if (typeof l.relay === "string" && l.relay) row2.relay = String(l.relay);
+        if (l.relayRemoved === true) row2.relayRemoved = true;
         const head = headKept(l.head);
-        if (head) row.head = head;
+        if (head) row2.head = head;
         const lapse = lapseKept(l.lapse);
-        if (lapse) row.lapse = lapse;
+        if (lapse) row2.lapse = lapse;
         const fork = forkKept(l.fork);
-        if (fork) row.fork = fork;
-        if (l.stranded && typeof l.stranded === "object") row.stranded = { seen: l.stranded.seen === true };
-        if (l.needsFolder === true) row.needsFolder = true;
-        if (typeof l.reading === "string" && l.reading) row.reading = String(l.reading);
-        return row;
+        if (fork) row2.fork = fork;
+        if (l.stranded && typeof l.stranded === "object") row2.stranded = { seen: l.stranded.seen === true };
+        if (l.needsFolder === true) row2.needsFolder = true;
+        if (typeof l.reading === "string" && l.reading) row2.reading = String(l.reading);
+        return row2;
       }) : []
     };
     if (s.joined && s.joined.file) {
@@ -16138,8 +16210,8 @@ What you type stays in this browser only.`;
     return Promise.resolve(null);
   }
   function teamReadingLine() {
-    const row = (joinNow && joinNow.leads || []).filter((l) => typeof l.reading === "string" && l.reading)[0];
-    return row ? String(row.reading) : "";
+    const row2 = (joinNow && joinNow.leads || []).filter((l) => typeof l.reading === "string" && l.reading)[0];
+    return row2 ? String(row2.reading) : "";
   }
   function teamReadingEmptyHtml() {
     const line = teamReadingLine();
@@ -16477,29 +16549,42 @@ What you type stays in this browser only.`;
   __export(shortcuts_list_exports, {
     scCaptureId: () => scCaptureId,
     scCaptureSlot: () => scCaptureSlot,
+    scFold: () => scFold,
+    scListShown: () => scListShown,
     scRepaint: () => scRepaint,
     scStopCapture: () => scStopCapture,
+    shortcutsShown: () => shortcutsShown,
     wireShortcutsList: () => wireShortcutsList
   });
-  function shortcutsListHtml() {
+  function scFold(s) {
+    return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+  function scMatch(d, q) {
+    return !q || scFold(t(d.label) + " " + (d.hint ? t(d.hint) : "")).indexOf(q) >= 0;
+  }
+  function shortcutsShown(q) {
+    return SC_DEFS.filter((d) => scMatch(d, q)).length;
+  }
+  function shortcutsListHtml(q) {
     const bind = (d, slot) => {
-      const fixed = !!d.fixed, listening = scCaptureId === d.id && scCaptureSlot === slot;
+      const fixed2 = !!d.fixed, listening = scCaptureId === d.id && scCaptureSlot === slot;
       const c = slot === 2 ? scChord2(d.id) : scChord(d.id), empty = !c || !c.code && !c.key;
       const shown2 = slot === 2 ? formatChord(c) : formatActionChord(d.id);
-      return '<button type="button" class="sc-bind' + (fixed ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
+      return '<button type="button" class="sc-bind' + (fixed2 ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed2 ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
     };
-    const row = (d) => {
+    const row2 = (d) => {
       return '<div class="sc-row" data-sc="' + esc(d.id) + '"><div class="sc-label">' + esc(t(d.label)) + (d.hint ? "<small>" + esc(t(d.hint)) + "</small>" : "") + '</div><div class="sc-binds">' + bind(d, 1) + (d.fixed ? "" : bind(d, 2)) + "</div></div>";
     };
-    return SC_DEFS.filter((d) => !d.fixed).map(row).join("") + '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" + SC_DEFS.filter((d) => d.fixed).map(row).join("");
+    const fixed = SC_DEFS.filter((d) => d.fixed && scMatch(d, q));
+    return SC_DEFS.filter((d) => !d.fixed && scMatch(d, q)).map(row2).join("") + (fixed.length ? '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" + fixed.map(row2).join("") : "");
   }
   var scCaptureId = null;
   var scCaptureSlot = 1;
   var scRepaint = null;
-  function wireShortcutsList(box, repaint) {
+  function wireShortcutsList(box, repaint, q) {
     if (!box) return;
     scRepaint = repaint;
-    box.innerHTML = shortcutsListHtml();
+    box.innerHTML = shortcutsListHtml(q || "");
     box.querySelectorAll("[data-bind]").forEach((btn) => {
       if (btn.disabled) return;
       btn.onclick = () => {
@@ -16512,6 +16597,9 @@ What you type stays in this browser only.`;
   }
   function scStopCapture() {
     scCaptureId = null;
+  }
+  function scListShown() {
+    return typeof document !== "undefined" && !!document.getElementById("scListInline");
   }
 
   // src/modules/dialog.js
@@ -16994,8 +17082,8 @@ What you type stays in this browser only.`;
           words = [title && title.textContent, tag && tag.textContent, body].filter(Boolean).join(". ");
         }
       } else if (markSurface() === "intent") {
-        const row = document.querySelector("#intentRailList .rail-item.rail-kbd");
-        const name = row && (row.querySelector(".rail-t") || row);
+        const row2 = document.querySelector("#intentRailList .rail-item.rail-kbd");
+        const name = row2 && (row2.querySelector(".rail-t") || row2);
         words = name ? String(name.textContent || "").trim() : "";
       }
       if (out.textContent !== words) out.textContent = words;
@@ -17459,7 +17547,7 @@ What you type stays in this browser only.`;
       if (!own()) return rows.length || catIds.length ? n + NX_DOT + t("the catalog's") : n;
       return n + NX_DOT + t(changed() ? "yours; the catalog's has changed" : "yours");
     }
-    function rowHtml(e, i) {
+    function rowHtml2(e, i) {
       const m = live.get(e.to), added = own() && catIds.indexOf(e.to) < 0, key = i < NEXT_KEYS ? formatActionChord("nextCopy" + (i + 1)) : "";
       return '<li class="nx-row' + (added ? " nx-new" : "") + '" data-to="' + esc(e.to) + '"><button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>' + (key && key !== "-" ? '<kbd class="nx-key">' + esc(key) + "</kbd>" : "") + '<span class="nx-t">' + esc(m ? cardTitle(m) : e.to) + "</span>" + (m && cardCommits(m) ? stampHtml("nx-stamp") : "") + (added ? '<span class="nx-tag">' + esc(t("added")) + "</span>" : "") + '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button></li>";
     }
@@ -17477,12 +17565,12 @@ What you type stays in this browser only.`;
       return t(changed() ? "The catalog's list has changed since you made yours: {LIST}" : "The catalog's list: {LIST}").replace("{LIST}", list2);
     }
     function body() {
-      return '<div class="nx" data-i18n-skip><input type="hidden" id="meNextIds" value="' + esc(JSON.stringify(nextIdsOf(rows))) + '">' + (catalog ? '<div class="nx-src" id="meNextSrc">' + srcHtml() + "</div>" : "") + '<ol class="nx-list" id="meNextList">' + rows.map(rowHtml).join("") + '</ol><div class="nx-add"><button type="button" class="btn nx-add-btn" id="meNextAdd">' + ICON_PLUS + "<span>" + esc(t("Add a reply")) + '</span></button></div><div class="nx-find" id="meNextFindBox" hidden><input type="text" id="meNextFind" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="meNextHits" aria-label="' + esc(t("Find a card to add")) + '" placeholder="' + esc(t("a card's title")) + '"><div class="nx-hits" id="meNextHits" role="listbox"></div></div>' + (catalog ? '<p class="nx-was" id="meNextWas" hidden>' + esc(wasText()) + "</p>" : "") + "</div>";
+      return '<div class="nx" data-i18n-skip><input type="hidden" id="meNextIds" value="' + esc(JSON.stringify(nextIdsOf(rows))) + '">' + (catalog ? '<div class="nx-src" id="meNextSrc">' + srcHtml() + "</div>" : "") + '<ol class="nx-list" id="meNextList">' + rows.map(rowHtml2).join("") + '</ol><div class="nx-add"><button type="button" class="btn nx-add-btn" id="meNextAdd">' + ICON_PLUS + "<span>" + esc(t("Add a reply")) + '</span></button></div><div class="nx-find" id="meNextFindBox" hidden><input type="text" id="meNextFind" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="meNextHits" aria-label="' + esc(t("Find a card to add")) + '" placeholder="' + esc(t("a card's title")) + '"><div class="nx-hits" id="meNextHits" role="listbox"></div></div>' + (catalog ? '<p class="nx-was" id="meNextWas" hidden>' + esc(wasText()) + "</p>" : "") + "</div>";
     }
     function sync(focus) {
       const list2 = el("meNextList");
       if (!list2) return;
-      list2.innerHTML = rows.map(rowHtml).join("");
+      list2.innerHTML = rows.map(rowHtml2).join("");
       const ids = el("meNextIds");
       if (ids) ids.value = JSON.stringify(nextIdsOf(rows));
       const src = el("meNextSrc");
@@ -20289,11 +20377,11 @@ What you type stays in this browser only.`;
         if (slotEl) {
           e.preventDefault();
           e.stopPropagation();
-          const row = slotEl.closest(".rail-item");
+          const row2 = slotEl.closest(".rail-item");
           let act = slotEl;
           if (!slotEl.hasAttribute("data-show-intent")) {
             const want = e.ctrlKey || e.metaKey ? "[data-edit-intent]" : e.shiftKey ? "[data-hide-intent]" : "[data-fav-intent]";
-            act = row && row.querySelector(want) || slotEl;
+            act = row2 && row2.querySelector(want) || slotEl;
           }
           const aid = act.getAttribute("data-fav-intent") || act.getAttribute("data-hide-intent") || act.getAttribute("data-show-intent") || act.getAttribute("data-edit-intent");
           if (act.hasAttribute("data-edit-intent")) {
@@ -23495,12 +23583,12 @@ What you type stays in this browser only.`;
   }
   function measureRowNaturals() {
     const w = (el) => el ? Math.ceil(el.getBoundingClientRect().width) : 0;
-    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button"), other = $("#seg button:not(.on)");
-    const whole = !!seg2 && w(seg2) > 0 && (other ? getComputedStyle(other).display !== "none" : seg2.querySelectorAll("button").length === 1);
+    const seg3 = $("#seg"), segOn = $("#seg button.on") || $("#seg button"), other = $("#seg button:not(.on)");
+    const whole = !!seg3 && w(seg3) > 0 && (other ? getComputedStyle(other).display !== "none" : seg3.querySelectorAll("button").length === 1);
     const m = {
       theme: w($("#theme")),
       facts: w($("#factsBtn")),
-      segFull: whole ? w(seg2) : 0,
+      segFull: whole ? w(seg3) : 0,
       segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
       // the fold keeps one button and the box's borders
       chevron: w($("#settingsBtn"))
@@ -23521,9 +23609,9 @@ What you type stays in this browser only.`;
   var ROW_RETURN_CLEAR = 14;
   var ROW_SHED_ROOM = 30;
   function syncRowShed() {
-    const row = $(".fills");
-    if (!row) return;
-    const fills = row.querySelectorAll(":scope > .fill");
+    const row2 = $(".fills");
+    if (!row2) return;
+    const fills = row2.querySelectorAll(":scope > .fill");
     const pax2 = fills[0], find = fills[1];
     if (!pax2 || !find || !$("#rowTools")) return;
     if (!eRowNat) measureRowNaturals();
@@ -23774,13 +23862,13 @@ What you type stays in this browser only.`;
     run();
   }
   function syncPickerRow() {
-    const row = $("#menuPicker"), h = eHost(), hk = eHotkey();
-    if (!row) return;
-    row.hidden = !hk || !h || typeof h.openPicker !== "function";
-    if (row.hidden) return;
+    const row2 = $("#menuPicker"), h = eHost(), hk = eHotkey();
+    if (!row2) return;
+    row2.hidden = !hk || !h || typeof h.openPicker !== "function";
+    if (row2.hidden) return;
     const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
-    row.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
-    row.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
+    row2.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
+    row2.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
   }
   function syncSettingsMenu() {
     syncPickerRow();
@@ -26406,14 +26494,14 @@ What you type stays in this browser only.`;
     p.appendChild(b);
     if (i >= 0) p.appendChild(document.createTextNode(" " + sentence.slice(i + 2)));
     d.appendChild(p);
-    const row = document.createElement("div");
-    row.className = "tour-actions";
+    const row2 = document.createElement("div");
+    row2.className = "tour-actions";
     const x = document.createElement("button");
     x.type = "button";
     x.className = "btn";
     x.textContent = t("Dismiss");
-    row.appendChild(x);
-    d.appendChild(row);
+    row2.appendChild(x);
+    d.appendChild(row2);
     document.body.appendChild(d);
     let raf = 0;
     const again = () => {
@@ -26718,8 +26806,8 @@ What you type stays in this browser only.`;
       return [];
     }
   }
-  function traceNote(row) {
-    lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)));
+  function traceNote(row2) {
+    lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row2)]).slice(-TRACE_MAX)));
   }
   var rollFrom = 0;
   var rollTo = 0;
@@ -26881,13 +26969,13 @@ What you type stays in this browser only.`;
   function mtReadings() {
     const S = mtSafe, r = [];
     const sec = (title) => r.push({ sec: title });
-    const row = (k, v, warn, panelOnly) => r.push({ k, v, warn: !!warn, panelOnly: !!panelOnly });
+    const row2 = (k, v, warn, panelOnly) => r.push({ k, v, warn: !!warn, panelOnly: !!panelOnly });
     sec("Engine");
-    row("version", S(() => E_VERSION));
-    row("running from", S(() => location.protocol === "file:" ? "file://" : location.origin));
-    row("running in", S(() => mtBrowser()));
-    row("host", S(() => eHost() ? "desktop app" : "browser"));
-    row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
+    row2("version", S(() => E_VERSION));
+    row2("running from", S(() => location.protocol === "file:" ? "file://" : location.origin));
+    row2("running in", S(() => mtBrowser()));
+    row2("host", S(() => eHost() ? "desktop app" : "browser"));
+    row2("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
     sec("Catalog");
     const edName = (() => {
       try {
@@ -26896,13 +26984,13 @@ What you type stays in this browser only.`;
         return void 0;
       }
     })();
-    if (edName && edName.r != null) row("rev", String(edName.r));
-    if (!edName || edName.e || edName.r == null) row("edition", edName === void 0 ? "unavailable" : edName && edName.e || "-");
-    row("cards / replies", S(() => cards.length + " / " + catalogMacroCount({ cards })));
-    row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
-    row("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
-    row("showing", S(() => lang));
-    row("cards in one language", S(() => {
+    if (edName && edName.r != null) row2("rev", String(edName.r));
+    if (!edName || edName.e || edName.r == null) row2("edition", edName === void 0 ? "unavailable" : edName && edName.e || "-");
+    row2("cards / replies", S(() => cards.length + " / " + catalogMacroCount({ cards })));
+    row2("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
+    row2("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
+    row2("showing", S(() => lang));
+    row2("cards in one language", S(() => {
       const others = CONTENT_LANGS.slice(1);
       let n = 0;
       (cards || []).forEach((m) => {
@@ -26913,51 +27001,51 @@ What you type stays in this browser only.`;
     sec("Catalog file");
     {
       const at = mtCatalogPlace();
-      row("file", at.file, false, true);
-      row("copy", at.copy);
-      row("folder", at.folder);
+      row2("file", at.file, false, true);
+      row2("copy", at.copy);
+      row2("folder", at.folder);
     }
-    row("id", S(() => {
+    row2("id", S(() => {
       const c = storedCatalog();
       return c && c.id ? c.id : "none";
     }));
-    row("signature", S(() => mtSignature()));
-    row("file watch", S(() => !eWatchSupported() ? "not supported here" : eWatchName() ? "on" : "off"));
+    row2("signature", S(() => mtSignature()));
+    row2("file watch", S(() => !eWatchSupported() ? "not supported here" : eWatchName() ? "on" : "off"));
     sec("Layout");
-    row("window", S(() => innerWidth + " x " + innerHeight));
-    row("layout rungs", S(() => {
+    row2("window", S(() => innerWidth + " x " + innerHeight));
+    row2("layout rungs", S(() => {
       const a = [];
       if (matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
       if (matchMedia("(max-width:560px)").matches) a.push("≤560 strip clipped");
       return a.length ? a.join(", ") : "desktop";
     }));
-    row("scroll region", S(() => {
+    row2("scroll region", S(() => {
       const sc = pageScroller();
       if (!sc) return "-";
       const r2 = sc.getBoundingClientRect();
       return Math.round(r2.height) + " of " + sc.scrollHeight + " from y " + Math.round(r2.top);
     }));
-    row("locked open", S(() => {
+    row2("locked open", S(() => {
       const a = [];
       if (railLocked()) a.push("intent panel");
       if (pillsLocked()) a.push("category bar");
       return a.length ? a.join(", ") : "nothing";
     }));
-    row("columns", S(() => {
+    row2("columns", S(() => {
       const n = colCount();
       return n + " (" + colMode() + ")";
     }));
-    row("list width", S(() => {
+    row2("list width", S(() => {
       if (!list) return "-";
       const w = Math.round(list.getBoundingClientRect().width);
       const f = Math.round(colFloor() * remPx());
       return w + "px  (fits " + Math.max(1, Math.floor((w + COL_GAP) / (f + COL_GAP))) + " at " + f + "px)";
     }));
-    row("narrowest column", S(() => {
+    row2("narrowest column", S(() => {
       const f = colFloor();
       return f + "rem (" + Math.round(f * remPx()) + "px)";
     }));
-    row("card / text width", S(() => {
+    row2("card / text width", S(() => {
       const el = list && list.querySelector(".card .txt");
       if (!el) return "-";
       const cs = getComputedStyle(el), pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
@@ -26970,7 +27058,7 @@ What you type stays in this browser only.`;
       p.remove();
       return Math.round(w) + "px / " + Math.round(w - pl - pr) + "px (" + Math.round((w - pl - pr) / ch) + "ch)";
     }));
-    row("right padding", S(() => {
+    row2("right padding", S(() => {
       const el = list && list.querySelector(".card .txt");
       if (!el) return "-";
       const pr = parseFloat(getComputedStyle(el).paddingRight) || 0;
@@ -26981,13 +27069,13 @@ What you type stays in this browser only.`;
     {
       const lsBad = S(() => E_LS_OK) === "false", ssBad = S(() => E_SS_OK) === "false";
       const desk = S(() => eDeskFileShown()), trouble = eSaveTrouble();
-      if (desk !== "-") row("desk file", desk);
-      else row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
-      row("last saved", S(() => eLastSaved() ? fileStamp(eLastSaved()) : ""));
-      if (trouble) row("not saved since", S(() => fileStamp(trouble.since)), true);
-      row("sessionStorage", ssBad ? "IN-MEMORY ONLY" : "OK", ssBad);
+      if (desk !== "-") row2("desk file", desk);
+      else row2("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
+      row2("last saved", S(() => eLastSaved() ? fileStamp(eLastSaved()) : ""));
+      if (trouble) row2("not saved since", S(() => fileStamp(trouble.since)), true);
+      row2("sessionStorage", ssBad ? "IN-MEMORY ONLY" : "OK", ssBad);
     }
-    row("local memory used", S(() => {
+    row2("local memory used", S(() => {
       const ks = lsKeys();
       let n = 0;
       ks.forEach((k) => {
@@ -26995,20 +27083,20 @@ What you type stays in this browser only.`;
       });
       return Math.max(1, Math.round(n / 1024)) + " KB in " + ks.length + " keys";
     }));
-    row("namespace", S(() => E_NS));
+    row2("namespace", S(() => E_NS));
     sec("Desk");
-    row("catalog folder", S(() => eHost() ? eHomeless(eCatalogFolder(), eDeskHome()) : ""));
-    row("tour", S(() => tourActive() ? "under way" : tourDueAtBoot() ? "offered at the next start" : "seen or declined"));
-    row("this start", S(() => eHost() && eHost().recovering ? "after a crash" : "ordinary"));
-    row("last crash", S(() => {
+    row2("catalog folder", S(() => eHost() ? eHomeless(eCatalogFolder(), eDeskHome()) : ""));
+    row2("tour", S(() => tourActive() ? "under way" : tourDueAtBoot() ? "offered at the next start" : "seen or declined"));
+    row2("this start", S(() => eHost() && eHost().recovering ? "after a crash" : "ordinary"));
+    row2("last crash", S(() => {
       const l = themeTrace().filter((x) => x[1] === "lost").pop();
       return l ? fileStamp(l[4] || l[0]) + ", " + l[2] + (l[3] != null ? " (" + l[3] + ")" : "") : "";
     }));
-    row("desk backup", S(() => {
+    row2("desk backup", S(() => {
       const r2 = eDeskRefused()[0];
       return r2 ? "restored" + (r2.restored ? " from " + fileStamp(r2.restored) : "") : "not needed";
     }), eDeskRefused().length > 0);
-    row("statistics", S(() => {
+    row2("statistics", S(() => {
       const days = Object.keys(pack.days || {}).length;
       let n = 0;
       Object.values(pack.useCounts || {}).forEach((v) => {
@@ -27017,9 +27105,9 @@ What you type stays in this browser only.`;
       return n + " copies, " + days + " days" + (pack.daysSince ? " since " + pack.daysSince : "");
     }));
     sec("Display");
-    row("device pixel ratio", S(() => window.devicePixelRatio));
-    row("backdrop-filter", S(() => CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") ? "supported" : "NOT SUPPORTED"));
-    row("reduced motion", S(() => {
+    row2("device pixel ratio", S(() => window.devicePixelRatio));
+    row2("backdrop-filter", S(() => CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") ? "supported" : "NOT SUPPORTED"));
+    row2("reduced motion", S(() => {
       const os = mgSystemStill();
       const off = lsGet("eMotionOff") === "1";
       if (os && off) return "on (system, and Animations off)";
@@ -27027,17 +27115,17 @@ What you type stays in this browser only.`;
       if (off) return "on (Animations off)";
       return "off";
     }));
-    row("forced colors", S(() => matchMedia("(forced-colors:active)").matches ? "ACTIVE" : "off"));
+    row2("forced colors", S(() => matchMedia("(forced-colors:active)").matches ? "ACTIVE" : "off"));
     sec("Intent panel");
-    row("state", S(() => document.body.classList.contains("rail-on") ? "docked" : "hidden / overlay"));
-    row("panel width cap", S(() => railMaxWidth() + "px"));
-    row("dock threshold", S(() => RAIL_DOCK_MIN + "px window (" + (innerWidth >= RAIL_DOCK_MIN ? "met" : "not met - panel auto-hides") + ")"));
+    row2("state", S(() => document.body.classList.contains("rail-on") ? "docked" : "hidden / overlay"));
+    row2("panel width cap", S(() => railMaxWidth() + "px"));
+    row2("dock threshold", S(() => RAIL_DOCK_MIN + "px window (" + (innerWidth >= RAIL_DOCK_MIN ? "met" : "not met - panel auto-hides") + ")"));
     sec("Personal state");
-    row("shortcuts rebound", S(() => {
+    row2("shortcuts rebound", S(() => {
       const raw = JSON.parse(lsGet("eShortcuts") || "null");
       return raw ? Object.keys(raw).length : 0;
     }));
-    row("tabs", S(() => tabs.length));
+    row2("tabs", S(() => tabs.length));
     r.push({ tab: {
       head: ["hidden", "starred", "edited", "yours"],
       rows: [
@@ -27055,9 +27143,9 @@ What you type stays in this browser only.`;
         ]]
       ]
     } });
-    row("categories renamed", S(() => Object.keys(pack.catLabels || {}).length + Object.keys(pack.catLabelsPl || {}).length));
-    row("sample untouched", S(() => sampleUntouched() ? "yes" : "no"));
-    row("blur effects", S(() => document.body.classList.contains("glass-off") ? "off (rescue)" : "on"));
+    row2("categories renamed", S(() => Object.keys(pack.catLabels || {}).length + Object.keys(pack.catLabelsPl || {}).length));
+    row2("sample untouched", S(() => sampleUntouched() ? "yes" : "no"));
+    row2("blur effects", S(() => document.body.classList.contains("glass-off") ? "off (rescue)" : "on"));
     return r;
   }
   function mtReportText() {
@@ -27127,20 +27215,6 @@ What you type stays in this browser only.`;
   }
   function wireMaintenanceActions(root, closeFn) {
     const $q = (s) => root ? root.querySelector(s) : $(s);
-    const sc = $q("#mtShortcuts");
-    if (sc) sc.onclick = () => {
-      const was = lsGet("eShortcuts");
-      lsDel("eShortcuts");
-      loadShortcuts();
-      offerUndo("Shortcuts reset", () => {
-        if (was != null) {
-          lsSet("eShortcuts", was);
-          loadShortcuts();
-        }
-      });
-    };
-    const cl2 = $q("#mtClear");
-    if (cl2) cl2.onclick = clearLocalMemory;
     const ej = $q("#mtEject");
     if (ej) ej.onclick = ejectCatalog;
     const cp = $q("#mtCopy");
@@ -27151,10 +27225,11 @@ What you type stays in this browser only.`;
       else dismissModal();
     };
   }
+  var MT_MOVED = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
   registerScreen("maintenance", {
     title: () => t("Maintenance"),
     render: (host, closeFn) => {
-      host.innerHTML = '<div class="screen-page mt-screen"><div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div><div class="screen-body">' + mtGridHtml() + '</div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn" id="mtShortcuts">' + esc(t("Reset shortcuts")) + '</button><button type="button" class="btn danger" id="mtClear">' + esc(t("Clear local memory")) + '</button><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+      host.innerHTML = '<div class="screen-page mt-screen"><div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div><div class="screen-body">' + mtGridHtml() + '</div><p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + '</p><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
       wireMaintenanceActions(host, closeFn);
     }
   });
@@ -27164,8 +27239,8 @@ What you type stays in this browser only.`;
       cls: "mt-modal",
       back: backFn || null,
       title: "Maintenance",
-      body: html,
-      actions: '<div class="mf-left"><button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button><button type="button" class="btn danger" id="mtClear">Clear local memory</button><button type="button" class="btn danger" id="mtEject">Eject catalog</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
+      body: html + '<p class="mt-moved" id="mtMoved">' + esc(MT_MOVED) + "</p>",
+      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mtEject">Eject catalog</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
       wire: () => wireMaintenanceActions(null, () => dismissModal())
     });
   }
@@ -28895,13 +28970,13 @@ What you type stays in this browser only.`;
     const items = o.changes.items, c = o.c, desk = o.desk || null, sub = desk ? desk.sub : null;
     let at = Math.max(0, items.findIndex((it) => it.own));
     const note = desk ? "" : editionNoteText(c, uiLang());
-    const row = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c, sub) + "</button>";
+    const row2 = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c, sub) + "</button>";
     openDialog({
       cls: "ed-modal",
       title: desk ? desk.title : editionSaid(o.ed, t("What is new in rev {R}"), t("What is new in edition {E}")),
       name: o.name,
       back: o.back,
-      body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
+      body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row2).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
       actions: '<button type="button" class="btn" id="edKeep">' + esc(desk ? desk.keep : t("Keep current")) + '</button><button type="button" class="btn primary" id="edLoad">' + esc(desk ? desk.load : t("Load the new edition")) + "</button>",
       wire: () => {
         const pane = document.getElementById("edPane"), list2 = document.querySelector(".ed-list");
@@ -29617,7 +29692,7 @@ What you type stays in this browser only.`;
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       wireEcKeys(box);
       nested.forEach((i) => deskChangeWords(desks[i], deskBase(desks[i], files, held)).then((words) => {
-        const row = box.querySelector('[data-ec-desk="' + i + '"]'), meta = row && row.querySelector(".ec-meta");
+        const row2 = box.querySelector('[data-ec-desk="' + i + '"]'), meta = row2 && row2.querySelector(".ec-meta");
         if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime, desks[i].rev)]).join(" · ");
       }));
       box.querySelectorAll("button[data-ec-look]").forEach((b) => {
@@ -29629,12 +29704,12 @@ What you type stays in this browser only.`;
         b.onclick = () => loadCatalogFromFolder(f.name, f.mtime, f.desk.id);
       });
       files.forEach((f, i) => ecFileTrust(f).then((r) => {
-        const row = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
-        const key = row && row.querySelector(".ec-key");
+        const row2 = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
+        const key = row2 && row2.querySelector(".ec-key");
         if (!key) return;
         key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, i === onAt ? heldCatalogPrint() : r.print));
         key.remove();
-        wireEcKeys(row);
+        wireEcKeys(row2);
       }));
       box.querySelectorAll("button[data-ec-load]").forEach((b) => {
         b.onclick = () => loadCatalogFromFolder(
@@ -30362,9 +30437,9 @@ What you type stays in this browser only.`;
     });
     const orphans = [];
     (cards || []).forEach((m, i) => {
-      const row = { m, i };
-      if (byCat[m.c]) byCat[m.c].push(row);
-      else orphans.push(row);
+      const row2 = { m, i };
+      if (byCat[m.c]) byCat[m.c].push(row2);
+      else orphans.push(row2);
     });
     const order = (list2) => list2.sort(mgCardCmp).map((o) => mgCardRow(o.m)).join("");
     const group = (k, rows, fixed, label2) => {
@@ -30580,21 +30655,21 @@ What you type stays in this browser only.`;
       const under = document.elementFromPoint(e.clientX, e.clientY);
       if (!under || !under.closest) return;
       if (mgDrag.kind === "intent") {
-        const row = under.closest(".manage-row[data-introw]");
-        if (!row || row === mgDrag.el) return;
-        if (row.parentNode !== mgDrag.el.parentNode) return;
-        if (row.getAttribute("data-band") !== mgDrag.el.getAttribute("data-band")) return;
-        if (!mgMoveIntentOrder(mgDrag.key, row.getAttribute("data-introw"))) return;
+        const row2 = under.closest(".manage-row[data-introw]");
+        if (!row2 || row2 === mgDrag.el) return;
+        if (row2.parentNode !== mgDrag.el.parentNode) return;
+        if (row2.getAttribute("data-band") !== mgDrag.el.getAttribute("data-band")) return;
+        if (!mgMoveIntentOrder(mgDrag.key, row2.getAttribute("data-introw"))) return;
         mgSwapLock = Date.now();
-        mgDomMove(mgDrag.el, row);
+        mgDomMove(mgDrag.el, row2);
         return;
       }
       if (mgDrag.kind === "cat") {
-        const row = under.closest(".mg-cat-row[data-crow]");
-        if (!row) return;
-        const key = row.getAttribute("data-crow");
+        const row2 = under.closest(".mg-cat-row[data-crow]");
+        if (!row2) return;
+        const key = row2.getAttribute("data-crow");
         if (key === mgDrag.key) return;
-        const toEl = row.closest(".mg-cat");
+        const toEl = row2.closest(".mg-cat");
         if (!toEl || toEl.parentNode !== mgDrag.el.parentNode) return;
         if (!mgMoveCatOrder(mgDrag.key, key)) return;
         mgSwapLock = Date.now();
@@ -30615,13 +30690,13 @@ What you type stays in this browser only.`;
           mgClearDropTarget();
           mgDrag.dropCat = null;
         }
-        const row = under.closest(".manage-row.mg-card[data-cardrow]");
-        if (!row || row === mgDrag.el) return;
-        if (row.parentNode !== mgDrag.el.parentNode) return;
-        if (row.getAttribute("data-band") !== mgDrag.el.getAttribute("data-band")) return;
-        if (!mgMoveCardOrder(mgDrag.key, row.getAttribute("data-cardrow"))) return;
+        const row2 = under.closest(".manage-row.mg-card[data-cardrow]");
+        if (!row2 || row2 === mgDrag.el) return;
+        if (row2.parentNode !== mgDrag.el.parentNode) return;
+        if (row2.getAttribute("data-band") !== mgDrag.el.getAttribute("data-band")) return;
+        if (!mgMoveCardOrder(mgDrag.key, row2.getAttribute("data-cardrow"))) return;
         mgSwapLock = Date.now();
-        mgDomMove(mgDrag.el, row);
+        mgDomMove(mgDrag.el, row2);
       }
     }, { passive: true });
     addEventListener("pointerup", endMgDrag);
@@ -30969,17 +31044,15 @@ What you type stays in this browser only.`;
     applyPrefs: () => applyPrefs,
     hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings,
+    resetAllSettings: () => resetAllSettings,
     settingsBodyHtml: () => settingsBodyHtml,
+    settingsFound: () => settingsFound,
+    settingsNavHtml: () => settingsNavHtml,
+    settingsPageHtml: () => settingsPageHtml,
+    settingsSections: () => settingsSections,
     wireHotkeyRow: () => wireHotkeyRow,
     wireTeamRows: () => wireTeamRows
   });
-  function curLangLabel() {
-    return (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
-  }
-  function personalNote() {
-    const n = agentName().trim();
-    return n ? n + ", " + curLangLabel() : curLangLabel();
-  }
   var E_HOTKEY_KEY = "eHotkey";
   var hkListening = false;
   function hotkeyHost() {
@@ -31019,6 +31092,7 @@ What you type stays in this browser only.`;
     return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.")) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
   }
   function syncHotkeyRow(box, now) {
+    if (!box) return;
     const b = box.querySelector("#setHotkey"), note = box.querySelector("#setHotkeyNote");
     if (!b) return;
     const st = typeof now === "string" ? { accel: now, taken: false } : hotkeyState();
@@ -31140,67 +31214,86 @@ What you type stays in this browser only.`;
       });
     });
   }
-  function settingsBodyHtml() {
-    const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
-    const row = (label2, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label2) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
-    const onoff = (name, on, tipOn, tipOff) => seg2(name, [
-      { v: "off", t: t("Off"), tip: tipOff },
-      { v: "on", t: t("On"), tip: tipOn }
-    ], on ? "on" : "off");
-    const themeCur = themeChoice() || "system";
+  var SX_ICONS = {
+    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
+    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
+    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
+    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
+    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
+    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
+    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
+    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
+    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
+    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
+    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
+    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
+    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
+    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
+    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
+    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
+    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
+    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>'
+  };
+  function sxIcon(name) {
+    const body = SX_ICONS[name];
+    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
+  }
+  function seg2(name, opts, cur) {
+    return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
+  }
+  function onoff(name, on, tipOn, tipOff) {
+    return seg2(name, [{ v: "off", t: t("Off"), tip: tipOff }, { v: "on", t: t("On"), tip: tipOn }], on ? "on" : "off");
+  }
+  function row(key, icon, title, hint, ctl) {
+    return { key, icon, title, hint: hint || "", ctl };
+  }
+  function rowHtml(r) {
+    if (r.html != null) return r.html;
+    return '<div class="set-row" data-row="' + esc(r.key) + '">' + sxIcon(r.icon) + '<div class="set-label">' + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
+  }
+  function rowWords(r) {
+    if (r.html != null) return String(r.html).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    return r.title + " " + r.hint;
+  }
+  function keysHtml(chord) {
+    return '<span class="sx-keys">' + String(chord || "").split("+").filter(Boolean).map((k) => "<kbd>" + esc(k) + "</kbd>").join("") + "</span>";
+  }
+  function generalGroups() {
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    const joinDoor = joinDoorButton("setJoinTeam");
-    const personalSection = accHtml(
-      "personal",
-      t("Personal"),
+    return [{ rows: [
+      row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="first name" value="' + esc(agentName()) + '">'),
       row(
-        t("Your name"),
-        "",
-        '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="first name" value="' + esc(agentName()) + '">'
-      ) + row(
+        "uilang",
+        "translate",
         t("Interface language"),
         t("The language of the buttons and menus, not of the replies: those follow EN|PL in the header"),
         langSel
-      ) + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
-         and the way back after leaving once, on the first row that offers Leave. */
-      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
-      (eHasShared() ? row(
-        t("Edit the shared catalog directly"),
-        t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
-        onoff(
-          "sharededit",
-          lsGet("eSharedEdit") === "1",
-          t("Each change goes into the shared catalog; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
-          t("Each change stays in this desk's own file")
-        )
-      ) : ""),
-      personalNote(),
-      t("The name customers see, and the language Etiuda's own buttons and menus are written in")
-    );
-    return personalSection + accHtml(
-      "appearance",
-      t("Appearance"),
+      )
+    ] }];
+  }
+  function appearanceGroups() {
+    return [{ rows: [
       row(
+        "theme",
+        "appearance",
         t("Theme"),
         t("System follows your computer's own setting."),
-        seg2("theme", [
-          {
-            v: "light",
-            t: t("Light"),
-            tip: t("Always the light palette, whatever the computer asks for")
-          },
-          {
-            v: "dark",
-            t: t("Dark"),
-            tip: t("Always the dark palette, whatever the computer asks for")
-          },
-          {
-            v: "system",
-            t: t("System"),
-            tip: t("Follows your computer's light or dark setting, and changes with it")
-          }
-        ], themeCur)
-      ) + row(
+        seg2(
+          "theme",
+          [
+            { v: "light", t: t("Light"), tip: t("Always the light palette, whatever the computer asks for") },
+            { v: "dark", t: t("Dark"), tip: t("Always the dark palette, whatever the computer asks for") },
+            { v: "system", t: t("System"), tip: t("Follows your computer's light or dark setting, and changes with it") }
+          ],
+          themeChoice() || "system"
+        )
+      ),
+      row(
+        "glass",
+        "expand",
         t("Blur effects"),
         t("Blurred panel backgrounds and the blur behind dialogs. Turn off if text reads less clearly, or the machine struggles."),
         onoff(
@@ -31209,9 +31302,11 @@ What you type stays in this browser only.`;
           t("Panels and the dialog backdrop stay blurred"),
           t("Panels go flat and opaque, and a dialog only darkens what is behind it")
         )
-      ) + /* Reads as what it GIVES, and the stored key still reads as what it takes away - it is
-         inverted here alone, so an existing choice survives the rename. */
+      ),
+      /* Reads as what it GIVES; the stored key still reads as what it takes away, so an existing choice survives. */
       row(
+        "motion",
+        "refresh",
         t("Animations"),
         t("Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion."),
         onoff(
@@ -31220,86 +31315,253 @@ What you type stays in this browser only.`;
           t("Everything moves as it was drawn to"),
           t("Nothing moves; every change lands at once")
         )
-      ),
-      null,
-      t("Theme, blur effects and animations")
-    ) + accHtml(
-      "layout",
-      t("Layout"),
-      row(
-        t("Columns"),
-        t("How many columns of cards to show. Auto fits as many as the window has room for."),
-        seg2(
+      )
+    ] }];
+  }
+  function layoutGroups() {
+    return [
+      { rows: [
+        row(
           "cols",
-          [
+          "layout",
+          t("Columns"),
+          t("How many columns of cards to show. Auto fits as many as the window has room for."),
+          seg2("cols", [
             { v: "1", t: t("1"), tip: t("Always a single column") },
             { v: "2", t: t("2"), tip: t("Always two columns, however wide the window is") },
             { v: "auto", t: t("Auto"), tip: t("As many as fit without making a column too narrow to read") }
-          ],
-          colMode()
+          ], colMode())
+        ),
+        row(
+          "colfloor",
+          "expand",
+          t("Narrowest column"),
+          t("How narrow a column may get before Auto drops one. Wider means fewer, roomier columns."),
+          '<div class="set-slider"><input type="range" id="setColFloor" min="' + COL_FLOOR_MIN + '" max="' + COL_FLOOR_MAX + '" step="' + COL_FLOOR_STEP + '" value="' + colFloor() + '" aria-label="' + esc(t("Narrowest column")) + '"><output id="setColFloorOut">' + Math.round(colFloor() * remPx()) + "px</output></div>"
         )
-      ) + row(
-        t("Narrowest column"),
-        t("How narrow a column may get before Auto drops one. Wider means fewer, roomier columns."),
-        '<div class="set-slider"><input type="range" id="setColFloor" min="' + COL_FLOOR_MIN + '" max="' + COL_FLOOR_MAX + '" step="' + COL_FLOOR_STEP + '" value="' + colFloor() + '" aria-label="' + esc(t("Narrowest column")) + '"><output id="setColFloorOut">' + Math.round(colFloor() * remPx()) + "px</output></div>"
-      ) + row(
-        t("Lock the intent panel"),
-        t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
-        onoff(
+      ] },
+      { rows: [
+        row(
           "raillock",
-          railLocked(),
-          t("The panel stays docked at any window width"),
-          t("The panel hides itself when the window gets narrow")
-        )
-      ) + row(
-        t("Lock the category bar"),
-        t("Keep every category row visible, instead of collapsing to two lines."),
-        onoff(
+          "intents",
+          t("Lock the intent panel"),
+          t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
+          onoff(
+            "raillock",
+            railLocked(),
+            t("The panel stays docked at any window width"),
+            t("The panel hides itself when the window gets narrow")
+          )
+        ),
+        row(
           "pillslock",
-          pillsLocked(),
-          t("Every category row stays visible"),
-          t("The bar keeps two rows, and Ctrl peeks at the others")
+          "categories",
+          t("Lock the category bar"),
+          t("Keep every category row visible, instead of collapsing to two lines."),
+          onoff(
+            "pillslock",
+            pillsLocked(),
+            t("Every category row stays visible"),
+            t("The bar keeps two rows, and Ctrl peeks at the others")
+          )
         )
-      ) + row(
-        t("Notes on hover"),
-        t("Open a card's internal note when the pointer rests on the card."),
-        onoff(
+      ] },
+      { rows: [
+        row(
           "notehover",
-          document.body.classList.contains("note-hover"),
-          t("The note opens by itself, and the card shows no i"),
-          t("The i on the card opens the note")
-        )
-      ) + row(
-        t("Stack a card's replies"),
-        t("A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it."),
-        onoff(
+          "note",
+          t("Notes on hover"),
+          t("Open a card's internal note when the pointer rests on the card."),
+          onoff(
+            "notehover",
+            document.body.classList.contains("note-hover"),
+            t("The note opens by itself, and the card shows no i"),
+            t("The i on the card opens the note")
+          )
+        ),
+        row(
           "deck",
-          deckOn(),
-          t("The first reply in front, the others laid out under the pointer"),
-          t("Every reply laid out on the card, one below the other")
+          "cards",
+          t("Stack a card's replies"),
+          t("A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it."),
+          onoff(
+            "deck",
+            deckOn(),
+            t("The first reply in front, the others laid out under the pointer"),
+            t("Every reply laid out on the card, one below the other")
+          )
         )
+      ] }
+    ];
+  }
+  function keysGroups() {
+    const hk = hotkeyRowHtml();
+    return [
+      hk ? { rows: [{ key: "hotkey", html: hk }] } : null,
+      { rows: [{ key: "shortcuts", html: '<div class="sc-list" id="scListInline"></div>' }] },
+      { after: '<div class="sx-note"><span>' + esc(t("Any shortcut can be changed; the keys Etiuda itself needs are shown as fixed.")) + '</span><button type="button" class="btn" id="setResetKeys">' + esc(t("Reset shortcuts")) + "</button></div>", rows: [] }
+    ].filter(Boolean);
+  }
+  function teamsGroups() {
+    const joinDoor = joinDoorButton("setJoinTeam");
+    const rows = teamLeads().map((l, i, all) => ({ key: "team", html: teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy)) }));
+    if (joinDoor) rows.push({ key: "join", html: '<div class="set-row" data-row="join">' + sxIcon("desks") + '<div class="set-label">' + esc(t("Team")) + '</div><div class="set-ctl">' + joinDoor + "</div></div>" });
+    if (eHasShared()) rows.push(row(
+      "sharededit",
+      "teams",
+      t("Edit the shared catalog directly"),
+      t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
+      onoff(
+        "sharededit",
+        lsGet("eSharedEdit") === "1",
+        t("Each change goes into the shared catalog; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
+        t("Each change stays in this desk's own file")
+      )
+    ));
+    return rows.length ? [{ rows }] : [];
+  }
+  function dataGroups() {
+    return [{ rows: [
+      row(
+        "reset",
+        "refresh",
+        t("Reset defaults"),
+        t("Puts every setting back as it ships. Cards and your edits are not touched."),
+        '<button type="button" class="btn" id="setReset">' + esc(t("Reset defaults")) + "</button>"
       ),
-      null,
-      t("What stays docked, and what may hide itself when space is short")
-    ) + accHtml(
-      "keys",
-      t("Keyboard shortcuts"),
-      hotkeyRowHtml() + '<div class="sc-list" id="scListInline"></div>',
-      /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
-         on the page. The neighbouring call has the same null in the same position. */
-      null,
-      t("Rebind any key combo. The keys the app itself needs are listed as fixed.")
-    );
+      row(
+        "clear",
+        "delete",
+        t("Clear local memory"),
+        "",
+        '<button type="button" class="btn danger" id="setClear">' + esc(t("Clear local memory")) + "</button>"
+      )
+    ] }];
+  }
+  function aboutGroups() {
+    return [{ rows: [
+      row(
+        "about",
+        "about",
+        "Etiuda",
+        E_VERSION,
+        '<button type="button" class="btn" id="setAbout" title="' + esc(t("This version of Etiuda, what is new in it, and its licence")) + '">' + esc(t("About Etiuda")) + "</button>"
+      ),
+      row(
+        "tour",
+        "forward",
+        t("Show tour…"),
+        t("The tour of Etiuda's controls, one at a time"),
+        '<button type="button" class="btn" id="setTour">' + esc(t("Show tour…")) + "</button>"
+      ),
+      row(
+        "maintenance",
+        "statistics",
+        t("Maintenance"),
+        t("What this computer reports, and ways to set things right."),
+        '<button type="button" class="btn sx-keys-btn" id="setMaint" title="' + esc(t("Maintenance")) + '">' + keysHtml(formatActionChord("maintenance")) + "</button>"
+      )
+    ] }];
+  }
+  function settingsSections() {
+    return [
+      { id: "general", icon: "general", name: t("General"), lede: t("Your name, the language, and how Etiuda starts and closes."), groups: generalGroups() },
+      { id: "appearance", icon: "appearance", name: t("Appearance"), lede: t("How the app looks and moves."), groups: appearanceGroups() },
+      { id: "layout", icon: "layout", name: t("Layout"), lede: t("How the screen is laid out."), groups: layoutGroups() },
+      { id: "keys", icon: "keys", name: t("Keyboard shortcuts"), lede: t("Every shortcut, and how to change it."), groups: keysGroups() },
+      { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: [] },
+      { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
+      { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
+      { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() }
+    ].filter((s) => s.groups.some((g) => g.rows.length));
+  }
+  function groupHtml(g) {
+    return '<div class="sx-group">' + (g.rows.length ? '<div class="sx-card">' + g.rows.map(rowHtml).join("") + "</div>" : "") + (g.after || "") + "</div>";
+  }
+  function settingsBodyHtml() {
+    return settingsSections().map((s) => s.groups.map(groupHtml).join("")).join("");
+  }
+  var sxOn = "general";
+  var sxQuery = "";
+  var SX_ALIAS = { personal: "general" };
+  function settingsFound(query) {
+    const q = scFold(query).trim();
+    if (!q) return [];
+    return settingsSections().map((s) => ({ sec: s, rows: [].concat(...s.groups.map((g) => g.rows)).filter((r) => r.key === "shortcuts" ? shortcutsShown(q) > 0 : scFold(rowWords(r)).indexOf(q) >= 0) })).filter((x) => x.rows.length);
+  }
+  function settingsNavHtml(on) {
+    return settingsSections().map((s) => '<button type="button" class="sx-sec' + (s.id === on ? " on" : "") + '" data-sx="' + esc(s.id) + '"' + (s.id === on ? ' aria-current="page"' : "") + ">" + sxIcon(s.icon) + "<span>" + esc(s.name) + "</span></button>").join("");
+  }
+  function settingsPageHtml(on, query) {
+    const q = String(query || "").trim();
+    if (q) {
+      const found = settingsFound(q);
+      return '<div class="sx-crumb">' + esc(t("Settings")) + "</div>" + (found.length ? found.map((f) => '<div class="sx-group"><h3>' + esc(f.sec.name) + '</h3><div class="sx-card">' + f.rows.map(rowHtml).join("") + "</div></div>").join("") : '<p class="sx-none">' + esc(t('No setting found for "{TEXT}".').split("{TEXT}").join(q)) + "</p>");
+    }
+    const secs = settingsSections(), s = secs.find((x) => x.id === on) || secs[0];
+    return '<div class="sx-crumb">' + esc(t("Settings")) + "</div><h2>" + esc(s.name) + '</h2><p class="lede">' + esc(s.lede) + "</p>" + s.groups.map(groupHtml).join("");
+  }
+  function settingsHost() {
+    if (screenOn !== "settings" || typeof document === "undefined") return null;
+    return document.getElementById("screenHost");
+  }
+  function settingsScreenHtml() {
+    return '<div class="sx" data-sel="tint"><nav class="sx-nav" aria-label="' + esc(t("Settings")) + '"><h1>' + esc(t("Settings")) + '</h1><label class="sx-search">' + sxIcon("search") + '<input type="search" id="sxSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(t("Search settings")) + '" aria-label="' + esc(t("Search settings")) + '" value="' + esc(sxQuery) + '"></label><div class="sx-secs" id="sxSecs">' + settingsNavHtml(sxQuery.trim() ? "" : sxOn) + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="sxMaint">' + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="setBody"></div></div>';
+  }
+  function renderSettings(host) {
+    scStopCapture();
+    if (hkListening) hotkeyListen(null, false);
+    host.innerHTML = settingsScreenHtml();
+    const secs = host.querySelector("#sxSecs");
+    if (secs) secs.onclick = (e) => {
+      const b = e.target && e.target.closest && e.target.closest("[data-sx]");
+      if (!b) return;
+      showSection(b.getAttribute("data-sx"));
+    };
+    const find = host.querySelector("#sxSearch");
+    if (find) {
+      find.oninput = () => {
+        sxQuery = find.value;
+        paintNav();
+        paintSettings();
+      };
+      find.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || !find.value) return;
+        e.preventDefault();
+        e.stopPropagation();
+        find.value = "";
+        sxQuery = "";
+        paintNav();
+        paintSettings();
+      });
+    }
+    const mt = host.querySelector("#sxMaint");
+    if (mt) mt.onclick = () => openMaintenance();
+    paintSettings();
+  }
+  function paintNav() {
+    const host = settingsHost(), secs = host && host.querySelector("#sxSecs");
+    if (secs) secs.innerHTML = settingsNavHtml(sxQuery.trim() ? "" : sxOn);
+  }
+  function showSection(id) {
+    sxOn = id;
+    sxQuery = "";
+    const host = settingsHost(), find = host && host.querySelector("#sxSearch");
+    if (find) find.value = "";
+    paintNav();
+    paintSettings();
+    const page = host && host.querySelector("#setBody");
+    if (page) page.scrollTop = 0;
   }
   function paintSettings() {
-    const box = modalCard && modalCard.querySelector("#setBody");
+    const host = settingsHost(), box = host && host.querySelector("#setBody");
     if (!box) return;
-    box.innerHTML = settingsBodyHtml();
-    wireAcc(box, (id) => {
-      if (id === "keys") paintKeysInline();
-    });
+    box.innerHTML = settingsPageHtml(sxOn, sxQuery);
     paintKeysInline();
     wireHotkeyRow(box);
+    wirePage(box);
+  }
+  function wirePage(box) {
     syncColFloorRow();
     const cf = box.querySelector("#setColFloor"), cfo = box.querySelector("#setColFloorOut");
     if (cf) {
@@ -31314,88 +31576,114 @@ What you type stays in this browser only.`;
     }
     wireTeamRows(box);
     const joinBtn = box.querySelector("#setJoinTeam");
-    if (joinBtn) joinBtn.onclick = () => {
-      dismissModal();
-      openJoinPaste();
-    };
+    if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     const nameBox = box.querySelector("#setAgentName");
-    if (nameBox) nameBox.oninput = () => {
-      setAgentName(nameBox.value);
-      const note = box.querySelector('details[data-acc="personal"] .acc-note');
-      if (note) note.textContent = personalNote();
+    if (nameBox) nameBox.oninput = () => setAgentName(nameBox.value);
+    const act = (id, fn) => {
+      const b = box.querySelector(id);
+      if (b) b.onclick = fn;
     };
+    act("#setReset", resetAllSettings);
+    act("#setClear", clearLocalMemory);
+    act("#setResetKeys", resetShortcuts);
+    act("#setAbout", () => openAbout());
+    act("#setTour", () => {
+      clearScreenOn();
+      hooks.startTour();
+    });
+    act("#setMaint", () => openMaintenance());
     box.querySelectorAll(".set-seg").forEach((sbox) => {
       sbox.querySelectorAll("button").forEach((b) => {
         b.onclick = () => {
-          const seg2 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
+          const seg3 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
           if (b.classList.contains("on")) return;
           sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
           b.classList.add("on");
-          if (seg2 === "theme") {
+          if (seg3 === "theme") {
             if (v === "system") lsDel("eTheme");
             else lsSet("eTheme", v);
             applyTheme();
             if (v === "system") toast(t("Theme follows the system"));
-          } else if (seg2 === "cols") {
+          } else if (seg3 === "cols") {
             nsSet("Cols", v);
             rebuildRailMQ();
             syncRailLayout();
             render();
             syncColFloorRow();
             toast(v === "auto" ? t("Columns fit the window") : v === "1" ? t("Single column") : t("Two columns"));
-          } else if (seg2 === "glass") {
+          } else if (seg3 === "glass") {
             document.body.classList.toggle("glass-off", !on);
             if (!on) lsSet("eGlassOff", "1");
             else lsDel("eGlassOff");
             toast(on ? t("Blur effects on") : t("Blur effects off"));
-          } else if (seg2 === "motion") {
+          } else if (seg3 === "motion") {
             if (on) lsDel("eMotionOff");
             else lsSet("eMotionOff", "1");
             syncStill();
             toast(on ? t("Animations on") : t("Animations reduced"));
-          } else if (seg2 === "notehover") {
+          } else if (seg3 === "notehover") {
             document.body.classList.toggle("note-hover", on);
             if (on) lsDel("eNoteHover");
             else lsSet("eNoteHover", "0");
             closeNotePane();
             toast(on ? t("Notes open on hover") : t("Notes open from the i"));
-          } else if (seg2 === "deck") {
+          } else if (seg3 === "deck") {
             if (on) lsDel("eDeckOff");
             else lsSet("eDeckOff", "1");
             syncDeck();
             toast(on ? t("Replies stack behind the first") : t("Replies laid out one below the other"));
-          } else if (seg2 === "sharededit") {
+          } else if (seg3 === "sharededit") {
             if (on) lsSet("eSharedEdit", "1");
             else lsDel("eSharedEdit");
             hooks.syncSampleMark();
             toast(on ? t("From now on, changes go into the shared catalog") : t("From now on, changes stay in this desk's own file"));
-          } else if (seg2 === "raillock") {
+          } else if (seg3 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
-          } else if (seg2 === "pillslock") {
+          } else if (seg3 === "pillslock") {
             if (pillsLocked() !== on) togglePillsLock();
           }
         };
       });
     });
-    const ls = $("#setUiLang");
+    const ls = box.querySelector("#setUiLang");
     if (ls) ls.onchange = () => {
       setUiLang(ls.value);
       const name = (UI_LANGS.filter((l) => l.code === uiLang())[0] || {}).label || ls.value;
-      modalResize(() => openSettings());
+      const host = settingsHost();
+      if (host) {
+        renderSettings(host);
+        const again = host.querySelector("#setUiLang");
+        if (again) again.focus();
+      }
+      drawTabs();
       toast(t("Interface language") + ": " + name);
     };
   }
   function paintKeysInline() {
-    const box = modalCard.querySelector("#scListInline");
-    if (box) wireShortcutsList(box, paintKeysInline);
+    const host = settingsHost(), box = host && host.querySelector("#scListInline");
+    if (box) wireShortcutsList(box, paintKeysInline, scFold(sxQuery).trim());
   }
   function syncColFloorRow() {
     const sl = document.querySelector("#setColFloor");
     if (!sl) return;
     const auto = colMode() === "auto";
     sl.disabled = !auto;
-    const row = sl.closest(".set-row");
-    if (row) row.classList.toggle("set-row-off", !auto);
+    const r = sl.closest(".set-row");
+    if (r) r.classList.toggle("set-row-off", !auto);
+  }
+  function resetShortcuts() {
+    const was = lsGet("eShortcuts");
+    scStopCapture();
+    lsDel("eShortcuts");
+    loadShortcuts();
+    paintKeysInline();
+    offerUndo("Shortcuts reset", () => {
+      if (was != null) {
+        lsSet("eShortcuts", was);
+        loadShortcuts();
+        paintKeysInline();
+      }
+    });
   }
   function resetAllSettings() {
     const was = {};
@@ -31430,7 +31718,7 @@ What you type stays in this browser only.`;
     nsDel("Cols");
     nsDel("Floor");
     applyPrefs();
-    paintSettings();
+    repaintScreen();
     offerUndo("Settings reset", () => {
       Object.keys(was).forEach((k) => {
         const v = was[k];
@@ -31438,8 +31726,16 @@ What you type stays in this browser only.`;
         else lsSet(k, v);
       });
       applyPrefs();
-      if (document.getElementById("setBody")) paintSettings();
+      repaintScreen();
     });
+  }
+  function repaintScreen() {
+    const host = settingsHost();
+    if (host) renderSettings(host);
+    try {
+      drawTabs();
+    } catch (e) {
+    }
   }
   function applyPrefs() {
     try {
@@ -31491,28 +31787,22 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
+  registerScreen("settings", {
+    title: () => t("Settings"),
+    render: (host) => renderSettings(host)
+  });
   function openSettings(section) {
-    scStopCapture();
-    if (section) {
-      accOpen.clear();
-      accOpen.add(section);
+    const id = SX_ALIAS[section] || section;
+    if (id) {
+      sxOn = id;
+      sxQuery = "";
     }
-    openDialog({
-      title: t("Settings"),
-      body: '<div id="setBody"></div>',
-      /* Reset sits at the bar's LEFT EDGE and stays secondary, with Close primary at the far
-         right: the destructive action should never be the one the eye lands on, nor the one a
-         reflex click finds when the intent was to dismiss. .mf-left is the group that takes the
-         auto margin, the way the editors and Maintenance place their own destructive controls. */
-      actions: '<div class="mf-left"><button type="button" class="btn" id="setReset" title="' + esc(t("Put every setting on this screen back to what it ships with. Cards and edits are not affected.")) + '">' + esc(t("Reset defaults")) + '</button></div><button type="button" class="btn primary" id="setClose">' + esc(t("Close")) + "</button>",
-      wire: () => {
-        paintSettings();
-        const c = $("#setClose");
-        if (c) c.onclick = () => dismissModal();
-        const rs = $("#setReset");
-        if (rs) rs.onclick = resetAllSettings;
-      }
-    });
+    openScreenTab("settings");
+    const host = settingsHost(), on = host && host.querySelector(".sx-sec.on");
+    if (on) try {
+      on.focus({ preventScroll: true });
+    } catch (e) {
+    }
   }
 
   // src/modules/search-box.js
@@ -32358,13 +32648,13 @@ What you type stays in this browser only.`;
     }
     dots += '<circle class="ln-dot ln-dot-open" cx="' + (h.l - 6) + '" cy="' + hy + '" r="4"/>';
     const rows = [...cols.querySelectorAll(".ln-row")];
-    rows.forEach((row, i) => {
-      const rh = row.querySelector(".chead");
+    rows.forEach((row2, i) => {
+      const rh = row2.querySelector(".chead");
       if (!rh) return;
       const r = at(rh.getBoundingClientRect()), y1 = (r.t + r.b) / 2, x1 = r.l - 8;
       const y0 = n.t + 18 + i * Math.min(14, Math.max(0, n.b - n.t - 36) / Math.max(1, rows.length - 1)), x0 = n.r;
       const dx = Math.max(12, (x1 - x0) / 2);
-      d += '<path class="ln-w' + (row.hasAttribute("data-learnt") || row.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + x1 + " " + y1 + '"/>';
+      d += '<path class="ln-w' + (row2.hasAttribute("data-learnt") || row2.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + x1 + " " + y1 + '"/>';
       dots += '<circle class="ln-dot" cx="' + x1 + '" cy="' + y1 + '" r="3.5"/>';
     });
     svg.setAttribute("width", String(cols.scrollWidth));
@@ -32394,8 +32684,8 @@ What you type stays in this browser only.`;
   function walkFrom(el, id) {
     const now = el.querySelector(".ln-now");
     if (!now || mgReduceMotion()) return null;
-    const row = el.querySelector('.ln-row[data-to="' + cssEsc(id) + '"]');
-    return { now, at: now.getBoundingClientRect(), row: row ? row.getBoundingClientRect() : null };
+    const row2 = el.querySelector('.ln-row[data-to="' + cssEsc(id) + '"]');
+    return { now, at: now.getBoundingClientRect(), row: row2 ? row2.getBoundingClientRect() : null };
   }
   function walkTo(el, was, say) {
     const cols = el.querySelector(".ln-cols"), now = cols && cols.querySelector(".ln-now");
@@ -32585,13 +32875,13 @@ What you type stays in this browser only.`;
     el.addEventListener("click", (e) => {
       const at = e.target;
       if (!at || !at.closest || !el.contains(at)) return true;
-      const row = at.closest(".ln-row"), k = row ? +row.dataset.k : -1;
+      const row2 = at.closest(".ln-row"), k = row2 ? +row2.dataset.k : -1;
       if (at.closest(".nx-x")) {
-        writeLaneList(laneListIds().filter((x) => x !== row.dataset.to), "Taken off the list");
+        writeLaneList(laneListIds().filter((x) => x !== row2.dataset.to), "Taken off the list");
         return true;
       }
       if (at.closest(".ln-keep")) {
-        writeLaneList(laneListIds().concat(row.dataset.to));
+        writeLaneList(laneListIds().concat(row2.dataset.to));
         return true;
       }
       if (at.closest(".nx-grip")) return true;
@@ -32738,7 +33028,8 @@ What you type stays in this browser only.`;
   }
   function wireCaptureKeydown() {
     addEventListener("keydown", (e) => {
-      if (!scCaptureId || !modalOpen()) return;
+      if (scCaptureId && !modalOpen() && !scListShown()) scStopCapture();
+      if (!scCaptureId) return;
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -33009,8 +33300,8 @@ What you type stays in this browser only.`;
     if (card) return replyRows(card, target);
     const sep = target.closest("#list .list-sep");
     if (sep) return headingRows(sep);
-    const row = target.closest("#intentRail .rail-item[data-si]");
-    if (row) return intentRows2(row);
+    const row2 = target.closest("#intentRail .rail-item[data-si]");
+    if (row2) return intentRows2(row2);
     const pill = target.closest("#pills .pill[data-k]");
     if (pill) return pill.dataset.k ? pillRows(pill) : null;
     const tab = target.closest("#tabsBar .tab[data-tid]");
@@ -33058,17 +33349,17 @@ What you type stays in this browser only.`;
     if (anyShut) rows.push({ label: t("Unfold every group"), act: () => animateFoldAll(false) });
     return rows;
   }
-  function intentRows2(row) {
-    const si = +row.dataset.si, picked = intentIdxs.indexOf(si) > -1;
-    const rows = [{ label: t(picked ? "Drop this intent" : "Pick this intent"), act: () => press(row) }];
-    if (!picked && intentIdxs.length) rows.push({ label: t("Pick it with the others"), act: () => press(row, { ctrlKey: true }) });
-    const show = row.querySelector("[data-show-intent]");
+  function intentRows2(row2) {
+    const si = +row2.dataset.si, picked = intentIdxs.indexOf(si) > -1;
+    const rows = [{ label: t(picked ? "Drop this intent" : "Pick this intent"), act: () => press(row2) }];
+    if (!picked && intentIdxs.length) rows.push({ label: t("Pick it with the others"), act: () => press(row2, { ctrlKey: true }) });
+    const show = row2.querySelector("[data-show-intent]");
     rows.push("-");
     if (show) {
       rows.push({ label: label(show, t("Show this intent again")), act: () => press(show) });
       return rows;
     }
-    const fav = row.querySelector("[data-fav-intent]"), edit = row.querySelector("[data-edit-intent]"), hide = row.querySelector("[data-hide-intent]");
+    const fav = row2.querySelector("[data-fav-intent]"), edit = row2.querySelector("[data-edit-intent]"), hide = row2.querySelector("[data-hide-intent]");
     if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
     if (edit) rows.push({ label: label(edit, t("Edit this intent")), act: () => press(edit, { ctrlKey: true }) });
     if (hide) rows.push({ label: label(hide, t("Hide this intent")), act: () => press(hide, { shiftKey: true }) });
@@ -33984,9 +34275,9 @@ What you type stays in this browser only.`;
   function pickRow(m, l, ps, vi) {
     const n = ps.length;
     const tag = n < 2 ? "" : m.seq ? t("step") + " " + (vi + 1) + "/" + n : altLabelAt(m, l, vi) || vi + 1 + "/" + n;
-    const row = { id: String(m.id), vi, t: cardTitle(m), x: pickExcerpt(ps[vi], fill(ps[vi], m, 0, l)), tag };
-    if (cardCommits(m)) row.commits = 1;
-    return row;
+    const row2 = { id: String(m.id), vi, t: cardTitle(m), x: pickExcerpt(ps[vi], fill(ps[vi], m, 0, l)), tag };
+    if (cardCommits(m)) row2.commits = 1;
+    return row2;
   }
   function pickByUse(hits) {
     const use = statsRecentUse(pack);
