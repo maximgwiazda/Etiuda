@@ -2248,6 +2248,27 @@ function sealBranchLead(box, teamId, keyId, deskId, text) {
   const w = hpkeSeal(Buffer.from(String(box), "hex"), branchLeadInfo(String(teamId), String(deskId)), Buffer.alloc(0), Buffer.from(String(text), "utf8"));
   return { format: 1, kind: BRANCH_LEAD_KIND, team: String(teamId), keyId: String(keyId), enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
 }
+/* What a box copy holds (board 962, stage 3): the desk file with the team, the `at` of the switch it was written under and the
+   grew chain this desk judged it by, signed under a prefix of its own, so Studio reads it only under that very switch. */
+const BRANCH_LEAD_INNER = "etiuda-branch-lead";
+const BRANCH_LEAD_PREFIX = "etiuda-catalog-branch\n";
+function branchLeadSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(BRANCH_LEAD_PREFIX, "utf8"), signedBytesOf(doc)]);
+}
+/* Whether an opened box copy is that folder's own: `keyHex` is the roster's desk.key for the folder's id, and that id, the id the
+   key makes and sig.keyId are one id. Which team, switch and chain it names is the reader's to compare. */
+function branchLeadGenuine(doc, folder, keyHex) {
+  const sig = doc && doc.sig;
+  try {
+    return !!folder && /^k-[0-9a-f]{16}$/.test(String(folder))
+      && /^[0-9a-f]{64}$/.test(String(keyHex)) && branchIdOf(String(keyHex)) === folder
+      && +doc.format === 1 && doc.kind === BRANCH_LEAD_INNER && typeof doc.team === "string" && !!doc.team
+      && typeof doc.content === "string" && !!doc.content && Array.isArray(doc.chain) && !!doc.file && typeof doc.file === "object"
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === folder && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, branchLeadSignedBytes(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(keyHex), "hex")]),
+        format: "der", type: "spki" }), Buffer.from(String(sig.value), "hex"));
+  } catch { return false; }
+}
 function openBranchLead(skR, doc, deskId) {
   try {
     if (!doc || typeof doc !== "object" || +doc.format !== 1 || doc.kind !== BRANCH_LEAD_KIND) return null;
@@ -2743,12 +2764,12 @@ function writeBranch(stem, text) {
     if (!d || d.id !== me.id || d.key !== me.key || d.box !== me.box || doc.id !== id) return branchHold(stem, text); /* plant:w1-early-hold */
     if (doc.grew && typeof doc.grew === "object" && teamOpened.has(String(doc.grew.id))) grewId = String(doc.grew.id);
   }
-  let toLead = null, withheld = false;
+  let toLead = null, toLeadAt = "", withheld = false;
   if (doc) {
     const gate = branchGate(doc);
     if (gate.hold) return branchHold(stem, text);
     if (gate.none) { doc = null; withheld = true; }
-    else if (gate.box) toLead = gate.box;
+    else if (gate.box) { toLead = gate.box; toLeadAt = gate.at; }
   }
   const at = branchDest(stem);
   if (!at) return branchHold(stem, text); /* plant:w1-early-hold */
@@ -2789,7 +2810,15 @@ function writeBranch(stem, text) {
       try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
     }
     const signed = JSON.stringify(doc, null, 1) + "\n";
-    const written = toLead ? JSON.stringify(sealBranchLead(toLead.box, toLead.team, String(toLead.lead.keyId), me.id, signed), null, 1) + "\n"
+    let boxed = "";
+    if (toLead) {
+      const said = { format: 1, kind: BRANCH_LEAD_INNER, team: String(toLead.team), content: toLeadAt, chain: lineageOf(doc), file: doc,
+        sig: { alg: "Ed25519", keyId: me.id } };
+      said.sig.value = branchSign(said, branchLeadSignedBytes); /* plant:s3-branch-said */
+      if (!toLeadAt || !/^[0-9a-f]{128}$/.test(String(said.sig.value))) return branchHold(stem, text);
+      boxed = JSON.stringify(said);
+    }
+    const written = toLead ? JSON.stringify(sealBranchLead(toLead.box, toLead.team, String(toLead.lead.keyId), me.id, boxed), null, 1) + "\n"
       : seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
     writeReplacing(at.dest, written);
     /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. */
@@ -3168,12 +3197,14 @@ function removeAnswer() {
   if (heldAnswer && heldAnswer.remove) heldAnswer = null;
   if (answerKept) { answerKept = null; persistDeskEnvelope(); }
 }
-/* The answer's text under either seal: the catalog, the ask and the team it answers and, sealed to the lead's box, the `at` of
-   the lead's switch it was given under, signed by this desk. Throws where it cannot sign. */
-function signedAnswer(me, team, askId, pin, catalogDoc, content) {
+/* The answer's text under either seal: the catalog, the ask and the team it answers, the grew chain this desk judged it by
+   (`chain`, lineageOf's ids) and, sealed to the lead's box, the `at` of the lead's switch it was given under, signed by this
+   desk. Throws where it cannot sign. */
+function signedAnswer(me, team, askId, pin, catalogDoc, content, chain) {
   const doc = { format: 1, kind: ANSWER_KIND, ask: String(askId), team: String(team), sha256: pin, catalog: catalogDoc,
     sig: { alg: "Ed25519", keyId: me.id } };
   if (content) doc.content = String(content);
+  if (Array.isArray(chain) && chain.length) doc.chain = chain.map(String); /* plant:s3-answer-chain */
   doc.sig.value = branchSign(doc, answerLeadSignedBytes);
   if (!/^[0-9a-f]{128}$/.test(String(doc.sig.value))) throw new Error("the answer could not be signed");
   return JSON.stringify(doc);
@@ -3268,7 +3299,7 @@ function branchGate(doc) {
   if (!onTeam) return {};
   if (chainListed(doc, use.catalogs)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
-  return { box: use.seal };
+  return { box: use.seal, at: use.content ? String(use.content.at) : "" };
 }
 /* What this desk put on the share that the lead may no longer read (board 962, stage 0b, Claude alpha's ruling B): an answer to
    the lead's box once the switch no longer applies, any answer about a catalog now private, and working copies likewise. */
@@ -3311,7 +3342,7 @@ function writeAnswer(use, pin, catalogDoc, toLead, askId) {
   if (toLead && !contentApplies(seal.team, use.consent)) return false; /* plant:s0b-switch */
   const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return false;
-  const inner = signedAnswer(me, seal.team, askId, pin, catalogDoc, toLead && use.content ? use.content.at : "");
+  const inner = signedAnswer(me, seal.team, askId, pin, catalogDoc, toLead && use.content ? use.content.at : "", lineageOf(catalogDoc));
   const at = branchDest("catalog-answer");
   if (!at) return false;
   for (const dir of [path.join(at.root, "desks"), at.dir]) {

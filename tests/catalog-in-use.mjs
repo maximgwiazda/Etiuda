@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 111;
+const EXPECTED = 115;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -53,7 +53,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
   "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt", "openAnswerLead", "answerLeadGenuine",
-  "writeAnswer", "openBranchLead"];
+  "writeAnswer", "openBranchLead", "branchLeadGenuine"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -77,7 +77,7 @@ function loadDesk(ud, src) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
+    (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -1468,10 +1468,10 @@ try {
       const keys = Object.keys(inner).sort().join(",");
       const moved = JSON.parse(JSON.stringify(inner));
       moved.team = "t-" + "0".repeat(16);
-      check(keys === "ask,catalog,format,kind,sha256,sig,team" && inner.ask === l.askId && inner.team === l.box.team
+      check(keys === "ask,catalog,chain,format,kind,sha256,sig,team" && inner.ask === l.askId && inner.team === l.box.team
           && l.box.D.api.answerLeadGenuine(inner, l.box.me.id, l.box.me.key) && !l.box.D.api.answerLeadGenuine(moved, l.box.me.id, l.box.me.key)
           && !openLeadDoc(l.box.D, l.ans),
-        "b0g an answer under the team key is signed by its desk as a box answer is, over the ask and the team, and names no switch (got " + keys + ")");
+        "b0g an answer under the team key is signed by its desk as a box answer is, over the ask and the team and its chain, and names no switch (got " + keys + ")");
     }
     {
       /* writeAnswer refuses by itself, whoever calls it: an answer to the lead's box under a switch not shown, and a private catalog. */
@@ -1651,7 +1651,7 @@ try {
         const withheld = await writeCopy(priv, "44444444", "quay-held");
         return {
           listed: listed.ok === true && fs.existsSync(branchAt(box, "11111111")),
-          boxed: open.ok === true && !!env && env.kind === "etiuda-branch-sealed" && !!inner && inner.id === box.me.id + "-22222222"
+          boxed: open.ok === true && !!env && env.kind === "etiuda-branch-sealed" && !!inner && !!inner.file && inner.file.id === box.me.id + "-22222222"
             && openRaw.indexOf(B0_MARK) < 0 && !openSealedDoc(box.D, branchAt(box, "22222222"), box.key),
           held: held.held === true && !fs.existsSync(branchAt(shut, "33333333")),
           withheld: withheld.ok === true && withheld.withheld === true && !fs.existsSync(branchAt(priv, "44444444")),
@@ -1756,6 +1756,57 @@ try {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-chain-listed") >= 0 ? "  /* plant:s0b-chain-listed */" : l).join("\n");
         const p = planted !== SRC ? await oneTest("r2-one-test-plant", planted) : null;
         check(!!p && !p.reverse, "r2t lifting plant:s0b-chain-listed turns r2s red: the copy of a listed catalog is judged unlisted (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    /* ---- stage 3: the desk signs the chain it judged, and a box copy names its team, switch and chain ---- */
+    {
+      const grownC3 = (id, grewId) => { const c = catalog(4, { id, name: "Quay held", card: B0_MARK, unsigned: true });
+        c.grew = { id: grewId, rev: 3, sha: "sha256:" + "ab".repeat(32) }; return textOf(c); };
+      const chains = async (name, src) => {
+        const t = await b0Ask(name, { catalogs: ["quay-held"], body: grownC3("k-0123456789abcdef-12345678", "quay-held"), src });
+        const b = await b0Ask(name + "-box", { src });
+        return { team: t.team ? JSON.stringify(t.team.chain) || "none" : "", box: b.lead ? JSON.stringify(b.lead.chain) || "none" : "",
+          boxSigned: !!b.lead && b.box.D.api.answerLeadGenuine(b.lead, b.box.me.id, b.box.me.key) };
+      };
+      const o = await chains("c3-chains");
+      check(o.team === JSON.stringify(["k-0123456789abcdef-12345678", "quay-held"]) && o.box === JSON.stringify(["quay-held"]) && o.boxSigned,
+        "c3a an answer carries the grew chain the desk judged it by, inside its signature, under the team key and to the lead's box alike (" + JSON.stringify(o) + ")");
+      if (PLANTS_OFF) skip("c3a2 lifting plant:s3-answer-chain turns c3a red");
+      else {
+        const NLc = String.fromCharCode(10);
+        const planted = SRC.split(NLc).map(l => l.indexOf("plant:s3-answer-chain") >= 0 ? "  /* plant:s3-answer-chain */" : l).join(NLc);
+        const p = planted !== SRC ? await chains("c3-chains-plant", planted) : null;
+        check(!!p && p.team === "none" && p.box === "none", "c3a2 lifting plant:s3-answer-chain turns c3a red: the answers carry no chain (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    {
+      const said = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+        const r = await writeCopy(box, "23232323", "quay-held");
+        let inner = null;
+        try { inner = JSON.parse(box.D.api.openBranchLead(leadBox.privateKey, JSON.parse(fs.readFileSync(branchAt(box, "23232323"), "utf8")), box.me.id)); }
+        catch { inner = null; }
+        if (!inner) return { written: r && r.ok === true && fs.existsSync(branchAt(box, "23232323")), inner: false };
+        const G = (d, at) => typeof box.D.api.branchLeadGenuine === "function" && box.D.api.branchLeadGenuine(d, at || box.me.id, box.me.key);
+        return {
+          written: true, inner: true, kind: inner.kind, team: inner.team === box.team, content: inner.content === SWITCH.at,
+          chain: JSON.stringify(inner.chain) === JSON.stringify([box.me.id + "-23232323", "quay-held"]), file: !!inner.file && inner.file.id === box.me.id + "-23232323"
+            && box.D.api.deskFileGenuine(inner.file, box.me.id),
+          genuine: G(inner), switched: G(Object.assign({}, inner, { content: "2026-10-01T09:00:00.000Z" })),
+          rechained: G(Object.assign({}, inner, { chain: [box.me.id + "-23232323", "harbour-board"] })),
+          elsewhere: G(inner, "k-" + "0".repeat(16)),
+        };
+      };
+      const o = await said("c3-said");
+      check(o.inner && o.kind === "etiuda-branch-lead" && o.team && o.content && o.file && o.genuine && !o.switched && !o.rechained && !o.elsewhere && o.chain,
+        "c3b a working copy sealed to the lead's box opens to the desk's signed statement: its team, the switch it was written under, the chain it was judged by and the desk file; another switch, another chain or another folder does not verify (" + JSON.stringify(o) + ")");
+      if (PLANTS_OFF) skip("c3b2 lifting plant:s3-branch-said turns c3b red");
+      else {
+        const NLc = String.fromCharCode(10);
+        const planted = SRC.split(NLc).map(l => l.indexOf("plant:s3-branch-said") >= 0 ? "      /* plant:s3-branch-said */" : l).join(NLc);
+        const p = planted !== SRC ? await said("c3-said-plant", planted) : null;
+        check(!!p && !p.genuine, "c3b2 lifting plant:s3-branch-said turns c3b red: no signed statement is written (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */
