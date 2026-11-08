@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 111;
+const EXPECTED = 113;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1756,6 +1756,32 @@ try {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-chain-listed") >= 0 ? "  /* plant:s0b-chain-listed */" : l).join("\n");
         const p = planted !== SRC ? await oneTest("r2-one-test-plant", planted) : null;
         check(!!p && !p.reverse, "r2t lifting plant:s0b-chain-listed turns r2s red: the copy of a listed catalog is judged unlisted (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    /* ---- 962 stage 5 (the design's 3.5): a listed id is not enough. A copy under the listed id itself that is not the lead's own
+       signed edition, an agent's own edit, answers as an unlisted catalog: only an ask naming its pin, and to the lead's box alone.
+       The lead's own edition answers as before. */
+    {
+      const s5 = async (name, src) => {
+        const own = await b0Ask(name + "-own", { catalogs: ["quay-held"], src,
+          body: textOf(catalog(4, { id: "quay-held", name: "Quay held", card: B0_MARK, unsigned: true })) });
+        const ownOut = { written: own.written, lead: !!own.lead && JSON.stringify(own.lead).indexOf(B0_MARK) >= 0, team: !!own.team };
+        if (fs.existsSync(own.ans)) fs.unlinkSync(own.ans);
+        putAsk(own.box, "Asks5other", "sha256:" + "cd".repeat(32));
+        const other = own.again();
+        const leadEd = await b0Ask(name + "-lead", { catalogs: ["quay-held"], src, body: b0Body("quay-held") });
+        return { own: ownOut, otherPin: other.written, leadTeam: !!leadEd.team && JSON.stringify(leadEd.team).indexOf(B0_MARK) >= 0, leadBox: !!leadEd.lead };
+      };
+      const u = await s5("s5u");
+      check(u.own.written && u.own.lead && !u.own.team && !u.otherPin && u.leadTeam && !u.leadBox,
+        "962s5u a copy under a listed id that is not the lead's signed edition is answered only to an ask naming its pin, and to the lead's box alone; the lead's own edition is answered under the team key as before ("
+        + JSON.stringify(u) + ")");
+      if (PLANTS_OFF) skip("962s5u2 lifting plant:s5-listed-lead turns 962s5u red: the agent's own copy under the listed id is answered under the team key");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-listed-lead") >= 0 ? "  /* plant:s5-listed-lead */" : l).join("\n");
+        const p = planted !== SRC ? await s5("s5u-plant", planted) : null;
+        check(!!p && p.own.team && !p.own.lead, "962s5u2 lifting plant:s5-listed-lead turns 962s5u red: the agent's own copy under the listed id is answered under the team key ("
+          + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */

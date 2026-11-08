@@ -814,7 +814,29 @@ function pickEdition(found) {
     if (pins.length && !catalogLeadOk(item.data)) drop.add(i);
     else if (best.has(id) && best.get(id) !== i) drop.add(i);
   });
-  return found.filter((item, i) => !drop.has(i))[0] || null;
+  const kept = found.filter((item, i) => !drop.has(i));
+  /* Where the team lists the catalog in use, that catalog's file; on an empty desk whose team lists more than one with a
+     file, none: the Library holds the choice. */
+  const inUse = pins.length ? inUseCatalogId() : "";
+  let mine = null;
+  mine = inUse && teamCovering(catalogFolder(), inUse) ? kept.filter(item => String(item.data.id || "") === inUse)[0] : null; /* plant:pick-in-use */
+  if (mine) return mine;
+  if (pins.length && !inUse && teamListedMany(kept)) return null; /* plant:pick-many-none */
+  return kept[0] || null;
+}
+/* The id of the catalog this desk has in use: the one the page took, else the one last handed to it. */
+function inUseCatalogId() {
+  const doc = catalogDocIn(loadedText || (typeof catalogJson === "string" ? catalogJson : ""));
+  return doc && typeof doc.id === "string" ? doc.id : "";
+}
+/* True where more than one catalog id among `items` is one the team at the catalog folder lists. */
+function teamListedMany(items) {
+  const root = catalogFolder(), ids = new Set();
+  for (const item of items) {
+    const id = String(item.data && item.data.id || "");
+    if (id && teamCovering(root, id)) ids.add(id);
+  }
+  return ids.size > 1;
 }
 /* The mirror is a cache, not a trust anchor. The desk keeps every read-time check it does today
    on what it reads from the mirror, as it does on the relay mirror. */
@@ -854,8 +876,9 @@ function readCatalog() {
       teamSay(shellWords().stillReading);
       return typeof catalogJson === "string" ? catalogJson : null;
     }
-    console.log(found.length ? "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for"
-      : "etiuda: no catalog found, so Etiuda starts as a clean slate");
+    console.log(!found.length ? "etiuda: no catalog found, so Etiuda starts as a clean slate"
+      : teamListedMany(found) ? "etiuda: the team lists more than one catalog here, so none is chosen without being asked for"
+      : "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for");
     catalogFrom = "";
     return null;
   }
@@ -1262,6 +1285,12 @@ function catalogFolderChanged() {
   armFolder(win);
 }
 
+/* True where `text` is a catalog the team lists other than the one in use, which the team also lists. */
+function otherTeamCatalog(text) {
+  const doc = catalogDocIn(text), inUse = inUseCatalogId(), root = catalogFolder();
+  const id = doc && typeof doc.id === "string" ? doc.id : "";
+  return !!id && !!inUse && id !== inUse && !!teamCovering(root, inUse) && !!teamCovering(root, id);
+}
 /* The engine is OFFERED the new file and never given it: replacing a catalog under somebody
    mid-chat is the one thing the offer dialog exists to prevent, and this is the third channel
    into it rather than a second way of loading. A file that stops parsing leaves what is loaded
@@ -1290,6 +1319,7 @@ function catalogChanged(win) {
   if (belowCatalogRev(now)) return;
   // Nor, with a lead pinned, bytes that lead did not sign: this send is unasked, the file this launch was opened with included.
   if (now && !unsolicitedLeadText(now)) return;
+  if (now && otherTeamCatalog(now)) return; /* plant:changed-in-use */
   catalogJson = now;
   keepCatalogRev(now);
   if (!now || !win || win.isDestroyed()) return;
@@ -1401,7 +1431,9 @@ function leadEditionBeside() {
     const id = String(peeked.data.id || "");
     if (!id) continue;
     const same = !!openedId && id === openedId;
-    if (!same && !teamCovering(root, id)) continue;
+    let other = d => !!d;
+    other = d => !!d && new Set(d.catalogs.map(String)).size === 1; /* plant:beside-one */
+    if (!same && !other(teamCovering(root, id))) continue;
     const rev = editionRev(peeked.data);
     const floor = openedBaseline.has(id) ? openedBaseline.get(id) : -1;
     if (!(rev > floor)) continue;
@@ -3388,7 +3420,10 @@ function tryCatalogAsk(win) {
     let pin = "";
     try { pin = signedSha(doc); } catch { return; }
     if (!PIN_RE.test(pin)) return;
-    const listed = chainListed(doc, use.catalogs);
+    let listed = chainListed(doc, use.catalogs);
+    /* A copy under a listed id itself answers as listed only where it is the lead's own signed edition, by this team's pin; any
+       other answers as an unlisted one. A copy under an id of its own keeps its grew chain's answer. */
+    listed = listed && (use.catalogs.indexOf(String(doc.id)) < 0 || catalogSigValid(doc, String(use.seal.lead.public || "")) === true); /* plant:s5-listed-lead */
     if (ask.sha256 !== pin && !listed) return;
     if (privateHere(doc, use.catalogs)) return; /* plant:s0b-private */
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
@@ -4214,8 +4249,16 @@ let joinTold = false;                           // the lead's answer already que
 let relayCatalogOwed = "";                      // a relay team admitted, whose catalog no view has named yet
 const relayCatalogNamed = new Set();            // the relay teams whose catalog a view has named this run
 function relayOpenFile(team) {
+  const h = teamSealedHere(team);
+  /* More than one of the team's catalogs here: nothing opens by itself, and the empty desk lands on the Library. */
+  if (h.ids.size > 1) return ""; /* plant:open-many-none */
+  return h.best;
+}
+/* The team's sealed files here this desk can open: the newest, and the catalog ids among them. */
+function teamSealedHere(team) {
   const kept = teamKeys[team] || {};
-  if (!Object.keys(kept).length) return "";
+  const ids = new Set();
+  if (!Object.keys(kept).length) return { best: "", ids: ids };
   /* The newest of the team's sealed files this desk can open: the highest key number, then the highest rev inside it (the
      test architect's C1 to the desk pilot; a sealed envelope carries no rev outside its ciphertext). */
   let best = "", bestEpoch = -1, bestRev = -1;
@@ -4229,10 +4272,16 @@ function relayOpenFile(team) {
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
     if (!(d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch])) continue;
     let rev = -1;
-    try { const text = openSealed(teamKeyAt(team, d.epoch), d); const doc = text ? JSON.parse(text) : null; if (doc && Number.isInteger(doc.rev)) rev = doc.rev; } catch { rev = -1; }
+    try { const text = openSealed(teamKeyAt(team, d.epoch), d); const doc = text ? JSON.parse(text) : null; if (doc && Number.isInteger(doc.rev)) rev = doc.rev; if (doc && typeof doc.id === "string") ids.add(doc.id); } catch { rev = -1; }
     if (d.epoch > bestEpoch || (d.epoch === bestEpoch && rev > bestRev)) { best = path.basename(f); bestEpoch = d.epoch; bestRev = rev; } /* plant:relay-open-newest */
   }
-  return best;
+  return { best: best, ids: ids };
+}
+/* The file an admission names for the page to open: none where the team's catalogs here are more than one. */
+function joinedFile(j) {
+  let many = false;
+  many = teamSealedHere(j.team).ids.size > 1; /* plant:joined-many-none */
+  return many ? "" : j.file;
 }
 function relayOpens(j) {
   const inv = j && j.invite && j.invite.relay;
@@ -4268,7 +4317,7 @@ function finishJoin(admitted) {
   try { unlinkOwn(joinFile()); } catch { /* gone already */ }
   teamJoin = null;
   if (j.invite && j.invite.relay) relayCatalogOwed = j.team;
-  if (!joinTold) joinDone = { team: j.team, file: j.file };
+  if (!joinTold) joinDone = { team: j.team, file: joinedFile(j) };
   joinTold = false;
   persistDeskEnvelope();
   if (j.invite && j.invite.relay) relaySoon();
@@ -5674,16 +5723,46 @@ function folderHeadShown(team) {
   } catch { genuine = false; }
   if (!genuine) return null; /* plant:folder-head-sig */
   const RCh = RelayChannel();
-  const edition = typeof RCh.newestEdition === "function" ? RCh.newestEdition(doc.editions) : null;
-  if (!edition) return null;
-  const deskRev = deskEditionRev(edition.catalog, folder, pin.public);
-  if (deskRev >= 0 && edition.rev < deskRev) return null; /* plant:folder-head-older */
+  /* Dated past the allowance ahead of this clock: refused, not floored, and read again at the next look. */
+  if (doc.t > Date.now() + RCh.HEAD_AHEAD_MS) return null; /* plant:folder-head-ahead */
+  const view = headView(team, RCh.headEditions(doc.editions), doc.t, folder);
+  if (!view) return null;
   if (Number.isFinite(teamHeadT[team]) && doc.t < teamHeadT[team]) return null;
   teamHeadT[team] = doc.t;
-  const ed = typeof edition.edition === "string" ? edition.edition : "";
-  const pub = typeof edition.published === "string" ? edition.published : "";
-  if (ed.length < 1 || ed.length > 120 || pub.length < 1 || pub.length > 80 || !Number.isFinite(doc.t) || /[\u0000-\u001f\u007f]/.test(ed + pub)) return null;
-  return { edition: ed, published: pub, t: doc.t };
+  return view;
+}
+/* A head's entries as the team row carries them: only catalogs the team's whole file lists, none below the rev this desk has
+   seen of that catalog, each `newer` where its rev is above what the desk has loaded of it, never a file unread in the
+   mirror. `edition` and `published` are the catalog in use's entry where kept, else the newest kept. */
+function headView(team, editions, t, folder) {
+  const pin = teamPins[team];
+  if (!pin || !Array.isArray(editions) || !folder || !Number.isFinite(t)) return null;
+  const doc = teamTextChosen(folder).doc;
+  if (!doc || !teamWhole(doc) || String(doc.id) !== team || doc.lead.keyId !== pin.keyId || doc.lead.public !== pin.public
+    || !Array.isArray(doc.catalogs)) return null;
+  const listed = doc.catalogs.map(String), inUse = inUseCatalogId(), kept = [];
+  for (const e of editions) {
+    const ed = e && typeof e.edition === "string" ? e.edition : "", pub = e && typeof e.published === "string" ? e.published : "";
+    if (!e || !Number.isInteger(e.rev) || ed.length < 1 || ed.length > 120 || pub.length < 1 || pub.length > 80 || /[\u0000-\u001f\u007f]/.test(ed + pub)) return null;
+    let off = false;
+    off = listed.indexOf(String(e.catalog)) < 0; /* plant:head-listed */
+    if (off) continue;
+    const seen = deskEditionRev(e.catalog, folder, pin.public);
+    if (seen >= 0 && e.rev < seen) continue; /* plant:folder-head-older */
+    kept.push({ catalog: String(e.catalog), rev: e.rev, edition: ed, published: pub, newer: e.rev > loadedRevOf(e.catalog, pin.public) });
+  }
+  if (!kept.length) return null;
+  let pick = kept.filter(e => e.catalog === inUse)[0] || null;
+  if (!pick) for (const e of kept) if (!pick || e.rev >= pick.rev) pick = e;
+  return { t: t, editions: kept, edition: pick.edition, published: pick.published };
+}
+/* The highest rev this desk has loaded of `id` under the lead's key: what was handed to the page, and the catalog in use. */
+function loadedRevOf(id, leadPublic) {
+  let rev = -1;
+  rev = catalogRevs[id] && Number.isInteger(catalogRevs[id][leadPublic]) ? catalogRevs[id][leadPublic] : -1; /* plant:head-loaded */
+  const doc = catalogDocIn(loadedText || (typeof catalogJson === "string" ? catalogJson : ""));
+  if (doc && doc.id === id) rev = Math.max(rev, editionRev(doc));
+  return rev;
 }
 /* The head of the team this desk follows, for the team row: either from the relay mirror, or from the folder's
    etiuda-head.json. A missing, bad, forged, foreign-key or older head gets no field at all. */
@@ -5694,10 +5773,7 @@ function headShown(team) {
     let n = null;
     try { n = relayChannel.program.headNews(Date.now()); } catch (e) { return null; }
     if (!n || n.shown !== true) return null;
-    const edition = typeof n.edition === "string" ? n.edition : "", published = typeof n.published === "string" ? n.published : "";
-    if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80
-      || !Number.isFinite(n.time) || /[\u0000-\u001f\u007f]/.test(edition + published)) return null;
-    return { edition: edition, published: published, t: n.time };
+    return headView(team, n.editions, n.time, relayMirrorOf(here.rt));
   }
   return folderHeadShown(team);
 }
@@ -6331,7 +6407,7 @@ function relayRun() {
       }
       if (answer === "joined" && !joinTold) {
         joinTold = true;
-        joinDone = { team: j.team, file: j.file };
+        joinDone = { team: j.team, file: joinedFile(j) };
       }
     },
     /* The team key from the invitation's wrap, kept as a roster wrap is kept, and the wrap key forgotten. Not admission. The
