@@ -2,7 +2,6 @@
    opens on this desk through the offer every route ends in; one the host says may go back is put back in the catalog
    folder, with an Undo. */
 import { eHost, eCatalogFolderShort } from "./host.js";
-import { openDialog } from "./dialog.js";
 import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
@@ -11,6 +10,7 @@ import { activateCatalog } from "./catalog-file.js";
 import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
 import { ICON_LOAD } from "./icons.js";
+import { screenOn } from "./screen-tabs.js";
 
 function historyHost(){
   const h=eHost();
@@ -97,22 +97,25 @@ function historyPutBack(v){
     }));
   }).catch(refuse);
 }
-function openHistory(){
+/* EARLIER VERSIONS IS A PAGE OF THE LIBRARY'S TAB, painted into the tab's host, and Back returns to the Library's list.
+   A list read after the tab went behind another is dropped, so it never paints over that one. */
+function openHistory(host){
   const h=historyHost(); if(!h) return;
+  const box=host||document.getElementById("screenHost");
+  if(!box) return;
   Promise.resolve(h.historyList()).then(list=>{
+    if(box.hidden || (screenOn && screenOn!=="library")) return;
     const groups=historyGroups(list), flat=[].concat.apply([],groups);
-    openDialog({
-      title:"Saved copies",
-      back:()=>hooks.openManage(),
-      body:'<div id="ehView">'+historyBodyHtml(groups)+'</div>',
-      actions:'<button type="button" class="btn" id="ehClose">'+esc(t("Close"))+'</button>',
-      wire:()=>{
-        const box=document.getElementById("ehView");
-        box.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
-        box.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
-        document.getElementById("ehClose").onclick=()=>hooks.openManage();
-      }
-    });
+    box.innerHTML='<div class="screen-page lib-screen lib-history" tabindex="-1">'
+      +'<div class="screen-head"><h2>'+esc(t("Saved copies"))+'</h2></div>'
+      +'<div class="screen-body"><div id="ehView">'+historyBodyHtml(groups)+'</div></div>'
+      +'<div class="screen-actions"><button type="button" class="btn" id="ehClose">'+esc(t("Back to the Library"))+'</button></div></div>';
+    const view=document.getElementById("ehView");
+    view.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
+    view.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
+    const back=document.getElementById("ehClose");
+    back.onclick=()=>hooks.openManage();
+    try{ back.focus({preventScroll:true}); }catch(e){}
   }).catch(()=>{});
 }
 

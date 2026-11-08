@@ -1499,7 +1499,7 @@ function translateTree(root){
 function translateChrome(){
   /* #intentRail carries the engine's own labels AND the catalog's intent clauses; the
      clauses are marked data-i18n-skip where they are written, so the sweep is safe here. */
-  ["header","#settingsMenu","#modalCard","footer","#tourRoot",
+  ["header","#settingsMenu","#modalCard","#screenHost","footer","#tourRoot",
    "#intentRail","#sampleMark","#railHit"].forEach(sel=>{
     const el=document.querySelector(sel);
     if(el) translateTree(el);

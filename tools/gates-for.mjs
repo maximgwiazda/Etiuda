@@ -185,6 +185,7 @@ export const SCANS = {
   "tests/catalog-in-use.mjs": ["src/modules/catalog-offer.js", "src/modules/catalog-file.js", "src/modules/catalog-history.js", "src/modules/settings.js", "src/modules/ui-lang.js", "src/modules/local-memory.js", "shell/preload.js"],
   "tests/desk-ipc.mjs": ["src/template.html", "src/modules/{hooks,theme,storage,motion,dom}.js"],
   "tests/stats-live.mjs": ["src/modules/host.js", "shell/preload.js", "src/modules/settings.js", "src/modules/ui-lang.js"],
+  "tests/library-tab.mjs": ["src/modules/*.js"],
   "tests/tab-focus.mjs": ["src/template.html", "src/modules/list-pointer.js", "src/modules/run-shortcut.js", "src/modules/tabs.js", "shell/main.js", "shell/preload.js", "src/modules/host.js"],
   "tests/shell-office.mjs": ["shell/*.ec"],
   "tests/pick.mjs": ["shell/*.js", "src/modules/*.js", "src/main.js", "shell/caret.cs", "electron-builder.js", "src/modules/tour.js", "src/modules/pick.js"],

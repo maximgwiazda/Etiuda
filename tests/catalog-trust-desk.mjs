@@ -483,6 +483,8 @@ async function launch(plan) {
         card.querySelectorAll = sel => (/^(\.mf input|\.ctitle,)/.test(sel) ? [] : ask(sel));
       }
       HOOKS.openManage = noop;
+      // Earlier versions is a page of the Library's tab, painted into the screen tabs' host.
+      if (!doc.getElementById("screenHost")) doc.body.appendChild(doc.createElement("div")).id = "screenHost";
       const HIST = await import(MOD("catalog-history.js"));
       HIST.openHistory();
       for (let i = 0; i < 500 && !doc.querySelector("[data-eh-open]"); i++) await new Promise(r => setImmediate(r));

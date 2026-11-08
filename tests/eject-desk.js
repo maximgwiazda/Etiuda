@@ -81,7 +81,7 @@ async function main() {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       document.getElementById("settingsBtn").click(); await wait(400);
       document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1000);
-      const sec = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+      const sec = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
       if (sec) sec.open = true;
     });
     await page.waitForSelector("#mgCatList button[data-ec-eject]", { timeout: 20000 });

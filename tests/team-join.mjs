@@ -3190,9 +3190,12 @@ try {
     settingsOpened = settingsClosed && TJ.inviteHeld().mode === "paste";
     try { await press("back"); leftPaste = TJ.inviteHeld().mode !== "paste"; }
     catch (e) { doorErr = doorErr || String(e && e.message || e); }
+    // The Library is a screen tab, painted into the screen tabs' host, and closed again once read.
+    if (!doc.getElementById("screenHost")) doc.body.appendChild(new DoorEl("div", { id: "screenHost" }));
     MG.openManage();
     click(doc.getElementById("mgJoinTeam"));
     libraryOpened = leftPaste && TJ.inviteHeld().mode === "paste";
+    (await import(MOD("screen-tabs.js"))).closeScreenTab("library");
     const offerEl = new DoorEl("div", { id: "eCatalogOffer", class: "bub bub-ask e-offer" });
     doc.body.appendChild(offerEl);
     TJ.openJoinPaste();

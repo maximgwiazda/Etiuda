@@ -85,8 +85,8 @@ function removeCategory(k){
     setCatOrder(order);
     lySet("CatOrder",JSON.stringify(catOrder));
     hooks.rebuildCards(); applyCatsToGlobal(); hooks.drawPillsCore(); hooks.render(); hooks.drawIntentRail();
-    // The Library shows the category again where it stands open.
-    if(document.getElementById("mgCatList")) hooks.openManage();
+    // The Library shows the category again where it stands in front, never closing a pop-up over it.
+    if(document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
   });
   return true;
 }

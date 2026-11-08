@@ -2807,16 +2807,6 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
-/* THE LIBRARY'S BAR HOLDS EVERY BUTTON ON ONE ROW at the default window, 1280 by 880: the
-   Polish labels need about 645px inside the padding, so the card is 720px, nowrap, and 2s9
-   reads the gap between the ends. Only from 760px wide: below it the bar and its left group
-   wrap rather than push a button off the card (2s9w, at 600px). Other dialogs stay at 560. */
-.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:wrap}
-@media (min-width:760px){
-.modal-card.lib-modal{max-width:720px}
-.modal-card.lib-modal .modal-actions,
-.modal-card.lib-modal .modal-actions .mf-left{flex-wrap:nowrap}
-}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
@@ -2825,6 +2815,13 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
   border-radius:1px}
+/* A SCREEN TAB'S HEADING AND BAR keep the dialog's: the file's name beside the title, and the bar's left group with
+   its hairline, as the Library's bar had them. */
+.screen-head{display:flex;align-items:baseline;gap:.7ch;min-width:0}
+.screen-head .screen-name{font-weight:400;color:var(--dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.screen-actions .mf-left{display:flex;gap:8px;margin-right:auto;flex-wrap:wrap}
+.screen-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);border-radius:1px}
+.screen-page:focus{outline:none}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
    specificity and beats it on source order alone, so anything that reorders the sheet - a
