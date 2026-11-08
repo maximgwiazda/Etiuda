@@ -6347,7 +6347,7 @@ function sharedLock(file) {
   if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
   if (st) {
     const aside = lock + "." + token + ".stale";
-    renamePatiently(lock, aside);
+    try { renamePatiently(lock, aside); } catch { return null; }
     try { fs.unlinkSync(aside); } catch { /* left beside it */ }
   }
   try { take(); return { lock: lock, token: token }; }
