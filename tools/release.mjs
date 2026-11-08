@@ -23,14 +23,14 @@
  * Each gate stops the run and the exit code is its number, so a failure names itself. A gate that
  * cannot run says NOT RUN and fails: a skipped gate that prints nothing reads exactly like one
  * that passed, which is the mistake this harness has made before. */
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawnSync, execFileSync } from 'node:child_process';
 import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, mkdirSync, linkSync, copyFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeBuild, signatureVerdict } from './sellable.mjs';
+import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict } from './sellable.mjs';
 import { writeSbom } from './sbom.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -116,6 +116,7 @@ const gate = (title, fn) => {
   console.log('  ok');
 };
 const sh = (cmd, opts) => execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...(opts || {}) }).trim();
+const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const run = (cmd, argv, env) => spawnSync(cmd, argv, {
   cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32',
   env: { ...process.env, ...(env || {}) },
@@ -150,6 +151,13 @@ gate('the version, read where the rulebook keeps it, and whether the build is a 
   if (judged.problems.length)
     return 'a CUSTOMER build that cannot be sold, ' + judged.problems.length + ' reason(s): ' + judged.problems.join('; ');
   console.log('  a CUSTOMER build, and nothing in the tree stops it being sold');
+  /* The release profile: required of a customer build (test-regimen.md rule 4, decisions 2026-11-05 11:43).
+     Whatever reaches a customer ships only from a tree whose release profile is green on that same tree,
+     with no red of class hold. A test build for Maxim alone needs no release profile, and no tool refuses it. */
+  const tree = git('rev-parse', 'HEAD^{tree}');
+  const profileVerdict = customerReleaseProfileVerdict({ root: ROOT, tree, runsDir: process.env.ETIUDA_RUNS }); /* plant:customer-release-profile */
+  if (profileVerdict !== true) return profileVerdict;
+  console.log('  a CUSTOMER build, and its release profile is green for tree ' + tree);
   return true;
 });
 

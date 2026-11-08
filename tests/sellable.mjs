@@ -29,12 +29,13 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { customerVersion, versionProblems, placeholders, licencePages, licenceProblems,
-         signingConfigured, signatureProblems, readAuthenticode, signatureVerdict, beforeBuild, SIGNING_VARS } from '../tools/sellable.mjs';
+         signingConfigured, signatureProblems, readAuthenticode, signatureVerdict, beforeBuild, SIGNING_VARS,
+         customerReleaseProfileVerdict, readReleaseSummaries } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 33;
+const EXPECTED = 39;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -387,8 +388,10 @@ try {
      env.js with the version under test, and the licence pages. Gate 3 then finds no name list in
      the lab and stops NOT RUN with exit 3, which is how a leg tells "past gate 2" from "stopped at
      it" without running a single gate more. */
-  const lab = (name, version, licence) => {
+  const lab = (name, version, licence, opts = {}) => {
     const root = path.join(TMP, 'lab-' + name), dir = path.join(root, 'repo');
+    const runs = path.join(root, 'runs');
+    fs.mkdirSync(runs, { recursive: true });
     for (const d of ['tools', 'tests', 'shell', path.join('src', 'modules')]) fs.mkdirSync(path.join(dir, d), { recursive: true });
     for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'package.json'])
       fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
@@ -398,10 +401,32 @@ try {
     const git = (...a) => execFileSync('git', ['-c', 'user.name=sellable', '-c', 'user.email=sellable@invalid',
       '-c', 'core.autocrlf=false', ...a], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
     git('init', '-q'); git('add', '-A'); git('commit', '-q', '-m', 'lab');
-    return { root, dir };
+    const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: dir, encoding: 'utf8' }).trim();
+    if (opts.greenSummary) {
+      const summary = {
+        kind: 'profile-summary',
+        profile: 'release',
+        gitTree: tree,
+        commit: 'lab-commit',
+        gates: {
+          profile: ['unit', 'hygiene'],
+          ran: ['unit', 'hygiene'],
+          total: 2,
+          completed: 2,
+        },
+        reds: { holds: [], warns: [] },
+        holds: false,
+        inherits: '',
+        start: new Date().toISOString(),
+        end: new Date().toISOString(),
+        time: new Date().toISOString(),
+      };
+      fs.writeFileSync(path.join(runs, 'release-summary-20261108T000000-000.json'), JSON.stringify(summary, null, 2) + '\n');
+    }
+    return { root, dir, runs, tree, git };
   };
-  const release = (l, argv, cert) => {
-    const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root };
+  const release = (l, argv, cert, extraEnv = {}) => {
+    const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root, ETIUDA_RUNS: l.runs, ...extraEnv };
     for (const k of SIGNING_VARS) delete env[k];
     if (cert) env.ETIUDA_CERT = cert;
     const res = spawnSync(process.execPath, ['tools/release.mjs', ...argv], { cwd: l.dir, env, encoding: 'utf8', timeout: 60000 });
@@ -421,7 +446,7 @@ try {
   const c = release(lab('rehearsed', '2.0.0-dev', FILLED), ['--customer'], 'C:/nowhere/etiuda.pfx');
   check(stopped2(c) && /carries a prerelease/.test(c.out),
     '6c --customer asks a preview the customer\'s questions and its version is refused, exit ' + c.status);
-  const d = release(lab('sellable', '2.0.0', FILLED), [], 'C:/nowhere/etiuda.pfx');
+  const d = release(lab('sellable', '2.0.0', FILLED, { greenSummary: true }), [], 'C:/nowhere/etiuda.pfx');
   check(past2(d) && /a CUSTOMER build, and nothing in the tree stops it being sold/.test(d.out),
     '6d a customer version with the page filled and a certificate configured passes gate 2, exit ' + d.status);
   /* 6e and 6f, GATE 1 AND AN UNTRACKED FILE (board 830). A release is of a commit, so gate 1 refuses a tree with
@@ -441,6 +466,86 @@ try {
   const f = release(strayLab('stray-hidden', true), []);
   check(stopped1(f), '6f the same untracked file is still refused at gate 1 with status.showUntrackedFiles=no in the repository\'s own'
     + ' configuration, exit ' + f.status + (stopped1(f) ? '' : ' (the gate went on as far as gate ' + ([...f.out.matchAll(/\n\[(\d+)\] /g)].pop() || [0, '?'])[1] + ')'));
+
+  /* ---- 7. the release profile gate for customer builds (test-regimen.md rule 4, decisions 2026-11-05 11:43) -- */
+  const putSummary = (runsDir, tree, opts = {}) => {
+    const summary = {
+      kind: 'profile-summary',
+      profile: opts.profile || 'release',
+      gitTree: tree,
+      commit: opts.commit || 'lab-commit',
+      gates: opts.gates || {
+        profile: ['unit', 'hygiene'],
+        ran: ['unit', 'hygiene'],
+        total: 2,
+        completed: 2,
+      },
+      reds: opts.reds || { holds: [], warns: [] },
+      holds: opts.holds != null ? opts.holds : ((opts.reds && opts.reds.holds && opts.reds.holds.length > 0) || false),
+      inherits: opts.inherits || '',
+      start: new Date().toISOString(),
+      end: new Date().toISOString(),
+      time: opts.time || new Date().toISOString(),
+    };
+    const file = path.join(runsDir, 'release-summary-' + (opts.tag || '20261108T000000-000') + '.json');
+    fs.writeFileSync(file, JSON.stringify(summary, null, 2) + '\n');
+    return file;
+  };
+
+  /* 7a (leg 1): Customer version (2.0.0) with no summary in runs is refused before any test/build. */
+  const l1 = lab('leg1-nosummary', '2.0.0', FILLED);
+  const r1 = release(l1, [], 'C:/nowhere/etiuda.pfx');
+  check(stopped2(r1) && /no release profile summary found/.test(r1.out) && /node tools\/gate-run\.mjs release/.test(r1.out) && !/\n\[3\] /.test(r1.out),
+    '7a customer build with no summary for its tree is refused at gate 2 and names how to get it, exit ' + r1.status);
+
+  /* 7b (leg 2): Summary for another tree is refused, naming that a different tree is not the same tree. */
+  const l2 = lab('leg2-othertree', '2.0.0', FILLED);
+  putSummary(l2.runs, '0123456789abcdef0123456789abcdef01234567');
+  const r2 = release(l2, [], 'C:/nowhere/etiuda.pfx');
+  check(stopped2(r2) && /a different tree is not the same tree/.test(r2.out) && !/\n\[3\] /.test(r2.out),
+    '7b summary for another tree is refused at gate 2, exit ' + r2.status);
+
+  /* 7c (leg 3): Summary with hold red is refused; summary with warn red alone is allowed. */
+  const l3hold = lab('leg3-hold', '2.0.0', FILLED);
+  putSummary(l3hold.runs, l3hold.tree, { reds: { holds: [{ gate: 'chain-split', class: 'hold' }], warns: [] }, holds: true });
+  const r3hold = release(l3hold, [], 'C:/nowhere/etiuda.pfx');
+
+  const l3warn = lab('leg3-warn', '2.0.0', FILLED);
+  putSummary(l3warn.runs, l3warn.tree, { reds: { holds: [], warns: [{ gate: 'hygiene', class: 'warn' }] }, holds: false });
+  const r3warn = release(l3warn, [], 'C:/nowhere/etiuda.pfx');
+
+  check(stopped2(r3hold) && /red\(s\) of class hold: chain-split/.test(r3hold.out) && past2(r3warn),
+    '7c summary with a hold red is refused at gate 2 (exit ' + r3hold.status + '), warn red alone is allowed past gate 2 (exit ' + r3warn.status + ')');
+
+  /* 7d (leg 4): Green whole summary for tree allowed past gate 2 to gate 3. */
+  const l4 = lab('leg4-green', '2.0.0', FILLED);
+  putSummary(l4.runs, l4.tree);
+  const r4 = release(l4, [], 'C:/nowhere/etiuda.pfx');
+  check(past2(r4) && /its release profile is green for tree/.test(r4.out),
+    '7d green whole summary for the tree passes gate 2, exit ' + r4.status);
+
+  /* 7e (leg 5): Preview build with no summary at all is allowed past gate 2 to gate 3. */
+  const l5 = lab('leg5-preview', '2.0.0-dev', FILLED);
+  const r5 = release(l5, [], 'C:/nowhere/etiuda.pfx');
+  check(past2(r5) && /PREVIEW, not for a customer/.test(r5.out),
+    '7e preview build with no summary at all is allowed past gate 2, exit ' + r5.status);
+
+  /* 7f (leg 6): Planted removal of the check in tools/release.mjs turns leg 1 red (passes gate 2). */
+  const l6 = lab('leg6-plant', '2.0.0', FILLED);
+  const relFile = path.join(l6.dir, 'tools', 'release.mjs');
+  const relCode = fs.readFileSync(relFile, 'utf8');
+  if (!relCode.includes('/* plant:customer-release-profile */')) {
+    throw new Error('plant:customer-release-profile marker not found in ' + relFile);
+  }
+  const liftedCode = relCode.replace(
+    /const profileVerdict = customerReleaseProfileVerdict\([^)]+\);\s*\/\* plant:customer-release-profile \*\//,
+    'const profileVerdict = true; /* plant:customer-release-profile */'
+  );
+  fs.writeFileSync(relFile, liftedCode);
+  l6.git('commit', '-am', 'lift plant:customer-release-profile');
+  const r6 = release(l6, [], 'C:/nowhere/etiuda.pfx');
+  check(!stopped2(r6) && past2(r6),
+    '7f lifting plant:customer-release-profile turns leg 1 red: customer build with no summary passes gate 2, exit ' + r6.status);
   /* The real tree as it stands, through the same function gate 2 calls: a preview today, and
      what stands between it and a sale is printed rather than asserted, so this leg does not
      redden on the day the seller or the certificate arrives. */
@@ -453,7 +558,7 @@ try {
   console.log('  FAIL ' + String(e && e.stack || e).split('\n').slice(0, 3).join(' | '));
 } finally {
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* reported below */ }
-  check(!fs.existsSync(TMP), '7a the temp folder is gone');
+  check(!fs.existsSync(TMP), '8a the temp folder is gone');
 }
 
 console.log('#counts checks=' + asserted + ' failed=' + failed + ' notRun=' + notRun.length + ' expected=' + EXPECTED);

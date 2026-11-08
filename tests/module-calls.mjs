@@ -63,6 +63,23 @@ const check = (mod, name, fn) => {
   let ok = false, detail = "";
   try {
     const r = fn();
+    if (r && typeof r.then === "function") {
+      return r.then(res => {
+        ok = res === true;
+        if (!ok && typeof res === "string") detail = res;
+        else if (!ok) detail = "returned " + JSON.stringify(res);
+        (ok ? pass++ : fail++);
+        console.log("  " + (ok ? "ok  " : "FAIL") + " " + mod + ": " + name
+          + (ok ? "" : "  [" + detail + "]"));
+        return ok;
+      }, e => {
+        ok = false;
+        detail = "threw " + String(e && e.message).split("\n")[0].slice(0, 110);
+        fail++;
+        console.log("  FAIL " + mod + ": " + name + "  [" + detail + "]");
+        return false;
+      });
+    }
     ok = r === true;
     if (!ok && typeof r === "string") detail = r;
     else if (!ok) detail = "returned " + JSON.stringify(r);
@@ -3971,19 +3988,59 @@ const CARD_B = {
        whose undelivered records are `held` and taken by takeRecords(), a size observer fed by hand, and frames that
        are queued, never run unless asked, and counted as scans when their callback is deckScan itself. */
     const deckRig = () => {
-      const g = globalThis, keys = ["MutationObserver", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame", "addEventListener", "innerHeight"];
+      const g = globalThis, keys = ["MutationObserver", "ResizeObserver", "IntersectionObserver", "requestAnimationFrame", "cancelAnimationFrame", "addEventListener", "innerHeight"];
       const was = keys.map(k => [k, Object.prototype.hasOwnProperty.call(g, k), g[k]]);
-      const rig = { held: [], feed: null, size: null, frames: [], mo: false, ro: false,
+      const rig = { held: [], feed: null, size: null, frames: [], mo: false, ro: false, io: null, ioObserved: [],
         scans() { return this.frames.filter(f => f.fn === DK.deckScan && f.state === "queued").length; },
         run() { this.frames.filter(f => f.state === "queued").forEach(f => { f.state = "ran"; f.fn(); }); },
         // A frame left queued would hold the module's own and swallow the next leg's ask, so the queue is run out first.
-        restore() { try { this.run(); } finally { was.forEach(([k, had, v]) => { if (had) g[k] = v; else delete g[k]; }); } } };
+        restore() {
+          try {
+            this.run();
+          } finally {
+            try {
+              UILANG_STORE.lsSet("eDeckOff", "1"); DK.syncDeck();
+              UILANG_STORE.lsSet("eDeckOff", "0");
+            } catch (_) {}
+            was.forEach(([k, had, v]) => { if (had) g[k] = v; else delete g[k]; });
+          }
+        } };
       g.MutationObserver = class { constructor(f) { rig.feed = f; } observe() { rig.mo = true; } disconnect() { rig.mo = false; }
         takeRecords() { const r = rig.held; rig.held = []; return r; } };
       g.ResizeObserver = class { constructor(f) { rig.size = f; } observe() { rig.ro = true; } disconnect() { rig.ro = false; } };
+      g.IntersectionObserver = class {
+        constructor(cb, opts = {}) {
+          this.cb = cb;
+          this.root = opts.root || null;
+          this.rootMargin = opts.rootMargin || "";
+          this.elements = [];
+          rig.io = this;
+        }
+        observe(el) {
+          if (!this.elements.includes(el)) this.elements.push(el);
+          if (!rig.ioObserved.includes(el)) rig.ioObserved.push(el);
+        }
+        unobserve(el) {
+          const idx = this.elements.indexOf(el);
+          if (idx >= 0) this.elements.splice(idx, 1);
+          const oIdx = rig.ioObserved.indexOf(el);
+          if (oIdx >= 0) rig.ioObserved.splice(oIdx, 1);
+        }
+        disconnect() {
+          this.elements = [];
+          if (rig.io === this) rig.io = null;
+        }
+        trigger(entries) {
+          this.cb(entries);
+        }
+      };
       g.requestAnimationFrame = fn => { rig.frames.push({ id: rig.frames.length + 1, fn, state: "queued" }); return rig.frames.length; };
       g.cancelAnimationFrame = id => { const f = rig.frames[id - 1]; if (f && f.state === "queued") f.state = "cancelled"; };
-      g.addEventListener = () => {}; globalThis.document.addEventListener = () => {};
+      const listeners = [];
+      rig.listeners = listeners;
+      const add = (evt, fn, opts) => { listeners.push({ evt, fn, opts }); };
+      g.addEventListener = add;
+      if (globalThis.document) globalThis.document.addEventListener = add;
       g.innerHeight = 800;
       return rig;
     };
@@ -3993,7 +4050,7 @@ const CARD_B = {
       const slabs = o.one ? [slab(10)] : [slab(10), slab(60)];
       const c = { nodeType: 1, dataset: { id }, classList: cls(new Set(["card"])), rects: 0, hover: !!o.hover, offsetHeight: 110,
         style: { v: {}, setProperty(k, x) { this.v[k] = x; }, removeProperty(k) { delete this.v[k]; if (k === "height") delete this.height; },
-          getPropertyValue(k) { return this.v[k] || ""; } },
+        getPropertyValue(k) { return this.v[k] || ""; } },
         getBoundingClientRect() { this.rects++; return { top, bottom: top + 110, left: 0, right: 300, width: 300, height: 110 }; },
         querySelectorAll() { return slabs; }, querySelector() { return null; }, closest() { return null; },
         matches(s) { return s === ":hover" ? this.hover : s === ".card[data-id]"; },
@@ -4002,9 +4059,11 @@ const CARD_B = {
     };
     const wired = items => {
       const l = listOf(items);
-      l.nodeType = 1; l.addEventListener = () => {}; l.closest = () => null; l.contains = n => l.items.includes(n);
+      const scroller = { nodeType: 1, id: "pageScroll", classList: cls(new Set(["scroller"])) };
+      l.nodeType = 1; l.addEventListener = () => {}; l.closest = s => (s === ".scroller" ? scroller : null); l.contains = n => l.items.includes(n);
       globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
       DK.wireDeck();
+      l.scroller = scroller;
       return l;
     };
     const at = c => [...c.classList.s].filter(k => k.startsWith("deck")).sort().join("+") || "none";
@@ -4118,6 +4177,141 @@ const CARD_B = {
           if (had.root === undefined) delete doc.documentElement; else doc.documentElement = had.root;
           if (had.gcs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = had.gcs;
         }
+      });
+    check("deck.js", "1104dk1 100 scroll events make zero getBoundingClientRect calls once all cards are measured",
+      () => {
+        const rig = deckRig();
+        try {
+          const cards = [];
+          for (let i = 0; i < 258; i++) {
+            cards.push(deckCard("c-" + i, i * 60, { one: i % 2 === 1 }));
+          }
+          const l = wired(cards);
+          rig.run();
+          cards.forEach(c => {
+            if (c.querySelectorAll().length >= 2) c.classList.add("deck", "deck-near");
+            c.rects = 0;
+          });
+          const scroller = rig.listeners.find(x => x.evt === "scroll");
+          for (let i = 0; i < 100; i++) {
+            if (scroller) scroller.fn({ target: globalThis.document });
+            rig.run();
+          }
+          const calls = cards.reduce((sum, c) => sum + c.rects, 0);
+          return eq(calls, 0);
+        } finally { rig.restore(); }
+      });
+    const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+    const liftPlant = async (tag, fn) => {
+      const at = join(MODDIR, "deck.js"), before = fs.readFileSync(at, "utf8");
+      const lines = before.split("\n");
+      const i = lines.findIndex(l => l.indexOf("plant:" + tag) >= 0);
+      if (i < 0) return { turned: false, reason: "plant line absent" };
+      lines.splice(i, 1);
+      const osMod = await import("node:os");
+      const dir = fs.mkdtempSync(join(osMod.tmpdir(), "etiuda-deck-plant-" + tag + "-"));
+      try {
+        fs.writeFileSync(join(dir, "package.json"), '{"type":"module"}');
+        const modulesUrl = pathToFileURL(MODDIR).href;
+        fs.writeFileSync(join(dir, "deck.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+        const scratchDK = await import(pathToFileURL(join(dir, "deck.js")).href + "?t=" + Date.now());
+        const ok = await fn(scratchDK);
+        const turned = ok === false;
+        return { turned, same: fs.readFileSync(at, "utf8") === before };
+      } finally {
+        try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      }
+    };
+    await check("deck.js", "1104dk2 the deck IntersectionObserver root is the list scroller and rootMargin matches deckInRange",
+      async () => {
+        const rig = deckRig();
+        try {
+          const c = deckCard("c-1", 100);
+          const l = wired([c]);
+          rig.run();
+          const rootMatches = !!(rig.io && rig.io.root === l.scroller);
+          const marginMatches = !!(rig.io && rig.io.rootMargin === "100% 0px");
+          if (!rootMatches || !marginMatches) {
+            return "root=" + (rig.io && rig.io.root ? "scroller" : "null") + ",margin=" + (rig.io ? rig.io.rootMargin : "null");
+          }
+          if (PLANTS_OFF) return true;
+          const p = await liftPlant("deck-io-root", async scratchDK => {
+            const sRig = deckRig();
+            try {
+              const sc = deckCard("sc-1", 100);
+              const sl = listOf([sc]);
+              const sScroller = { nodeType: 1, id: "pageScroll", classList: cls(new Set(["scroller"])) };
+              sl.nodeType = 1; sl.addEventListener = () => {}; sl.closest = s => (s === ".scroller" ? sScroller : null);
+              sl.contains = n => sl.items.includes(n);
+              globalThis.document.querySelector = q => (q === "#list" ? sl : null);
+              scratchDK.wireDeck();
+              sRig.run();
+              return sRig.io && sRig.io.root === sScroller && sRig.io.rootMargin === "100% 0px";
+            } finally { sRig.restore(); }
+          });
+          return p.turned && p.same;
+        } finally { rig.restore(); }
+      });
+    await check("deck.js", "1104dk3 a made-but-not-drawn rebuilt card is observed by the deck IntersectionObserver and an element replaced is unobserved",
+      async () => {
+        const rig = deckRig();
+        try {
+          const near = deckCard("c-near", 100), far = deckCard("c-far", 5000);
+          const l = wired([near]);
+          rig.run();
+          DK.deckSettle([near], [near, far]);
+          const observed = !!(rig.io && rig.io.elements.includes(far));
+          if (typeof DK.deckUnobserve === "function") DK.deckUnobserve(far);
+          const unobserved = !!(rig.io && !rig.io.elements.includes(far));
+          if (!observed || !unobserved) {
+            return "observed=" + observed + ",unobserved=" + unobserved;
+          }
+          if (PLANTS_OFF) return true;
+          const p = await liftPlant("deck-io-rebuilt", async scratchDK => {
+            const sRig = deckRig();
+            try {
+              const scNear = deckCard("sc-near", 100), scFar = deckCard("sc-far", 5000);
+              const sl = listOf([scNear]);
+              sl.nodeType = 1; sl.addEventListener = () => {}; sl.closest = () => null; sl.contains = n => sl.items.includes(n);
+              globalThis.document.querySelector = q => (q === "#list" ? sl : null);
+              scratchDK.wireDeck();
+              sRig.run();
+              scratchDK.deckSettle([scNear], [scNear, scFar]);
+              return sRig.io && sRig.io.elements.includes(scFar);
+            } finally { sRig.restore(); }
+          });
+          return p.turned && p.same;
+        } finally { rig.restore(); }
+      });
+    await check("deck.js", "1104dk4 an intersecting IntersectionObserver entry measures the deck card",
+      async () => {
+        const rig = deckRig();
+        try {
+          const c = deckCard("c-inter", 3000);
+          const l = wired([c]);
+          rig.run();
+          c.rects = 0;
+          if (rig.io) rig.io.trigger([{ target: c, isIntersecting: true }]);
+          const measured = c.style.height === "66px" && c.classList.contains("deck") && c.classList.contains("deck-near");
+          if (!measured) {
+            return "height=" + c.style.height + ",deck=" + c.classList.contains("deck");
+          }
+          if (PLANTS_OFF) return true;
+          const p = await liftPlant("deck-io-measure", async scratchDK => {
+            const sRig = deckRig();
+            try {
+              const sc = deckCard("sc-inter", 3000);
+              const sl = listOf([sc]);
+              sl.nodeType = 1; sl.addEventListener = () => {}; sl.closest = () => null; sl.contains = n => sl.items.includes(n);
+              globalThis.document.querySelector = q => (q === "#list" ? sl : null);
+              scratchDK.wireDeck();
+              sRig.run();
+              sRig.io.trigger([{ target: sc, isIntersecting: true }]);
+              return sc.style.height === "66px" && sc.classList.contains("deck");
+            } finally { sRig.restore(); }
+          });
+          return p.turned && p.same;
+        } finally { rig.restore(); }
       });
     /* THE SWITCH (board 903): Layout's row turns the deck off, and off is a card laid out as it was before the deck, every
        reply in its place and nothing of the deck acting. The cards are drawn by the card body itself, one of alternatives
