@@ -3313,7 +3313,8 @@ function hopShaOnDisk(id, root) {
   for (const { f: file, desk } of files) {
     let doc = null;
     try { if (fs.statSync(file).size <= BRANCH_TEXT_MAX) doc = catalogDocIn(catalogRead(fs.readFileSync(file, "utf8")).json); } catch { doc = null; }
-    if (doc && desk && !deskFileGenuine(doc, desk)) doc = null; /* plant:s5-hop-genuine */
+    /* The root is the team's shared folder on a folder team, writable by any teammate, so a root file counts only where this desk signed it. */
+    if (doc && !deskFileGenuine(doc, desk || (me ? me.id : ""))) doc = null; /* plant:s5-hop-genuine */
     const g = doc && doc.id === id && doc.grew && typeof doc.grew === "object" ? doc.grew : null;
     if (g && String(g.id || "") === root && PIN_RE.test(String(g.sha || ""))) { catalogLineageSha[id] = String(g.sha); return String(g.sha); }
   }

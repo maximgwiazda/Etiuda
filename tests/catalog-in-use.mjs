@@ -1867,7 +1867,8 @@ try {
         const fake = catalog(1, { id: c1Id, name: "Planted", card: B0_MARK, unsigned: true });
         fake.grew = { id: "quay-held", rev: 4, sha: pinV4(JSON.parse(leadEd)) };
         /* Planted where the folder team's mirror carries the share's desk folders, as the syncer brings a teammate's files. */
-        const plantDir = path.join(box.D.ud, "folder-mirror", box.team, "desks", mine ? box.me.id : otherDesk);
+        const plantDir = mine === "top" ? path.join(box.D.ud, "folder-mirror", box.team)
+          : path.join(box.D.ud, "folder-mirror", box.team, "desks", mine ? box.me.id : otherDesk);
         fs.mkdirSync(plantDir, { recursive: true });
         fs.writeFileSync(path.join(plantDir, "quay-63636363.ec"), textOf(fake), "utf8");
         /* This desk once saw the chain from that id to the team's catalog, so the copy's chain reads three hops. */
@@ -1882,10 +1883,10 @@ try {
         try { kind = JSON.parse(fs.readFileSync(branchAt(box, "64646464"), "utf8")).kind; } catch { kind = ""; }
         return { held: !!w && w.held === true, boxed: kind === "etiuda-branch-sealed" };
       };
-      const fh = await forgedHop("s5u7"), fm = await forgedHop("s5u7-mine", undefined, true);
-      check(fh.boxed && !fh.held && fm.boxed && !fm.held,
-        "962s5u7 a forged intermediate in another desk's folder, or unsigned in this desk's own, leaves this desk's copy unlisted: it goes to the lead's box alone ("
-        + JSON.stringify({ other: fh, mine: fm }) + ")");
+      const fh = await forgedHop("s5u7"), fm = await forgedHop("s5u7-mine", undefined, true), ft = await forgedHop("s5u7-top", undefined, "top");
+      check(fh.boxed && !fh.held && fm.boxed && !fm.held && ft.boxed && !ft.held,
+        "962s5u7 a forged intermediate in another desk's folder, unsigned in this desk's own, or unsigned at the top of the shared folder, leaves this desk's copy unlisted: it goes to the lead's box alone ("
+        + JSON.stringify({ other: fh, mine: fm, top: ft }) + ")");
       if (PLANTS_OFF) {
         skip("962s5u8 lifting plant:s5-hop-own with plant:s5-hop-genuine reads the forged intermediate as listed");
         skip("962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed");
