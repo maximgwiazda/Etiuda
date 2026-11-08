@@ -162,6 +162,8 @@ export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/storage-carry.js", args: [], cmd: "node tests/storage-carry.js" },
   { script: "nightly", file: "tests/theme-presses.mjs", args: [], cmd: "node tests/theme-presses.mjs" },
   { script: "nightly", file: "tests/theme-roll.mjs", args: [], cmd: "node tests/theme-roll.mjs" },
+  /* A browser leg: the desk swapped in place held to a fresh start, driven in headless Chrome (the test architect, 2026-11-08). */
+  { script: "nightly", file: "tests/swap.mjs", args: [], cmd: "node tests/swap.mjs" },
 ];
 
 export const FLOOR = [
