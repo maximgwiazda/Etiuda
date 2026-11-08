@@ -4021,7 +4021,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <!-- THE FLIP'S HOLD: enabled by theme.js for a theme press's own two frames and disabled otherwise.
      A sheet toggled through the CSSOM touches no element and wakes no observer, and the browser
      restyles only what its one rule matches. Unlayered, so it outranks the tone tier. -->
-<style id="eFlipHold">.rail-item,.cacts button,.cat-chip{transition:none}</style>
+<style id="eFlipHold">.rail-item,.cacts button,.cat-chip,.pill,.btn,.seg button,.seg::before,.tab,.tab-x,.menu button,.field-clear,.combo-clear,.rail-lock,.mg-tw,.me-stamp,.fab,.fab-clear,.card.deck>.txt,header{transition:none}</style>
 
 <header>
   <div class="row">
@@ -7736,10 +7736,11 @@ What you type stays in this browser only.`;
     "To join, a new invitation from the team's lead is needed.": "Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
     /* Claudette's words, 2026-10-27 01:23. */
     "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.": "Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",
-    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
-    "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana: katalog z listy zespołu może otworzyć każdy w zespole, a każdy inny tylko lider zespołu. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
+    "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.": "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.",
     "The team's relay is due for renewal": "Przekaźnik zespołu czeka na odnowienie",
     "It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.": "Termin odnowienia minął dnia {DATE}. Do dnia {READONLY} wszystko działa jak dotąd; potem katalogi na tym stanowisku zostaną bez zmian, ale do czasu odnowienia nic nowego nie przejdzie już między stanowiskiem a zespołem. Przekaźnik odnawia lider zespołu w Studiu; tutaj nic nie trzeba robić.",
     "The team's relay is read-only until renewed": "Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",
@@ -10268,6 +10269,7 @@ What you type stays in this browser only.`;
     deckReach: () => deckReach,
     deckScan: () => deckScan,
     deckSettle: () => deckSettle,
+    deckUnobserve: () => deckUnobserve,
     syncDeck: () => syncDeck,
     wireDeck: () => wireDeck
   });
@@ -10370,12 +10372,14 @@ What you type stays in this browser only.`;
   function deckScan() {
     deckRaf = 0;
     if (!list || !deckOn()) return;
+    deckInitIO();
     const todo = [];
     list.querySelectorAll(".card[data-id]").forEach((c) => {
       if (deckSlabs(c).length < 2) {
         if (c.classList.contains("deck")) deckReset(c);
         return;
       }
+      if (deckIO) deckIO.observe(c);
       if (!deckLive(c)) {
         c.classList.remove("deck-near");
         return;
@@ -10413,6 +10417,7 @@ What you type stays in this browser only.`;
   }
   function deckSettle(drawn, made) {
     if (!list || !deckOn()) return;
+    deckInitIO();
     const ms = deckObs ? deckObs.takeRecords() : [];
     if (!drawn) {
       if (deckRaf) {
@@ -10421,30 +10426,19 @@ What you type stays in this browser only.`;
       }
       deckScan();
     } else {
+      if (deckIO && made) made.filter((c) => deckSlabs(c).length > 1).forEach((c) => deckIO.observe(c));
       deckMeasure(drawn.filter((c) => deckSlabs(c).length > 1));
       if (ms.some((r) => r.type === "childList" && !deckDrawnBy(r, made || drawn))) deckLater();
     }
     if (deckHeard(ms).fade) deckFade();
   }
   var deckApproachRaf = 0;
-  function deckApproach() {
-    if (!list || !deckOn()) return;
-    const todo = [];
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      if (c.classList.contains("deck-near") || c.classList.contains("deck-open") || c.classList.contains("deck-up")) {
-        if (!c.classList.contains("deck-open") && !c.classList.contains("deck-up") && !deckInRange(c)) c.classList.remove("deck-near");
-        return;
-      }
-      if (deckSlabs(c).length < 2 || !deckInRange(c)) return;
-      todo.push(c);
-    });
-    deckMeasure(todo);
-  }
-  function deckLaterApproach() {
-    if (!deckApproachRaf && deckOn()) deckApproachRaf = requestAnimationFrame(() => {
-      deckApproachRaf = 0;
-      deckApproach();
-    });
+  function deckMarkLive() {
+    if (deckKbdCard) return true;
+    if (!list) return false;
+    if (typeof list.querySelector === "function") return !!list.querySelector(".card.deck.deck-open, .card.deck.deck-up");
+    if (typeof list.querySelectorAll === "function") return list.querySelectorAll(".card.deck.deck-open, .card.deck.deck-up").length > 0;
+    return false;
   }
   function deckSetOpen(card, open, instant) {
     clearTimeout(card._deckT);
@@ -10596,7 +10590,7 @@ What you type stays in this browser only.`;
     list.addEventListener("animationend", deckFadeLater);
     list.addEventListener("transitionend", deckFadeLater);
     document.addEventListener("scroll", () => {
-      deckLaterApproach();
+      if (!deckMarkLive()) return;
       deckFadeLater();
     }, { capture: true, passive: true });
     addEventListener("resize", () => {
@@ -10630,6 +10624,32 @@ What you type stays in this browser only.`;
   }
   var deckSizeObs = null;
   var deckWatching = false;
+  var deckIO = null;
+  function deckInitIO() {
+    if (typeof IntersectionObserver !== "function" || deckIO) return;
+    let ioOpts = { root: null, rootMargin: "0px" };
+    if (list && list.closest) ioOpts = { root: list.closest(".scroller"), rootMargin: "100% 0px" };
+    deckIO = new IntersectionObserver((entries) => {
+      const todo = [];
+      for (const entry of entries) {
+        const c = entry.target;
+        if (entry.isIntersecting) {
+          if (!c.classList.contains("deck-near")) {
+            c.classList.add("deck-near");
+            if (deckSlabs(c).length >= 2) todo.push(c);
+          }
+        } else {
+          if (!c.classList.contains("deck-open") && !c.classList.contains("deck-up")) {
+            c.classList.remove("deck-near");
+          }
+        }
+      }
+      if (todo.length) deckMeasure(todo);
+    }, ioOpts);
+  }
+  function deckUnobserve(el) {
+    if (deckIO && el) deckIO.unobserve(el);
+  }
   function deckClass(on) {
     try {
       document.body.classList.toggle("deck-off", !on);
@@ -10642,9 +10662,14 @@ What you type stays in this browser only.`;
     if (on) {
       if (deckObs) deckObs.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
       if (deckSizeObs) deckSizeObs.observe(list);
+      deckInitIO();
     } else {
       if (deckObs) deckObs.disconnect();
       if (deckSizeObs) deckSizeObs.disconnect();
+      if (deckIO) {
+        deckIO.disconnect();
+        deckIO = null;
+      }
     }
   }
   function deckFlat() {
@@ -10655,6 +10680,10 @@ What you type stays in this browser only.`;
     deckFadeRaf = 0;
     deckApproachRaf = 0;
     deckKbdCard = null;
+    if (deckIO) {
+      deckIO.disconnect();
+      deckIO = null;
+    }
     list.querySelectorAll(".card.deck").forEach((c) => {
       clearTimeout(c._deckM);
       deckReset(c);
@@ -11248,6 +11277,7 @@ What you type stays in this browser only.`;
     sayLive: () => sayLive,
     scheduleTabSave: () => scheduleTabSave,
     setTabBeads: () => setTabBeads,
+    settleBarWidth: () => settleBarWidth,
     stepTab: () => stepTab,
     switchTab: () => switchTab,
     syncTabBeads: () => syncTabBeads,
@@ -12317,6 +12347,27 @@ What you type stays in this browser only.`;
       return false;
     }
   }
+  function syncTabActive(id) {
+    const bar = $("#tabsBar");
+    if (!bar) return false;
+    const tabEls = bar.querySelectorAll(".tab");
+    if (tabEls.length !== tabs.length) return false;
+    let matched = true;
+    tabEls.forEach((el, i) => {
+      if (!tabs[i] || el.dataset.tid !== tabs[i].id) {
+        matched = false;
+        return;
+      }
+      const on = tabs[i].id === id;
+      el.classList.toggle("on", on);
+      const lab = el.querySelector(".tab-label");
+      if (lab) lab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    if (!matched) return false;
+    syncTabAccent();
+    syncTabBeads();
+    return true;
+  }
   function applyTab(tb) {
     if (!tb) return;
     activeTabId = tb.id;
@@ -12332,7 +12383,9 @@ What you type stays in this browser only.`;
       putEntrySel(null);
     }
     setPickRun(false);
-    hooks.applyLangUI(tb.lang);
+    const langChanged = !!(tb.lang && tb.lang !== lang);
+    if (langChanged) hooks.applyLangUI(tb.lang);
+    else hooks.applyLangUI(tb.lang, "tail");
     hooks.updateIntentPlaceholder();
     if (intentEl) {
       intentEl.value = tb.intentBox || "";
@@ -12344,9 +12397,9 @@ What you type stays in this browser only.`;
     const paxClear = $("#paxClear");
     if (paxClear) paxClear.disabled = !String(pax && pax.value || "").length;
     drawPills();
-    hooks.drawIntentRail();
+    if (!langChanged) hooks.drawIntentRail();
     hooks.render();
-    drawTabs();
+    if (!syncTabActive(tb.id)) drawTabs();
     requestAnimationFrame(() => {
       try {
         pageScroller().scrollTop = tb.scrollY || 0;
@@ -12810,6 +12863,23 @@ What you type stays in this browser only.`;
       if (wrap) ro.observe(wrap);
     }
   }
+  function settleBarWidth(from, o0, probed, o1, floor) {
+    if (!(o0 > 0.5)) return from;
+    const moved = from - probed;
+    if (!(moved > 0)) return from;
+    if (!(o1 > 0.5)) return probed;
+    const alpha = (o0 - o1) / moved;
+    if (!(alpha > 0)) return probed;
+    let bw = probed, o = o1;
+    for (let i = 1; i < 10 && o > 0.5 && bw > floor; i++) {
+      const step = Math.ceil(o * 1.5);
+      const next = Math.max(floor, bw - step);
+      if (next === bw) break;
+      o -= alpha * (bw - next);
+      bw = next;
+    }
+    return bw;
+  }
   function applyTabWidths() {
     const bar = $("#tabsBar");
     const wrap = $("#tabsWrap") || bar && bar.parentElement;
@@ -12886,14 +12956,25 @@ What you type stays in this browser only.`;
     updateTabOverflow();
     if (add) {
       let bw = barW;
-      for (let i = 0; i < 10; i++) {
-        const overhang = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
-        if (overhang <= 0.5) break;
-        bw = Math.max(40, bw - Math.ceil(overhang * 1.5));
-        bar.style.flex = "0 0 " + bw + "px";
-        bar.style.width = bw + "px";
-        bar.style.minWidth = bw + "px";
-        bar.style.maxWidth = bw + "px";
+      const o0 = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+      if (o0 > 0.5) {
+        const probed = Math.max(40, bw - Math.ceil(o0 * 1.5));
+        if (probed < bw) {
+          bw = probed;
+          bar.style.flex = "0 0 " + bw + "px";
+          bar.style.width = bw + "px";
+          bar.style.minWidth = bw + "px";
+          bar.style.maxWidth = bw + "px";
+          const o1 = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+          const settled = settleBarWidth(barW, o0, probed, o1, 40);
+          if (settled !== bw) {
+            bw = settled;
+            bar.style.flex = "0 0 " + bw + "px";
+            bar.style.width = bw + "px";
+            bar.style.minWidth = bw + "px";
+            bar.style.maxWidth = bw + "px";
+          }
+        }
       }
       if (bw !== barW) updateTabOverflow();
       if (bw < contentW - 1) {
@@ -14873,9 +14954,9 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h || typeof h.onCatalogCopy !== "function" || typeof fn !== "function") return;
     try {
-      h.onCatalogCopy(() => {
+      h.onCatalogCopy((m) => {
         try {
-          fn();
+          fn(m);
         } catch (e) {
         }
       });
@@ -15561,8 +15642,8 @@ What you type stays in this browser only.`;
     if (changed === true || JSON.stringify(joinNow) !== was || askWhy !== hadAskWhy) paintJoin();
     return joinNow;
   }
-  function noteCatalogCopy() {
-    toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
+  function noteCatalogCopy(m) {
+    toast(m && m.lead === true ? "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone." : "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
   }
   function wireTeamJoin() {
     if (!eHasJoin()) return;
@@ -15621,7 +15702,7 @@ What you type stays in this browser only.`;
     return '<button type="button" class="btn" id="' + esc(id) + '" title="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(t("Join a team")) + "</button>";
   }
   function joinDisclosure() {
-    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
+    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
   }
   function joinKindWord(kind) {
     return kind === "onedrive" ? t("OneDrive") : kind === "onedrive-business" ? t("OneDrive for Business") : kind === "dropbox" ? t("Dropbox") : kind === "gdrive" ? t("Google Drive") : kind === "mapped" ? t("a mapped network drive") : t("a shared network folder");
@@ -21337,6 +21418,7 @@ What you type stays in this browser only.`;
     fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
+    deckUnobserve(el);
     el.replaceWith(fresh);
     if (near) holdFresh(fresh);
     cardPool.set(id, fresh);
@@ -30826,7 +30908,7 @@ What you type stays in this browser only.`;
         langSel
       ) + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
          and the way back after leaving once, on the first row that offers Leave. */
-      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
+      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),
         t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
@@ -32986,8 +33068,9 @@ What you type stays in this browser only.`;
     drawIntentRail();
     recountMacros();
   }
-  function applyLangUI(l) {
+  function applyLangUI(l, mode) {
     cancelLangTail();
+    if (mode === "tail") return;
     applyLangState(l);
     applyLangHeavy();
   }
@@ -34184,7 +34267,9 @@ What you type stays in this browser only.`;
       }
     }, 900);
     wirePops();
-    addEventListener("resize", () => {
+    let resizeRaf = 0;
+    function runResize() {
+      resizeRaf = 0;
       syncHeaderElevation();
       syncShortcutTitles();
       schedulePillsCollapse();
@@ -34194,6 +34279,9 @@ What you type stays in this browser only.`;
       if (tourActive()) scheduleTourPlace();
       mtRefreshLive();
       scheduleCutScan();
+    }
+    addEventListener("resize", () => {
+      if (!resizeRaf) resizeRaf = requestAnimationFrame(runResize);
     }, { passive: true });
     translateChrome();
     placeRailNow();

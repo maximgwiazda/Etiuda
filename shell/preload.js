@@ -42,6 +42,7 @@ const json = PICKER ? null : ipcRenderer.sendSync("etiuda:catalog");
    controls and whether to leave the band's pixels to a backdrop. Absent in a browser, which is
    the whole test: nothing in the engine asks what platform it is on. */
 const host = PICKER ? {} : ipcRenderer.sendSync("etiuda:host");
+const sessionCache = new Map(host && host.session ? Object.entries(host.session) : []);
 if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   platform: host.platform,
   backdrop: host.backdrop,
@@ -113,9 +114,31 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      are synchronous: the engine reads its whole desk before its first key, and deskSave is for
      the write that must be on the disk before it returns. deskWrite is every other one. */
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
-  /* The tabs' session, held by the app in memory and never written: get, set, del or clear, as text. */
-  session: (op, key, value) => ipcRenderer.sendSync("etiuda:session", String(op || ""), String(key || ""),
-    value === undefined ? null : String(value)),
+  /* The tabs' session, held by the app in memory and never written: get, set, del or clear, as text.
+     Cached in preload memory and synced asynchronously to main with no sendSync. */
+  session: (op, key, value) => {
+    const o = String(op || "");
+    const k = String(key || "");
+    if (o === "get") return sessionCache.has(k) ? sessionCache.get(k) : null;
+    if (o === "set") {
+      const v = value === undefined ? null : String(value);
+      if (typeof v !== "string") return null;
+      sessionCache.set(k, v);
+      ipcRenderer.send("etiuda:session", o, k, v);
+      return true;
+    }
+    if (o === "del") {
+      sessionCache.delete(k);
+      ipcRenderer.send("etiuda:session", o, k);
+      return true;
+    }
+    if (o === "clear") {
+      sessionCache.clear();
+      ipcRenderer.send("etiuda:session", o, k);
+      return true;
+    }
+    return null;
+  },
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
   /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does. */
@@ -183,7 +206,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     String(check || "")),
   onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),
   /* The shell has sent the lead a copy of the catalog in use. The page says so; nothing here asks the agent. */
-  onCatalogCopy: (fn) => ipcRenderer.on("etiuda:catalog-copy", () => { try { fn(); } catch { /* the page has gone */ } }),
+  onCatalogCopy: (fn) => ipcRenderer.on("etiuda:catalog-copy", (_e, m) => { try { fn({ lead: !!(m && m.lead === true) }); } catch { /* the page has gone */ } }),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
      the text a copy puts on the clipboard, which the shell writes. */

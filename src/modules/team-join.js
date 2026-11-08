@@ -367,8 +367,8 @@ function joinTook(v,changed){
   if(changed===true || JSON.stringify(joinNow)!==was || askWhy!==hadAskWhy) paintJoin();
   return joinNow;
 }
-function noteCatalogCopy(){
-  toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
+function noteCatalogCopy(m){
+  toast(m && m.lead===true ? "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone." : "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
 }
 function wireTeamJoin(){
   if(!eHasJoin()) return;
@@ -420,7 +420,7 @@ function joinDoorButton(id){
   return '<button type="button" class="btn" id="'+esc(id)+'" title="'+esc(t("Paste the invitation from the team's lead."))+'">'+esc(t("Join a team"))+'</button>';
 }
 function joinDisclosure(){
-  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."))+'</div>';
+  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed: a catalog the team lists opens for anyone on the team, and any other catalog for the team's lead alone. The desk's use counts only in the team's totals, never on its own."))+'</div>';
 }
 /* The name of a sync root's kind, as the absent-root sentence names it. */
 function joinKindWord(kind){

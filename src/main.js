@@ -478,12 +478,11 @@ function boot(){
   pops.wirePops();
 
   /* ---- ONE RESIZE LISTENER ------------------------------------------------------------------
-     One listener, one place, a stated order: cheap flags first, text swaps, then the
-     rAF-debounced geometry, then things that read finished layout. Every member is
-     idempotent or self-debouncing, so the cost per event is what it always was. The old
-     matchMedia(max-width:720px) change listener is folded in too: resize fires on every
-     threshold crossing, and unlike matchMedia it also fires in emulated viewports. */
-  addEventListener("resize",()=>{
+     One listener coalesced to one animation frame via rAF so dragging or resizing does not walk
+     layout every event; cheap flags first, text swaps, then debounced geometry. */
+  let resizeRaf=0;
+  function runResize(){
+    resizeRaf=0;
     railPanel.syncHeaderElevation();                                // cheap flag, no layout read
     shortcuts.syncShortcutTitles();   // seg fold retitles EN/PL
     pillsBox.schedulePillsCollapse();                              // rAF: pill bar two-line measure
@@ -493,6 +492,9 @@ function boot(){
     if(tour.tourActive()) tour.scheduleTourPlace();                 // spotlight follows its target
     maintenance.mtRefreshLive();                                      // maintenance readings, while open
     cutText.scheduleCutScan();                                    // what fits changed, so what is cut did
+  }
+  addEventListener("resize",()=>{
+    if(!resizeRaf) resizeRaf=requestAnimationFrame(runResize);
   },{passive:true});
 
   /* The markup's own English swept into the saved language before the first frame rather than two

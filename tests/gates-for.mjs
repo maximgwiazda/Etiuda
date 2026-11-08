@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 21;
+const EXPECTED = 23;
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -379,6 +379,18 @@ try {
   const inTest = /tests\/storage-carry\.js/.test(String((pkgNow.scripts || {}).test || ""));
   check(relFiles.includes("tests/storage-carry.js") && !inTest,
     "gf21 the release profile runs tests/storage-carry.js and `test` does not: profile " + relFiles.includes("tests/storage-carry.js") + ", in test " + inTest);
+
+  /* swap.mjs is a browser leg, so it lives in the release profile and the nightly, not in `test`; a merge touching the
+     files it reads runs it through gates-for (the test architect, 2026-11-08: kept from rotting as a nightly-only leg). */
+  let namedForSwap = "";
+  try { namedForSwap = execFileSync(process.execPath, [path.join(ROOT, "tools", "gates-for.mjs"), "engine/etiuda.html"], { cwd: ROOT, encoding: "utf8" }); }
+  catch (e) { namedForSwap = String(e && e.stdout || ""); }
+  check(/tests\/swap\.mjs/.test(namedForSwap),
+    "gf22 a change to engine/etiuda.html, which swap.mjs reads, names tests/swap.mjs: "
+    + (/tests\/swap\.mjs/.test(namedForSwap) ? "named" : "not named"));
+  const inTestSwap = /tests\/swap\.mjs/.test(String((pkgNow.scripts || {}).test || ""));
+  check(relFiles.includes("tests/swap.mjs") && !inTestSwap,
+    "gf23 the release profile runs tests/swap.mjs and `test` does not: profile " + relFiles.includes("tests/swap.mjs") + ", in test " + inTestSwap);
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {

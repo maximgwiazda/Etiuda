@@ -4427,18 +4427,22 @@ function shippedFlagTests() {
       .map(m => extractDecl(shell, m)).join("\n") + "\nreturn {isBuiltIn,folderShown};")(path.win32, inAsar);
   } catch (e) { S = null; }
   const answer = (from) => {
-    let handler = null;
+    let handler = null, ev = null;
     try {
+      /* The slice has no module scope. The host seeds the session from these three, so the
+         stand-in supplies them: an empty map, no saved tabs yet, and a read that finds none. */
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
         "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
         "openedRefused", "recovering", "deskFile", "os", "hostAccent", "catalogWaitNewer", "newerKey", "catalogNewerSaid",
+        "sessionHeld", "pendingSavedTabs", "readSavedTabs",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
         () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
-        null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "");
+        null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "",
+        new Map(), null, () => null);
+      ev = { sender: { id: 1, once() {} } };
+      handler(ev);
     } catch (e) { return "the host answer did not run: " + e.message; }
-    const ev = { sender: { id: 1 } };
-    handler(ev);
     return [ev.returnValue.catalogBuiltIn, ev.returnValue.catalogIn];
   };
   eq("the host answer flags the shipped sample and hands no folder for it, and a folder file is unflagged with its folder",
@@ -5811,8 +5815,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1229;
-const UI_STRINGS_SHA256 = "978c6f562ebbfd3a15d44a7c6a6063e57db3798479f41b6837a06beabe8cb74f";
+const UI_STRINGS_COUNT = 1230;
+const UI_STRINGS_SHA256 = "8be4f2a501e5e09c4f87ce4aa9473c67eb9b5f6fa850a3086ea9276ffdf64f93";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
