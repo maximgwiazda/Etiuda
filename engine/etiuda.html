@@ -8944,7 +8944,8 @@ What you type stays in this browser only.`;
     });
     pack.editBases = keep;
   }
-  function savePack() {
+  function savePack(dirtyIds) {
+    const was = ePackEpoch;
     ePackEpoch++;
     keepEditBases();
     if (eStatsT) {
@@ -8953,6 +8954,9 @@ What you type stays in this browser only.`;
     }
     const ok = writePack();
     hooks.syncSampleMark();
+    if (Array.isArray(dirtyIds) && typeof hooks.keepPoolAcross === "function") {
+      hooks.keepPoolAcross(was, dirtyIds);
+    }
     return ok;
   }
   var STATS_SAVE_MS = 1500;
@@ -10161,7 +10165,7 @@ What you type stays in this browser only.`;
       if (Object.keys(o).length) pack.overrides[id] = o;
       else delete pack.overrides[id];
     }
-    savePack();
+    savePack([id]);
     eMoveRecent(id, fromVi, toVi);
     hooks.rebuildCards();
     return true;
@@ -11244,6 +11248,7 @@ What you type stays in this browser only.`;
     sayLive: () => sayLive,
     scheduleTabSave: () => scheduleTabSave,
     setTabBeads: () => setTabBeads,
+    settleBarWidth: () => settleBarWidth,
     stepTab: () => stepTab,
     switchTab: () => switchTab,
     syncTabBeads: () => syncTabBeads,
@@ -12313,6 +12318,27 @@ What you type stays in this browser only.`;
       return false;
     }
   }
+  function syncTabActive(id) {
+    const bar = $("#tabsBar");
+    if (!bar) return false;
+    const tabEls = bar.querySelectorAll(".tab");
+    if (tabEls.length !== tabs.length) return false;
+    let matched = true;
+    tabEls.forEach((el, i) => {
+      if (!tabs[i] || el.dataset.tid !== tabs[i].id) {
+        matched = false;
+        return;
+      }
+      const on = tabs[i].id === id;
+      el.classList.toggle("on", on);
+      const lab = el.querySelector(".tab-label");
+      if (lab) lab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    if (!matched) return false;
+    syncTabAccent();
+    syncTabBeads();
+    return true;
+  }
   function applyTab(tb) {
     if (!tb) return;
     activeTabId = tb.id;
@@ -12328,7 +12354,9 @@ What you type stays in this browser only.`;
       putEntrySel(null);
     }
     setPickRun(false);
-    hooks.applyLangUI(tb.lang);
+    const langChanged = !!(tb.lang && tb.lang !== lang);
+    if (langChanged) hooks.applyLangUI(tb.lang);
+    else hooks.applyLangUI(tb.lang, "tail");
     hooks.updateIntentPlaceholder();
     if (intentEl) {
       intentEl.value = tb.intentBox || "";
@@ -12340,9 +12368,9 @@ What you type stays in this browser only.`;
     const paxClear = $("#paxClear");
     if (paxClear) paxClear.disabled = !String(pax && pax.value || "").length;
     drawPills();
-    hooks.drawIntentRail();
+    if (!langChanged) hooks.drawIntentRail();
     hooks.render();
-    drawTabs();
+    if (!syncTabActive(tb.id)) drawTabs();
     requestAnimationFrame(() => {
       try {
         pageScroller().scrollTop = tb.scrollY || 0;
@@ -12806,6 +12834,23 @@ What you type stays in this browser only.`;
       if (wrap) ro.observe(wrap);
     }
   }
+  function settleBarWidth(from, o0, probed, o1, floor) {
+    if (!(o0 > 0.5)) return from;
+    const moved = from - probed;
+    if (!(moved > 0)) return from;
+    if (!(o1 > 0.5)) return probed;
+    const alpha = (o0 - o1) / moved;
+    if (!(alpha > 0)) return probed;
+    let bw = probed, o = o1;
+    for (let i = 1; i < 10 && o > 0.5 && bw > floor; i++) {
+      const step = Math.ceil(o * 1.5);
+      const next = Math.max(floor, bw - step);
+      if (next === bw) break;
+      o -= alpha * (bw - next);
+      bw = next;
+    }
+    return bw;
+  }
   function applyTabWidths() {
     const bar = $("#tabsBar");
     const wrap = $("#tabsWrap") || bar && bar.parentElement;
@@ -12882,14 +12927,25 @@ What you type stays in this browser only.`;
     updateTabOverflow();
     if (add) {
       let bw = barW;
-      for (let i = 0; i < 10; i++) {
-        const overhang = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
-        if (overhang <= 0.5) break;
-        bw = Math.max(40, bw - Math.ceil(overhang * 1.5));
-        bar.style.flex = "0 0 " + bw + "px";
-        bar.style.width = bw + "px";
-        bar.style.minWidth = bw + "px";
-        bar.style.maxWidth = bw + "px";
+      const o0 = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+      if (o0 > 0.5) {
+        const probed = Math.max(40, bw - Math.ceil(o0 * 1.5));
+        if (probed < bw) {
+          bw = probed;
+          bar.style.flex = "0 0 " + bw + "px";
+          bar.style.width = bw + "px";
+          bar.style.minWidth = bw + "px";
+          bar.style.maxWidth = bw + "px";
+          const o1 = add.getBoundingClientRect().right - wrap.getBoundingClientRect().right;
+          const settled = settleBarWidth(barW, o0, probed, o1, 40);
+          if (settled !== bw) {
+            bw = settled;
+            bar.style.flex = "0 0 " + bw + "px";
+            bar.style.width = bw + "px";
+            bar.style.minWidth = bw + "px";
+            bar.style.maxWidth = bw + "px";
+          }
+        }
       }
       if (bw !== barW) updateTabOverflow();
       if (bw < contentW - 1) {
@@ -20194,9 +20250,7 @@ What you type stays in this browser only.`;
       }
       toast("Added to Favourites");
     }
-    const was = ePackEpoch;
-    savePack();
-    hooks.keepPoolAcross(was, [id]);
+    savePack([id]);
     syncFavouritesMeta();
     hooks.render();
   }
@@ -28261,7 +28315,7 @@ What you type stays in this browser only.`;
     syncMeIntentPick();
     if ($("#meReset")) $("#meReset").onclick = () => {
       delete pack.overrides[id];
-      savePack();
+      savePack([id]);
       rebuildCards();
       doneCardEditor();
       toast(t("Restored original -") + " " + (base.t || id));
@@ -28354,7 +28408,7 @@ What you type stays in this browser only.`;
       }
       if (!isNew) edMarkClean();
       afterPaint(() => {
-        savePack();
+        savePack([savedId]);
         rebuildCards();
         toast(isNew ? "Card added" : "Card saved");
         if (isNew) openCardEditor(savedId, null, fromManage);
@@ -28405,9 +28459,7 @@ What you type stays in this browser only.`;
       }
       toast(lostStar ? "Put away - greyed at the foot of its category, unfavourited" : "Put away - greyed at the foot of its category");
     }
-    const was = ePackEpoch;
-    savePack();
-    hooks.keepPoolAcross(was, [id]);
+    savePack([id]);
     const m = (cards || []).find((x) => x && x.id === id);
     if (m) {
       if (nowHidden) m._hidden = 1;
@@ -32986,8 +33038,9 @@ What you type stays in this browser only.`;
     drawIntentRail();
     recountMacros();
   }
-  function applyLangUI(l) {
+  function applyLangUI(l, mode) {
     cancelLangTail();
+    if (mode === "tail") return;
     applyLangState(l);
     applyLangHeavy();
   }
