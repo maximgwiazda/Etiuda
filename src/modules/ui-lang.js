@@ -604,7 +604,7 @@ UI_STRINGS.pl={
   "Clear local changes?":"Wyczyścić zmiany lokalne?",
   "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.":"Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
   "On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.":"W zespole znikają też zmiany, które to stanowisko udostępniło liderowi zespołu, także te, których lider jeszcze nie przejrzał.",
-  "The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back until Etiuda closes; after a restart, nothing comes back.":"Plik katalogu, zespół, licencja, ustawienie folderu i imię agenta zostają. Przycisk Cofnij przywraca zmiany do zamknięcia Etiudy; po ponownym uruchomieniu nic już nie wróci.",
+  "The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.":"Plik katalogu, zespół, licencja, ustawienie folderu i imię agenta zostają. Przycisk Cofnij przywraca zmiany na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu nic już nie wróci.",
   "Loads a catalog file from this computer.":"Wczytuje plik katalogu z tego komputera.",
   "Joins a team with an invitation from its lead.":"Dołącza do zespołu na podstawie zaproszenia od lidera.",
   "Eject catalog":"Odłącz katalog",

@@ -72,7 +72,7 @@ function askClearLocal(){
   el.innerHTML='<h3 id="eClearAskT">'+esc(t("Clear local changes?"))+'</h3>'
     +'<p>'+esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered."))+'</p>'
     +(eHasBranch() ? '<p>'+esc(t("On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included."))+'</p>' : '')
-    +'<p>'+esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back until Etiuda closes; after a restart, nothing comes back."))+'</p>'
+    +'<p>'+esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back."))+'</p>'
     +'<div class="tour-actions"><button type="button" class="btn" id="eClearGo">'+esc(t("Clear local changes"))+'</button>'
     +'<button type="button" class="btn primary" id="eClearStay">'+esc(t("Cancel"))+'</button></div>';
   document.body.appendChild(el);
