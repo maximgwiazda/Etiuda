@@ -2368,7 +2368,7 @@ html.raildrag #intentRailList{margin-top:0}
 .cat-slot{flex:0 0 16px;align-self:stretch;display:flex;align-items:center;justify-content:center}
 .cat-slot .cat-ic{width:16px;height:16px;margin:0;color:inherit}
 .rail-item.on .cat-slot{color:var(--go)}
-.rail-item{position:relative;padding-right:32px}
+.rail-item{position:relative;padding-right:8px}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
    notice, and its margins reached these rows through the shared name. */
 .rail-item.rail-nohit{opacity:.35}
@@ -2378,14 +2378,14 @@ html.raildrag #intentRailList{margin-top:0}
   backdrop-filter:var(--mark-filter)}
 .rail-item.rail-kbd .rail-t,.rail-item.rail-kbd .cat-slot{color:var(--accent)}
 /* Favourite star on hover (edit intents only from Manage) */
-/* ABSOLUTE, so the target can grow without taking a letter from any name: what the row
-   reserves is its own padding-right, and the two move together. 6px round a 15px glyph is a
-   27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
+/* ABSOLUTE, so the target can grow without taking a letter from any name. The row reserves
+   padding for it only while it is showing; the rules are with the docked row. 6px round a
+   15px glyph is a 27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
 .rail-fav{position:absolute;right:4px;top:50%;transform:translateY(-50%);
   border:0;background:transparent;color:var(--dim);line-height:1;
   padding:6px;border-radius:6px;cursor:default;opacity:0;
   display:inline-flex;align-items:center;justify-content:center}
-.rail-item:hover .rail-fav,.rail-fav:focus-visible{opacity:1}
+.rail-item:hover .rail-fav,.rail-item:focus-within .rail-fav,.rail-fav:focus-visible{opacity:1}
 .rail-fav:hover{color:var(--fav);background:var(--fav-soft)}
 /* The one control whose resting state is INVISIBLE-until-hover. On a coarse pointer there is
    no hover, so an invisible star is not quiet - it is absent: nothing on a touch screen ever
@@ -2536,7 +2536,20 @@ body.rail-col .rail-head .rail-n{margin-left:0;padding:0;font:13px var(--sans);c
   font-variant-numeric:tabular-nums;opacity:1}
 body.rail-col .rail-head .rail-hid{order:2;opacity:.75}
 body.rail-col .rail-actions{margin-left:auto;order:3;align-self:center}
-body.rail-col .rail-item{padding:7px 36px 7px 10px;gap:11px;align-items:center}
+body.rail-col .rail-item{padding:7px 10px;gap:11px;align-items:center}
+/* The star is absolute, so the name runs to the row's own padding until the star is
+   showing. A starred row keeps the room, because its star stays. A coarse pointer has
+   no hover to reveal a star, so it keeps the room too. */
+@media (hover:hover){
+  .rail-item:is(:hover,:focus-within){padding-right:32px}
+  body.rail-col .rail-item:is(:hover,:focus-within){padding-right:36px}
+}
+.rail-item:has(.rail-fav.on){padding-right:32px}
+body.rail-col .rail-item:has(.rail-fav.on){padding-right:36px}
+@media (pointer:coarse){
+  .rail-item{padding-right:32px}
+  body.rail-col .rail-item{padding-right:36px}
+}
 body.rail-col .rail-item .cat-slot{color:var(--side-dim);opacity:.85}
 /* The chosen row is the panel's own - mint, green name, check - and its mark stays green, which the
    quiet marks above would otherwise grey. */
