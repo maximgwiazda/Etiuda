@@ -31715,7 +31715,7 @@ What you type stays in this browser only.`;
         const show = key === libOn;
         if (show) d.removeAttribute("hidden");
         else d.setAttribute("hidden", "");
-        d.open = mgOpen.has(key);
+        d.open = show;
         if (key === libOn) {
           const c = d.querySelector(".mg-count");
           if (c) countEl = c;

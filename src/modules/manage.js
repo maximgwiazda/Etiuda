@@ -655,7 +655,9 @@ function applyLibView(page){
     if(!q){
       const show=key===libOn;
       if(show) d.removeAttribute("hidden"); else d.setAttribute("hidden","");
-      d.open=mgOpen.has(key);
+      /* The page's fold has no summary to open it by, and a hidden fold left open shuts it: the
+         folds are an accordion, whose toggle runs after this paint. */
+      d.open=show; /* plant:library-page-open */
       if(key===libOn){ const c=d.querySelector(".mg-count"); if(c) countEl=c; }
       if(key==="catmac"){
         d.querySelectorAll(".mg-cat").forEach(cat=>{

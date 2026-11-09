@@ -86,10 +86,10 @@ class El {
   set tabIndex(v) { this.setAttribute("tabindex", v); }
   get value() { return this._value !== undefined ? this._value : (this.attrs.get("value") || ""); }
   set value(v) { this._value = String(v); }
-  setAttribute(k, v) { this.attrs.set(String(k).toLowerCase(), String(v)); }
+  setAttribute(k, v) { k = String(k).toLowerCase(); const had = this.attrs.has(k); this.attrs.set(k, String(v)); if (!had) detailsToggle(this, k, "closed"); }
   getAttribute(k) { const v = this.attrs.get(String(k).toLowerCase()); return v === undefined ? null : v; }
   hasAttribute(k) { return this.attrs.has(String(k).toLowerCase()); }
-  removeAttribute(k) { this.attrs.delete(String(k).toLowerCase()); }
+  removeAttribute(k) { k = String(k).toLowerCase(); const had = this.attrs.has(k); this.attrs.delete(k); if (had) detailsToggle(this, k, "open"); }
   get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n === this.ownerDocument.documentElement; }
   appendChild(n) { if (n.parentNode) n.parentNode._drop(n); n.parentNode = this; this.childNodes.push(n); return n; }
   append(...ns) { ns.forEach(n => this.appendChild(typeof n === "string" ? new TextNode(n) : n)); }
@@ -146,6 +146,15 @@ class El {
   getAnimations() { return []; }
   scrollIntoView() {}
   getContext() { return { font: "", measureText: t => ({ width: String(t).length * 7 }) }; }
+}
+/* A details element's toggle, as the HTML standard queues it: on the open attribute added or removed,
+   parsed markup included, fired a task later with any pending one folded in, so it sees the final state. */
+function detailsToggle(el, k, was) {
+  if (k !== "open" || el.localName !== "details") return;
+  if (el._toggle) { was = el._toggle.was; clearImmediate(el._toggle.id); }
+  const id = setImmediate(() => { el._toggle = null;
+    (el.listeners.toggle || []).slice().forEach(fn => fn({ type: "toggle", target: el, oldState: was, newState: el.open ? "open" : "closed" })); });
+  el._toggle = { id, was };
 }
 function serial(n) {
   if (n.nodeType === 3) return n.data;
@@ -659,12 +668,67 @@ check("L13 .screen-actions uses var(--line) instead of var(--border) and #ehClos
     || JSON.stringify({ usesBorder, primaryStyled, ehClosePrimary });
 });
 
+/* A page's fold has no summary on screen, so a page whose details element is shut shows its title and
+   nothing under it: shown means not hidden AND open, and the toggle the stub page now fires is what shut
+   them. Run last, because it puts a catalog on the desk. Invented: two shelves, two requests, two names. */
+await checkAsync("L16 every Library page holds its content when reached from another page, Categories and cards included", async () => {
+  if (wired) return wired;
+  const CAT = await import(MOD("catalog.js"));
+  const invented = {
+    format: 2, kind: "etiuda-catalog", id: "harbour-lamps", rev: 1, name: "Harbour Lamps", date: "2026-01-09",
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [
+      { id: "t-op", kind: "shelf", label: { en: "Openers", pl: "Powitania" } },
+      { id: "t-rt", kind: "shelf", label: { en: "Returns", pl: "Zwroty" } },
+      { id: "t-wick", kind: "request", clause: { en: "a new wick", pl: "nowy knot" },
+        action: { en: "sent a wick", pl: "wysłano knot" }, topic: { en: "the wick", pl: "knot" } },
+      { id: "t-shade", kind: "request", clause: { en: "a shade swap", pl: "wymianę klosza" },
+        action: { en: "swapped the shade", pl: "wymieniono klosz" }, topic: { en: "the shade", pl: "klosz" } },
+    ],
+    cards: [
+      { id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening", pl: "Ciepłe powitanie" },
+        body: { en: "Good day.", pl: "Dzień dobry." } },
+      { id: "c-wick", shelf: "t-rt", bodyShape: "plain", requests: ["t-wick"], title: { en: "Wick", pl: "Knot" },
+        body: { en: "A wick is on its way.", pl: "Knot jest w drodze." } },
+      { id: "c-shade", shelf: "t-rt", bodyShape: "plain", requests: ["t-shade"], title: { en: "Shade", pl: "Klosz" },
+        body: { en: "The shade is swapped.", pl: "Klosz wymieniony." } },
+    ],
+    role: ["Concierge", "Porter"],
+  };
+  if (!CAT.storeCatalog(CAT.parseCatalogFile(JSON.stringify(invented)))) return "the invented catalog was not stored";
+  H.hooks.restartDesk();
+  if (STAB.screenOn !== "library") MG.openManage();
+  await settle();
+  const holds = {
+    catmac: d => d.querySelectorAll(".mg-cat").length >= 2,
+    intents: d => d.querySelectorAll(".manage-row.mg-int").length === 2,
+    who: d => /Concierge, Porter/.test((d.querySelector("#mgWho") || {}).value || ""),
+    data: d => /3\scards[\s\S]*2\sintents/.test((d.querySelector("#mgCatList .ec-row.is-loaded") || {}).textContent || ""),
+  };
+  const seen = [];
+  let all = true;
+  for (const k of ["catmac", "intents", "catmac", "who", "catmac", "data", "intents", "who", "data", "catmac"]) {
+    const b = host().querySelector('.sx-sec[data-lm="' + k + '"]');
+    if (!b) return "no section " + k + " in the nav";
+    b.click();
+    await settle();
+    const shown = host().querySelectorAll(".sx.lm-lib details.manage-sec").filter(d => !d.hasAttribute("hidden"));
+    const page = shown.length === 1 && shown[0].getAttribute("data-mg") === k ? shown[0] : null;
+    const ok = !!page && page.open && holds[k](page);
+    if (!ok) all = false;
+    seen.push(k + ":" + (page ? (page.open ? "open" : "shut") + (holds[k](page) ? "+content" : "-content")
+      : "shown " + shown.map(d => d.getAttribute("data-mg")).join("|")));
+  }
+  return all || seen.join(" ");
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
 const PLANTS = [
   { tag: "library-editor-closes-back", file: "manage.js", leg: "L3" },
   { tag: "restart-keeps-screen", file: "restart.js", leg: "L5" },
+  { tag: "library-page-open", file: "manage.js", leg: "L16" },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {
