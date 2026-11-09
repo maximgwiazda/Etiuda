@@ -1564,7 +1564,8 @@ const t0 = Date.now();
     "Settings shows one section at a time, and Appearance is the one that holds Blur (" + acc.n + " sections)");
   /* WHAT THE SCREEN IS MADE OF, board 452: the sections it holds, in order, and the two rows the
      first of them holds. Read as a list rather than asserted one at a time, so a section
-     arriving as well as a section leaving is a failure. */
+     arriving as well as a section leaving is a failure. A section with no row is left out of
+     the screen, which is why Teams and AI are not in this list. */
   const setSecs = await p.evaluate(() => {
     const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
     const rows = [...document.querySelectorAll("#setBody .set-row")];
@@ -1573,9 +1574,9 @@ const t0 = Date.now();
              title: h2 ? h2.textContent : "",
              rows: rows.map(r => (r.querySelector("input,select") || {}).id || "").filter(Boolean) };
   });
-  check(setSecs.ids.join(",") === "general,appearance,layout,keys,data,about" && setSecs.title === "General"
+  check(setSecs.ids.join(",") === "general,appearance,layout,keys,notifications,data,about" && setSecs.title === "General"
         && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.ids.indexOf("catalog") < 0,
-    "Settings holds General, Appearance, Layout, Keyboard shortcuts, Data and defaults and About, the name above the"
+    "Settings holds General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About, the name above the"
     + " language and nothing about catalogs: " + JSON.stringify(setSecs));
   await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
   /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
@@ -2719,6 +2720,13 @@ const t0 = Date.now();
     await p.keyboard.press("Escape"); await sleep(400);
   } else check(false, "no catalog category to test Reset against");
 
+  /* The export opens the Library, and Escape leaves a screen open. Closing that screen puts
+     back the filter it snapshotted on open, which is this empty category, so the desk would
+     show nothing after the removal had already cleared the filter. Close it first. The removal
+     then clears the filter on the desk, and the next open snapshots a whole list. The counts
+     below are the same assertions as before. */
+  await p.evaluate(() => { if (screenOn === "library") closeScreenTab("library"); });
+  await sleep(400);
   await p.evaluate(k => { removeCategory(k); cats = []; rebuildCards(); drawPills(); render(); }, emptyCat); await sleep(600);
   clean(e, "the empty category");
 
