@@ -207,6 +207,8 @@ function mgSiblingIdx(el){
 function mgRefreshAround(mutate){
   const page=libPage(), host=libHost();
   if(!page){ mutate(); return; }
+  const pageEl = (host && host.querySelector("#libPage")) || page.querySelector("#libPage");
+  const keepPage = pageEl ? pageEl.scrollTop : 0;
   const treeBefore=page.querySelector(".mg-tree");
   const keepTree=treeBefore?treeBefore.scrollTop:0;
   const keepCard=host?host.scrollTop:0;
@@ -225,19 +227,20 @@ function mgRefreshAround(mutate){
   paintLibrary();
   const now=libPage();
   if(!now) return;
+  const nowPage = (host && host.querySelector("#libPage")) || now.querySelector("#libPage");
+  if(nowPage) nowPage.scrollTop = keepPage;
   const tree=now.querySelector(".mg-tree");
   if(tree) tree.scrollTop=keepTree;
   if(host) host.scrollTop=keepCard;
   if(mgReduceMotion()) return;
   /* Clip each row against whatever actually scrolls around it - the tree for a card, the tab's
      page for an intent - so a row animating in one list is never measured against the other. */
-  const bodyBox=(host||now).getBoundingClientRect();
+  const bodyBox=(nowPage||host||now).getBoundingClientRect();
   const moved=[], dys=[];
   now.querySelectorAll(ROWS).forEach(el=>{
     const b=before[rowKey(el)];
     if(b==null || !el.offsetParent) return;
-    const holder=el.closest(".mg-tree");
-    const box=holder?holder.getBoundingClientRect():bodyBox;
+    const box=nowPage?nowPage.getBoundingClientRect():bodyBox;
     const r=el.getBoundingClientRect();
     if(r.bottom<box.top-40 || r.top>box.bottom+40) return;
     const dy=Math.round(b-r.top);
@@ -631,13 +634,91 @@ function applyLibView(page){
   const q=libFold(libQuery);
   if(page.classList){ if(q) page.classList.add("is-find"); else page.classList.remove("is-find"); }
   let countEl=null;
+  let totalHits=0;
   page.querySelectorAll("details.manage-sec").forEach(d=>{
     const key=d.getAttribute("data-mg");
-    const hit=!q || libFold(d.textContent).indexOf(q)>=0;
-    const show=q?hit:key===libOn;
-    if(show) d.removeAttribute("hidden"); else d.setAttribute("hidden","");
-    if(!q && key===libOn){ const c=d.querySelector(".mg-count"); if(c) countEl=c; }
+    if(!q){
+      const show=key===libOn;
+      if(show) d.removeAttribute("hidden"); else d.setAttribute("hidden","");
+      d.open=mgOpen.has(key);
+      if(key===libOn){ const c=d.querySelector(".mg-count"); if(c) countEl=c; }
+      if(key==="catmac"){
+        d.querySelectorAll(".mg-cat").forEach(cat=>{
+          const k=cat.getAttribute("data-cat");
+          const op=mgOpen.has("cat:"+k);
+          cat.removeAttribute("hidden");
+          if(cat.classList) cat.classList.toggle("is-open", op);
+          const body=cat.querySelector(".mg-cat-body");
+          if(body){ if(op) body.removeAttribute("hidden"); else body.setAttribute("hidden",""); }
+          cat.querySelectorAll(".mg-card-row").forEach(r=>r.removeAttribute("hidden"));
+        });
+      } else if(key==="intents"){
+        d.querySelectorAll(".mg-intent-row").forEach(r=>r.removeAttribute("hidden"));
+      }
+    } else {
+      let hit=false;
+      if(key==="catmac"){
+        d.querySelectorAll(".mg-cat").forEach(cat=>{
+          const lab=cat.querySelector(".mg-cat-lab2");
+          const fixed=cat.querySelector(".mg-cat-fixed");
+          const catName=(lab && lab.value) || (fixed ? fixed.textContent : "") || "";
+          const catMatch=libFold(catName).indexOf(q)>=0;
+          let anyCardMatch=false;
+          cat.querySelectorAll(".mg-card-row").forEach(crow=>{
+            const cHit=libFold(crow.textContent).indexOf(q)>=0;
+            if(cHit) anyCardMatch=true;
+            if(catMatch || cHit) crow.removeAttribute("hidden");
+            else crow.setAttribute("hidden","");
+          });
+          const catHit=catMatch||anyCardMatch;
+          const body=cat.querySelector(".mg-cat-body");
+          if(catHit){
+            hit=true;
+            cat.removeAttribute("hidden");
+            if(cat.classList) cat.classList.add("is-open");
+            if(body) body.removeAttribute("hidden");
+          } else {
+            cat.setAttribute("hidden","");
+          }
+        });
+      } else if(key==="intents"){
+        d.querySelectorAll(".mg-intent-row").forEach(r=>{
+          const iHit=libFold(r.textContent).indexOf(q)>=0;
+          if(iHit){ hit=true; r.removeAttribute("hidden"); }
+          else r.setAttribute("hidden","");
+        });
+      } else if(key==="who"){
+        const whoInput=d.querySelector("#mgWho");
+        const whoVal=whoInput?whoInput.value:"";
+        hit=libFold(d.textContent).indexOf(q)>=0 || libFold(whoVal).indexOf(q)>=0;
+      } else {
+        hit=libFold(d.textContent).indexOf(q)>=0;
+      }
+      if(hit){
+        totalHits++;
+        d.removeAttribute("hidden");
+        d.open=true;
+      } else {
+        d.setAttribute("hidden","");
+      }
+    }
   });
+
+  const card=page.querySelector(".sx-card") || page;
+  let emptyP=page.querySelector("#libEmptySearch");
+  if(q && totalHits===0){
+    if(!emptyP){
+      emptyP=document.createElement("p");
+      emptyP.className="sx-none";
+      emptyP.id="libEmptySearch";
+      emptyP.setAttribute("data-i18n-skip","");
+      // placeholder: Claudette
+      emptyP.textContent="Nothing in the library matches this search.";
+      card.appendChild(emptyP);
+    }
+  } else if(emptyP){
+    emptyP.remove();
+  }
   buttons.forEach(b=>{
     const on=!q && b.getAttribute("data-lm")===libOn;
     if(b.classList) b.classList.toggle("on", on);
@@ -658,6 +739,7 @@ function wireLibShell(page){
   if(!buttons||!buttons.length) return;
   buttons.forEach(b=>{
     b.onclick=()=>{
+      libView="list";
       libOn=b.getAttribute("data-lm")||libOn;
       libQuery="";
       mgOpen.add(libOn);
@@ -778,12 +860,9 @@ function openManage(justHtml){
        bringing one in is the Library's, so it stands in the Library's bar. What is left here is
        the list, which is the answer to "what is on this desk". */
     mgSec("data","Catalog & data",
+      (dataTail ? '<div class="mg-data-bar">'+dataTail+'</div>' : '')+
       '<div class="ec-list" id="mgCatList"></div>',
       null,
-      /* Only where a host answers: a browser has no folder, and the title line is then a title
-         line. The PATH IS THE CONTROL - clicking it opens the folder - and the pencil beside it
-         changes which folder that is; a click inside a summary would toggle the fold, so both
-         stop the event in wireManage. */
       dataTail
     );
   if(justHtml) return mgBody;
@@ -798,6 +877,9 @@ function openManage(justHtml){
    every section is about one catalog, and only "Catalog & data" otherwise says which. */
 function libraryHeadHtml(){
   const name=catalogFileName();
+  if(libView==="history"){
+    return '<div class="sx-nav-title"><h2>'+esc(t("Library"))+'</h2></div>';
+  }
   return '<div class="screen-head"><h2>'+esc(t("Library"))+'</h2>'
     +(name?'<span class="screen-name" data-i18n-skip>'+esc(name)+'</span>':'')+'</div>';
 }
@@ -813,9 +895,9 @@ function libPage(){ const host=libHost(); return host ? host.querySelector(".lib
 function paintLibrary(host,body){
   host=host||libHost();
   if(!host) return;
-  if(libView==="history"){ openHistory(host); return; }
+  const isHist=libView==="history";
   const name=catalogFileName();
-  host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1">'
+  host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
     +'<label class="sx-search">'+lmIcon("search")
@@ -824,20 +906,30 @@ function paintLibrary(host,body){
     +'<div class="sx-secs" id="libSecs">'+libNavHtml()+'</div>'
     +'<div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">'+lmIcon("statistics")
     +esc(t("Maintenance"))+' <kbd>'+esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'
-    +'<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
-    +(name?' · <span data-i18n-skip>'+esc(name)+'</span>':'')+'</div>'
-    +'<h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p>'
-    +'<div class="sx-card">'+(body||openManage(true))+'</div></div></div>'
-    /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
-       and .mf-left is the group that carries it there. Danger kept, because this one forgets
-       personal state. The bar stays under the whole tab so its five actions remain one row. */
-    +'<div class="screen-actions">'+libraryActionsHtml()+'</div></div>';
+    +(isHist
+      ? '<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
+        +' · <span data-i18n-skip>'+esc(t("Saved copies"))+'</span></div>'
+        +'<div class="screen-head"><h2>'+esc(t("Saved copies"))+'</h2></div>'
+        +'<div class="sx-card"><div id="ehView"></div></div></div>'
+      : '<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
+        +(name?' · <span data-i18n-skip>'+esc(name)+'</span>':'')+'</div>'
+        +'<h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p>'
+        +'<div class="sx-card">'+(body||openManage(true))+'</div></div>')
+    +'</div>'
+    +'<div class="screen-actions">'+(isHist ? '<div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button>' : libraryActionsHtml())+'</div></div>';
   const page=host.querySelector(".lib-list");
-  wireLibrary(page);
-  translateTree(page);
-  applyLibView(page);
-  dressDialogInputs(page);
-  markCutText(page);
+  if(isHist){
+    wireLibShell(page);
+    openHistory(host.querySelector("#ehView")||host);
+    const back=host.querySelector("#ehClose");
+    if(back) back.onclick=()=>{ libView="list"; paintLibrary(host); };
+  } else {
+    wireLibrary(page);
+    translateTree(page);
+    applyLibView(page);
+    dressDialogInputs(page);
+    markCutText(page);
+  }
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
   const at=document.activeElement;
   if(!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
@@ -1042,6 +1134,7 @@ export {
   mgCardRow,
   mgCardsIn,
   mgUsesTip,
+  mgRefreshAround,
   libraryBodyHtml,
   openManage,
   wireManageDrag,

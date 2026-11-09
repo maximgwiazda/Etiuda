@@ -81,7 +81,7 @@ function historyOpen(v){
     const shown=eOfferCatalogDialog(c,{ file:name, force:true, asked:true, direct:!offTeam, offTeam:offTeam,
       foundHtml:esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join('<code>'+esc(name)+'</code>')
         .split("{WHEN}").join(esc(fileStamp(v.first))),
-      accept:sig=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{from:name}); } });
+      accept:sig=>{ hooks.openManage(true); lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{from:name}); } });
     if(!shown) toastIfSameCatalog(c);
   }).catch(()=>{});
 }
@@ -106,16 +106,23 @@ function openHistory(host){
   Promise.resolve(h.historyList()).then(list=>{
     if(box.hidden || (screenOn && screenOn!=="library")) return;
     const groups=historyGroups(list), flat=[].concat.apply([],groups);
-    box.innerHTML='<div class="screen-page lib-screen lib-history" tabindex="-1">'
-      +'<div class="screen-head"><h2>'+esc(t("Saved copies"))+'</h2></div>'
-      +'<div class="screen-body"><div id="ehView">'+historyBodyHtml(groups)+'</div></div>'
-      +'<div class="screen-actions"><button type="button" class="btn" id="ehClose">'+esc(t("Back to the Library"))+'</button></div></div>';
-    const view=document.getElementById("ehView");
-    view.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
-    view.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
+    const view=(box.id==="ehView"?box:(box.querySelector&&box.querySelector("#ehView")))||null;
+    if(view){
+      view.innerHTML=historyBodyHtml(groups);
+    } else {
+      box.innerHTML='<div class="screen-page lib-screen lib-history" tabindex="-1">'
+        +'<div class="screen-head"><h2>'+esc(t("Saved copies"))+'</h2></div>'
+        +'<div class="screen-body"><div id="ehView">'+historyBodyHtml(groups)+'</div></div>'
+        +'<div class="screen-actions"><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button></div></div>';
+    }
+    const ehView=document.getElementById("ehView");
+    if(ehView){
+      ehView.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
+      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
+    }
     const back=document.getElementById("ehClose");
-    back.onclick=()=>hooks.openManage();
-    try{ back.focus({preventScroll:true}); }catch(e){}
+    if(back) back.onclick=()=>hooks.openManage();
+    try{ if(back) back.focus({preventScroll:true}); }catch(e){}
   }).catch(()=>{});
 }
 

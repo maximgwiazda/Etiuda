@@ -3100,6 +3100,14 @@ const CARD_B = {
       // The bubble's foot is the name's foot, the gap, and the list at its cap: vh - (cap - gap) from the top.
       return eq([cap - gap > row + gap, packed].join(","), "true,true");
     });
+  check("catalog-offer.js", "D7-catalog-offer-unfocused eOfferCatalogDialog with #mgCatList does not skip notification when document.hasFocus() is false",
+    () => {
+      const off = fs.readFileSync(join(MODDIR, "catalog-offer.js"), "utf8");
+      /* Check that the mgCatList check gates on document.hasFocus() */
+      const earlyReturn = /if\s*\(!src\.asked\s*&&\s*document\.getElementById\("mgCatList"\)\s*\)\s*\{\s*paintCatalogList\(\);\s*return\s+false;/.test(off);
+      const gatesOnFocus = /document\.getElementById\("mgCatList"\)[\s\S]*?document\.hasFocus/.test(off);
+      return !earlyReturn && gatesOnFocus;
+    });
   } finally {
     T.watchTabPath(null);
     T.tabs.splice(0, T.tabs.length);

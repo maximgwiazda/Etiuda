@@ -5852,7 +5852,9 @@ const UI_STRINGS_SHA256 = "e80f86779433be2121851a7e2b39864a4dad31c475144847a0ea2
    and no count moves. Until the copywriter's words land in both languages, each is listed here,
    checked present, and printed as owed. A word that leaves the source leaves this list in the
    same commit, so the count only falls. */
-const OWED_WORDS = [];
+const OWED_WORDS = [
+  "Nothing in the library matches this search."
+];
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

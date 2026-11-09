@@ -558,7 +558,8 @@ function eOfferCatalogDialog(c,src){
      every catalog in the folder, marks the one loaded and offers Load on each row, so a question
      about the folder argues with a person already looking at the answer. Ruled 2026-09-17. */
   if(!src.asked && document.getElementById("mgCatList")){
-    paintCatalogList(); return false;
+    paintCatalogList();
+    if(typeof document!=="undefined" && typeof document.hasFocus==="function" && document.hasFocus()) return false;
   }
   /* One bubble at a time. A file somebody chose takes the place of one found and left standing,
      since that is the question they are waiting on; anything found waits behind the one up. */

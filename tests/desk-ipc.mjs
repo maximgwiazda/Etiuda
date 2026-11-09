@@ -151,7 +151,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
@@ -1926,6 +1926,66 @@ try {
     }
   } catch (e) { d8ArgsWhy = String(e && e.message || e).split("\n")[0]; }
   check(d8Args, "D8-args --settings, --library, --new-tab, --picker do their act in a running desk (" + d8ArgsWhy + ")");
+
+  /* Finding 3: Cold start with Jump List tasks dispatches them once main window loads */
+  let d8ColdStart = false, d8ColdStartWhy = "";
+  try {
+    if (typeof mainTest.dispatchColdStartArgs !== "function") {
+      d8ColdStartWhy = "no dispatchColdStartArgs function in main";
+    } else {
+      mainTest.createWindow();
+      const w = madeWins[madeWins.length - 1];
+      const origArgv = process.argv;
+      try {
+        /* 1. Cold start with --settings */
+        process.argv = ["etiuda.exe", "--settings"];
+        w.sentEvents = [];
+        mainTest.dispatchColdStartArgs(w);
+        const coldSettings = (w.sentEvents || []).some(e => e.ch === "etiuda:tray-go" && e.args[0] === "settings");
+
+        /* 2. Cold start with --new-tab */
+        process.argv = ["etiuda.exe", "--new-tab"];
+        w.sentEvents = [];
+        mainTest.dispatchColdStartArgs(w);
+        const coldNewTab = (w.sentEvents || []).some(e => e.ch === "etiuda:tray-go" && e.args[0] === "new-tab");
+
+        /* 3. Cold start with --library */
+        process.argv = ["etiuda.exe", "--library"];
+        w.sentEvents = [];
+        mainTest.dispatchColdStartArgs(w);
+        const coldLibrary = (w.sentEvents || []).some(e => e.ch === "etiuda:tray-go" && e.args[0] === "library");
+
+        /* 4. Host handles kind === "new-tab" */
+        const hostSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "host.js"), "utf8");
+        const hostHandlesNewTab = hostSrc.includes('kind==="new-tab"') || hostSrc.includes('kind === "new-tab"');
+
+        d8ColdStart = coldSettings && coldNewTab && coldLibrary && hostHandlesNewTab;
+        if (!d8ColdStart) d8ColdStartWhy = JSON.stringify({ coldSettings, coldNewTab, coldLibrary, hostHandlesNewTab });
+      } finally {
+        process.argv = origArgv;
+      }
+    }
+  } catch (e) { d8ColdStartWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d8ColdStart, "D8-cold-start cold start dispatches --settings, --library, --new-tab, --picker and host handles new-tab (" + d8ColdStartWhy + ")");
+
+  /* Finding 11: Interface language change rebuilds tray menu and syncs jump list */
+  let d8LangTraySync = false, d8LangTraySyncWhy = "";
+  try {
+    /* Seen through the harness's own Electron stubs, never through a seam in the shell: the live tray's rebuilt menu and
+       the jump list the shell last handed app.setJumpList. */
+    const liveTray = () => madeTrays.filter(t => !t.dead).slice(-1)[0] || null;
+    const labels = () => { const t = liveTray(); return t && t.menu && t.menu.items ? t.menu.items.map(i => i && i.label).filter(Boolean).join("|") : ""; };
+    const jump = () => JSON.stringify(electron.app._jumpList || null);
+    const before = { menu: labels(), jump: jump() };
+    ipcRenderer.sendSync("etiuda:desk-save", JSON.stringify({ eUiLang: "pl" }));
+    const pl = { menu: labels(), jump: jump() };
+    ipcRenderer.sendSync("etiuda:desk-patch-save", JSON.stringify({ eUiLang: "en" }));
+    const en = { menu: labels(), jump: jump() };
+    d8LangTraySync = !!liveTray() && pl.menu.indexOf("Otwórz Etiudę") >= 0 && en.menu.indexOf("Open Etiuda") >= 0
+      && pl.jump !== en.jump && pl.jump !== "null";
+    if (!d8LangTraySync) d8LangTraySyncWhy = JSON.stringify({ tray: !!liveTray(), before: before.menu.slice(0, 60), pl: pl.menu.slice(0, 60), en: en.menu.slice(0, 60), jumpChanged: pl.jump !== en.jump });
+  } catch (e) { d8LangTraySyncWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d8LangTraySync, "D8-lang-tray-sync changing eUiLang rebuilds tray menu and syncs jump list (" + d8LangTraySyncWhy + ")");
 
   let d8FileOffered = false, d8FileOfferedWhy = "";
   try {
