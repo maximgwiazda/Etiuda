@@ -215,19 +215,99 @@ check(noticeFaults(withoutAttribution, "en").includes("attribution") && noticeFa
 const runtimeJson = path.join(ROOT, "tools", "model-runtime.json");
 let runtimeList = null;
 try { runtimeList = JSON.parse(fs.readFileSync(runtimeJson, "utf8")); } catch { runtimeList = null; }
-const listed = runtimeList && Array.isArray(runtimeList.files) ? runtimeList.files : [];
-let runtimeMismatch = "";
-for (const item of listed) {
-  const at = path.join(ROOT, "node_modules", ...item.name.split("/"));
-  if (!fs.existsSync(at)) { runtimeMismatch = item.name + " absent"; break; }
-  const got = sha256(fs.readFileSync(at));
-  if (got !== item.sha256) { runtimeMismatch = item.name + " " + got.slice(0, 12); break; }
+function runtimeFor(platform) {
+  if (!runtimeList || !Array.isArray(runtimeList.common) || !runtimeList.native) return [];
+  const native = runtimeList.native[platform];
+  return Array.isArray(native) ? runtimeList.common.concat(native) : [];
 }
-const direct = ["onnxruntime.dll", "onnxruntime_binding.node", "tokenizers.cjs"].every(part => listed.some(item => item.name.endsWith(part)));
-const dropped = listed.some(item => /DirectML\.dll$|dxcompiler\.dll$/.test(item.name));
-check(listed.length >= 4 && !runtimeMismatch && direct && !dropped,
-  "m7 the pinned Windows runtime matches node_modules, without the two unused DirectML files: "
-  + listed.length + " file(s)" + (runtimeMismatch ? " " + runtimeMismatch : ""));
+function runtimeFault(items) {
+  for (const item of items) {
+    const at = path.join(ROOT, "node_modules", ...item.name.split("/"));
+    if (!fs.existsSync(at)) return item.name + " absent";
+    const got = sha256(fs.readFileSync(at));
+    if (got !== item.sha256) return item.name + " " + got.slice(0, 12);
+  }
+  return "";
+}
+const winListed = runtimeFor("win32");
+const linListed = runtimeFor("linux");
+const winFault = runtimeFault(winListed);
+const linFault = runtimeFault(linListed);
+const winNative = winListed.filter(item => item.name.includes("/win32/x64/"));
+const linNative = linListed.filter(item => item.name.includes("/linux/x64/"));
+const dropped = winListed.concat(linListed).some(item => /DirectML\.dll$|dxcompiler\.dll$/.test(item.name));
+const winDirect = ["onnxruntime.dll", "onnxruntime_binding.node", "tokenizers.cjs"].every(part => winListed.some(item => item.name.endsWith(part)));
+const linDirect = ["libonnxruntime.so.1", "onnxruntime_binding.node", "tokenizers.cjs"].every(part => linListed.some(item => item.name.endsWith(part)));
+const crossed = winListed.some(item => item.name.includes("/linux/")) || linListed.some(item => item.name.includes("/win32/"));
+check(winListed.length >= 4 && linListed.length >= 4 && !winFault && !linFault && winDirect && linDirect
+    && winNative.length === 2 && linNative.length === 2 && !dropped && !crossed,
+  "m7 the pinned Windows and linux-x64 runtimes match node_modules, each with its own native pair and the shared tokenizer, without DirectML: "
+  + "win32 " + winListed.length + " linux " + linListed.length
+  + (winFault ? " win " + winFault : "") + (linFault ? " linux " + linFault : ""));
+
+const destMissingLinux = path.join(LAB, "dest-missing-linux");
+const missingLinux = fs.existsSync(PACK) ? pack(["--dest", destMissingLinux, "--model", path.join(LAB, "no-such-linux"), "--platform", "linux"]) : { status: 127, stdout: "", stderr: "no packer" };
+const shippedLinux = fs.existsSync(path.join(destMissingLinux, "model", "model_q4.onnx"));
+check(missingLinux.status === 0 && (missingLinux.stdout || "").includes(WITHOUT) && !shippedLinux,
+  "m4b a missing model on a Linux pack exits 0, says the desk ships without it, and packs no model file: exit " + missingLinux.status
+  + " shipped=" + shippedLinux + " " + JSON.stringify((missingLinux.stdout || "").trim().slice(0, 160)));
+
+const destWrongLinux = path.join(LAB, "dest-wrong-linux");
+const wrongLinux = fs.existsSync(PACK) ? pack(["--dest", destWrongLinux, "--model", modelDir, "--pin", pinFile, "--platform", "linux"]) : { status: 127, stderr: "no packer" };
+const acceptedLinux = fs.existsSync(path.join(destWrongLinux, "model", "model_q4.onnx"));
+check(wrongLinux.status === 1 && /sha256|checksum/.test((wrongLinux.stderr || "") + (wrongLinux.stdout || "")) && !acceptedLinux,
+  "m5e a Linux pack refuses a model file whose sha256 is wrong and does not copy it, as the Windows pack does: exit " + wrongLinux.status
+  + " copied=" + acceptedLinux + " " + JSON.stringify(((wrongLinux.stderr || "") + (wrongLinux.stdout || "")).trim().slice(0, 180)));
+
+const destLinux = path.join(LAB, "dest-linux");
+let linuxLine = "";
+try {
+  const packed = await prepareEmbed({
+    dest: destLinux,
+    modelDir: readyModel,
+    pin: JSON.parse(fs.readFileSync(readyPin, "utf8")),
+    platform: "linux",
+    log: () => {},
+  });
+  linuxLine = packed.included ? "included" : "absent";
+} catch (error) { linuxLine = String((error && error.message) || error); }
+const soAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "linux", "x64", "libonnxruntime.so.1");
+const bindAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "linux", "x64", "onnxruntime_binding.node");
+const dllAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "win32", "x64", "onnxruntime.dll");
+const tokAt = path.join(destLinux, "runtime", "node_modules", "@huggingface", "tokenizers", "dist", "tokenizers.cjs");
+const modelAt = path.join(destLinux, "model", "model_q4.onnx");
+let soHash = "";
+if (fs.existsSync(soAt)) soHash = sha256(fs.readFileSync(soAt));
+const soPinned = linNative.find(item => item.name.endsWith("libonnxruntime.so.1"));
+check(linuxLine === "included" && fs.existsSync(modelAt) && fs.existsSync(bindAt) && fs.existsSync(tokAt) && !fs.existsSync(dllAt)
+    && !!soPinned && soHash === soPinned.sha256,
+  "m8 a Linux pack copies the model, the tokenizer runtime and the linux-x64 pair, and not the Windows binaries: " + linuxLine
+  + " so=" + soHash.slice(0, 12));
+
+const shellMain = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+const aiState = shellMain.indexOf('ipcMain.on("etiuda:ai-state"');
+const aiBody = aiState < 0 ? "" : shellMain.slice(aiState, aiState + 280);
+const readsEmbed = /const base = INSTALLED \? path\.join\(String\(process\.resourcesPath \|\| ""\), "embed"\) : "";/.test(shellMain);
+check(readsEmbed && /model: !!\(embedSuggest && embedSuggest\.installed\(\)\)/.test(aiBody) && !/win32/.test(aiBody),
+  "m10 an installed desk reads resources/embed on every platform, and the Settings switch follows whether that model is there");
+
+const judgeDir = path.join(LAB, "pin-mismatch");
+fs.mkdirSync(judgeDir);
+fs.writeFileSync(path.join(judgeDir, "model_q4.onnx"), Buffer.from("nope"));
+fs.writeFileSync(path.join(judgeDir, "model_q4.onnx_data"), Buffer.from("nope"));
+const judged = fs.existsSync(EXPORT) ? py(["--pin-match", "--out", judgeDir]) : { status: 127, stderr: "no tool" };
+check(judged.status === 1 && /model_q4\.onnx/.test(judged.stderr || "") && /sha256|bytes|absent/.test(judged.stderr || ""),
+  "m2b export.py --pin-match refuses written bytes that are not the shell pin: exit " + judged.status
+  + " " + JSON.stringify((judged.stderr || "").trim().slice(0, 200)));
+
+const MAKE = path.join(ROOT, "tools", "model-export", "make.py");
+const makeSelf = fs.existsSync(MAKE) ? spawnSync("python", [MAKE, "--self-test"], {
+  encoding: "utf8", timeout: 30000, cwd: ROOT, windowsHide: true,
+}) : { status: 127, stdout: "", stderr: "no make" };
+const makeOut = (makeSelf.stdout || "") + (makeSelf.stderr || "");
+check(fs.existsSync(MAKE) && makeSelf.status === 0 && /sha256 refused/.test(makeOut) && /pin refused/.test(makeOut) && /resume ok/.test(makeOut),
+  "m9 make.py refuses a source file whose sha256 is wrong and a written model that misses the pin, and resumes a partial fetch: exit "
+  + makeSelf.status + " " + JSON.stringify(makeOut.trim().slice(-240)));
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the lab is under tmp */ }
 console.log("#counts checks=" + checks + " failed=" + failed);
