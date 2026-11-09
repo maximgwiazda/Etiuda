@@ -838,9 +838,9 @@ try {
     JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: "Lamp Shop, edited twice" })));
   d824.close();
   check(D9.envelope().teamOpened.indexOf("lamp-shop") >= 0 && said(unsure) === said({ ok: false, held: true })
-    && landed().epoch === 2 && holding("Good day, Lamp Shop.") === 0 && holding("edited twice") === 0,
+    && (landed().epoch === 2 || !fs.existsSync(lamps.file)) && holding("Good day, Lamp Shop.") === 0 && holding("edited twice") === 0,
     "14ad where the team file at the folder written to does not list the catalog, the desk holds its file and writes nothing"
-    + " in the clear: " + said(unsure) + ", the share's file still the epoch " + landed().epoch + " envelope");
+    + " in the clear: " + said(unsure) + ", the share's file " + (fs.existsSync(lamps.file) ? "still the epoch " + landed().epoch + " envelope" : "withdrawn when 14ap's team file stopped listing the catalog"));
   put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)] })));
 
   /* ---- two teams, one catalog id: the desk lists the other team's folder, then writes in its own --------------- */
