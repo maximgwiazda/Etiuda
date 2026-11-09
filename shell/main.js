@@ -9731,9 +9731,18 @@ function isOwnText(text) {
   const h = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
   return h === lastOwnText;
 }
-function readClipText() {
-  try { return String(clipboard.readText() || ""); }
-  catch (e) { return ""; }
+/* THE CLIPBOARD'S TEXT, handed to then(text). Windows' readText answers at once and the opening goes on in the same turn,
+   as before; Electron 44 on Linux answers with a Promise (Claude gamma's Ubuntu walk, 2026-11-09), which used to be read
+   as "[object Promise]", so a copied message was never suggested there. That one is awaited. */
+function withClipText(then) {
+  let got = "";
+  try { got = clipboard.readText(); } catch (e) { got = ""; }
+  if (got && typeof got.then === "function") {
+    Promise.resolve(got).then(t => String(t || ""), () => "").then(then)
+      .catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
+    return;
+  }
+  then(String(got || ""));
 }
 /* THE HOTKEY. A second press while the picker stands closes it; otherwise the desk's page is asked
    for what to show, the picker is filled while hidden and shown only once its page says it has
@@ -9748,8 +9757,10 @@ function pickToggle() {
   const press = ++pickPress;
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
-  let clip = "";
-  try { clip = readClipText(); } catch (e) { clip = ""; }
+  withClipText(text => pickWithClip(press, which, text));
+}
+function pickWithClip(press, which, text) {
+  let clip = text;
   const isOwn = isOwnText(clip);
   const want = !isOwn && readsLikeMessage(clip);
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");

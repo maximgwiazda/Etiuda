@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 133;
+const EXPECTED = 134;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -303,7 +303,7 @@ try {
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
       args && args[0] === "which" ? caret.front : "", ""));
   } });
-  let suspended = null, clipReads = 0, clipHeld = "";
+  let suspended = null, clipReads = 0, clipHeld = "", clipAsPromise = false;
   const onH = {}, invH = {};
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
   let cursor = { x: 300, y: 200 };
@@ -314,7 +314,7 @@ try {
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
     BrowserWindow: BW, Menu: anything(), dialog: anything(), net: anything(), protocol: anything(), session: anything(),
-    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipHeld; } },
+    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipAsPromise ? Promise.resolve(clipHeld) : clipHeld; } },
     globalShortcut: { register: (a, fn) => { if (taken.has(a)) return false; held.set(a, fn); return true; },
       unregister: a => { held.delete(a); }, unregisterAll: () => held.clear(), setSuspended: v => { suspended = !!v; } },
     screen: { getCursorScreenPoint: () => cursor, getDisplayNearestPoint: () => ({ workArea: area }),
@@ -529,6 +529,21 @@ try {
   check(!!(afterBad.suggest && afterBad.suggest.length),
     "6r own-text takes a string within its cap only: after a non-string and a 300,001-character send, a customer's message still"
     + " shows its strip: " + JSON.stringify((afterBad.suggest || []).length));
+
+  /* 6s. Electron 44 on Linux answers clipboard.readText() with a Promise (Claude gamma's Ubuntu walk, 2026-11-09); the
+     shell read it as "[object Promise]", so a copied message was never suggested there. The same message, read through a
+     Promise, shows its strip. */
+  clipAsPromise = true;
+  clipHeld = fresh6r + " Again.";
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const viaPromise = opened[opened.length - 1];
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  clipAsPromise = false;
+  check(!!(viaPromise.suggest && viaPromise.suggest.length),
+    "6s a clipboard that answers with a Promise, as on Linux, still shows a customer's message its strip: "
+    + JSON.stringify((viaPromise.suggest || []).length));
 
   /* Row 7: Two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB. */
   let modelBuilds = 0;
