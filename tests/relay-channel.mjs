@@ -2691,7 +2691,7 @@ try {
     /* 962 stage 5, T4, the page's half of the head per catalog: the row keeps each catalog's entry the shell kept, and the note
        under the team's name counts only the team's other catalogs whose edition is newer than the one loaded here. */
     {
-      const ONE = "Another catalog of the team has a newer edition.", MANY = " other catalogs of the team have newer editions.";
+      const ONE = "Another catalog of the team has a newer edition.";
       const quayAt = newer => ({ catalog: "quay-board", rev: 3, edition: "Quay three", published: "2 March 2026", newer });
       const pebbleAt = newer => ({ catalog: "pebble-board", rev: 5, edition: "Pebble five", published: "4 March 2026", newer });
       const stoneAt = newer => ({ catalog: "stone-board", rev: 2, edition: "Stone two", published: "6 March 2026", newer });
@@ -2708,7 +2708,7 @@ try {
       };
       const says = (p, s) => p.en.indexOf(s) >= 0;
       const headSaid = p => says(p, "Newest edition Quay three, published 2 March 2026. The team's news: ");
-      const counted = p => says(p, ONE) ? "one" : /\d+ other catalogs of the team have newer editions\./.test(p.en) ? p.en.match(/(\d+) other catalogs/)[1] : "none";
+      const counted = p => says(p, ONE) ? "one" : /Other catalogs of the team with a newer edition: \d+\./.test(p.en) ? p.en.match(/a newer edition: (\d+)\./)[1] : "none";
       const two = await pageOf([quayAt(false), pebbleAt(true)], quayAt(false));
       const listed = two.row && two.row.head && Array.isArray(two.row.head.editions) ? two.row.head.editions : [];
       const entry = id => listed.filter(e => e.catalog === id)[0] || null;
@@ -2720,7 +2720,7 @@ try {
       const ownNewer = await pageOf([quayAt(true), pebbleAt(false)], quayAt(true));
       const three = await pageOf([pebbleAt(true), quayAt(false), stoneAt(true)], quayAt(false));
       check(headSaid(two) && counted(two) === "one" && headSaid(ownNewer) && counted(ownNewer) === "none" && headSaid(three) && counted(three) === "2"
-        && says(three, "2" + MANY),
+        && says(three, "Other catalogs of the team with a newer edition: 2."),
         "962t4b the note names the catalog in use's edition and counts only the team's other catalogs with a newer edition: another newer "
         + counted(two) + ", only the one in use newer " + counted(ownNewer) + ", two others newer of three " + counted(three));
       const both = await pageOf([quayAt(false), pebbleAt(false)], quayAt(false));

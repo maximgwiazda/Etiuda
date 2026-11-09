@@ -156,7 +156,8 @@ function teamHeadNote(h){
   let others=(h.editions||[]).filter(e=>e.catalog!==h.catalog);
   others=others.filter(e=>e.newer); /* plant:head-newer */
   if(!others.length) return said;
-  return said+" "+counted(others.length,"Another catalog of the team has a newer edition.","{N} other catalogs of the team have newer editions."); // placeholder: Claudette
+  /* The copywriter's words: one other in a sentence of its own, more after a colon, so Polish needs no plural forms. */
+  return said+" "+(others.length===1?t("Another catalog of the team has a newer edition."):t("Other catalogs of the team with a newer edition: {N}.").split("{N}").join(String(others.length)));
 }
 /* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team.
    Machine policy would undo a leave, so the button is not offered where it names the lead. `bar` says the way
