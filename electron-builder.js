@@ -88,7 +88,7 @@ module.exports = {
   copyright: "Copyright (c) 2026 Maxim Gwiazda",
   extraMetadata: { version },
   directories: { output, buildResources: "shell" },
-  // An allowlist, the same discipline as .gitignore's blocklist in reverse: eighteen files go in
+  // An allowlist, the same discipline as .gitignore's blocklist in reverse: seventeen files go in
   // and the src tree, the harness and the tools stay out of a customer's machine. The pin
   // travels with the artefact it describes, or the shell serves script-src 'none' and the
   // packaged app opens on a blank window. The last is the sample catalog the shell puts in the
@@ -98,7 +98,6 @@ module.exports = {
   // its worker, which the shell requires only for a team in a shared folder (board 945 stage 3 (b)).
   // The three under shell/embed/ run the embedded model, whose files sit beside the asar, not in it.
   files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs", "shell/clip-suggest.cjs", "shell/tray.cjs",
-          "shell/etiuda-tray.png",
           "shell/relay/channel.cjs", "shell/relay/blob.cjs", "shell/folder/syncer.cjs", "shell/folder/syncer-worker.cjs",
           "shell/embed/suggest.cjs", "shell/embed/core.cjs", "shell/embed/worker.cjs",
           "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec"],
@@ -169,6 +168,10 @@ module.exports = {
     desktop: { entry: { StartupWMClass: "etiuda" } },
     // Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
     extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }],
+    // Linux carries the tray PNG extracted from the icon (board 973).
+    files: [
+      "shell/etiuda-tray.png",
+    ],
   },
   beforePack: async context => {
     if (context.electronPlatformName === "linux") linuxIcons();
