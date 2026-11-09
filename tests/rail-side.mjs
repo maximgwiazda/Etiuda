@@ -11,6 +11,8 @@
  *   2  a long unstarred name is wider at rest than while the pointer or the keyboard is on
  *      the row, and the gap it leaves is the star's room only then. A starred row keeps
  *      that room at rest, and a name that does not fit fades rather than ending in dots.
+ *   3  leaving Settings, the rail's first row is at the same y on the first frame as it was
+ *      before the screen, and the title sits below the header.
  */
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
@@ -172,6 +174,59 @@ async function nameRoom(page, width) {
     { gap: kept.gap, star: kept.star });
   check(rest.over && hot.over && hot.cut && back.cut, "at " + width + " a name that does not fit fades, at rest and under the pointer",
     { rest, hot, back });
+  console.log("       name at " + width + " rest " + rest.name + " gap " + rest.gap
+    + ", hover " + hot.name + " gap " + hot.gap + ", key gap " + keyed.gap + ", starred gap " + kept.gap);
+}
+
+function railFrame() {
+  const title = document.querySelector("#intentRail .rail-head");
+  const row = document.querySelector("#intentRailList .rail-item");
+  const header = document.querySelector("header");
+  if (!title || !row || !header) return null;
+  const tr = title.getBoundingClientRect(), rr = row.getBoundingClientRect();
+  return {
+    titleY: Math.round(tr.top * 10) / 10,
+    titleH: Math.round(tr.height * 10) / 10,
+    rowY: Math.round(rr.top * 10) / 10,
+    headerB: Math.round(header.getBoundingClientRect().bottom * 10) / 10,
+    colTop: getComputedStyle(document.documentElement).getPropertyValue("--rail-col-top").trim(),
+  };
+}
+
+/* The return is the current conversation tab, which is already the active one, so the screen
+   closes without the tab being applied again. Settings is left only once the rail has taken
+   the short header: that is the value a stay writes, and the first frame is read then. */
+async function titleHold(page) {
+  const before = await page.evaluate(railFrame);
+  await openSettings(page);
+  await page.waitForFunction(() => {
+    const headerB = document.querySelector("header").getBoundingClientRect().bottom;
+    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-col-top"));
+    return headerB > 0 && headerB < 120 && Math.abs(top - headerB) <= 2;
+  }, { timeout: 5000 });
+  const first = await page.evaluate(() => new Promise(resolve => {
+    document.querySelector("#tabsBar .tab[data-tid]").click();
+    requestAnimationFrame(() => {
+      const title = document.querySelector("#intentRail .rail-head");
+      const row = document.querySelector("#intentRailList .rail-item");
+      const header = document.querySelector("header");
+      const tr = title.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      resolve({
+        titleY: Math.round(tr.top * 10) / 10,
+        titleH: Math.round(tr.height * 10) / 10,
+        rowY: Math.round(rr.top * 10) / 10,
+        headerB: Math.round(header.getBoundingClientRect().bottom * 10) / 10,
+        colTop: getComputedStyle(document.documentElement).getPropertyValue("--rail-col-top").trim(),
+      });
+    });
+  }));
+  console.log("       title before " + JSON.stringify(before) + " first " + JSON.stringify(first));
+  check(before && near(first.rowY, before.rowY, 1),
+    "leaving Settings, the rail's first row holds its place on the first frame",
+    { before: before && before.rowY, first: first.rowY, colTop: first.colTop });
+  check(first.titleH >= 20 && first.titleY + 1 >= first.headerB,
+    "leaving Settings, the title sits below the header on the first frame",
+    { titleY: first.titleY, titleH: first.titleH, headerB: first.headerB });
 }
 
 try {
@@ -180,7 +235,10 @@ try {
   for (const width of [1280, 900]) {
     const page = await boot(width);
     await widths(page, width);
-    if (width === 1280) await nameRoom(page, width);
+    if (width === 1280) {
+      await nameRoom(page, width);
+      await titleHold(page);
+    }
     await page.close();
   }
 } catch (e) {
@@ -189,6 +247,6 @@ try {
   if (browser) await browser.close();
   try { RUN.drop(); } catch (e) {}
 }
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=13");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=15");
 console.log(checks + " checks, " + fails + " failed");
 process.exit(fails ? 1 : 0);

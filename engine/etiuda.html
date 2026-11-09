@@ -12423,7 +12423,10 @@ What you type stays in this browser only.`;
   var tabs = [];
   var activeTabId = null;
   var tabSaveTimer = null;
-  wireScreenTabsChange(() => drawTabs());
+  wireScreenTabsChange(() => {
+    drawTabs();
+    hooks.syncRailGeometry();
+  });
   wireScreenTabsReturn((id) => {
     if (id && tabs.some((x) => x.id === id)) switchTab(id);
     else if (tabs[0]) switchTab(tabs[0].id);
