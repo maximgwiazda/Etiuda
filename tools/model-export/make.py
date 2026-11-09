@@ -265,7 +265,10 @@ def build(out_dir, sources_path):
         print("refused: " + str(exc), file=sys.stderr)
         return 1
     py = ensure_venv(venv, REQUIREMENTS)
-    done = subprocess.run([py, EXPORT, "--export", src, "--out", out_dir, "--pin-match", "--sources", sources_path])
+    # A fixed hash seed as well as export.py's sorted walk, so no other set in the packages can
+    # make the bytes a coin toss again; the pin check still decides.
+    env = dict(os.environ, PYTHONHASHSEED="0")
+    done = subprocess.run([py, EXPORT, "--export", src, "--out", out_dir, "--pin-match", "--sources", sources_path], env=env)
     try:
         rows = shell_model_pin()
     except RuntimeError as exc:
