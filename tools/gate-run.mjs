@@ -67,9 +67,12 @@ export function isInstalledAppRunning() {
   }
   try {
     if (process.platform === "win32") {
+      /* By where it runs from, never by name: a test's own installed copy runs from a scratch folder under the same name
+         and must never soften this check (the test architect, 2026-11-09). Per machine under Program Files, per user under
+         LOCALAPPDATA\\Programs. */
       const out = execFileSync("powershell.exe", [
         "-NoProfile", "-NonInteractive", "-Command",
-        "@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(?i)(etiuda|etiuda studio|etiuda-studio)\\.exe$' }).Count"
+        "@(Get-CimInstance Win32_Process | Where-Object { $p = $_.ExecutablePath; $p -and (($p -like (Join-Path $env:ProgramFiles 'Etiuda*')) -or ($p -like (Join-Path $env:LOCALAPPDATA 'Programs\\*tiuda*'))) }).Count"
       ], { encoding: "utf8", timeout: 10000, windowsHide: true }).trim();
       return parseInt(out, 10) > 0;
     } else {
