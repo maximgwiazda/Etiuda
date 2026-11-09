@@ -7397,6 +7397,7 @@ What you type stays in this browser only.`;
     "toggles": "przełącza",
     "Library": "Biblioteka",
     "Maintenance": "Konserwacja",
+    "Maintenance can open once the edit in progress is saved or cancelled.": "Konserwację można otworzyć po zapisaniu lub anulowaniu bieżącej edycji.",
     "Moved to": "Przeniesiono do",
     "Restored original -": "Przywrócono oryginał -",
     "Edit, hide or restore every card, intent and category": "Edycja, ukrywanie i przywracanie kart, intencji i kategorii",
@@ -27946,7 +27947,13 @@ What you type stays in this browser only.`;
     });
   }
   function openMaintenance(backFn) {
-    if (typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()) return;
+    if (typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()) {
+      try {
+        toast(t("Maintenance can open once the edit in progress is saved or cancelled."));
+      } catch (_) {
+      }
+      return;
+    }
     if (typeof closeModal === "function") {
       try {
         closeModal();

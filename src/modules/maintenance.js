@@ -15,7 +15,7 @@ import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrou
 import { ejectCatalog } from "./local-memory.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
-import { tc, fileStamp, t } from "./ui-lang.js";
+import { tc, fileStamp, t, toast } from "./ui-lang.js";
 import { openScreenTab, registerScreen } from "./screen-tabs.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
@@ -619,7 +619,10 @@ function openMaintenanceModal(backFn){
 function openMaintenance(backFn){
   /* An editor holding typed, unsaved changes keeps them: the shortcut does nothing rather than close it with no way
      back (the test architect, 2026-11-09). A clean modal closes before Maintenance comes forward. */
-  if(typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()) return; /* plant:mt-dirty-keep */
+  if(typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()){ /* plant:mt-dirty-keep */
+    try { toast(t("Maintenance can open once the edit in progress is saved or cancelled.")); } catch(_) {}
+    return;
+  }
   if(typeof closeModal === "function"){
     try { closeModal(); } catch(_) {}
   }

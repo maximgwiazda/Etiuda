@@ -6356,7 +6356,8 @@ const CARD_B = {
       DL.edMarkClean();
       cardIn.value = "typed but not saved";
       MN.openMaintenance();
-      const kept = modal.hidden === false && cardIn.value === "typed but not saved" && STAB.screenOn !== "maintenance";
+      const kept = modal.hidden === false && cardIn.value === "typed but not saved" && STAB.screenOn !== "maintenance"
+        && String(toastEl.textContent || toastEl.innerHTML || "").indexOf("Maintenance can open once the edit in progress is saved or cancelled.") >= 0;
       const why = JSON.stringify({ modalHidden: modal.hidden, value: cardIn.value, screenOn: STAB.screenOn });
       modalCard.kids = [];
       DL.closeModal();

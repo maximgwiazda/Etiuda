@@ -580,6 +580,7 @@ UI_STRINGS.pl={
   "toggles":"przełącza",
   "Library":"Biblioteka",
   "Maintenance":"Konserwacja",
+  "Maintenance can open once the edit in progress is saved or cancelled.":"Konserwację można otworzyć po zapisaniu lub anulowaniu bieżącej edycji.",
   "Moved to":"Przeniesiono do",
   "Restored original -":"Przywrócono oryginał -",
   "Edit, hide or restore every card, intent and category":"Edycja, ukrywanie i przywracanie kart, intencji i kategorii",
