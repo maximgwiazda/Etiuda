@@ -35,7 +35,7 @@ const KEEP = process.argv.indexOf('--keep') > -1;
 const require = createRequire(import.meta.url);
 const E = require('./engine.js');
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 31;
+const EXPECTED = 32;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -57,8 +57,11 @@ function run(argv) {
 }
 function bomAt(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return null; } }
 /* The npm packages a BOM lists, as name@version, sorted: Electron counted apart. */
+function shipsBeside(component) {
+  return ((component && component.properties) || []).some(p => p.name === 'etiuda:ships' && p.value === 'beside-asar');
+}
 function npmSet(bom) {
-  return ((bom && bom.components) || []).filter(c => /^pkg:npm\//.test(c.purl || '') && c.name !== 'electron')
+  return ((bom && bom.components) || []).filter(c => /^pkg:npm\//.test(c.purl || '') && c.name !== 'electron' && !shipsBeside(c))
     .map(c => (c.group ? c.group + '/' : '') + c.name + '@' + c.version).sort();
 }
 function comp(bom, name) { return ((bom && bom.components) || []).find(c => c.name === name) || null; }
@@ -124,15 +127,23 @@ async function main() {
     && e1.purl === 'pkg:npm/electron@' + distVersion && e1.scope === 'required',
     '1c Electron is listed at ' + JSON.stringify(e1 && e1.version) + ' against node_modules/electron/dist/version '
     + JSON.stringify(distVersion) + ' and the lockfile\'s ' + JSON.stringify(lockV));
-  const devNames = Object.keys(pkg.devDependencies || {}).filter(n => n !== 'electron');
+  const devNames = Object.keys(pkg.devDependencies || {}).filter(n => n !== 'electron'
+    && n !== 'onnxruntime-node' && n !== '@huggingface/tokenizers');
   const devListed = devNames.filter(n => ((b1 && b1.components) || []).some(c => (c.group ? c.group + '/' : '') + c.name === n));
   check(devNames.length >= 3 && devListed.length === 0,
-    '1d none of the ' + devNames.length + ' devDependencies but Electron is listed (' + JSON.stringify(devListed)
-    + ' listed of ' + JSON.stringify(devNames) + ')');
+    '1d none of the ' + devNames.length + ' devDependencies but Electron and the embed runtime is listed ('
+    + JSON.stringify(devListed) + ' listed of ' + JSON.stringify(devNames) + ')');
   const want1 = lockClosure(pkg, lock);
   check(JSON.stringify(npmSet(b1)) === JSON.stringify(want1),
     '1e the npm packages listed, ' + JSON.stringify(npmSet(b1)) + ', are the lockfile\'s production closure '
     + JSON.stringify(want1));
+  const beside = ((b1 && b1.components) || []).filter(shipsBeside);
+  const besideNamed = beside.map(c => (c.group ? c.group + '/' : '') + c.name + '@' + c.version).sort();
+  const fullName = c => (c.group ? c.group + '/' : '') + c.name;
+  check(beside.some(c => fullName(c) === 'onnxruntime-node' && c.version === '1.31.1')
+    && beside.some(c => fullName(c) === '@huggingface/tokenizers' && c.version === '0.2.0')
+    && beside.some(c => fullName(c) === 'onnxruntime-common'),
+    '1f the embed runtime is listed as shipping beside the archive: ' + besideNamed.join(', '));
 
   /* ---- 2. A DEPENDENCY ADDED TO package.json APPEARS ---------------------------------------- */
   /* The real package.json and the real node_modules through a junction, so the walk is over what

@@ -1,0 +1,449 @@
+{
+  "note": "Windows x64 runtime copied beside the archive when the model is packed. DirectML.dll and dxcompiler.dll are not required to load.",
+  "files": [
+    {
+      "name": "@huggingface/tokenizers/dist/tokenizers.cjs",
+      "sha256": "fab81302e9d4ebf2c7aec310e35af0df81c28cb1ef7a4ac44ac83848e39ae79c"
+    },
+    {
+      "name": "@huggingface/tokenizers/package.json",
+      "sha256": "f6b9849b58de625c4fd79583242dd4506914b92082f9af17719d39416658ef24"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend-impl.d.ts",
+      "sha256": "fb0a7a63fcb2e106b7180efedf518967e3b7a9763d5c3f7bd4323deb8bcd3258"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend-impl.d.ts.map",
+      "sha256": "f9428bb812058025e9c49eebfcd3f7e0fdfc589c9173caf6b5e1a2f1cf22344a"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend-impl.js",
+      "sha256": "7ec5d5b37145f23fb776d11cb8dab749caa162fade9eddab100d8edfe56c3de4"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend-impl.js.map",
+      "sha256": "3762ab3463dc1ab7eaf1178d2a094b574bfff25336654441315739b823e2d524"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend.d.ts",
+      "sha256": "3391b94b1a57e5a33f8220aa3e263e022ac25c83600c2636cec26f96ba350a31"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend.d.ts.map",
+      "sha256": "d24710b9590898d02f7ce89c0e08786602b1099f81304f7b7fc392c63508bdc9"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend.js",
+      "sha256": "325aaee7a2649ea27629666f3ca01c0d80b9751e704ce502e43a8352390749b4"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/backend.js.map",
+      "sha256": "37c5b710194c64a041d6408c5b6a1eacc5beca31940ec73aac1a79047c0e3c7b"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env-impl.d.ts",
+      "sha256": "727057116fb089d326c340d96948f1ad4583a14a88ec414ef58a51ed38ee698e"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env-impl.d.ts.map",
+      "sha256": "1bd023add62d88790addd59711b71840d4f018cbffada119bda3fc9fb477bfcf"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env-impl.js",
+      "sha256": "35cd8cac33973538eab471b68622c86c35a6896f4307d1a74c9ca0eda7abbac6"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env-impl.js.map",
+      "sha256": "eb9066a3b4882b587af0378cde5002d7bfb50d9d20293aea5f713d12692f6922"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env.d.ts",
+      "sha256": "7d19a1ff1a618b06fa781362607385503cf73e163272adad485de9c38b7935f5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env.d.ts.map",
+      "sha256": "4b7539e422a36e833612def9bf76bebed69b3da2ab0ee5cf76cb2847afd0df5d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env.js",
+      "sha256": "22c7647f8ca1c1b83b437a92b95fee1457fcb72866fa029616b8f146dc609be8"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/env.js.map",
+      "sha256": "3692c6fb2dab06dc003cbcc7297955322c9f5d2260c78d320a7d835e1f6abedb"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/index.d.ts",
+      "sha256": "77ccac1c093c906df99838ce639d68789e33e27e4bb523a0473343c1202fa33b"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/index.d.ts.map",
+      "sha256": "a6098da4359891cce2c3e3f2e2788bb0ba90bd342e99b32cbf63b0001b1e14b2"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/index.js",
+      "sha256": "4c532c6b100d176594e0175757fe373d09e12abd5277695c376a40affddfaace"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/index.js.map",
+      "sha256": "a9e1a269dd8dd53634c3662b8dbe515db473b6b1a341972c9765627a5ed5273b"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session-impl.d.ts",
+      "sha256": "e32418c32ea8407d17d3d03732c47261644287fdf3d2ab7b1f24c4dee5c6aff2"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session-impl.d.ts.map",
+      "sha256": "6be3f052a96cbe1bea9e78d210a4554ddd43aa5c3f95cfde92a8f67cf5fc1ba9"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session-impl.js",
+      "sha256": "80455e8b5278e66721c1f680765fb430502771edb2854683652cec696474d971"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session-impl.js.map",
+      "sha256": "1dfa5fe9750a1229684689870e483ed698e8c233d3a1270ec7d2640863396fc0"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session.d.ts",
+      "sha256": "d5ad5c93acaf5aac0f19d652b1a434d8ed8f994486c4548aab12e885a095d12a"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session.d.ts.map",
+      "sha256": "ec4c1dc1e70e2edb00df7b1695e964a8534499dd03a8f86db873b6d5a779e635"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session.js",
+      "sha256": "458be26f316c5068d32a56ddbc30ca0aa687c636e079b3d161a69f0f14a683f1"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/inference-session.js.map",
+      "sha256": "d8e6a3a671e5668381e0c3f71ae6bcbe87685839807143370554ee26782fffc1"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter-impl.d.ts",
+      "sha256": "2fce0599d99ecda82652b3d55c46e06e8c15147c58fc4a5eaa9b67a9574ff186"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter-impl.d.ts.map",
+      "sha256": "52a4a00d7b722daf0bea2bca34f402bd2fb93b7a307b0aa81fda3eeee6fbf382"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter-impl.js",
+      "sha256": "490c28348ae9681d8b73f5c15e31c093a3a27cb90af3d77e9a284b28899d4cad"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter-impl.js.map",
+      "sha256": "7c46daca26a4ef613d3481312e75b61e4dc5be6ce8fd4c4ea1742cdd05b0b8f2"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter.d.ts",
+      "sha256": "2d4fe72f87f0b75a7d088e777e3c07c5cfba0a54ad2bf8715100fac6617f5f4d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter.d.ts.map",
+      "sha256": "a2fbbca1b94847cb9e3f865ae9094de6eefb02e64ec3e89a44abd6aa8f3f7c6e"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter.js",
+      "sha256": "18c3f4b891c2a9f758fd223061f006b40b36cff39aed46c42cda50e9546d8668"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/lora-adapter.js.map",
+      "sha256": "996199069424171d7e79df4ef9de0631c6d9b0df96588a27a5f297211f5a8251"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-model.d.ts",
+      "sha256": "82fae3b4bd4fd41ddec85d4a8e3351bc3c9fa0e418d2eecffeb65b0677070c08"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-model.d.ts.map",
+      "sha256": "93ce1490667c68e384748ca91880dfa899fdb97d3949db8db024e525cbe71211"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-model.js",
+      "sha256": "667f5fdac4b6df25e17f8a864d4dc619507f541f9fa0aafb6d3572fcca1e25e5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-model.js.map",
+      "sha256": "119cbe6aefc7677efaec2b00b7b76d4697ecaea05288c2bdb41e78ef39a9a6fe"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-value.d.ts",
+      "sha256": "2d1be07df40c1da6220c9717644a93630855ea8c068f8a4bc9bab32e72af704b"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-value.d.ts.map",
+      "sha256": "a7c4b0a89729cfc4a659d85e03bf69e0aeab79c67b0470817174cadd849ddbdc"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-value.js",
+      "sha256": "8446854766f4955ce438a7338216f49223767ecc508bb502b73a3dc1a1f1998e"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/onnx-value.js.map",
+      "sha256": "b3fbef148e38bb8b5a04ba2feeac12cfe9e005551bee69a04bb20237c517b612"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/package.json",
+      "sha256": "091a04fa67c7907b98e106fcff8b964e13129754fce72d24f3025b97c4887fa3"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion-impl.d.ts",
+      "sha256": "4efbe2fc7c074e2040e2b6808883707ff1167c870efd8dc2bfe55d26d2c9d5a5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion-impl.d.ts.map",
+      "sha256": "771436ac420108264f3a408af98d903cef9b1f8d7a14c2a1e8158b99181ef71a"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion-impl.js",
+      "sha256": "9815e72c0bb91896035de93b3113a2256a1a998bc53c7b5e6bf5fb4e93714766"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion-impl.js.map",
+      "sha256": "2e301f4c77133e45976f66acf5190c670f8c4e3e122f4d823f10a4dfb177ae7d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion.d.ts",
+      "sha256": "b5c7ddba6ed8e41b6ab71ff62ba6189d615f08f617843ef570edb09fb7ced882"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion.d.ts.map",
+      "sha256": "6f4fa51a5b6501c1a8214a85c9b9d389b04bfbe0d3e59cfd122fffb309788a67"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion.js",
+      "sha256": "28cc462d4a9ea556ecc86c0e6d16a51d61b58d5bc5b4b7b48976b14bc8035bdc"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-conversion.js.map",
+      "sha256": "d85995b69057d7383514a3261f1a0ec2826370e423ccf062b852cb2f23b13c45"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory-impl.d.ts",
+      "sha256": "5b3183961388699dd9f7bc1638e546a31d3b3f0e1d396f60a5c70d279bf77887"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory-impl.d.ts.map",
+      "sha256": "a9bdd72daefb0ce2b8456ad3b122d993e1e154eace858b187fc250d897d2c8cd"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory-impl.js",
+      "sha256": "a3204838a2c14416e4e61c968dc17c663ab3c9b8b2c4a8b7f2a1c5b06e3e5173"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory-impl.js.map",
+      "sha256": "b4e7e9856d3eaeff16d000d1f9ce9b15ae8468347bff1e29c4b82730cb6c544d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory.d.ts",
+      "sha256": "4bbf58af95c745c404c7aad88e36b1e9490b3236a9819175acad099508d519d4"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory.d.ts.map",
+      "sha256": "a86e5a12803bb7fc7a432e82f223330176d9f85b5e7ef5bcec98563c97b04828"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory.js",
+      "sha256": "13b8d735350b828a49bda8aeec50b1dac888cf42268006efc4312f50a88b6906"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-factory.js.map",
+      "sha256": "9511238610786ebc1e2cf40fa9977b5b33d4f8cf276feb247ef8da4c224af2bf"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl-type-mapping.d.ts",
+      "sha256": "5ca748ccfcb1d430c355aa5c19909569fbe9e3b475a3e5263288d2e20d720f31"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl-type-mapping.d.ts.map",
+      "sha256": "1865e78cd55a546634777d96cebf3d7665fa7a6ff5a314bc867218c2dc59c84e"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl-type-mapping.js",
+      "sha256": "333110edbbffdb7575ea340cb341bcaf691862d6594a649db28097f7d8cb19b7"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl-type-mapping.js.map",
+      "sha256": "c7afac16abbd32197070f5104a7654ea6a0a70a1e963771f0add3f5cb0df38c6"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl.d.ts",
+      "sha256": "1b4d2a5e8531db01cb9c2a4d2d09e0805f56696bbfca6b164bee9ed1d1e02831"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl.d.ts.map",
+      "sha256": "548efb8f62410a7c015bb3c71fc59ae9ecfe4afc8e3ae9514e66bf52cdd71f6d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl.js",
+      "sha256": "11645352ba5d08971344717d3339f86aac560f84f29229b2ebe07f1ec8aa8905"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-impl.js.map",
+      "sha256": "3076125a075e86ac7b3cb4131586566b9abaca6347353de13aaba7fcca5236bb"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils-impl.d.ts",
+      "sha256": "69cd3333d205f279d0db5e2ad6166d1f9dd520cc21a8d995d5d6fe3c35a09738"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils-impl.d.ts.map",
+      "sha256": "cae9cc94d5fa7f9692302476e7ab68fd400f5c935ed929ef4c9d2e31de83c019"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils-impl.js",
+      "sha256": "e7b1db989d33d54bdd1807b080a0989ff0b10d5f7dd8c93b92bbf293103aa4d5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils-impl.js.map",
+      "sha256": "fd756bb026bf51a827ab7a1c468b48a1ac000f5a9a6f3be0c66f57e005713ad5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils.d.ts",
+      "sha256": "208abeb6168785830877b91f7224c112ac56c3973d51cc50ece014e61efe98df"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils.d.ts.map",
+      "sha256": "9784ff3fe1102ec2ad45fb9592c6f5082a08386f5cf24585afdf57c4ca1686a5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils.js",
+      "sha256": "d3f577e90dc2257c72ac728e5e6355c34af0342d971158d9f22b69d22aa97b8d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor-utils.js.map",
+      "sha256": "c386d3b1b47f10a5258efe644d2f1ee4f3c0bdcc698621e53cc71a49e8c32ca6"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor.d.ts",
+      "sha256": "f7fb8b79a47ca55a656bdacc70fe4fc2bc0884f27efc9ee142a7d217098821d6"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor.d.ts.map",
+      "sha256": "ed5d26a586ee8021d6d90692893b2351289e9fb2517cc66f71842c99a0f5226a"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor.js",
+      "sha256": "9097114de356750f36f28776fa6ccd08d13694f0f9aac9e7669c30b6c43153f7"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/tensor.js.map",
+      "sha256": "7755ef74c2fed376998275c2dca1c452209db26406e1a159a936c57fb101a5c5"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/trace.d.ts",
+      "sha256": "d310376ece0d657e18c98909ed15684bc535e23a089e3da87adbce8a7e1d0a9b"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/trace.d.ts.map",
+      "sha256": "7cc7b6bf8ad0378a2f9b09087ffe057e3c4576f4731f2a97df630bcb565bfff3"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/trace.js",
+      "sha256": "faecd0df94998d786e2085d56aa6003449f1ac3b35c350e0d2762498604e5d72"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/trace.js.map",
+      "sha256": "1e9811909542eb716e476084822097eccacaa4e25dabe76c2e1e0efeee532f90"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/type-helper.d.ts",
+      "sha256": "c16ecf73bb75fc2218e4e1a80273f4196579217172468c17d4923b64cf0d225d"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/type-helper.d.ts.map",
+      "sha256": "3eaaba36581e3d6442d1f76572b4ba88d73b6fd7337e94ead793123130356387"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/type-helper.js",
+      "sha256": "7f786da8d2a611ad751c70a74edf4d9acfccd26be8e5c6b1cb730f982892bf32"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/type-helper.js.map",
+      "sha256": "e6d6e73be5933d6602fec821ffdf536d56156cb8baba92c49ef01591c53e95ae"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/version.d.ts",
+      "sha256": "8d662ecd4ed54bfc2b10c65b0c3f0df71feb2d25e2889479a934e0d2f2b42287"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/version.d.ts.map",
+      "sha256": "5e6caf25727598d548d1e1284fe20290f8314b1b723834dde798db14e81741a3"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/version.js",
+      "sha256": "d83ca5483dba1d108ec2cac1b6d0f3e11d865546e897683a6ec825c93193723c"
+    },
+    {
+      "name": "onnxruntime-common/dist/cjs/version.js.map",
+      "sha256": "739871ec130896cec927f8a604c1e0b8c05f57cdbc56205ec63021e3334aeb53"
+    },
+    {
+      "name": "onnxruntime-common/package.json",
+      "sha256": "c8e59240260cd3d230f1417765e0dbe098323ef65a5785991059de1bd5d7cde0"
+    },
+    {
+      "name": "onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime.dll",
+      "sha256": "beb6e1edba0e74c132453fe4df113da2ea2b99ef8ea7dfc25696a872efd11c45"
+    },
+    {
+      "name": "onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime_binding.node",
+      "sha256": "8d9f996ff7dcc60c4899aa87aa7abe07d806f9c314882f44a001d0fd8a23d16f"
+    },
+    {
+      "name": "onnxruntime-node/dist/backend.d.ts",
+      "sha256": "23e65ad2c30827e0f2bfe2aadc2987b76d4619ae5e25aad36674ce618ed3df6d"
+    },
+    {
+      "name": "onnxruntime-node/dist/backend.js",
+      "sha256": "67e1c8bf72817a4dd0d598aa660ba431a9b3e90c6504e002a902e13bee523cf2"
+    },
+    {
+      "name": "onnxruntime-node/dist/backend.js.map",
+      "sha256": "3cc29b2f0d912bdf20417e3ad11035eb371e47f2b9d4001bc84aa4296e152fa6"
+    },
+    {
+      "name": "onnxruntime-node/dist/binding.d.ts",
+      "sha256": "f82fec528354a3e5013d8ddeff70aa39f35be5241f391d3104b3ae518bde2085"
+    },
+    {
+      "name": "onnxruntime-node/dist/binding.js",
+      "sha256": "2a85ac5de943c7222aae5ca2897f52d73891f528d4295b701fab077470c668c0"
+    },
+    {
+      "name": "onnxruntime-node/dist/binding.js.map",
+      "sha256": "6657e468862e6545f3d07a662ddb2aa6907bc3e17eafc87506096d4c1b1627a0"
+    },
+    {
+      "name": "onnxruntime-node/dist/index.d.ts",
+      "sha256": "d2498ae6d465fecfa80a535e99ad9bbabcfafac73f6b420f29651ec9d50b98fa"
+    },
+    {
+      "name": "onnxruntime-node/dist/index.js",
+      "sha256": "019eb02133b94b1f7fdf2d89eb93b590ce1288d271f7b280647fb3978e6391fa"
+    },
+    {
+      "name": "onnxruntime-node/dist/index.js.map",
+      "sha256": "08ed0bf4483b52c91c2c9271f4acb93f43f217a496ef8918aac05be0341a2b00"
+    },
+    {
+      "name": "onnxruntime-node/dist/version.d.ts",
+      "sha256": "1846a4d83c6ccb485057f7e6bffc8ffa90742895b2e41a8877ab8c735a406fa9"
+    },
+    {
+      "name": "onnxruntime-node/dist/version.js",
+      "sha256": "d83ca5483dba1d108ec2cac1b6d0f3e11d865546e897683a6ec825c93193723c"
+    },
+    {
+      "name": "onnxruntime-node/dist/version.js.map",
+      "sha256": "dc33a306cd858dd8d4b11566d33c13db607eaa2587ed6f7c06809513f3dab50e"
+    },
+    {
+      "name": "onnxruntime-node/package.json",
+      "sha256": "41aedb3e877786245ab4dc0f533cda63f7d971b5c5fec171eafca9fb9572a8d5"
+    }
+  ]
+}

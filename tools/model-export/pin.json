@@ -1,0 +1,101 @@
+{
+  "status": "passed",
+  "source": {
+    "repo": "google/embeddinggemma-2",
+    "commit": "f9972ac22e696a105c482202646979e33e4b5a1e"
+  },
+  "quant": "q4",
+  "textOnly": true,
+  "cosineProxy": 0.98,
+  "passGate": "taskFloor",
+  "taskFloor": "top-five within 1 of the published q4 on en and on pl",
+  "output": [
+    "model_q4.onnx",
+    "model_q4.onnx_data",
+    "tokenizer.json",
+    "tokenizer_config.json"
+  ],
+  "files": [
+    {
+      "name": "model_q4.onnx",
+      "size": 1827764,
+      "sha256": "e13c09a774ef0d6aab552b329e832c5c8654d799d9d1cc8eac9dd6bd76d49c63"
+    },
+    {
+      "name": "model_q4.onnx_data",
+      "size": 173850624,
+      "sha256": "7fc9b472f2dfa0b2087b466c2dfcb52af592cb57dd7c5d7d382f41bac5a9d3a4"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 32170510,
+      "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 1599,
+      "sha256": "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874"
+    }
+  ],
+  "parity": {
+    "status": "pass",
+    "floor": "top-five within 1 of the published q4 on en and on pl",
+    "threshold": 0.835,
+    "head": "nearest",
+    "kind": "paraphrase",
+    "cosineProxy": 0.98,
+    "cosines": [
+      0.9775263495048618,
+      0.9768001380372174,
+      0.9733832706341594,
+      0.9724060363992607,
+      0.9650765293055643
+    ],
+    "messages": [
+      "The customer wants to change the name on the order.",
+      "The bag arrived damaged and they want a replacement.",
+      "Dzień dobry, proszę o zmianę adresu dostawy.",
+      "Can I add a second item to this order?",
+      "The payment did not go through."
+    ],
+    "published": {
+      "en": {
+        "hits": 130,
+        "of": 189
+      },
+      "pl": {
+        "hits": 152,
+        "of": 229
+      },
+      "bytes": 174519542
+    },
+    "candidate": {
+      "en": {
+        "hits": 129,
+        "of": 189
+      },
+      "pl": {
+        "hits": 152,
+        "of": 229
+      },
+      "bytes": 175678388
+    }
+  },
+  "prompt": "task: classification | query: ",
+  "alternative": {
+    "quant": "fp16",
+    "shipped": false,
+    "files": [
+      {
+        "name": "model_q4.onnx",
+        "size": 1785165,
+        "sha256": "26334b4c9554b15258cd1673955dfa7ae06e6d8476335fddefe75d82fca43b1f"
+      },
+      {
+        "name": "model_q4.onnx_data",
+        "size": 541984768,
+        "sha256": "14639bd1a88b11f6b25e860a704b3030e6ab2861deb84b3e93b4f68d94ea8c4f"
+      }
+    ]
+  }
+}

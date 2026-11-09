@@ -19,6 +19,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packagedFuseProblems, wantedFuses } from './fuses.mjs';
+import { prepareEmbed } from './model.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(ROOT, process.env.ETIUDA_DIST || 'dist');
@@ -36,6 +37,15 @@ function installers(dir) {
     const s = statSync(join(dir, name));
     return name + '\t' + s.mtimeMs + '\t' + s.size;
   });
+}
+
+/* The built-in model, copied and checked before the installer is built. A missing model
+   leaves the folder empty and the desk on words. A mismatched file stops the pack. */
+try {
+  await prepareEmbed({ dest: join(DIST, '.embed') });
+} catch (e) {
+  console.error('npm run package: the built-in model: ' + ((e && e.message) || e));
+  process.exit(1);
 }
 
 const before = new Set(installers(DIST));

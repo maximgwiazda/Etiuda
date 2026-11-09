@@ -70,6 +70,10 @@ catalogs/
 /node_modules/
 /dist/
 /build/
+# The built-in model's bytes. The export writes them and the packer reads them.
+# The pin stays in the tree; the weights do not.
+/embed-pack/
+/tools/model-export/out/
 /out/
 /release/
 *.asar
