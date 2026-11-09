@@ -1,0 +1,11 @@
+# Direct packages only. Transitive versions are resolved when this environment
+# is created, which waits until the owner's weights are in the source folder.
+# CPU build of torch: the export is float32 on CPU.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+transformers==5.22.2
+sentence-transformers==6.2.0
+onnxruntime==1.31.1
+onnx==1.23.2
+numpy==2.5.4
+safetensors==0.8.0

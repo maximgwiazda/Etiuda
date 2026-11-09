@@ -1,0 +1,28 @@
+{
+  "status": "not-exported",
+  "source": {
+    "repo": "google/embeddinggemma-2",
+    "commit": "f9972ac22e696a105c482202646979e33e4b5a1e"
+  },
+  "quant": "q4",
+  "textOnly": true,
+  "cosineMinimum": 0.98,
+  "output": [
+    "model_q4.onnx",
+    "model_q4.onnx_data",
+    "tokenizer.json",
+    "tokenizer_config.json"
+  ],
+  "files": [],
+  "parity": {
+    "status": "not-run",
+    "messages": [
+      "The customer wants to change the name on the order.",
+      "The bag arrived damaged and they want a replacement.",
+      "Dzień dobry, proszę o zmianę adresu dostawy.",
+      "Can I add a second item to this order?",
+      "The payment did not go through."
+    ]
+  },
+  "prompt": "task: classification | query: "
+}
