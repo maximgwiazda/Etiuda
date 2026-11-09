@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 90;
+const EXPECTED = 92;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1525,9 +1525,9 @@ try {
     "14bc a folder team file without an embedded ring falls back to loose etiuda-ring.json: "
     + (ringFallback === JSON.stringify(looseRing) ? "loose" : "missed"));
 
-  // Helper to make signed head
-  const makeHead = (team, editions, t, key, keyId) => {
-    const doc = { v: 1, team: team, epoch: 1, rev: 1, editions: editions, t: t,
+  // Helper to make signed head. Studio signs a head at the team file's epoch, 2 since 14bc; a head below it is left out (962s5t6).
+  const makeHead = (team, editions, t, key, keyId, epoch) => {
+    const doc = { v: 1, team: team, epoch: epoch || 2, rev: 1, editions: editions, t: t,
       sig: { alg: "Ed25519", keyId: keyId || LEAD.keyId } };
     const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
     const bytes = Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), Ch.signedBytes(doc)]);
@@ -1544,6 +1544,27 @@ try {
   check(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
     "14bd a newer genuine etiuda-head.json on a folder team shows its edition and publish time in leadsView(): "
     + (row1 && row1.head ? row1.head.edition + " / " + row1.head.published : "no head"));
+
+  // 962s5t6: the folder's epoch floor beside 14bd. A genuine, newer head signed at epoch 1, below the team file's epoch 2, shows
+  // nothing; lifting plant:folder-head-epoch shows it.
+  const lowHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 4, edition: "Lamp Shop v4", published: "2026-02-04" }], headNow + 500, null, null, 1);
+  put(F6, "etiuda-head.json", JSON.stringify(lowHead));
+  const rowLow = (((await DF6.ask("etiuda:team-join", "leads")) || {}).leads || []).find(r => r.team === T6);
+  check(!!rowLow && !rowLow.head, "962s5t6 a genuine newer head below the folder team file's epoch shows nothing in leadsView(): "
+    + (rowLow && rowLow.head ? rowLow.head.edition : "nothing"));
+  if (PLANTS_OFF) skip("962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch");
+  else {
+    const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:folder-head-epoch") >= 0);
+    let shown = "plant line absent";
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const DP = loadDesk(DF6.ud, null, { src: lines.join("\n") });
+      await DP.ask("etiuda:branch-identity", true);
+      const rowP = (((await DP.ask("etiuda:team-join", "leads")) || {}).leads || []).find(r => r.team === T6);
+      shown = rowP && rowP.head ? rowP.head.edition : "nothing";
+    }
+    check(shown === "Lamp Shop v4", "962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t6): " + shown);
+  }
 
   // 14bj: forged head shows nothing in leadsView()
   const forgedHead = JSON.parse(JSON.stringify(freshHead));
