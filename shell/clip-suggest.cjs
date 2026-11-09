@@ -21,6 +21,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var clip_suggest_exports = {};
 __export(clip_suggest_exports, {
   MESSAGE_LETTER_SHARE: () => MESSAGE_LETTER_SHARE,
+  MESSAGE_MAX_CHARS: () => MESSAGE_MAX_CHARS,
   MESSAGE_WORD_MIN: () => MESSAGE_WORD_MIN,
   SUGGEST_LIMIT: () => SUGGEST_LIMIT,
   SUGGEST_SCORE_FLOOR: () => SUGGEST_SCORE_FLOOR,
@@ -151,6 +152,7 @@ var MESSAGE_WORD_MIN = 3;
 var MESSAGE_LETTER_SHARE = 0.6;
 var SUGGEST_SCORE_FLOOR = 2.5;
 var SUGGEST_LIMIT = 5;
+var MESSAGE_MAX_CHARS = 1500;
 var AFFINITY_STOP = /* @__PURE__ */ new Set([
   "your",
   "with",
@@ -226,7 +228,8 @@ function letterShare(text) {
   return (letters ? letters.length : 0) / [...s].length;
 }
 function readsLikeMessage(text) {
-  return messageWords(text).length >= MESSAGE_WORD_MIN && letterShare(text) >= MESSAGE_LETTER_SHARE;
+  const s = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
+  return messageWords(s).length >= MESSAGE_WORD_MIN && letterShare(s) >= MESSAGE_LETTER_SHARE;
 }
 function suggestEditDistance1(a, b) {
   if (a === b) return false;
@@ -460,7 +463,7 @@ function buildSuggestModel(catalog, labels) {
 }
 function segmentCustomerMessage(raw) {
   if (!raw || typeof raw !== "string") return [];
-  if (raw.length < 4 || raw.length > 1500) return [];
+  if (raw.length < 4 || raw.length > MESSAGE_MAX_CHARS) return [];
   if (!/\p{L}/u.test(raw)) return [];
   const trimmed = raw.trim();
   if (/^[A-Z0-9]{6,8}$/i.test(trimmed)) return [];
@@ -617,6 +620,7 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
   return results;
 }
 function scoreSuggestions(text, model) {
+  text = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
   if (!readsLikeMessage(text) || !model) return [];
   const profiles = profilesFrom(model);
   const vocab = new Map(model.vocab || []);
@@ -643,6 +647,7 @@ function scoreSuggestions(text, model) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   MESSAGE_LETTER_SHARE,
+  MESSAGE_MAX_CHARS,
   MESSAGE_WORD_MIN,
   SUGGEST_LIMIT,
   SUGGEST_SCORE_FLOOR,

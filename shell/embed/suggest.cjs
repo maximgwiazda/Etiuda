@@ -9,13 +9,15 @@ const path = require("node:path");
 const core = require("./core.cjs");
 
 const WORKER = path.join(__dirname, "worker.cjs");
+/* A worker that fails or dies is started again at the next warm, this many times in a desk's life; then the words stand. */
+const EMBED_RESTARTS = 3;
 
 /* o.fork(file) starts the worker and returns {post(m), onMessage(fn), onExit(fn), kill()}; o.dir holds the model
    files, o.runtime the folder whose node_modules hold the runtime and the tokenizer. */
 function createEmbedSuggest(o) {
   const pin = o.pin || core.MODEL_PIN;
   const later = o.setTimeout || setTimeout;
-  let on = false, child = null, status = "idle", warmEpoch = null, asked = null, n = 0;
+  let on = false, child = null, status = "idle", warmEpoch = null, asked = null, n = 0, crashes = 0;
   const waiting = new Map();
 
   function installed() {
@@ -35,18 +37,23 @@ function createEmbedSuggest(o) {
     for (const id of [...waiting.keys()]) settle(id, null);
     if (c) { try { c.kill(); } catch (e) { /* already gone */ } }
   }
+  function crashed() {
+    stop();
+    crashes++;
+    status = crashes >= EMBED_RESTARTS ? "failed" : "idle";
+  }
   function onMessage(c, m) {
     if (c !== child || !m || typeof m !== "object") return;
     if (m.kind === "ready") { status = "ready"; warmEpoch = m.epoch; }
     else if (m.kind === "ranked") settle(m.n, m.epoch === warmEpoch && Array.isArray(m.rows) ? m.rows : null);
-    /* A refusal or a failure is for the life of this desk: the files do not change while it runs. */
-    else if (m.kind === "refused" || m.kind === "failed") { stop(); status = m.kind; }
+    /* A refusal is for the life of this desk: the files do not change while it runs. */
+    else if (m.kind === "refused") { stop(); status = "refused"; }
+    else if (m.kind === "failed") crashed();
   }
   function onExit(c) {
     if (c !== child) return;
     child = null;
-    for (const id of [...waiting.keys()]) settle(id, null);
-    if (status !== "refused") status = "failed";
+    crashed();
   }
   return {
     setOn(want) {
@@ -89,4 +96,4 @@ function createEmbedSuggest(o) {
   };
 }
 
-module.exports = { createEmbedSuggest, WORKER };
+module.exports = { createEmbedSuggest, WORKER, EMBED_RESTARTS, passagesKey: core.passagesKey };

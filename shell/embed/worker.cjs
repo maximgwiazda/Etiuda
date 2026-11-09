@@ -44,15 +44,17 @@ async function passagesTable(passages) {
 }
 
 async function load(m) {
-  const bad = await core.pinProblem(m.dir, pinInForce());
-  if (bad) { send({ kind: "refused", why: bad.why, name: bad.name }); return false; }
+  const got = await core.pinRead(m.dir, pinInForce());
+  if (got.problem) { send({ kind: "refused", why: got.problem.why, name: got.problem.name }); return false; }
   const mods = path.join(String(m.runtime || ""), "node_modules");
   ort = require(path.join(mods, "onnxruntime-node"));
   const { Tokenizer } = require(path.join(mods, "@huggingface", "tokenizers", "dist", "tokenizers.cjs"));
-  const fs = require("node:fs");
-  tok = new Tokenizer(JSON.parse(fs.readFileSync(path.join(m.dir, "tokenizer.json"), "utf8")),
-    JSON.parse(fs.readFileSync(path.join(m.dir, "tokenizer_config.json"), "utf8")));
-  session = await ort.InferenceSession.create(path.join(m.dir, "model_q4.onnx"), { intraOpNumThreads: 2, interOpNumThreads: 1 });
+  /* Built from the bytes the pin was checked on; the folder is not read again. */
+  const b = got.bytes;
+  const u8 = x => new Uint8Array(x.buffer, x.byteOffset, x.length);
+  tok = new Tokenizer(JSON.parse(b["tokenizer.json"].toString("utf8")), JSON.parse(b["tokenizer_config.json"].toString("utf8")));
+  session = await ort.InferenceSession.create(u8(b["model_q4.onnx"]), { intraOpNumThreads: 2, interOpNumThreads: 1,
+    externalData: [{ path: "model_q4.onnx_data", data: u8(b["model_q4.onnx_data"]) }] });
   table = await passagesTable(m.passages);
   epoch = m.epoch;
   send({ kind: "ready", epoch });
