@@ -3614,6 +3614,7 @@ body.screen-on #lanes { display: none !important; }
    line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
 .mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
+.sx.lm-lib .mg-data-acts>.set-row:first-child{border-top:1px solid var(--line)}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
 .sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
@@ -3856,6 +3857,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The question before Clear local changes: the strip's place, a heading and two lines stacked above its buttons. */
+.e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
+.e-undo.e-clear-ask p{margin:0 0 8px}
+.e-undo.e-clear-ask .tour-actions{justify-content:flex-end;margin-top:12px}
 /* The key that takes it, on the button in the button's own ink. */
 .e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
   border-radius:4px;font:11px var(--mono);font-weight:400}

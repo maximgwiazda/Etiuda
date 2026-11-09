@@ -1478,8 +1478,8 @@ const CARD_B = {
    else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "the module exports the eject and the clear, and nothing else",
-    () => eq(Object.keys(L).sort().join(","), "clearLocalMemory,ejectCatalog"));
+  check("local-memory.js", "the module exports the eject, the clear and the question before it, and nothing else",
+    () => eq(Object.keys(L).sort().join(","), "askClearLocal,clearLocalMemory,ejectCatalog"));
 }
 
 /* ==================================================================================
@@ -5729,7 +5729,7 @@ const CARD_B = {
       }
     });
 
-    check("maintenance.js", "D3-7 Clear local memory and Reset shortcuts are no longer in Maintenance, tab or rescue window, which says where they went; Settings has both", () => {
+    check("maintenance.js", "D3-7 Clear local changes and Reset shortcuts are not in Maintenance, tab or rescue window, which says where they went; Settings has Reset shortcuts and no Clear", () => {
       shutAll();
       MN.openMaintenance();
       const tab = screenHost.innerHTML;
@@ -5737,11 +5737,12 @@ const CARD_B = {
       modal.hidden = true;
       MN.openMaintenanceModal();
       const rescue = modalCard.innerHTML + " " + (byId["#modalCard"].innerHTML || "");
-      const said = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
-      const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local memory<") < 0 && h.indexOf(">Reset shortcuts<") < 0;
+      const said = "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog &amp; data.";
+      const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local") < 0 && h.indexOf(">Reset shortcuts<") < 0;
       const all = SET.settingsBodyHtml();
       return (gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') >= 0 && gone(modalCard.innerHTML + rescue)
-        && all.indexOf('id="setClear"') >= 0 && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
+        && all.indexOf('id="setClear"') < 0 && all.indexOf(">Clear local") < 0 && all.indexOf('id="setReset"') >= 0
+        && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
     });
 
     check("settings.js", "D3-8 Reset shortcuts on the Keyboard shortcuts page puts every rebinding back, with an Undo", () => {

@@ -22,7 +22,6 @@ import { hooks } from "./hooks.js";
 import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
-import { clearLocalMemory } from "./local-memory.js";
 import { openAbout } from "./about.js";
 import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
@@ -400,10 +399,7 @@ function aiGroups(){
 function dataGroups(){
   return [{rows:[
     row("reset","refresh",t("Reset defaults"),t("Puts every setting back as it ships. Cards and your edits are not touched."),
-      '<button type="button" class="btn" id="setReset">'+esc(t("Reset defaults"))+'</button>'),
-    row("clear","delete",t("Clear local memory"),
-      t("Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back."),
-      '<button type="button" class="btn danger" id="setClear">'+esc(t("Clear local memory"))+'</button>')
+      '<button type="button" class="btn" id="setReset">'+esc(t("Reset defaults"))+'</button>')
   ]}];
 }
 function aboutGroups(){
@@ -570,7 +566,6 @@ function wirePage(box){
   if(nameBox) nameBox.oninput=()=>setAgentName(nameBox.value);
   const act=(id,fn)=>{ const b=box.querySelector(id); if(b) b.onclick=fn; };
   act("#setReset",resetAllSettings);
-  act("#setClear",clearLocalMemory);
   act("#setResetKeys",resetShortcuts);
   act("#setAbout",()=>openAbout());
   /* The tour runs on the conversation, so the conversation comes forward and the tab stays for coming back. */
