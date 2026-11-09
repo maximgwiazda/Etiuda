@@ -5843,8 +5843,16 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1300;
-const UI_STRINGS_SHA256 = "fb45a17ecd802584646e16d67241401799c2a7e182228b85e1816958591eca5f";
+const UI_STRINGS_COUNT = 1317;
+const UI_STRINGS_SHA256 = "a29ac7e728dbed28ea16d866b4342673c8af466c57243deae720a2a241511d92";
+
+/* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
+   A table read through a variable ({key, icon, name, lede}) never reaches the census above or
+   i18n-scan, which read literal t() calls, so these English placeholders show on a Polish desk
+   and no count moves. Until the copywriter's words land in both languages, each is listed here,
+   checked present, and printed as owed. A word that leaves the source leaves this list in the
+   same commit, so the count only falls. */
+const OWED_WORDS = [];
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -5998,6 +6006,10 @@ function checkFrozenContracts() {
       + ui.sha256.slice(0, 16) + ", against " + UI_STRINGS_COUNT + " and " + UI_STRINGS_SHA256.slice(0, 16)
       + " - if the words changed on purpose, update UI_STRINGS_COUNT and UI_STRINGS_SHA256 in this "
       + "file in that commit; if they did not, something mechanical has rewritten what people read");
+  const owedGone = OWED_WORDS.filter(w => src.indexOf(JSON.stringify(w).slice(1, -1)) < 0 && src.indexOf(w) < 0);
+  if (owedGone.length)
+    problems.push("owed words no longer in the source, so their list in OWED_WORDS is stale: " + owedGone.join(" | "));
+  console.log("#owed words=" + OWED_WORDS.length + " (English placeholders awaiting both languages; OWED_WORDS in tests/test.js)");
   return { problems: problems, ui: ui, prefix: bare ? bare.E_NS : "?", shape: appShape || "?" };
 }
 function checkStacking() {

@@ -3589,6 +3589,75 @@ body.screen-on #lanes { display: none !important; }
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
 .mt-moved{margin:12px 0 0;color:var(--dim);font-size:12.5px}
+/* ---------- Library and Maintenance, in the Settings shell ---------- */
+/* Their own selectors, so a search bar restored on every screen tab can land beside them.
+   The header hide stays the layered rule it is; nothing here fights it. */
+.sx.lm{width:100%;max-width:none;height:100%;overflow:hidden;flex-direction:column}
+.sx.lm:focus{outline:none}
+.sx.lm .lm-split{flex:1 1 auto;min-height:0;min-width:0;display:flex;overflow:hidden}
+.sx.lm .sx-page{min-height:0}
+.sx.lm .screen-actions{flex:0 0 auto;padding:12px 32px 16px}
+.sx.lm .sx-maint{display:inline-flex;align-items:center;gap:6px}
+.sx.lm .sx-maint .sx-ic{width:15px;height:15px}
+.sx.lm .sx-nav .screen-head{display:block;margin:4px 10px 14px;position:relative}
+.sx.lm .sx-nav .screen-head h2{margin:0;font:300 26px/1.1 var(--sans-display)}
+.sx.lm .screen-head .screen-name{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sx.lm-lib details.manage-sec{margin:0;padding:0;border:0}
+.sx.lm-lib details.manage-sec>summary{display:none}
+.sx.lm-lib details.manage-sec[data-mg="data"]>summary,
+.sx.lm-lib.is-find details.manage-sec>summary{display:flex}
+.sx.lm-lib .manage-secbody{padding-top:0}
+.sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
+.sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
+.sx.lm-lib .sx-card .mg-cat:first-child>.mg-cat-row{border-top:0}
+.sx.lm-lib .sx-card .mg-cat-body{padding:0 0 6px 30px}
+.sx.lm-lib .sx-card .mg-int{padding-top:8px;padding-bottom:8px;border-top:1px solid var(--line)}
+.sx.lm-lib .sx-card .mg-int:first-child{border-top:0}
+.sx.lm-lib .sx-card .ec-list{margin:0}
+.sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
+.sx.lm-lib #mgWho{width:min(420px,100%)}
+.sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
+  box-shadow:none;margin:0}
+.sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
+.sx.lm-mt[data-page="health"] #mtLede{display:none}
+.sx.lm-mt:not([data-page="health"]) .mt-sub,
+.sx.lm-mt:not([data-page="health"]) .mt-health,
+.sx.lm-mt:not([data-page="health"]) #mtMoved{display:none}
+.sx.lm-mt .mt-readings{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sx.lm-mt .mt-health{margin:0 0 16px;gap:12px}
+.sx.lm-mt .mt-h{padding:16px 18px}
+.sx.lm-mt .mt-h b{font-size:14.5px}
+.sx.lm-mt .mt-grid{columns:unset;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;
+  align-items:start}
+.sx.lm-mt[data-page="health"] .mt-grid{display:none}
+.sx.lm-mt .mt-sec{display:none;margin:0 0 16px;break-inside:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius-sm);overflow:hidden}
+.sx.lm-mt[data-page="engine"] .mt-sec[data-mt-sec="Engine"],
+.sx.lm-mt[data-page="engine"] .mt-sec[data-mt-sec="Display"],
+.sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog"],
+.sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog file"],
+.sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Storage"],
+.sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Desk"],
+.sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Layout"],
+.sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Intent panel"],
+.sx.lm-mt[data-page="state"] .mt-sec[data-mt-sec="Personal state"]{display:block}
+.sx.lm-mt .mt-sec h3{margin:0;padding:12px 16px 4px;font:600 12px var(--sans);letter-spacing:.06em}
+.sx.lm-mt .mt-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;
+  padding:10px 16px;border-top:1px solid var(--line);font:13.5px var(--sans)}
+.sx.lm-mt .mt-sec h3+.mt-row,.sx.lm-mt .mt-sec h3+.mt-tab{border-top:0}
+.sx.lm-mt .mt-row .v{font:12.5px var(--mono)}
+.sx.lm-mt .mt-tab{padding:10px 16px;border-top:1px solid var(--line)}
+@media (max-width:720px){
+  .sx.lm-mt .mt-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-height:700px){
+  .sx.lm-mt .mt-h{padding:6px 8px}
+  .sx.lm-mt .sx-page{padding:16px 20px 20px}
+  .sx.lm-mt .mt-row{padding:4px 12px;font-size:12px}
+  .sx.lm-mt .screen-actions{padding:8px 20px 10px}
+}
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
@@ -7039,6 +7108,23 @@ What you type stays in this browser only.`;
     "Intents": "Intencje",
     "ROLE suggestions": "Podpowiedzi ROLE",
     "Catalog & data": "Katalog i dane",
+    "Search the library": "Szukaj w Bibliotece",
+    "Categories and cards": "Kategorie i karty",
+    "Each category with its cards, its place in the order, and whether it supports every intent.": "Każda kategoria z kartami, jej miejsce w kolejności i to, czy wspiera każdą intencję.",
+    "Favourites first, hidden intents at the foot.": "Najpierw ulubione, ukryte intencje na końcu.",
+    "Intents: {N}.": "Intencje: {N}.",
+    "The names the ROLE wheel offers, separated by commas.": "Nazwy, które podpowiada pokrętło ROLE, oddzielone przecinkami.",
+    "The catalog in use on this desk, and loading another catalog file.": "Katalog używany na tym stanowisku i wczytanie innego pliku katalogu.",
+    "Health": "Stan",
+    "Engine and display": "Silnik i ekran",
+    "What runs Etiuda here, and what the screen offers it.": "Co uruchamia tu Etiudę i co daje jej ekran.",
+    "The catalog in use, and the file it came from.": "Używany katalog i plik, z którego pochodzi.",
+    "Storage and desk": "Pamięć i stanowisko",
+    "Where the desk keeps its memory, and its own state.": "Gdzie stanowisko przechowuje swoją pamięć i własny stan.",
+    "Layout and intent panel": "Układ i panel intencji",
+    "How the window is laid out, and the intent panel.": "Układ okna i panel intencji.",
+    "What you have made your own on this desk.": "Własne zmiany na tym stanowisku.",
+    "Open Data and defaults": "Otwórz Dane i ustawienia domyślne",
     "Content": "Treść",
     "Category": "Kategoria",
     "Linked intents": "Powiązane intencje",
@@ -27213,6 +27299,25 @@ What you type stays in this browser only.`;
     };
   }
 
+  // src/modules/lm-icon.js
+  var LM_ICONS = {
+    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
+    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
+    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
+    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
+    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
+    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
+    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "health": '<path d="M3.5 12.5h4.2l1.7-4.6 2.6 9.2 1.8-4.6H20.5"/>'
+  };
+  function lmIcon(name) {
+    const body = LM_ICONS[name];
+    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
+  }
+
   // src/modules/maintenance.js
   function mtSafe(f) {
     try {
@@ -27657,7 +27762,7 @@ What you type stays in this browser only.`;
     rows.forEach((x) => {
       if (x.sec) {
         if (open) html += "</div>";
-        html += '<div class="mt-sec"><h3>' + esc(tc("maintenance", x.sec)) + "</h3>";
+        html += '<div class="mt-sec" data-mt-sec="' + esc(x.sec) + '"><h3>' + esc(tc("maintenance", x.sec)) + "</h3>";
         open = true;
       } else if (x.tab) {
         const th = (w) => '<span class="h">' + esc(tc("maintenance", w)) + "</span>";
@@ -27683,11 +27788,69 @@ What you type stays in this browser only.`;
     };
   }
   var MT_MOVED = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+  var mtOn = "health";
+  var mtPages = () => [
+    { key: "health", icon: "health", name: t("Health") },
+    { key: "engine", icon: "desks", name: t("Engine and display") },
+    { key: "catalog", icon: "categories", name: t("Catalog") },
+    { key: "storage", icon: "data", name: t("Storage and desk") },
+    { key: "layout", icon: "layout", name: t("Layout and intent panel") },
+    { key: "state", icon: "user", name: t("Personal state") }
+  ];
+  var mtLede = () => ({
+    engine: t("What runs Etiuda here, and what the screen offers it."),
+    catalog: t("The catalog in use, and the file it came from."),
+    storage: t("Where the desk keeps its memory, and its own state."),
+    layout: t("How the window is laid out, and the intent panel."),
+    state: t("What you have made your own on this desk.")
+  });
+  function mtNavHtml() {
+    return mtPages().map((p) => {
+      const on = p.key === mtOn;
+      return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-mt="' + esc(p.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(p.icon) + "<span data-i18n-skip>" + esc(p.name) + "</span></button>";
+    }).join("");
+  }
+  function mtShellHtml() {
+    const pages = mtPages(), page = pages.filter((p) => p.key === mtOn)[0] || pages[0];
+    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+  }
+  function wireMtShell(root) {
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    const buttons = root.querySelectorAll(".sx-sec[data-mt]");
+    if (!buttons || !buttons.length) return;
+    const show = (key) => {
+      mtOn = key || "health";
+      root.setAttribute("data-page", mtOn);
+      root.querySelectorAll(".sx-sec[data-mt]").forEach((b) => {
+        const on = b.getAttribute("data-mt") === mtOn;
+        if (b.classList) b.classList.toggle("on", on);
+        if (on) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      });
+      const page = mtPages().filter((p) => p.key === mtOn)[0];
+      const title = root.querySelector("#mtTitle");
+      if (title && page) title.textContent = page.name;
+      const lede = root.querySelector("#mtLede");
+      if (lede) lede.textContent = mtOn === "health" ? "" : mtLede()[mtOn] || "";
+    };
+    buttons.forEach((b) => {
+      b.onclick = () => show(b.getAttribute("data-mt"));
+    });
+    const gear = root.querySelector("#mtSettings");
+    if (gear) gear.onclick = () => {
+      if (typeof hooks.openSettings === "function") hooks.openSettings();
+    };
+    const data = root.querySelector("#mtOpenData");
+    if (data) data.onclick = () => {
+      if (typeof hooks.openSettings === "function") hooks.openSettings("data");
+    };
+  }
   registerScreen("maintenance", {
     title: () => t("Maintenance"),
     render: (host, closeFn) => {
-      host.innerHTML = '<div class="screen-page mt-screen"><div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div><div class="screen-body">' + mtMaintBody() + '</div><p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + '</p><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+      host.innerHTML = mtShellHtml();
       wireMaintenanceActions(host, closeFn);
+      wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
     }
   });
   function openMaintenanceModal(backFn) {
@@ -31330,8 +31493,108 @@ What you type stays in this browser only.`;
     if (relay.length === 1 && !normCatalogFolder(relay[0].folder)) return relay[0];
     return null;
   }
+  var libOn = "data";
+  var libQuery = "";
+  var libFind = () => t("Search the library");
+  var libSections = () => [
+    { key: "catmac", icon: "categories", name: t("Categories and cards"), lede: t("Each category with its cards, its place in the order, and whether it supports every intent.") },
+    { key: "intents", icon: "intents", name: t("Intents"), lede: t("Favourites first, hidden intents at the foot.") },
+    { key: "who", icon: "user", name: t("ROLE suggestions"), lede: t("The names the ROLE wheel offers, separated by commas.") },
+    { key: "data", icon: "cards", name: t("Catalog & data"), lede: t("The catalog in use on this desk, and loading another catalog file.") }
+  ];
+  function libFold(s) {
+    return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  }
+  function rememberedLib() {
+    const order = ["catmac", "intents", "who", "data"];
+    const open = order.filter((k) => mgOpen.has(k));
+    if (open.length === 1) return open[0];
+    if (open.indexOf(libOn) >= 0) return libOn;
+    return open[0] || "catmac";
+  }
+  function libNavHtml() {
+    const finding = !!libFold(libQuery);
+    return libSections().map((s) => {
+      const on = !finding && s.key === libOn;
+      return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-lm="' + esc(s.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(s.icon) + "<span data-i18n-skip>" + esc(s.name) + "</span></button>";
+    }).join("");
+  }
+  function applyLibView(page) {
+    if (!page || typeof page.querySelectorAll !== "function") return;
+    const buttons = page.querySelectorAll(".sx-sec[data-lm]");
+    if (!buttons || !buttons.length) return;
+    const q = libFold(libQuery);
+    if (page.classList) {
+      if (q) page.classList.add("is-find");
+      else page.classList.remove("is-find");
+    }
+    let countEl = null;
+    page.querySelectorAll("details.manage-sec").forEach((d) => {
+      const key = d.getAttribute("data-mg");
+      const hit = !q || libFold(d.textContent).indexOf(q) >= 0;
+      const show = q ? hit : key === libOn;
+      if (show) d.removeAttribute("hidden");
+      else d.setAttribute("hidden", "");
+      if (!q && key === libOn) {
+        const c = d.querySelector(".mg-count");
+        if (c) countEl = c;
+      }
+    });
+    buttons.forEach((b) => {
+      const on = !q && b.getAttribute("data-lm") === libOn;
+      if (b.classList) b.classList.toggle("on", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+    const sec = libSections().filter((s) => s.key === libOn)[0];
+    const title = page.querySelector("#libTitle");
+    const lede = page.querySelector("#libLede");
+    if (title) title.textContent = q ? String(libQuery || "").trim() : sec ? sec.name : "";
+    if (lede) {
+      const n = countEl && countEl.textContent ? countEl.textContent.trim() : "";
+      lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" && n ? t("Intents: {N}.").replace("{N}", n) + " " + sec.lede : sec.lede;
+    }
+  }
+  function wireLibShell(page) {
+    if (!page || typeof page.querySelectorAll !== "function") return;
+    const buttons = page.querySelectorAll(".sx-sec[data-lm]");
+    if (!buttons || !buttons.length) return;
+    buttons.forEach((b) => {
+      b.onclick = () => {
+        libOn = b.getAttribute("data-lm") || libOn;
+        libQuery = "";
+        mgOpen.add(libOn);
+        paintLibrary();
+      };
+    });
+    const find = page.querySelector("#libSearch");
+    if (find) {
+      find.oninput = () => {
+        libQuery = find.value;
+        const at = find.selectionStart;
+        paintLibrary();
+        const again = document.getElementById("libSearch");
+        if (!again) return;
+        try {
+          again.focus();
+          if (at != null && again.setSelectionRange) again.setSelectionRange(at, at);
+        } catch (e) {
+        }
+      };
+      find.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || !find.value) return;
+        e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        libQuery = "";
+        paintLibrary();
+      });
+    }
+    const mt = page.querySelector("#libMaint");
+    if (mt) mt.onclick = () => openMaintenance();
+  }
   function openManage(justHtml) {
     applyCatsToGlobal();
+    if (!libFold(libQuery)) libOn = rememberedLib();
     const mgGoneIntents = new Set(pack.intentRemoved || []);
     const mgIntentIdxs = intentOrder.filter((i) => !mgGoneIntents.has(intentIdAt(i))).map((i, n) => ({ i, n })).sort((a, b) => {
       const ha = isIntentHiddenIdx(a.i) ? 1 : 0, hb = isIntentHiddenIdx(b.i) ? 1 : 0;
@@ -31419,10 +31682,12 @@ What you type stays in this browser only.`;
       openHistory(host);
       return;
     }
-    host.innerHTML = '<div class="screen-page lib-screen lib-list" tabindex="-1">' + libraryHeadHtml() + '<div class="screen-body">' + (body || openManage(true)) + '</div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
+    const name = catalogFileName();
+    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + '</div></div></div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
     const page = host.querySelector(".lib-list");
     wireLibrary(page);
     translateTree(page);
+    applyLibView(page);
     dressDialogInputs(page);
     markCutText(page);
     const at = document.activeElement;
@@ -31434,6 +31699,7 @@ What you type stays in this browser only.`;
   }
   registerScreen(LIB_SCREEN, { title: () => t("Library"), render: (host) => paintLibrary(host) });
   function wireLibrary(page) {
+    wireLibShell(page);
     $("#mgClose").onclick = () => closeScreenTab(LIB_SCREEN);
     $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
     $("#mgAddCat").onclick = () => startMgCatAdd();
