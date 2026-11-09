@@ -70,7 +70,7 @@ function deskLaunch(){
   ssSet("eLaunched","1");
   const region=document.querySelector("#dotField>div");
   if(!region) return null;
-  const h=launchMark({app:"desk", region:region, still:mgReduceMotion, covered:markCovered,
+  const h=launchMark({app:"desk", region:region, still:mgReduceMotion, covered:markCovered, shown:afterShown,
     phase:fifthPhase, ready:new Promise(r=>afterShown(()=>requestAnimationFrame(()=>r())))});
   return h;
 }
