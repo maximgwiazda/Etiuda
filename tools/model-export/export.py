@@ -17,11 +17,17 @@ place. Only counts, cosines and sizes are written into the pin.
   python tools/model-export/export.py --check <dir> [--sources <file>]
   python tools/model-export/export.py --export <dir> --out <dir> [--sources <file>]
       [--width q4|fp16] [--fp16-out <dir>] [--task <dir>] [--task-script <file>]
+      [--pin-match]
+  python tools/model-export/export.py --pin-match --out <dir>
+
+--pin-match skips the task floor only after the written files match the shell
+pin. A match is the floored file. Anything else is refused.
 """
 import gc
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -50,7 +56,8 @@ MESSAGES = [
 ]
 USAGE = ("usage: python tools/model-export/export.py --self-test | --write-pin <file> "
          "| --check <dir> [--sources <file>] | --export <dir> --out <dir> [--sources <file>] "
-         "[--width q4|fp16] [--fp16-out <dir>] [--task <dir>] [--task-script <file>]")
+         "[--width q4|fp16] [--fp16-out <dir>] [--task <dir>] [--task-script <file>] "
+         "[--pin-match] | --pin-match --out <dir>")
 
 
 def sha256_file(path):
@@ -297,6 +304,69 @@ def task_count(script, model_dir, task_root, out_path):
     return got
 
 
+def parse_pin_rows(block):
+    found = []
+    for match in re.finditer(r'name:\s*"([^"]+)",\s*size:\s*(\d+),\s*sha256:\s*"([0-9a-f]{64})"', block):
+        found.append({"name": match.group(1), "size": int(match.group(2)), "sha256": match.group(3)})
+    return found
+
+
+def shell_model_pin():
+    """The four files shell/embed/core.cjs holds the desk to, q4 width and the tokenizer."""
+    core = os.path.join(HERE, "..", "..", "shell", "embed", "core.cjs")
+    with open(core, "r", encoding="utf-8") as handle:
+        text = handle.read()
+    start = text.find("q4: Object.freeze([")
+    end = text.find("]),", start)
+    tokenizer = text.find("const TOKENIZER = Object.freeze([")
+    tokenizer_end = text.find("]);", tokenizer)
+    if start < 0 or end < 0 or tokenizer < 0 or tokenizer_end < 0:
+        raise RuntimeError("the shell pin could not be read")
+    rows = parse_pin_rows(text[start:end]) + parse_pin_rows(text[tokenizer:tokenizer_end])
+    if len(rows) != 4:
+        raise RuntimeError("the shell pin did not name four files")
+    return rows
+
+
+def pin_problems(folder, rows):
+    problems = []
+    for item in rows:
+        at = os.path.join(folder, item["name"])
+        if not os.path.isfile(at):
+            problems.append(item["name"] + " is absent")
+            continue
+        size = os.path.getsize(at)
+        if size != item["size"]:
+            problems.append(item["name"] + " is " + str(size) + " bytes, not " + str(item["size"]))
+            continue
+        got = sha256_file(at)
+        if got != item["sha256"]:
+            problems.append(item["name"] + " sha256 is " + got + ", not " + item["sha256"])
+    return problems
+
+
+def judge_pin(folder, remove_on_fail=False):
+    """0 when every shell-pin file matches. Otherwise 1, and the reason on stderr."""
+    try:
+        rows = shell_model_pin()
+    except RuntimeError as exc:
+        print("refused: " + str(exc), file=sys.stderr)
+        return 1
+    problems = pin_problems(folder, rows)
+    if problems:
+        if remove_on_fail:
+            for name in ("model_q4.onnx", "model_q4.onnx_data"):
+                at = os.path.join(folder, name)
+                if os.path.isfile(at):
+                    os.remove(at)
+        for line in problems:
+            print("refused: " + line, file=sys.stderr)
+        return 1
+    for item in rows:
+        print(item["name"] + " " + sha256_file(os.path.join(folder, item["name"])))
+    return 0
+
+
 def task_paths_ready(task_root, script):
     if not task_root or not script:
         print("export: the task check needs --task and --task-script", file=sys.stderr)
@@ -334,10 +404,35 @@ def merge_alternative(folder):
     return 0
 
 
-def export_onnx(source, out_dir, width, fp16_out, task_root, task_script):
+def export_onnx(source, out_dir, width, fp16_out, task_root, task_script, pin_match=False):
     os.makedirs(out_dir, exist_ok=True)
-    if width == "q4" and not task_paths_ready(task_root, task_script):
+    if width == "q4" and not pin_match and not task_paths_ready(task_root, task_script):
         return 2
+    # Measured 2026-11-09. model_q4.onnx comes out the pin's size and not its bytes when
+    # the current directory is the engine tree, or when this process was started on this
+    # file (its path, and argv[0], sit inside that tree). With the directory, the main
+    # module's file and argv[0] all on the weights folder, the bytes match the pin.
+    previous = os.getcwd()
+    os.chdir(source)
+    main = sys.modules.get("__main__")
+    real_file = getattr(main, "__file__", None) if main is not None else None
+    real_argv = sys.argv[0] if sys.argv else None
+    placed = os.path.join(source, "export.py")
+    if real_file:
+        main.__file__ = placed
+    if real_argv:
+        sys.argv[0] = placed
+    try:
+        return _export_onnx(source, out_dir, width, fp16_out, task_root, task_script, pin_match)
+    finally:
+        if real_file and main is not None:
+            main.__file__ = real_file
+        if real_argv:
+            sys.argv[0] = real_argv
+        os.chdir(previous)
+
+
+def _export_onnx(source, out_dir, width, fp16_out, task_root, task_script, pin_match):
     fp32, tokenizer = export_fp32(source, out_dir)
     alternative = None
     if width == "fp16":
@@ -355,7 +450,7 @@ def export_onnx(source, out_dir, width, fp16_out, task_root, task_script):
     del proto
     gc.collect()
     say("export: q4 bytes " + str(weight_bytes(out_dir)))
-    if fp16_out:
+    if fp16_out and not pin_match:
         say("export: convert fp16")
         proto = convert_fp16(fp32)
         save_onnx(proto, fp16_out)
@@ -367,6 +462,15 @@ def export_onnx(source, out_dir, width, fp16_out, task_root, task_script):
         say("export: fp16 bytes " + str(weight_bytes(fp16_out)))
     os.remove(fp32)
     copy_tokenizer(source, out_dir)
+    # The task floor needs sets that are not on the build machine. A file that matches the
+    # shell pin is the file that already passed that floor, so the check is skipped only then.
+    if pin_match:
+        del tokenizer
+        gc.collect()
+        code = judge_pin(out_dir, remove_on_fail=True)
+        if code == 0:
+            say("export: pin match, task check skipped")
+        return code
 
     cosines = parity(source, onnx_path, tokenizer)
     del tokenizer
@@ -447,17 +551,26 @@ def main(argv):
         print("pin: " + dest)
         return 0
     exporting = "--export" in argv
+    pin_match = "--pin-match" in argv
+    out_dir = take(argv, "--out")
+    if pin_match and not exporting:
+        if not out_dir:
+            print(USAGE, file=sys.stderr)
+            return 2
+        return judge_pin(out_dir)
     checking = "--check" in argv or exporting
     if not checking:
         print(USAGE, file=sys.stderr)
         return 2
     folder = take(argv, "--export") if exporting else take(argv, "--check")
     sources_path = take(argv, "--sources") or SOURCES
-    out_dir = take(argv, "--out")
     width = "q4"
     if "--width" in argv:
         width = take(argv, "--width")
     if width not in ("q4", "fp16"):
+        print(USAGE, file=sys.stderr)
+        return 2
+    if pin_match and width != "q4":
         print(USAGE, file=sys.stderr)
         return 2
     fp16_out = take(argv, "--fp16-out")
@@ -476,7 +589,7 @@ def main(argv):
         return 0
     os.makedirs(out_dir, exist_ok=True)
     try:
-        return export_onnx(folder, out_dir, width, fp16_out, task_root, task_script)
+        return export_onnx(folder, out_dir, width, fp16_out, task_root, task_script, pin_match)
     except ImportError as exc:
         print("export: the pinned packages are not installed (" + str(exc) + ")", file=sys.stderr)
         return 3
@@ -506,9 +619,17 @@ def self_test():
         pin_ok = (pin.get("status") == "not-exported" and pin.get("quant") == "q4"
                   and pin.get("cosineProxy") == COSINE_MINIMUM and pin.get("passGate") == "taskFloor"
                   and pin.get("parity", {}).get("status") == "not-run")
-        if bare != 2 or good != 0 or bad != 1 or wrote or not pin_ok:
+        judge = tempfile.mkdtemp(prefix="etiuda-pin-")
+        try:
+            for name in ("model_q4.onnx", "model_q4.onnx_data"):
+                with open(os.path.join(judge, name), "wb") as handle:
+                    handle.write(b"not-the-pin")
+            pin_refused = main(["--pin-match", "--out", judge])
+        finally:
+            shutil.rmtree(judge, ignore_errors=True)
+        if bare != 2 or good != 0 or bad != 1 or wrote or not pin_ok or pin_refused != 1:
             print("self-test: bare=" + str(bare) + " good=" + str(good) + " bad=" + str(bad)
-                  + " wrote=" + str(wrote) + " pin=" + str(pin_ok), file=sys.stderr)
+                  + " wrote=" + str(wrote) + " pin=" + str(pin_ok) + " pin-match=" + str(pin_refused), file=sys.stderr)
             return 1
     finally:
         shutil.rmtree(folder, ignore_errors=True)
@@ -516,6 +637,7 @@ def self_test():
     print("self-test: arguments 2")
     print("self-test: checksum refused")
     print("self-test: pin status=not-exported parity=not-run")
+    print("self-test: pin-match refused")
     print("self-test: ok")
     return 0
 

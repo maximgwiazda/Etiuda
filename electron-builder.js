@@ -30,7 +30,7 @@ const LINUX_ICONS = path.resolve(output, ".linux-icons");
 // resources/dictionaries, outside the asar, where the shell finds them by process.resourcesPath.
 const LINUX_DICTIONARIES = path.resolve(output, ".dictionaries");
 // The built-in model and its runtime, outside the archive. tools/model.mjs fills this folder, or
-// leaves it without a model when the files are not on the machine. Windows only: the desk installer.
+// leaves it without a model when the files are not on the machine. Both desks copy it to resources/embed.
 const EMBED = path.resolve(output, ".embed");
 function linuxIcons() {
   const ico = fs.readFileSync(path.join(__dirname, "shell", "etiuda.ico"));
@@ -169,15 +169,17 @@ module.exports = {
     // The class the window is measured to carry (tests/linux-desk.js 5a), so a dock groups it under this entry.
     // The scheme joins this entry from protocols above: MimeType=x-scheme-handler/etiuda;
     desktop: { entry: { StartupWMClass: "etiuda" } },
-    // Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
-    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }],
+    // Dictionaries are Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
+    // The model folder is the one the Windows block copies. The shell reads resources/embed once installed.
+    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }, { from: EMBED, to: "embed" }],
   },
   beforePack: async context => {
-    if (context.electronPlatformName === "linux") linuxIcons();
-    if (context.electronPlatformName === "win32") {
-      caretHelper();
+    const plat = context.electronPlatformName;
+    if (plat === "linux") linuxIcons();
+    if (plat === "win32") caretHelper();
+    if (plat === "linux" || plat === "win32") {
       const { prepareEmbed } = await import("./tools/model.mjs");
-      await prepareEmbed({ dest: EMBED });
+      await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });
     }
   },
   deb: { artifactName: "etiuda_${version}_amd64.${ext}" },

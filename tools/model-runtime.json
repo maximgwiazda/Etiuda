@@ -1,6 +1,6 @@
 {
-  "note": "Windows x64 runtime copied beside the archive when the model is packed. DirectML.dll and dxcompiler.dll are not required to load.",
-  "files": [
+  "note": "Runtime copied beside the archive when the model is packed. common is every platform. native is the pair that platform loads. DirectML.dll and dxcompiler.dll are not required to load on Windows.",
+  "common": [
     {
       "name": "@huggingface/tokenizers/dist/tokenizers.cjs",
       "sha256": "fab81302e9d4ebf2c7aec310e35af0df81c28cb1ef7a4ac44ac83848e39ae79c"
@@ -386,14 +386,6 @@
       "sha256": "c8e59240260cd3d230f1417765e0dbe098323ef65a5785991059de1bd5d7cde0"
     },
     {
-      "name": "onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime.dll",
-      "sha256": "beb6e1edba0e74c132453fe4df113da2ea2b99ef8ea7dfc25696a872efd11c45"
-    },
-    {
-      "name": "onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime_binding.node",
-      "sha256": "8d9f996ff7dcc60c4899aa87aa7abe07d806f9c314882f44a001d0fd8a23d16f"
-    },
-    {
       "name": "onnxruntime-node/dist/backend.d.ts",
       "sha256": "23e65ad2c30827e0f2bfe2aadc2987b76d4619ae5e25aad36674ce618ed3df6d"
     },
@@ -445,5 +437,27 @@
       "name": "onnxruntime-node/package.json",
       "sha256": "41aedb3e877786245ab4dc0f533cda63f7d971b5c5fec171eafca9fb9572a8d5"
     }
-  ]
+  ],
+  "native": {
+    "win32": [
+      {
+        "name": "onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime.dll",
+        "sha256": "beb6e1edba0e74c132453fe4df113da2ea2b99ef8ea7dfc25696a872efd11c45"
+      },
+      {
+        "name": "onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime_binding.node",
+        "sha256": "8d9f996ff7dcc60c4899aa87aa7abe07d806f9c314882f44a001d0fd8a23d16f"
+      }
+    ],
+    "linux": [
+      {
+        "name": "onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime.so.1",
+        "sha256": "f19a4da48c4c65e0cdccff82354482f657fa91a3455b66174195b94ca55b0e6f"
+      },
+      {
+        "name": "onnxruntime-node/bin/napi-v6/linux/x64/onnxruntime_binding.node",
+        "sha256": "e3a108803b8bd33c8e9691b52921c37bede7a6886251aa41219f053d268ee231"
+      }
+    ]
+  }
 }

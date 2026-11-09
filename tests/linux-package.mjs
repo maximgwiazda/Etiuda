@@ -12,8 +12,9 @@
  *      profile's userns, the profile's program, chrome-sandbox, the MIME type on the .desktop entry,
  *      the file it is handed, the glob, and an updater's file put in; no tree and an empty ask refuse;
  *      a dictionary missing, a dictionary with other bytes and the notice missing (planted bytes, hashed here)
- *   5  the spelling dictionaries: the Linux block copies them into resources/dictionaries and Windows has no such
- *      step; the .deb is held to the five pinned files of tools/dictionaries.mjs and the tree's notice; the fetch
+ *   5  the spelling dictionaries and the built-in model: the Linux block copies the dictionaries into
+ *      resources/dictionaries and the embed folder into resources/embed, the same folder Windows copies;
+ *      the .deb is held to the five pinned files of tools/dictionaries.mjs and the tree's notice; the fetch
  *      keeps a whole file, writes only bytes of the pinned hash, falls to the second source, and refuses
  *      without writing when no source has them (a planted getter, so nothing reaches the network)
  */
@@ -137,13 +138,14 @@ try {
 
   /* ---- 5. the spelling dictionaries ---- */
   const DIST = path.join(LAB, 'dist');
-  check(J(fresh.linux.extraResources) === J([{ from: path.join(DIST, '.dictionaries'), to: 'dictionaries' }])
+  check(J(fresh.linux.extraResources) === J([{ from: path.join(DIST, '.dictionaries'), to: 'dictionaries' },
+        { from: path.join(DIST, '.embed'), to: 'embed' }])
       && cfg.extraResources === undefined && cfg.nsis.extraResources === undefined
       && J(fresh.win.extraResources) === J([{ from: path.join(DIST, '.caret', 'caret.exe'), to: 'caret.exe' }, { from: 'shell/policy', to: 'policy' },
         { from: path.join(DIST, '.embed'), to: 'embed' }]),
-    '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries, the Windows block the caret'
-    + ' helper, the Group Policy template and the embed folder (tests/join-policy.mjs 19i), and nothing above them copies a resource: '
-    + J(fresh.linux.extraResources) + ' ' + J(fresh.win.extraResources));
+    '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries and its .embed into resources/embed,'
+    + ' the Windows block the caret helper, the Group Policy template and the same embed folder (tests/join-policy.mjs 19i),'
+    + ' and nothing above them copies a resource: ' + J(fresh.linux.extraResources) + ' ' + J(fresh.win.extraResources));
   const shellFiles = (/files: (\[[^\]]*\])/.exec(fs.readFileSync(path.join(ROOT, 'shell', 'main.js'), 'utf8')) || [])[1] || '';
   check(real.dictionaries === FILES && J(FILES.map(f => f.name)) === J(['en-US-10-1.bdic', 'pl-PL-3-0.bdic', 'README_en_US.txt', 'README_pl_PL.txt', 'COPYING.MPL'])
       && shellFiles === '["en-US-10-1.bdic", "pl-PL-3-0.bdic"]'
