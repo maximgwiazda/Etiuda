@@ -1579,29 +1579,32 @@ const t0 = Date.now();
     "Settings holds General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About, the name above the"
     + " language and nothing about catalogs: " + JSON.stringify(setSecs));
   await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
-  /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
-     fact worth asserting is the one the app owns: that the fold a person left open is still open
-     when Manage is drawn again. This read mgOpen until 2026-09-13 - the module's own Set, reached
-     off the page through the bridge - which is the module asserting its own opinion, board item
-     264's fault. What is on screen is details[open] after a redraw, so that is what is read, and
-     the section is put back the way it was found. */
+  /* THE LIBRARY'S PAGES. Each section is a page, its fold's summary hidden, so a page whose fold is shut shows its
+     title and nothing under it (Max's finding of 2026-11-09). What is asserted is what is on screen after a redraw:
+     the page left on is the page again, open, and a page whose fold a script shut is open when drawn. */
   await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(900);
+  const shownPage = () => p.evaluate(() => { const d = [...document.querySelectorAll("#screenHost details[data-mg]")].filter(x => !x.hidden);
+    return d.length === 1 ? { key: d[0].getAttribute("data-mg"), open: d[0].open } : { key: null, n: d.length }; });
   const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#screenHost details[data-mg]")];
-    const d = ds.find(x => !x.open); if (!d) return { n: ds.length, key: null };
-    d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
-    return { n: ds.length, key: d.getAttribute("data-mg"), toggled: d.open }; });
-  const reopen = k => p.evaluate(async key => { closeScreenTab("library"); await new Promise(r => setTimeout(r, 400));
-    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700));
-    const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
-    return d ? d.open : null; }, k);
-  const mgAfter = mgKey.key === null ? null : await reopen(mgKey.key);
+    const d = ds.find(x => x.hidden); if (!d) return { n: ds.length, key: null };
+    const key = d.getAttribute("data-mg");
+    document.querySelector('#screenHost .sx-sec[data-lm="' + key + '"]').click(); await new Promise(r => setTimeout(r, 450));
+    const now = document.querySelector('#screenHost details[data-mg="' + key + '"]');
+    return { n: ds.length, key, toggled: !!now && !now.hidden && now.open }; });
+  const reopen = () => p.evaluate(async () => { closeScreenTab("library"); await new Promise(r => setTimeout(r, 400));
+    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700)); });
+  if (mgKey.key !== null) await reopen();
+  const mgAfter = mgKey.key === null ? null : await shownPage();
   if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
-    if (d && d.open) d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
-  const mgBack = mgKey.key === null ? null : await reopen(mgKey.key);
+    if (d && d.open) d.open = false; await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
+  if (mgKey.key !== null) await reopen();
+  const mgBack = mgKey.key === null ? null : await shownPage();
   check(mgKey.n > 0 && mgKey.key !== null && mgKey.toggled === true,
-    "a closed Manage section opens on its summary (" + mgKey.n + " sections)");
-  check(mgAfter === true, "and is still open when Manage is drawn again (details[open] " + mgAfter + ")");
-  check(mgBack === false, "and closing it survives the same redraw (details[open] " + mgBack + ")");
+    "a Library section click shows its page, open (" + mgKey.n + " sections)");
+  check(!!mgAfter && mgAfter.key === mgKey.key && mgAfter.open === true,
+    "and that page is the one shown, open, when the Library is drawn again (" + JSON.stringify(mgAfter) + ")");
+  check(!!mgBack && mgBack.key === mgKey.key && mgBack.open === true,
+    "and a page whose fold was shut is open when drawn, a page having no summary to open it by (" + JSON.stringify(mgBack) + ")");
 
   /* THE SAME LIST A DESK HAS, in a browser that has no folder to read: one row, the catalog this
      page is holding, marked and offering Eject. The file-backed rows are the host's, so what is
