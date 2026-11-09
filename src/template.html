@@ -372,15 +372,20 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      box, the hint drawn over it, and every name in the panel beside it. A second literal drifts
      the first time one of the three is tuned. */
   --intent-type:16.5px;
-  /* Widest the intent panel grows to (docked column and overlay peek both use it).
-     JS reads this, the gap below and the app padding to derive the auto-hide threshold, which
-     is the width where this panel would cost a card column - see railDockMin(). */
-  --rail-max:268px;
+  /* Widest the intent panel's own column grows to (the docked grid column and the overlay
+     peek both use it). JS reads this, the gap below and the app padding to derive the
+     auto-hide threshold, which is the width where this panel would cost a card column -
+     see railDockMin(). */
+  --rail-max:228px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
-  /* The docked rail's column: from the window's edge to where the dot field begins, one 12px pitch
-     short of the cards - see .dotfield>div. */
-  --rail-col-w:calc(var(--rail-left,14px) + var(--rail-max) + var(--rail-gap) - 12px);
+  /* The painted side column, from the window's edge to one 12px dot pitch short of the cards.
+     The docked rail and Settings' section list both read it, so a dragged rail and the list
+     stay one width. --app-pad is the page gutter, declared below; --rail-max is the column
+     inside that gutter. The measured --rail-left is not in this sum: it is 0 while a screen
+     tab hides the stage, and the list would shrink for as long as Settings was open. */
+  --side-w:calc(var(--app-pad) + var(--rail-max) + var(--rail-gap) - 12px);
+  --rail-col-w:var(--side-w);
   /* THE SIDE AREA'S LANGUAGE: a column on the header's own ground, a hairline to the cards, a light
      title, quiet rows. The docked intent rail wears it; Settings' side area is to share it. */
   --side-ground:var(--header-bg);
@@ -3524,7 +3529,7 @@ body.screen-on #lanes { display: none !important; }
   --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 26%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 4%,transparent)}
 .sx *{box-sizing:border-box}
 .sx-ic{display:block;width:18px;height:18px;flex:0 0 auto}
-.sx-nav{flex:0 0 248px;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
+.sx-nav{flex:0 0 var(--side-w);min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
   background:var(--header-bg);border-right:1px solid var(--line)}
 .sx-nav h1{font:300 26px/1.1 var(--sans-display);margin:4px 10px 14px}
 .sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--field-line);
