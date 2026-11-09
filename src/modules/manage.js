@@ -40,6 +40,21 @@ import { openMaintenance } from "./maintenance.js";
 import { formatActionChord } from "./shortcuts.js";
 
 
+/* Search shows the summary and hides the bar; otherwise the bar shows. The path's id stays
+   on the bar, once. The summary copy is the same control without that id. */
+function catalogFolderTail(withId){
+  const pathId=withId?' id="mgCatFolderPath"':'';
+  const editId=withId?' id="mgCatFolder"':'';
+  return '<span class="ec-where">'
+    +'<code class="open-folder"'+pathId+' role="button" tabindex="0"'
+    +' title="'+esc(eCatalogFolder())+'"'
+    +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
+    +esc(eCatalogFolderShort())+'</code>'
+    +'<button type="button" class="btn icbtn ec-where-edit"'+editId+' title="'
+    +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
+    +ICON_EDIT+'</button>'
+    +'</span>';
+}
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
 /* `tail` is TRUSTED markup riding at the right of the title line, where a count would sit:
    the one section whose value is not a number puts its folder there instead. */
@@ -815,16 +830,9 @@ function openManage(justHtml){
   const dataTail=relayLead
     ? '<span class="ec-where"><small>'+esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay))+'</small></span>'
     : eCatalogFolder()
-    ? '<span class="ec-where">'
-      +'<code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0"'
-        +' title="'+esc(eCatalogFolder())+'"'
-        +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
-        +esc(eCatalogFolderShort())+'</code>'
-      +'<button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="'
-        +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
-        +ICON_EDIT+'</button>'
-      +'</span>'
+    ? catalogFolderTail(true)
     : '';
+  const summaryTail=relayLead||!eCatalogFolder()?dataTail:catalogFolderTail(false);
 
   const mgBody=''+
     mgSec("catmac","Categories & cards",
@@ -863,7 +871,7 @@ function openManage(justHtml){
       (dataTail ? '<div class="mg-data-bar">'+dataTail+'</div>' : '')+
       '<div class="ec-list" id="mgCatList"></div>',
       null,
-      dataTail
+      summaryTail
     );
   if(justHtml) return mgBody;
   /* THE LIBRARY IS A TAB: opening it fronts the one tab, and a pop-up standing over it closes back
@@ -960,22 +968,23 @@ function wireLibrary(page){
   /* BOTH LIVE INSIDE A SUMMARY, where a click is the browser's own way of folding the section:
      each stops the event before that happens. The path answers Enter and Space as well, the way
      the same control does on the empty screen - it is a code element, so nothing is given. */
-  const fpath=$("#mgCatFolderPath");
-  if(fpath){
-    const open=e=>{ e.preventDefault(); e.stopPropagation(); eOpenCatalogFolder(); };
-    fpath.onclick=open;
-    fpath.onkeydown=e=>{ if(e.key==="Enter"||e.key===" ") open(e); };
-  }
+  const openFolder=e=>{ e.preventDefault(); e.stopPropagation(); eOpenCatalogFolder(); };
+  if(page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach(fpath=>{
+    fpath.onclick=openFolder;
+    fpath.onkeydown=e=>{ if(e.key==="Enter"||e.key===" ") openFolder(e); };
+  });
   /* The picker is the host's and its caption goes out already translated, the shell having no
      t(). Writing the key is the whole act: the shell watches the desk, re-aims its own watch and
      offers whatever the new folder holds, so the list is repainted from the answer rather than
      from a guess about when that has happened. */
-  if($("#mgCatFolder")) $("#mgCatFolder").onclick=e=>{
-    e.preventDefault(); e.stopPropagation();
-    eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
-      if(dir) paintLibrary();
-    });
-  };
+  if(page && page.querySelectorAll) page.querySelectorAll("button.ec-where-edit").forEach(btn=>{
+    btn.onclick=e=>{
+      e.preventDefault(); e.stopPropagation();
+      eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
+        if(dir) paintLibrary();
+      });
+    };
+  });
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;
   /* Remember which groups are open, so the re-render after every edit does not shut them.

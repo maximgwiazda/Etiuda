@@ -102,12 +102,33 @@ class El {
     return n;
   }
   _drop(n) { const i = this.childNodes.indexOf(n); if (i > -1) this.childNodes.splice(i, 1); n.parentNode = null; }
+  removeChild(n) { this._drop(n); return n; }
   remove() { if (this.parentNode) this.parentNode._drop(this); }
+  get firstChild() { return this.childNodes[0] || null; }
+  get nextSibling() {
+    if (!this.parentNode) return null;
+    const i = this.parentNode.childNodes.indexOf(this);
+    return i >= 0 ? (this.parentNode.childNodes[i + 1] || null) : null;
+  }
+  /* A template's markup lives on content, which is where the card list reads a painted card. */
+  get content() {
+    if (this.localName !== "template") return undefined;
+    if (!this._content) this._content = new El("div", this.ownerDocument);
+    return this._content;
+  }
   contains(n) { while (n) { if (n === this) return true; n = n.parentNode; } return false; }
   get textContent() { return this.childNodes.map(n => n.textContent).join(""); }
   set textContent(s) { this.childNodes.forEach(n => { n.parentNode = null; }); this.childNodes = []; if (String(s)) this.appendChild(new TextNode(s)); }
-  get innerHTML() { return this.childNodes.map(serial).join(""); }
-  set innerHTML(html) { this.childNodes.forEach(n => { n.parentNode = null; }); this.childNodes = []; parseInto(this, String(html)); }
+  get innerHTML() {
+    const box = this.localName === "template" && this._content ? this._content : this;
+    return box.childNodes.map(serial).join("");
+  }
+  set innerHTML(html) {
+    const box = this.localName === "template" ? this.content : this;
+    box.childNodes.forEach(n => { n.parentNode = null; });
+    box.childNodes = [];
+    parseInto(box, String(html));
+  }
   get outerHTML() { return serial(this); }
   addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
   removeEventListener(t, fn) { this.listeners[t] = (this.listeners[t] || []).filter(f => f !== fn); }
@@ -200,6 +221,7 @@ function queryAll(root, sel) {
 function makeDocument() {
   const doc = { listeners: {}, visibilityState: "visible", hidden: false, readyState: "complete", activeElement: null };
   doc.createElement = t => new El(t, doc);
+  doc.createDocumentFragment = () => new El("fragment", doc);
   doc.createElementNS = (_ns, t) => new El(t, doc);
   doc.createTextNode = s => new TextNode(s);
   doc.createTreeWalker = () => ({ nextNode: () => null });
@@ -278,6 +300,11 @@ const MG = await import(MOD("manage.js"));
 const ED = await import(MOD("editors.js"));
 const HM = await import(MOD("header-menus.js"));
 const R = await import(MOD("restart.js"));
+const PK = await import(MOD("pack.js"));
+const AS = await import(MOD("app-state.js"));
+const CM = await import(MOD("content-model.js"));
+const RB = await import(MOD("rebuild.js"));
+const RD = await import(MOD("render.js"));
 
 const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
   "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut",
@@ -551,6 +578,74 @@ check("L12 Catalog & data shows folder path in non-collapsible row and has no du
   const duplicateSummaryRule = tpl.includes('details.manage-sec[data-mg="data"]>summary');
   return !!dataBar && hasFolderPath && !duplicateSummaryRule
     || JSON.stringify({ hasDataBar: !!dataBar, hasFolderPath, duplicateSummaryRule });
+});
+
+/* The path is emitted on the data bar and again in the summary. One id, on the bar the page shows. */
+check("L15 the Catalog and data page holds the folder path id once, on the data bar", () => {
+  if (wired) return wired;
+  if (STAB.screenOn !== "library") MG.openManage();
+  const dataBtn = host().querySelector('.sx-sec[data-lm="data"]');
+  if (dataBtn) dataBtn.click();
+  const all = doc.querySelectorAll("#mgCatFolderPath");
+  const inBar = all.filter(el => el.closest(".mg-data-bar"));
+  const inSummary = all.filter(el => el.closest("summary"));
+  return all.length === 1 && inBar.length === 1 && inSummary.length === 0
+    || JSON.stringify({ n: all.length, inBar: inBar.length, inSummary: inSummary.length });
+});
+
+/* A category deleted while the Library is open leaves the snapshot from when it opened.
+   Closing restores that snapshot. A category the catalog no longer has is not a filter,
+   and the desk shows the cards the clear filter keeps. */
+check("L14 closing the Library drops a filter whose category was deleted while it was open, and the desk shows its cards", () => {
+  if (wired) return wired;
+  const hadRebuild = H.hooks.rebuildCards;
+  const hadRender = H.hooks.render;
+  const hadCustom = PK.pack.custom.slice();
+  const hadCats = Object.assign({}, PK.pack.customCats);
+  const hadRemoved = (PK.pack.removedCats || []).slice();
+  H.hooks.rebuildCards = RB.rebuildCards;
+  H.hooks.render = RD.render;
+  try {
+    if (STAB.screenOn === "library") {
+      const shut = host().querySelector("#mgClose");
+      if (shut) shut.click();
+    }
+    PK.pack.customCats = Object.assign({}, hadCats, { shelf: "Shelf" });
+    PK.pack.custom = hadCustom.concat([{ id: "u:desk-card", c: "gen", t: "Desk card", en: "A reply on the desk." }]);
+    RB.rebuildCards();
+    if (!CM.CATS.shelf) return "shelf was not a category after rebuild";
+    const tid = T.getActiveTabId();
+    const tab = () => T.tabs.find(x => x.id === tid);
+    AS.setCats(["shelf"]);
+    if (tab()) tab().cats = ["shelf"];
+    MG.openManage();
+    const opened = STAB.screenOn === "library";
+    const snap = tab() ? tab().cats.slice() : [];
+    const del = host().querySelector('[data-delcat="shelf"]');
+    if (!del) return "no delete for shelf: " + JSON.stringify({ opened, snap, cats: Object.keys(CM.CATS) });
+    del.click();
+    const liveWhileOpen = AS.cats.slice();
+    const storedWhileOpen = tab() ? tab().cats.slice() : [];
+    const gone = !CM.CATS.shelf;
+    const shut = host().querySelector("#mgClose");
+    if (!shut) return "no Close";
+    shut.click();
+    const live = AS.cats.slice();
+    const stored = tab() ? tab().cats.slice() : [];
+    const cardThere = !!doc.querySelector('#list .card[data-id="u:desk-card"]');
+    const held = snap.indexOf("shelf") >= 0 && storedWhileOpen.indexOf("shelf") >= 0 && liveWhileOpen.indexOf("shelf") < 0 && gone;
+    const clear = STAB.screenOn === "" && live.length === 0 && stored.length === 0 && cardThere;
+    return opened && held && clear
+      || JSON.stringify({ opened, snap, liveWhileOpen, storedWhileOpen, gone, screen: STAB.screenOn, live, stored, cardThere });
+  } finally {
+    H.hooks.rebuildCards = hadRebuild;
+    H.hooks.render = hadRender;
+    PK.pack.custom = hadCustom;
+    PK.pack.customCats = hadCats;
+    PK.pack.removedCats = hadRemoved;
+    try { RB.rebuildCards(); } catch (e) {}
+    AS.setCats([]);
+  }
 });
 
 /* Finding 14: .screen-actions uses var(--line) and #ehClose carries .btn.primary */

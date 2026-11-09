@@ -3610,6 +3610,9 @@ body.screen-on #lanes { display: none !important; }
 .sx.lm-lib details.manage-sec>summary{display:none}
 .sx.lm-lib.is-find details.manage-sec>summary{display:flex}
 .mg-data-bar{display:flex;align-items:center;justify-content:flex-end;padding:10px 16px;border-bottom:1px solid var(--line)}
+/* The summary is hidden here, so this bar is the path the desk shows. The same trim as the title
+   line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
+.mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}

@@ -385,7 +385,11 @@ function applyTab(tb){
   putHandGender(tb.gender);
   setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<intentCount()):[]);
   setIntentText(tb.intentText||"");
-  setCats(Array.isArray(tb.cats)?tb.cats.slice():[]);
+  /* A category removed while this tab sat behind a screen matches nothing and draws no pill.
+     loadTabSession drops the same key when a session is read back. */
+  const keptCats=Array.isArray(tb.cats)?tb.cats.filter(k=>CATS[k]):[];
+  tb.cats=keptCats;
+  setCats(keptCats.slice());
   if(tb.entrySel&&tb.entrySel.id!=null){
     putEntrySel({id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0});
   } else {

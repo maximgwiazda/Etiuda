@@ -3610,6 +3610,9 @@ body.screen-on #lanes { display: none !important; }
 .sx.lm-lib details.manage-sec>summary{display:none}
 .sx.lm-lib.is-find details.manage-sec>summary{display:flex}
 .mg-data-bar{display:flex;align-items:center;justify-content:flex-end;padding:10px 16px;border-bottom:1px solid var(--line)}
+/* The summary is hidden here, so this bar is the path the desk shows. The same trim as the title
+   line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
+.mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
@@ -12943,7 +12946,9 @@ What you type stays in this browser only.`;
     putHandGender(tb.gender);
     setIntentIdxs(Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < intentCount()) : []);
     setIntentText(tb.intentText || "");
-    setCats(Array.isArray(tb.cats) ? tb.cats.slice() : []);
+    const keptCats = Array.isArray(tb.cats) ? tb.cats.filter((k) => CATS[k]) : [];
+    tb.cats = keptCats;
+    setCats(keptCats.slice());
     if (tb.entrySel && tb.entrySel.id != null) {
       putEntrySel({ id: String(tb.entrySel.id), vi: +tb.entrySel.vi || 0 });
     } else {
@@ -31205,6 +31210,11 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/manage.js
+  function catalogFolderTail(withId) {
+    const pathId = withId ? ' id="mgCatFolderPath"' : "";
+    const editId = withId ? ' id="mgCatFolder"' : "";
+    return '<span class="ec-where"><code class="open-folder"' + pathId + ' role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit"' + editId + ' title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>";
+  }
   function mgSec(key, title, body, count, tail) {
     return '<details class="manage-sec" data-mg="' + esc(key) + '"' + (mgOpen.has(key) ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + "</span><h3>" + esc(title) + "</h3>" + (count != null ? '<span class="mg-count">' + esc(String(count)) + "</span>" : "") + (tail || "") + '</summary><div class="manage-secbody">' + body + "</div></details>";
   }
@@ -31809,7 +31819,8 @@ What you type stays in this browser only.`;
     const hiddenIntentCount = mgIntentIdxs.filter((i) => isIntentHiddenIdx(i)).length;
     let relayLead = null;
     relayLead = libraryRelayLead();
-    const dataTail = relayLead ? '<span class="ec-where"><small>' + esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay)) + "</small></span>" : eCatalogFolder() ? '<span class="ec-where"><code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>" : "";
+    const dataTail = relayLead ? '<span class="ec-where"><small>' + esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay)) + "</small></span>" : eCatalogFolder() ? catalogFolderTail(true) : "";
+    const summaryTail = relayLead || !eCatalogFolder() ? dataTail : catalogFolderTail(false);
     const mgBody = "" + mgSec(
       "catmac",
       "Categories & cards",
@@ -31847,7 +31858,7 @@ What you type stays in this browser only.`;
       "Catalog & data",
       (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>',
       null,
-      dataTail
+      summaryTail
     );
     if (justHtml) return mgBody;
     libView = "list";
@@ -31923,25 +31934,26 @@ What you type stays in this browser only.`;
       paintLibrary();
     };
     paintCatalogList();
-    const fpath = $("#mgCatFolderPath");
-    if (fpath) {
-      const open = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        eOpenCatalogFolder();
-      };
-      fpath.onclick = open;
-      fpath.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") open(e);
-      };
-    }
-    if ($("#mgCatFolder")) $("#mgCatFolder").onclick = (e) => {
+    const openFolder = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
-        if (dir) paintLibrary();
-      });
+      eOpenCatalogFolder();
     };
+    if (page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach((fpath) => {
+      fpath.onclick = openFolder;
+      fpath.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") openFolder(e);
+      };
+    });
+    if (page && page.querySelectorAll) page.querySelectorAll("button.ec-where-edit").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
+          if (dir) paintLibrary();
+        });
+      };
+    });
     $("#mgWipe").onclick = clearLocalMemory;
     wireFolds(
       page,
