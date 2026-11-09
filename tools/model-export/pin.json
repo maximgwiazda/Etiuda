@@ -1,5 +1,5 @@
 {
-  "status": "not-exported",
+  "status": "parity-failed",
   "source": {
     "repo": "google/embeddinggemma-2",
     "commit": "f9972ac22e696a105c482202646979e33e4b5a1e"
@@ -13,9 +13,38 @@
     "tokenizer.json",
     "tokenizer_config.json"
   ],
-  "files": [],
+  "files": [
+    {
+      "name": "model_q4.onnx",
+      "size": 2501382,
+      "sha256": "7c4f8b3578bbda64cfd2f82cf94717bbd2b6e6ada9cecaf2f77d0ffea9f3d124"
+    },
+    {
+      "name": "model_q4.onnx_data",
+      "size": 1867806720,
+      "sha256": "b1c11290ce18d1516264ec5fbb738d3a083b5c12fd7a780ca807728c0653763a"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 32170510,
+      "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 1599,
+      "sha256": "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874"
+    }
+  ],
   "parity": {
-    "status": "not-run",
+    "status": "fail",
+    "cosineMinimum": 0.98,
+    "cosines": [
+      0.96972145503367,
+      0.9791492407150777,
+      0.9718248845599567,
+      0.9735314499323918,
+      0.947962045481653
+    ],
     "messages": [
       "The customer wants to change the name on the order.",
       "The bag arrived damaged and they want a replacement.",
