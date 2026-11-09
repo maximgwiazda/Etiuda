@@ -75,20 +75,7 @@ function skip(line) {
   console.log("  SKIP  " + line);
 }
 
-function processStart(pid) {
-  const n = Number(pid);
-  if (!Number.isSafeInteger(n) || n <= 0) return "";
-  if (process.platform === "win32") {
-    const r = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command",
-      "$p = Get-CimInstance Win32_Process -Filter 'ProcessId=" + n + "'; if ($p) { $p.CreationDate.ToUniversalTime().ToString('o') }"],
-      { encoding: "utf8", windowsHide: true, timeout: 30000 });
-    return String(r.stdout || "").trim();
-  }
-  const r = spawnSync("ps", ["-o", "lstart=", "-p", String(n)], { encoding: "utf8", timeout: 30000 });
-  const t = Date.parse(String(r.stdout || "").trim());
-  return Number.isFinite(t) ? new Date(t).toISOString() : "";
-}
-
+/* The owner is judged by its process id alone: a reused id reads as alive, so its folder stays, the safe way (the test architect, 2026-11-09). */
 function isOwnerAlive(owner) {
   if (!owner || typeof owner !== "object" || typeof owner.pid !== "number") return true;
   let alive = false;
@@ -139,7 +126,7 @@ function cleanStaleLabs(activeLab) {
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-channel-"));
-const LAB_OWNER = { pid: process.pid, started: processStart(process.pid) };
+const LAB_OWNER = { pid: process.pid };
 try {
   fs.writeFileSync(path.join(LAB, "owner.json"), JSON.stringify(LAB_OWNER, null, 2) + "\n");
 } catch (e) {
