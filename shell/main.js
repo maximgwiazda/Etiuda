@@ -3465,7 +3465,10 @@ function withdrawClosed() {
     if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || privateChain(lineageOfId(me.id + "-" + tail[1])).some(id => catalogPrivate.has(id));
     else {
       if (d && d.kind === SEALED_KIND) { const inner = teamOpen(d); try { d = inner === null ? null : JSON.parse(inner); } catch { d = null; } }
-      gone = !!d && typeof d === "object" && !teamListedDoc(d, use);
+      /* Only a file this desk signed is judged: reading another's would teach lineageOf the chain it claims (962s5u7). */
+      let own = true;
+      own = !!d && typeof d === "object" && branchGenuine(d); /* plant:s6-withdraw-own */
+      gone = !!d && typeof d === "object" && own && !teamListedDoc(d, use);
     }
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
@@ -3664,6 +3667,7 @@ function notePinTeam(pin, team) {
   if (was === undefined || was === team) editionTeam.set(pin, team);
 }
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
+const teamListedLast = {};                     // team id -> the catalogs the last file heeded this run listed
 const teamSaid = new Set();
 /* Whether a team file is whole under the lead key it names, which is what the engine's v2TeamSigState says. */
 function teamWhole(doc) {
@@ -4353,6 +4357,13 @@ function heedTeam() {
   /* A file above every one heeded before, naming this desk with a wrap it opened: never a roster read before the request. */
   const admitted = raised && r.key ? r.team : ""; /* plant:c6-fresh */
   finishJoin(admitted); /* plant:n1-heed */
+  /* A heeded file that drops a catalog the last one of this run listed, or a team's first of the run (a drop made while the desk
+     was closed), takes back at once what was shared of it, as an ask does; teamListedDoc decides. Kept before the call:
+     withdrawClosed heeds again, and a cleared stamp must not take back twice. */
+  const listedNow = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [], listedWas = r.team ? teamListedLast[r.team] : null;
+  if (r.team) teamListedLast[r.team] = listedNow;
+  if (r.team && !listedWas) try { withdrawClosed(); } catch { /* the next pass tries again */ } /* plant:s6-withdraw-first */
+  if (listedWas && listedWas.some(id => listedNow.indexOf(id) < 0)) try { withdrawClosed(); } catch { /* the next pass tries again */ } /* plant:s6-withdraw-unlisted */
 }
 /* The catalog's text inside a sealed envelope, where this desk holds its team's key for its epoch, else null. */
 function teamOpen(data) {
