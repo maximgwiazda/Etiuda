@@ -20427,6 +20427,9 @@ What you type stays in this browser only.`;
   var boxDirty = false;
   var askedQuery = null;
   var SEARCH_RETRY_MS = 5e3;
+  var SEARCH_RETRY_MAX = 30;
+  var retryQuery = null;
+  var retryCount = 0;
   var cheapSeen = "";
   var sentText = "";
   var sending = "";
@@ -20668,6 +20671,11 @@ What you type stays in this browser only.`;
     if (!acceptSearchAnswer(ticket, { gen: searchGen, query: currentQuery() })) return;
     if (!eSearchOn()) return;
     if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) {
+      if (retryQuery !== q) {
+        retryQuery = q;
+        retryCount = 0;
+      }
+      if (++retryCount > SEARCH_RETRY_MAX) return;
       if (askedQuery === q) askedQuery = null;
       setTimeout(() => {
         if (currentQuery() === q) scheduleSearchRank();

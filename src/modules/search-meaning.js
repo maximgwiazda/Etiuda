@@ -35,7 +35,8 @@ function acceptSearchAnswer(ticket, live) {
 }
 
 let meaning = null, searchGen = 0, typed = null, boxDirty = false, askedQuery = null;
-const SEARCH_RETRY_MS = 5000;
+const SEARCH_RETRY_MS = 5000, SEARCH_RETRY_MAX = 30;
+let retryQuery = null, retryCount = 0;
 let cheapSeen = "", sentText = "", sending = "", toasted = "", modelKnown = null;
 
 function currentQuery() {
@@ -262,6 +263,10 @@ async function ask(q) {
   if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) {
     /* No answer yet (the catalog is still being prepared): forget the ask, so the same query is asked again,
        on the next keystroke or after SEARCH_RETRY_MS, rather than keeping word order until the query is edited. */
+    /* Capped per query, so a worker that broke, or a catalog that never finishes, is not asked every five seconds for
+       as long as the query sits in the box; the catalog's preparation (about two minutes here) fits well inside. */
+    if (retryQuery !== q) { retryQuery = q; retryCount = 0; }
+    if (++retryCount > SEARCH_RETRY_MAX) return; /* plant:search-retry-cap */
     if (askedQuery === q) askedQuery = null;
     setTimeout(() => { if (currentQuery() === q) scheduleSearchRank(); }, SEARCH_RETRY_MS);
     return;
