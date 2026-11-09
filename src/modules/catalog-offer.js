@@ -652,11 +652,12 @@ function eOfferCatalogDialog(c,src){
           const tLeads=teamLeads().filter(l=>l&&!l.removed);
           const print=trustPrint(c);
           const matchLead=tLeads.find(l=>l&&l.print===print);
-          const leadName=(matchLead&&matchLead.lead)||(tLeads[0]&&tLeads[0].lead)||t("The team lead");
+          const leadName=(matchLead&&matchLead.lead)||(tLeads[0]&&tLeads[0].lead)||"";
           const catName=catalogNameOfFile(String((src&&src.file)||"")||E_CATALOG_SCRIPT)||t("Catalog");
           const ed=editionNameOf(c);
           const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):String(ed.e||"");
-          const title=t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
+          /* No name for the lead: the copywriter's nameless title, never a stand-in name inside the named one. */
+          const title=leadName?t("{LEAD} published a new edition").split("{LEAD}").join(leadName):t("The team's lead published a new edition");
           const body=edStr
             ? t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.")
                 .split("{CATALOG}").join(catName).split("{EDITION}").join(edStr)
@@ -922,7 +923,7 @@ function onCatalogListing(all){
   if(lsGet("eNotifyCatalogOff")!=="1"){
     const tLeads=teamLeads().filter(l=>l&&!l.removed);
     if(tLeads.length>0){
-      const leadName=(tLeads[0]&&tLeads[0].lead)||t("The team lead");
+      const leadName=(tLeads[0]&&tLeads[0].lead)||"";
       const teamFiles=(all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id);
       const held=storedCatalog();
       for(const f of teamFiles){
@@ -931,7 +932,7 @@ function onCatalogListing(all){
         if(key && !listingNotified.has(key)){
           listingNotified.add(key);
           const catName=catalogNameOfFile(f.name);
-          const title=t("A new catalog from {LEAD}").split("{LEAD}").join(leadName);
+          const title=leadName?t("A new catalog from {LEAD}").split("{LEAD}").join(leadName):t("A new catalog from the team's lead");
           const body=t("{CATALOG} is in the Library, ready to open.").split("{CATALOG}").join(catName);
           eNotify({ title, body, target: "library" });
         }
