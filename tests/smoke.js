@@ -73,7 +73,9 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 303 since a pointer move off the list is judged to hand the keyboard's deck back (one check);
+/* 308 since ArrowUp during a shortcut recording is named fixed, the row stays open and
+   nothing is stored (one check);
+   303 since a pointer move off the list is judged to hand the keyboard's deck back (one check);
    302 since an address form picked through the override is shown, saved and read back after
    a reload (three checks); 299 since a macro's text keeps out from under its badge (four checks and its clean) and the
    dot field's extent (two checks and its clean); 291 since About closes on the trademark notice
@@ -82,7 +84,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 307 };
+const EXPECTED = { chrome: 308 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2372,6 +2374,33 @@ const t0 = Date.now();
     check(grab.armed && kept.after === grab.before && !kept.still
       && kept.said.indexOf("Enter is needed for typing") === 0,
       "a capture refuses Enter, which a field needs for typing, and says which (" + JSON.stringify(kept.said.slice(0, 48)) + ")");
+    /* ArrowUp is fixed. Enter has ended the recording, so the row is armed again. The line
+       names the key, the same row stays open, and nothing is rebound or stored. */
+    const up = await p.evaluate(() => {
+      const b = document.querySelector('[data-bind="focusPax"][data-slot="1"]');
+      if (!b || b.disabled) return null;
+      b.click();
+      return { armed: scCaptureId === "focusPax" && scCaptureSlot === 1,
+        before: JSON.stringify(scMap.focusPax), store: localStorage.getItem("eShortcuts") };
+    });
+    if (up && up.armed) {
+      await p.keyboard.press("ArrowUp"); await sleep(400);
+      const held = await p.evaluate(() => ({
+        after: JSON.stringify(scMap.focusPax),
+        still: !!scCaptureId,
+        row: scCaptureId,
+        slot: scCaptureSlot,
+        store: localStorage.getItem("eShortcuts"),
+        said: (document.getElementById("toast") || {}).textContent || ""
+      }));
+      check(up.before === held.after && held.still && held.row === "focusPax" && held.slot === 1
+        && held.store === up.store
+        && held.said.indexOf("↑ is fixed and keeps its own meaning") === 0,
+        "a capture names ArrowUp as fixed, keeps the same row open and stores nothing ("
+        + JSON.stringify({ still: held.still, row: held.row, slot: held.slot,
+          same: up.before === held.after, stored: held.store !== up.store,
+          said: held.said.slice(0, 48) }) + ")");
+    } else check(false, "the shortcuts list offered no second capture for ArrowUp");
     await p.keyboard.press("Escape"); await sleep(300);
   } else check(false, "the shortcuts list offered no capture to arm");
   await p.evaluate(() => { if (screenOn === "settings") closeScreenTab("settings"); }); await sleep(500);
