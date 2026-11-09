@@ -333,13 +333,20 @@ async function main() {
      stub package step that writes a fourteen-byte installer and a real seventeen-file app.asar, the
      release's allowlist (seventeen since the tray helper and the embedded model's worker). Every gate then runs and the last two are the
      ones after the document is written. */
+  /* The stub asar holds exactly what tools/release.mjs expects, read from its own `expected` list, so the two cannot drift: a
+     hand copy here went red on main when the tray PNG joined the release list (the test architect, 2026-11-09). */
+  const RELEASE_ASAR = (() => {
+    const text = fs.readFileSync(path.join(ROOT, 'tools', 'release.mjs'), 'utf8');
+    const m = /const expected = \[([\s\S]*?)\];/.exec(text);
+    const list = m ? [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : [];
+    if (!list.length) throw new Error('sbom: the release allowlist could not be read from tools/release.mjs');
+    return list;
+  })();
   const STUB_PACKAGE = [
     "import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module';",
     "const asar = createRequire(import.meta.url)(process.env.ETIUDA_TEST_ASAR);",
     "const dist = process.env.ETIUDA_DIST; const src = path.join(dist, '..', 'stage');",
-    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/clip-suggest.cjs', 'shell/embed/core.cjs', 'shell/embed/suggest.cjs', 'shell/embed/worker.cjs', 'shell/folder/syncer-worker.cjs', 'shell/folder/syncer.cjs',"
-    + " 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',"
-    + " 'shell/relay/blob.cjs', 'shell/relay/channel.cjs', 'shell/sample-catalog.ec', 'shell/tray.cjs', 'shell/win-proxy.cjs']) {",
+    "for (const f of " + JSON.stringify(RELEASE_ASAR) + ") {",
     "  fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), 'x\\n'); }",
     "fs.mkdirSync(path.join(dist, 'win-unpacked', 'resources'), { recursive: true });",
     "await asar.createPackage(src, path.join(dist, 'win-unpacked', 'resources', 'app.asar'));",
