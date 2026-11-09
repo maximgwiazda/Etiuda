@@ -47,7 +47,12 @@ function queueSearchSettle(){
 function wireSearchBox(){
   intentEl.oninput=()=>{
     if(screenOn){
+      setRailSettled(false);
+      putEntrySel(null); markEntrySel(); setRailSel(-1); setRailMarkUsed(false); setSemiKind(null);
+      kbdNav(true);
       turnScreenTabToCards(intentEl.value);
+      intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
+      syncIntentClearBtns();
       queueSearchSettle();
       return;
     }

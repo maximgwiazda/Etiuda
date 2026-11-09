@@ -52,6 +52,43 @@ function runShortcut(id){
       }
       return false;
     }
+    if(id==="selectSearch"){
+      if(!intentEl) return false;
+      closeLooseOverlays();
+      try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
+      try{ intentEl.select(); }catch(_){}
+      return true;
+    }
+    if(id==="focusPax"){
+      if(!pax) return false;
+      pax.focus();
+      try{ pax.select(); }catch(_){}
+      return true;
+    }
+    if(id==="focusRole"){
+      const d=$("#roleDrum");
+      if(d) d.focus();
+      return true;
+    }
+    if (id === "langToggle") {
+      if(CONTENT_LANGS.length>1) setLang(nextContentLang(lang));
+      return true;
+    }
+    if(id==="quickFacts"){
+      toggleFactsPanel();
+      return true;
+    }
+    if(id==="escape" || id==="escapeHeld"){
+      if(notePaneOpen && notePaneOpen()){ closeNotePane(); return true; }
+      if(factsPanelOpen && factsPanelOpen()){ closeFactsPanel(); return true; }
+      if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
+      const a=typeof document!=="undefined"?document.activeElement:null;
+      if(a && (a.tagName==="INPUT" || a.tagName==="TEXTAREA" || a.isContentEditable)){
+        try{ a.blur(); }catch(_){}
+        return true;
+      }
+      return true;
+    }
     return false;
   }
   if(id==="lanes") return lanesKey();

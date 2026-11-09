@@ -7401,6 +7401,7 @@ What you type stays in this browser only.`;
     "toggles": "przełącza",
     "Library": "Biblioteka",
     "Maintenance": "Konserwacja",
+    "Maintenance can open once the edit in progress is saved or cancelled.": "Konserwację można otworzyć po zapisaniu lub anulowaniu bieżącej edycji.",
     "Moved to": "Przeniesiono do",
     "Restored original -": "Przywrócono oryginał -",
     "Edit, hide or restore every card, intent and category": "Edycja, ukrywanie i przywracanie kart, intencji i kategorii",
@@ -12566,7 +12567,8 @@ What you type stays in this browser only.`;
       }
     }
   }
-  function clearScreenOn() {
+  function clearScreenOn(returnTab = true) {
+    const wasScreen = Boolean(screenOn);
     screenOn = "";
     if (typeof document !== "undefined" && document.body && document.body.classList) {
       document.body.classList.remove("screen-on");
@@ -12576,6 +12578,7 @@ What you type stays in this browser only.`;
       sh.innerHTML = "";
       sh.hidden = true;
     }
+    if (wasScreen && returnTab && onScreenReturn) onScreenReturn(prevTabId);
     if (onScreenChange) onScreenChange();
   }
   function renderScreenHost(id) {
@@ -12840,22 +12843,25 @@ What you type stays in this browser only.`;
   function turnScreenTabToCards(val, paxVal) {
     const sid = screenOn;
     if (!sid) return;
-    const sidx = screens.indexOf(sid);
-    const stripPos = tabs.length + (sidx >= 0 ? sidx : 0);
     dropScreenTab(sid);
     const tb = blankTab();
     tb.intentBox = String(val != null ? val : "");
     if (paxVal) tb.pax = String(paxVal);
-    tabs.splice(stripPos, 0, tb);
+    tabs.push(tb);
     activeTabId = tb.id;
     setPrevTabId(tb.id);
     applyTab(tb);
     saveTabSession();
     try {
-      if (intentEl) {
+      const inPax = Boolean(paxVal) || typeof document !== "undefined" && document.activeElement === pax;
+      if (inPax && pax) {
+        pax.focus({ preventScroll: true });
+        const len = pax.value.length;
+        if (typeof pax.setSelectionRange === "function") pax.setSelectionRange(len, len);
+      } else if (intentEl) {
         intentEl.focus({ preventScroll: true });
         const len = intentEl.value.length;
-        intentEl.setSelectionRange(len, len);
+        if (typeof intentEl.setSelectionRange === "function") intentEl.setSelectionRange(len, len);
       }
     } catch (_) {
     }
@@ -12929,7 +12935,7 @@ What you type stays in this browser only.`;
   }
   function applyTab(tb) {
     if (!tb) return;
-    if (screenOn) clearScreenOn();
+    if (screenOn) clearScreenOn(false);
     activeTabId = tb.id;
     setPrevTabId(tb.id);
     if (pax) pax.value = tb.pax || "";
@@ -12972,7 +12978,7 @@ What you type stays in this browser only.`;
   }
   function switchTab(id, force) {
     const fromScreen = Boolean(screenOn) || Boolean(force);
-    if (screenOn) clearScreenOn();
+    if (screenOn) clearScreenOn(false);
     if (!id || id === activeTabId && !fromScreen) return;
     if (!fromScreen) {
       snapshotActiveTab();
@@ -13099,7 +13105,7 @@ What you type stays in this browser only.`;
   }
   function addTab() {
     const fromScreen = Boolean(screenOn);
-    if (screenOn) clearScreenOn();
+    if (screenOn) clearScreenOn(false);
     if (!fromScreen) snapshotActiveTab();
     const t2 = blankTab();
     animateTabInsert(() => {
@@ -13609,7 +13615,11 @@ What you type stays in this browser only.`;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i], c = cutSides(r.span), cut = c.l || c.r;
       applyCut(r.span, c);
-      r.el.title = (cut ? r.name + " · " : "") + t("Click to switch, or drag to reorder");
+      if (r.el.dataset && r.el.dataset.sid) {
+        r.el.title = r.name;
+      } else {
+        r.el.title = (cut ? r.name + " · " : "") + t("Click to switch, or drag to reorder");
+      }
     }
   }
   function tabAccentSlots(list2) {
@@ -13746,6 +13756,15 @@ What you type stays in this browser only.`;
       };
       b.appendChild(lab);
       b.appendChild(x);
+      b.onmousedown = (e) => {
+        if (e.button === 1) e.preventDefault();
+      };
+      b.onauxclick = (e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          if (typeof closeScreenTab === "function") closeScreenTab(sid);
+        }
+      };
       b.onclick = (e) => {
         if (e.target.closest && e.target.closest(".tab-x")) return;
         if (typeof frontScreenTab === "function") frontScreenTab(sid);
@@ -27937,6 +27956,19 @@ What you type stays in this browser only.`;
     });
   }
   function openMaintenance(backFn) {
+    if (typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()) {
+      try {
+        toast(t("Maintenance can open once the edit in progress is saved or cancelled."));
+      } catch (_) {
+      }
+      return;
+    }
+    if (typeof closeModal === "function") {
+      try {
+        closeModal();
+      } catch (_) {
+      }
+    }
     try {
       openScreenTab("maintenance");
       return;
@@ -33193,7 +33225,16 @@ What you type stays in this browser only.`;
   function wireSearchBox() {
     intentEl.oninput = () => {
       if (screenOn) {
+        setRailSettled(false);
+        putEntrySel(null);
+        markEntrySel();
+        setRailSel(-1);
+        setRailMarkUsed(false);
+        setSemiKind(null);
+        kbdNav(true);
         turnScreenTabToCards(intentEl.value);
+        intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
+        syncIntentClearBtns();
         queueSearchSettle();
         return;
       }
@@ -34420,81 +34461,90 @@ What you type stays in this browser only.`;
         hooks.runShortcut("tabReopen");
         return;
       }
-      if (typeof document !== "undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")) {
-        return;
-      }
-      if (!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyC" || e.key === "c" || e.key === "C") && !String(window.getSelection && window.getSelection() || "")) {
-        if (hooks.runShortcut("copyMarked") !== false) {
+      const isScreen = typeof document !== "undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on");
+      if (!isScreen) {
+        if (!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyC" || e.key === "c" || e.key === "C") && !String(window.getSelection && window.getSelection() || "")) {
+          if (hooks.runShortcut("copyMarked") !== false) {
+            e.preventDefault();
+            return;
+          }
+        }
+        const plain2 = !e.ctrlKey && !e.altKey && !e.metaKey;
+        if (plain2 && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key, lanesPageScroller())) {
           e.preventDefault();
           return;
         }
       }
-      const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
-      if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key, lanesPageScroller())) {
-        e.preventDefault();
-        return;
-      }
       if (inField) return;
+      const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
       const onControl = document.activeElement;
       if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
-      if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key, lanesPageScroller())) {
-        e.preventDefault();
-        return;
-      }
-      if (eventMatchesAction(e, "navUp")) {
-        e.preventDefault();
-        hooks.runShortcut("navUp");
-        return;
-      }
-      if (eventMatchesAction(e, "navDown")) {
-        e.preventDefault();
-        hooks.runShortcut("navDown");
-        return;
-      }
-      if (eventMatchesAction(e, "markTop")) {
-        e.preventDefault();
-        hooks.runShortcut("markTop");
-        return;
-      }
-      if (eventMatchesAction(e, "markBottom")) {
-        e.preventDefault();
-        hooks.runShortcut("markBottom");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillFirst")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillFirst");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillLast")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillLast");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillLeft")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillLeft");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillRight")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillRight");
-        return;
-      }
-      if (eventMatchesAction(e, "copyOther")) {
-        e.preventDefault();
-        hooks.runShortcut("copyOther");
-        return;
-      }
-      if (eventMatchesAction(e, "copy")) {
-        e.preventDefault();
-        hooks.runShortcut("copy");
-        return;
-      }
-      if (eventMatchesAction(e, "escape")) {
-        e.preventDefault();
-        hooks.runShortcut(e.repeat ? "escapeHeld" : "escape");
-        return;
+      if (!isScreen) {
+        if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key, lanesPageScroller())) {
+          e.preventDefault();
+          return;
+        }
+        if (eventMatchesAction(e, "navUp")) {
+          e.preventDefault();
+          hooks.runShortcut("navUp");
+          return;
+        }
+        if (eventMatchesAction(e, "navDown")) {
+          e.preventDefault();
+          hooks.runShortcut("navDown");
+          return;
+        }
+        if (eventMatchesAction(e, "markTop")) {
+          e.preventDefault();
+          hooks.runShortcut("markTop");
+          return;
+        }
+        if (eventMatchesAction(e, "markBottom")) {
+          e.preventDefault();
+          hooks.runShortcut("markBottom");
+          return;
+        }
+        if (eventMatchesAction(e, "navPillFirst")) {
+          e.preventDefault();
+          hooks.runShortcut("navPillFirst");
+          return;
+        }
+        if (eventMatchesAction(e, "navPillLast")) {
+          e.preventDefault();
+          hooks.runShortcut("navPillLast");
+          return;
+        }
+        if (eventMatchesAction(e, "navPillLeft")) {
+          e.preventDefault();
+          hooks.runShortcut("navPillLeft");
+          return;
+        }
+        if (eventMatchesAction(e, "navPillRight")) {
+          e.preventDefault();
+          hooks.runShortcut("navPillRight");
+          return;
+        }
+        if (eventMatchesAction(e, "copyOther")) {
+          e.preventDefault();
+          hooks.runShortcut("copyOther");
+          return;
+        }
+        if (eventMatchesAction(e, "copy")) {
+          e.preventDefault();
+          hooks.runShortcut("copy");
+          return;
+        }
+        if (eventMatchesAction(e, "escape")) {
+          e.preventDefault();
+          hooks.runShortcut(e.repeat ? "escapeHeld" : "escape");
+          return;
+        }
+      } else {
+        if (eventMatchesAction(e, "escape")) {
+          e.preventDefault();
+          hooks.runShortcut(e.repeat ? "escapeHeld" : "escape");
+          return;
+        }
       }
       if (e.ctrlKey || e.altKey || e.metaKey) return;
       if (e.key.length !== 1) return;
@@ -35048,6 +35098,68 @@ What you type stays in this browser only.`;
           }
         }
         return false;
+      }
+      if (id === "selectSearch") {
+        if (!intentEl) return false;
+        closeLooseOverlays();
+        try {
+          intentEl.focus({ preventScroll: true });
+        } catch (_) {
+          try {
+            intentEl.focus();
+          } catch (__) {
+          }
+        }
+        try {
+          intentEl.select();
+        } catch (_) {
+        }
+        return true;
+      }
+      if (id === "focusPax") {
+        if (!pax) return false;
+        pax.focus();
+        try {
+          pax.select();
+        } catch (_) {
+        }
+        return true;
+      }
+      if (id === "focusRole") {
+        const d = $("#roleDrum");
+        if (d) d.focus();
+        return true;
+      }
+      if (id === "langToggle") {
+        if (CONTENT_LANGS.length > 1) setLang(nextContentLang(lang));
+        return true;
+      }
+      if (id === "quickFacts") {
+        toggleFactsPanel();
+        return true;
+      }
+      if (id === "escape" || id === "escapeHeld") {
+        if (notePaneOpen && notePaneOpen()) {
+          closeNotePane();
+          return true;
+        }
+        if (factsPanelOpen && factsPanelOpen()) {
+          closeFactsPanel();
+          return true;
+        }
+        if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+          closeSettingsMenu();
+          return true;
+        }
+        const a = typeof document !== "undefined" ? document.activeElement : null;
+        if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) {
+          try {
+            a.blur();
+          } catch (_) {
+          }
+          return true;
+        }
+        return true;
       }
       return false;
     }

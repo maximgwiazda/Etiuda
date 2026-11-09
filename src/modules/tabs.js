@@ -284,22 +284,25 @@ function wirePaxBlur(){
 function turnScreenTabToCards(val, paxVal){
   const sid = screenOn;
   if(!sid) return;
-  const sidx = screens.indexOf(sid);
-  const stripPos = tabs.length + (sidx >= 0 ? sidx : 0);
   dropScreenTab(sid);
   const tb = blankTab();
   tb.intentBox = String(val != null ? val : "");
   if(paxVal) tb.pax = String(paxVal);
-  tabs.splice(stripPos, 0, tb);
+  tabs.push(tb);
   activeTabId = tb.id;
   setPrevTabId(tb.id);
   applyTab(tb);
   saveTabSession();
   try{
-    if(intentEl){
+    const inPax = Boolean(paxVal) || (typeof document !== "undefined" && document.activeElement === pax);
+    if(inPax && pax){
+      pax.focus({preventScroll:true});
+      const len = pax.value.length;
+      if(typeof pax.setSelectionRange === "function") pax.setSelectionRange(len, len);
+    }else if(intentEl){
       intentEl.focus({preventScroll:true});
       const len = intentEl.value.length;
-      intentEl.setSelectionRange(len, len);
+      if(typeof intentEl.setSelectionRange === "function") intentEl.setSelectionRange(len, len);
     }
   }catch(_){}
 }
@@ -374,7 +377,7 @@ function syncTabActive(id){
 }
 function applyTab(tb){
   if(!tb) return;
-  if(screenOn) clearScreenOn();
+  if(screenOn) clearScreenOn(false);
   activeTabId=tb.id;
   setPrevTabId(tb.id);
   if(pax) pax.value=tb.pax||"";
@@ -422,7 +425,7 @@ function applyTab(tb){
 }
 function switchTab(id, force){
   const fromScreen = Boolean(screenOn) || Boolean(force);
-  if(screenOn) clearScreenOn();
+  if(screenOn) clearScreenOn(false);
   if(!id||(id===activeTabId && !fromScreen)) return;
   if(!fromScreen){
     snapshotActiveTab();
@@ -568,7 +571,7 @@ function animateTabInsert(mutate){
 }
 function addTab(){
   const fromScreen = Boolean(screenOn);
-  if(screenOn) clearScreenOn();
+  if(screenOn) clearScreenOn(false);
   if(!fromScreen) snapshotActiveTab();
   const t=blankTab();
   // applyTab() redraws the strip, so the whole insert happens inside the one capture
@@ -1216,7 +1219,11 @@ function fitTabLabels(){
     const r=rows[i], c=cutSides(r.span), cut=c.l||c.r;
     applyCut(r.span,c);
     /* A name the strip has faded has nowhere else to be read, so the tooltip carries it. */
-    r.el.title=(cut ? r.name+" · " : "")+t("Click to switch, or drag to reorder");
+    if(r.el.dataset && r.el.dataset.sid){
+      r.el.title=r.name;
+    } else {
+      r.el.title=(cut ? r.name+" · " : "")+t("Click to switch, or drag to reorder");
+    }
   }
 }
 /* One swatch per filtered category, in the order they were picked: one paints the dot its
@@ -1369,6 +1376,13 @@ function drawTabsCore(){
     };
     b.appendChild(lab);
     b.appendChild(x);
+    b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
+    b.onauxclick=e=>{
+      if(e.button===1){
+        e.preventDefault();
+        if(typeof closeScreenTab === "function") closeScreenTab(sid);
+      }
+    };
     b.onclick=e=>{
       if(e.target.closest && e.target.closest(".tab-x")) return;
       if(typeof frontScreenTab === "function") frontScreenTab(sid);
