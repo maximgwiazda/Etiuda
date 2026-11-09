@@ -24,7 +24,7 @@ Zakończenie. Licencja kończy się, kiedy usuwasz oprogramowanie. Możemy ją z
 
 Prawo właściwe. Licencję reguluje prawo polskie. Konsument może wnieść sprawę przed sąd swojego kraju; pozostałe sprawy rozpatrują sądy właściwe dla siedziby sprzedawcy.
 
-Wbudowany model. Gdy ten instalator zawiera wbudowany model podpowiedzi, jest to EmbeddingGemma 2, Google DeepMind, Apache 2.0. Konwersja do ONNX i kwantyzacja zmieniają oryginalne wagi. Program nie pobiera tego modelu. Instalacja bez niego podpowiada wyłącznie przez dopasowanie słów.
+Wbudowany model. Gdy ten instalator zawiera wbudowany model podpowiedzi, jest to EmbeddingGemma 2, Google DeepMind, Apache 2.0. Konwersja do ONNX i kwantyzacja, wykonane przez Maxima Gwiazdę 9 listopada 2026 r., zmieniają oryginalne wagi. Program nie pobiera tego modelu. Instalacja bez niego podpowiada wyłącznie przez dopasowanie słów.
 
 Model jest publikowany na licencji Apache 2.0. Dalej jest jej tekst.
 
