@@ -309,8 +309,8 @@ async function uiLeg() {
     } else check(false, "4d3 the confirm has no word field or press");
   } catch (e) {
     const why = e && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : String(e);
-    if (!opened) check(false, "4d1 Maintenance did not open: " + why);
-    else check(false, "4d2 the confirm threw: " + why);
+    if (!opened) check(false, "Maintenance did not open: " + why);
+    else check(false, "the confirm threw: " + why);
   }
 }
 
@@ -320,9 +320,9 @@ function gone(p) { try { fs.lstatSync(p); return false; } catch (e) { return e.c
 
 function shellLeg(mod) {
   if (!mod || typeof mod.commitReset !== "function") {
-    check(false, "4d4 shell/desk-reset.cjs is not there to keep the licence");
-    check(false, "4d5 a path outside the desk's folders is not refused, because the reset is not there");
-    check(false, "4d6 the next start has no marker to honour");
+    check(false, "shell/desk-reset.cjs is not there to keep the licence");
+    check(false, "a path outside the desk's folders is not refused, because the reset is not there");
+    check(false, "the next start has no marker to honour");
     return;
   }
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-"));
