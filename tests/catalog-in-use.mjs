@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 115;
+const EXPECTED = 117;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1807,6 +1807,35 @@ try {
         const planted = SRC.split(NLc).map(l => l.indexOf("plant:s3-branch-said") >= 0 ? "      /* plant:s3-branch-said */" : l).join(NLc);
         const p = planted !== SRC ? await said("c3-said-plant", planted) : null;
         check(!!p && !p.genuine, "c3b2 lifting plant:s3-branch-said turns c3b red: no signed statement is written (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    {
+      /* Argon's F2: a working copy sealed to the lead's box and then renamed at the desk leaves no copy under its old name, and one
+         then deleted under yet another name leaves none at all. */
+      const tidied = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+        const text = JSON.stringify(branchDoc(box, "24242424", "quay-held"));
+        const at = (stem) => path.join(ownDir(box.share, box.me.id), stem + "-24242424.ec");
+        const said = (r) => !r ? "none" : r.ok ? (r.removed ? "removed" : "ok") : "no";
+        const r1 = await box.D.ask("etiuda:branch-write", "quay-24242424", text);
+        let boxed = false;
+        try { boxed = JSON.parse(fs.readFileSync(at("quay"), "utf8")).kind === "etiuda-branch-sealed"; } catch { boxed = false; }
+        const r2 = await box.D.ask("etiuda:branch-write", "zeta-24242424", text);
+        const renamed = fs.existsSync(at("zeta")) && !fs.existsSync(at("quay"));
+        const r3 = await box.D.ask("etiuda:branch-write", "omega-24242424", "");
+        const deleted = !fs.existsSync(at("zeta")) && !fs.existsSync(at("omega"));
+        return { boxed, renamed, deleted, said: [r1, r2, r3].map(said).join(",") };
+      };
+      const o = await tidied("c3-tidy");
+      check(o.boxed && o.renamed && o.deleted && o.said === "ok,ok,removed",
+        "c3c a working copy sealed to the lead's box, renamed at the desk, leaves no copy under its old name, and deleted under another name leaves none (" + JSON.stringify(o) + ")");
+      if (PLANTS_OFF) skip("c3c2 lifting plant:s3-branch-tidy turns c3c red");
+      else {
+        const NLc = String.fromCharCode(10);
+        const planted = SRC.split(NLc).map(l => l.indexOf("plant:s3-branch-tidy") >= 0 ? "        /* plant:s3-branch-tidy */" : l).join(NLc);
+        const p = planted !== SRC ? await tidied("c3-tidy-plant", planted) : null;
+        check(!!p && p.boxed && !p.renamed && !p.deleted, "c3c2 lifting plant:s3-branch-tidy turns c3c red: the old box copy stays (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */

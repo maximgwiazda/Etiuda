@@ -2654,6 +2654,13 @@ function ownFilesWithId(dir, id) {
     const file = path.join(dir, n);
     try {
       let d = JSON.parse(fs.readFileSync(file, "utf8")), sealed = "";
+      /* A copy sealed to the lead's box this desk cannot open again: it holds the id its name ends in, as withdrawClosed reads it,
+         so a renamed or deleted copy leaves no stale one behind (Argon's F2, board 962 stage 3). Its doc is not kept. */
+      if (d && typeof d === "object" && d.kind === BRANCH_LEAD_KIND) {
+        const tail = /-([0-9a-f]{8})\.ec$/.exec(n);
+        if (tail && path.basename(dir) + "-" + tail[1] === id) out.push({ file: file, doc: null, sealed: "box" }); /* plant:s3-branch-tidy */
+        continue;
+      }
       if (d && typeof d === "object" && d.kind === SEALED_KIND) {
         const inner = teamOpen(d);
         sealed = d.team + "|" + d.epoch;
