@@ -653,7 +653,7 @@ function eOfferCatalogDialog(c,src){
           const leadName=(tLeads[0]&&tLeads[0].lead)||t("The team lead");
           const catName=catalogNameOfFile(String((src&&src.file)||"")||E_CATALOG_SCRIPT)||t("Catalog");
           const ed=editionNameOf(c);
-          const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):(ed.r!=null?editionRevText(ed):String(ed.e||c.version||""));
+          const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):(ed.r!=null?(String(ed.r)+(ed.e?" ("+ed.e+")":"")):String(ed.e||c.version||""));
           const title=t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
           const body=t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.")
             .split("{CATALOG}").join(catName).split("{EDITION}").join(edStr);

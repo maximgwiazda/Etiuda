@@ -1820,10 +1820,14 @@ try {
     delete out.hash;
     out.sig = { alg: V2.V2_SIG_ALG, keyId: keyId || d7KeyId };
     out.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(out)), key).toString("hex");
-    return out;
+    return CT.parseCatalogFile(JSON.stringify(out));
   };
 
+  const docWasD7 = globalThis.document;
+  const iwWas = globalThis.innerWidth, ihWas = globalThis.innerHeight;
+  globalThis.innerWidth = 1280; globalThis.innerHeight = 800;
   try {
+    ST.lsSet("eUiLang", "en");
     REAL_HOST.setTrayNotes(true);
     mainTest.createWindow();
     const w = madeWins[madeWins.length - 1];
@@ -1836,14 +1840,23 @@ try {
     w.isFocused = () => false;
 
     REAL_HOST.catalogLeads = () => Promise.resolve([{ keyId: d7KeyId, public: d7PubHex }]);
-    REAL_HOST.teamJoin = (op) => { if (op === "leads") return { leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] }; };
+    REAL_HOST.teamJoin = (op) => ({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
     let d7JoinCb = null;
     REAL_HOST.onTeamJoin = (fn) => { d7JoinCb = fn; };
     TJ.wireTeamJoin();
     if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
 
-    document.getElementById = id => null;
-    document.body = { appendChild: noop, removeChild: noop, classList: { contains: () => false, add: noop, remove: noop, toggle: noop } };
+    globalThis.document = new Proxy({}, {
+      set: () => true,
+      get: (t, k) => (
+        k === "readyState" ? "complete"
+        : k === "visibilityState" ? "visible"
+        : (k === "addEventListener" || k === "removeEventListener") ? noop
+        : k === "getElementById" ? () => null
+        : k === "body" ? { appendChild: noop, removeChild: noop, classList: { contains: () => false, add: noop, remove: noop, toggle: noop } }
+        : fake()
+      )
+    });
 
     const notesStart = madeNotes.length;
     const signedCat = d7Sign(d7Fixture, d7LeadPair.privateKey);
@@ -1887,7 +1900,7 @@ try {
     const notesBeforeUnsigned = madeNotes.length;
     const unsignedCat = JSON.parse(JSON.stringify(d7Fixture));
     delete unsignedCat.sig;
-    CO.eOfferCatalogDialog(unsignedCat, { file: "unsigned.ec", asked: false });
+    CO.eOfferCatalogDialog(CT.parseCatalogFile(JSON.stringify(unsignedCat)), { file: "unsigned.ec", asked: false });
     await tick(100);
     d7Unsigned = madeNotes.length === notesBeforeUnsigned;
     if (!d7Unsigned) d7UnsignedWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeUnsigned });
@@ -1971,6 +1984,11 @@ try {
     if (!d7ListingWhy) d7ListingWhy = msg;
     if (!d7SwitchesWhy) d7SwitchesWhy = msg;
     if (!d7ClickWhy) d7ClickWhy = msg;
+  } finally {
+    ST.lsDel("eUiLang");
+    globalThis.document = docWasD7;
+    globalThis.innerWidth = iwWas;
+    globalThis.innerHeight = ihWas;
   }
 
   check(d7Offer, "D7-offer a lead-signed edition offered while the window is hidden toasts once (" + d7OfferWhy + ")");

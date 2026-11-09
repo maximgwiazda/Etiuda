@@ -15005,15 +15005,15 @@ What you type stays in this browser only.`;
     if (n) return { r: /^[0-9]+$/.test(n[1]) ? +n[1] : n[1], e: "" };
     return { r: null, e };
   }
-  function editionRevText2(name) {
+  function editionRevText(name) {
     return String(name.r) + (name.e ? " (" + name.e + ")" : "");
   }
   function editionLabel(name) {
-    return name && name.r != null ? t("rev {R}").split("{R}").join(editionRevText2(name)) : String(name && name.e || "");
+    return name && name.r != null ? t("rev {R}").split("{R}").join(editionRevText(name)) : String(name && name.e || "");
   }
   function editionSaid(name, revWords, datedWords) {
     const n = name || {};
-    return n.r != null ? revWords.split("{R}").join(editionRevText2(n)) : datedWords.split("{E}").join(String(n.e || ""));
+    return n.r != null ? revWords.split("{R}").join(editionRevText(n)) : datedWords.split("{E}").join(String(n.e || ""));
   }
   function eCatalogAccepted(c) {
     try {
@@ -30207,7 +30207,7 @@ What you type stays in this browser only.`;
             const leadName = tLeads[0] && tLeads[0].lead || t("The team lead");
             const catName = catalogNameOfFile(String(src && src.file || "") || E_CATALOG_SCRIPT) || t("Catalog");
             const ed2 = editionNameOf(c);
-            const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : ed2.r != null ? editionRevText(ed2) : String(ed2.e || c.version || "");
+            const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : ed2.r != null ? String(ed2.r) + (ed2.e ? " (" + ed2.e + ")" : "") : String(ed2.e || c.version || "");
             const title = t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
             const body = t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName).split("{EDITION}").join(edStr);
             eNotify({ title, body, target: "offer" });
