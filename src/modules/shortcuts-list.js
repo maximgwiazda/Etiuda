@@ -58,7 +58,7 @@ function wireShortcutsList(box, repaint, q){
     btn.onclick=()=>{
       scBeginCapture(btn.getAttribute("data-bind"), +btn.getAttribute("data-slot")||1);
       repaint();
-      toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Backspace to clear)":"Press the new shortcut (Esc to cancel, Backspace for the default)");
+      toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Ctrl+Backspace to clear)":"Press the new shortcut (Esc to cancel, Ctrl+Backspace for the default)");
     };
   });
 }
