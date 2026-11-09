@@ -93,7 +93,8 @@ def pin_document(files=None, parity=None, status="not-exported"):
         "source": {"repo": "google/embeddinggemma-2", "commit": COMMIT},
         "quant": "q4",
         "textOnly": True,
-        "cosineMinimum": COSINE_MINIMUM,
+        "cosineProxy": COSINE_MINIMUM,
+        "passGate": "taskFloor",
         "taskFloor": TASK_FLOOR,
         "output": ["model_q4.onnx", "model_q4.onnx_data", "tokenizer.json", "tokenizer_config.json"],
         "files": files or [],
@@ -384,7 +385,7 @@ def export_onnx(source, out_dir, width, fp16_out, task_root, task_script):
         "threshold": THRESHOLD,
         "head": "nearest",
         "kind": "paraphrase",
-        "cosineMinimum": COSINE_MINIMUM,
+        "cosineProxy": COSINE_MINIMUM,
         "cosines": cosines,
         "messages": list(MESSAGES),
         "published": None if published is None else {
@@ -503,7 +504,7 @@ def self_test():
         with open(pin_path, "r", encoding="utf-8") as handle:
             pin = json.load(handle)
         pin_ok = (pin.get("status") == "not-exported" and pin.get("quant") == "q4"
-                  and pin.get("cosineMinimum") == COSINE_MINIMUM
+                  and pin.get("cosineProxy") == COSINE_MINIMUM and pin.get("passGate") == "taskFloor"
                   and pin.get("parity", {}).get("status") == "not-run")
         if bare != 2 or good != 0 or bad != 1 or wrote or not pin_ok:
             print("self-test: bare=" + str(bare) + " good=" + str(good) + " bad=" + str(bad)

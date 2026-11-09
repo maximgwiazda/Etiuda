@@ -87,12 +87,23 @@ const pinRun = fs.existsSync(EXPORT) ? py(["--write-pin", pinOut]) : { status: 1
 let pin = null;
 try { pin = JSON.parse(fs.readFileSync(pinOut, "utf8")); } catch { pin = null; }
 const pinOk = pin && pin.status === "not-exported" && pin.quant === "q4" && pin.textOnly === true
-  && pin.cosineMinimum === 0.98 && Array.isArray(pin.files) && pin.files.length === 0
+  && pin.cosineProxy === 0.98 && pin.passGate === "taskFloor" && !("cosineMinimum" in pin) && Array.isArray(pin.files) && pin.files.length === 0
   && pin.parity && pin.parity.status === "not-run" && Array.isArray(pin.parity.messages) && pin.parity.messages.length >= 3
   && pin.source && pin.source.commit === "f9972ac22e696a105c482202646979e33e4b5a1e";
 check(pinRun.status === 0 && pinOk,
-  "m3 the pin file records quant q4, cosine 0.98 and a parity that has not run: exit " + pinRun.status
+  "m3 the pin file records quant q4, the task floor as its pass gate, the cosine 0.98 as a proxy only, and a parity that has not run: exit " + pinRun.status
   + " " + JSON.stringify(pin && { status: pin.status, quant: pin.quant, parity: pin.parity && pin.parity.status }));
+
+/* THE COMMITTED PIN PASSES BY THE TASK FLOOR (Claude alpha, 05:42): its top five within one message of the published q4,
+   on en and on pl; the cosines beside it are a proxy and gate nothing. */
+let shipped0 = null;
+try { shipped0 = JSON.parse(fs.readFileSync(path.join(ROOT, "tools", "model-export", "pin.json"), "utf8")); } catch { shipped0 = null; }
+const par = shipped0 && shipped0.parity, within = l => par && par.candidate && par.published
+  && Math.abs(par.candidate[l].hits - par.published[l].hits) <= 1 && par.candidate[l].of === par.published[l].of;
+check(!!shipped0 && shipped0.status === "passed" && shipped0.passGate === "taskFloor" && par.status === "pass" && within("en") && within("pl")
+  && !("cosineMinimum" in shipped0) && !("cosineMinimum" in par),
+  "m3b the committed pin passes by the task floor: top five within one of the published q4 on en and on pl, the cosine a proxy only: "
+  + JSON.stringify(par && { candidate: par.candidate, published: par.published && { en: par.published.en, pl: par.published.pl } }));
 
 const destMissing = path.join(LAB, "dest-missing");
 const missing = fs.existsSync(PACK) ? pack(["--dest", destMissing, "--model", path.join(LAB, "no-such-model")]) : { status: 127, stdout: "", stderr: "no packer" };

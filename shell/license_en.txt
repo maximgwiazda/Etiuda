@@ -24,7 +24,7 @@ Termination. The licence ends whenever you remove the software. We may end it if
 
 Governing law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.
 
-Built-in model. When this installer includes the built-in suggestion model, that model is EmbeddingGemma 2, Google DeepMind, Apache 2.0. The conversion to ONNX and the quantisation modify the original weights. The program does not fetch the model. An install without it suggests from matching words alone.
+Built-in model. When this installer includes the built-in suggestion model, that model is EmbeddingGemma 2, Google DeepMind, Apache 2.0. The conversion to ONNX and the quantisation, made by Maxim Gwiazda on 9 November 2026, modify the original weights. The program does not fetch the model. An install without it suggests from matching words alone.
 
 The model is published under the Apache Licence 2.0. Its text follows.
 

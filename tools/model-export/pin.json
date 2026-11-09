@@ -6,7 +6,8 @@
   },
   "quant": "q4",
   "textOnly": true,
-  "cosineMinimum": 0.98,
+  "cosineProxy": 0.98,
+  "passGate": "taskFloor",
   "taskFloor": "top-five within 1 of the published q4 on en and on pl",
   "output": [
     "model_q4.onnx",
@@ -42,7 +43,7 @@
     "threshold": 0.835,
     "head": "nearest",
     "kind": "paraphrase",
-    "cosineMinimum": 0.98,
+    "cosineProxy": 0.98,
     "cosines": [
       0.9775263495048618,
       0.9768001380372174,
