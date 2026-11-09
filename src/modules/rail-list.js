@@ -1,6 +1,6 @@
 import { isAlwaysCat } from "./cat-roles.js";
 import { intentCount } from "./content-model.js";
-import { scheduleCutScan } from "./cut-text.js";
+import { markCut, scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentPickedLine, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, M_MS } from "./motion.js";
@@ -417,11 +417,22 @@ function cardHoverClaim(e){
    never mousemove, so the pointer's own motion is the only thing that can claim - and the
    global mousemove the app registers first has already lowered e-kbdnav by the time these
    run. */
+/* The list's width observer does not see a row's padding change, and the fade is decided
+   from the name's box. The star arriving or leaving has to be measured in that turn. */
+function railStarCut(e){
+  const row=e.target.closest&&e.target.closest(".rail-item");
+  if(!row) return;
+  if((e.type==="pointerout"||e.type==="focusout")&&row.contains(e.relatedTarget)) return;
+  markCut(row.querySelector(".rail-t"));
+}
 function wireRailHover(){
   addEventListener("load",()=>{ setTimeout(()=>{
     const l=$("#list"), r=$("#intentRailList");
     if(l) l.addEventListener("mousemove",cardHoverClaim,{passive:true});
-    if(r) r.addEventListener("mousemove",railHoverClaim,{passive:true});
+    if(r){
+      r.addEventListener("mousemove",railHoverClaim,{passive:true});
+      ["pointerover","pointerout","focusin","focusout"].forEach(type=>r.addEventListener(type,railStarCut));
+    }
   },0); });
 }
 function drawIntentRailCore(){
