@@ -61,7 +61,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 424;
+const EXPECTED = 427;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1646,7 +1646,8 @@ try {
   fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
   const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
-    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun"];
+    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun",
+    "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -2923,6 +2924,182 @@ try {
     }
   } catch (e) {
     check(false, "962 stage 5 on a folder team's row: " + (e && e.stack ? e.stack : e));
+  }
+  /* ---- 962 stage 6 (E6) catalog leaves team: loaded across restart, withdrawal finding, head names nothing ---- */
+  try {
+    const catOf = (id, rev) => {
+      const o = { format: 2, kind: "etiuda-catalog", id, rev, name: "Board " + id, date: "2026-03-0" + Math.min(rev, 9),
+        langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+        cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" }, body: { en: "Good day, edition " + rev + "." } }] };
+      o.sig = { alg: "Ed25519", keyId: LEAD.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), LEAD.privateKey).toString("hex");
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    const pe = (rev, ed) => ({ catalog: "pebble-board", rev, edition: ed || "Pebble " + rev, published: rev + " March 2026" });
+    const qe = (rev, ed) => ({ catalog: "quay-board", rev, edition: ed || "Quay " + rev, published: rev + " April 2026" });
+    const entryOf = (h, id) => h && Array.isArray(h.editions) ? h.editions.filter(e => e.catalog === id)[0] || null : null;
+    const shownS5 = h => !h ? "none" : (h.edition || "-") + " [" + (Array.isArray(h.editions) ? h.editions.map(e => e.catalog + "@" + e.rev + (e.newer ? "+" : "")).join(",") : "no list") + "]";
+
+    let n6 = 0;
+    const rowOf = async (head, o) => {
+      const opt = o || {};
+      const ud = path.join(LAB, "s6-head-" + (++n6) + "-" + hex(3)), mir = path.join(ud, "folder-mirror", opt.teamId || TME6), elsewhere = path.join(ud, "share");
+      fs.mkdirSync(mir, { recursive: true }); fs.mkdirSync(elsewhere, { recursive: true });
+      fs.writeFileSync(path.join(mir, C.TEAM_NAME), opt.team);
+      if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
+        teamPins: { [opt.teamId || TME6]: { keyId: LEAD.keyId, public: LEAD.pub } } }), "utf8");
+      const FD = loadDesk(ud);
+      await FD.ask("etiuda:branch-identity", true);
+      const look = async () => {
+        const v = await FD.ask("etiuda:team-join", "leads");
+        const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === (opt.teamId || TME6))[0];
+        return row && row.head ? row.head : null;
+      };
+      return await look();
+    };
+
+    /* E6c: a head still naming B after B leaves names nothing on the row */
+    const TME6 = "t-" + hex(8);
+    const teamDocBefore = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TME6, catalogs: ["pebble-board", "quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1, roster: [] }, LEAD), null, 1) + "\n";
+    const teamDocAfter = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TME6, catalogs: ["pebble-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 2, roster: [] }, LEAD), null, 1) + "\n";
+    const teamDocEmpty = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TME6, catalogs: [],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 3, roster: [] }, LEAD), null, 1) + "\n";
+    const nowE6 = Date.now();
+    const headOnlyB = signHead({ v: 1, team: TME6, epoch: 1, rev: 1, editions: [qe(2, "Quay two")], t: nowE6 });
+    const headBoth = signHead({ v: 1, team: TME6, epoch: 1, rev: 1, editions: [pe(5, "Pebble five"), qe(2, "Quay two")], t: nowE6 });
+    const rowOnlyB = await rowOf(headOnlyB, { team: teamDocAfter });
+    const rowBoth = await rowOf(headBoth, { team: teamDocAfter });
+    const rowEmpty = await rowOf(headOnlyB, { team: teamDocEmpty });
+    check(rowOnlyB == null && !!rowBoth && !entryOf(rowBoth, "quay-board") && rowBoth.edition === "Pebble five" && rowEmpty == null,
+      "962s6e6c a head still naming B after B leaves names nothing on the row: only B " + shownS5(rowOnlyB)
+      + ", both " + shownS5(rowBoth) + ", empty team " + shownS5(rowEmpty));
+
+    /* E6b: a team-key working copy of B is withdrawn once the team file stops listing B (red on main: finding 1) */
+    let hadCopyBeforeE6b = false, copyFileStillE6b = false;
+    {
+      const udB = path.join(LAB, "e6b-desk-" + hex(3)), shareB = path.join(LAB, "e6b-share-" + hex(3));
+      const teamB = "t-" + hex(8), mirB = path.join(udB, "folder-mirror", teamB);
+      fs.mkdirSync(shareB, { recursive: true }); fs.mkdirSync(mirB, { recursive: true }); fs.mkdirSync(udB, { recursive: true });
+      const encB = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+      const keyB = crypto.randomBytes(32);
+      fs.writeFileSync(path.join(udB, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: shareB, eUiLang: "en" },
+        teamPins: { [teamB]: { keyId: LEAD.keyId, public: LEAD.pub } },
+        folderTeams: { [teamB]: { folder: shareB } },
+        teamKeys: { [teamB]: { 1: encB(keyB.toString("base64")) } } }), "utf8");
+      const DB = loadDesk(udB);
+      const meB = await DB.ask("etiuda:branch-identity", true);
+      const docB1 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamB, catalogs: ["quay-board", "pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+        roster: [{ desk: { id: meB.id, key: meB.key, box: meB.box }, wrap: DB.api.wrapTeamKey(keyB, meB.box, teamB, 1, meB.id) }] }, LEAD), null, 1) + "\n";
+      fs.writeFileSync(path.join(shareB, C.TEAM_NAME), docB1);
+      fs.writeFileSync(path.join(mirB, C.TEAM_NAME), docB1);
+      DB.api.heedTeam();
+      const textCatB = catOf("quay-board", 1);
+      const pinCatB = DB.api.signedSha(DB.api.catalogDocIn(textCatB));
+      DB.api.noteHanded(textCatB, "folder");
+      DB.api.writeInUse(pinCatB, null);
+      const useFileB = path.join(mirB, "desks", meB.id, "in-use.ec");
+      hadCopyBeforeE6b = fs.existsSync(useFileB);
+      const docB2 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamB, catalogs: ["pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 2,
+        roster: [{ desk: { id: meB.id, key: meB.key, box: meB.box }, wrap: DB.api.wrapTeamKey(keyB, meB.box, teamB, 1, meB.id) }] }, LEAD), null, 1) + "\n";
+      fs.writeFileSync(path.join(shareB, C.TEAM_NAME), docB2);
+      fs.writeFileSync(path.join(mirB, C.TEAM_NAME), docB2);
+      DB.api.heedTeam();
+      copyFileStillE6b = fs.existsSync(useFileB);
+    }
+    check(hadCopyBeforeE6b && !copyFileStillE6b,
+      "962s6e6b a team-key working copy of B is withdrawn once the team file stops listing B: had before "
+      + hadCopyBeforeE6b + ", copy still on mirror " + copyFileStillE6b);
+
+    /* E6a: a desk working in catalog B keeps B loaded when B leaves its team and B's file leaves the mirror, by relay and by folder, across a restart */
+    let folderOkE6a = false, relayOkE6a = false;
+    {
+      const udF = path.join(LAB, "e6a-f-desk-" + hex(3)), shareF = path.join(LAB, "e6a-f-share-" + hex(3));
+      const teamF = "t-" + hex(8), mirF = path.join(udF, "folder-mirror", teamF);
+      fs.mkdirSync(shareF, { recursive: true }); fs.mkdirSync(mirF, { recursive: true }); fs.mkdirSync(udF, { recursive: true });
+      const encF = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+      const keyF = crypto.randomBytes(32);
+      fs.writeFileSync(path.join(udF, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: shareF, eUiLang: "en" },
+        teamPins: { [teamF]: { keyId: LEAD.keyId, public: LEAD.pub } },
+        folderTeams: { [teamF]: { folder: shareF } },
+        teamKeys: { [teamF]: { 1: encF(keyF.toString("base64")) } } }), "utf8");
+      const DF = loadDesk(udF);
+      const meF = await DF.ask("etiuda:branch-identity", true);
+      const docF1 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamF, catalogs: ["quay-board", "pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+        roster: [{ desk: { id: meF.id, key: meF.key, box: meF.box }, wrap: DF.api.wrapTeamKey(keyF, meF.box, teamF, 1, meF.id) }] }, LEAD), null, 1) + "\n";
+      fs.writeFileSync(path.join(shareF, C.TEAM_NAME), docF1);
+      fs.writeFileSync(path.join(mirF, C.TEAM_NAME), docF1);
+      DF.api.heedTeam();
+      const catTextF = catOf("quay-board", 1);
+      const pinF = DF.api.signedSha(DF.api.catalogDocIn(catTextF));
+      DF.api.noteHanded(catTextF, "folder");
+      DF.api.writeInUse(pinF, null);
+      const keptFileF = path.join(udF, "catalog-loaded.txt");
+      const beforeF = DF.api.inUseCatalogId() === "quay-board" && fs.existsSync(keptFileF) && fs.readFileSync(keptFileF, "utf8") === catTextF;
+      const docF2 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamF, catalogs: ["pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 2,
+        roster: [{ desk: { id: meF.id, key: meF.key, box: meF.box }, wrap: DF.api.wrapTeamKey(keyF, meF.box, teamF, 1, meF.id) }] }, LEAD), null, 1) + "\n";
+      fs.writeFileSync(path.join(shareF, C.TEAM_NAME), docF2);
+      fs.writeFileSync(path.join(mirF, C.TEAM_NAME), docF2);
+      DF.api.heedTeam();
+      const liveF = DF.api.inUseCatalogId() === "quay-board" && fs.existsSync(keptFileF) && fs.readFileSync(keptFileF, "utf8") === catTextF;
+      const DF2 = loadDesk(udF);
+      await DF2.ask("etiuda:branch-identity", false);
+      const restartF = DF2.api.inUseCatalogId() === "quay-board" && fs.existsSync(keptFileF) && fs.readFileSync(keptFileF, "utf8") === catTextF;
+      const pickF = DF2.api.pickEdition([{ file: "pebble.ec", data: JSON.parse(catOf("pebble-board", 1)) }]);
+      folderOkE6a = beforeF && liveF && restartF && pickF === null;
+    }
+    {
+      const udR = path.join(LAB, "e6a-r-desk-" + hex(3)), rtR = hex(16), teamR = "t-" + hex(8);
+      const mirR = path.join(udR, "relay", rtR);
+      fs.mkdirSync(mirR, { recursive: true }); fs.mkdirSync(udR, { recursive: true });
+      const encR = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+      const keyR = crypto.randomBytes(32);
+      fs.writeFileSync(path.join(udR, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: path.join(LAB, "dummy-r"), eUiLang: "en" },
+        teamPins: { [teamR]: { keyId: LEAD.keyId, public: LEAD.pub } },
+        teamPinFrom: { [teamR]: "invite" },
+        teamChannel: { [teamR]: { kind: "relay", rt: rtR, url: URLV1 } },
+        teamKeys: { [teamR]: { 1: encR(keyR.toString("base64")) } } }), "utf8");
+      const DR = loadDesk(udR);
+      const meR = await DR.ask("etiuda:branch-identity", true);
+      const docR1 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamR, catalogs: ["quay-board", "pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+        channel: { kind: "relay", rt: rtR, url: URLV1 },
+        roster: [{ desk: { id: meR.id, key: meR.key, box: meR.box }, wrap: DR.api.wrapTeamKey(keyR, meR.box, teamR, 1, meR.id) }] }, LEAD), null, 1) + "\n";
+      fs.writeFileSync(path.join(mirR, C.TEAM_NAME), docR1);
+      DR.api.heedTeam();
+      const catTextR = catOf("quay-board", 1);
+      const pinR = DR.api.signedSha(DR.api.catalogDocIn(catTextR));
+      DR.api.noteHanded(catTextR, "folder");
+      DR.api.writeInUse(pinR, null);
+      const keptFileR = path.join(udR, "catalog-loaded.txt");
+      const beforeR = DR.api.inUseCatalogId() === "quay-board" && fs.existsSync(keptFileR) && fs.readFileSync(keptFileR, "utf8") === catTextR;
+      const docR2 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: teamR, catalogs: ["pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 2,
+        channel: { kind: "relay", rt: rtR, url: URLV1 },
+        roster: [{ desk: { id: meR.id, key: meR.key, box: meR.box }, wrap: DR.api.wrapTeamKey(keyR, meR.box, teamR, 1, meR.id) }] }, LEAD), null, 1) + "\n";
+      fs.writeFileSync(path.join(mirR, C.TEAM_NAME), docR2);
+      DR.api.heedTeam();
+      const liveR = DR.api.inUseCatalogId() === "quay-board" && fs.existsSync(keptFileR) && fs.readFileSync(keptFileR, "utf8") === catTextR;
+      const DR2 = loadDesk(udR);
+      await DR2.ask("etiuda:branch-identity", false);
+      const restartR = DR2.api.inUseCatalogId() === "quay-board" && fs.existsSync(keptFileR) && fs.readFileSync(keptFileR, "utf8") === catTextR;
+      const pickR = DR2.api.pickEdition([{ file: "pebble.ec", data: JSON.parse(catOf("pebble-board", 1)) }]);
+      relayOkE6a = beforeR && liveR && restartR && pickR === null;
+    }
+    check(folderOkE6a && relayOkE6a,
+      "962s6e6a a desk working in catalog B keeps B loaded when B leaves its team and B's file leaves the mirror, by relay and by folder, across a restart: folder "
+      + folderOkE6a + ", relay " + relayOkE6a);
+  } catch (e) {
+    check(false, "962 stage 6 on a team's row: " + (e && e.stack ? e.stack : e));
   }
   /* F1 through the desk's own shell: the lead's Studio lends its box's agreement, takes a desk off with a new key, and this
      desk, holding only the first key, reaches the new epoch by itself: its own copy of the team file, its wrap opened by
