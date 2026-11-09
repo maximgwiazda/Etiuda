@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 119;
+const EXPECTED = 120;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1964,6 +1964,7 @@ try {
   let d7Focused = false, d7FocusedWhy = "";
   let d7Unsigned = false, d7UnsignedWhy = "";
   let d7Listing = false, d7ListingWhy = "";
+  let d7Nameless = false, d7NamelessWhy = "";
   let d7Switches = false, d7SwitchesWhy = "";
   let d7Click = false, d7ClickWhy = "";
   let d7Asked = false, d7AskedWhy = "";
@@ -2095,6 +2096,26 @@ try {
       && bodyList.indexOf("is in the Library, ready to open.") >= 0;
     if (!d7Listing) d7ListingWhy = JSON.stringify({ nListOk, nListOnce, notes: madeNotes.length - notesBeforeListing, title: titleList, body: bodyList });
 
+    // 4b. A lead the team file gives no name: the copywriter's nameless titles in both languages, never a stand-in name
+    if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "", print: "1234" }] });
+    const nlTitles = [];
+    for (const [lang, n] of [["en", 4], ["pl", 5]]) {
+      ST.lsSet("eUiLang", lang);
+      const before = madeNotes.length;
+      CO.eOfferCatalogDialog(d7Sign(Object.assign({}, d7Fixture, { rev: n, edition: String(n) }), d7LeadPair.privateKey), { file: "catalog-nl-" + lang + ".ec", asked: false });
+      await tick(100);
+      const a = madeNotes.length === before + 1 ? madeNotes[madeNotes.length - 1].opts.title : null;
+      if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now() }]);
+      await tick(100);
+      const b = madeNotes.length === before + 2 ? madeNotes[madeNotes.length - 1].opts.title : null;
+      nlTitles.push(a, b);
+    }
+    ST.lsSet("eUiLang", "en");
+    if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
+    d7Nameless = nlTitles.join("|") === ["The team's lead published a new edition", "A new catalog from the team's lead",
+      "Nowe wydanie od lidera zespołu", "Nowy katalog od lidera zespołu"].join("|");
+    if (!d7Nameless) d7NamelessWhy = JSON.stringify(nlTitles);
+
     // 5. Each switch silences its kind
     const notesBeforeSwitches = madeNotes.length;
     ST.lsSet("eNotifyEditionOff", "1");
@@ -2204,6 +2225,7 @@ try {
   check(d7Focused, "D7-focused the same while focused does not (" + d7FocusedWhy + ")");
   check(d7Unsigned, "D7-unsigned a refused or unsigned file never toasts (" + d7UnsignedWhy + ")");
   check(d7Listing, "D7-listing a new team catalog in the listing toasts once (" + d7ListingWhy + ")");
+  check(d7Nameless, "D7-nameless a lead with no name gets the nameless titles in both languages, never a stand-in name (" + d7NamelessWhy + ")");
   check(d7Switches, "D7-switches each switch silences its kind (" + d7SwitchesWhy + ")");
   check(d7Click, "D7-click a click shows the window on the offer or the Library tab (" + d7ClickWhy + ")");
   check(d7Asked, "D7-asked an asked or reopened offer shows no toast (" + d7AskedWhy + ")");
