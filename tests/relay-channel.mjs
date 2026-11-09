@@ -61,7 +61,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 430;
+const EXPECTED = 432;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -2988,7 +2988,8 @@ try {
         channel ? { teamPinFrom: { [team]: "invite" }, teamChannel: { [team]: channel } } : { folderTeams: { [team]: { folder: share } } })), "utf8");
       const D = loadDesk(ud, src);
       const me = await D.ask("etiuda:branch-identity", true);
-      const land = text => { if (!channel) fs.writeFileSync(path.join(share, C.TEAM_NAME), text); fs.writeFileSync(path.join(mir, C.TEAM_NAME), text); D.api.heedTeam(); };
+      const put6 = text => { if (!channel) fs.writeFileSync(path.join(share, C.TEAM_NAME), text); fs.writeFileSync(path.join(mir, C.TEAM_NAME), text); };
+      const land = text => { put6(text); D.api.heedTeam(); };
       land(teamE6(team, ["quay-board", "pebble-board"], 1, me, D, key, channel));
       const texts = { "quay-board": catOf("quay-board", 1), "pebble-board": catOf("pebble-board", 1) };
       const opened = {};
@@ -3011,18 +3012,24 @@ try {
         return { ok: !!w && w.ok === true, file: path.join(deskDir, "desk-" + tail + ".ec") };
       };
       const sealedThere = file => { try { return JSON.parse(fs.readFileSync(file, "utf8")).kind === "etiuda-sealed"; } catch { return false; } };
-      return { D, me, team, key, channel, land, copy, sealedThere, inUse: path.join(deskDir, "in-use.ec"), texts, opened, ud, mir };
+      return { D, me, team, key, channel, land, put6, copy, sealedThere, inUse: path.join(deskDir, "in-use.ec"), texts, opened, ud, mir };
     };
 
     /* E6b: the landing of a team file that no longer lists B withdraws the desk's team-key working copy of B from the share, with
        no ask and no restart; the copy of A, still listed, and the in-use note stay. */
-    const e6bScene = async (kind, src) => {
+    /* restart: the lead drops B while the desk is closed, and the desk starts on the new file. */
+    const e6bScene = async (kind, src, restart) => {
       const d = await e6Desk(kind, src);
       const b = await d.copy("b6b6b6b6", "quay-board"), a = await d.copy("a6a6a6a6", "pebble-board");
       const before = b.ok && a.ok && d.sealedThere(b.file) && d.sealedThere(a.file) && fs.existsSync(d.inUse);
       d.land(teamE6(d.team, ["quay-board", "pebble-board"], 2, d.me, d.D, d.key, d.channel));
       const sameList = fs.existsSync(b.file);
-      d.land(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
+      if (restart) {
+        d.put6(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
+        const D2 = loadDesk(d.ud, src);
+        await D2.ask("etiuda:branch-identity", false);
+        D2.api.heedTeam();
+      } else d.land(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
       return { before, sameList, bGone: !fs.existsSync(b.file), aKept: fs.existsSync(a.file), inUseKept: fs.existsSync(d.inUse) };
     };
     const b6ok = r => r.before && r.sameList && r.bGone && r.aKept && r.inUseKept;
@@ -3030,6 +3037,8 @@ try {
     check(b6ok(b6f) && b6ok(b6r),
       "962s6e6b a team file that stops listing B withdraws the desk's team-key working copy of B at its landing, no ask and no restart; A's copy and the in-use note stay: folder "
       + JSON.stringify(b6f) + ", relay " + JSON.stringify(b6r));
+    const b6s = await e6bScene("folder", undefined, true);
+    check(b6ok(b6s), "962s6e6b3 a desk started after the lead dropped B withdraws its team-key working copy of B at its first heed of the new file, no ask; A's copy and the in-use note stay: " + JSON.stringify(b6s));
 
     /* E6a: working in B, the desk keeps B loaded when B leaves the team and B's file leaves the mirror, this run and across a
        restart, by folder and by relay; a pick among the team's other catalogs then chooses none. */
@@ -3056,6 +3065,7 @@ try {
     if (PLANTS_OFF) {
       skip("962s6e6c2 lifting plant:head-listed keeps naming B on the row");
       skip("962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy on the share");
+      skip("962s6e6b4 lifting plant:s6-withdraw-first leaves B's working copy on the share across the restart");
       skip("962s6e6a2 lifting plant:pick-in-use-gone unloads B for the team's other catalog");
     } else {
       const sc = lifted6("plant:head-listed"), pc = sc ? await e6cScene(sc) : null;
@@ -3064,6 +3074,9 @@ try {
       const sb = lifted6("plant:s6-withdraw-unlisted"), pb = sb ? await e6bScene("folder", sb) : null;
       check(!!pb && pb.before && !pb.bGone, "962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy on the share (FAIL 962s6e6b): "
         + (sb ? JSON.stringify(pb) : "plant line absent"));
+      const sf = lifted6("plant:s6-withdraw-first"), pf = sf ? await e6bScene("folder", sf, true) : null;
+      check(!!pf && pf.before && !pf.bGone, "962s6e6b4 lifting plant:s6-withdraw-first leaves B's working copy on the share across the restart (FAIL 962s6e6b3): "
+        + (sf ? JSON.stringify(pf) : "plant line absent"));
       const sa = lifted6("plant:pick-in-use-gone"), pa = sa ? await e6aScene("folder", sa) : null;
       check(!!pa && pa.before && !pa.pickNone, "962s6e6a2 lifting plant:pick-in-use-gone unloads B for the team's other catalog (FAIL 962s6e6a): "
         + (sa ? JSON.stringify(pa) : "plant line absent"));
