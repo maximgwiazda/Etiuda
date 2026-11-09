@@ -1634,7 +1634,26 @@ function offscreenCheck(pid, who, check, notRun) {
   return v;
 }
 
-module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
+/* THE SHELL A LEG'S APP CARRIES IS THE ONE THE RELEASE SHIPS: the shell/ entries of tools/release.mjs's `expected` list,
+   copied with their folders. Five window legs named five files by hand, and main.js requires tray.cjs (and more) at load,
+   so the app they built stopped there (the test architect, 2026-11-09). */
+function shellAppFiles() {
+  const text = fs.readFileSync(path.join(ROOT, "tools", "release.mjs"), "utf8");
+  const m = /const expected = \[([\s\S]*?)\];/.exec(text);
+  const list = m ? [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : [];
+  const shell = list.filter(f => f.startsWith("shell/")).map(f => f.slice("shell/".length));
+  if (!shell.length) throw new Error("tests/engine.js: the release's shell list could not be read from tools/release.mjs");
+  return shell;
+}
+function copyShellApp(dir) {
+  for (const f of shellAppFiles()) {
+    const to = path.join(dir, "shell", f);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, "shell", f), to);
+  }
+}
+
+module.exports = { shellAppFiles, copyShellApp, NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch, unsignedEnv,
