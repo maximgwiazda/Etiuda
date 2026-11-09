@@ -4319,6 +4319,7 @@ const CARD_B = {
        eDeckOff, which Settings' own row writes when its button is pressed. Every global and key set here is put back. */
     const CB = await import(MOD("card-body.js")), SET = await import(MOD("settings.js")), DLG = await import(MOD("dialog.js"));
     const STB = await import(MOD("screen-tabs.js"));
+    const HK = await import(MOD("hooks.js"));
     const AS = await import(MOD("app-state.js")), ST = UILANG_STORE;
     const flip = s => Object.assign(cls(s), { toggle(c, f) { const w = f === undefined ? !s.has(c) : !!f; if (w) s.add(c); else s.delete(c); return w; } });
     const part = (o = {}) => Object.assign({ attrs: {}, style: {}, classList: flip(new Set()), textContent: "", hidden: true, value: "",
@@ -4359,6 +4360,10 @@ const CARD_B = {
       doc.createElement = () => { const btn = part(); return part({ btn, getContext: () => ({}), querySelector: s => (s === "#eUndoBtn" ? btn : null) }); };
       g.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
       ST.lsSet("eMotionOff", "1"); AS.putLang("en");
+      /* Closing the screen, and opening Settings, redraws the strip and then measures the rail.
+         This page has no rail, so the slot the other sections already stand in for is stood in for here too. */
+      const stubRailSync = typeof HK.hooks.syncRailGeometry !== "function";
+      if (stubRailSync) HK.hooks.syncRailGeometry = () => {};
       Dom.grabDom();
       const drawn = (m, top) => {
         const tags = [...CB.cardBodyHtml(m, 0, { hit: false, catHit: false, fav: false, band: "", other: "pl", dragTip: "" }).cardH.matchAll(TAG)].map(x => x[2]);
@@ -4414,6 +4419,7 @@ const CARD_B = {
             if (had.gcs === undefined) delete g.getComputedStyle; else g.getComputedStyle = had.gcs;
             for (const [k, v] of [["eMotionOff", had.motion], ["eDeckOff", had.deck]]) if (v == null) ST.lsDel(k); else ST.lsSet(k, v);
             AS.putLang(had.lang); DLG.accOpen.clear(); had.acc.forEach(k => DLG.accOpen.add(k));
+            if (stubRailSync) delete HK.hooks.syncRailGeometry;
             Dom.grabDom();
           }
         } };
