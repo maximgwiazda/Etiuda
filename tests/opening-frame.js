@@ -1,6 +1,6 @@
 /* THE DESK'S FIRST FRAME IS THE OPENING'S, IN THE DESK'S OWN THEME. Driven in the shell, unpackaged, offscreen.
  *
- *   ETIUDA_WINDOWS=<today> node tests/opening-frame.js
+ *   node tests/opening-frame.js        with the window wall's variable set to today's date for that one command
  *
  * The case is Max's (2026-11-09 20:26): "At first, the regular empty state Desk shows up, with a dark theme for some
  * reson applied (even though light theme is set up in my Desk; possibly it's because my system theme is dark), and only
