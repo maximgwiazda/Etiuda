@@ -92,8 +92,14 @@
        document left stays on screen and nothing half-built is painted. Where blocking is not
        understood, the body stays unseen. */
     var host=window.E_HOST;
-    if(host && host.recovering){
-      root.classList.add("e-arriving");
+    if(host && host.recovering) root.classList.add("e-arriving");
+    /* THE OPENING IS THE WINDOW'S FIRST FRAME: a launch, the window session's first load unless quiet (on-open.js
+       deskLaunch), is held the same way, so the shell shows the launch's ground and never the page half-built. */
+    var launching=false;
+    if(!root.classList.contains("e-still")) try{
+      launching=!((dh && typeof host.session==="function") ? host.session("get","eLaunched") : sessionStorage.getItem("eLaunched"));
+    }catch(e){}
+    if(root.classList.contains("e-arriving") || launching){
       var hold=document.createElement("link");
       if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
         hold.rel="expect"; hold.href="#eBooted"; hold.setAttribute("blocking","render");
@@ -105,6 +111,12 @@
       var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
+  }catch(e){}
+  /* The theme before the first frame, chosen as theme.js applyTheme chooses it: the stored choice, else the system's. */
+  try{
+    var th=desk ? desk.eTheme : localStorage.getItem("eTheme");
+    if(th!=="light" && th!=="dark") th=matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", th);
   }catch(e){}
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
@@ -139,6 +151,7 @@
   window.E_BOOT_OK=function(){
     booted=true;
     arrive();
+    document.documentElement.classList.remove("e-veiled");   // a launch held where blocking is not understood
     try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception

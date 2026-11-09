@@ -60,6 +60,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
+    node tests/opening-frame.js                      the desk's first frame is the opening's ground in the desk's theme, read from the frame itself in an unpackaged Electron, against the system's theme and a quiet desk
     ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panels, the menus, Quick facts, the pill bar and a dialog: painted in dark, absent in light, a quiet line along the top and bottom, Chrome
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard. node tests/pick-desk.js --guards proves the desk guards on stand-ins and opens nothing

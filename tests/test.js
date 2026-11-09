@@ -2526,9 +2526,8 @@ function recoveryTests() {
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
   const guard = m ? m[1] : "";
-  const run = (host, arriving) => {
+  const run = (host, store, quiet) => {
     const cls = new Set(), head = [];
-    const store = arriving ? { eArriving: "1" } : {};
     const el = () => ({ style: { setProperty() {} }, setAttribute(k, v) { this[k] = v; },
       blocking: { supports: w => w === "render" }, appendChild() {} });
     const sb = {
@@ -2537,7 +2536,8 @@ function recoveryTests() {
         head: { appendChild: n => head.push(n) }, createElement: el, getElementById: () => null, querySelector: () => null },
       sessionStorage: { getItem: k => store[k] || null, removeItem: k => { delete store[k]; }, setItem: (k, v) => { store[k] = v; }, clear() {} },
       localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
-      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      matchMedia: q => ({ matches: !!quiet && /reduced-motion/.test(q) }),
+      location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
       navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
       setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
     };
@@ -2547,13 +2547,17 @@ function recoveryTests() {
     return [cls.has("e-arriving"), hold.length];
   };
   let got;
+  const seen = { eLaunched: "1" };
   try {
-    got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
+    got = [run({ recovering: true }, seen), run({ recovering: true }, {}), run({ recovering: false }, seen),
+      run(null, { eArriving: "1", eLaunched: "1" }), run(null, {}), run(null, {}, true)];
   } catch (e) { got = "the boot guard threw: " + e.message; }
   /* The page no longer reloads itself to change catalogs, so a session mark alone, which only that
-     reload wrote, holds nothing: the third case is the one that changed. */
-  eq("the guard holds the first frame for the shell's recovery, and for nothing else, a stray session mark included",
-    got, [[true, 1], [false, 0], [false, 0], [false, 0]]);
+     reload wrote, holds nothing. A launch, the session's first load with motion on, is held for the opening
+     (Max, 2026-11-09 20:26: "the opening animation should play right away, with no empty state desk showing up
+     before it starts playing"); a load the session has launched before, and a quiet one, are not. */
+  eq("the guard holds the first frame for the shell's recovery and for a launch, once each, and for nothing else: not a load the session launched before, a stray session mark or a quiet desk",
+    got, [[true, 1], [true, 1], [false, 0], [false, 0], [false, 1], [false, 0]]);
 }
 /* THE FIRST PAINT READS THE SETTINGS WHERE THEY ARE KEPT: an installed Etiuda keeps them in its desk
    file and never in localStorage, so the head script reads the desk the shell hands it, once, and
@@ -3365,6 +3369,24 @@ function launchMarkTests() {
   eq("given way by itself, the work rises in over 350 ms and the drawing stops with the veil", got, ["time", "350ms", true, false, false]);
 
   try {
+    /* The opening starts on the window's word that it is on screen, not on the next look 150 ms on: the word at 40 ms
+       asks for the first frame at once; without the word the look at 150 ms is the first that asks. */
+    const word = withWord => {
+      let seen = false, tell = null;
+      const L = launchLab({ covered: () => !seen });
+      L.launch(withWord ? { shown: fn => { if (seen) fn(); else tell = fn; } } : {});
+      const before = L.frames();
+      L.timersTo(40); seen = true; if (tell) tell();
+      const at = L.frames();
+      L.timersTo(160);
+      return [before, at, L.frames()];
+    };
+    got = [word(true), word(false)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the opening asks for its first frame on the window's word that it is shown, at once, and not on the next look 150 ms on",
+    got, [[0, 1, 1], [0, 0, 1]]);
+
+  try {
     const L = launchLab({ still: true }), h = L.launch(); const framesAsked = L.frames(), dots = L.drawn.arc, img = L.drawn.image;
     L.ready(); L.timersTo(6000);
     // the control: moving, the same launch asks for frames and draws nothing until one comes
@@ -3446,13 +3468,13 @@ function launchMarkTests() {
       require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
       const o = calls[0];
       return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.markCovered, typeof o.ready.then,
-        o.phase === sb.fifthPhase, o.R || null] : null, handed.length];
+        o.phase === sb.fifthPhase, o.R || null, o.shown === sb.afterShown] : null, handed.length];
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock",
-    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0], [0, [], null, 0],
-      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0]]);
+    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null, true], 0], [0, [], null, 0],
+      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null, true], 0]]);
 
   try {
     // with a launch arriving, the chrome is already repainted and the menu's warm copy is what waits
