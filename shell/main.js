@@ -24,7 +24,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
-const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, setJumpList, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 const { readsLikeMessage, scoreSuggestions } = require(path.join(__dirname, "clip-suggest.cjs"));
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
@@ -335,8 +335,10 @@ let openedWith = "";
 let openedBaseline = null;
 let offeredLead = null;
 function ecFromArgv(argv) {
-  for (const a of (argv || []).slice(1)) {
-    const s = String(a);
+  const list = Array.isArray(argv) ? argv : [];
+  const candidates = list.length === 1 ? list : list.slice(1);
+  for (const a of candidates) {
+    const s = String(a).replace(/^"|"$/g, "");
     if (s.slice(0, 7).toLowerCase() === "etiuda:") continue; /* plant:link-file */
     if (s.charAt(0) === "-" || !/\.ec$/i.test(s)) continue;
     try { if (fs.statSync(s).isFile()) return path.resolve(s); } catch { /* not a file from here */ }
@@ -900,6 +902,7 @@ function readCatalog() {
     return null;
   }
   catalogFrom = chosen.file;
+  recordRecentCatalog(chosen.file);
   historySoon(chosen.file, chosen.text);
   const cards = Array.isArray(opened.data.cards) ? opened.data.cards.length : 0;
   console.log("etiuda: catalog read from " + chosen.file + ", " + cards + " cards");
@@ -1359,6 +1362,7 @@ function offerFile(win, file) {
     handAsked(json, "");
     noteHanded(json, "opened");
     catalogFrom = file;
+    recordRecentCatalog(file);
     offeredLead = null;
     rememberOpenedBaseline();
     historySoon(file, text);
@@ -1471,6 +1475,7 @@ function noteOpenedTaken(pin, text, win) {
     releaseOpened();
     catalogFrom = file;
     catalogJson = body;
+    recordRecentCatalog(file);
     return;
   }
   let mine = "";
@@ -1513,6 +1518,20 @@ const handedAsked = new Map(), HANDED_ASKED_MAX = 32;
 const handedUse = new Map();
 let inUseKept = null, catalogAskIds = [], heldInUse = null, heldAnswer = null, ejectOwed = null;
 let loadedText = "", asksWatcher = null, askSettle = null, lastCatalogCopy = "";
+let recentCatalogs = [];
+const RECENT_CATALOGS_MAX = 32;
+function recordRecentCatalog(file) {
+  if (!file || typeof file !== "string" || isBuiltIn(file)) return;
+  let resolved;
+  try { resolved = path.resolve(file); } catch { return; }
+  if (deskKeys === undefined) {
+    try { readDesk(); } catch { /* start fresh */ }
+  }
+  const next = [resolved].concat(recentCatalogs.filter(f => f !== resolved));
+  recentCatalogs = next.slice(0, RECENT_CATALOGS_MAX);
+  try { persistDeskEnvelope(); } catch { /* envelope write best effort */ }
+  try { syncJumpList(); } catch { /* jump list optional */ }
+}
 const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
 /* The catalog text this desk loaded, beside its own desk file. The page keeps the runtime copy,
    not the format-2 document, and the folder's file is not always the one in use, so a restart
@@ -1737,6 +1756,7 @@ function deskEnvelopeBody(keysText) {
     + (inUseN > 0 ? ',"inUseN":' + inUseN : "")
     + (Object.keys(teamPauseSeen).length ? ',"teamPauseSeen":' + JSON.stringify(teamPauseSeen) : "")
     + (Object.keys(teamNeedsFolder).length ? ',"teamNeedsFolder":' + JSON.stringify(teamNeedsFolder) : "")
+    + (recentCatalogs.length ? ',"recentCatalogs":' + JSON.stringify(recentCatalogs) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -7138,6 +7158,11 @@ function readDesk() {
       if (ASK_ID_RE.test(s) && catalogAskIds.indexOf(s) < 0) catalogAskIds.push(s);
     });
     while (catalogAskIds.length > 64) catalogAskIds.shift();
+    if (doc && Array.isArray(doc.recentCatalogs)) doc.recentCatalogs.forEach(f => {
+      const s = String(f || "");
+      if (s && recentCatalogs.indexOf(s) < 0) recentCatalogs.push(s);
+    });
+    while (recentCatalogs.length > RECENT_CATALOGS_MAX) recentCatalogs.pop();
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     reloadLoadedCatalog();
@@ -8060,6 +8085,7 @@ function sendListing(win, force) {
   if (!win || win.isDestroyed() || !folderAnswers(catalogFolder())) return;
   const rows = listingRows();
   const key = JSON.stringify(rows.map(r => [r.desk ? r.desk.id : r.builtIn ? "~" : "", r.name, r.id, r.rev, r.sha]).sort());
+  try { syncJumpList(); } catch { /* jump list optional */ }
   if (!force && key === listingSent) return;
   listingSent = key;
   win.webContents.send("etiuda:catalog-listing", rows);
@@ -8259,7 +8285,10 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     historySoon(file, text);
     const json = catalogTextOf(text);
-    if (json) noteHanded(json, "opened");
+    if (json) {
+      noteHanded(json, "opened");
+      recordRecentCatalog(file);
+    }
     const note = rosterNoteText(json);
     return note ? { name: name, text: json, notOnTeam: note } : { name: name, text: json };
   }
@@ -8553,7 +8582,12 @@ const SHELL_WORDS = {
         trayQuit: "Quit Etiuda",
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda keeps running in the tray",
-        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this." },
+        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this.",
+        jumpRecent: "Recent catalogs",
+        jumpReplies: "Bring the replies over any window",
+        jumpNewTab: "New tab",
+        jumpLibrary: "Library",
+        jumpSettings: "Settings" },
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
@@ -8572,7 +8606,12 @@ const SHELL_WORDS = {
         trayQuit: "Zakończ Etiudę",
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda działa dalej w zasobniku",
-        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka się z ikony w zasobniku, a to zachowanie zmienia się w Ustawieniach, w części Ogólne." },
+        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka się z ikony w zasobniku, a to zachowanie zmienia się w Ustawieniach, w części Ogólne.",
+        jumpRecent: "Ostatnie katalogi",
+        jumpReplies: "Przywołaj odpowiedzi nad dowolne okno",
+        jumpNewTab: "Nowa rozmowa",
+        jumpLibrary: "Biblioteka",
+        jumpSettings: "Ustawienia" },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -10126,12 +10165,51 @@ function ensureTray() {
   }
   return deskTray;
 }
+/* THE JUMP LIST. Recent catalogs this desk itself loaded most recently, newest first,
+   five at most, files that still exist, and the four tasks: Bring the replies over any window,
+   New tab, Library, Settings. A file that is now gone drops out. */
+function syncJumpList() {
+  try {
+    const w = trayWords();
+    const tasks = [
+      { title: w.jumpReplies || w.trayReplies || "Bring the replies over any window", args: "--picker" },
+      { title: w.jumpNewTab || "New tab", args: "--new-tab" },
+      { title: w.jumpLibrary || "Library", args: "--library" },
+      { title: w.jumpSettings || w.traySettings || "Settings", args: "--settings" },
+    ];
+    const existing = [];
+    for (const f of recentCatalogs) {
+      if (existing.length >= 5) break;
+      try {
+        if (fs.existsSync(f) && fs.statSync(f).isFile()) existing.push(f);
+      } catch { /* file gone */ }
+    }
+    const recent = existing.map(f => ({
+      title: path.basename(f, ".ec") || path.basename(f),
+      path: f,
+    }));
+    return setJumpList(app, {
+      tasks,
+      recent,
+      recentCategoryName: w.jumpRecent || "Recent catalogs",
+    });
+  } catch (e) {
+    console.error("etiuda: jump list could not be updated - " + (e && e.message || e));
+    return null;
+  }
+}
 /* A second launch hands its arguments to the one already running. --update-close seals and closes.
-   --hidden leaves a running copy where it is. Anything else brings the window forward. */
+   --hidden leaves a running copy where it is. --picker toggles the picker without showing the desk.
+   --settings, --library, --new-tab open their surface and bring the window forward.
+   A file argument is offered and never loaded. */
 function onSecondInstance(argv) {
   const args = Array.isArray(argv) ? argv : [];
   if (args.indexOf("--update-close") > -1) {
     handleUpdateClose();
+    return;
+  }
+  if (args.indexOf("--picker") > -1) {
+    try { pickToggle(); } catch { /* the picker can wait */ }
     return;
   }
   const link = linkArgFrom(args);
@@ -10141,8 +10219,24 @@ function onSecondInstance(argv) {
     if (file) offerFile(theWindow, file);
     return;
   }
-  const win = theWindow;
+  const win = deskWindow() || theWindow;
   if (win && typeof win.isDestroyed === "function" && !win.isDestroyed() && !PLACED_ASIDE) showDesk(win);
+  if (args.indexOf("--settings") > -1) {
+    try {
+      if (win && win.webContents && typeof win.webContents.send === "function")
+        win.webContents.send("etiuda:tray-go", "settings");
+    } catch { /* the page is gone */ }
+  } else if (args.indexOf("--library") > -1) {
+    try {
+      if (win && win.webContents && typeof win.webContents.send === "function")
+        win.webContents.send("etiuda:tray-go", "library");
+    } catch { /* the page is gone */ }
+  } else if (args.indexOf("--new-tab") > -1) {
+    try {
+      if (win && win.webContents && typeof win.webContents.send === "function")
+        win.webContents.send("etiuda:tray-go", "new-tab");
+    } catch { /* the page is gone */ }
+  }
   if (file) offerFile(win, file);
 }
 
@@ -10177,6 +10271,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
       return awaitFolderPrime().then(() => {
         createWindow();
         try { ensureTray(); } catch { /* the window still opens */ }
+        try { syncJumpList(); } catch { /* the jump list still stands */ }
         hotkeyReady = true; syncHotkey();
         // Asked for here: powerMonitor is not to be used before the app is ready.
         require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
