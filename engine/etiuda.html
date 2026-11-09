@@ -7648,6 +7648,21 @@ What you type stays in this browser only.`;
     "Hide categories": "Ukryj kategorie",
     "Show categories": "Pokaż kategorie",
     "Settings": "Ustawienia",
+    "AI": "AI",
+    "Suggest intents with the built-in model": "Suggest intents with the built-in model",
+    // placeholder: Claudette
+    "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.": "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.",
+    // placeholder: Claudette
+    "The model ranks the suggestions; nothing leaves this computer": "The model ranks the suggestions; nothing leaves this computer",
+    // placeholder: Claudette
+    "Suggestions come from matching words, and the model stays unloaded": "Suggestions come from matching words, and the model stays unloaded",
+    // placeholder: Claudette
+    "Suggestions from the built-in model": "Suggestions from the built-in model",
+    // placeholder: Claudette
+    "Suggestions from matching words": "Suggestions from matching words",
+    // placeholder: Claudette
+    "The model built into Etiuda, which works on this computer alone.": "The model built into Etiuda, which works on this computer alone.",
+    // placeholder: Claudette
     "General": "Ogólne",
     "Notifications": "Powiadomienia",
     "Notifications from Etiuda, also while its window is closed.": "Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",
@@ -15227,9 +15242,12 @@ What you type stays in this browser only.`;
   // src/modules/host.js
   var host_exports = {};
   __export(host_exports, {
+    E_AI_OFF_KEY: () => E_AI_OFF_KEY,
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
     dispatchTabChord: () => dispatchTabChord,
+    eAiModel: () => eAiModel,
+    eAiOn: () => eAiOn,
     eBranchIdentity: () => eBranchIdentity,
     eCatalogBuiltIn: () => eCatalogBuiltIn,
     eCatalogEject: () => eCatalogEject,
@@ -15266,6 +15284,7 @@ What you type stays in this browser only.`;
     eSetMaximized: () => eSetMaximized,
     eSharedRead: () => eSharedRead,
     eSharedWrite: () => eSharedWrite,
+    eTellAi: () => eTellAi,
     eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
     wireFolderLink: () => wireFolderLink,
@@ -15625,6 +15644,27 @@ What you type stays in this browser only.`;
   }
   function eHotkeyLabel(accel) {
     return String(accel || "").split("+").map((k) => k === "Control" ? "Ctrl" : k).join("+");
+  }
+  var E_AI_OFF_KEY = "eAiOff";
+  function eAiOn() {
+    return lsGet(E_AI_OFF_KEY) !== "1";
+  }
+  function eAiModel() {
+    const h = eHost();
+    if (!h || typeof h.aiState !== "function") return false;
+    try {
+      const st = h.aiState();
+      return !!(st && st.model);
+    } catch (e) {
+      return false;
+    }
+  }
+  function eTellAi() {
+    const h = eHost();
+    try {
+      if (h && typeof h.setAi === "function") h.setAi(eAiOn());
+    } catch (e) {
+    }
   }
   function eOpenPicker() {
     const h = eHost();
@@ -31782,7 +31822,8 @@ What you type stays in this browser only.`;
     "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
     "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
     "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
-    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>'
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
   };
   function sxIcon(name) {
     const body = SX_ICONS[name];
@@ -31999,6 +32040,27 @@ What you type stays in this browser only.`;
     ));
     return rows.length ? [{ rows }] : [];
   }
+  function aiGroups() {
+    if (!eAiModel()) return [];
+    return [{ rows: [
+      // placeholder: Claudette
+      row(
+        "aisuggest",
+        "ai",
+        t("Suggest intents with the built-in model"),
+        // placeholder: Claudette
+        t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+        onoff(
+          "aisuggest",
+          eAiOn(),
+          // placeholder: Claudette
+          t("The model ranks the suggestions; nothing leaves this computer"),
+          // placeholder: Claudette
+          t("Suggestions come from matching words, and the model stays unloaded")
+        )
+      )
+    ] }];
+  }
   function dataGroups() {
     return [{ rows: [
       row(
@@ -32089,7 +32151,9 @@ What you type stays in this browser only.`;
       { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: notificationsGroups() },
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
-      { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() }
+      { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
+      // placeholder: Claudette (the lede; "AI" is hers)
+      { id: "ai", icon: "ai", name: t("AI"), lede: t("The model built into Etiuda, which works on this computer alone."), groups: aiGroups() }
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
@@ -32254,6 +32318,11 @@ What you type stays in this browser only.`;
             else lsDel("eSharedEdit");
             hooks.syncSampleMark();
             toast(on ? t("From now on, changes go into the shared catalog") : t("From now on, changes stay in this desk's own file"));
+          } else if (seg3 === "aisuggest") {
+            if (on) lsDel(E_AI_OFF_KEY);
+            else lsSet(E_AI_OFF_KEY, "1");
+            eTellAi();
+            toast(on ? t("Suggestions from the built-in model") : t("Suggestions from matching words"));
           } else if (seg3 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
           } else if (seg3 === "pillslock") {
@@ -32363,7 +32432,8 @@ What you type stays in this browser only.`;
       E_HOTKEY_KEY,
       "eQuitOnClose",
       "eNotifyEditionOff",
-      "eNotifyCatalogOff"
+      "eNotifyCatalogOff",
+      E_AI_OFF_KEY
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {
@@ -32489,6 +32559,7 @@ What you type stays in this browser only.`;
       if (host && typeof host.setClosePolicy === "function") host.setClosePolicy(lsGet("eQuitOnClose") === "1");
     } catch (e) {
     }
+    eTellAi();
   }
   registerScreen("settings", {
     title: () => t("Settings"),
@@ -34993,6 +35064,23 @@ What you type stays in this browser only.`;
       p.tier3 = next;
     }
   }
+  function intentPassages(catalog) {
+    const tags = (Array.isArray(catalog && catalog.tags) ? catalog.tags : []).filter((t2) => t2 && t2.kind === "request");
+    const out = [];
+    for (const req of tags) {
+      const id = String(req.id || "");
+      if (!id) continue;
+      const topic = req.topic && typeof req.topic === "object" ? req.topic : { "": req.topic };
+      const clause = req.clause && typeof req.clause === "object" ? req.clause : { "": req.clause };
+      const texts = [];
+      for (const code of /* @__PURE__ */ new Set([...Object.keys(topic), ...Object.keys(clause)])) {
+        const text = [topic[code], clause[code]].map((x) => String(x || "").trim()).filter(Boolean).join(" - ");
+        if (text && texts.indexOf(text) < 0) texts.push(text);
+      }
+      if (texts.length) out.push({ id, texts });
+    }
+    return out;
+  }
   function buildSuggestModel(catalog, labels) {
     const weights = buildAffinityWordWeights(catalog || {});
     const profiles = buildProfiles(catalog || {});
@@ -35010,6 +35098,7 @@ What you type stays in this browser only.`;
         topic: p.topicWords,
         clause: p.clauseWords
       })),
+      passages: intentPassages(catalog || {}),
       labels: {
         suggest: String(labels && labels.suggest || ""),
         suggestTip: String(labels && labels.suggestTip || "")
@@ -35358,7 +35447,7 @@ What you type stays in this browser only.`;
       }
       const paxVal = pickDeskPax();
       const curEpoch = suggestEpoch();
-      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, picked: intentIdxs.map((i) => intentIdAt(i)), epoch: curEpoch }, pickFound(""));
+      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, picked: intentIdxs.map((i) => intentIdAt(i)), epoch: curEpoch, ai: eAiOn() }, pickFound(""));
       if (a.profiles || a.epoch !== void 0 && a.epoch !== curEpoch) {
         try {
           out.profiles = suggestModel();
@@ -35366,6 +35455,17 @@ What you type stays in this browser only.`;
         }
       }
       return withIndex(out, "");
+    }
+    if (op === "suggest-profiles") {
+      const on = eAiOn();
+      const out = { ai: on, epoch: suggestEpoch() };
+      if (on) {
+        try {
+          out.profiles = suggestModel();
+        } catch (e) {
+        }
+      }
+      return out;
     }
     if (op === "suggest-open") {
       bumpSuggestOpen(pack);

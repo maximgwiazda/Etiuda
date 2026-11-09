@@ -902,6 +902,14 @@ UI_STRINGS.pl={
   "Hide categories":"Ukryj kategorie",
   "Show categories":"Pokaż kategorie",
   "Settings":"Ustawienia",
+  "AI":"AI",
+  "Suggest intents with the built-in model":"Suggest intents with the built-in model", // placeholder: Claudette
+  "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.":"Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.", // placeholder: Claudette
+  "The model ranks the suggestions; nothing leaves this computer":"The model ranks the suggestions; nothing leaves this computer", // placeholder: Claudette
+  "Suggestions come from matching words, and the model stays unloaded":"Suggestions come from matching words, and the model stays unloaded", // placeholder: Claudette
+  "Suggestions from the built-in model":"Suggestions from the built-in model", // placeholder: Claudette
+  "Suggestions from matching words":"Suggestions from matching words", // placeholder: Claudette
+  "The model built into Etiuda, which works on this computer alone.":"The model built into Etiuda, which works on this computer alone.", // placeholder: Claudette
   "General":"Ogólne",
   "Notifications":"Powiadomienia",
   "Notifications from Etiuda, also while its window is closed.":"Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",

@@ -220,6 +220,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   hotkeyState: () => ipcRenderer.sendSync("etiuda:hotkey-state"),
   setHotkey: (accel) => ipcRenderer.invoke("etiuda:hotkey-set", String(accel || "")),
   pauseHotkey: (on) => ipcRenderer.send("etiuda:hotkey-hold", !!on),
+  /* The embedded model: {model} says whether this desk carries it, and the switch is told to the shell as it moves. */
+  aiState: () => ipcRenderer.sendSync("etiuda:ai-state"),
+  setAi: (on) => ipcRenderer.send("etiuda:ai-set", !!on),
   /* The picker opened from the desk itself, by the pointer, as the hotkey opens it. */
   openPicker: () => ipcRenderer.send("etiuda:pick-show"),
   noteOwnText: (text) => ipcRenderer.send("etiuda:own-text", String(text || "")),
