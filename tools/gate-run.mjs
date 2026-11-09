@@ -264,6 +264,19 @@ export const PRODUCT_CORE = [
   { step: "catalog-sig", file: "tests/catalog-sig.js", cmd: "node tests/catalog-sig.js", args: [] },
 ];
 
+/* NODE_MODULES IS GONE (the test architect, 2026-11-09): a worktree's node_modules junction was swept from under two landings
+   mid-gate, and every later leg then failed on a missing module or binary, read as reds. A tree whose package.json declares
+   dependencies and has no node_modules, or a junction to nothing, has no verdict to give, so it is refused with 78 at the
+   start and before each step. */
+function modulesGone() {
+  let pkg = null;
+  try { pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")); } catch (e) { return ""; }
+  const deps = Object.keys((pkg && pkg.dependencies) || {}).length + Object.keys((pkg && pkg.devDependencies) || {}).length;
+  if (!deps || fs.existsSync(path.join(ROOT, "node_modules"))) return "";
+  return "node_modules is gone at " + path.join(ROOT, "node_modules") + " (a swept junction, or never linked)";
+}
+const MODULES_HOW = "relink it (cmd /c mklink /J <tree>\\node_modules <checkout>\\node_modules) and run again; nothing was judged";
+
 function refuse(what, how) {
   console.log("  FAIL " + what);
   if (how) console.log("       " + how);
@@ -1293,6 +1306,7 @@ async function main() {
     process.exit(0);
   }
 
+  { const gone = modulesGone(); if (gone) refuse(gone, MODULES_HOW); }
   const inTemp = /\\AppData\\Local\\Temp\\/i.test(ROOT) || inside(os.tmpdir(), ROOT);
   if (mode === "nightly") {
     if (inTemp && process.env.ETIUDA_NIGHTLY_ALLOW_TEMP !== "1" && !asked.includes("--dry-run")) {
@@ -1548,6 +1562,15 @@ async function main() {
   const ranFiles = [];
 
   for (const step of ordered) {
+    const goneNow = modulesGone();
+    if (goneNow) {
+      console.log("  FAIL " + goneNow);
+      console.log("       " + MODULES_HOW);
+      console.log("  gate-run: refused, the run has no verdict");
+      redsList.push({ gate: gateName(step.file), cmd: step.cmd, exit: NO_VERDICT, cause: goneNow, class: "hold" });
+      worst = NO_VERDICT;
+      break;
+    }
     const now = new Date();
     if (step.alone) console.log("gate-run: " + step.file.replace(/\\/g, "/") + " run after the rest of its list (not alone on the machine)");
     console.log("\n> " + step.cmd);
