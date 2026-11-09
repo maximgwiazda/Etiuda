@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 120;
+const EXPECTED = 127;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -151,7 +151,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
@@ -1795,6 +1795,137 @@ try {
   } catch (e) { d6MenuWhy = String(e && e.message || e).split("\n")[0]; }
   finally { fs.watch = realWatchMenu; }
   check(d6Menu, "D6-menu the tray offers Open, the replies shortcut, notifications, Settings and Quit, and a click opens the window (" + d6MenuWhy + ")");
+
+  /* 973. LINUX DESK TRAY PNG AND LOGIN ITEM OFF WINDOWS */
+  /* 973a. PNG exists and carries PNG signature */
+  const trayPngPath = path.join(ROOT, "shell", "etiuda-tray.png");
+  const pngExists = fs.existsSync(trayPngPath);
+  let pngSig = false;
+  if (pngExists) {
+    const b = fs.readFileSync(trayPngPath);
+    pngSig = b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
+      && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a;
+  }
+  check(pngExists && pngSig, "973a shell/etiuda-tray.png exists and carries the PNG signature");
+
+  /* 973b. Package file list in electron-builder.js carries the PNG for Linux */
+  let pkgHasPng = false;
+  try {
+    delete nodeRequire.cache[nodeRequire.resolve("../electron-builder.js")];
+    const bld = nodeRequire(path.join(ROOT, "electron-builder.js"));
+    /* The root list carries it, and no platform-level `files` exists to stand in for the root list on Linux. */
+    const files = bld.files || [];
+    pkgHasPng = files.includes("shell/etiuda-tray.png") && files.includes("shell/main.js")
+      && !(bld.linux && bld.linux.files) && !(bld.win && bld.win.files);
+  } catch {}
+  check(pkgHasPng, "973b shell/etiuda-tray.png is in electron-builder.js's root file list beside shell/main.js, with no platform-level list");
+
+  /* 973c. Tray built from PNG on linux and .ico on win32 */
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  let trayLinuxOk = false, trayWinOk = false;
+  try {
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    const iconLinux = typeof mainTest.trayIcon === "function" ? mainTest.trayIcon() : null;
+    trayLinuxOk = !!iconLinux && String(iconLinux.path || "").endsWith("etiuda-tray.png");
+
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    const iconWin = typeof mainTest.trayIcon === "function" ? mainTest.trayIcon() : null;
+    trayWinOk = !!iconWin && String(iconWin.path || "").endsWith("etiuda.ico");
+  } finally {
+    Object.defineProperty(process, "platform", origPlatform);
+  }
+  check(trayLinuxOk && trayWinOk, "973c on linux the tray is built from etiuda-tray.png and on win32 from etiuda.ico ("
+    + JSON.stringify({ trayLinuxOk, trayWinOk }) + ")");
+
+  /* 973d. With linux the Settings row is absent and the act refused, with win32 present and working */
+  let settingsLinuxRowAbsent = false, actRefused = false;
+  let settingsWinRowPresent = false, actAccepted = false;
+  const docWas973 = globalThis.document;
+  const csWas973 = globalThis.getComputedStyle;
+  const rafWas973 = globalThis.requestAnimationFrame;
+  const clsOn973 = s => ({ contains: c => s.has(c), add: c => s.add(c), remove: c => s.delete(c), toggle: (c, v) => (v ? s.add(c) : s.delete(c)) });
+  if (!globalThis.getComputedStyle) globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0", marginLeft: "0" });
+  if (!globalThis.requestAnimationFrame) globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+  globalThis.document = {
+    visibilityState: "visible",
+    addEventListener: listen("document"),
+    removeEventListener: noop,
+    body: { classList: clsOn973(new Set()) },
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: clsOn973(new Set()), setAttribute() {}, getAttribute: () => null, addEventListener() {} },
+  };
+  try {
+    const SET = await import(PLAIN("settings.js"));
+
+    // Linux
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    window.E_HOST = Object.assign({}, REAL_HOST, { platform: "linux" });
+    const linuxSecs = SET.settingsSections();
+    const linuxGen = linuxSecs.find(s => s.id === "general");
+    const linuxHasStartWin = !!linuxGen && linuxGen.groups.some(g => (g.rows || []).some(r => r && r.key === "startwin"));
+    settingsLinuxRowAbsent = !linuxHasStartWin;
+
+    loginApplied = null;
+    REAL_HOST.setLoginItem(true);
+    actRefused = loginApplied === null;
+
+    // Win32
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    window.E_HOST = Object.assign({}, REAL_HOST, { platform: "win32" });
+    const winSecs = SET.settingsSections();
+    const winGen = winSecs.find(s => s.id === "general");
+    const winHasStartWin = !!winGen && winGen.groups.some(g => (g.rows || []).some(r => r && r.key === "startwin"));
+    settingsWinRowPresent = winHasStartWin;
+
+    loginApplied = null;
+    REAL_HOST.setLoginItem(true);
+    actAccepted = !!loginApplied && loginApplied.openAtLogin === true;
+  } finally {
+    Object.defineProperty(process, "platform", origPlatform);
+    REAL_HOST.setLoginItem(false);
+    loginApplied = null;
+    window.E_HOST = REAL_HOST;
+    globalThis.document = docWas973;
+    globalThis.getComputedStyle = csWas973;
+    globalThis.requestAnimationFrame = rafWas973;
+  }
+  check(settingsLinuxRowAbsent && actRefused && settingsWinRowPresent && actAccepted,
+    "973d with linux the Settings row is absent and the act refused, with win32 present and working ("
+    + JSON.stringify({ settingsLinuxRowAbsent, actRefused, settingsWinRowPresent, actAccepted }) + ")");
+
+  /* 973e. Plant the platform choice of the tray image, red with plants on */
+  if (PLANTS_OFF) {
+    skip("973e lifting plant:tray-platform turns the tray icon on linux back to etiuda.ico");
+  } else {
+    let plantRed = false;
+    try {
+      const origSrc = shellSrc("main.js");
+      const marker = "/* plant:tray-platform */";
+      if (origSrc.includes(marker)) {
+        const lines = origSrc.split("\n");
+        const idx = lines.findIndex(l => l.includes(marker));
+        lines.splice(idx, 1);
+        const mutatedSrc = lines.join("\n");
+        const plantTest = {};
+        const isolatedElectron = Object.assign({}, electron, {
+          app: Object.assign({}, electron.app, { on: noop, whenReady: () => new Promise(noop) }),
+          ipcMain: Object.assign({}, electron.ipcMain, { on: noop, handle: noop }),
+          Tray: function (icon) { this.icon = icon; },
+        });
+        const isolatedReq = n => (n === "electron" ? isolatedElectron : nodeRequire(n));
+        new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
+          mutatedSrc + "\nif (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon;")(
+          isolatedReq, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, plantTest);
+        Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+        try {
+          const tray = plantTest.ensureTray();
+          plantRed = !!tray && !!tray.icon && String(tray.icon.path || "").endsWith("etiuda.ico");
+        } finally {
+          Object.defineProperty(process, "platform", origPlatform);
+        }
+      }
+    } catch {}
+    check(plantRed, "973e lifting plant:tray-platform turns the tray icon on linux back to etiuda.ico");
+  }
 
   /* D8. THE JUMP LIST AND SECOND-INSTANCE ARGUMENTS */
   let d8JumpList = false, d8JumpListWhy = "";

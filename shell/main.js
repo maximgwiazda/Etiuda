@@ -7812,11 +7812,13 @@ ipcMain.on("etiuda:close-answer", (e, a) => {
 /* Start with Windows is Windows' own login item, read back from there, never a desk key. */
 ipcMain.on("etiuda:login-item-set", (e, on) => {
   if (!fromEngine(e)) return;
+  if (process.platform !== "win32") return;
   try { setLoginItemSettings(app, !!on); }
   catch (err) { console.error("etiuda: start with Windows could not be changed - " + err.message); }
 });
 ipcMain.on("etiuda:login-item-state", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
+  if (process.platform !== "win32") { e.returnValue = { openAtLogin: false }; return; }
   let openAtLogin = false;
   try {
     if (typeof app.getLoginItemSettings === "function") {
@@ -10304,7 +10306,9 @@ let deskTray = null;
 function trayIcon() {
   try {
     if (!nativeImage || typeof nativeImage.createFromPath !== "function") return null;
-    const img = nativeImage.createFromPath(path.join(__dirname, "etiuda.ico"));
+    let file = "etiuda.ico";
+    if (process.platform === "linux") file = "etiuda-tray.png"; /* plant:tray-platform */
+    const img = nativeImage.createFromPath(path.join(__dirname, file));
     if (img && typeof img.isEmpty === "function" && img.isEmpty()) return null;
     return img || null;
   } catch { return null; }

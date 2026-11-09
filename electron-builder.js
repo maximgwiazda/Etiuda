@@ -100,7 +100,10 @@ module.exports = {
   files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs", "shell/clip-suggest.cjs", "shell/tray.cjs",
           "shell/relay/channel.cjs", "shell/relay/blob.cjs", "shell/folder/syncer.cjs", "shell/folder/syncer-worker.cjs",
           "shell/embed/suggest.cjs", "shell/embed/core.cjs", "shell/embed/worker.cjs",
-          "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec"],
+          "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec",
+          // The tray's PNG, which Linux reads where it reads an .ico as empty (board 973). In the root list, not a
+          // linux-level `files`, so it can never stand in for the root list.
+          "shell/etiuda-tray.png"],
   asar: true,
   // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
   // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read
