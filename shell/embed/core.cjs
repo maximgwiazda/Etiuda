@@ -13,24 +13,36 @@ const EMBED_PROMPT = "task: classification | query: ";
 const EMBED_MAX_TOKENS = 128;
 const EMBED_LIMIT = 5;
 
-/* EmbeddingGemma 2, q4 ONNX, each file at a fixed commit of the repository named beside it. The tokenizer files are
-   Google's own; the ONNX weights are Hugging Face's conversion of them. */
+/* EmbeddingGemma 2. The tokenizer files are Google's own. The ONNX weights are our own conversion of
+   Google's weights, not Hugging Face's. SHIPPED is the width the desk loads. The other list is the
+   fp16 row of tools/model-export/pin.json, so the swap is this one constant. */
+const SHIPPED = "q4";
+const WEIGHTS = "https://huggingface.co/google/embeddinggemma-2/resolve/f9972ac22e696a105c482202646979e33e4b5a1e/model.safetensors";
+const WIDTHS = Object.freeze({
+  q4: Object.freeze([
+    Object.freeze({ name: "model_q4.onnx", size: 1827764,
+      sha256: "e13c09a774ef0d6aab552b329e832c5c8654d799d9d1cc8eac9dd6bd76d49c63", source: WEIGHTS }),
+    Object.freeze({ name: "model_q4.onnx_data", size: 173850624,
+      sha256: "7fc9b472f2dfa0b2087b466c2dfcb52af592cb57dd7c5d7d382f41bac5a9d3a4", source: WEIGHTS }),
+  ]),
+  fp16: Object.freeze([
+    Object.freeze({ name: "model_q4.onnx", size: 1785165,
+      sha256: "26334b4c9554b15258cd1673955dfa7ae06e6d8476335fddefe75d82fca43b1f", source: WEIGHTS }),
+    Object.freeze({ name: "model_q4.onnx_data", size: 541984768,
+      sha256: "14639bd1a88b11f6b25e860a704b3030e6ab2861deb84b3e93b4f68d94ea8c4f", source: WEIGHTS }),
+  ]),
+});
+const TOKENIZER = Object.freeze([
+  Object.freeze({ name: "tokenizer.json", size: 32170510,
+    sha256: "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+    source: "https://huggingface.co/google/embeddinggemma-2/resolve/f9972ac22e696a105c482202646979e33e4b5a1e/tokenizer.json" }),
+  Object.freeze({ name: "tokenizer_config.json", size: 1599,
+    sha256: "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874",
+    source: "https://huggingface.co/google/embeddinggemma-2/resolve/f9972ac22e696a105c482202646979e33e4b5a1e/tokenizer_config.json" }),
+]);
 const MODEL_PIN = Object.freeze({
-  name: "embeddinggemma-2-q4",
-  files: Object.freeze([
-    Object.freeze({ name: "model_q4.onnx", size: 490742,
-      sha256: "f9eeba97acddf139b8ee2ddf04bc30dceafa88de93fadf74d7644e0d61a477a9",
-      source: "https://huggingface.co/onnx-community/embeddinggemma-2-ONNX/resolve/daa72c51243991dfcaf9f9137d2c573d8f7790c0/onnx/model_q4.onnx" }),
-    Object.freeze({ name: "model_q4.onnx_data", size: 174028800,
-      sha256: "c3975f2d1ab7a1878ae31a7d7a9b7804a827aff3800b60dfceafce21cac3df49",
-      source: "https://huggingface.co/onnx-community/embeddinggemma-2-ONNX/resolve/daa72c51243991dfcaf9f9137d2c573d8f7790c0/onnx/model_q4.onnx_data" }),
-    Object.freeze({ name: "tokenizer.json", size: 32170510,
-      sha256: "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
-      source: "https://huggingface.co/google/embeddinggemma-2/resolve/f9972ac22e696a105c482202646979e33e4b5a1e/tokenizer.json" }),
-    Object.freeze({ name: "tokenizer_config.json", size: 1599,
-      sha256: "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874",
-      source: "https://huggingface.co/google/embeddinggemma-2/resolve/f9972ac22e696a105c482202646979e33e4b5a1e/tokenizer_config.json" })
-  ])
+  name: "embeddinggemma-2-" + SHIPPED,
+  files: Object.freeze(WIDTHS[SHIPPED].concat(TOKENIZER)),
 });
 
 /* Every file of `pin` in `dir`, read once and hashed as read: {problem: null, bytes: {name: Buffer}} when all are whole,

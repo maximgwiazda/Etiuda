@@ -4,6 +4,7 @@
   "quant": "q4",
   "textOnly": true,
   "cosineMinimum": 0.98,
+  "taskFloor": "top-five within 1 of the published q4 on en and on pl",
   "packages": [
     {"name": "torch", "version": "2.15.0", "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib", "note": "The project describes this as a BSD-style licence. Install the CPU build of this version. The export is float32 on CPU."},
     {"name": "transformers", "version": "5.22.2", "licence": "Apache-2.0"},
