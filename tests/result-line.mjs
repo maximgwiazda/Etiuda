@@ -444,6 +444,7 @@ function realProfileTouchLegs() {
     ETIUDA_LOCK_PATH: path.join(cleanLab.root, "machine.lock"),
     ETIUDA_CHAINS_PATH: cleanChains,
     ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+    ETIUDA_INSTALLED_APP_RUNNING: "0", /* the desk's own installed app must not decide this leg (the test architect, 2026-11-09) */
   });
   const cleanLine = chainLines(cleanChains).pop() || null;
   check(cleanRun.exit === 0 && !!cleanLine && cleanLine.holds === false
@@ -469,6 +470,7 @@ function realProfileTouchLegs() {
     ETIUDA_LOCK_PATH: path.join(touchedLab.root, "machine.lock"),
     ETIUDA_CHAINS_PATH: touchedChains,
     ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+    ETIUDA_INSTALLED_APP_RUNNING: "0", /* the desk's own installed app must not decide this leg (the test architect, 2026-11-09) */
   });
   const touchedLine = chainLines(touchedChains).pop() || null;
   const touchedReds = touchedLine ? touchedLine.reds : [];
