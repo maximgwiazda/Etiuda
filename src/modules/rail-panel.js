@@ -192,6 +192,9 @@ function railHeaderEdge(){
 // Fixed rail geometry: clear header + any expanded pills (docked + peek).
 // Docked also aligns left/width to .rail-slot so page scroll never shifts it.
 function syncRailGeometry(){
+  /* A screen tab hides the panel and the pill bar. Written there, the vars below would change on
+     the root and back again on leaving, and each change restyles every card: the switch's cost. */
+  if(document.body.classList.contains("screen-on")) return;
   const root=document.documentElement;
   /* Until this has run once, --rail-top/left are unset and the CSS falls back to the
      window's own corner - the panel painted there and then jumped, exactly where the
