@@ -5846,6 +5846,27 @@ function checkCatalogRoundTrip() {
 const UI_STRINGS_COUNT = 1282;
 const UI_STRINGS_SHA256 = "c5f1c1fb86c8f22f98e276db057d864652d2bdfabe7a3fc11ca8e344ea0d6cb8";
 
+/* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
+   A table read through a variable ({key, icon, name, lede}) never reaches the census above or
+   i18n-scan, which read literal t() calls, so these English placeholders show on a Polish desk
+   and no count moves. Until the copywriter's words land in both languages, each is listed here,
+   checked present, and printed as owed. A word that leaves the source leaves this list in the
+   same commit, so the count only falls. */
+const OWED_WORDS = [
+  "Search the library",
+  "Categories and cards", "Each category's cards, its role and its order.",
+  "Intents", "Favourites first, hidden intents at the foot.",
+  "Role suggestions", "The names the ROLE wheel offers, comma-separated.",
+  "Catalog and data", "The catalog on this desk, and loading another.",
+  "Open Data and defaults",
+  "Health", "Engine and display", "Catalog", "Storage and desk", "Layout and intent panel", "Personal state",
+  "What runs Etiuda here, and what the screen offers it.",
+  "The catalog in use, and the file it came from.",
+  "Where the desk keeps its memory, and its own state.",
+  "How the window is laid out, and the intent panel.",
+  "What you have made your own on this desk."
+];
+
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
    so a Polish value cannot move unremarked either.
@@ -5998,6 +6019,10 @@ function checkFrozenContracts() {
       + ui.sha256.slice(0, 16) + ", against " + UI_STRINGS_COUNT + " and " + UI_STRINGS_SHA256.slice(0, 16)
       + " - if the words changed on purpose, update UI_STRINGS_COUNT and UI_STRINGS_SHA256 in this "
       + "file in that commit; if they did not, something mechanical has rewritten what people read");
+  const owedGone = OWED_WORDS.filter(w => src.indexOf(JSON.stringify(w).slice(1, -1)) < 0 && src.indexOf(w) < 0);
+  if (owedGone.length)
+    problems.push("owed words no longer in the source, so their list in OWED_WORDS is stale: " + owedGone.join(" | "));
+  console.log("#owed words=" + OWED_WORDS.length + " (English placeholders awaiting both languages; OWED_WORDS in tests/test.js)");
   return { problems: problems, ui: ui, prefix: bare ? bare.E_NS : "?", shape: appShape || "?" };
 }
 function checkStacking() {
