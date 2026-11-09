@@ -292,7 +292,7 @@ if (flag('--package')) {
        in tests/reinstall.js 1c: all three move together or this gate stops the release. */
     const expected = ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/clip-suggest.cjs', 'shell/folder/syncer-worker.cjs', 'shell/folder/syncer.cjs', 'shell/main.js',
                       'shell/page-watch.cjs', 'shell/preload.js', 'shell/relay/blob.cjs', 'shell/relay/channel.cjs',
-                      'shell/sample-catalog.ec', 'shell/win-proxy.cjs'];
+                      'shell/sample-catalog.ec', 'shell/tray.cjs', 'shell/win-proxy.cjs'];
     console.log('  the asar holds ' + inside.length + ': ' + inside.join(', '));
     if (JSON.stringify(inside) !== JSON.stringify(expected)) return 'the asar is not the allowlist';
     /* The software bill of materials goes beside the installer, named for it. One an earlier run

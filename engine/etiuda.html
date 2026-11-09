@@ -7636,6 +7636,13 @@ What you type stays in this browser only.`;
     "No setting matches this search.": "Żadne ustawienie nie pasuje do tego wyszukiwania.",
     "Open": "Otwórz",
     "Your name, the language, and how Etiuda starts and closes.": "Imię agenta, język oraz sposób uruchamiania i zamykania Etiudy.",
+    "Starting and closing": "Uruchamianie i zamykanie",
+    "Start with Windows": "Uruchamiaj razem z systemem Windows",
+    "Etiuda starts in the tray when this Windows account signs in.": "Etiuda uruchamia się w zasobniku po zalogowaniu do tego konta Windows.",
+    "When the window closes": "Po zamknięciu okna",
+    "Stay in the tray": "Zostaje w zasobniku",
+    "Quit": "Kończy działanie",
+    "In the tray, Etiuda still answers its shortcut and shows notifications.": "W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
     "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
     "How the screen is laid out.": "Jak rozłożony jest ekran.",
     "Every shortcut, and how to change it.": "Wszystkie skróty i sposób ich zmiany.",
@@ -15560,6 +15567,14 @@ What you type stays in this browser only.`;
         } catch (e) {
         }
       }));
+    if (typeof h.onTrayGo === "function") h.onTrayGo((kind) => {
+      if (kind === "settings") {
+        try {
+          hooks.openSettings();
+        } catch (e) {
+        }
+      }
+    });
     const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
     if (min) min.onclick = () => {
       try {
@@ -31618,9 +31633,13 @@ What you type stays in this browser only.`;
   function keysHtml(chord) {
     return '<span class="sx-keys">' + String(chord || "").split("+").filter(Boolean).map((k) => "<kbd>" + esc(k) + "</kbd>").join("") + "</span>";
   }
+  function closeHost() {
+    const h = eHost();
+    return h && typeof h.setClosePolicy === "function" && typeof h.setLoginItem === "function" && typeof h.loginItemState === "function" ? h : null;
+  }
   function generalGroups() {
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    return [{ rows: [
+    const groups = [{ rows: [
       row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="first name" value="' + esc(agentName()) + '">'),
       row(
         "uilang",
@@ -31630,6 +31649,34 @@ What you type stays in this browser only.`;
         langSel
       )
     ] }];
+    const host = closeHost();
+    if (host) {
+      let startOn = false;
+      try {
+        const s = host.loginItemState();
+        startOn = !!(s && s.openAtLogin);
+      } catch (e) {
+        startOn = false;
+      }
+      const quit = lsGet("eQuitOnClose") === "1";
+      groups.push({ head: t("Starting and closing"), rows: [
+        row(
+          "startwin",
+          "forward",
+          t("Start with Windows"),
+          t("Etiuda starts in the tray when this Windows account signs in."),
+          onoff("startwin", startOn, "", "")
+        ),
+        row(
+          "closehow",
+          "desks",
+          t("When the window closes"),
+          t("In the tray, Etiuda still answers its shortcut and shows notifications."),
+          seg2("closehow", [{ v: "stay", t: t("Stay in the tray") }, { v: "quit", t: t("Quit") }], quit ? "quit" : "stay")
+        )
+      ] });
+    }
+    return groups;
   }
   function appearanceGroups() {
     return [{ rows: [
@@ -31998,6 +32045,27 @@ What you type stays in this browser only.`;
             if (railLocked() !== on) toggleRailLock();
           } else if (seg3 === "pillslock") {
             if (pillsLocked() !== on) togglePillsLock();
+          } else if (seg3 === "startwin") {
+            const host = closeHost();
+            if (host) {
+              try {
+                host.setLoginItem(on);
+              } catch (e) {
+              }
+            }
+            toast(on ? t("On") : t("Off"));
+          } else if (seg3 === "closehow") {
+            const quit = v === "quit";
+            if (quit) lsSet("eQuitOnClose", "1");
+            else lsDel("eQuitOnClose");
+            const host = closeHost();
+            if (host) {
+              try {
+                host.setClosePolicy(quit);
+              } catch (e) {
+              }
+            }
+            toast(quit ? t("Quit") : t("Stay in the tray"));
           }
         };
       });
@@ -32062,7 +32130,8 @@ What you type stays in this browser only.`;
       "eFactsH",
       "eCollapsed",
       "eSharedEdit",
-      E_HOTKEY_KEY
+      E_HOTKEY_KEY,
+      "eQuitOnClose"
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {
@@ -32074,6 +32143,34 @@ What you type stays in this browser only.`;
     was[nsKey("Floor")] = nsGet("Floor");
     nsDel("Cols");
     nsDel("Floor");
+    const host = eHost();
+    let loginWas = false, notesWere = true;
+    if (host && typeof host.loginItemState === "function") {
+      try {
+        const s = host.loginItemState();
+        loginWas = !!(s && s.openAtLogin);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.trayNotesState === "function") {
+      try {
+        const s = host.trayNotesState();
+        notesWere = !(s && s.on === false);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.setLoginItem === "function") {
+      try {
+        host.setLoginItem(false);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.setTrayNotes === "function") {
+      try {
+        host.setTrayNotes(true);
+      } catch (e) {
+      }
+    }
     applyPrefs();
     repaintScreen();
     offerUndo("Settings reset", () => {
@@ -32082,6 +32179,18 @@ What you type stays in this browser only.`;
         if (v == null) lsDel(k);
         else lsSet(k, v);
       });
+      if (host && typeof host.setLoginItem === "function") {
+        try {
+          host.setLoginItem(loginWas);
+        } catch (e) {
+        }
+      }
+      if (host && typeof host.setTrayNotes === "function") {
+        try {
+          host.setTrayNotes(notesWere);
+        } catch (e) {
+        }
+      }
       applyPrefs();
       repaintScreen();
     });
@@ -32141,6 +32250,11 @@ What you type stays in this browser only.`;
     }
     try {
       render();
+    } catch (e) {
+    }
+    try {
+      const host = eHost();
+      if (host && typeof host.setClosePolicy === "function") host.setClosePolicy(lsGet("eQuitOnClose") === "1");
     } catch (e) {
     }
   }

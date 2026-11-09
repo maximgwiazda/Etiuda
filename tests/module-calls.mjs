@@ -5676,6 +5676,45 @@ const CARD_B = {
       }
     });
 
+    check("settings.js", "D6 reset defaults turns start-with-Windows off and clears quit-on-close", () => {
+      const calls = [];
+      const prev = globalThis.window.E_HOST;
+      /* Reset clears the motion key the later screen-tab checks still need reduced, so put every key back. */
+      const KEYS = ["eTheme", "eGlassOff", "eMotionOff", "eUiLang", "ePillsLock", "eRailLock", "ePills", "eRail",
+        "eShortcuts", "eHdrPills", "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed",
+        "eSharedEdit", "eHotkey", "eQuitOnClose"];
+      const was = KEYS.map(k => [k, ST.lsGet(k)]);
+      const wasNs = [["Cols", ST.nsGet("Cols")], ["Floor", ST.nsGet("Floor")]];
+      globalThis.window.E_HOST = Object.assign({}, prev, {
+        loginItemState: () => ({ openAtLogin: true }),
+        setLoginItem: (on) => { calls.push(["login", !!on]); },
+        setClosePolicy: (quit) => { calls.push(["close", !!quit]); },
+        trayNotesState: () => ({ on: false }),
+        setTrayNotes: (on) => { calls.push(["notes", !!on]); },
+      });
+      try {
+        ST.lsSet("eQuitOnClose", "1");
+        const html = SET.settingsPageHtml("general", "");
+        const rows = html.indexOf("Starting and closing") >= 0 && html.indexOf("Start with Windows") >= 0
+          && html.indexOf("Stay in the tray") >= 0 && html.indexOf("When the window closes") >= 0
+          && html.indexOf(">Quit<") >= 0;
+        SET.resetAllSettings();
+        const ok = rows && ST.lsGet("eQuitOnClose") == null
+          && calls.some(c => c[0] === "login" && c[1] === false)
+          && calls.some(c => c[0] === "close" && c[1] === false)
+          && calls.some(c => c[0] === "notes" && c[1] === true);
+        ST.lsSet("eUiLang", "pl");
+        const pl = SET.settingsPageHtml("general", "");
+        const plOk = pl.indexOf("Uruchamiaj razem z systemem Windows") >= 0 && pl.indexOf("Zostaje w zasobniku") >= 0
+          && pl.indexOf("Uruchamianie i zamykanie") >= 0 && pl.indexOf("Po zamknięciu okna") >= 0;
+        return (ok && plOk) || JSON.stringify({ rows: rows, key: ST.lsGet("eQuitOnClose"), calls: calls, plOk: plOk });
+      } finally {
+        was.forEach(([k, v]) => { if (v == null) ST.lsDel(k); else ST.lsSet(k, v); });
+        wasNs.forEach(([k, v]) => { if (v == null) ST.nsDel(k); else ST.nsSet(k, v); });
+        globalThis.window.E_HOST = prev;
+      }
+    });
+
     check("maintenance.js", "D3-7 Clear local memory and Reset shortcuts are no longer in Maintenance, tab or rescue window, which says where they went; Settings has both", () => {
       shutAll();
       MN.openMaintenance();
