@@ -3,7 +3,7 @@ import { loadShortcuts, formatActionChord } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList, shortcutsShown, scFold } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills, drawTabs } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp, counted } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -151,14 +151,20 @@ function headAgeWords(at){
   return fileStamp(at);
 }
 function teamHeadNote(h){
-  return t("Newest edition {E}, published {WHEN}. The team's news: {AGE}.")
+  const said=t("Newest edition {E}, published {WHEN}. The team's news: {AGE}.")
     .split("{E}").join(h.edition).split("{WHEN}").join(h.published).split("{AGE}").join(headAgeWords(h.t));
+  let others=(h.editions||[]).filter(e=>e.catalog!==h.catalog);
+  others=others.filter(e=>e.newer); /* plant:head-newer */
+  if(!others.length) return said;
+  /* The copywriter's words: one other in a sentence of its own, more after a colon, so Polish needs no plural forms. */
+  return said+" "+(others.length===1?t("Another catalog of the team has a newer edition."):t("Other catalogs of the team with a newer edition: {N}.").split("{N}").join(String(others.length)));
 }
 /* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team.
    Machine policy would undo a leave, so the button is not offered where it names the lead. `bar` says the way
    back, before the press. The button wears danger, the same class as Delete: the leave destroys the pin, the
    sealed keys and bars the team once its Undo has lapsed. The head, where the shell has one, is a note under the
-   name: the newest edition, when it was published, and how old the news is. It never disables a control. */
+   name: the newest edition, when it was published, how old the news is, and how many of the team's other catalogs
+   have an edition newer than this desk has loaded. It never disables a control. */
 function teamRowHtml(l,status,bar){
   const notes=[l.relay?t("Relay: {HOST}").split("{HOST}").join(l.relay):l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,

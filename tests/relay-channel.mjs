@@ -61,7 +61,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 419;
+const EXPECTED = 424;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -2472,7 +2472,7 @@ try {
           const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
           TJ.wireTeamJoin();
           await wait(40);
-          pageMod = { ST, SET };
+          pageMod = { ST, SET, TJ };
         }
         if (tookFn) tookFn({ leads: leads || [] });
         pageMod.ST.lsSet("eUiLang", "en");
@@ -2687,6 +2687,79 @@ try {
       }
       const back = sha(fs.readFileSync(src)) === digest;
       check(turned && back, "948h lifting plant:head-show drops the sentence, and the product file is never written: " + detail + ", sha " + (back ? "restored" : "differs"));
+    }
+    /* 962 stage 5, T4, the page's half of the head per catalog: the row keeps each catalog's entry the shell kept, and the note
+       under the team's name counts only the team's other catalogs whose edition is newer than the one loaded here. */
+    {
+      const ONE = "Another catalog of the team has a newer edition.";
+      const quayAt = newer => ({ catalog: "quay-board", rev: 3, edition: "Quay three", published: "2 March 2026", newer });
+      const pebbleAt = newer => ({ catalog: "pebble-board", rev: 5, edition: "Pebble five", published: "4 March 2026", newer });
+      const stoneAt = newer => ({ catalog: "stone-board", rev: 2, edition: "Stone two", published: "6 March 2026", newer });
+      const withHead = (editions, named) => (freshLeads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { head: { t: Date.now(),
+        editions, edition: named.edition, published: named.published } }) : l);
+      const pageOf = async (editions, named, inUse) => {
+        const was = window.E_CATALOG;
+        if (inUse) window.E_CATALOG = { id: inUse };
+        try {
+          const page = await pageHtml(withHead(editions, named));
+          const row = pageMod && pageMod.TJ ? pageMod.TJ.teamLeads().filter(l => l && l.team === TEAM2)[0] : null;
+          return { en: page.en, pl: page.pl, row };
+        } finally { window.E_CATALOG = was; }
+      };
+      const says = (p, s) => p.en.indexOf(s) >= 0;
+      const headSaid = p => says(p, "Newest edition Quay three, published 2 March 2026. The team's news: ");
+      const counted = p => says(p, ONE) ? "one" : /Other catalogs of the team with a newer edition: \d+\./.test(p.en) ? p.en.match(/a newer edition: (\d+)\./)[1] : "none";
+      const two = await pageOf([quayAt(false), pebbleAt(true)], quayAt(false));
+      const listed = two.row && two.row.head && Array.isArray(two.row.head.editions) ? two.row.head.editions : [];
+      const entry = id => listed.filter(e => e.catalog === id)[0] || null;
+      check(listed.length === 2 && !!entry("quay-board") && entry("quay-board").rev === 3 && entry("quay-board").newer === false
+        && !!entry("pebble-board") && entry("pebble-board").rev === 5 && entry("pebble-board").newer === true && two.row.head.catalog === "quay-board",
+        "962t4a the team's row keeps both catalogs' entries as the shell kept them, the one the note names marked: "
+        + (listed.length ? listed.map(e => e.catalog + "@" + e.rev + (e.newer ? "+" : "")).join(",") : "no list") + ", named "
+        + (two.row && two.row.head ? two.row.head.catalog : "no head") + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+      const ownNewer = await pageOf([quayAt(true), pebbleAt(false)], quayAt(true));
+      const three = await pageOf([pebbleAt(true), quayAt(false), stoneAt(true)], quayAt(false));
+      check(headSaid(two) && counted(two) === "one" && headSaid(ownNewer) && counted(ownNewer) === "none" && headSaid(three) && counted(three) === "2"
+        && says(three, "Other catalogs of the team with a newer edition: 2."),
+        "962t4b the note names the catalog in use's edition and counts only the team's other catalogs with a newer edition: another newer "
+        + counted(two) + ", only the one in use newer " + counted(ownNewer) + ", two others newer of three " + counted(three));
+      const both = await pageOf([quayAt(false), pebbleAt(false)], quayAt(false));
+      const bothPl = both.pl.indexOf("Najnowsze wydanie Quay three, opublikowane 2 March 2026. Wiadomość zespołu: ") >= 0;
+      check(headSaid(both) && counted(both) === "none" && bothPl && both.en.indexOf(" newer edition") < 0,
+        "962t4c once both catalogs are loaded the note says nothing of the other, and still names the edition: count " + counted(both)
+        + ", sentence " + headSaid(both) + ", polish " + bothPl);
+      /* Two catalogs published on the same day carry the same edition and date, so the named one is the catalog in use. */
+      const twin = newer => ({ catalog: "pebble-board", rev: 5, edition: "Quay three", published: "2 March 2026", newer });
+      const usedOld = await pageOf([quayAt(false), twin(true)], quayAt(false), "quay-board");
+      const usedNew = await pageOf([quayAt(false), twin(true)], quayAt(false), "pebble-board");
+      check(counted(usedOld) === "one" && counted(usedNew) === "none" && usedOld.row && usedOld.row.head.catalog === "quay-board"
+        && usedNew.row && usedNew.row.head.catalog === "pebble-board",
+        "962t4d of two catalogs with the same edition and date, the note names the one in use and counts the other: quay in use "
+        + counted(usedOld) + ", pebble in use " + counted(usedNew));
+      /* plant:head-newer. Deleting that line, leaving the file valid script, counts the team's other catalogs whether or not they are newer. */
+      const src = path.join(ROOT, "src", "modules", "settings.js");
+      const before = fs.readFileSync(src);
+      const digest = sha(before);
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = before.toString("utf8").split(/\n/);
+        const at = lines.findIndex(l => l.indexOf("plant:head-newer") >= 0);
+        if (at >= 0 && pageMod) {
+          lines.splice(at, 1);
+          const SET3 = await loadPlantedSettings(lines.join("\n"));
+          if (tookFn) tookFn({ leads: withHead([quayAt(false), pebbleAt(false)], quayAt(false)) });
+          pageMod.ST.lsSet("eUiLang", "en");
+          const html = shownText(SET3.settingsBodyHtml());
+          turned = html.indexOf(ONE) >= 0;
+          detail = turned ? "the loaded catalog is counted" : "nothing counted";
+        }
+      } catch (e) {
+        detail = e && e.message ? e.message : String(e);
+      }
+      const back = sha(fs.readFileSync(src)) === digest;
+      check(turned && back, "962t4e lifting plant:head-newer counts a catalog already loaded (FAIL 962t4c), and the product file is never written: "
+        + detail + ", sha " + (back ? "restored" : "differs"));
+      if (tookFn) tookFn({ leads: freshLeads });
     }
     const shareH = path.join(LAB, "head-folder");
     fs.mkdirSync(shareH, { recursive: true });

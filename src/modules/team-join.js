@@ -177,7 +177,33 @@ function headKept(h){
   const edition=typeof h.edition==="string"?h.edition:"", published=typeof h.published==="string"?h.published:"";
   if(edition.length<1 || edition.length>120 || published.length<1 || published.length>80 || !Number.isFinite(h.t)) return null;
   if(/[\u0000-\u001f\u007f]/.test(edition+published)) return null;
-  return {edition:edition, published:published, t:h.t};
+  const kept={edition:edition, published:published, t:h.t};
+  const list=headEntriesKept(h.editions), named=list ? headNamed(list, edition, published) : null;
+  if(named){ kept.editions=list; kept.catalog=named.catalog; }
+  return kept;
+}
+/* Each catalog's entry the shell kept, or nothing where one is not that shape, so the note says only what it said before. */
+function headEntriesKept(list){
+  if(!Array.isArray(list) || !list.length || list.length>64) return null;
+  const out=[], ids=new Set();
+  for(const e of list){
+    if(!e || typeof e!=="object" || typeof e.catalog!=="string" || e.catalog.length<1 || e.catalog.length>200 || ids.has(e.catalog)
+      || !Number.isInteger(e.rev) || typeof e.edition!=="string" || typeof e.published!=="string" || e.edition.length>120
+      || e.published.length>80 || /[\u0000-\u001f\u007f]/.test(e.catalog+e.edition+e.published)) return null;
+    ids.add(e.catalog);
+    out.push({catalog:e.catalog, rev:e.rev, edition:e.edition, published:e.published, newer:e.newer===true});
+  }
+  return out;
+}
+/* The entry the row's edition and date came from. The shell names the catalog in use where the head lists it, else the
+   greatest rev, the last of a tie; two catalogs published on one day share both, so the catalog this page holds decides. */
+function headNamed(list, edition, published){
+  const same=list.filter(e=>e.edition===edition && e.published===published);
+  if(same.length<2) return same[0]||null;
+  const c=typeof window!=="undefined" && window.E_CATALOG && typeof window.E_CATALOG==="object" ? String(window.E_CATALOG.id||"") : "";
+  let pick=same.filter(e=>e.catalog===c)[0]||null;
+  if(!pick) for(const e of same) if(!pick || e.rev>=pick.rev) pick=e;
+  return pick;
 }
 /* The lapse the shell judged for a relay team past its grant, or nothing: a team inside its grant sends none. */
 const LAPSE_STEPS=["grace","read-only","lapsed","gone","unknown"];
