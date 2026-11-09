@@ -25,6 +25,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createLab } from "./lab-owner.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
@@ -49,7 +50,10 @@ function skip(line) {
   console.log("  SKIP  " + line);
 }
 
-const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-folder-mirror-"));
+const LAB = createLab("etiuda-folder-mirror-", {
+  keepEnv: "ETIUDA_FOLDER_MIRROR_KEEP",
+  stopEnv: "ETIUDA_FOLDER_MIRROR_STOP",
+});
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 function getShellSrc() {
