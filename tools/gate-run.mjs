@@ -58,6 +58,29 @@ export function getRealProfileSnapshotFolders() {
   ];
 }
 
+export function isInstalledAppRunning() {
+  const hook = process.env.ETIUDA_INSTALLED_APP_RUNNING !== undefined ? process.env.ETIUDA_INSTALLED_APP_RUNNING
+    : process.env.ETIUDA_APP_RUNNING_HOOK !== undefined ? process.env.ETIUDA_APP_RUNNING_HOOK
+    : process.env.ETIUDA_INSTALLED_APP_HOOK;
+  if (hook !== undefined) {
+    return hook === "1" || hook === "true";
+  }
+  try {
+    if (process.platform === "win32") {
+      const out = execFileSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-Command",
+        "@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(?i)(etiuda|etiuda studio|etiuda-studio)\\.exe$' }).Count"
+      ], { encoding: "utf8", timeout: 10000, windowsHide: true }).trim();
+      return parseInt(out, 10) > 0;
+    } else {
+      const out = execFileSync("pgrep", ["-i", "^(etiuda|etiuda-studio)$"], { encoding: "utf8", timeout: 10000 }).trim();
+      return out.length > 0;
+    }
+  } catch {
+    return false;
+  }
+}
+
 export function takeRealProfileSnapshot() {
   const roots = getRealProfileSnapshotFolders();
   const snap = {};
@@ -1445,7 +1468,9 @@ async function main() {
 
   const checkRealProfile = (mode === "area") || inProfile;
   let realProfileSnapBefore = null;
+  let appRunningBefore = false;
   if (checkRealProfile) {
+    appRunningBefore = isInstalledAppRunning();
     realProfileSnapBefore = takeRealProfileSnapshot();
   }
 
@@ -1661,19 +1686,48 @@ async function main() {
   }
 
   if (checkRealProfile && realProfileSnapBefore) {
+    const appRunningAfter = isInstalledAppRunning();
+    const appRunning = appRunningBefore || appRunningAfter;
+    let unattributable = false;
+    if (appRunning) unattributable = true; /* plant:running-app */
     const realProfileSnapAfter = takeRealProfileSnapshot();
     const diff = compareRealProfileSnapshots(realProfileSnapBefore, realProfileSnapAfter);
     if (diff.length) {
       const names = diff.join(", ");
-      console.log("  FAIL touched the real profile: " + names);
-      redsList.push({
-        gate: gateLabel,
-        cmd: "gate-run " + gateLabel,
-        exit: 78,
-        cause: "touched the real profile: " + names,
-        class: "hold",
-      });
-      worst = worst || 78;
+      if (unattributable) {
+        const msg = "the real profile changed while the installed app ran, so it cannot be attributed: " + names;
+        if (mode === "area") {
+          console.log("  WARN " + msg);
+          redsList.push({
+            gate: gateLabel,
+            cmd: "gate-run " + gateLabel,
+            exit: 0,
+            cause: msg,
+            class: "warn",
+          });
+        } else {
+          console.log("  FAIL " + msg);
+          console.log("  gate-run: refused, the run has no verdict");
+          redsList.push({
+            gate: gateLabel,
+            cmd: "gate-run " + gateLabel,
+            exit: NO_VERDICT,
+            cause: msg,
+            class: "hold",
+          });
+          worst = NO_VERDICT;
+        }
+      } else {
+        console.log("  FAIL touched the real profile: " + names);
+        redsList.push({
+          gate: gateLabel,
+          cmd: "gate-run " + gateLabel,
+          exit: 78,
+          cause: "touched the real profile: " + names,
+          class: "hold",
+        });
+        worst = worst || 78;
+      }
     }
   }
 
@@ -1732,6 +1786,7 @@ async function main() {
 
   if (isHeavy) releaseLock();
 
+  const allHygiene = warns.every(w => !w.cause || !w.cause.startsWith("the real profile changed"));
   console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
               + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
               + ", tree " + before.hash + ", git tree " + tree
@@ -1742,9 +1797,15 @@ async function main() {
                  : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
                    + " refused, did not finish, or left a leg not run"
                  : worst ? ", stopped at a gate exiting " + worst
-                 : warns.length ? ", " + warns.length + " HYGIENE warn(s), nothing held" : ", all green"));
+                 : warns.length ? ", " + warns.length + (allHygiene ? " HYGIENE warn(s)" : " warn(s)") + ", nothing held" : ", all green"));
 
-  for (const w of warns) console.log("WARN " + w.gate + " (exit " + w.exit + "): a HYGIENE leg, red in the " + gateLabel + " profile; it holds nothing and is fixed at the next merge");
+  for (const w of warns) {
+    if (w.cause && w.cause.startsWith("the real profile changed")) {
+      console.log("WARN " + w.gate + ": " + w.cause);
+    } else {
+      console.log("WARN " + w.gate + " (exit " + w.exit + "): a HYGIENE leg, red in the " + gateLabel + " profile; it holds nothing and is fixed at the next merge");
+    }
+  }
 
   process.exitCode = !holds && worst === 0 ? 0 : (worst > 0 && worst < 256 ? worst : 1);
 }
