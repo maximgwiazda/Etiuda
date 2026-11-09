@@ -555,21 +555,53 @@ const t0 = Date.now();
   check(mt.present.join(",") === "mtEject,mtCopy,mtClose" && mt.gone.length === 0 && mt.moved,
     "the panel's rescues and copy are wired, and Reset and Clear local memory are named as moved: "
     + JSON.stringify({ present: mt.present, gone: mt.gone, moved: mt.moved }));
-  /* ONE SCREEN, NO SCROLLING, at the two windows the panel was sized for: 1280 x 880, and 959 x 586,
-     which is a 1438 x 879 window at 150 per cent. The panel rebuilds itself on a resize. */
-  const mtFit = [];
-  for (const [w, h] of [[1280, 880], [959, 586]]) {
-    await sized(p, w, h, "maintenance " + w + "x" + h);
-    await sleep(300);
-    mtFit.push(await p.evaluate(() => {
-      const host = document.getElementById("screenHost");
-      return host && !host.hidden ? [innerWidth, innerHeight, host.scrollHeight, host.clientHeight] : null;
-    }));
-  }
+  /* At 1280 x 880 the panel still fits on one screen: the screen host's scroll height against
+     its client height. At 959 x 586, which is a 1438 x 879 window
+     at 150 per cent, the Maintenance tab is a page. Its own scroll container, the first
+     ancestor of the last action whose overflow scrolls, is taken to the end, and that action
+     sits inside the container's visible area. The panel rebuilds itself on a resize. */
+  await sized(p, 1280, 880, "maintenance 1280x880");
+  await sleep(300);
+  const mtWide = await p.evaluate(() => {
+    const host = document.getElementById("screenHost");
+    return host && !host.hidden ? [innerWidth, innerHeight, host.scrollHeight, host.clientHeight] : null;
+  });
+  await sized(p, 959, 586, "maintenance 959x586");
+  await sleep(300);
+  const mtFloor = await p.evaluate(() => {
+    const host = document.getElementById("screenHost");
+    const page = host && !host.hidden ? host.querySelector(".mt-screen") : null;
+    const buttons = page ? page.querySelectorAll(".screen-actions button") : [];
+    const last = buttons.length ? buttons[buttons.length - 1] : null;
+    if (!page || !last) return { ok: false, why: "no page" };
+    let sc = last.parentElement;
+    while (sc && sc !== document.documentElement) {
+      const oy = getComputedStyle(sc).overflowY;
+      if (oy === "auto" || oy === "scroll") break;
+      sc = sc.parentElement;
+    }
+    if (!sc || sc === document.documentElement) return { ok: false, why: "no scroller" };
+    sc.scrollTop = sc.scrollHeight;
+    const b = last.getBoundingClientRect();
+    const r = sc.getBoundingClientRect();
+    const st = getComputedStyle(sc);
+    const top = r.top + (parseFloat(st.borderTopWidth) || 0);
+    const left = r.left + (parseFloat(st.borderLeftWidth) || 0);
+    const bottom = top + sc.clientHeight;
+    const right = left + sc.clientWidth;
+    const inside = b.width > 0 && b.height > 0 && b.top >= top - 1 && b.bottom <= bottom + 1
+      && b.left >= left - 1 && b.right <= right + 1;
+    return { ok: inside, id: sc.id || "", oy: st.overflowY,
+      top: Math.round(sc.scrollTop), max: Math.round(sc.scrollHeight - sc.clientHeight),
+      box: [innerWidth, innerHeight, sc.scrollHeight, sc.clientHeight],
+      btn: last.id || "",
+      b: [Math.round(b.top), Math.round(b.bottom)],
+      vis: [Math.round(top), Math.round(bottom)] };
+  });
   await sized(p, 1500, 950, "maintenance back");
-  check(mtFit.every(f => f && f[2] <= f[3] + 1),
-    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (screen scroll height against its height): "
-    + JSON.stringify(mtFit));
+  check(!!mtWide && mtWide[2] <= mtWide[3] + 1 && !!mtFloor && mtFloor.ok,
+    "the maintenance panel fits at 1280 x 880 without scrolling, and at 959 x 586 its own scroll reaches the last action: "
+    + JSON.stringify({ wide: mtWide, floor: mtFloor }));
   await p.evaluate(() => { const b = document.getElementById("mtClose"); if (b) b.click(); });
   await sleep(500);
   clean(e, "the maintenance panel");
