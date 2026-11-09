@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 133;
+const EXPECTED = 134;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1257,6 +1257,15 @@ try {
     + (missing.join(", ") || "none") + "), and release.mjs " + (J(releaseList) === J(sortedFiles) ? "states" : "does NOT state")
     + ", shell-smoke " + (smokeOk ? "states" : "does NOT state") + " and reinstall " + (reinstallOk ? "states" : "does NOT state")
     + " the same " + sortedFiles.length + " files");
+  /* 5i. A picture the shell reads beside itself at run time (the tray's, by a file name held in a variable, which 5h's
+     require walk cannot see) is in the builder's files too: the desk shipped without its tray picture on 2026-11-09. */
+  const mainText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  const pictures = [...new Set([...mainText.matchAll(/"([\w.-]+\.(?:ico|png))"/g)].map(m => "shell/" + m[1]))]
+    .filter(rel => fs.existsSync(path.join(ROOT, rel)));
+  const picturesMissing = pictures.filter(rel => filesList.indexOf(rel) < 0);
+  check(pictures.indexOf("shell/etiuda.ico") >= 0 && picturesMissing.length === 0,
+    "5i every picture shell/main.js names beside itself is in the builder's files (" + pictures.length + " named; missing: "
+    + (picturesMissing.join(", ") || "none") + ")");
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
   console.log("\n[6/7] the most used replies first: the picker at rest, a search, and what stays as it was");

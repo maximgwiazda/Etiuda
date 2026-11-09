@@ -77,6 +77,17 @@ if (r.status === 0) {
   }
   console.log('npm run package: ' + Object.keys(wantedFuses()).length + ' fuse(s) read back from '
     + join(DIST, 'win-unpacked', 'Etiuda.exe') + ' as asked');
+  /* THE TRAY'S PICTURE IS IN THE ASAR. The shell reads it from there at run time (shell/main.js trayIcon), so a build
+     without it makes a desk with no tray, which quits on close whatever Settings say (Max's finding, 2026-11-09). */
+  const asarAt = join(DIST, 'win-unpacked', 'resources', 'app.asar');
+  let packed = [];
+  try { packed = (await import('@electron/asar')).listPackage(asarAt).map(p => p.replace(/\\/g, '/')); } catch {}
+  const trayMissing = ['/shell/etiuda.ico'].filter(p => packed.indexOf(p) < 0);
+  if (trayMissing.length) {
+    console.error('npm run package: ' + asarAt + ' lacks ' + trayMissing.join(', ') + ', so the desk would have no tray');
+    process.exit(1);
+  }
+  console.log('npm run package: the tray\'s picture is in the asar');
   /* The caret helper is skipped where the C# compiler is missing, so an installer is refused without it. */
   const caret = join(DIST, 'win-unpacked', 'resources', 'caret.exe');
   if (!existsSync(caret)) {

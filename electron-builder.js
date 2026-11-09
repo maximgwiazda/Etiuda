@@ -103,7 +103,10 @@ module.exports = {
           "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec",
           // The tray's PNG, which Linux reads where it reads an .ico as empty (board 973). In the root list, not a
           // linux-level `files`, so it can never stand in for the root list.
-          "shell/etiuda-tray.png"],
+          "shell/etiuda-tray.png",
+          // The tray's picture on Windows, read from the asar at run time; the installer's and the exe's icon
+          // (`icon:` below) is a build input and never reaches the asar by itself (Max's finding, 2026-11-09).
+          "shell/etiuda.ico"],
   asar: true,
   // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
   // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read
