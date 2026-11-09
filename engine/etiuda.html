@@ -12425,7 +12425,7 @@ What you type stays in this browser only.`;
   var tabSaveTimer = null;
   wireScreenTabsChange(() => {
     drawTabs();
-    hooks.syncRailGeometry();
+    if (typeof hooks.syncRailGeometry === "function") hooks.syncRailGeometry();
   });
   wireScreenTabsReturn((id) => {
     if (id && tabs.some((x) => x.id === id)) switchTab(id);

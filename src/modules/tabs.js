@@ -27,7 +27,7 @@ let tabSaveTimer=null;
 /* The strip is redrawn, then the rail is measured. Leaving a screen gives the pill bar
    back in this same turn, and the rail's top is still the short header's. The resize
    observer does not run before the first frame, so the write is here. */
-wireScreenTabsChange(() => { drawTabs(); hooks.syncRailGeometry(); });
+wireScreenTabsChange(() => { drawTabs(); if (typeof hooks.syncRailGeometry === "function") hooks.syncRailGeometry(); });
 /* A closed screen hands the keyboard to the search box, so typing lands there at once. */
 wireScreenTabsReturn(id => {
   if (id && tabs.some(x => x.id === id)) switchTab(id);
