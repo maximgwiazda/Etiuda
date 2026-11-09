@@ -9688,6 +9688,37 @@ let lastProfiles = null, lastProfilesEpoch = null;
    warm for this catalog, fills that strip with its five instead, if they come within EMBED_BUDGET_MS of the press. */
 const EMBED_BUDGET_MS = 250;
 const EMBED_WARM_DELAY_MS = 15000;
+/* Search passage vectors, in the desk's own user-data folder. The name is the cache key, 64 hex, so a path cannot escape. */
+function searchCacheDir() { return path.join(app.getPath("userData"), "search-embed"); }
+function searchCacheFile(key) {
+  return /^[0-9a-f]{64}$/.test(String(key || "")) ? path.join(searchCacheDir(), String(key) + ".bin") : "";
+}
+function searchCacheRead(key) {
+  const at = searchCacheFile(key);
+  if (!at) return null;
+  try { return fs.readFileSync(at); } catch (e) { return null; }
+}
+function searchCacheWrite(key, buf) {
+  const at = searchCacheFile(key);
+  if (!at || !Buffer.isBuffer(buf)) return;
+  fs.mkdirSync(searchCacheDir(), { recursive: true });
+  const tmp = at + ".tmp";
+  fs.writeFileSync(tmp, buf);
+  fs.renameSync(tmp, at);
+}
+function searchCachePrune(keep) {
+  let names = [];
+  try { names = fs.readdirSync(searchCacheDir()); } catch (e) { return; }
+  const entries = [];
+  for (const name of names) {
+    if (!/^[0-9a-f]{64}\.bin$/.test(name)) continue;
+    try { entries.push({ name, mtime: fs.statSync(path.join(searchCacheDir(), name)).mtimeMs }); } catch (e) { /* gone already */ }
+  }
+  if (!embedLib) return;
+  for (const name of embedLib.cacheKeep(entries, keep)) {
+    try { fs.unlinkSync(path.join(searchCacheDir(), name)); } catch (e) { /* already gone */ }
+  }
+}
 const embedSuggest = (() => {
   if (!embedLib) return null;
   const base = INSTALLED ? path.join(String(process.resourcesPath || ""), "embed") : "";
@@ -9697,7 +9728,10 @@ const embedSuggest = (() => {
     fork: file => {
       const c = utilityProcess.fork(file, [], { serviceName: "Etiuda suggestions", stdio: "ignore" });
       return { post: m => c.postMessage(m), onMessage: fn => c.on("message", fn), onExit: fn => c.on("exit", fn), kill: () => c.kill() };
-    }
+    },
+    cacheRead: searchCacheRead,
+    cacheWrite: searchCacheWrite,
+    cachePrune: searchCachePrune
   });
 })();
 /* The model is warmed for what it embeds, the intents' passages, so a save that leaves every intent's words alone
@@ -9895,6 +9929,21 @@ ipcMain.on("etiuda:ai-state", (e) => {
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;
   if (on) { embedSuggest.setOn(true); warmSuggestSoon(); } else embedSuggest.setOn(false);
+});
+/* The main search's own switch, and the ranking it asks for. Preparation returns at once; the passages embed in the
+   worker afterwards. A rank before they are ready, or under three letters, is null, and the page keeps the word order. */
+ipcMain.on("etiuda:search-set", (e, on) => {
+  if (!fromEngine(e) || !embedSuggest) return;
+  embedSuggest.setSearchOn(!!on);
+});
+ipcMain.handle("etiuda:search-prepare", (e, rows) => {
+  if (!fromEngine(e) || !embedSuggest) return { ready: false, skipped: true };
+  try { return embedSuggest.prepareSearch(rows) || { ready: false, skipped: true }; }
+  catch (err) { return { ready: false, skipped: true }; }
+});
+ipcMain.handle("etiuda:search-rank", (e, text) => {
+  if (!fromEngine(e) || !embedSuggest) return null;
+  return embedSuggest.searchRank(String(text == null ? "" : text));
 });
 /* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
    nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */

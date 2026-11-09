@@ -7762,6 +7762,11 @@ What you type stays in this browser only.`;
     "Suggestions from the built-in model": "Propozycje z wbudowanego modelu",
     "Suggestions from matching words": "Propozycje z dopasowania słów",
     "The model built into Etiuda, which works on this computer alone.": "Model wbudowany w Etiudę, działający wyłącznie na tym komputerze.",
+    "Search by meaning with the built-in model": "Wyszukiwanie według znaczenia przy użyciu wbudowanego modelu",
+    "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only.": "Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model na tym komputerze. Wyłączone dopasowuje tylko słowa.",
+    "Preparing the catalog for search by meaning; word search works meanwhile.": "Trwa przygotowanie katalogu do wyszukiwania według znaczenia; w tym czasie działa wyszukiwanie po słowach.",
+    "The model ranks the search beside word matches; nothing leaves this computer": "Model porządkuje wyniki obok dopasowań słów; nic nie opuszcza tego komputera",
+    "Off, it matches words only.": "Wyłączone dopasowuje tylko słowa.",
     "General": "Ogólne",
     "Notifications": "Powiadomienia",
     "Notifications from Etiuda, also while its window is closed.": "Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",
@@ -13993,9 +13998,9 @@ What you type stays in this browser only.`;
     if (!inp || !prev) return null;
     const shown2 = signLines(raw);
     const sync = () => {
-      const typed = inp.value.trim();
-      const who = typed ? esc(typed) : '<span class="e-name-ph">' + esc(t("Kate")) + "</span>";
-      const init = esc(agentParts(typed || t("Kate")).init);
+      const typed2 = inp.value.trim();
+      const who = typed2 ? esc(typed2) : '<span class="e-name-ph">' + esc(t("Kate")) + "</span>";
+      const init = esc(agentParts(typed2 || t("Kate")).init);
       if (!shown2.length) {
         const parts2 = greetLine("{NAME}", lang).split("{NAME}");
         prev.innerHTML = esc(parts2[0]) + who + esc(parts2[1] || "");
@@ -15447,6 +15452,7 @@ What you type stays in this browser only.`;
     E_AI_OFF_KEY: () => E_AI_OFF_KEY,
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
+    E_SEARCH_AI_OFF_KEY: () => E_SEARCH_AI_OFF_KEY,
     dispatchTabChord: () => dispatchTabChord,
     eAiModel: () => eAiModel,
     eAiOn: () => eAiOn,
@@ -15482,11 +15488,13 @@ What you type stays in this browser only.`;
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
     eSaveCatalogFile: () => eSaveCatalogFile,
+    eSearchOn: () => eSearchOn,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
     eSharedRead: () => eSharedRead,
     eSharedWrite: () => eSharedWrite,
     eTellAi: () => eTellAi,
+    eTellSearch: () => eTellSearch,
     eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
     wireFolderLink: () => wireFolderLink,
@@ -15865,6 +15873,17 @@ What you type stays in this browser only.`;
     const h = eHost();
     try {
       if (h && typeof h.setAi === "function") h.setAi(eAiOn());
+    } catch (e) {
+    }
+  }
+  var E_SEARCH_AI_OFF_KEY = "eSearchAiOff";
+  function eSearchOn() {
+    return lsGet(E_SEARCH_AI_OFF_KEY) !== "1";
+  }
+  function eTellSearch() {
+    const h = eHost();
+    try {
+      if (h && typeof h.setSearchAi === "function") h.setSearchAi(eSearchOn());
     } catch (e) {
     }
   }
@@ -16528,7 +16547,7 @@ What you type stays in this browser only.`;
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
     if (joinMode === "confirm" && joinOffer) {
-      const o = joinOffer, ask = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
+      const o = joinOffer, ask2 = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
       const title = o.left ? t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)) : t("Join this team?");
       if (o.relay) {
         const line = t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
@@ -16546,7 +16565,7 @@ What you type stays in this browser only.`;
       return {
         title,
         line: joinWhere(o),
-        body: absent + '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
+        body: absent + '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask2) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
         acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
       };
     }
@@ -16672,7 +16691,7 @@ What you type stays in this browser only.`;
       body: joinCodeHtml("") + meta,
       acts: [["cancel", t("Cancel the request")]]
     };
-    const ask = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
+    const ask2 = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
     const acts = [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]];
     const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
     if (gone) {
@@ -16682,10 +16701,10 @@ What you type stays in this browser only.`;
       if (hushLine) return {
         title,
         line: t("The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
-        body: ask,
+        body: ask2,
         acts
       };
-      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask, acts };
+      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask2, acts };
     }
     let line = t("Once the team's lead lets this desk in, the catalog opens here by itself.");
     if (askWhy === "no-identity") {
@@ -16698,7 +16717,7 @@ What you type stays in this browser only.`;
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line,
-      body: ask,
+      body: ask2,
       acts
     };
   }
@@ -20383,6 +20402,331 @@ What you type stays in this browser only.`;
     ePickTailT2 = 0;
   }
 
+  // src/modules/search-meaning.js
+  var search_meaning_exports = {};
+  __export(search_meaning_exports, {
+    acceptSearchAnswer: () => acceptSearchAnswer,
+    armSearch: () => armSearch,
+    clearSearchMeaning: () => clearSearchMeaning,
+    hybridIds: () => hybridIds,
+    mixCards: () => mixCards,
+    mixIntentRows: () => mixIntentRows,
+    noteSearchTyping: () => noteSearchTyping,
+    scheduleSearchRank: () => scheduleSearchRank,
+    searchAlnumLen: () => searchAlnumLen,
+    searchOnSettle: () => searchOnSettle,
+    searchPassages: () => searchPassages
+  });
+  function searchAlnumLen(text) {
+    const m = String(text == null ? "" : text).match(/\p{L}|\p{N}/gu);
+    return m ? m.length : 0;
+  }
+  function hybridIds(wordIds, meaningIds) {
+    if (!Array.isArray(wordIds)) return [];
+    if (!Array.isArray(meaningIds)) return wordIds;
+    return wordIds.concat(meaningIds.filter((id) => wordIds.indexOf(id) < 0));
+  }
+  function acceptSearchAnswer(ticket, live) {
+    if (!ticket || !live) return false;
+    if (ticket.gen !== live.gen || ticket.query !== live.query) return false;
+    return true;
+  }
+  var meaning = null;
+  var searchGen = 0;
+  var typed = null;
+  var boxDirty = false;
+  var askedQuery = null;
+  var SEARCH_RETRY_MS = 5e3;
+  var SEARCH_RETRY_MAX = 30;
+  var retryQuery = null;
+  var retryCount = 0;
+  var cheapSeen = "";
+  var sentText = "";
+  var sending = "";
+  var toasted = "";
+  var modelKnown = null;
+  function currentQuery() {
+    try {
+      return intentEl ? String(intentEl.value || "").trim() : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function modelHere() {
+    if (modelKnown === null) {
+      try {
+        modelKnown = !!eAiModel();
+      } catch (e) {
+        modelKnown = false;
+      }
+    }
+    return modelKnown;
+  }
+  function meaningLive() {
+    return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery() && searchAlnumLen(currentQuery()) >= 3);
+  }
+  function catEnOf(key) {
+    const over = pack.catLabels && pack.catLabels[key];
+    if (over) return String(over).trim();
+    return String(BASE_CATS[key] || "").trim();
+  }
+  function catPlOf(key) {
+    const over = pack.catLabelsPl && pack.catLabelsPl[key];
+    if (over) return String(over).trim();
+    return String(CAT_LABELS_PL[key] || "").trim();
+  }
+  function joinParts2(parts2) {
+    const out = [];
+    for (let i = 0; i < parts2.length; i++) {
+      const s = String(parts2[i] || "").trim();
+      if (s) out.push(s);
+    }
+    return out.join("\n");
+  }
+  function searchPassages() {
+    const out = [];
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (!m || m.id == null) continue;
+      for (let pass = 0; pass < 2; pass++) {
+        const pl = pass === 1;
+        const title = String(pl ? m.tPl || "" : m.t || "").trim();
+        const body = expandSearchPlaceholders(pl ? m.pl : m.en);
+        const note = String(pl ? m.notePl || "" : m.note || "").trim();
+        const keys = String(m.k || "").trim();
+        const catEn = catEnOf(m.c);
+        const catPl = catPlOf(m.c);
+        const catOwn = pl && catPl && catPl !== catEn ? catPl : "";
+        const classText = joinParts2([title, keys, catEn, catOwn, body, note]);
+        if (!classText) continue;
+        const searchBody = joinParts2([keys, catEn, catOwn, body, note]);
+        out.push({
+          surface: "card",
+          id: String(m.id),
+          text: "title: " + (title || "none") + " | text: " + searchBody
+        });
+      }
+    }
+    const n = intentCount();
+    for (let i = 0; i < n; i++) {
+      const id = String(intentIdAt(i));
+      for (let pass = 0; pass < 2; pass++) {
+        const lang2 = pass === 0 ? "en" : "pl";
+        const topic = String(intentFieldAt(i, "topic", lang2) || "").trim();
+        const clause = String(intentFieldAt(i, "clause", lang2) || "").trim();
+        if (!topic && !clause) continue;
+        out.push({
+          surface: "intent",
+          id,
+          text: "title: " + (topic || "none") + " | text: " + clause
+        });
+      }
+    }
+    return out;
+  }
+  function mixHash(s, h) {
+    const t2 = String(s || "");
+    for (let i = 0; i < t2.length; i++) h = Math.imul(h, 33) ^ t2.charCodeAt(i);
+    return h >>> 0;
+  }
+  function cheapStamp() {
+    let n = 0, chars = 0, labels = 5381;
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (!m) continue;
+      n++;
+      chars += String(m.t || "").length + String(m.tPl || "").length + String(m.en || "").length + String(m.pl || "").length + String(m.k || "").length + String(m.note || "").length + String(m.notePl || "").length;
+    }
+    const keys = Object.keys(BASE_CATS);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      labels = mixHash(k, labels);
+      labels = mixHash(BASE_CATS[k], labels);
+      labels = mixHash(pack.catLabels && pack.catLabels[k], labels);
+      labels = mixHash(pack.catLabelsPl && pack.catLabelsPl[k], labels);
+      labels = mixHash(CAT_LABELS_PL[k], labels);
+    }
+    return String(ePackEpoch()) + "|" + n + "|" + chars + "|" + labels.toString(16) + "|" + intentCount();
+  }
+  function textStamp(rows) {
+    let h = 5381;
+    for (let i = 0; i < rows.length; i++) {
+      h = mixHash(rows[i].surface, h);
+      h = mixHash(rows[i].id, h);
+      h = mixHash(rows[i].text, h);
+    }
+    return h.toString(16);
+  }
+  function noteCatalog() {
+    if (!eSearchOn() || !modelHere()) return;
+    const cheap = cheapStamp();
+    if (cheap === cheapSeen && (sentText || sending)) return;
+    const rows = searchPassages();
+    const stamp = textStamp(rows);
+    if (stamp === sentText || stamp === sending) {
+      cheapSeen = cheap;
+      return;
+    }
+    const h = eHost();
+    if (!h || typeof h.searchPrepare !== "function") return;
+    sending = stamp;
+    const mine = stamp;
+    Promise.resolve(h.searchPrepare(rows)).then((res) => {
+      if (!res || res.skipped) {
+        if (sending === mine) sending = "";
+        return;
+      }
+      sentText = mine;
+      if (res.ready === false && toasted !== mine) {
+        toasted = mine;
+        try {
+          toast(t("Preparing the catalog for search by meaning; word search works meanwhile."));
+        } catch (e) {
+        }
+      }
+    }).catch(() => {
+      if (sending === mine) sending = "";
+    });
+    meaning = null;
+    askedQuery = null;
+    searchGen++;
+    cheapSeen = cheap;
+  }
+  function mixCards(wordHits, keep) {
+    if (!meaningLive() || !Array.isArray(wordHits)) return null;
+    const byId = /* @__PURE__ */ new Map();
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (m && m.id != null && !byId.has(m.id)) byId.set(m.id, m);
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const tail = [];
+    for (let i = 0; i < wordHits.length; i++) seen.add(wordHits[i].id);
+    const order = hybridIds(wordHits.map((m) => m.id), meaning.cards);
+    for (let i = wordHits.length; i < order.length; i++) {
+      const m = byId.get(order[i]);
+      if (!m || seen.has(m.id)) continue;
+      if (keep && !keep(m)) continue;
+      seen.add(m.id);
+      tail.push(m);
+    }
+    return wordHits.concat(tail);
+  }
+  function mixIntentRows(rows) {
+    if (!meaningLive() || !Array.isArray(rows)) return null;
+    const byIdx = /* @__PURE__ */ new Map();
+    const byId = /* @__PURE__ */ new Map();
+    for (let i = 0; i < rows.length; i++) {
+      byIdx.set(rows[i].idx, rows[i]);
+      if (!byId.has(rows[i].id)) byId.set(rows[i].id, rows[i]);
+    }
+    const hits = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (let i = 0; i < railOrder.length; i++) {
+      const row2 = byIdx.get(railOrder[i]);
+      if (!row2 || seen.has(row2.id)) continue;
+      hits.push(row2);
+      seen.add(row2.id);
+    }
+    const restIds = hybridIds(hits.map((r) => r.id), meaning.intents);
+    const tail = [];
+    for (let i = hits.length; i < restIds.length; i++) {
+      const row2 = byId.get(restIds[i]);
+      if (!row2 || seen.has(row2.id)) continue;
+      seen.add(row2.id);
+      tail.push(row2);
+    }
+    for (let i = 0; i < rows.length; i++) {
+      if (seen.has(rows[i].id)) continue;
+      seen.add(rows[i].id);
+      tail.push(rows[i]);
+    }
+    return hits.concat(tail);
+  }
+  function noteSearchTyping() {
+    const q = currentQuery();
+    if (typed !== null && q !== typed) boxDirty = true;
+    typed = q;
+  }
+  function searchOnSettle() {
+    const q = currentQuery();
+    if (!eSearchOn()) {
+      meaning = null;
+      askedQuery = null;
+      boxDirty = false;
+      typed = q;
+      return;
+    }
+    if (boxDirty) {
+      meaning = null;
+      askedQuery = null;
+      boxDirty = false;
+    }
+    typed = q;
+  }
+  async function ask(q) {
+    const gen = ++searchGen;
+    const ticket = { gen, query: q };
+    let ans = null;
+    try {
+      const h = eHost();
+      if (h && typeof h.searchRank === "function") ans = await h.searchRank(q);
+    } catch (e) {
+      ans = null;
+    }
+    if (boxDirty) return;
+    if (!acceptSearchAnswer(ticket, { gen: searchGen, query: currentQuery() })) return;
+    if (!eSearchOn()) return;
+    if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) {
+      if (retryQuery !== q) {
+        retryQuery = q;
+        retryCount = 0;
+      }
+      if (++retryCount > SEARCH_RETRY_MAX) return;
+      if (askedQuery === q) askedQuery = null;
+      setTimeout(() => {
+        if (currentQuery() === q) scheduleSearchRank();
+      }, SEARCH_RETRY_MS);
+      return;
+    }
+    meaning = { gen, query: q, cards: ans.cards, intents: ans.intents };
+    try {
+      hooks.render();
+    } catch (e) {
+    }
+    try {
+      hooks.drawIntentRail();
+    } catch (e) {
+    }
+  }
+  function scheduleSearchRank() {
+    if (!eSearchOn() || !modelHere()) return;
+    noteCatalog();
+    const q = currentQuery();
+    if (searchAlnumLen(q) < 3) return;
+    if (meaning && meaning.query === q && meaning.gen === searchGen) return;
+    if (askedQuery === q) return;
+    askedQuery = q;
+    void ask(q);
+  }
+  function clearSearchMeaning() {
+    meaning = null;
+    askedQuery = null;
+    boxDirty = false;
+    searchGen++;
+  }
+  function armSearch() {
+    try {
+      eTellSearch();
+    } catch (e) {
+    }
+    if (!eSearchOn() || !modelHere()) return;
+    noteCatalog();
+  }
+
   // src/modules/rail-list.js
   var railDrag = null;
   var railSwapLock = 0;
@@ -20514,6 +20858,7 @@ What you type stays in this browser only.`;
     clearTimeout(railSortT);
     setRailSortT(0);
     if (typeof dragState !== "undefined" && dragState) return;
+    searchOnSettle();
     const cardsBefore = captureSettle();
     if (catsDropArmed) {
       setCatsDropArmed(false);
@@ -20739,7 +21084,9 @@ What you type stays in this browser only.`;
     if (!box) return;
     hooks.syncIntentOrder();
     const keepScroll = box.scrollTop;
-    const rows = displayIntentRows();
+    let rows = displayIntentRows();
+    const mixedRows = mixIntentRows(rows);
+    if (mixedRows) rows = mixedRows;
     if (!intentCount()) {
       if (!box.querySelector(".rail-empty"))
         box.innerHTML = '<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">' + esc(t("Intents arrive with a catalog.")) + "</p>";
@@ -23852,10 +24199,13 @@ What you type stays in this browser only.`;
     closeNotePane();
     cancelLangChunks();
     const terms = cardSearchTerms();
+    scheduleSearchRank();
     syncPillCounts();
-    const ranked = rankedCards(terms, (m) => cardInActiveCats(m, terms));
+    const keep = (m) => cardInActiveCats(m, terms);
+    const ranked = rankedCards(terms, keep);
     const sc = ranked.sc;
-    setShown(ranked.hits);
+    const mixed = mixCards(ranked.hits, keep);
+    setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
@@ -24402,15 +24752,15 @@ What you type stays in this browser only.`;
       syncRowShed();
       syncMoreBtn();
     };
-    const ask = () => {
+    const ask2 = () => {
       if (!raf) raf = requestAnimationFrame(run);
       if (!belt) belt = setTimeout(run, 200);
     };
-    window.scheduleHeaderSync = ask;
-    addEventListener("resize", ask);
-    document.addEventListener("visibilitychange", ask);
+    window.scheduleHeaderSync = ask2;
+    addEventListener("resize", ask2);
+    document.addEventListener("visibilitychange", ask2);
     if (typeof MutationObserver === "function") {
-      new MutationObserver(ask).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
     }
     run();
   }
@@ -28363,8 +28713,8 @@ What you type stays in this browser only.`;
       };
       const next = {};
       INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = intentFieldKey(f, l), typed = ieVal(f, l);
-        next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
+        const k = intentFieldKey(f, l), typed2 = ieVal(f, l);
+        next[k] = typed2 != null ? typed2 : f === "clause" ? "" : val[k];
       }));
       const primary = CONTENT_LANGS[0], clauseKey = intentFieldKey("clause", primary);
       const nen = next[clauseKey];
@@ -29174,13 +29524,13 @@ What you type stays in this browser only.`;
     if (!b) return;
     const one = cats.length === 1 && CATS[cats[0]] ? cats[0] : null;
     b.hidden = !Object.keys(CATS).length;
-    const ask = !!one && !cardCounts[one];
-    if (ask && b.dataset.nudged !== one) {
+    const ask2 = !!one && !cardCounts[one];
+    if (ask2 && b.dataset.nudged !== one) {
       b.classList.remove("nudge");
       void b.offsetWidth;
     }
-    b.classList.toggle("nudge", ask);
-    if (ask) b.dataset.nudged = one;
+    b.classList.toggle("nudge", ask2);
+    if (ask2) b.dataset.nudged = one;
     else delete b.dataset.nudged;
     b.title = one ? t("Create a card in {CAT}").replace("{CAT}", CATS[one]) : t("Create a card");
     b.setAttribute("aria-label", b.title);
@@ -32599,20 +32949,28 @@ What you type stays in this browser only.`;
   function aiGroups() {
     if (!eAiModel()) return [];
     return [{ rows: [
-      // placeholder: Claudette
       row(
         "aisuggest",
         "ai",
         t("Suggest intents with the built-in model"),
-        // placeholder: Claudette
         t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
         onoff(
           "aisuggest",
           eAiOn(),
-          // placeholder: Claudette
           t("The model ranks the suggestions; nothing leaves this computer"),
-          // placeholder: Claudette
           t("Suggestions come from matching words, and the model stays unloaded")
+        )
+      ),
+      row(
+        "aisearch",
+        "ai",
+        t("Search by meaning with the built-in model"),
+        t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+        onoff(
+          "aisearch",
+          eSearchOn(),
+          t("The model ranks the search beside word matches; nothing leaves this computer"),
+          t("Off, it matches words only.")
         )
       )
     ] }];
@@ -32701,7 +33059,6 @@ What you type stays in this browser only.`;
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
       { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
-      // placeholder: Claudette (the lede; "AI" is hers)
       { id: "ai", icon: "ai", name: t("AI"), lede: t("The model built into Etiuda, which works on this computer alone."), groups: aiGroups() }
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
@@ -32872,6 +33229,21 @@ What you type stays in this browser only.`;
             else lsSet(E_AI_OFF_KEY, "1");
             eTellAi();
             toast(on ? t("Suggestions from the built-in model") : t("Suggestions from matching words"));
+          } else if (seg3 === "aisearch") {
+            if (on) lsDel(E_SEARCH_AI_OFF_KEY);
+            else lsSet(E_SEARCH_AI_OFF_KEY, "1");
+            eTellSearch();
+            if (on) armSearch();
+            else clearSearchMeaning();
+            try {
+              render();
+            } catch (e) {
+            }
+            try {
+              hooks.drawIntentRail();
+            } catch (e) {
+            }
+            toast(on ? t("The model ranks the search beside word matches; nothing leaves this computer") : t("Off, it matches words only."));
           } else if (seg3 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
           } else if (seg3 === "pillslock") {
@@ -32982,7 +33354,8 @@ What you type stays in this browser only.`;
       "eQuitOnClose",
       "eNotifyEditionOff",
       "eNotifyCatalogOff",
-      E_AI_OFF_KEY
+      E_AI_OFF_KEY,
+      E_SEARCH_AI_OFF_KEY
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {
@@ -33099,6 +33472,7 @@ What you type stays in this browser only.`;
       drawPills();
     } catch (e) {
     }
+    eTellSearch();
     try {
       render();
     } catch (e) {
@@ -33297,6 +33671,7 @@ What you type stays in this browser only.`;
   }
   function wireSearchBox() {
     intentEl.oninput = () => {
+      noteSearchTyping();
       if (screenOn) {
         setRailSettled(false);
         putEntrySel(null);
@@ -36163,10 +36538,14 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h || typeof h.onPickAsk !== "function") return;
     h.onPickAsk((op, arg) => JSON.stringify(answerPick(String(op || ""), arg)));
+    try {
+      armSearch();
+    } catch (e) {
+    }
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

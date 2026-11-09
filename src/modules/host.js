@@ -396,6 +396,13 @@ function eTellAi(){
   const h=eHost();
   try{ if(h && typeof h.setAi==="function") h.setAi(eAiOn()); }catch(e){}
 }
+/* THE MAIN SEARCH'S OWN SWITCH, on unless the person turned it off. It does not move the picker's switch. */
+const E_SEARCH_AI_OFF_KEY="eSearchAiOff";
+function eSearchOn(){ return lsGet(E_SEARCH_AI_OFF_KEY)!=="1"; }
+function eTellSearch(){
+  const h=eHost();
+  try{ if(h && typeof h.setSearchAi==="function") h.setSearchAi(eSearchOn()); }catch(e){}
+}
 // The picker brought forward from the desk itself, by the pointer: false where the host has none.
 function eOpenPicker(){
   const h=eHost();
@@ -496,6 +503,9 @@ export {
   eAiOn,
   eAiModel,
   eTellAi,
+  E_SEARCH_AI_OFF_KEY,
+  eSearchOn,
+  eTellSearch,
   eOpenPicker,
   eOpenCatalogFolder,
   wireFolderLink,

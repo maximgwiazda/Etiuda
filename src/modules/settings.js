@@ -17,7 +17,8 @@ import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
-import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi } from "./host.js";
+import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
+import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
 import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
 import { pack } from "./pack.js";
@@ -385,15 +386,16 @@ function teamsGroups(){
 function aiGroups(){
   if(!eAiModel()) return [];
   return [{rows:[
-    // placeholder: Claudette
     row("aisuggest","ai",t("Suggest intents with the built-in model"),
-      // placeholder: Claudette
       t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
       onoff("aisuggest", eAiOn(),
-        // placeholder: Claudette
         t("The model ranks the suggestions; nothing leaves this computer"),
-        // placeholder: Claudette
-        t("Suggestions come from matching words, and the model stays unloaded")))
+        t("Suggestions come from matching words, and the model stays unloaded"))),
+    row("aisearch","ai",t("Search by meaning with the built-in model"),
+      t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+      onoff("aisearch", eSearchOn(),
+        t("The model ranks the search beside word matches; nothing leaves this computer"),
+        t("Off, it matches words only.")))
   ]}];
 }
 function dataGroups(){
@@ -443,7 +445,6 @@ function settingsSections(){
     {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsGroups()},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
     {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()},
-    // placeholder: Claudette (the lede; "AI" is hers)
     {id:"ai", icon:"ai", name:t("AI"), lede:t("The model built into Etiuda, which works on this computer alone."), groups:aiGroups()}
   ].filter(s=>s.groups.some(g=>g.rows.length));
 }
@@ -625,8 +626,15 @@ function wirePage(box){
         else if(seg==="aisuggest"){
           if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");
           eTellAi();
-          // placeholder: Claudette
           toast(on?t("Suggestions from the built-in model"):t("Suggestions from matching words"));
+        }
+        else if(seg==="aisearch"){
+          if(on) lsDel(E_SEARCH_AI_OFF_KEY); else lsSet(E_SEARCH_AI_OFF_KEY,"1");
+          eTellSearch();
+          if(on) armSearch(); else clearSearchMeaning();
+          try{ render(); }catch(e){}
+          try{ hooks.drawIntentRail(); }catch(e){}
+          toast(on?t("The model ranks the search beside word matches; nothing leaves this computer"):t("Off, it matches words only."));
         }
         else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
         else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }
@@ -701,7 +709,7 @@ function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
    "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose",
-   "eNotifyEditionOff","eNotifyCatalogOff",E_AI_OFF_KEY]
+   "eNotifyEditionOff","eNotifyCatalogOff",E_AI_OFF_KEY,E_SEARCH_AI_OFF_KEY]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");
@@ -748,6 +756,7 @@ function applyPrefs(){
   try{ syncLayoutPrefs(); }catch(e){}
   try{ syncRailLayout(); }catch(e){}
   try{ drawPills(); }catch(e){}
+  eTellSearch();
   try{ render(); }catch(e){}
   try{
     const host=eHost();
