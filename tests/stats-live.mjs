@@ -21,7 +21,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 18;
+const EXPECTED = 20;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -38,7 +38,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-stats-live-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), APP, { recursive: true });
 const COPY = path.join(APP, "main.js");
-const EXPOSE = ["spanSignedBytes", "spanDocument", "setStatsClock", "statsPulse", "flushHeldStats",
+const EXPOSE = ["spanSignedBytes", "spanDocument", "spanPeriod", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
   "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks"];
@@ -709,6 +709,103 @@ try {
         return box.D.api.statsAnswerGenuine(tampered, folder, key) === false;
       });
     check(g.ok, "891q the desk signs the answer inside the seal, a forged seal opens and fails that check, and another desk's key does not pass for this folder"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 559a: any whole days the desk keeps ----------------------------------------------------- */
+  {
+    const day = "2026-04-15";
+    const sig = { alg: "Ed25519", keyId: "quay-lead", value: "ab".repeat(64) };
+    const textOf = (span) => {
+      const doc = { format: 1, kind: "etiuda-stats-span", sig: sig };
+      if (span !== undefined) doc.span = span;
+      return JSON.stringify(doc);
+    };
+    const at = (api, span, ymd) => {
+      const parts = ymd.split("-").map(Number);
+      return api.spanPeriod(span, new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0));
+    };
+    const same = (got, from, to) => !!got && got.from === from && got.to === to;
+    const box = await joined(false);
+    const api = box.D.api;
+    const misses = [];
+    const accept = (span, from, to, ymd) => {
+      const on = ymd || day;
+      const doc = api.spanDocument(textOf(span));
+      if (!doc || doc.span !== span) misses.push(span + " on " + on + " was not read");
+      const got = at(api, span, on);
+      if (!same(got, from, to)) misses.push(span + " on " + on + " is " + JSON.stringify(got));
+    };
+    const refuse = (span, label) => {
+      const name = label || JSON.stringify(span);
+      if (api.spanDocument(textOf(span)) !== null) misses.push(name + " was read");
+      if (at(api, span, day) !== null) misses.push(name + " had a period");
+    };
+    accept("rolling-1", day, day);
+    accept("rolling-7", "2026-04-09", day);
+    accept("rolling-30", "2026-03-17", day);
+    accept("rolling-400", "2025-03-12", day);
+    accept("this-month", "2026-04-01", day);
+    accept("last-month", "2025-12-01", "2025-12-31", "2026-01-15");
+    accept("range-2026-04-01-2026-04-10", "2026-04-01", "2026-04-10");
+    accept("range-2020-01-01-2030-01-01", "2025-03-12", day);
+    accept("range-2025-03-12-2025-03-12", "2025-03-12", "2025-03-12");
+    refuse("rolling-0");
+    refuse("rolling-401");
+    refuse("rolling-07");
+    refuse("rolling-x");
+    refuse("range-2026-04-10-2026-04-01");
+    refuse("range-2026-02-28-2026-02-30");
+    refuse("last-months");
+    refuse("");
+    refuse(undefined, "an empty span");
+    const beforeWindow = "range-2020-01-01-2025-03-11";
+    const ahead = "range-2026-04-16-2026-05-01";
+    if (!api.spanDocument(textOf(beforeWindow)) || at(api, beforeWindow, day) !== null) misses.push("a range before the kept window");
+    if (!api.spanDocument(textOf(ahead)) || at(api, ahead, day) !== null) misses.push("a range after today");
+    const late = new Date(2026, 3, 15, 23, 0, 0, 0);
+    const next = new Date(2026, 3, 16, 0, 30, 0, 0);
+    const sealed = (span, from, to) => {
+      box.D.api.setStatsClock(late.getTime());
+      adopt(box, span, lead.privateKey, LEAD, 2);
+      const first = openStats(box);
+      box.D.api.setStatsClock(next.getTime());
+      box.D.api.statsPulse();
+      const moved = openStats(box);
+      if (!first || !same(first.period, from, to)) misses.push(span + " before midnight " + JSON.stringify(first && first.period));
+      return moved;
+    };
+    const rolled = sealed("rolling-7", "2026-04-09", "2026-04-15");
+    if (!same(rolled && rolled.period, "2026-04-10", "2026-04-16")) misses.push("rolling-7 after midnight " + JSON.stringify(rolled && rolled.period));
+    const held = sealed("range-2026-04-01-2026-04-10", "2026-04-01", "2026-04-10");
+    if (!same(held && held.period, "2026-04-01", "2026-04-10")) misses.push("a range end moved " + JSON.stringify(held && held.period));
+    const clipped = sealed("range-2020-01-01-2026-04-10", "2025-03-12", "2026-04-10");
+    if (!same(clipped && clipped.period, "2025-03-13", "2026-04-10")) misses.push("a clipped start " + JSON.stringify(clipped && clipped.period));
+    check(misses.length === 0, "559a a span of whole days the desk keeps, and a range end stays put at midnight"
+      + (misses.length ? ": " + misses[0] : ""));
+  }
+
+  /* ---- 559b: a range counts only the days the desk still holds -------------------------------- */
+  {
+    const g = await prove("559b",
+      "  const oldest = statsShiftYmd(today, 1 - SPAN_DAYS_KEPT); /* plant:span-range-clip */\n"
+        + "  const from = shape.from > oldest ? shape.from : oldest;\n"
+        + "  const to = shape.to < today ? shape.to : today;\n"
+        + "  if (from > to) return null;\n"
+        + "  return { from: from, to: to };",
+      "  return { from: shape.from, to: shape.to }; /* plant:span-range-clip */",
+      async () => {
+        const box = await joined(false);
+        const when = new Date(CLOCK);
+        box.D.api.setStatsClock(CLOCK);
+        adopt(box, "range-2020-01-01-2030-01-01", lead.privateKey, LEAD, 2);
+        const inner = openStats(box);
+        if (!inner || inner.period.from !== "2025-03-12" || inner.period.to !== "2026-04-15") return false;
+        if (box.D.api.spanPeriod("range-2020-01-01-2025-03-11", when) !== null) return false;
+        if (box.D.api.spanPeriod("range-2026-04-16-2026-05-01", when) !== null) return false;
+        return true;
+      });
+    check(g.ok, "559b a range is counted only for the days the desk still holds, and the answer says which"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
   }
 
