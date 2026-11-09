@@ -77,6 +77,22 @@ export function closeScreenTab(id) {
   if (onScreenChange) onScreenChange();
 }
 
+export function dropScreenTab(id) {
+  const idx = screens.indexOf(id);
+  if (idx >= 0) screens.splice(idx, 1);
+  if (screenOn === id) {
+    screenOn = "";
+    if (typeof document !== "undefined" && document.body && document.body.classList) {
+      document.body.classList.remove("screen-on");
+    }
+    const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+    if (sh) {
+      sh.innerHTML = "";
+      sh.hidden = true;
+    }
+  }
+}
+
 export function clearScreenOn() {
   screenOn = "";
   if (typeof document !== "undefined" && document.body && document.body.classList) {

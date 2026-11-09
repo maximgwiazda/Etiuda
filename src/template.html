@@ -3501,13 +3501,17 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
    586 pixels, a 1438 x 879 window at 150 per cent. */
 @media (max-height:700px){
   .mt-row,.mt-tab{font-size:11px;padding:0}
-  .mt-sec{margin-bottom:8px}
-  .mt-screen.screen-page{padding:10px 16px;gap:8px}
-  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:8px}
-  .mt-h{padding:6px 8px;font-size:11px;gap:6px}
-  .mt-h small{font-size:10.5px}
-  .mt-readings{margin:0 0 4px}
-  .mt-moved{margin:6px 0 0}
+  .mt-sec{margin-bottom:4px}
+  .mt-sec h3{margin-bottom:2px}
+  .mt-screen.screen-page{padding:6px 16px;gap:4px}
+  .mt-screen .screen-head h2{font-size:17px}
+  .mt-screen .mt-sub{margin-top:1px;font-size:12px}
+  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:4px}
+  .mt-h{padding:3px 8px;font-size:11px;gap:6px}
+  .mt-h small{font-size:10px}
+  .mt-readings{margin:0 0 2px}
+  .mt-moved{margin:2px 0 0}
+  .mt-grid{columns:200px;column-gap:16px}
 }
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
@@ -3520,7 +3524,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --scrim-filter:none;--mark-filter:none}
 /* ---------- Screen tabs & host (boards 965, 967, 969) ---------- */
 body.screen-on .fab-stack,
-body.screen-on .fills,
 body.screen-on .pills-slot,
 body.screen-on .pills-probe,
 body.screen-on .stage,

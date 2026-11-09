@@ -5782,10 +5782,13 @@ const CARD_B = {
   const DL = await import(MOD("dialog.js"));
   const SET = await import(MOD("settings.js"));
   const STAB = await import(MOD("screen-tabs.js"));
+  const MG = await import(MOD("manage.js"));
+  const HM = await import(MOD("header-menus.js"));
+  const SB = await import(MOD("search-box.js"));
   const fs = await import("node:fs");
 
   const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
-    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW"];
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW", "tourActive"];
   const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
 
   const on = o => ({
@@ -5796,8 +5799,12 @@ const CARD_B = {
   });
   const el = extra => {
     const classes = new Set((extra && extra.className || "").split(/\s+/).filter(Boolean));
+    const made = {};
     const e = Object.assign({
-      hidden: false, attrs: {}, innerHTML: "", value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
+      hidden: false, attrs: {}, _html: "",
+      get innerHTML() { return this._html || ""; },
+      set innerHTML(v) { this._html = String(v); for (const k of Object.keys(made)) delete made[k]; },
+      value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
       get textContent() {
         if (this._text !== undefined) return this._text;
         return (this.kids && this.kids.length) ? this.kids.map(k => k.textContent).join("") : "";
@@ -5812,6 +5819,8 @@ const CARD_B = {
       getAttribute(k) { return k === "class" ? this.className : this.attrs[k]; },
       removeAttribute(k) { delete this.attrs[k]; },
       querySelector(s) {
+        const m = /^#([\w-]+)$/.exec(s);
+        if (m && this._html && this._html.indexOf('id="' + m[1] + '"') >= 0) return made[m[1]] || (made[m[1]] = el({ id: m[1], tagName: "INPUT" }));
         if (!this.kids) return null;
         for (const k of this.kids) {
           if (s.startsWith("#") && k.id === s.slice(1)) return k;
@@ -5878,6 +5887,12 @@ const CARD_B = {
   const modal = el({ id: "modal", hidden: true });
   const modalCard = el({ id: "modalCard", className: "modal-card" });
   modal.appendChild(modalCard);
+  const settingsBtn = el({ id: "settingsBtn", tagName: "BUTTON" });
+  const settingsMenu = el({ id: "settingsMenu", hidden: true, tagName: "DIV" });
+  const settingsWrap = el({ id: "settingsWrap", kids: [settingsBtn, settingsMenu] });
+  settingsBtn.parentNode = settingsWrap; settingsMenu.parentNode = settingsWrap;
+  const fillsEl = el({ className: "fills", kids: [pax, box, settingsWrap] });
+  pax.parentNode = fillsEl; box.parentNode = fillsEl; settingsWrap.parentNode = fillsEl;
   const byId = {
     "#toast": toastEl,
     "#pax": pax,
@@ -5887,10 +5902,16 @@ const CARD_B = {
     "#tabsWrap": tabsWrap,
     "#screenHost": screenHost,
     "#modal": modal,
-    "#modalCard": modalCard
+    "#modalCard": modalCard,
+    "#settingsBtn": settingsBtn,
+    "#settingsMenu": settingsMenu,
+    "#settingsWrap": settingsWrap,
+    "#moreBtn": el({ id: "moreBtn" }),
+    "#moreMenu": el({ id: "moreMenu", hidden: true }),
+    ".fills": fillsEl
   };
 
-  const bodyKids = [tabsWrap, screenHost, modal];
+  const bodyKids = [tabsWrap, fillsEl, screenHost, modal];
   const body = el({
     tagName: "BODY",
     kids: bodyKids,
@@ -5898,21 +5919,28 @@ const CARD_B = {
     removeChild: n => { n.gone = true; }
   });
   bodyKids.forEach(k => { k.parentNode = body; k.parentElement = body; });
+  const keyListeners = [];
   let pageKeys = null, pageInput = null;
 
   globalThis.document = {
-    querySelector: s => byId[s] || (s === "#modalCard" ? modalCard : null),
+    querySelector: s => byId[s] || (s === "#modalCard" ? modalCard : screenHost.querySelector(s)),
     getElementById: id => byId["#" + id] || null,
     querySelectorAll: s => (s === ".tab" ? tabsBar.querySelectorAll(".tab") : []),
     activeElement: body,
     body,
-    addEventListener(k, fn) { if (k === "keydown") pageKeys = fn; if (k === "input") pageInput = fn; },
+    addEventListener(k, fn) {
+      if (k === "keydown") { keyListeners.push(fn); pageKeys = ev => keyListeners.forEach(f => f(ev)); }
+      if (k === "input") pageInput = fn;
+    },
     contains: () => true,
     createElement: tag => el({ tagName: (tag || "div").toUpperCase() }),
     createRange: () => ({}),
     documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} }
   };
-  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; if (k === "input") pageInput = fn; };
+  globalThis.addEventListener = (k, fn) => {
+    if (k === "keydown") { keyListeners.push(fn); pageKeys = ev => keyListeners.forEach(f => f(ev)); }
+    if (k === "input") pageInput = fn;
+  };
   globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0", marginLeft: "0" });
   globalThis.requestAnimationFrame = fn => { fn(); return 0; };
   STUBS.forEach(k => { H.hooks[k] = () => {}; });
@@ -5935,6 +5963,8 @@ const CARD_B = {
 
   try {
     KD.wireGlobalKeydown();
+    HM.wireHeaderMenus();
+    SB.wireSearchBox();
 
     // 1. Ctrl+Shift+M opens a tab named Maintenance
     check("screen-tabs.js", "D1-1 Ctrl+Shift+M opens a tab named Maintenance", () => {
@@ -6190,6 +6220,80 @@ const CARD_B = {
       return viz.textContent === "Maintenance" ? true : "label reads " + JSON.stringify(viz.textContent);
     });
 
+    // 15. In each of the three screen tabs the bar and the Menu button are visible and the Menu opens
+    check("screen-tabs.js", "D1-15 in each of the three screen tabs the bar and the Menu button are visible and the Menu opens", () => {
+      const srcTmpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
+      const screenOnHidden = (srcTmpl.match(/body\.screen-on\s+[^{]+{[\s\S]*?display:\s*none\s*!important/g) || []).join("\n");
+      const fillsHidden = screenOnHidden.indexOf(".fills") >= 0;
+
+      const testScreen = sid => {
+        start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+        if (sid === "settings") SET.openSettings();
+        else if (sid === "library") MG.openManage();
+        else if (sid === "maintenance") MN.openMaintenance();
+        const btn = byId["#settingsBtn"];
+        const menu = byId["#settingsMenu"];
+        const btnVisible = btn && !btn.hidden;
+        if (menu) menu.hidden = true;
+        if (btn && btn.onclick) btn.onclick({ stopPropagation() {}, detail: 1 });
+        const menuOpened = menu && !menu.hidden;
+        STAB.clearScreenOn();
+        return btnVisible && menuOpened;
+      };
+      const ok = !fillsHidden && testScreen("settings") && testScreen("library") && testScreen("maintenance");
+      return ok || ("fillsHidden: " + fillsHidden);
+    });
+
+    // 16. Typing a letter in the main search on each turns that tab into a cards tab with the letter in the field, the tab count unchanged and no other tab fronted
+    check("screen-tabs.js", "D1-16 typing a letter in the main search on each turns that tab into a cards tab with the letter in the field, the tab count unchanged and no other tab fronted", () => {
+      const testScreen = (sid, letter) => {
+        STAB.clearScreenOn();
+        STAB.screens.length = 0;
+        start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+        if (sid === "settings") SET.openSettings();
+        else if (sid === "library") MG.openManage();
+        else if (sid === "maintenance") MN.openMaintenance();
+        if (STAB.screenOn !== sid) return "did not open " + sid;
+        const countBefore = T.tabs.length + STAB.screens.length;
+        box.value = letter;
+        if (box.oninput) box.oninput();
+        const turned = STAB.screenOn === "" && !body.classList.contains("screen-on");
+        const notInScreens = !STAB.screens.includes(sid);
+        const countAfter = T.tabs.length + STAB.screens.length;
+        const countOk = countBefore === countAfter && countAfter === 3;
+        const curTab = T.tabs.find(x => x.id === T.getActiveTabId());
+        const tabIsCards = curTab && curTab.id !== "t-a" && curTab.id !== "t-b" && curTab.intentBox === letter;
+        const stripPos = T.tabs.indexOf(curTab);
+        const posOk = stripPos === 2;
+        STAB.clearScreenOn();
+        STAB.screens.length = 0;
+        return turned && notInScreens && countOk && tabIsCards && posOk && box.value === letter;
+      };
+      const sOk = testScreen("settings", "s");
+      const lOk = testScreen("library", "l");
+      const mOk = testScreen("maintenance", "m");
+      return (sOk === true && lOk === true && mOk === true) || JSON.stringify({ sOk, lOk, mOk });
+    });
+
+    // 17. Settings' own search still filters settings and turns nothing
+    check("screen-tabs.js", "D1-17 Settings' own search still filters settings and turns nothing", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      SET.openSettings();
+      const countBefore = T.tabs.length + STAB.screens.length;
+      const blurHtml = SET.settingsPageHtml("general", "blur");
+      const filters = blurHtml.indexOf("Blur effects") >= 0;
+      const find = screenHost.querySelector("#sxSearch");
+      if (find && find.oninput) {
+        find.value = "blur";
+        find.oninput();
+      }
+      const stillSettings = STAB.screenOn === "settings" && body.classList.contains("screen-on");
+      const countAfter = T.tabs.length + STAB.screens.length;
+      const countOk = countBefore === countAfter;
+      STAB.clearScreenOn();
+      return filters && stillSettings && countOk;
+    });
+
   } finally {
     STAB.clearScreenOn();
     STAB.screens.length = 0;
@@ -6229,7 +6333,7 @@ const CARD_B = {
   const fs = await import("node:fs");
 
   const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
-    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW"];
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate", "runShortcut", "openManage", "openSettings", "shedWordmarkW", "tourActive"];
   const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
 
   const on = o => ({
