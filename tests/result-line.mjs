@@ -1988,19 +1988,19 @@ async function main() {
   {
     const withDeps = (l) => { const p = path.join(l.lab, "package.json"); const j = JSON.parse(fs.readFileSync(p, "utf8"));
       j.devDependencies = { "left-pad": "1.0.0" }; fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n"); };
-    const marks = (name) => 'import fs from "node:fs";\nfs.writeFileSync("ran-' + name + '", "1");\nconsole.log("  ok   leg 0");\n';
+    const marks = (name) => 'import fs from "node:fs";\nfs.writeFileSync("../ran-' + name + '", "1");\nconsole.log("  ok   leg 0");\n';
     const tail = (x) => String(x.out).trim().split(/\r?\n/).slice(-3).join(" | ");
     const gone = makeLab("nm-gone", { green: marks("green") });
     withDeps(gone);
     const g = run(gone, ["green"]);
-    const gRan = fs.existsSync(path.join(gone.lab, "ran-green"));
+    const gRan = fs.existsSync(path.join(gone.root, "ran-green"));
     check(g.exit === 78 && /node_modules is gone/.test(g.out) && !gRan,
       "nm1 a tree whose package.json declares dependencies and has no node_modules is refused with 78 before any gate runs: exit "
       + g.exit + ", ran " + gRan + " | " + tail(g));
     const here = makeLab("nm-here", { green: marks("green") });
     withDeps(here); fs.mkdirSync(path.join(here.lab, "node_modules"));
     const h = run(here, ["green"]);
-    const hRan = fs.existsSync(path.join(here.lab, "ran-green"));
+    const hRan = fs.existsSync(path.join(here.root, "ran-green"));
     check(h.exit === 0 && hRan, "nm2 THE CONTROL: the same tree with node_modules runs its gate: exit " + h.exit + ", ran " + hRan + " | " + tail(h));
     const mid = makeLab("nm-mid", {
       first: 'import fs from "node:fs";\nfs.rmSync("node_modules", { recursive: true, force: true });\nconsole.log("  ok   leg 0");\n',
@@ -2008,7 +2008,7 @@ async function main() {
     });
     withDeps(mid); fs.mkdirSync(path.join(mid.lab, "node_modules"));
     const md = run(mid, ["first", "second"]);
-    const mRan = fs.existsSync(path.join(mid.lab, "ran-second"));
+    const mRan = fs.existsSync(path.join(mid.root, "ran-second"));
     check(md.exit === 78 && /node_modules is gone/.test(md.out) && !mRan,
       "nm3 node_modules gone mid-run stops the chain with 78 before the next gate runs: exit " + md.exit + ", second ran " + mRan + " | " + tail(md));
   }
