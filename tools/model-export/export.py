@@ -16,6 +16,7 @@ import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.join(HERE, "sources.json")
@@ -148,7 +149,7 @@ def export_onnx(source, out_dir):
     # The block size and the symmetric 4-bit settings are unchanged.
     from onnxruntime.quantization.matmul_nbits_quantizer import DefaultWeightOnlyQuantConfig, MatMulNBitsQuantizer
     from onnxruntime.quantization.quant_utils import load_model_with_shape_infer
-    loaded = load_model_with_shape_infer(fp32)
+    loaded = load_model_with_shape_infer(Path(fp32))
     quant_config = DefaultWeightOnlyQuantConfig(block_size=32, is_symmetric=True)
     quant = MatMulNBitsQuantizer(loaded, algo_config=quant_config)
     quant.process()
