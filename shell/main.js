@@ -1712,7 +1712,7 @@ function spanDocument(text) {
     Object.keys(v).forEach(k => walk.push([v[k], depth + 1]));
   }
   if (+data.format !== 1 || data.kind !== "etiuda-stats-span") return null;
-  if (data.span !== "rolling-30" && data.span !== "this-month") return null;
+  if (!spanShape(data.span)) return null;
   const sig = data.sig;
   if (!sig || typeof sig !== "object" || Array.isArray(sig)) return null;
   if (sig.alg !== "Ed25519" || typeof sig.keyId !== "string" || !sig.keyId) return null;
@@ -1912,11 +1912,47 @@ function statsShiftYmd(ymd, days) {
   const p = v => String(v).padStart(2, "0");
   return x.getUTCFullYear() + "-" + p(x.getUTCMonth() + 1) + "-" + p(x.getUTCDate());
 }
+/* The page keeps SPAN_DAYS_KEPT day buckets, today included. A rolling span asks for at most
+   that many, and a range counts only the part that still lies in those days. */
+const SPAN_DAYS_KEPT = 400;
+function ymdReal(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ""));
+  if (!m) return false;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  const x = new Date(Date.UTC(y, mo - 1, d));
+  return x.getUTCFullYear() === y && x.getUTCMonth() === mo - 1 && x.getUTCDate() === d;
+}
+/* Four shapes and no other. rolling-N takes N from 1 to SPAN_DAYS_KEPT with no leading zero.
+   A range names two real dates, the first not after the second. */
+function spanShape(span) {
+  if (typeof span !== "string" || !span) return null;
+  if (span === "this-month" || span === "last-month") return { kind: span };
+  const rolling = /^rolling-([1-9]\d*)$/.exec(span);
+  if (rolling) {
+    const n = +rolling[1];
+    return n <= SPAN_DAYS_KEPT ? { kind: "rolling", n: n } : null;
+  }
+  const range = /^range-(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})$/.exec(span);
+  if (!range || !ymdReal(range[1]) || !ymdReal(range[2]) || range[1] > range[2]) return null;
+  return { kind: "range", from: range[1], to: range[2] };
+}
 function spanPeriod(span, now) {
+  const shape = spanShape(span);
+  if (!shape) return null;
   const today = channelYmd(now);
-  if (span === "rolling-30") return { from: statsShiftYmd(today, -29), to: today };
-  if (span === "this-month") return { from: today.slice(0, 8) + "01", to: today };
-  return null;
+  if (shape.kind === "rolling") return { from: statsShiftYmd(today, 1 - shape.n), to: today };
+  if (shape.kind === "this-month") return { from: today.slice(0, 8) + "01", to: today };
+  if (shape.kind === "last-month") {
+    const end = statsShiftYmd(today.slice(0, 8) + "01", -1);
+    if (!ymdReal(end)) return null;
+    return { from: end.slice(0, 8) + "01", to: end };
+  }
+  if (shape.kind !== "range") return null;
+  const oldest = statsShiftYmd(today, 1 - SPAN_DAYS_KEPT); /* plant:span-range-clip */
+  const from = shape.from > oldest ? shape.from : oldest;
+  const to = shape.to < today ? shape.to : today;
+  if (from > to) return null;
+  return { from: from, to: to };
 }
 /* The figures, the span and the catalog, without the sync line or the hash, so an identical answer is not sealed again. */
 function statsContentKey(out) {
@@ -1986,8 +2022,8 @@ function askStats(win, why) {
   try { live.webContents.send("etiuda:stats-ask", { id: id, from: statsPeriod.from, to: statsPeriod.to }); }
   catch { /* the page has gone */ }
 }
-/* Moves the rolling span on when the driven or real clock has crossed midnight, and otherwise writes a held answer
-   whose pace has elapsed. The page is asked once, and its answer is the write. */
+/* Moves a span whose days have changed when the driven or real clock has crossed midnight, and otherwise writes a
+   held answer whose pace has elapsed. The page is asked once, and its answer is the write. */
 function statsPulse() {
   if (!statsSpan) return;
   const period = spanPeriod(statsSpan, statsNow());

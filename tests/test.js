@@ -5345,7 +5345,8 @@ function motionJudgeTests() {
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
-  const decls = ["function spanDocument("].map(m => extractDecl(src, m)).join("\n");
+  const decls = ["const SPAN_DAYS_KEPT =", "function ymdReal(", "function spanShape(", "function spanDocument("]
+    .map(m => extractDecl(src, m)).join("\n");
   const said = [];
   const quiet = { log: (s) => said.push(String(s)), error: (s) => said.push(String(s)) };
   return Object.assign(new Function("console", decls
