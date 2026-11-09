@@ -24,7 +24,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
-const { decideClose, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 const { readsLikeMessage, scoreSuggestions } = require(path.join(__dirname, "clip-suggest.cjs"));
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
@@ -7560,6 +7560,26 @@ ipcMain.on("etiuda:tray-notes-set", (e, on) => {
 ipcMain.on("etiuda:tray-notes-state", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   e.returnValue = { on: notesOn() };
+});
+ipcMain.on("etiuda:notify", (e, opts) => {
+  if (!fromEngine(e)) return;
+  if (!notesOn()) return;
+  const win = deskWindow();
+  if (win && !win.isDestroyed() && typeof win.isFocused === "function" && win.isFocused() && (typeof win.isVisible !== "function" || win.isVisible()) && (typeof win.isMinimized !== "function" || !win.isMinimized())) return;
+  const icon = trayIcon();
+  showNotification({
+    electron: { Notification: Notification, app: app },
+    appId: APP_IDS.desktop,
+    title: String(opts && opts.title || ""),
+    body: String(opts && opts.body || ""),
+    icon: icon,
+    onClick: () => {
+      showDesk(win);
+      if (opts && opts.target && win && win.webContents && typeof win.webContents.send === "function") {
+        try { win.webContents.send("etiuda:tray-go", String(opts.target)); } catch {}
+      }
+    }
+  });
 });
 
 ipcMain.on("etiuda:host", (e) => {

@@ -7,6 +7,7 @@ import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
 import { askClose } from "./tabs.js";
 import { hooks } from "./hooks.js";
+import { clearScreenOn } from "./screen-tabs.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -422,6 +423,8 @@ function wireHost(){
   /* The tray's Settings item. The same open the menu uses, registered on hooks at boot. */
   if(typeof h.onTrayGo==="function") h.onTrayGo(kind=>{
     if(kind==="settings"){ try{ hooks.openSettings(); }catch(e){} }
+    else if(kind==="library"){ try{ hooks.openManage(); }catch(e){} }
+    else if(kind==="offer"){ try{ clearScreenOn(); }catch(e){} }
   });
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
@@ -434,6 +437,12 @@ function wireHost(){
       const row=$(".row"); if(row) eBandRO.observe(row);
     }catch(e){ addEventListener("resize",syncBandHeight,{passive:true}); }
   }
+}
+
+function eNotify(opts){
+  const h=eHost();
+  if(!h || typeof h.notify!=="function") return false;
+  try{ h.notify(opts); return true; }catch(e){ return false; }
 }
 
 function eSetMaximized(on){
@@ -485,5 +494,6 @@ export {
   dispatchTabChord,
   eSetAccent,
   eSetMaximized,
+  eNotify,
   syncBandHeight
 };
