@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 128;
+const EXPECTED = 129;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -2008,6 +2008,7 @@ try {
       if (PLANTS_OFF) {
         skip("962s5u8 lifting plant:s5-hop-own with plant:s5-hop-genuine reads the forged intermediate as listed");
         skip("962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed");
+        skip("962s5u10 lifting plant:s6-withdraw-own lets the withdrawal pass read the unsigned intermediate in this desk's own folder, so the copy reads as listed");
       } else {
         const NL = String.fromCharCode(10);
         const lift = (...tags) => SRC.split(NL).map(l => tags.some(tg => l.indexOf(tg) >= 0) ? "  /* lifted */" : l).join(NL);
@@ -2018,6 +2019,10 @@ try {
         const q = gen !== SRC ? await forgedHop("s5u7-plant-mine", gen, true) : null;
         check(!!q && !q.boxed, "962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed (FAIL 962s5u7): "
           + (q ? JSON.stringify(q) : "plant not found"));
+        const own = SRC.split(NL).map(l => l.indexOf("plant:s6-withdraw-own") >= 0 ? "  /* lifted */" : l).join(NL);
+        const o = own !== SRC ? await forgedHop("s5u7-plant-own", own, true) : null;
+        check(!!o && !o.boxed, "962s5u10 lifting plant:s6-withdraw-own lets the withdrawal pass read the unsigned intermediate in this desk's own folder, so the copy reads as listed (FAIL 962s5u7): "
+          + (o ? JSON.stringify(o) : "plant not found"));
       }
     }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */
