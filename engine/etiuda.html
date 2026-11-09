@@ -12031,6 +12031,7 @@ What you type stays in this browser only.`;
       if (key === " " || key === "Space" || code === "Space" || key === "Enter" || code === "Enter" || key === "Tab" || code === "Tab" || key === "Backspace" || code === "Backspace" || key === "Delete" || code === "Delete") return true;
     }
     if (ctrl === 0 && alt === 0 && meta === 0 && isPrintableKey(c)) return true;
+    if (ctrl === 1 && alt === 1 && meta === 0 && isPrintableKey(c)) return true;
     return false;
   }
   function fieldKeyRefusal(chord) {

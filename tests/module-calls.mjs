@@ -6935,8 +6935,13 @@ const CARD_B = {
         : sig("rename") + " " + ST.lsGet("eShortcuts"));
     fresh("en");
     press(ev("k", { code: "KeyK", ctrlKey: true, altKey: true }));
-    check("shortcuts.js", "9fk Ctrl+Alt plus a letter is taken and stored",
-      () => sig("rename") === "KeyK/k/1/1/0/0" && ST.lsGet("eShortcuts") != null ? true
+    check("shortcuts.js", "9fk Ctrl+Alt plus a letter is AltGr typing, so it is refused and nothing is stored",
+      () => sig("rename") === "F2/F2/0/0/0/0" && ST.lsGet("eShortcuts") == null && SL.scCaptureId == null ? true
+        : sig("rename") + " " + ST.lsGet("eShortcuts"));
+    fresh("en");
+    press(ev("k", { code: "KeyK", ctrlKey: true, shiftKey: true }));
+    check("shortcuts.js", "9fk Ctrl+Shift plus a letter is taken and stored",
+      () => sig("rename") === "KeyK/k/1/0/1/0" && ST.lsGet("eShortcuts") != null ? true
         : sig("rename") + " " + ST.lsGet("eShortcuts"));
     ST.lsDel("eShortcuts");
     S.loadShortcuts();

@@ -170,7 +170,7 @@ function formatChord(c, def){
   return parts.join("+");
 }
 /* A recorded chord a field needs for typing is refused. Shift with a printable key counts as one.
-   F-keys, and Ctrl, Alt or Meta otherwise, stay free. Recording only: scTake still restores a default. */
+   Ctrl+Alt with a printable key is AltGr, so it is typing too. F-keys, and Ctrl, Alt or Meta otherwise, stay free. Recording only: scTake still restores a default. */
 function isPrintableKey(c){
   if(!c) return false;
   const code=c.code||"", key=c.key||"";
@@ -193,6 +193,9 @@ function isRefusedChord(c){
        key==="Delete" || code==="Delete") return true;
   }
   if(ctrl===0 && alt===0 && meta===0 && isPrintableKey(c)) return true;
+  /* AltGr is Ctrl+Alt: on a Polish layout Ctrl+Alt with A, C, E, L, N, O, S, X or Z types a letter (the test architect,
+     2026-11-09), so Ctrl+Alt with a printable key, with or without Shift, is typing too. */
+  if(ctrl===1 && alt===1 && meta===0 && isPrintableKey(c)) return true;
   return false;
 }
 function fieldKeyRefusal(chord){
