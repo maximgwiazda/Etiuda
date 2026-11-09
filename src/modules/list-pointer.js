@@ -5,7 +5,7 @@ import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX, M_MS } from "./motion.js";
 import { pack, savePack, saveStats } from "./pack.js";
-import { bumpLang, bumpPair, bumpUse } from "./desk-stats.js";
+import { bumpCardLang, bumpLang, bumpPair, bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
@@ -470,7 +470,8 @@ function manualToastMsg(m, l, vi, total){
   }
   return copiedToastMsg(m, l, vi, total);
 }
-/* Local copy counter: one integer per card id, stored in the pack. It leaves the desk
+/* Local copy counter: one integer per card id, and the language of that copy counted on
+   the card, still only counts. It leaves the desk
    only as a file on the organisation's own share, on request. Answers two questions
    nothing else can: which phrases earn their place - a count on the Manage rows - and
    how often the tool is actually used, the honest denominator for any time-saved
@@ -479,6 +480,7 @@ function bumpUseCount(id, lang, vi){
   if(!id) return;
   bumpUse(pack, id);
   bumpLang(pack, lang);
+  bumpCardLang(pack, id, lang);
   const prev=tabPathStep(id, {l:lang, b:vi});
   if(prev) bumpPair(pack, prev, id);
   saveStats();

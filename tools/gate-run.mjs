@@ -918,6 +918,14 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
     }
   }
 
+  /* engine-selftest's 31a also holds every gate in tests/ to a chain or to NOT_GATES, so whatever selects chain-split for that
+     reason selects it too: lab-owner.mjs reached main named by chain-split's list and not by 31a's (the test architect, 2026-11-09). */
+  const alsoSelftest = (note) => {
+    if (fs.existsSync(path.join(root, "tests", "engine-selftest.js")) && !addedFiles.has("tests/engine-selftest.js")) {
+      steps.push({ script: "area", cmd: "node tests/engine-selftest.js", file: "tests/engine-selftest.js", args: [], note });
+      addedFiles.add("tests/engine-selftest.js");
+    }
+  };
   /* A test file added, removed or renamed selects chain-split, which holds every test file to a chain (gates-for's
      testsListChanged; the test architect's edge, 2026-10-28). */
   if (gf && typeof gf.testsListChanged === "function" && gf.testsListChanged(root, changed, base)
@@ -926,6 +934,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
       note: "a test file added, removed or renamed" });
     addedFiles.add("tests/chain-split.mjs");
   }
+  if (gf && typeof gf.testsListChanged === "function" && gf.testsListChanged(root, changed, base)) alsoSelftest("a test file added, removed or renamed"); /* plant:selftest-on-added */
 
   /* A confined script edit selects each added file, the gates that read it, and chain-split. A removed entry selects chain-split only. */
   if (acceptedScript && fs.existsSync(path.join(root, "tests", "chain-split.mjs")) && !addedFiles.has("tests/chain-split.mjs")) {
@@ -933,6 +942,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
       note: "a script chain gained or lost an entry" });
     addedFiles.add("tests/chain-split.mjs");
   }
+  if (acceptedScript) alsoSelftest("a script chain gained or lost an entry");
   if (acceptedScript) {
     for (const e of scriptEdit.added) {
       const abs = path.join(root, e.file);

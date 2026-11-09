@@ -2019,7 +2019,7 @@ function writeStatsAnswer(text, askId, forced) {
     engine: String(data.engine || ""),
     period: { from: String(statsPeriod.from), to: String(statsPeriod.to) },
     sync: channelStamp(now),
-    cards: Array.isArray(data.cards) ? data.cards : [],
+    cards: cardCounts(data.cards),
     intents: Array.isArray(data.intents) ? data.intents : [],
     misses: data.misses | 0,
     /* One counter per language the page actually counted, keyed by code: the desk's languages
@@ -7904,6 +7904,21 @@ function ecBlocks(text, shape) {
    format makes safe: a card dividing differently in another language is refused at load. */
 /* Whatever the page sent, reduced to codes and whole numbers. Anything that is not a usable
    code is dropped here rather than forwarded into a document that leaves this machine. */
+/* Per card, the languages that card was copied in, reduced the same way as the desk's
+   language totals. A card sent without the field is returned as it arrived. */
+function cardCounts(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(card => {
+    if (!card || typeof card !== "object" || Array.isArray(card) || !Object.prototype.hasOwnProperty.call(card, "langs")) return card;
+    const kept = langCounts(card.langs);
+    const langs = {};
+    Object.keys(kept).forEach(code => { if ((kept[code] | 0) > 0) langs[code] = kept[code] | 0; });
+    const out = {};
+    Object.keys(card).forEach(k => { if (k !== "langs") out[k] = card[k]; });
+    if (Object.keys(langs).length) out.langs = langs;
+    return out;
+  });
+}
 function langCounts(v) {
   const out = {};
   if (v && typeof v === "object" && !Array.isArray(v)) {

@@ -7606,7 +7606,7 @@ What you type stays in this browser only.`;
     "Press Esc again to close all tabs": "Naciśnij Esc ponownie, aby zamknąć wszystkie rozmowy",
     "{INTENT} cleared": "Wyczyszczono {INTENT}",
     "Shortcuts reset": "Przywrócono domyślne skróty",
-    "Press the new shortcut (Esc to cancel, Backspace for the default)": "Naciśnij nowy skrót (Esc anuluje, Backspace przywraca domyślny)",
+    "Press the new shortcut (Esc to cancel, Ctrl+Backspace for the default)": "Oczekiwanie na nowy skrót (Esc anuluje, Ctrl+Backspace przywraca domyślny)",
     "Built-in quick facts restored": "Przywrócono wbudowane szybkie fakty",
     "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.": "Tę odpowiedź można skopiować, zaznaczając jej tekst na karcie i naciskając Ctrl+C; przeglądarka nie dała dostępu do schowka.",
     "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.": "Tę odpowiedź można skopiować, zaznaczając jej tekst na karcie i naciskając Ctrl+C; schowek tym razem jej nie przyjął.",
@@ -7794,7 +7794,7 @@ What you type stays in this browser only.`;
     "The team this desk is on, and how its changes reach the team.": "Zespół tego stanowiska i sposób, w jaki jego zmiany trafiają do zespołu.",
     "Putting settings back, and what the app keeps on this computer.": "Przywracanie ustawień i to, co program przechowuje na tym komputerze.",
     "The version, the licence and the tour.": "Wersja, licencja i przewodnik.",
-    "Any shortcut can be changed; the keys Etiuda itself needs are shown as fixed.": "Każdy skrót można zmienić; klawisze, których Etiuda potrzebuje sama, są oznaczone jako stałe.",
+    "A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.": "Skrót można zmienić na klawisz F albo połączenie z Ctrl lub Alt, bo klawisze potrzebne do pisania zostają do pisania; klawisze, których Etiuda potrzebuje sama, są oznaczone jako stałe.",
     "Puts every setting back as it ships. Cards and your edits are not touched.": "Przywraca wszystkie ustawienia do stanu wyjściowego. Karty i własne zmiany zostają bez zmian.",
     "What this computer reports, and ways to set things right.": "Co raportuje ten komputer i jak przywrócić porządek.",
     "Reset defaults and Clear local memory are in Settings, under Data and defaults.": "Przywróć domyślne i Wyczyść pamięć lokalną są w Ustawieniach, w części Dane i ustawienia domyślne.",
@@ -7821,7 +7821,7 @@ What you type stays in this browser only.`;
     "Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion.": "Przejścia, przesunięcia i przestawianie się kart. Ustawienie wyłącza się samo, gdy system prosi o ograniczenie ruchu.",
     "Keyboard shortcuts": "Skróty klawiszowe",
     "An alternative: click, then press the key combo": "Skrót alternatywny: kliknij, a następnie naciśnij kombinację klawiszy",
-    "Press the alternative (Esc to cancel, Backspace to clear)": "Naciśnij skrót alternatywny (Esc anuluje, Backspace usuwa)",
+    "Press the alternative (Esc to cancel, Ctrl+Backspace to clear)": "Oczekiwanie na skrót alternatywny (Esc anuluje, Ctrl+Backspace usuwa)",
     "Alternative cleared": "Usunięto skrót alternatywny",
     "Back to the default": "Przywrócono domyślny skrót",
     "search replies": "szukaj odpowiedzi",
@@ -8458,6 +8458,11 @@ What you type stays in this browser only.`;
       used.add(a);
       Object.keys(b.p[a] || {}).forEach((z) => used.add(z));
     }));
+    const cardLangs = (fn) => Object.keys(days).forEach((d) => {
+      const b = days[d];
+      if (b && b.k && typeof b.k === "object" && !Array.isArray(b.k)) fn(b);
+    });
+    cardLangs((b) => Object.keys(b.k).forEach((a) => used.add(a)));
     const to = /* @__PURE__ */ Object.create(null), keep = [];
     ids.forEach((id, at) => {
       if (id != null && used.has(String(at))) {
@@ -8484,6 +8489,15 @@ What you type stays in this browser only.`;
         });
       });
       b.p = out;
+    });
+    cardLangs((b) => {
+      const out = {};
+      Object.keys(b.k).forEach((a) => {
+        const row2 = b.k[a];
+        if (!(a in to) || !row2 || typeof row2 !== "object" || Array.isArray(row2)) return;
+        out[to[a]] = row2;
+      });
+      b.k = out;
     });
     pack2.dayIds = keep;
   }
@@ -8532,6 +8546,15 @@ What you type stays in this browser only.`;
     const b = statsDay(pack2, at);
     b.l[code] = (b.l[code] | 0) + 1;
   }
+  function bumpCardLang(pack2, id, lang2, at) {
+    if (!id) return;
+    const code = String(lang2 == null ? "" : lang2);
+    if (!code || /[\s:]/.test(code)) return;
+    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
+    if (!b.k || typeof b.k !== "object" || Array.isArray(b.k)) b.k = {};
+    const row2 = b.k[k] && typeof b.k[k] === "object" && !Array.isArray(b.k[k]) ? b.k[k] : b.k[k] = {};
+    row2[code] = (row2[code] | 0) + 1;
+  }
   function bumpSuggest(pack2, at) {
     pack2.suggestTaken = (pack2.suggestTaken | 0) + 1;
     const b = statsDay(pack2, at);
@@ -8553,9 +8576,16 @@ What you type stays in this browser only.`;
     let n = 0;
     Object.keys(pack2.days || {}).forEach((d) => {
       const c = pack2.days[d] && pack2.days[d].c, p = pack2.days[d] && pack2.days[d].p;
+      const langs = pack2.days[d] && pack2.days[d].k;
       if (c) Object.keys(c).forEach((k) => {
         if (!keep(ids[k])) {
           delete c[k];
+          n++;
+        }
+      });
+      if (langs && typeof langs === "object" && !Array.isArray(langs)) Object.keys(langs).forEach((k) => {
+        if (!keep(ids[k])) {
+          delete langs[k];
           n++;
         }
       });
@@ -8640,6 +8670,7 @@ What you type stays in this browser only.`;
     let suggestTaken = (pack2 && pack2.suggestTaken) | 0, suggestOpen = (pack2 && pack2.suggestOpen) | 0;
     let since = "";
     const pr = /* @__PURE__ */ new Map();
+    const cl2 = {};
     if (spanned) {
       const days = pack2 && pack2.days && typeof pack2.days === "object" && !Array.isArray(pack2.days) ? pack2.days : {};
       const ids = pack2 && Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
@@ -8668,6 +8699,18 @@ What you type stays in this browser only.`;
         Object.keys(b.l || {}).forEach((c) => {
           lc[c] = (lc[c] | 0) + (b.l[c] | 0);
         });
+        const bk = b.k && typeof b.k === "object" && !Array.isArray(b.k) ? b.k : {};
+        Object.keys(bk).forEach((k) => {
+          const id = ids[k], row2 = bk[k];
+          if (id == null || !row2 || typeof row2 !== "object" || Array.isArray(row2)) return;
+          Object.keys(row2).forEach((code) => {
+            if (!code || /[\s:]/.test(code)) return;
+            const n = row2[code] | 0;
+            if (n <= 0) return;
+            const bag = cl2[id] || (cl2[id] = {});
+            bag[code] = (bag[code] | 0) + n;
+          });
+        });
         misses += b.m | 0;
         const bp = b.p && typeof b.p === "object" ? b.p : {};
         Object.keys(bp).forEach((a) => {
@@ -8690,6 +8733,14 @@ What you type stays in this browser only.`;
       if (!n) return;
       const row2 = { id: String(id), n };
       if (at[id]) row2.at = String(at[id]);
+      const bag = cl2[id];
+      if (bag) {
+        const langs2 = {};
+        Object.keys(bag).forEach((code) => {
+          if (bag[code] | 0) langs2[code] = bag[code] | 0;
+        });
+        if (Object.keys(langs2).length) row2.langs = langs2;
+      }
       cards2.push(row2);
     });
     const intents = [];
@@ -17078,7 +17129,7 @@ What you type stays in this browser only.`;
       btn.onclick = () => {
         scBeginCapture(btn.getAttribute("data-bind"), +btn.getAttribute("data-slot") || 1);
         repaint();
-        toast(scCaptureSlot === 2 ? "Press the alternative (Esc to cancel, Backspace to clear)" : "Press the new shortcut (Esc to cancel, Backspace for the default)");
+        toast(scCaptureSlot === 2 ? "Press the alternative (Esc to cancel, Ctrl+Backspace to clear)" : "Press the new shortcut (Esc to cancel, Ctrl+Backspace for the default)");
       };
     });
   }
@@ -22063,6 +22114,7 @@ What you type stays in this browser only.`;
     if (!id) return;
     bumpUse(pack, id);
     bumpLang(pack, lang2);
+    bumpCardLang(pack, id, lang2);
     const prev = tabPathStep(id, { l: lang2, b: vi });
     if (prev) bumpPair(pack, prev, id);
     saveStats();
@@ -32506,7 +32558,7 @@ What you type stays in this browser only.`;
     return [
       hk ? { rows: [{ key: "hotkey", html: hk }] } : null,
       { rows: [{ key: "shortcuts", html: '<div class="sc-list" id="scListInline"></div>' }] },
-      { after: '<div class="sx-note"><span>' + esc(t("Any shortcut can be changed; the keys Etiuda itself needs are shown as fixed.")) + '</span><button type="button" class="btn" id="setResetKeys">' + esc(t("Reset shortcuts")) + "</button></div>", rows: [] }
+      { after: '<div class="sx-note"><span>' + esc(t("A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.")) + '</span><button type="button" class="btn" id="setResetKeys">' + esc(t("Reset shortcuts")) + "</button></div>", rows: [] }
     ].filter(Boolean);
   }
   function teamsGroups() {

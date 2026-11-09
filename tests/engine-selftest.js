@@ -1753,6 +1753,7 @@ Module.prototype._compile = function (content, filename) {
     "no-crash-dialog.js": "the crash guard loaded into Electron's main process, not a gate",
     "quiet-lane.mjs": "the timing legs' busy-machine refusal, a helper they require, not a gate; its leg is tests/quiet-lane-selftest.mjs",
     "plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate; its use is held by tests/plant-hold.mjs and tests/plant-compare.mjs",
+    "lab-owner.mjs": "the shared owner file and sweep the lab-using legs (relay-channel, desk-roster, folder-mirror) import, not a gate; its use is held by tests/relay-channel-clean.mjs",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard", "nightly"];
   function reachOf(scripts, releaseSrc, nightlyLegs) {
