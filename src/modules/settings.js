@@ -361,7 +361,7 @@ function keysGroups(){
   return [
     hk ? {rows:[{key:"hotkey", html:hk}]} : null,
     {rows:[{key:"shortcuts", html:'<div class="sc-list" id="scListInline"></div>'}]},
-    {after:'<div class="sx-note"><span>'+esc(t("Any shortcut can be changed; the keys Etiuda itself needs are shown as fixed."))+'</span>'
+    {after:'<div class="sx-note"><span>'+esc(t("A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed."))+'</span>'
       +'<button type="button" class="btn" id="setResetKeys">'+esc(t("Reset shortcuts"))+'</button></div>', rows:[]}
   ].filter(Boolean);
 }
