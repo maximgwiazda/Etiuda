@@ -190,6 +190,7 @@ export const SCANS = {
   "tests/shell-office.mjs": ["shell/*.ec"],
   "tests/pick.mjs": ["shell/*.js", "src/modules/*.js", "src/main.js", "shell/caret.cs", "electron-builder.js", "src/modules/tour.js", "src/modules/pick.js"],
   "tests/clip-suggest.mjs": ["src/modules/clip-suggest.js", "shell/clip-suggest.cjs", "src/modules/pick.js", "shell/main.js"],
+  "tests/embed-suggest.mjs": ["shell/embed/*.cjs", "shell/main.js", "src/modules/clip-suggest.js"],
   "tests/module-calls.mjs": ["src/template.html", "src/modules/deck.js"],
   "tests/team-join.mjs": ["src/template.html", "src/modules/ui-lang.js", "shell/main.js", "src/modules/catalog-trust.js"],
   "tests/relay-blob.mjs": ["relay/test/target-contract.md", "shell/main.js"],

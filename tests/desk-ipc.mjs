@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 99;
+const EXPECTED = 120;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -72,7 +72,7 @@ function RecWin(opts) {
   const self = this;
   this.webContents = {
     id: madeWins.length + 1, etiudaLost: null,
-    send: (ch) => { self.sent.push(ch); },
+    send: (ch, ...args) => { self.sent.push(ch); (self.sentEvents = self.sentEvents || []).push({ ch, args }); },
     on: (k, fn) => { (self.wc[k] = self.wc[k] || []).push(fn); },
     once: (k, fn) => { self.webContents.on(k, fn); },
     setWindowOpenHandler: () => {}, getURL: () => "", getZoomLevel: () => 0, setZoomLevel: () => {}, reload: () => {},
@@ -95,8 +95,11 @@ RecWin.prototype.setBounds = function (b) { if (b) Object.assign(this.bounds, b)
 RecWin.fromWebContents = () => inert;
 RecWin.getAllWindows = () => madeWins;
 const onHandlers = {}, invokeHandlers = {}, appOn = {};
+let appQuits = 0, loginApplied = null;
+const madeNotes = [], madeTrays = [];
 const electron = {
-  app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
+  app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: () => { appQuits++; }, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
+         getLocale: () => "en", getPreferredSystemLanguages: () => ["en"],
          whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
   BrowserWindow: RecWin, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
@@ -111,6 +114,35 @@ const safeStorage = {
   decryptString: b => { if (!sealOk || (decryptFails && Buffer.from(b).toString("base64") === decryptFails)) throw new Error("cannot decrypt for this account"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
 };
 electron.safeStorage = safeStorage;
+electron.app.getLoginItemSettings = () => loginApplied || { openAtLogin: false, args: [] };
+electron.app.setLoginItemSettings = (s) => { loginApplied = s; };
+electron.app.setAppUserModelId = (id) => { electron.app._aumid = id; };
+electron.app.setJumpList = (categories) => { electron.app._jumpList = categories; return { result: "ok" }; };
+electron.app.getJumpListSettings = () => ({ minItems: 0 });
+function FakeNotification(opts) {
+  this.opts = opts || {};
+  this.handlers = {};
+  madeNotes.push(this);
+}
+FakeNotification.prototype.on = function (ev, fn) { (this.handlers[ev] = this.handlers[ev] || []).push(fn); };
+FakeNotification.prototype.show = function () { this.shown = true; };
+FakeNotification.isSupported = () => true;
+electron.Notification = FakeNotification;
+function FakeTray(icon) {
+  if (FakeTray.throwOnCreate) throw new Error("planted tray failure");
+  this.icon = icon;
+  this.tip = "";
+  this.menu = null;
+  this.handlers = {};
+  madeTrays.push(this);
+}
+FakeTray.prototype.setToolTip = function (tip) { this.tip = tip; };
+FakeTray.prototype.setContextMenu = function (menu) { this.menu = menu; };
+FakeTray.prototype.on = function (ev, fn) { this.handlers[ev] = fn; };
+FakeTray.prototype.destroy = function () { this.dead = true; };
+electron.Tray = FakeTray;
+electron.Menu = { setApplicationMenu: noop, buildFromTemplate(tpl) { const items = tpl.slice(); return { items: items, template: items, popup() {} }; } };
+electron.nativeImage = { createFromPath(p) { return { path: p, isEmpty: () => false }; } };
 const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 /* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
@@ -119,8 +151,9 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
+const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
@@ -1283,7 +1316,9 @@ try {
       && newRO.length === 1 && newRO[0] === "Etiuda catalog-" + sha(Buffer.from(idRO)).slice(0, 8) + ".ec",
     "82h where the minted id cannot be saved the desk makes no file and keeps no id, and once it can, the next write makes one file named by the id kept (answer "
     + rRO + ", ids " + idsRO + ", then " + rBackRO + ", new files " + JSON.stringify(newRO) + ")");
-  /* ---- THE WINDOW'S CLOSE. A window as far as the hold asks of it: what it sends, and how often it is closed. */
+  /* ---- THE WINDOW'S CLOSE. A window as far as the hold asks of it: what it sends, and how often it is closed.
+     Quit on close is on for these legs: the product's default is Stay in the tray, and that would hide where these legs ask. */
+  if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(true);
   const winFor = () => {
     const id = madeWins.length + 1;
     const w = { sent: [], closes: 0, webContents: { id, send: ch => w.sent.push(ch), etiudaLost: null },
@@ -1526,6 +1561,676 @@ try {
   finally { decryptFails = null; }
   check(decryptLeavesFile,
     "1152p a failed decrypt leaves the file");
+
+  /* D6. Stay hides and tells once. Quit from the tray seals the tabs and quits. The installer's close, the end of
+     the session, a refusal and a quit never hide. A close whose tray cannot be created is not hidden. Reset of the
+     login item is the preload's send. A launch with --hidden does not show the window. The tray menu uses the desk's
+     words. */
+  const watchStub = () => ({ on() { return this; }, close() {} });
+  /* Before any successful tray: ensureTray keeps the first one it made, so a later throw would never be asked. */
+  let d6NoTray = false, d6NoTrayWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    FakeTray.throwOnCreate = true;
+    const saidBefore = said.length;
+    const notesBefore = madeNotes.length;
+    const traysBefore = madeTrays.length;
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const e = closeEv();
+    const held = mainTest.closeHeld(w, e);
+    const asked = (w.sent || []).indexOf("etiuda:ask-close") >= 0;
+    const trayErr = said.slice(saidBefore).some(s => s.indexOf("the tray could not be created") >= 0);
+    d6NoTray = held === true && e.prevented === true && w.hides === 0 && asked && trayErr
+      && madeNotes.length === notesBefore && madeTrays.length === traysBefore;
+    if (!d6NoTray) d6NoTrayWhy = JSON.stringify({ held: held, prevented: e.prevented, hides: w.hides, asked: asked, trayErr: trayErr, notes: madeNotes.length - notesBefore, trays: madeTrays.length - traysBefore });
+    mainTest.closeAnswered(w, "stay");
+  } catch (err) { d6NoTrayWhy = String(err && err.message || err).split("\n")[0]; }
+  finally { FakeTray.throwOnCreate = false; }
+  check(d6NoTray, "D6-no-tray a close is not hidden when the tray cannot be created, and the page is asked (" + d6NoTrayWhy + ")");
+  let d6Stay = false, d6StayWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    const placeFile = mainTest.windowFile();
+    fs.writeFileSync(placeFile, JSON.stringify({ x: 3, y: 4, width: 5, height: 6, maximized: false }));
+    const w = winFor();
+    w.hides = 0; w.shows = 0;
+    w.hide = () => { w.hides++; };
+    w.show = () => { w.shows++; };
+    w.focus = () => {};
+    w.isMinimized = () => false;
+    const notesBefore = madeNotes.length;
+    const e1 = closeEv();
+    const held = mainTest.closeHeld(w, e1);
+    let meta = {};
+    try { meta = JSON.parse(fs.readFileSync(placeFile, "utf8")); } catch { meta = {}; }
+    const note = madeNotes[madeNotes.length - 1];
+    const clicks = (note && note.handlers && note.handlers.click) || [];
+    clicks.forEach(fn => fn());
+    const e2 = closeEv();
+    mainTest.closeHeld(w, e2);
+    const title = note && note.opts && note.opts.title;
+    const body = note && note.opts && note.opts.body;
+    d6Stay = held === true && e1.prevented === true && w.hides === 2 && w.shows === 1
+      && madeNotes.length === notesBefore + 1 && meta.x === 3 && meta.trayTold === true
+      && title === "Etiuda keeps running in the tray"
+      && body === "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this."
+      && Array.isArray(note.opts.actions) && note.opts.actions.length === 0;
+    if (!d6Stay) d6StayWhy = JSON.stringify({ held: held, prevented: e1.prevented, hides: w.hides, shows: w.shows, notes: madeNotes.length - notesBefore, title: title, x: meta.x, told: meta.trayTold });
+  } catch (e) { d6StayWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Stay, "D6-stay the first close hides and tells once, the click opens the window, and a later close does not tell again (" + d6StayWhy + ")");
+
+  let d6Never = false, d6NeverWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const heard = {};
+    w.on = (k, fn) => { heard[k] = fn; };
+    mainTest.wireHold(w, () => {});
+    const plain = closeEv();
+    heard.close(plain);
+    const hid = w.hides === 1 && plain.prevented === true;
+    w.etiudaInstallerClose = true;
+    const inst = closeEv();
+    heard.close(inst);
+    const instOk = inst.prevented === false && w.hides === 1;
+    const sess = winFor();
+    sess.hides = 0;
+    sess.hide = () => { sess.hides++; };
+    const heardS = {};
+    sess.on = (k, fn) => { heardS[k] = fn; };
+    mainTest.wireHold(sess, () => {});
+    (heardS["session-end"] || noop)();
+    const sessEv = closeEv();
+    heardS.close(sessEv);
+    const sessOk = sessEv.prevented === false && sess.hides === 0;
+    const ref = winFor();
+    ref.hides = 0;
+    ref.hide = () => { ref.hides++; };
+    const heardR = {};
+    ref.on = (k, fn) => { heardR[k] = fn; };
+    mainTest.wireHold(ref, () => {});
+    ref.close = function () { this.closes++; const ev = closeEv(); heardR.close(ev); this.lastPrevented = ev.prevented; };
+    mainTest.closeFromRefusal(ref);
+    const refOk = ref.closes === 1 && ref.lastPrevented === false && ref.hides === 0 && ref.sent.length === 0;
+    const q = winFor();
+    q.hides = 0;
+    q.hide = () => { q.hides++; };
+    mainTest.setQuitting(true);
+    const qEv = closeEv();
+    const qHeld = mainTest.closeHeld(q, qEv);
+    const quitOk = qHeld === false && qEv.prevented === false && q.hides === 0;
+    mainTest.setQuitting(false);
+    d6Never = hid && instOk && sessOk && refOk && quitOk;
+    if (!d6Never) d6NeverWhy = JSON.stringify({ hid: hid, instOk: instOk, sessOk: sessOk, refOk: refOk, quitOk: quitOk, hides: w.hides });
+  } catch (e) { d6NeverWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Never, "D6-never-hide Stay hides an ordinary close, and the installer, the session ending, a refusal and a quit do not (" + d6NeverWhy + ")");
+
+  let d6Quit = false, d6QuitWhy = "";
+  try {
+    if (typeof mainTest.trayQuit !== "function") d6QuitWhy = "no trayQuit";
+    else {
+      const w = winFor();
+      const sm = new Map();
+      sm.set("eSessionTabs", JSON.stringify({ v: 1, tabs: [{ id: "t-tray", pax: "Tray Person", intentBox: "Tray draft" }], activeTabId: "t-tray" }));
+      mainTest.sessionHeld.set(w.webContents.id, sm);
+      const q0 = appQuits;
+      const asks = () => madeWins.reduce((n, win) => n + (win.sent || []).filter(ch => ch === "etiuda:ask-close").length, 0);
+      const asks0 = asks();
+      const sealed = mainTest.trayQuit() === true;
+      const tf = mainTest.tabsFile();
+      const raw = fs.existsSync(tf) ? fs.readFileSync(tf) : Buffer.alloc(0);
+      const text = raw.toString("utf8");
+      const sealedOk = sealed && appQuits === q0 + 1 && asks() === asks0 && text.indexOf("Tray draft") < 0 && text.indexOf("Tray Person") < 0 && raw.length > 0;
+      try { fs.unlinkSync(tf); } catch { /* none */ }
+      sealOk = false;
+      const q1 = appQuits;
+      const asked = mainTest.trayQuit() === false && asks() === asks0 + 1 && appQuits === q1;
+      sealOk = true;
+      mainTest.setQuitting(false);
+      mainTest.sessionHeld.delete(w.webContents.id);
+      d6Quit = sealedOk && asked;
+      if (!d6Quit) d6QuitWhy = JSON.stringify({ sealedOk: sealedOk, asked: asked, quits: appQuits - q0, bytes: raw.length });
+    }
+  } catch (e) { d6QuitWhy = String(e && e.message || e).split("\n")[0]; sealOk = true; mainTest.setQuitting(false); }
+  check(d6Quit, "D6-quit-tabs Quit from the tray seals the open tabs and quits, and where the seal fails it asks and does not quit (" + d6QuitWhy + ")");
+
+  let d6Update = false, d6UpdateWhy = "";
+  try {
+    if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(false);
+    const w = winFor();
+    w.hides = 0;
+    w.hide = () => { w.hides++; };
+    const heard = {};
+    w.on = (k, fn) => { heard[k] = fn; };
+    mainTest.wireHold(w, () => {});
+    const plain = closeEv();
+    heard.close(plain);
+    const hid = w.hides === 1 && plain.prevented === true;
+    w.close = function () {
+      this.closes++;
+      const ev = closeEv();
+      (heard.close || noop)(ev);
+      this.lastPrevented = ev.prevented;
+      if (!ev.prevented && appOn["window-all-closed"]) appOn["window-all-closed"]();
+    };
+    const q0 = appQuits;
+    if (hid && typeof mainTest.onSecondInstance === "function") mainTest.onSecondInstance(["--update-close"]);
+    d6Update = hid && w.hides === 1 && w.lastPrevented === false && appQuits > q0;
+    if (!d6Update) d6UpdateWhy = JSON.stringify({ hid: hid, hides: w.hides, prevented: w.lastPrevented, quits: appQuits - q0, second: typeof mainTest.onSecondInstance });
+  } catch (e) { d6UpdateWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Update, "D6-update-close an installer close of a window that had hidden still ends the process (" + d6UpdateWhy + ")");
+
+  let d6Login = false, d6LoginWhy = "";
+  try {
+    if (typeof REAL_HOST.setLoginItem !== "function") d6LoginWhy = "no setLoginItem";
+    else {
+      loginApplied = { openAtLogin: true, args: ["--hidden"] };
+      REAL_HOST.setLoginItem(false);
+      d6Login = !!loginApplied && loginApplied.openAtLogin === false && Array.isArray(loginApplied.args) && loginApplied.args.length === 0;
+      if (!d6Login) d6LoginWhy = JSON.stringify(loginApplied);
+    }
+  } catch (e) { d6LoginWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Login, "D6-login Reset's turn-off reaches Windows as a login item with no hidden argument (" + d6LoginWhy + ")");
+
+  let d6Hidden = false, d6HiddenWhy = "";
+  const realWatchD6 = fs.watch;
+  fs.watch = watchStub;
+  process.argv.push("--hidden");
+  try {
+    const before = madeWins.length;
+    mainTest.createWindow();
+    const w = madeWins[madeWins.length - 1];
+    let shows = 0;
+    w.show = () => { shows++; };
+    (w.listeners["ready-to-show"] || []).forEach(fn => fn());
+    const told = (w.sent || []).indexOf("etiuda:shown") >= 0;
+    const launchShows = shows;
+    let secondHidden = false, secondOpen = false;
+    if (launchShows === 0 && told && typeof mainTest.onSecondInstance === "function") {
+      mainTest.onSecondInstance(["--hidden"]);
+      secondHidden = shows === 0;
+      mainTest.onSecondInstance(["Etiuda"]);
+      secondOpen = shows === 1;
+    }
+    d6Hidden = launchShows === 0 && told && secondHidden && secondOpen;
+    if (!d6Hidden) d6HiddenWhy = JSON.stringify({ shows: launchShows, told: told, secondHidden: secondHidden, secondOpen: secondOpen, made: madeWins.length - before });
+  } catch (e) { d6HiddenWhy = String(e && e.message || e).split("\n")[0]; }
+  finally { fs.watch = realWatchD6; process.argv.pop(); }
+  check(d6Hidden, "D6-hidden a launch with --hidden does not show the window, a second hidden launch does not either, and an ordinary second launch does (" + d6HiddenWhy + ")");
+
+  let d6Menu = false, d6MenuWhy = "";
+  const realWatchMenu = fs.watch;
+  fs.watch = watchStub;
+  try {
+    if (typeof mainTest.ensureTray !== "function") d6MenuWhy = "no ensureTray";
+    else {
+      mainTest.createWindow();
+      const w = madeWins[madeWins.length - 1];
+      let shows = 0;
+      w.show = () => { shows++; };
+      w.focus = () => {};
+      w.isMinimized = () => false;
+      const tray = mainTest.ensureTray();
+      const labels = (tray && tray.menu && tray.menu.template || []).map(item => item.type === "separator" ? "|" : item.label);
+      const want = ["Open Etiuda", "Bring the replies over any window\tCtrl+Shift+Space", "Notifications: on", "Settings", "|", "Quit Etiuda"];
+      const notes = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Notifications: on");
+      if (notes && notes.click) notes.click();
+      const labels2 = (tray && tray.menu && tray.menu.template || []).map(item => item.label);
+      let meta = {};
+      try { meta = JSON.parse(fs.readFileSync(mainTest.windowFile(), "utf8")); } catch { meta = {}; }
+      if (tray && tray.handlers && tray.handlers.click) tray.handlers.click();
+      const opened = shows === 1;
+      shows = 0;
+      const settingsItem = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Settings");
+      if (settingsItem && settingsItem.click) settingsItem.click();
+      const went = (w.sent || []).indexOf("etiuda:tray-go") >= 0 && shows === 1;
+      d6Menu = !!tray && tray.tip === "Etiuda" && JSON.stringify(labels) === JSON.stringify(want)
+        && labels2.indexOf("Notifications: off") >= 0 && meta.trayNotes === false && opened && went;
+      if (!d6Menu) d6MenuWhy = JSON.stringify({ tip: tray && tray.tip, labels: labels, labels2: labels2, notes: meta.trayNotes, opened: opened, went: went });
+    }
+  } catch (e) { d6MenuWhy = String(e && e.message || e).split("\n")[0]; }
+  finally { fs.watch = realWatchMenu; }
+  check(d6Menu, "D6-menu the tray offers Open, the replies shortcut, notifications, Settings and Quit, and a click opens the window (" + d6MenuWhy + ")");
+
+  /* D8. THE JUMP LIST AND SECOND-INSTANCE ARGUMENTS */
+  let d8JumpList = false, d8JumpListWhy = "";
+  try {
+    if (typeof mainTest.syncJumpList !== "function") {
+      d8JumpListWhy = "no syncJumpList";
+    } else {
+      const catDir = typeof mainTest.catalogFolder === "function" ? mainTest.catalogFolder() : UD;
+      const filesCreated = [];
+      /* 1. Shared folder holds other files from colleagues/lead that this desk never opened */
+      const colleagueFiles = [
+        path.join(catDir, "colleague-lead.ec"),
+        path.join(catDir, "colleague-team.ec"),
+      ];
+      for (const cf of colleagueFiles) {
+        fs.writeFileSync(cf, JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "lead-c", rev: 1, cards: [] }));
+        filesCreated.push(cf);
+      }
+
+      /* 2. This desk opens seven catalog files in sequence (1 to 7) */
+      mainTest.createWindow();
+      const w = madeWins[madeWins.length - 1];
+      const openedFiles = [];
+      for (let i = 1; i <= 7; i++) {
+        const fp = path.join(UD, "desk-open-" + i + ".ec");
+        fs.writeFileSync(fp, JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "open-" + i, rev: 1, cards: [] }));
+        filesCreated.push(fp);
+        openedFiles.push(fp);
+        mainTest.offerFile(w, fp);
+      }
+
+      electron.app._jumpList = null;
+      mainTest.syncJumpList();
+      const jl = electron.app._jumpList;
+      if (!Array.isArray(jl)) {
+        d8JumpListWhy = "jumpList is not an array: " + typeof jl;
+      } else {
+        const tasksCat = jl.find(c => c.type === "tasks");
+        const recentCat = jl.find(c => c.type === "custom");
+        const taskItems = tasksCat ? tasksCat.items : [];
+        const taskTitles = taskItems.map(t => t.title);
+        const taskArgs = taskItems.map(t => t.args);
+        const tasksMatch = taskItems.length === 4
+          && taskArgs[0] === "--picker" && taskTitles[0] === "Bring the replies over any window"
+          && taskArgs[1] === "--new-tab" && taskTitles[1] === "New tab"
+          && taskArgs[2] === "--library" && taskTitles[2] === "Library"
+          && taskArgs[3] === "--settings" && taskTitles[3] === "Settings";
+        const recentItems = recentCat ? recentCat.items : [];
+
+        /* Only the files this desk opened, newest first, at most five:
+           desk-open-7.ec down to desk-open-3.ec, none of the colleague files */
+        const recentMatch1 = recentCat && recentCat.name === "Recent catalogs"
+          && recentItems.length === 5
+          && recentItems[0].args.indexOf("desk-open-7.ec") >= 0
+          && recentItems[1].args.indexOf("desk-open-6.ec") >= 0
+          && recentItems[2].args.indexOf("desk-open-5.ec") >= 0
+          && recentItems[3].args.indexOf("desk-open-4.ec") >= 0
+          && recentItems[4].args.indexOf("desk-open-3.ec") >= 0
+          && recentItems.every(item => colleagueFiles.every(cf => item.args.indexOf(path.basename(cf)) < 0));
+
+        /* 3. A file this desk opened and that is now gone drops out:
+           delete desk-open-7.ec, sync again -> desk-open-6.ec down to desk-open-2.ec */
+        fs.unlinkSync(openedFiles[6]);
+        mainTest.syncJumpList();
+        const jl2 = electron.app._jumpList;
+        const recentCat2 = jl2 ? jl2.find(c => c.type === "custom") : null;
+        const recentItems2 = recentCat2 ? recentCat2.items : [];
+        const recentMatch2 = recentCat2 && recentItems2.length === 5
+          && recentItems2[0].args.indexOf("desk-open-6.ec") >= 0
+          && recentItems2[1].args.indexOf("desk-open-5.ec") >= 0
+          && recentItems2[2].args.indexOf("desk-open-4.ec") >= 0
+          && recentItems2[3].args.indexOf("desk-open-3.ec") >= 0
+          && recentItems2[4].args.indexOf("desk-open-2.ec") >= 0
+          && recentItems2.every(item => item.args.indexOf("desk-open-7.ec") < 0);
+
+        d8JumpList = tasksMatch && recentMatch1 && recentMatch2;
+        if (!d8JumpList) {
+          d8JumpListWhy = JSON.stringify({ tasksMatch, recentMatch1, recentMatch2, recentItems, recentItems2 });
+        }
+      }
+      /* Clean up created test catalog files */
+      for (const fp of filesCreated) {
+        try { fs.unlinkSync(fp); } catch {}
+      }
+    }
+  } catch (e) { d8JumpListWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d8JumpList, "D8-jump-list on a folder team whose shared folder holds other files, the jump list lists only the files this desk opened, newest first, at most five; a file this desk opened and that is now gone drops out (" + d8JumpListWhy + ")");
+
+  let d8Args = false, d8ArgsWhy = "";
+  try {
+    mainTest.createWindow();
+    const w = madeWins[madeWins.length - 1];
+    let shows = 0;
+    w.show = () => { shows++; };
+    w.focus = () => {};
+    w.isMinimized = () => false;
+
+    /* 1. --settings */
+    shows = 0;
+    w.sent = [];
+    w.sentEvents = [];
+    mainTest.onSecondInstance(["--settings"]);
+    const settingsOk = shows === 1 && (w.sentEvents || []).some(e => e.ch === "etiuda:tray-go" && e.args[0] === "settings");
+
+    /* 2. --library */
+    shows = 0;
+    w.sent = [];
+    w.sentEvents = [];
+    mainTest.onSecondInstance(["--library"]);
+    const libraryOk = shows === 1 && (w.sentEvents || []).some(e => e.ch === "etiuda:tray-go" && e.args[0] === "library");
+
+    /* 3. --new-tab */
+    shows = 0;
+    w.sent = [];
+    w.sentEvents = [];
+    mainTest.onSecondInstance(["--new-tab"]);
+    const newTabOk = shows === 1 && (w.sentEvents || []).some(e => e.ch === "etiuda:tray-go" && e.args[0] === "new-tab");
+
+    /* 4. --picker: toggles picker, does not show main desk window */
+    shows = 0;
+    w.sent = [];
+    w.sentEvents = [];
+    mainTest.onSecondInstance(["--picker"]);
+    const pickerOk = shows === 0 && w.sent.indexOf("etiuda:pick-ask") >= 0;
+
+    d8Args = settingsOk && libraryOk && newTabOk && pickerOk;
+    if (!d8Args) {
+      d8ArgsWhy = JSON.stringify({ settingsOk, libraryOk, newTabOk, pickerOk, shows, sent: w.sent, events: w.sentEvents });
+    }
+  } catch (e) { d8ArgsWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d8Args, "D8-args --settings, --library, --new-tab, --picker do their act in a running desk (" + d8ArgsWhy + ")");
+
+  let d8FileOffered = false, d8FileOfferedWhy = "";
+  try {
+    mainTest.createWindow();
+    const w = madeWins[madeWins.length - 1];
+    let shows = 0;
+    w.show = () => { shows++; };
+    w.focus = () => {};
+    w.isMinimized = () => false;
+
+    const testCatPath = path.join(UD, "offer-test.ec");
+    fs.writeFileSync(testCatPath, JSON.stringify({ format: 2, id: "test-offered-id", rev: 1, cards: [] }));
+    shows = 0;
+    w.sent = [];
+    w.sentEvents = [];
+    mainTest.onSecondInstance([testCatPath]);
+    const offeredOk = w.sent.indexOf("etiuda:catalog-file") >= 0 && shows === 1;
+    /* Verify it is only offered and not automatically taken/loaded */
+    const notTaken = w.sent.indexOf("etiuda:catalog-taken") < 0;
+    d8FileOffered = offeredOk && notTaken;
+    if (!d8FileOffered) {
+      d8FileOfferedWhy = JSON.stringify({ offeredOk, notTaken, shows, sent: w.sent });
+    }
+    try { fs.unlinkSync(testCatPath); } catch {}
+  } catch (e) { d8FileOfferedWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d8FileOffered, "D8-file-offered a file argument is offered, never loaded (" + d8FileOfferedWhy + ")");
+
+  if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(true);
+  mainTest.setQuitting(false);
+
+  /* D7. Notifications: a lead-signed edition offered while the window is hidden toasts once;
+     the same while focused does not; a refused or unsigned file never toasts;
+     a new team catalog in the listing toasts once; each switch silences its kind;
+     a click shows the window on the offer or the Library tab. */
+  let d7Offer = false, d7OfferWhy = "";
+  let d7Focused = false, d7FocusedWhy = "";
+  let d7Unsigned = false, d7UnsignedWhy = "";
+  let d7Listing = false, d7ListingWhy = "";
+  let d7Nameless = false, d7NamelessWhy = "";
+  let d7Switches = false, d7SwitchesWhy = "";
+  let d7Click = false, d7ClickWhy = "";
+  let d7Asked = false, d7AskedWhy = "";
+  let d7NoEdition = false, d7NoEditionWhy = "";
+  let d7NonLead = false, d7NonLeadWhy = "";
+
+  const CO = await import(PLAIN("catalog-offer.js"));
+  const TJ = await import(PLAIN("team-join.js"));
+  const d7LeadPair = crypto.generateKeyPairSync("ed25519");
+  const d7PubHex = d7LeadPair.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+  const d7KeyId = "lead-key-1";
+  const d7Fixture = JSON.parse(fs.readFileSync(path.join(ROOT, "shell", "sample-catalog.ec"), "utf8"));
+
+  const d7Sign = (doc, key, keyId) => {
+    const out = JSON.parse(JSON.stringify(doc));
+    delete out.hash;
+    out.sig = { alg: V2.V2_SIG_ALG, keyId: keyId || d7KeyId };
+    out.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(out)), key).toString("hex");
+    const parsed = CT.parseCatalogFile(JSON.stringify(out));
+    if (doc.rev != null) parsed.rev = doc.rev;
+    if (doc.edition != null) parsed.edition = doc.edition;
+    if (doc.version != null) parsed.version = doc.version;
+    return parsed;
+  };
+
+  const docWasD7 = globalThis.document;
+  const iwWas = globalThis.innerWidth, ihWas = globalThis.innerHeight;
+  globalThis.innerWidth = 1280; globalThis.innerHeight = 800;
+  try {
+    ST.lsSet("eUiLang", "en");
+    d7Fixture.rev = 1;
+    CT.storeCatalog(d7Fixture);
+    ST.nsSet("CatalogTrust", "valid");
+    ST.nsSet("CatalogSigner", d7KeyId);
+    ST.nsSet("CatalogSignerPub", d7PubHex);
+    REAL_HOST.setTrayNotes(true);
+    mainTest.createWindow();
+    const w = madeWins[madeWins.length - 1];
+    w.hides = 0; w.shows = 0;
+    w.hide = () => { w.hides++; };
+    w.show = () => { w.shows++; };
+    w.focus = () => {};
+    w.isMinimized = () => false;
+    w.isVisible = () => false;
+    w.isFocused = () => false;
+
+    REAL_HOST.catalogLeads = () => Promise.resolve([{ keyId: d7KeyId, public: d7PubHex }]);
+    REAL_HOST.teamJoin = (op) => ({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
+    let d7JoinCb = null;
+    REAL_HOST.onTeamJoin = (fn) => { d7JoinCb = fn; };
+    TJ.wireTeamJoin();
+    if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
+
+    globalThis.document = new Proxy({}, {
+      set: () => true,
+      get: (t, k) => (
+        k === "readyState" ? "complete"
+        : k === "visibilityState" ? "visible"
+        : (k === "addEventListener" || k === "removeEventListener") ? noop
+        : k === "getElementById" ? () => null
+        : k === "body" ? { appendChild: noop, removeChild: noop, classList: { contains: () => false, add: noop, remove: noop, toggle: noop } }
+        : fake()
+      )
+    });
+
+    const notesStart = madeNotes.length;
+    const signedCat = d7Sign(Object.assign({}, d7Fixture, { rev: 2, edition: "2" }), d7LeadPair.privateKey);
+
+    // 1. Lead-signed edition offered while window is hidden toasts once
+    CO.eOfferCatalogDialog(signedCat, { file: "catalog-alpha.ec", asked: false });
+    await tick(100);
+
+    const note1 = madeNotes[madeNotes.length - 1];
+    const n1Ok = madeNotes.length === notesStart + 1;
+    const title1 = note1 && note1.opts && note1.opts.title;
+    const body1 = note1 && note1.opts && note1.opts.body;
+    const target1 = note1 && note1.opts && note1.opts.target;
+
+    // Second call for same edition must toast once
+    CO.eOfferCatalogDialog(signedCat, { file: "catalog-alpha.ec", asked: false });
+    await tick(100);
+    const n1Once = madeNotes.length === notesStart + 1;
+
+    d7Offer = n1Ok && n1Once && title1 === "Anna published a new edition"
+      && body1.indexOf("edition 2") >= 0 && body1.indexOf("Nothing is loaded until it is looked at.") >= 0;
+    if (!d7Offer) d7OfferWhy = JSON.stringify({ n1Ok, n1Once, notes: madeNotes.length - notesStart, title: title1, body: body1 });
+
+    // 2. Focused window does not toast
+    const notesBeforeFocused = madeNotes.length;
+    w.isFocused = () => true;
+    w.isVisible = () => true;
+    const signedCat2 = d7Sign(Object.assign({}, d7Fixture, { rev: 3, edition: "3" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCat2, { file: "catalog-beta.ec", asked: false });
+    await tick(100);
+    d7Focused = madeNotes.length === notesBeforeFocused;
+    if (!d7Focused) d7FocusedWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeFocused });
+
+    // 3. Refused or unsigned file never toasts
+    w.isFocused = () => false;
+    w.isVisible = () => false;
+    const notesBeforeUnsigned = madeNotes.length;
+    const unsignedCat = JSON.parse(JSON.stringify(d7Fixture));
+    delete unsignedCat.sig;
+    CO.eOfferCatalogDialog(CT.parseCatalogFile(JSON.stringify(unsignedCat)), { file: "unsigned.ec", asked: false });
+    await tick(100);
+    d7Unsigned = madeNotes.length === notesBeforeUnsigned;
+    if (!d7Unsigned) d7UnsignedWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeUnsigned });
+
+    // 4. New team catalog in listing toasts once
+    const notesBeforeListing = madeNotes.length;
+    const newListing = [{ name: "catalog-gamma.ec", id: "k-team-gamma", sha: "sha-gamma-1", rev: 1, mtime: Date.now() }];
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing(newListing);
+    }
+    await tick(100);
+
+    const noteList = madeNotes[madeNotes.length - 1];
+    const nListOk = madeNotes.length === notesBeforeListing + 1;
+    const titleList = noteList && noteList.opts && noteList.opts.title;
+    const bodyList = noteList && noteList.opts && noteList.opts.body;
+
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing(newListing);
+    }
+    await tick(100);
+    const nListOnce = madeNotes.length === notesBeforeListing + 1;
+
+    d7Listing = nListOk && nListOnce && titleList === "A new catalog from Anna"
+      && bodyList.indexOf("is in the Library, ready to open.") >= 0;
+    if (!d7Listing) d7ListingWhy = JSON.stringify({ nListOk, nListOnce, notes: madeNotes.length - notesBeforeListing, title: titleList, body: bodyList });
+
+    // 4b. A lead the team file gives no name: the copywriter's nameless titles in both languages, never a stand-in name
+    if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "", print: "1234" }] });
+    const nlTitles = [];
+    for (const [lang, n] of [["en", 4], ["pl", 5]]) {
+      ST.lsSet("eUiLang", lang);
+      const before = madeNotes.length;
+      CO.eOfferCatalogDialog(d7Sign(Object.assign({}, d7Fixture, { rev: n, edition: String(n) }), d7LeadPair.privateKey), { file: "catalog-nl-" + lang + ".ec", asked: false });
+      await tick(100);
+      const a = madeNotes.length === before + 1 ? madeNotes[madeNotes.length - 1].opts.title : null;
+      if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now() }]);
+      await tick(100);
+      const b = madeNotes.length === before + 2 ? madeNotes[madeNotes.length - 1].opts.title : null;
+      nlTitles.push(a, b);
+    }
+    ST.lsSet("eUiLang", "en");
+    if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
+    d7Nameless = nlTitles.join("|") === ["The team's lead published a new edition", "A new catalog from the team's lead",
+      "Nowe wydanie od lidera zespołu", "Nowy katalog od lidera zespołu"].join("|");
+    if (!d7Nameless) d7NamelessWhy = JSON.stringify(nlTitles);
+
+    // 5. Each switch silences its kind
+    const notesBeforeSwitches = madeNotes.length;
+    ST.lsSet("eNotifyEditionOff", "1");
+    const signedCat4 = d7Sign(Object.assign({}, d7Fixture, { rev: 4, edition: "4" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCat4, { file: "catalog-delta.ec", asked: false });
+    await tick(100);
+    const silEdition = madeNotes.length === notesBeforeSwitches;
+    ST.lsDel("eNotifyEditionOff");
+
+    ST.lsSet("eNotifyCatalogOff", "1");
+    const listing2 = [{ name: "catalog-epsilon.ec", id: "k-team-eps", sha: "sha-eps-1", rev: 1, mtime: Date.now() }];
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing(listing2);
+    }
+    await tick(100);
+    const silCatalog = madeNotes.length === notesBeforeSwitches;
+    ST.lsDel("eNotifyCatalogOff");
+
+    REAL_HOST.setTrayNotes(false);
+    const signedCat5 = d7Sign(Object.assign({}, d7Fixture, { rev: 5, edition: "5" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCat5, { file: "catalog-zeta.ec", asked: false });
+    await tick(100);
+    const silMaster = madeNotes.length === notesBeforeSwitches;
+    REAL_HOST.setTrayNotes(true);
+
+    d7Switches = silEdition && silCatalog && silMaster;
+    if (!d7Switches) d7SwitchesWhy = JSON.stringify({ silEdition, silCatalog, silMaster, notesAdded: madeNotes.length - notesBeforeSwitches });
+
+    // 6. Click shows window on offer or Library tab
+    w.shows = 0;
+    const sentBeforeClick = w.sent.length;
+    if (note1 && note1.handlers && note1.handlers.click) {
+      note1.handlers.click.forEach(fn => fn());
+    }
+    const offerClicked = w.shows === 1 && w.sent.indexOf("etiuda:tray-go") >= 0;
+
+    w.shows = 0;
+    if (noteList && noteList.handlers && noteList.handlers.click) {
+      noteList.handlers.click.forEach(fn => fn());
+    }
+    const libraryClicked = w.shows === 1 && w.sent.indexOf("etiuda:tray-go") >= 0;
+
+    d7Click = offerClicked && libraryClicked;
+    if (!d7Click) d7ClickWhy = JSON.stringify({ offerClicked, libraryClicked, shows: w.shows, sent: w.sent.slice(sentBeforeClick) });
+
+    // 7. Asked or reopened offer shows no toast
+    const notesBeforeAsked = madeNotes.length;
+    const signedCatAsked = d7Sign(Object.assign({}, d7Fixture, { rev: 10, edition: "10" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCatAsked, { file: "catalog-asked.ec", asked: true });
+    await tick(100);
+    const silAsked = madeNotes.length === notesBeforeAsked;
+
+    const notesBeforeReopened = madeNotes.length;
+    const signedCatReopened = d7Sign(Object.assign({}, d7Fixture, { rev: 11, edition: "11" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCatReopened, { file: "catalog-reopened.ec", asked: false, reopened: true });
+    await tick(100);
+    const silReopened = madeNotes.length === notesBeforeReopened;
+
+    d7Asked = silAsked && silReopened;
+    if (!d7Asked) d7AskedWhy = JSON.stringify({ silAsked, silReopened, notesAdded: madeNotes.length - notesBeforeAsked });
+
+    // 8. Catalog with no edition name shows no number
+    const notesBeforeNoEd = madeNotes.length;
+    const signedCatNoEd = d7Sign(Object.assign({}, d7Fixture, { rev: 7, edition: "", version: "7" }), d7LeadPair.privateKey);
+    delete signedCatNoEd.edition;
+    CO.eOfferCatalogDialog(signedCatNoEd, { file: "catalog-noed.ec", asked: false });
+    await tick(100);
+    const noteNoEd = madeNotes[madeNotes.length - 1];
+    const bodyNoEd = (noteNoEd && noteNoEd.opts && noteNoEd.opts.body) || "";
+    const noEdToasted = madeNotes.length === notesBeforeNoEd + 1;
+    const noEdNoNum = !/[0-9]/.test(bodyNoEd) && bodyNoEd.indexOf("edition") < 0;
+    d7NoEdition = noEdToasted && noEdNoNum && bodyNoEd.indexOf("Nothing is loaded until it is looked at.") >= 0;
+    if (!d7NoEdition) d7NoEditionWhy = JSON.stringify({ noEdToasted, noEdNoNum, body: bodyNoEd });
+
+    // 9. Valid signature from a non-lead key shows no "published" toast
+    const nonLeadPair = crypto.generateKeyPairSync("ed25519");
+    const nonLeadPubHex = nonLeadPair.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const ringWithNonLead = JSON.stringify({ [d7Fixture.id || ""]: { "non-lead-key": nonLeadPubHex } });
+    REAL_HOST.catalogRing = () => Promise.resolve(ringWithNonLead);
+    const notesBeforeNonLead = madeNotes.length;
+    const signedNonLead = d7Sign(Object.assign({}, d7Fixture, { rev: 12, edition: "12" }), nonLeadPair.privateKey, "non-lead-key");
+    CO.eOfferCatalogDialog(signedNonLead, { file: "catalog-nonlead.ec", asked: false });
+    await tick(100);
+    d7NonLead = madeNotes.length === notesBeforeNonLead;
+    if (!d7NonLead) d7NonLeadWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeNonLead });
+    REAL_HOST.catalogRing = () => Promise.resolve("");
+  } catch (err) {
+    const msg = String(err && err.message || err).split("\n")[0];
+    if (!d7OfferWhy) d7OfferWhy = msg;
+    if (!d7FocusedWhy) d7FocusedWhy = msg;
+    if (!d7UnsignedWhy) d7UnsignedWhy = msg;
+    if (!d7ListingWhy) d7ListingWhy = msg;
+    if (!d7SwitchesWhy) d7SwitchesWhy = msg;
+    if (!d7ClickWhy) d7ClickWhy = msg;
+    if (!d7AskedWhy) d7AskedWhy = msg;
+    if (!d7NoEditionWhy) d7NoEditionWhy = msg;
+    if (!d7NonLeadWhy) d7NonLeadWhy = msg;
+  } finally {
+    ST.lsDel("eUiLang");
+    ST.nsDel("Catalog");
+    globalThis.document = docWasD7;
+    globalThis.innerWidth = iwWas;
+    globalThis.innerHeight = ihWas;
+  }
+
+  check(d7Offer, "D7-offer a lead-signed edition offered while the window is hidden toasts once (" + d7OfferWhy + ")");
+  check(d7Focused, "D7-focused the same while focused does not (" + d7FocusedWhy + ")");
+  check(d7Unsigned, "D7-unsigned a refused or unsigned file never toasts (" + d7UnsignedWhy + ")");
+  check(d7Listing, "D7-listing a new team catalog in the listing toasts once (" + d7ListingWhy + ")");
+  check(d7Nameless, "D7-nameless a lead with no name gets the nameless titles in both languages, never a stand-in name (" + d7NamelessWhy + ")");
+  check(d7Switches, "D7-switches each switch silences its kind (" + d7SwitchesWhy + ")");
+  check(d7Click, "D7-click a click shows the window on the offer or the Library tab (" + d7ClickWhy + ")");
+  check(d7Asked, "D7-asked an asked or reopened offer shows no toast (" + d7AskedWhy + ")");
+  check(d7NoEdition, "D7-no-edition a catalog with no edition name shows no number (" + d7NoEditionWhy + ")");
+  check(d7NonLead, "D7-non-lead a valid signature from a non-lead key shows no \"published\" toast (" + d7NonLeadWhy + ")");
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");

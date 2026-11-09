@@ -15,6 +15,12 @@
  * 8. A stub where git never answers: the run stops with the "git did not answer" reason, and no moved-tree line.
  * 9. A real file written by a gate under the tree: still a moved-tree verdict (the control).
  * 10. A planted removal of the method check turns leg 7 red, by the tree's plant convention, and honours ETIUDA_PLANTS=off.
+ *
+ * Real profile attribution while installed app runs (2026-11-09):
+ * 11. App running, a change in the stand-in profile, area mode: a warn line naming the cause, no hold, the run continues.
+ * 12. App running, profile mode: exit 78, refused, named.
+ * 13. No app running, the same change: the hold red as today (the control).
+ * 14. A planted removal of the running-app check turns leg 1 red, by the tree's plant convention, honouring ETIUDA_PLANTS=off.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -26,7 +32,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 10;
+const EXPECTED = 14;
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -91,8 +97,24 @@ function setupLab() {
   };
   fs.writeFileSync(path.join(lab, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
 
+  const standIn = path.join(root, "stand-in-profile");
+  fs.mkdirSync(path.join(standIn, "etiuda"), { recursive: true });
+  fs.mkdirSync(path.join(standIn, "Etiuda Studio"), { recursive: true });
+
   fs.writeFileSync(path.join(lab, "src", "leaf.mjs"), "export const leaf = 1;\n");
-  fs.writeFileSync(path.join(lab, "tests", "a.mjs"), "import \"../src/leaf.mjs\";\nconsole.log(\"  ok   leg a\");\nprocess.exit(0);\n");
+  fs.writeFileSync(path.join(lab, "tests", "a.mjs"), [
+    'import fs from "node:fs";',
+    'import path from "node:path";',
+    'import "../src/leaf.mjs";',
+    'if (process.env.ETIUDA_TOUCH_PROFILE === "1" && process.env.ETIUDA_REAL_PROFILE_OVERRIDE) {',
+    '  const p = path.join(process.env.ETIUDA_REAL_PROFILE_OVERRIDE, "etiuda");',
+    '  fs.mkdirSync(p, { recursive: true });',
+    '  fs.writeFileSync(path.join(p, "window.json"), "touched\\n", "utf8");',
+    '}',
+    'console.log("  ok   leg a");',
+    'process.exit(0);',
+    '',
+  ].join("\n"));
   fs.writeFileSync(path.join(lab, "tests", "b.mjs"), "import \"../src/leaf.mjs\";\nconsole.log(\"  ok   leg b\");\nprocess.exit(0);\n");
   fs.mkdirSync(path.join(lab, "ignored"), { recursive: true });
   fs.writeFileSync(path.join(lab, ".gitignore"), "ignored/\n");
@@ -114,7 +136,7 @@ function setupLab() {
   const head = gitCmd(["rev-parse", "--short", "HEAD"], lab, gitEnv);
   const gitTree = gitCmd(["rev-parse", "HEAD^{tree}"], lab, gitEnv);
 
-  return { root, lab, runs, chainsPath, gitEnv, head, gitTree };
+  return { root, lab, runs, chainsPath, gitEnv, head, gitTree, standIn };
 }
 
 function cleanLab(lab) {
@@ -314,6 +336,68 @@ function main() {
 
       const leg2TurnedRed = plantedSrc !== toolSrc && hasPlant && rPlantMethod.exit === 78 && rPlantMethod.out.indexOf("the tree moved") >= 0;
       check(leg2TurnedRed, "10 (5) planted removal of method check turns leg 7 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
+    }
+
+    /* Real profile attribution while installed app runs (2026-11-09) */
+    const standIn = lab.standIn;
+
+    /* 11 (1). App running, a change in the stand-in profile, area mode: a warn line naming the cause, no hold, the run continues */
+    fs.rmSync(path.join(standIn, "etiuda", "window.json"), { force: true });
+    const r11 = runTool(lab, ["area", "HEAD~1...HEAD"], {
+      ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+      ETIUDA_TOUCH_PROFILE: "1",
+      ETIUDA_INSTALLED_APP_RUNNING: "1",
+    });
+    const leg11Ok = r11.exit === 0
+      && r11.out.indexOf("the real profile changed while the installed app ran, so it cannot be attributed") >= 0
+      && r11.out.indexOf("WARN") >= 0
+      && r11.out.indexOf("FAIL touched the real profile") < 0;
+    check(leg11Ok, "11 (1) app running, change in stand-in profile, area mode: warn line naming cause, no hold, run continues");
+
+    /* 12 (2). App running, profile mode: exit 78, refused, named */
+    fs.rmSync(path.join(standIn, "etiuda", "window.json"), { force: true });
+    const r12 = runTool(lab, ["release"], {
+      ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+      ETIUDA_TOUCH_PROFILE: "1",
+      ETIUDA_INSTALLED_APP_RUNNING: "1",
+    });
+    const leg12Ok = r12.exit === 78
+      && r12.out.indexOf("the real profile changed while the installed app ran, so it cannot be attributed") >= 0
+      && (r12.out.indexOf("refused") >= 0 || r12.out.indexOf("REFUSED") >= 0);
+    check(leg12Ok, "12 (2) app running, profile mode: exit 78, refused, named");
+
+    /* 13 (3). No app running, the same change: the hold red as today (the control) */
+    fs.rmSync(path.join(standIn, "etiuda", "window.json"), { force: true });
+    const r13 = runTool(lab, ["area", "HEAD~1...HEAD"], {
+      ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+      ETIUDA_TOUCH_PROFILE: "1",
+      ETIUDA_INSTALLED_APP_RUNNING: "0",
+    });
+    const leg13Ok = r13.exit !== 0
+      && r13.out.indexOf("touched the real profile") >= 0;
+    check(leg13Ok, "13 (3) no app running, the same change: hold red as today (the control)");
+
+    /* 14 (4). A planted removal of the running-app check turns leg 1 red, by the tree's plant convention, honouring ETIUDA_PLANTS=off */
+    if (PLANTS_OFF) {
+      skip("14 (4) planted removal of running-app check turns leg 1 red (ETIUDA_PLANTS=off)");
+    } else {
+      const toolFile = path.join(lab.lab, "tools", "gate-run.mjs");
+      const toolSrc = fs.readFileSync(toolFile, "utf8");
+      const PLANT_TAG = "/* plant:running-app */";
+      const hasPlant = toolSrc.includes(PLANT_TAG);
+      const plantedSrc = toolSrc.replace(/^[^\n]*\/\*\s*plant:running-app\s*\*\/[^\n]*$/m, "/* plant:running-app removed */");
+      fs.writeFileSync(toolFile, plantedSrc);
+
+      fs.rmSync(path.join(standIn, "etiuda", "window.json"), { force: true });
+      const rPlant = runTool(lab, ["area", "HEAD~1...HEAD"], {
+        ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+        ETIUDA_TOUCH_PROFILE: "1",
+        ETIUDA_INSTALLED_APP_RUNNING: "1",
+      });
+      fs.writeFileSync(toolFile, toolSrc);
+
+      const leg1TurnedRed = plantedSrc !== toolSrc && hasPlant && rPlant.exit !== 0 && rPlant.out.indexOf("touched the real profile") >= 0;
+      check(leg1TurnedRed, "14 (4) planted removal of running-app check turns leg 1 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
     }
   } finally {
     cleanLab(lab);

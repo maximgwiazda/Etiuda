@@ -134,6 +134,10 @@ const LISTED_KEEP_MS = 29 * 24 * 60 * 60 * 1000;
 const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /* How far a removed desk's clock may run ahead of the lead's and its last file sealed before the removal still be taken. */
 const REMOVED_CLOCK_AHEAD_MS = 10 * 60 * 1000;
+/* How far ahead of this computer's clock a head may be dated and still be taken. One further ahead is refused, not floored,
+   so a lead's clock running far ahead cannot raise the floor past every later head; it is judged again once the clock reaches it. */
+const HEAD_AHEAD_MS = 10 * 60 * 1000;
+const HEAD_AHEAD_SAID = "That head is dated ahead of this computer's clock, so it waits until the clock reaches it.";
 const SESSION_KEEP_MS = 25 * 60 * 1000;
 const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
@@ -401,12 +405,12 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, lapse: null, skew: 0, made: null, suspect: false,
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
     pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] } };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
-function stateOf(x) {
+function stateOf(x, now) {
   const s = freshState();
   if (!table(x) || x.kind !== STATE_KIND || x.v !== 1) return s;
   const count = v => Number.isSafeInteger(v) && v >= 0;
@@ -415,6 +419,9 @@ function stateOf(x) {
   if (count(x.bytes)) s.bytes = x.bytes;
   if (count(x.leadEpoch)) s.leadEpoch = x.leadEpoch;
   if (Number.isFinite(x.headT)) s.headT = x.headT;
+  if (Number.isFinite(s.headT) && Number.isFinite(now) && s.headT > now + HEAD_AHEAD_MS) s.headT = null; /* plant:head-t-load */
+  s.heldHead = heldHeadOf(x.heldHead); /* plant:held-head-load */
+  s.heldItem = heldItemOf(x.heldItem);
   if (Number.isSafeInteger(x.listed)) s.listed = x.listed;
   s.lapse = lapseKept(x.lapse);
   if (Number.isSafeInteger(x.skew)) s.skew = x.skew;
@@ -512,6 +519,23 @@ function stateOf(x) {
   return s;
 }
 
+/* A head held for its key or its time (headJudged's `again`), read back whole or not at all. */
+const HELD_BODY_MAX = 64 * 1024;
+function heldHeadOf(h) {
+  if (!table(h) || h.path !== HEAD_NAME || h.kind !== "file" || typeof h.body !== "string" || h.body.length > HELD_BODY_MAX
+    || !B.isId(h.writerKeyId) || !isCount(h.epoch) || !isCount(h.counter) || !HEX32.test(String(h.id))) return null;
+  return { path: HEAD_NAME, kind: "file", body: h.body, writerKeyId: h.writerKeyId, epoch: h.epoch, counter: h.counter, id: h.id,
+    size: Number.isSafeInteger(h.size) && h.size >= 0 ? h.size : 0 };
+}
+/* A fetched blob kept to be opened again once its writer is the pinned lead: the header as the relay gave it, the ciphertext. */
+const HELD_META = ["v", "size", "id", "epoch", "supersedes", "writer", "counter", "nonce", "sig", "place", "del"];
+function heldItemOf(h) {
+  if (!table(h) || !table(h.meta) || typeof h.ct !== "string" || h.ct.length > 2 * HELD_BODY_MAX + 8192 || !Number.isSafeInteger(h.seq)
+    || !HEX32.test(String(h.meta.id)) || !B.isId(h.meta.writer) || !isCount(h.meta.epoch) || !isCount(h.meta.counter)) return null;
+  const meta = {};
+  for (const k of HELD_META) if (has(h.meta, k) && (h.meta[k] === null || ["string", "number", "boolean"].indexOf(typeof h.meta[k]) >= 0)) meta[k] = h.meta[k];
+  return { seq: h.seq, floor: Number.isSafeInteger(h.floor) && h.floor >= 0 ? h.floor : 0, meta, ct: h.ct };
+}
 /* A short text the desk may show from a head: nothing hidden in it, and not so long that one head fills the row. */
 function headTextOk(s, max) {
   return typeof s === "string" && s.length >= 1 && s.length <= max && !/[\u0000-\u001f\u007f]/.test(s);
@@ -531,6 +555,20 @@ function newestEdition(list) {
   return best;
 }
 
+/* Every catalog a head names, one entry each: the greatest rev, and the last of a tie; sorted by catalog id. Null where
+   newestEdition is null, so one entry that is not well shaped refuses the whole head here too. */
+function headEditions(list) {
+  if (!newestEdition(list)) return null;
+  const best = new Map();
+  for (const e of list) {
+    let published = e.published;
+    if (typeof published === "number") published = String(published);
+    const had = best.get(e.catalog);
+    if (!had || e.rev >= had.rev) best.set(e.catalog, { catalog: e.catalog, rev: e.rev, edition: e.edition, published: published });
+  }
+  return Array.from(best.values()).sort((a, b) => (a.catalog < b.catalog ? -1 : a.catalog > b.catalog ? 1 : 0));
+}
+
 function createProgram(opts) {
   const o = opts || {};
   const io = o.io;
@@ -539,7 +577,7 @@ function createProgram(opts) {
   const save = typeof o.save === "function" ? o.save : () => {};
   const onFork = typeof o.onFork === "function" ? o.onFork : null;
   const teamMax = Number.isSafeInteger(o.teamMax) ? o.teamMax : B.TEAM_MAX;
-  let st = stateOf(typeof o.load === "function" ? o.load() : null);
+  let st = stateOf(typeof o.load === "function" ? o.load() : null, clock());
   let pin = pinOf((st && st.pin) || o.pin);
   if (st.stranded && (!pin || pin.lead.keyId !== st.stranded.lead)) { st.stranded = null; st.behind = {}; } /* plant:stranded-out-invite */
   const rates = new Map();
@@ -563,12 +601,6 @@ function createProgram(opts) {
   }
   function isLeadKey(keyId) {
     return chainLeads().some(l => l.keyId === keyId);
-  }
-  function leadSigned(bytes, sigValue, prefix) {
-    for (const l of chainLeads()) {
-      if (B.verifySigned(l.public, prefix, bytes, sigValue)) return true;
-    }
-    return false;
   }
   const persist = () => { try { save(st); } catch (e) { say("the relay's record could not be kept - " + (e && e.message)); } };
   const revKey = t => ({ teamId: pin.teamId, leadKeyId: pin.lead.keyId, epoch: t.epoch, rev: t.rev });
@@ -702,8 +734,10 @@ function createProgram(opts) {
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
 
-  /* The head the lead's Studio writes. The pinned lead's signature over the head prefix, and this team's name.
-     An older t than one already kept is left out. Whatever it says, the desk is not blocked. */
+  /* The head the lead's Studio writes. The pinned lead's signature over the head prefix, and this team's name; never an
+     earlier key of the handover chain. An older t than one already kept is left out, and so is an epoch below the newest the
+     lead has named. One refused for its key or for a t ahead of the clock carries `again`: it may hold once the pin moves or
+     the clock reaches it. Whatever it says, the desk is not blocked. */
   function headJudged(body, floor) {
     if (!pin) return R("wrong-team");
     let doc = null;
@@ -711,14 +745,20 @@ function createProgram(opts) {
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!leadSigned(bytes, doc.sig.value, HEAD_PREFIX)) return R("bad-signature"); /* plant:head-sig */
+    let signer = chainLeads();
+    signer = [pin.lead]; /* plant:head-pin-only */
+    if (!signer.some(l => B.verifySigned(l.public, HEAD_PREFIX, bytes, doc.sig.value))) return Object.assign(R("bad-signature"), { again: true }); /* plant:head-sig */
     if (doc.v !== 1) return R("bad-signature");
     if (doc.team !== pin.teamId) return R("wrong-team");
     if (!isCount(doc.epoch) || !isCount(doc.rev) || !Number.isFinite(doc.t)) return R("bad-signature");
     const edition = newestEdition(doc.editions);
     if (!edition) return R("bad-signature");
+    if (doc.t > clock() + HEAD_AHEAD_MS) return { ok: false, reason: "head-ahead", said: HEAD_AHEAD_SAID, served: false, again: true }; /* plant:head-ahead */
+    const held = newestRoster();
+    if (held && doc.epoch < held.epoch) return R("epoch"); /* plant:head-epoch */
     if (floor && Number.isFinite(st.headT) && doc.t < st.headT) return R("replay-counter");
-    return { ok: true, t: doc.t, edition: edition.edition, published: edition.published, epoch: doc.epoch, rev: doc.rev };
+    return { ok: true, t: doc.t, edition: edition.edition, published: edition.published, epoch: doc.epoch, rev: doc.rev,
+      editions: headEditions(doc.editions) };
   }
 
   /* The roster of this epoch at this rev. A higher rev keeps the keys the rev it replaces named, so leaving one off is a removal. */
@@ -898,7 +938,9 @@ function createProgram(opts) {
     let head = null;
     if (r.path === HEAD_NAME && r.kind === "file") {
       head = headJudged(r.body, true);
+      if (!head.ok && head.again && (!st.heldHead || later(r, st.heldHead))) { st.heldHead = heldHeadOf(r); persist(); } /* plant:head-held */
       if (!head.ok) return dropSaid(HEAD_NAME, head);
+      if (st.heldHead && !later(st.heldHead, r)) st.heldHead = null;
     }
     try {
       if (r.kind === "delete") io.remove(r.path);
@@ -1037,6 +1079,7 @@ function createProgram(opts) {
     keepTrust(t);
     if (st.stranded && t.epoch >= st.stranded.above) { st.stranded = null; st.behind = {}; } /* plant:stranded-out-invite */ /* plant:stranded-out-recopy */
     persist();
+    headAgain(); /* plant:head-again-team */
     if (ctx && typeof ctx.onTeam === "function") {
       try { ctx.onTeam(); } catch (e) { say("the team file could not be heeded - " + (e && e.message)); }
     }
@@ -1419,12 +1462,15 @@ function createProgram(opts) {
       if (x) after.push(x);
     }
     landTop(after);
-    landNewest(opened.concat(after).filter(x => !isTeam(x)), out, ctx);
+    let again = [];
+    again = itemAgain(floors0, ctx); /* plant:item-again */
+    landNewest(opened.concat(after, again).filter(x => !isTeam(x)), out, ctx);
     const desks = [];
     /* What a held handover's new lead wrote waits for the pin to move, then comes back through retryPending. */
     const heldLeads = new Set(st.ahead.held.map(h => h.lead));
     for (const it of others) {
       if (st.ahead.held.some(h => h.id === it.meta.id)) continue;
+      if (headAhead(it, ctx)) { holdItem(it, floors0); continue; } /* plant:item-held */
       if (look && !look.whole && heldLeads.has(it.meta.writer)) { pend(it, floors0); continue; } /* plant:ahead-park */
       const x = openOne(it, floors0, ctx);
       if (x) desks.push(x);
@@ -1438,6 +1484,41 @@ function createProgram(opts) {
     }
     persist();
     return out;
+  }
+
+  /* A root file from a key no roster names and that is not yet a lead, which opens under the team key as the head: the next
+     lead's head, uploaded before the team file that hands over to it. Nothing about it is trusted until its writer leads. */
+  function headAhead(it, ctx) {
+    const m = it && it.meta;
+    if (!pin || !table(m) || isLeadKey(m.writer) || m.del === true || typeof m.pub === "string") return false;
+    if (!(m.place === undefined || m.place === null || m.place === "root")) return false;
+    for (const e of Object.keys(st.trust)) {
+      const row = st.trust[e];
+      if ((row.desks || []).concat(row.prior || []).some(d => d.keyId === m.writer)) return false;
+    }
+    const key = ctx && typeof ctx.keyFor === "function" ? ctx.keyFor(m.epoch) : null;
+    const blob = key ? envelopeOf(it) : null;
+    const peek = blob ? peekBlob(blob, pin.rt, key) : null;
+    return !!peek && peek.kind === "file" && peek.path === HEAD_NAME;
+  }
+  /* One such blob is kept, with the floor its counter is judged against: the first that reads back whole, replaced only by a later
+     one of the same writer that does, so another unnamed key's blob neither takes the slot nor clears it. */
+  function holdItem(it, floors0) {
+    const m = it.meta, was = st.heldItem;
+    if (was && Number.isSafeInteger(it.seq) && it.seq < was.seq) return;
+    if (was && was.meta.writer !== m.writer) return; /* plant:item-keep */
+    const ct = toBytes(it.ct);
+    const next = heldItemOf({ seq: Number.isSafeInteger(it.seq) ? it.seq : 0,
+      floor: it.floor !== undefined ? it.floor : floorAt(floors0, m.writer, m.epoch), meta: m, ct: ct ? ct.toString("base64") : "" });
+    if (next) st.heldItem = next;
+  }
+  /* The kept blob, once its writer is a lead: opened and judged as any lead blob is, and let go whatever the answer. */
+  function itemAgain(floors0, ctx) {
+    const h = st.heldItem;
+    if (!h || !isLeadKey(h.meta.writer)) return [];
+    st.heldItem = null;
+    const x = openOne({ seq: h.seq, floor: h.floor, meta: Object.assign({}, h.meta), ct: Buffer.from(h.ct, "base64") }, floors0, ctx);
+    return x ? [x] : [];
   }
 
   /* The steps the team files of a catch-up have shown so far, with `docs` added, as one look for forkIn. */
@@ -1667,10 +1748,23 @@ function createProgram(opts) {
     return { ok: true };
   }
 
+  /* The head last refused for its key or its time, judged again: landed where it now holds, let go where it is refused for
+     anything else or a later head has landed since. Said once, when it was first refused. */
+  function headAgain() {
+    const h = st.heldHead;
+    if (!h || !pin) return;
+    const j = headJudged(h.body, true);
+    if (!j.ok && j.again) return;
+    st.heldHead = null;
+    if (j.ok) land(h);
+    else persist();
+  }
+
   /* The head in this mirror, read again and verified. A missing or bad file shows nothing, and nothing is blocked. */
   function headNews(now) {
-    const none = { shown: false, blocked: false, time: null, epoch: null, rev: null, ageMs: null, edition: null, published: null };
+    const none = { shown: false, blocked: false, time: null, epoch: null, rev: null, ageMs: null, edition: null, published: null, editions: null };
     if (!pin) return none;
+    headAgain(); /* plant:head-again-clock */
     const raw = io.read(HEAD_NAME);
     if (raw == null) return none;
     let text;
@@ -1679,16 +1773,17 @@ function createProgram(opts) {
     if (!h.ok) return none;
     const at = Number.isFinite(now) ? now : clock();
     return { shown: true, blocked: false, time: h.t, epoch: h.epoch, rev: h.rev, ageMs: at - h.t,
-      edition: h.edition, published: h.published };
+      edition: h.edition, published: h.published, editions: h.editions };
   }
 
-  /* The head shown by its signed time, never as a block: only one the pinned lead or genuine predecessor signed for this relay. */
+  /* The head shown by its signed time, never as a block: only one the pinned lead signed for this relay. */
   function showFreshness(input) {
     const i = input || {};
     const none = { shown: false, blocked: false, time: null, epoch: null, rev: null, ageMs: null };
     const head = i.head;
     if (!pin || !table(head) || !table(head.sig)) return none;
-    const lead = chainLeads().find(l => l.keyId === head.keyId);
+    let lead = chainLeads().find(l => l.keyId === head.keyId);
+    lead = pin.lead.keyId === head.keyId ? pin.lead : null; /* plant:fresh-pin-only */
     if (!lead || head.relay !== pin.rt) return none;
     let bytes;
     try { bytes = signedBytes(head); } catch { return none; }
@@ -2790,6 +2885,7 @@ function createChannel(opts) {
 }
 
 module.exports = {
+  HEAD_AHEAD_MS, headEditions,
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
   SESSION_KEEP_MS, REMOVED_KEEP_MS, REMOVED_CLOCK_AHEAD_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,

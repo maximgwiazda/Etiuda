@@ -17,18 +17,37 @@ import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js"
 import { pax, intentEl, roleSel, $ } from "./dom.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
+import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, dropScreenTab, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="eSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
 
-wireScreenTabsChange(() => drawTabs());
+/* The strip is redrawn, then the rail is measured. Leaving a screen gives the pill bar
+   back in this same turn, and the rail's top is still the short header's. The resize
+   observer does not run before the first frame, so the write is here. */
+wireScreenTabsChange(() => {
+  if (screenOn) {
+    snapshotActiveTab(true);
+    if (intentEl) {
+      intentEl.value = "";
+      intentEl.classList.remove("set");
+      syncIntentClearBtns();
+    }
+    if (pax) {
+      pax.value = "";
+      const paxClear = $("#paxClear");
+      if (paxClear) paxClear.disabled = true;
+    }
+  }
+  drawTabs();
+  if (typeof hooks.syncRailGeometry === "function") hooks.syncRailGeometry();
+});
 /* A closed screen hands the keyboard to the search box, so typing lands there at once. */
 wireScreenTabsReturn(id => {
-  if (id && tabs.some(x => x.id === id)) switchTab(id);
-  else if (tabs[0]) switchTab(tabs[0].id);
+  if (id && tabs.some(x => x.id === id)) switchTab(id, true);
+  else if (tabs[0]) switchTab(tabs[0].id, true);
   try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
 });
 
@@ -144,13 +163,14 @@ function tabLabel(tb, i){
   return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
 }
 /* The conversation in front as its tab is named, from the name typed in it now. */
+function getActiveTabId(){ return activeTabId; }
 function activeTabName(){
   const i=tabs.findIndex(x=>x.id===activeTabId);
   if(i<0) return "";
   return tabLabel(Object.assign({}, tabs[i], {pax:pax ? pax.value : tabs[i].pax}), i);
 }
-function snapshotActiveTab(){
-  if(!activeTabId) return;
+function snapshotActiveTab(force){
+  if((screenOn && !force) || !activeTabId) return;
   const t=tabs.find(x=>x.id===activeTabId);
   if(!t) return;
   t.lang=lang;
@@ -261,7 +281,35 @@ function wirePaxBlur(){
     }
   });
 }
+function turnScreenTabToCards(val, paxVal){
+  const sid = screenOn;
+  if(!sid) return;
+  const sidx = screens.indexOf(sid);
+  const stripPos = tabs.length + (sidx >= 0 ? sidx : 0);
+  dropScreenTab(sid);
+  const tb = blankTab();
+  tb.intentBox = String(val != null ? val : "");
+  if(paxVal) tb.pax = String(paxVal);
+  tabs.splice(stripPos, 0, tb);
+  activeTabId = tb.id;
+  setPrevTabId(tb.id);
+  applyTab(tb);
+  saveTabSession();
+  try{
+    if(intentEl){
+      intentEl.focus({preventScroll:true});
+      const len = intentEl.value.length;
+      intentEl.setSelectionRange(len, len);
+    }
+  }catch(_){}
+}
 function scheduleTabSave(){
+  if(screenOn){
+    if(pax && pax.value){
+      turnScreenTabToCards("", pax.value);
+    }
+    return;
+  }
   wirePaxBlur();
   paxTabId=activeTabId;
   const tb=tabs.find(x=>x.id===activeTabId);
@@ -372,11 +420,14 @@ function applyTab(tb){
     scrollTabIntoView(tb.id);
   });
 }
-function switchTab(id){
+function switchTab(id, force){
+  const fromScreen = Boolean(screenOn) || Boolean(force);
   if(screenOn) clearScreenOn();
-  if(!id||id===activeTabId) return;
-  snapshotActiveTab();
-  endPaxConversation(tabs.find(x=>x.id===activeTabId));
+  if(!id||(id===activeTabId && !fromScreen)) return;
+  if(!fromScreen){
+    snapshotActiveTab();
+    endPaxConversation(tabs.find(x=>x.id===activeTabId));
+  }
   const t=tabs.find(x=>x.id===id);
   if(!t) return;
   applyTab(t);
@@ -516,8 +567,9 @@ function animateTabInsert(mutate){
   }));
 }
 function addTab(){
+  const fromScreen = Boolean(screenOn);
   if(screenOn) clearScreenOn();
-  snapshotActiveTab();
+  if(!fromScreen) snapshotActiveTab();
   const t=blankTab();
   // applyTab() redraws the strip, so the whole insert happens inside the one capture
   animateTabInsert(()=>{ tabs.push(t); applyTab(t); });
@@ -1463,7 +1515,9 @@ export {
   watchTabPath,
   TAB_KEY,
   tabs,
+  getActiveTabId,
   tabSaveTimer,
   tabInsertAnimating,
+  turnScreenTabToCards,
   TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName
 };

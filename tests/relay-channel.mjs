@@ -61,7 +61,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 384;
+const EXPECTED = 419;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -266,7 +266,7 @@ function headWith(team, t, editions, v) {
   return signHead({ v: v === undefined ? 1 : v, team: team, epoch: 1, rev: 1, editions: editions, t: t });
 }
 function headBody(team, t, edition, published) {
-  return headWith(team, t, [{ catalog: "quay-board", rev: 1, edition: edition, published: published }]);
+  return headWith(team, t, [{ catalog: "quay-board", rev: 2, edition: edition, published: published }]);
 }
 function dayStamp(ms) {
   const d = new Date(ms), p = v => String(v).padStart(2, "0");
@@ -2717,6 +2717,8 @@ try {
       fs.mkdirSync(mirrorBoth, { recursive: true });
       const headNow = read(mirror, HEAD_FILE);
       fs.writeFileSync(path.join(mirrorBoth, HEAD_FILE), headNow);
+      /* The row keeps only catalogs the team file lists (962 stage 5), so the record holds the team file the head is read against. */
+      fs.writeFileSync(path.join(mirrorBoth, C.TEAM_NAME), read(mirror, C.TEAM_NAME));
       fs.writeFileSync(path.join(udBoth, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
         keys: { eCatalogFolder: shareH, eUiLang: "en" },
         teamPins: { [TEAM2]: { keyId: LEAD.keyId, public: LEAD.pub }, [TEAMH]: { keyId: INTR.keyId, public: INTR.pub } },
@@ -2735,8 +2737,119 @@ try {
         "948l one desk following the relay team and holding a folder team: the relay team's row shows the head, the folder team's row"
         + " carries none: channel " + (runBD ? "running" : "none") + ", relay row " + relayHead + ", folder row's head " + folderHead);
     }
+    /* 962s5g3, the relay, after 948l has read the head it shows: an entry below the rev this desk has loaded of that catalog is left off the row, though the channel took the head. */
+    const belowS5 = await shownFor(headWith(TEAM2, tTwo + 2, [{ catalog: "quay-board", rev: 1, edition: "Quay one again", published: "1 March 2026" }]));
+    check(belowS5.landed && belowS5.news === "Quay one again / 1 March 2026" && belowS5.row === "none",
+      "962s5g3 on the relay, a head naming only an edition below the one this desk has loaded is left off the team row: news " + belowS5.news + ", row " + belowS5.row);
   } catch (e) {
     check(false, "948 the team's news: " + (e && e.stack ? e.stack : e));
+  }
+  /* ---- 962 stage 5 (the design's 3.2 and 3.3) on a folder team's row, through the desk's own shell: the head per catalog ---- */
+  try {
+    const TMF = "t-" + hex(8);
+    const folderTeamS5 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TMF, catalogs: ["pebble-board", "quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1, roster: [] }, LEAD), null, 1) + "\n";
+    const catOf = (id, rev) => {
+      const o = { format: 2, kind: "etiuda-catalog", id, rev, name: "Board " + id, date: "2026-03-0" + Math.min(rev, 9),
+        langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+        cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" }, body: { en: "Good day, edition " + rev + "." } }] };
+      o.sig = { alg: "Ed25519", keyId: LEAD.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), LEAD.privateKey).toString("hex");
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    const pe = (rev, ed) => ({ catalog: "pebble-board", rev, edition: ed || "Pebble " + rev, published: rev + " March 2026" });
+    const qe = (rev, ed) => ({ catalog: "quay-board", rev, edition: ed || "Quay " + rev, published: rev + " April 2026" });
+    let n5 = 0;
+    /* A desk pinned to the folder team, its mirror holding the team file, the head and any `files`; `revs` its handed revs. */
+    const rowOf = async (head, o) => {
+      const opt = o || {};
+      const ud = path.join(LAB, "s5-head-" + (++n5) + "-" + hex(3)), mir = path.join(ud, "folder-mirror", TMF), elsewhere = path.join(ud, "share");
+      fs.mkdirSync(mir, { recursive: true }); fs.mkdirSync(elsewhere, { recursive: true });
+      fs.writeFileSync(path.join(mir, C.TEAM_NAME), opt.team || folderTeamS5);
+      for (const [n, t] of opt.files || []) fs.writeFileSync(path.join(mir, n), t);
+      if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
+      const revs = {};
+      for (const id of Object.keys(opt.revs || {})) revs[id] = { [LEAD.pub]: opt.revs[id] };
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
+        teamPins: { [TMF]: { keyId: LEAD.keyId, public: LEAD.pub } }, catalogRevs: revs }), "utf8");
+      const FD = loadDesk(ud, opt.src);
+      await FD.ask("etiuda:branch-identity", true);
+      const look = async () => {
+        const v = await FD.ask("etiuda:team-join", "leads");
+        const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === TMF)[0];
+        return row && row.head ? row.head : null;
+      };
+      const first = await look();
+      return { head: first, again: async next => { fs.writeFileSync(path.join(mir, HEAD_FILE), next); return look(); } };
+    };
+    const shownS5 = h => !h ? "none" : (h.edition || "-") + " [" + (Array.isArray(h.editions) ? h.editions.map(e => e.catalog + "@" + e.rev + (e.newer ? "+" : "")).join(",") : "no list") + "]";
+    const entryOf = (h, id) => h && Array.isArray(h.editions) ? h.editions.filter(e => e.catalog === id)[0] || null : null;
+    const now = Date.now();
+
+    /* 962s5d: both catalogs' entries kept, the second's newer edition beside the first's higher rev. */
+    const d = (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble five"), qe(2, "Quay two")], t: now }))).head;
+    check(!!d && d.edition === "Pebble five" && (d.editions || []).length === 2 && !!entryOf(d, "quay-board") && entryOf(d, "quay-board").newer === true
+      && entryOf(d, "pebble-board").newer === true,
+      "962s5d a folder team's head naming two catalogs keeps both entries, the second's newer edition beside the first's higher rev: " + shownS5(d));
+    /* 962s5f: an entry for a catalog the team file does not list is dropped. */
+    const fScene = async src => (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), { catalog: "stone-board", rev: 9, edition: "Stone nine", published: "9 May 2026" }], t: now }), { src })).head;
+    const f = await fScene();
+    check(!!f && (f.editions || []).length === 1 && !entryOf(f, "stone-board") && f.edition === "Pebble 5",
+      "962s5f an entry for a catalog the team file does not list is dropped from the row: " + shownS5(f));
+    /* 962s5g, the folder: an entry below the rev this desk has seen of that catalog is dropped; a higher one is kept. */
+    const gScene = async src => (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(2)], t: now }), { revs: { "quay-board": 3 }, src })).head;
+    const g = await gScene();
+    const gUp = (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(4)], t: now }), { revs: { "quay-board": 3 } })).head;
+    check(!!g && !entryOf(g, "quay-board") && !!entryOf(g, "pebble-board") && !!gUp && !!entryOf(gUp, "quay-board") && entryOf(gUp, "quay-board").newer === true,
+      "962s5g on a folder team, an entry below the rev this desk has of that catalog is dropped and a higher one kept: below " + shownS5(g) + ", above " + shownS5(gUp));
+    /* 962s5p: newer is false for a rev the desk has loaded and true above it; a file sitting unread in the mirror is not loaded. */
+    const pScene = async src => (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(3)], t: now }),
+      { revs: { "pebble-board": 5 }, files: [["quay.ec", catOf("quay-board", 3)]], src })).head;
+    const p = await pScene();
+    check(!!p && !!entryOf(p, "pebble-board") && entryOf(p, "pebble-board").newer === false && !!entryOf(p, "quay-board") && entryOf(p, "quay-board").newer === true,
+      "962s5p an entry the desk has loaded is not newer, one above it is, and a file unread in the mirror does not count as loaded: " + shownS5(p));
+    /* 962s5r, the folder: a head dated beyond now plus ten minutes is not shown and raises no floor, so a genuine head then shows. */
+    const rFScene = async src => {
+      const desk = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(6, "Pebble from ahead")], t: now + 11 * 60 * 1000 }), { src });
+      const next = await desk.again(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble now")], t: now }));
+      return { ahead: desk.head, next };
+    };
+    const rF = await rFScene();
+    check(!rF.ahead && !!rF.next && rF.next.edition === "Pebble now",
+      "962s5r2f on a folder team, a head dated beyond now plus ten minutes is not shown and leaves the floor, so the genuine head after it shows: ahead "
+      + shownS5(rF.ahead) + ", then " + shownS5(rF.next));
+    /* 962s5t4: the folder's epoch floor, as the relay's: a head below the epoch of the team file the mirror holds is left out. */
+    const teamAt2 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TMF, catalogs: ["pebble-board", "quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 2, rev: 1, roster: [] }, LEAD), null, 1) + "\n";
+    const t4Scene = async src => {
+      const desk = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble at epoch one")], t: now }), { team: teamAt2, src });
+      const at2 = await desk.again(signHead({ v: 1, team: TMF, epoch: 2, rev: 1, editions: [pe(5, "Pebble at epoch two")], t: now + 1 }));
+      return { low: desk.head, at2 };
+    };
+    const t4 = await t4Scene();
+    check(!t4.low && !!t4.at2 && t4.at2.edition === "Pebble at epoch two",
+      "962s5t4 on a folder team, a head below the epoch of the team file the mirror holds is left out, and one at it shows: below " + shownS5(t4.low) + ", at " + shownS5(t4.at2));
+    if (PLANTS_OFF) {
+      skip("962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch");
+      skip("962s5f2 lifting plant:head-listed keeps the unlisted catalog's entry");
+      skip("962s5g2 lifting plant:folder-head-older keeps the entry below the desk's rev");
+      skip("962s5p2 lifting plant:head-loaded calls the loaded rev newer");
+      skip("962s5r4 lifting plant:folder-head-ahead shows the head from ahead and refuses the genuine one");
+    } else {
+      const lifted = tag => { const lines = SRC.split(/\n/), at = lines.findIndex(l => l.indexOf(tag) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
+      const s5 = lifted("plant:folder-head-epoch"), t5 = s5 ? await t4Scene(s5) : null;
+      check(!!t5 && !!t5.low, "962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t4): " + (s5 ? shownS5(t5 && t5.low) : "plant line absent"));
+      const s1 = lifted("plant:head-listed"), s2 = lifted("plant:folder-head-older"), s3 = lifted("plant:head-loaded"), s4 = lifted("plant:folder-head-ahead");
+      const f2 = s1 ? await fScene(s1) : null, g2 = s2 ? await gScene(s2) : null, p2 = s3 ? await pScene(s3) : null, r2 = s4 ? await rFScene(s4) : null;
+      check(!!f2 && !!entryOf(f2, "stone-board"), "962s5f2 lifting plant:head-listed keeps the unlisted catalog's entry (FAIL 962s5f): " + (s1 ? shownS5(f2) : "plant line absent"));
+      check(!!g2 && !!entryOf(g2, "quay-board"), "962s5g2 lifting plant:folder-head-older keeps the entry below the desk's rev (FAIL 962s5g): " + (s2 ? shownS5(g2) : "plant line absent"));
+      check(!!p2 && !!entryOf(p2, "pebble-board") && entryOf(p2, "pebble-board").newer === true, "962s5p2 lifting plant:head-loaded calls the loaded rev newer (FAIL 962s5p): "
+        + (s3 ? shownS5(p2) : "plant line absent"));
+      check(!!r2 && !!r2.ahead && r2.ahead.edition === "Pebble from ahead" && !r2.next, "962s5r4 lifting plant:folder-head-ahead shows the head from ahead and refuses the genuine one (FAIL 962s5r2f): "
+        + (s4 ? shownS5(r2 && r2.ahead) + ", then " + shownS5(r2 && r2.next) : "plant line absent"));
+    }
+  } catch (e) {
+    check(false, "962 stage 5 on a folder team's row: " + (e && e.stack ? e.stack : e));
   }
   /* F1 through the desk's own shell: the lead's Studio lends its box's agreement, takes a desk off with a new key, and this
      desk, holding only the first key, reaches the new epoch by itself: its own copy of the team file, its wrap opened by
@@ -4989,10 +5102,13 @@ try {
     const beforeBytes = fs.readFileSync(src), digest = sha(beforeBytes);
     let turned = false, detail = "plant line absent", sites = 0;
     try {
+      /* A tag, or a list of tags lifted together: every tag must find its line. */
+      const tags = Array.isArray(tag) ? tag : [tag];
       const lines = beforeBytes.toString("utf8").split(/\n/);
-      const kept = lines.filter(l => (l.match(/plant:[\w-]+/g) || []).indexOf(tag) < 0);
+      const marks = l => l.match(/plant:[\w-]+/g) || [];
+      const kept = lines.filter(l => !marks(l).some(m => tags.indexOf(m) >= 0));
       sites = lines.length - kept.length;
-      if (sites > 0) {
+      if (sites > 0 && tags.every(tg => lines.some(l => marks(l).indexOf(tg) >= 0))) {
         const dir = fs.mkdtempSync(path.join(LAB, "app-plant-"));
         fs.cpSync(path.join(APP, "shell"), path.join(dir, "shell"), { recursive: true });
         fs.writeFileSync(path.join(dir, "shell", "relay", "channel.cjs"), kept.join("\n"), "utf8");
@@ -6214,10 +6330,11 @@ try {
       check(j.turned && j.back, "994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead, and the product file"
         + " is never written: " + j.detail + ", sha " + (j.back ? "restored" : "differs"));
     }
-    if (PLANTS_OFF) skip("994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head");
+    if (PLANTS_OFF) skip("994k lifting plant:ahead-park with plant:item-held drops what the new key wrote on the first page, so the desk follows without its head");
     else {
-      const k = await liftApp("plant:ahead-park", async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
-      check(k.turned && k.back, "994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head,"
+      /* Paired: stage 5's kept head (plant:item-held) also carries the new key's head across the pages, so ahead-park alone is redundancy. */
+      const k = await liftApp(["plant:ahead-park", "plant:item-held"], async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
+      check(k.turned && k.back, "994k lifting plant:ahead-park with plant:item-held drops what the new key wrote on the first page, so the desk follows without its head,"
         + " and the product file is never written: " + k.detail + ", sha " + (k.back ? "restored" : "differs"));
     }
     const lText = x => (x ? "synced " + x.synced + ", the K3 file by K1 " + x.thief + ", pages from the stand-in " + x.pages + ", desk pin "
@@ -9733,8 +9850,11 @@ check(retryPlant.turned && retryPlant.back,
   const rStranger = progE.acceptBlob({ blob: strangerBlob, teamDoc: docE, teamKey: KE });
   const guideRead = progE.readMirror("guide.ec");
   const headNewsE = progE.headNews(2000000);
-  check(rGuide.ok === true && guideRead === "guide published by old lead\n" && rHead.ok === true && headNewsE.edition === "First edition" && rStranger.ok === false && rStranger.reason === "not-roster",
-    "932e a desk joining after the move reads a catalog and a head the old lead published before it; a blob by a key on no chain is still refused: guide " + (guideRead === "guide published by old lead\n") + ", head " + headNewsE.edition + ", stranger " + rStranger.reason);
+  /* The head clause inverted by 962 stage 5 (the design's 3.3): a head is the current lead's news, so one the old lead signed is left out. */
+  check(rGuide.ok === true && guideRead === "guide published by old lead\n" && rHead.ok !== true && rHead.reason === "bad-signature" && headNewsE.shown === false
+    && rStranger.ok === false && rStranger.reason === "not-roster",
+    "932e a desk joining after the move reads a catalog the old lead published before it, and not the head the old lead signed; a blob by a key on no chain is still refused: guide "
+    + (guideRead === "guide published by old lead\n") + ", head " + (rHead.ok === true ? "taken" : rHead.reason) + ", shown " + headNewsE.shown + ", stranger " + rStranger.reason);
 
   const tmF = "t-" + hex(8), rtF = hex(16);
   const oldF = keyPair(false), newF = keyPair(false);
@@ -9748,6 +9868,244 @@ check(retryPlant.turned && retryPlant.back,
   const pinAfterF = progF.pinned();
   check(resF.ok === true && pinAfterF && pinAfterF.lead.keyId === newF.keyId && pinAfterF.lead.public === newF.pub,
     "932f an invitation made before the move pins the old lead, and the joiner follows the chain at its first team file: admitted " + resF.ok + ", followed " + (pinAfterF && pinAfterF.lead.keyId === newF.keyId));
+
+  /* ---- 962 stage 5: the head per catalog, and its trust (the design's 3.2 and 3.3, with the test architect's second read) ---- */
+  {
+    const tmS = "t-" + hex(8), rtS = hex(16), KS = crypto.randomBytes(32);
+    const leadS1 = keyPair(false), leadS2 = keyPair(false);
+    const pinS = { teamId: tmS, rt: rtS, lead: { keyId: leadS1.keyId, public: leadS1.pub } };
+    const docS1 = teamDocWith(tmS, rtS, leadS1, 1, 1, []);
+    const docS2 = teamDocWith(tmS, rtS, leadS2, 1, 2, [], [makeHandoverStep(tmS, leadS1, leadS2)]);
+    const edA = (rev, ed) => ({ catalog: "pebble-board", rev, edition: ed || "Pebble " + rev, published: rev + " March 2026" });
+    const edB = (rev, ed) => ({ catalog: "quay-board", rev, edition: ed || "Quay " + rev, published: rev + " April 2026" });
+    const headS = (t, editions, key, epoch) => signHead({ v: 1, team: tmS, epoch: epoch || 1, rev: 1, editions, t }, key || leadS1);
+    const sealS = (body, n, writer, path2, epoch) => B.seal({ relayTeamId: rtS, epoch: epoch || 1, teamKey: KS,
+      writer: { keyId: (writer || leadS1).keyId, privateKey: (writer || leadS1).privateKey }, path: path2 || HEAD_FILE, body, counter: n, place: "root", kind: "file" });
+    const progS = (mod, o) => {
+      const m = mod || C;
+      const dir = path.join(LAB, "s5-" + hex(4)); fs.mkdirSync(dir, { recursive: true });
+      const p = m.createProgram(Object.assign({ io: m.diskIO(dir, m.writeWhole), pin: pinS, save() {}, say() {} }, o || {}));
+      p.loadTeamFile(docS1);
+      return p;
+    };
+    const putHead = (p, body, n, writer, doc) => p.acceptBlob({ blob: sealS(body, n, writer), teamDoc: doc || docS1, teamKey: KS });
+
+    /* 962s5e: one entry not well shaped refuses the whole head; headEditions keeps one entry a catalog, the greatest rev and the last of a tie. */
+    const headEds = typeof C.headEditions === "function" ? C.headEditions : () => "absent";
+    const eds = headEds([edB(2, "Quay two"), edA(4), edB(2, "Quay two again"), edA(3), edB(1)]);
+    const bent = headEds([edA(4), { catalog: "quay-board", rev: -1, edition: "x", published: "y" }]);
+    const pE = progS();
+    const rE = putHead(pE, headS(Date.now(), [edA(4), { catalog: "quay-board", rev: 2, edition: "", published: "2 April 2026" }]), 1);
+    check(JSON.stringify(eds) === JSON.stringify([edA(4), edB(2, "Quay two again")]) && bent === null && rE.ok !== true && rE.reason === "bad-signature"
+      && pE.readMirror(HEAD_FILE) === null,
+      "962s5e a head with one entry not well shaped is refused whole, and headEditions keeps one entry a catalog by greatest rev, the last of a tie, sorted:"
+      + " editions " + JSON.stringify(Array.isArray(eds) ? eds.map(e => e.catalog + "@" + e.rev + ":" + e.edition) : eds) + ", bent " + JSON.stringify(bent) + ", head " + rE.reason);
+
+    /* 962s5q: after the handover only the new lead's head holds; one the old lead signed is refused, said once like any refused head. */
+    const qSaid = [];
+    const pQ = progS(null, { say: l => qSaid.push(l) });
+    pQ.loadTeamFile(docS2);
+    const rQold = putHead(pQ, headS(Date.now(), [edA(2)], leadS1), 1, leadS1, docS2);
+    const qNews = pQ.headNews(Date.now());
+    check(pQ.pinned().lead.keyId === leadS2.keyId && rQold.ok !== true && rQold.reason === "bad-signature" && qNews.shown === false
+      && qSaid.filter(l => l.indexOf(HEAD_FILE) === 0).length === 1,
+      "962s5q a head signed by the lead's key before the handover is refused once the pin has moved, and said once: head "
+      + (rQold.ok === true ? "taken" : rQold.reason) + ", shown " + qNews.shown + ", said " + qSaid.filter(l => l.indexOf(HEAD_FILE) === 0).length);
+    const qPlant = await liftChannel("plant:head-pin-only", async mod => {
+      const p = progS(mod);
+      p.loadTeamFile(docS2);
+      const r = putHead(p, headS(Date.now(), [edA(2)], leadS1), 1, leadS1, docS2);
+      return r.ok === true && p.headNews(Date.now()).shown === true;
+    });
+    check(qPlant.turned && qPlant.back, "962s5q2 lifting plant:head-pin-only takes the old lead's head after the handover (FAIL 962s5q): "
+      + qPlant.detail + ", sha " + (qPlant.back ? "restored" : "differs"));
+    /* showFreshness, the same rule: the pinned lead's signature only. */
+    const freshOf = (key, time) => {
+      const o = { keyId: key.keyId, relay: rtS, epoch: 1, rev: 2, time };
+      o.sig = { alg: "Ed25519", keyId: key.keyId };
+      o.sig.value = signHex(key, Buffer.concat([Buffer.from(C.HEAD_PREFIX, "utf8"), C.signedBytes(o)]));
+      return o;
+    };
+    const fOld = pQ.showFreshness({ head: freshOf(leadS1, 5000), now: 6000 }), fNew = pQ.showFreshness({ head: freshOf(leadS2, 5000), now: 6000 });
+    check(fOld.shown === false && fNew.shown === true,
+      "962s5q3 the head's freshness shows only under the pinned lead, never a key before the handover: old " + fOld.shown + ", new " + fNew.shown);
+    const fPlant = await liftChannel("plant:fresh-pin-only", async mod => {
+      const p = progS(mod);
+      p.loadTeamFile(docS2);
+      return p.showFreshness({ head: freshOf(leadS1, 5000), now: 6000 }).shown === true;
+    });
+    check(fPlant.turned && fPlant.back, "962s5q4 lifting plant:fresh-pin-only shows the old lead's freshness after the handover (FAIL 962s5q3): "
+      + fPlant.detail + ", sha " + (fPlant.back ? "restored" : "differs"));
+
+    /* 962s5z (the test architect's second read, change 1): the new lead's head, arriving before the team file that hands over,
+       is refused for its key and judged again once that file lands; it is in the mirror before anything reads the news. */
+    const zScene = mod => {
+      const m = mod || C;
+      const p = progS(m);
+      const early = putHead(p, headS(Date.now(), [edA(3, "Pebble from the new lead")], leadS2), 1, leadS1);
+      const before = p.readMirror(HEAD_FILE);
+      const team = p.acceptBlob({ blob: sealS(JSON.stringify(docS2), 2, leadS2, C.TEAM_NAME), teamDoc: docS2, teamKey: KS });
+      const after = p.readMirror(HEAD_FILE);
+      return { early, before, team, after, news: p.headNews(Date.now()), pinned: p.pinned().lead.keyId === leadS2.keyId };
+    };
+    const z = zScene();
+    const zSaid = s => "early " + (s.early.ok === true ? "taken" : s.early.reason) + ", mirror before " + (s.before ? "holds it" : "none")
+      + ", team " + (s.team.ok === true ? "landed" : s.team.reason) + ", pinned " + s.pinned + ", mirror after " + (s.after ? "holds it" : "none")
+      + ", news " + (s.news.shown ? s.news.edition : "none");
+    check(z.early.ok !== true && z.before === null && z.team.ok === true && z.pinned && !!z.after && z.news.shown === true && z.news.edition === "Pebble from the new lead",
+      "962s5z a head the new lead signed, arriving before the handover's team file, is refused and then shown once that file lands: " + zSaid(z));
+    const zHeld = await liftChannel("plant:head-held", async mod => { const s = zScene(mod); return s.team.ok === true && s.news.shown === false; });
+    check(zHeld.turned && zHeld.back, "962s5z2 lifting plant:head-held drops the early head for good (FAIL 962s5z): " + zHeld.detail + ", sha " + (zHeld.back ? "restored" : "differs"));
+    const zTeam = await liftChannel("plant:head-again-team", async mod => { const s = zScene(mod); return s.team.ok === true && s.after === null; });
+    check(zTeam.turned && zTeam.back, "962s5z3 lifting plant:head-again-team leaves the early head out of the mirror when the team file lands (FAIL 962s5z): "
+      + zTeam.detail + ", sha " + (zTeam.back ? "restored" : "differs"));
+
+    /* 962s5r, the relay: a head dated more than ten minutes ahead is refused, not floored; a genuine head then lands; and the
+       refused one shows once the clock reaches it. */
+    const rScene = mod => {
+      let now = 10 * 24 * 3600 * 1000;
+      const p = progS(mod, { clock: () => now });
+      const ahead = putHead(p, headS(now + 11 * 60 * 1000, [edA(5, "Pebble from ahead")]), 1);
+      const tAfterAhead = p.state().headT;
+      const genuine = putHead(p, headS(now, [edA(4, "Pebble now")]), 2);
+      const shownNow = p.headNews(now);
+      /* With no later head, the one refused for its time shows once the clock reaches it. */
+      let now2 = 10 * 24 * 3600 * 1000;
+      const q = progS(mod, { clock: () => now2 });
+      const ahead2 = putHead(q, headS(now2 + 11 * 60 * 1000, [edA(5, "Pebble from ahead")]), 1);
+      const shownBefore = q.headNews(now2);
+      now2 += 12 * 60 * 1000;
+      const shownLater = q.headNews(now2);
+      return { ahead, tAfterAhead, genuine, shownNow, ahead2, shownBefore, shownLater };
+    };
+    const r = rScene();
+    const rSaid = s => "ahead " + (s.ahead.ok === true ? "taken" : s.ahead.reason) + ", headT after " + s.tAfterAhead + ", genuine "
+      + (s.genuine.ok === true ? "landed" : s.genuine.reason) + ", shown " + (s.shownNow.shown ? s.shownNow.edition : "none")
+      + "; alone " + (s.ahead2.ok === true ? "taken" : s.ahead2.reason) + ", shown before " + (s.shownBefore.shown ? s.shownBefore.edition : "none")
+      + ", once the clock reaches it " + (s.shownLater.shown ? s.shownLater.edition : "none");
+    check(r.ahead.ok !== true && r.ahead.reason === "head-ahead" && r.tAfterAhead === null && r.genuine.ok === true && r.shownNow.edition === "Pebble now"
+      && r.ahead2.ok !== true && r.shownBefore.shown === false && r.shownLater.edition === "Pebble from ahead",
+      "962s5r a relay head dated beyond now plus ten minutes is refused and leaves the floor where it was, a genuine head lands, and with none later the refused one shows once the clock reaches it: " + rSaid(r));
+    const rAhead = await liftChannel("plant:head-ahead", async mod => { const s = rScene(mod); return s.ahead.ok === true && s.genuine.ok !== true; });
+    check(rAhead.turned && rAhead.back, "962s5r2 lifting plant:head-ahead takes the head from ahead and refuses every genuine head after it (FAIL 962s5r): "
+      + rAhead.detail + ", sha " + (rAhead.back ? "restored" : "differs"));
+    const rClock = await liftChannel("plant:head-again-clock", async mod => { const s = rScene(mod); return s.ahead2.ok !== true && s.shownLater.shown === false; });
+    check(rClock.turned && rClock.back, "962s5r3 lifting plant:head-again-clock never shows the refused head once the clock reaches it (FAIL 962s5r): "
+      + rClock.detail + ", sha " + (rClock.back ? "restored" : "differs"));
+
+    /* 962s5s: a floor from the future, persisted before the fix, is dropped when the record is read, so a genuine head lands. */
+    const sScene = mod => {
+      const m = mod || C;
+      const now = Date.now();
+      const s0 = progS(m).state();
+      const kept = JSON.parse(JSON.stringify(s0));
+      kept.headT = now + 24 * 3600 * 1000;
+      const p = progS(m, { load: () => kept, clock: () => now });
+      const t0 = p.state().headT;
+      const genuine = putHead(p, headS(now, [edA(2)]), 1);
+      return { t0, genuine };
+    };
+    const sR = sScene();
+    check(sR.t0 === null && sR.genuine.ok === true,
+      "962s5s a head floor a day ahead, kept in the record, is dropped when it is read, and a genuine head lands: floor " + sR.t0 + ", head "
+      + (sR.genuine.ok === true ? "landed" : sR.genuine.reason));
+    const sPlant = await liftChannel("plant:head-t-load", async mod => { const s = sScene(mod); return s.t0 !== null && s.genuine.ok !== true; });
+    check(sPlant.turned && sPlant.back, "962s5s2 lifting plant:head-t-load keeps the floor from the future and refuses the genuine head (FAIL 962s5s): "
+      + sPlant.detail + ", sha " + (sPlant.back ? "restored" : "differs"));
+
+    /* 962s5t: a head below the newest epoch the lead has named is left out. */
+    const tScene = mod => {
+      const m = mod || C;
+      const p = progS(m);
+      p.loadTeamFile(teamDocWith(tmS, rtS, leadS1, 2, 1, []));
+      const low = putHead(p, headS(Date.now(), [edA(2)], leadS1, 1), 1);
+      return { low, shown: p.headNews(Date.now()).shown };
+    };
+    const tR = tScene();
+    check(tR.low.ok !== true && tR.low.reason === "epoch" && tR.shown === false,
+      "962s5t a head at epoch 1, once a team file of epoch 2 is held, is left out: head " + (tR.low.ok === true ? "taken" : tR.low.reason) + ", shown " + tR.shown);
+    const tPlant = await liftChannel("plant:head-epoch", async mod => { const s = tScene(mod); return s.low.ok === true; });
+    check(tPlant.turned && tPlant.back, "962s5t2 lifting plant:head-epoch takes the head below the lead's epoch (FAIL 962s5t): "
+      + tPlant.detail + ", sha " + (tPlant.back ? "restored" : "differs"));
+    /* ---- round two, the test architect's read of e9ed3b33 ---- */
+    const fetchOf = (b, seq) => ({ seq, ct: b.ciphertext, meta: { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId,
+      counter: b.counter, del: false, sig: b.signature, nonce: b.nonce, place: b.place, size: b.ciphertext.length } });
+    /* 962s5z4: the catch-up, two polls. The new lead's own upload of its head comes on the first page, before any team file names it;
+       the handover's team file on the next. The head shows once that file lands. Each page goes through applyBatch, as createChannel
+       hands it each page of since/<seq>. */
+    /* The cursor moves past each page (setSeq, as the catch-up does), and the desk restarts between the head and the team file.
+       `junk`: a later head-shaped blob from a key that never leads comes between. */
+    const z4Scene = (mod, junk) => {
+      const m = mod || C;
+      let kept = null;
+      const save = st => { kept = JSON.parse(JSON.stringify(st)); };
+      const p = progS(m, { save, load: () => kept });
+      const ctx = { keyFor: e => (e === 1 ? KS : null) };
+      const head = sealS(headS(Date.now(), [edA(7, "Pebble the new lead wrote")], leadS2), 1, leadS2);
+      const first = p.applyBatch([fetchOf(head, 10)], ctx, { whole: true });
+      p.setSeq(10);
+      if (junk) {
+        const stray = keyPair(false);
+        p.applyBatch([fetchOf(sealS(headS(Date.now(), [edA(9, "Pebble from nobody")], stray), 1, stray), 11)], ctx, { whole: true });
+        p.setSeq(11);
+      }
+      const between = p.headNews(Date.now());
+      const q = progS(m, { save, load: () => kept });
+      const team = sealS(JSON.stringify(docS2), 2, leadS2, C.TEAM_NAME);
+      const second = q.applyBatch([fetchOf(team, 12)], ctx, { whole: true });
+      q.setSeq(12);
+      return { first: first.applied.slice(), between: between.shown, second: second.applied.slice(), pinned: q.pinned().lead.keyId === leadS2.keyId,
+        seq: q.state().seq, news: q.headNews(Date.now()) };
+    };
+    const z4 = z4Scene();
+    const z4Said = s => "first page " + JSON.stringify(s.first) + ", shown between " + s.between + ", second page " + JSON.stringify(s.second)
+      + ", pinned " + s.pinned + ", news " + (s.news.shown ? s.news.edition : "none");
+    check(z4.between === false && z4.pinned && z4.news.shown === true && z4.news.edition === "Pebble the new lead wrote",
+      "962s5z4 the new lead's own head on one page of the catch-up, the cursor past it and the desk restarted, and the team file that hands over on the next: the head shows once that file lands: " + z4Said(z4));
+    const z7 = z4Scene(null, true);
+    check(z7.pinned && z7.news.shown === true && z7.news.edition === "Pebble the new lead wrote",
+      "962s5z7 a later head-shaped blob from a key that never leads neither takes nor clears the kept head: " + z4Said(z7));
+    const z7Plant = await liftChannel("plant:item-keep", async mod => { const s = z4Scene(mod, true); return s.pinned && s.news.shown === false; });
+    check(z7Plant.turned && z7Plant.back, "962s5z8 lifting plant:item-keep lets the stray blob take the slot, and the new lead's head is lost (FAIL 962s5z7): "
+      + z7Plant.detail + ", sha " + (z7Plant.back ? "restored" : "differs"));
+    const z4Held = await liftChannel("plant:item-held", async mod => { const s = z4Scene(mod); return s.pinned && s.news.shown === false; });
+    check(z4Held.turned && z4Held.back, "962s5z5 lifting plant:item-held drops the new lead's head for good (FAIL 962s5z4): " + z4Held.detail + ", sha " + (z4Held.back ? "restored" : "differs"));
+    const z4Again = await liftChannel("plant:item-again", async mod => { const s = z4Scene(mod); return s.pinned && s.news.shown === false; });
+    check(z4Again.turned && z4Again.back, "962s5z6 lifting plant:item-again never opens the kept head once its writer leads (FAIL 962s5z4): " + z4Again.detail + ", sha " + (z4Again.back ? "restored" : "differs"));
+
+    /* 962s5r5: a head refused for its time survives a restart, and shows once the clock reaches it. */
+    const r5Scene = mod => {
+      const m = mod || C;
+      let now = 20 * 24 * 3600 * 1000, kept = null;
+      const save = st => { kept = JSON.parse(JSON.stringify(st)); };
+      const before = progS(m, { clock: () => now, save, load: () => kept });
+      const ahead = putHead(before, headS(now + 11 * 60 * 1000, [edA(8, "Pebble kept across a restart")]), 1);
+      const after = progS(m, { clock: () => now, save, load: () => kept });
+      now += 12 * 60 * 1000;
+      return { ahead, news: after.headNews(now) };
+    };
+    const r5 = r5Scene();
+    check(r5.ahead.ok !== true && r5.ahead.reason === "head-ahead" && r5.news.shown === true && r5.news.edition === "Pebble kept across a restart",
+      "962s5r5 a head refused for its time is kept with the record, so after a restart it shows once the clock reaches it: refused "
+      + r5.ahead.reason + ", then " + (r5.news.shown ? r5.news.edition : "none"));
+    const r5Plant = await liftChannel("plant:held-head-load", async mod => { const s = r5Scene(mod); return s.news.shown === false; });
+    check(r5Plant.turned && r5Plant.back, "962s5r6 lifting plant:held-head-load loses the held head at the restart (FAIL 962s5r5): " + r5Plant.detail + ", sha " + (r5Plant.back ? "restored" : "differs"));
+
+    /* 962s5t3: a chain key's upload naming a high epoch raises the lead's epoch but lands no team file, and does not silence the
+       current lead's head: the floor is the newest team file held. */
+    const t3Scene = mod => {
+      const m = mod || C;
+      const s0 = JSON.parse(JSON.stringify(progS(m).state()));
+      s0.leadEpoch = 9;
+      const p = progS(m, { load: () => s0 });
+      const r = putHead(p, headS(Date.now(), [edA(3, "Pebble at the team file's epoch")], leadS1, 1), 1);
+      return { r, news: p.headNews(Date.now()) };
+    };
+    const t3 = t3Scene();
+    check(t3.r.ok === true && t3.news.edition === "Pebble at the team file's epoch",
+      "962s5t3 a lead epoch of 9 that no team file carries leaves the current lead's head at the team file's epoch 1 shown: head "
+      + (t3.r.ok === true ? "landed" : t3.r.reason) + ", news " + (t3.news.shown ? t3.news.edition : "none"));
+  }
 
   const pHandover = await liftChannel("plant:team-handover", async mod => {
     const dirP = path.join(LAB, "plant-ho-" + hex(4)); fs.mkdirSync(dirP, { recursive: true });

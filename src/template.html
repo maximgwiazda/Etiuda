@@ -372,15 +372,20 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      box, the hint drawn over it, and every name in the panel beside it. A second literal drifts
      the first time one of the three is tuned. */
   --intent-type:16.5px;
-  /* Widest the intent panel grows to (docked column and overlay peek both use it).
-     JS reads this, the gap below and the app padding to derive the auto-hide threshold, which
-     is the width where this panel would cost a card column - see railDockMin(). */
-  --rail-max:268px;
+  /* Widest the intent panel's own column grows to (the docked grid column and the overlay
+     peek both use it). JS reads this, the gap below and the app padding to derive the
+     auto-hide threshold, which is the width where this panel would cost a card column -
+     see railDockMin(). */
+  --rail-max:228px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
-  /* The docked rail's column: from the window's edge to where the dot field begins, one 12px pitch
-     short of the cards - see .dotfield>div. */
-  --rail-col-w:calc(var(--rail-left,14px) + var(--rail-max) + var(--rail-gap) - 12px);
+  /* The painted side column, from the window's edge to one 12px dot pitch short of the cards.
+     The docked rail and Settings' section list both read it, so a dragged rail and the list
+     stay one width. --app-pad is the page gutter, declared below; --rail-max is the column
+     inside that gutter. The measured --rail-left is not in this sum: it is 0 while a screen
+     tab hides the stage, and the list would shrink for as long as Settings was open. */
+  --side-w:calc(var(--app-pad) + var(--rail-max) + var(--rail-gap) - 12px);
+  --rail-col-w:var(--side-w);
   /* THE SIDE AREA'S LANGUAGE: a column on the header's own ground, a hairline to the cards, a light
      title, quiet rows. The docked intent rail wears it; Settings' side area is to share it. */
   --side-ground:var(--header-bg);
@@ -2363,7 +2368,7 @@ html.raildrag #intentRailList{margin-top:0}
 .cat-slot{flex:0 0 16px;align-self:stretch;display:flex;align-items:center;justify-content:center}
 .cat-slot .cat-ic{width:16px;height:16px;margin:0;color:inherit}
 .rail-item.on .cat-slot{color:var(--go)}
-.rail-item{position:relative;padding-right:32px}
+.rail-item{position:relative;padding-right:8px}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
    notice, and its margins reached these rows through the shared name. */
 .rail-item.rail-nohit{opacity:.35}
@@ -2373,14 +2378,14 @@ html.raildrag #intentRailList{margin-top:0}
   backdrop-filter:var(--mark-filter)}
 .rail-item.rail-kbd .rail-t,.rail-item.rail-kbd .cat-slot{color:var(--accent)}
 /* Favourite star on hover (edit intents only from Manage) */
-/* ABSOLUTE, so the target can grow without taking a letter from any name: what the row
-   reserves is its own padding-right, and the two move together. 6px round a 15px glyph is a
-   27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
+/* ABSOLUTE, so the target can grow without taking a letter from any name. The row reserves
+   padding for it only while it is showing; the rules are with the docked row. 6px round a
+   15px glyph is a 27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
 .rail-fav{position:absolute;right:4px;top:50%;transform:translateY(-50%);
   border:0;background:transparent;color:var(--dim);line-height:1;
   padding:6px;border-radius:6px;cursor:default;opacity:0;
   display:inline-flex;align-items:center;justify-content:center}
-.rail-item:hover .rail-fav,.rail-fav:focus-visible{opacity:1}
+.rail-item:hover .rail-fav,.rail-item:focus-within .rail-fav,.rail-fav:focus-visible{opacity:1}
 .rail-fav:hover{color:var(--fav);background:var(--fav-soft)}
 /* The one control whose resting state is INVISIBLE-until-hover. On a coarse pointer there is
    no hover, so an invisible star is not quiet - it is absent: nothing on a touch screen ever
@@ -2531,7 +2536,20 @@ body.rail-col .rail-head .rail-n{margin-left:0;padding:0;font:13px var(--sans);c
   font-variant-numeric:tabular-nums;opacity:1}
 body.rail-col .rail-head .rail-hid{order:2;opacity:.75}
 body.rail-col .rail-actions{margin-left:auto;order:3;align-self:center}
-body.rail-col .rail-item{padding:7px 36px 7px 10px;gap:11px;align-items:center}
+body.rail-col .rail-item{padding:7px 10px;gap:11px;align-items:center}
+/* The star is absolute, so the name runs to the row's own padding until the star is
+   showing. A starred row keeps the room, because its star stays. A coarse pointer has
+   no hover to reveal a star, so it keeps the room too. */
+@media (hover:hover){
+  .rail-item:is(:hover,:focus-within){padding-right:32px}
+  body.rail-col .rail-item:is(:hover,:focus-within){padding-right:36px}
+}
+.rail-item:has(.rail-fav.on){padding-right:32px}
+body.rail-col .rail-item:has(.rail-fav.on){padding-right:36px}
+@media (pointer:coarse){
+  .rail-item{padding-right:32px}
+  body.rail-col .rail-item{padding-right:36px}
+}
 body.rail-col .rail-item .cat-slot{color:var(--side-dim);opacity:.85}
 /* The chosen row is the panel's own - mint, green name, check - and its mark stays green, which the
    quiet marks above would otherwise grey. */
@@ -3483,13 +3501,17 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
    586 pixels, a 1438 x 879 window at 150 per cent. */
 @media (max-height:700px){
   .mt-row,.mt-tab{font-size:11px;padding:0}
-  .mt-sec{margin-bottom:8px}
-  .mt-screen.screen-page{padding:10px 16px;gap:8px}
-  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:8px}
-  .mt-h{padding:6px 8px;font-size:11px;gap:6px}
-  .mt-h small{font-size:10.5px}
-  .mt-readings{margin:0 0 4px}
-  .mt-moved{margin:6px 0 0}
+  .mt-sec{margin-bottom:4px}
+  .mt-sec h3{margin-bottom:2px}
+  .mt-screen.screen-page{padding:6px 16px;gap:4px}
+  .mt-screen .screen-head h2{font-size:17px}
+  .mt-screen .mt-sub{margin-top:1px;font-size:12px}
+  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:4px}
+  .mt-h{padding:3px 8px;font-size:11px;gap:6px}
+  .mt-h small{font-size:10px}
+  .mt-readings{margin:0 0 2px}
+  .mt-moved{margin:2px 0 0}
+  .mt-grid{columns:200px;column-gap:16px}
 }
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
@@ -3502,7 +3524,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --scrim-filter:none;--mark-filter:none}
 /* ---------- Screen tabs & host (boards 965, 967, 969) ---------- */
 body.screen-on .fab-stack,
-body.screen-on .fills,
 body.screen-on .pills-slot,
 body.screen-on .pills-probe,
 body.screen-on .stage,
@@ -3524,7 +3545,7 @@ body.screen-on #lanes { display: none !important; }
   --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 26%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 4%,transparent)}
 .sx *{box-sizing:border-box}
 .sx-ic{display:block;width:18px;height:18px;flex:0 0 auto}
-.sx-nav{flex:0 0 248px;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
+.sx-nav{flex:0 0 var(--side-w);min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
   background:var(--header-bg);border-right:1px solid var(--line)}
 .sx-nav h1{font:300 26px/1.1 var(--sans-display);margin:4px 10px 14px}
 .sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--field-line);
@@ -3568,6 +3589,75 @@ body.screen-on #lanes { display: none !important; }
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
 .mt-moved{margin:12px 0 0;color:var(--dim);font-size:12.5px}
+/* ---------- Library and Maintenance, in the Settings shell ---------- */
+/* Their own selectors, so a search bar restored on every screen tab can land beside them.
+   The header hide stays the layered rule it is; nothing here fights it. */
+.sx.lm{width:100%;max-width:none;height:100%;overflow:hidden;flex-direction:column}
+.sx.lm:focus{outline:none}
+.sx.lm .lm-split{flex:1 1 auto;min-height:0;min-width:0;display:flex;overflow:hidden}
+.sx.lm .sx-page{min-height:0}
+.sx.lm .screen-actions{flex:0 0 auto;padding:12px 32px 16px}
+.sx.lm .sx-maint{display:inline-flex;align-items:center;gap:6px}
+.sx.lm .sx-maint .sx-ic{width:15px;height:15px}
+.sx.lm .sx-nav .screen-head{display:block;margin:4px 10px 14px;position:relative}
+.sx.lm .sx-nav .screen-head h2{margin:0;font:300 26px/1.1 var(--sans-display)}
+.sx.lm .screen-head .screen-name{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sx.lm-lib details.manage-sec{margin:0;padding:0;border:0}
+.sx.lm-lib details.manage-sec>summary{display:none}
+.sx.lm-lib details.manage-sec[data-mg="data"]>summary,
+.sx.lm-lib.is-find details.manage-sec>summary{display:flex}
+.sx.lm-lib .manage-secbody{padding-top:0}
+.sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
+.sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
+.sx.lm-lib .sx-card .mg-cat:first-child>.mg-cat-row{border-top:0}
+.sx.lm-lib .sx-card .mg-cat-body{padding:0 0 6px 30px}
+.sx.lm-lib .sx-card .mg-int{padding-top:8px;padding-bottom:8px;border-top:1px solid var(--line)}
+.sx.lm-lib .sx-card .mg-int:first-child{border-top:0}
+.sx.lm-lib .sx-card .ec-list{margin:0}
+.sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
+.sx.lm-lib #mgWho{width:min(420px,100%)}
+.sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
+  box-shadow:none;margin:0}
+.sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
+.sx.lm-mt[data-page="health"] #mtLede{display:none}
+.sx.lm-mt:not([data-page="health"]) .mt-sub,
+.sx.lm-mt:not([data-page="health"]) .mt-health,
+.sx.lm-mt:not([data-page="health"]) #mtMoved{display:none}
+.sx.lm-mt .mt-readings{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sx.lm-mt .mt-health{margin:0 0 16px;gap:12px}
+.sx.lm-mt .mt-h{padding:16px 18px}
+.sx.lm-mt .mt-h b{font-size:14.5px}
+.sx.lm-mt .mt-grid{columns:unset;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;
+  align-items:start}
+.sx.lm-mt[data-page="health"] .mt-grid{display:none}
+.sx.lm-mt .mt-sec{display:none;margin:0 0 16px;break-inside:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius-sm);overflow:hidden}
+.sx.lm-mt[data-page="engine"] .mt-sec[data-mt-sec="Engine"],
+.sx.lm-mt[data-page="engine"] .mt-sec[data-mt-sec="Display"],
+.sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog"],
+.sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog file"],
+.sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Storage"],
+.sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Desk"],
+.sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Layout"],
+.sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Intent panel"],
+.sx.lm-mt[data-page="state"] .mt-sec[data-mt-sec="Personal state"]{display:block}
+.sx.lm-mt .mt-sec h3{margin:0;padding:12px 16px 4px;font:600 12px var(--sans);letter-spacing:.06em}
+.sx.lm-mt .mt-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;
+  padding:10px 16px;border-top:1px solid var(--line);font:13.5px var(--sans)}
+.sx.lm-mt .mt-sec h3+.mt-row,.sx.lm-mt .mt-sec h3+.mt-tab{border-top:0}
+.sx.lm-mt .mt-row .v{font:12.5px var(--mono)}
+.sx.lm-mt .mt-tab{padding:10px 16px;border-top:1px solid var(--line)}
+@media (max-width:720px){
+  .sx.lm-mt .mt-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-height:700px){
+  .sx.lm-mt .mt-h{padding:6px 8px}
+  .sx.lm-mt .sx-page{padding:16px 20px 20px}
+  .sx.lm-mt .mt-row{padding:4px 12px;font-size:12px}
+  .sx.lm-mt .screen-actions{padding:8px 20px 10px}
+}
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a

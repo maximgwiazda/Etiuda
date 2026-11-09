@@ -38,7 +38,7 @@ if (!PLANTS_OFF && process.env.ETIUDA_PLANTS_COPY !== "1") {
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 82;
+const EXPECTED = 91;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1578,6 +1578,150 @@ try {
       "888be leaving the outside file clears it, by forget, leave, eject and opening another: "
       + (forgetOk ? "forget" : "FORGET") + " " + (leaveOk ? "leave" : "LEAVE") + " "
       + (ejectOk ? "eject" : "EJECT") + " " + (openOk ? "open" : "OPEN"));
+  }
+  /* ---- 962 stage 5 (the design's 3.4): with two catalogs on one team, neither interrupts the other ---- */
+  {
+    const TWO_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const twoTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: TWO_TEAM, catalogs: ["quay-board", "pebble-board"], lead: LEAD,
+      sealed: true, exportsSealed: false, epoch: 1, roster: [] }));
+    const twoDesk = (name, share, src) => {
+      const ud = path.join(LAB, name);
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+        teamPins: { [TWO_TEAM]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+      const d = loadDesk(ud, src || undefined);
+      syncFolder(share);
+      return d;
+    };
+    const twoShare = name => {
+      const share = folder(name + "-share");
+      put(share, "etiuda-ring.json", RING);
+      put(share, "etiuda-team.json", twoTeamFile);
+      return share;
+    };
+    const sent = D => fileSends(D).map(a => { const f = facts(a[1]); return (f.name || "-") + " " + f.rev; });
+    const lift = (...tags) => {
+      const lines = SRC.split(/\n/), at = tags.map(tg => lines.findIndex(l => l.indexOf(tg) >= 0));
+      if (at.some(i => i < 0)) return null;
+      at.sort((x, y) => y - x).forEach(i => lines.splice(i, 1));
+      return lines.join("\n");
+    };
+    /* 962s5h: beside a file opened on purpose, a newer edition of the same catalog is offered and another of the team's is not. */
+    const beside = src => {
+      const share = twoShare("s5h" + (src ? "-plant" : "")), away = folder("s5h-away" + (src ? "-plant" : ""));
+      put(share, "board.ec", CAT2);
+      put(away, "old.ec", CAT1);
+      const D = twoDesk("s5h" + (src ? "-plant" : ""), share, src);
+      D.sync("etiuda:catalog");
+      D.api.offerFile(D.win, path.join(away, "old.ec"));
+      put(share, "pebble.ec", sideOf("pebble-board", 6, "Pebble Board"));
+      touch(path.join(share, "pebble.ec"), Date.now() + 2000);
+      D.sent.length = 0;
+      D.api.catalogChanged(D.win);
+      const other = sent(D);
+      put(share, "five.ec", CAT5);
+      D.sent.length = 0;
+      D.api.catalogChanged(D.win);
+      return { other, same: sent(D) };
+    };
+    const h = beside(null);
+    check(h.other.length === 0 && h.same.length === 1 && h.same[0] === "Quay Board 5",
+      "962s5h beside an opened catalog of a two-catalog team, the team's other catalog is not offered and a newer edition of the opened one is: other "
+      + (h.other.join(",") || "nothing") + ", same " + (h.same.join(",") || "nothing"));
+    if (PLANTS_OFF) skip("962s5h2 lifting plant:beside-one offers the team's other catalog beside the opened one");
+    else {
+      const src = lift("plant:beside-one");
+      const p = src ? beside(src) : null;
+      check(!!p && p.other.length === 1, "962s5h2 lifting plant:beside-one offers the team's other catalog beside the opened one (FAIL 962s5h): "
+        + (p ? p.other.join(",") || "nothing" : "plant line absent"));
+    }
+    /* 962s5m: a desk working in one of the team's catalogs is not offered the other when it is published with a newer file time:
+       the pick stays the catalog in use, and the watch sends nothing unasked for another of the team's catalogs. */
+    const working = src => {
+      const tag = "s5m" + (src ? "-plant" + crypto.randomBytes(2).toString("hex") : "");
+      const share = twoShare(tag);
+      put(share, "board.ec", CAT2);
+      const D = twoDesk(tag, share, src);
+      const booted = facts(D.sync("etiuda:catalog") || "");
+      put(share, "pebble.ec", sideOf("pebble-board", 1, "Pebble Board"));
+      touch(path.join(share, "pebble.ec"), Date.now() + 3000);
+      const pick = facts(D.api.readCatalog() || "").name || "nothing";
+      D.sent.length = 0;
+      D.api.catalogChanged(D.win);
+      return { booted: booted.rev, pick, newer: sent(D) };
+    };
+    const m = working(null);
+    check(m.booted === 2 && m.pick === "Quay Board" && m.newer.length === 0,
+      "962s5m a desk working in the team's first catalog is not sent the second, published with a newer file time, and its pick stays the first: boot "
+      + m.booted + ", pick " + m.pick + ", sent " + (m.newer.join(",") || "nothing"));
+    /* 962s5m2: an empty desk on a team listing two catalogs with a file picks neither unasked; one listed catalog boots as before. */
+    const empty = src => {
+      const tag = "s5m2" + (src ? "-plant" : "");
+      const share = twoShare(tag);
+      put(share, "board.ec", CAT2);
+      put(share, "pebble.ec", sideOf("pebble-board", 1, "Pebble Board"));
+      return facts(twoDesk(tag, share, src).sync("etiuda:catalog") || "");
+    };
+    const e2 = empty(null);
+    const oneShare = folder("s5m2-one-share");
+    put(oneShare, "etiuda-ring.json", RING);
+    put(oneShare, "etiuda-team.json", twoTeamFile);
+    put(oneShare, "board.ec", CAT2);
+    const one = facts(twoDesk("s5m2-one", oneShare).sync("etiuda:catalog") || "");
+    check(e2.rev == null && one.rev === 2,
+      "962s5m2 an empty desk whose team lists two catalogs with a file opens neither unasked, and with one catalog's file opens it as before: two "
+      + (e2.rev == null ? "nothing" : (e2.name || "-") + " " + e2.rev) + ", one " + (one.rev == null ? "nothing" : one.rev));
+    if (PLANTS_OFF) {
+      skip("962s5m3 lifting plant:pick-in-use picks the second catalog, and the watch still sends nothing for it");
+      skip("962s5m4 lifting plant:pick-in-use with plant:changed-in-use sends the second catalog over the first");
+      skip("962s5m5 lifting plant:pick-many-none opens one of two catalogs on an empty desk");
+    } else {
+      const s1 = lift("plant:pick-in-use", "plant:pick-in-use-gone"), s2 = lift("plant:pick-in-use", "plant:pick-in-use-gone", "plant:changed-in-use"),
+        s3 = lift("plant:pick-many-none");
+      const p1 = s1 ? working(s1) : null, p2 = s2 ? working(s2) : null, p3 = s3 ? empty(s3) : null;
+      check(!!p1 && p1.pick === "Pebble Board" && p1.newer.length === 0, "962s5m3 lifting plant:pick-in-use picks the second catalog, and the watch still sends nothing for it (FAIL 962s5m): "
+        + (p1 ? "pick " + p1.pick + ", sent " + (p1.newer.join(",") || "nothing") : "plant line absent"));
+      check(!!p2 && p2.newer.length === 1, "962s5m4 lifting plant:pick-in-use with plant:changed-in-use sends the second catalog over the first (FAIL 962s5m): "
+        + (p2 ? p2.newer.join(",") || "nothing" : "plant line absent"));
+      check(!!p3 && p3.rev != null, "962s5m5 lifting plant:pick-many-none opens one of two catalogs on an empty desk (FAIL 962s5m2): " + (p3 ? p3.rev : "plant line absent"));
+    }
+    /* 962s5m6 (round two): a desk working in a catalog its team does not list keeps it as its pick, and is sent nothing of
+       another id, when a catalog the team lists is published with a newer file time. */
+    const ONE_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const oneTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: ONE_TEAM, catalogs: ["pebble-board"], lead: LEAD,
+      sealed: true, exportsSealed: false, epoch: 1, roster: [] }));
+    const unlisted = (src, gone) => {
+      const tag = "s5m6" + (gone ? "-gone" : "") + (src ? "-plant" + crypto.randomBytes(2).toString("hex") : "");
+      const share = folder(tag + "-share"), ud = path.join(LAB, tag);
+      put(share, "etiuda-ring.json", RING);
+      put(share, "etiuda-team.json", oneTeamFile);
+      put(share, "board.ec", CAT2);
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+        teamPins: { [ONE_TEAM]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+      const D = loadDesk(ud, src || undefined);
+      syncFolder(share);
+      const booted = facts(D.sync("etiuda:catalog") || "");
+      /* `gone`: the file in use rewritten by hand, so no edition of it is one the lead signed. */
+      if (gone) put(share, "board.ec", JSON.stringify(Object.assign(JSON.parse(CAT2), { sig: undefined, rev: 3 }), null, 1) + "\n");
+      put(share, "pebble.ec", sideOf("pebble-board", 1, "Pebble Board"));
+      touch(path.join(share, "pebble.ec"), Date.now() + 3000);
+      const pick = facts(D.api.readCatalog() || "").name || "nothing";
+      D.sent.length = 0;
+      D.api.catalogChanged(D.win);
+      return { booted: booted.rev, pick, sent: sent(D) };
+    };
+    const m6 = unlisted(null, false), m7 = unlisted(null, true);
+    check(m6.booted === 2 && m6.pick === "Quay Board" && m6.sent.length === 0 && m7.pick === "nothing" && m7.sent.length === 0,
+      "962s5m6 a desk working in a catalog its team does not list keeps it as its pick and is sent nothing of another id; with no edition of it the lead signed left, it picks nothing: pick "
+      + m6.pick + ", sent " + (m6.sent.join(",") || "nothing") + "; rewritten, pick " + m7.pick + ", sent " + (m7.sent.join(",") || "nothing"));
+    if (PLANTS_OFF) skip("962s5m7 lifting plant:pick-in-use-gone picks the team's catalog over the one in use");
+    else {
+      const s7 = lift("plant:pick-in-use-gone");
+      const p7 = s7 ? unlisted(s7, true) : null;
+      check(!!p7 && p7.pick === "Pebble Board", "962s5m7 lifting plant:pick-in-use-gone picks the team's catalog over the one in use (FAIL 962s5m6): "
+        + (p7 ? "pick " + p7.pick : "plant line absent"));
+    }
   }
 
   /* ---- a bare number where the catalog mark is a table of signing keys ----------------------------- */

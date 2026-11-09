@@ -6,6 +6,8 @@ import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
 import { askClose } from "./tabs.js";
+import { hooks } from "./hooks.js";
+import { clearScreenOn } from "./screen-tabs.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -381,6 +383,19 @@ function eHotkey(){
 }
 // A combination in the host's spelling as the desk names keys: Control reads Ctrl.
 function eHotkeyLabel(accel){ return String(accel||"").split("+").map(k=>k==="Control"?"Ctrl":k).join("+"); }
+/* THE EMBEDDED MODEL'S SWITCH, on unless the person turned it off; the shell loads the model only while it is on. */
+const E_AI_OFF_KEY="eAiOff";
+function eAiOn(){ return lsGet(E_AI_OFF_KEY)!=="1"; }
+// Whether this desk carries the model at all: false in a browser, and where the package holds none.
+function eAiModel(){
+  const h=eHost();
+  if(!h || typeof h.aiState!=="function") return false;
+  try{ const st=h.aiState(); return !!(st && st.model); }catch(e){ return false; }
+}
+function eTellAi(){
+  const h=eHost();
+  try{ if(h && typeof h.setAi==="function") h.setAi(eAiOn()); }catch(e){}
+}
 // The picker brought forward from the desk itself, by the pointer: false where the host has none.
 function eOpenPicker(){
   const h=eHost();
@@ -418,6 +433,12 @@ function wireHost(){
       if(a==="none"||a==="close") sendStats(true);
       try{ h.closeAnswer(a); }catch(e){}
     }));
+  /* The tray's Settings item. The same open the menu uses, registered on hooks at boot. */
+  if(typeof h.onTrayGo==="function") h.onTrayGo(kind=>{
+    if(kind==="settings"){ try{ hooks.openSettings(); }catch(e){} }
+    else if(kind==="library"){ try{ hooks.openManage(); }catch(e){} }
+    else if(kind==="offer"){ try{ clearScreenOn(); }catch(e){} }
+  });
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };
@@ -429,6 +450,12 @@ function wireHost(){
       const row=$(".row"); if(row) eBandRO.observe(row);
     }catch(e){ addEventListener("resize",syncBandHeight,{passive:true}); }
   }
+}
+
+function eNotify(opts){
+  const h=eHost();
+  if(!h || typeof h.notify!=="function") return false;
+  try{ h.notify(opts); return true; }catch(e){ return false; }
 }
 
 function eSetMaximized(on){
@@ -464,6 +491,10 @@ export {
   eHost,
   eHotkey,
   eHotkeyLabel,
+  E_AI_OFF_KEY,
+  eAiOn,
+  eAiModel,
+  eTellAi,
   eOpenPicker,
   eOpenCatalogFolder,
   wireFolderLink,
@@ -480,5 +511,6 @@ export {
   dispatchTabChord,
   eSetAccent,
   eSetMaximized,
+  eNotify,
   syncBandHeight
 };

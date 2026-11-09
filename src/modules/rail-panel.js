@@ -48,7 +48,8 @@ function applyDefaultRailWidth(){
 }
 function railMaxWidth(){
   const v=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
-  return v>0 ? v : 268;
+  /* The sheet's own --rail-max, for the moment the variable cannot be read. */
+  return v>0 ? v : 228;
 }
 /* THE THRESHOLD IS THE COLUMN THE PANEL WOULD COST. Docked, the panel and its gap come out of
    the card box, so there is a band of window widths where the panel is the only reason a second

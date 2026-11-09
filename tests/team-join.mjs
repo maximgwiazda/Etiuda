@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 170;
+const EXPECTED = 174;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -421,6 +421,43 @@ try {
   check(inNow.joined && inNow.joined.team === TEAM && inNow.joined.file === "lamps.ec" && inNow.join === null && inNow.sealed === null
     && !fs.existsSync(reqOf(me1)) && !kept(D1r) && D1r.api.readCatalog() === A1.trim(),
     "15q admitted, the desk says it joined, takes its request off the share, and opens the catalog");
+
+  /* ---- 962 stage 5 (the design's 3.4): admitted to a team whose catalogs here are two, the desk names none to open, and the empty
+     desk lands on the Library; with one, as 15q. ---- */
+  {
+    const B1 = JSON.stringify(sign(Object.assign(JSON.parse(A1), { id: "lamp-annex", name: "Lamp Annex" }), lead.privateKey, LEAD.keyId), null, 1) + "\n";
+    const twoAdmitted = async (name, src) => {
+      const share = folder(name + "-share"), ud = path.join(LAB, name);
+      put(share, "etiuda-team.json", teamFile([]));
+      put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+      put(share, "annex.ec", P.sealCatalog(K1, TEAM, 1, B1));
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+      const D = loadDesk(ud, src);
+      syncFolder(share);
+      const me = await D.ask("etiuda:branch-identity", true);
+      await D.join("ask", "lamps.ec", "Ida");
+      const req = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8"));
+      put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, nonce: nonce() }]));
+      await D.join("state");
+      put(share, "etiuda-team.json", teamFile([entry(me, K1, 1)]));
+      const s = await D.join("state");
+      return { joined: !!s.joined && s.joined.team === TEAM, file: s.joined ? s.joined.file : null, opens: s.opens ? s.opens.file : null };
+    };
+    const two = await twoAdmitted("s5i-folder");
+    check(two.joined && !two.file && !two.opens,
+      "962s5i admitted by its folder to a team whose catalogs here are two, the desk names none for the page to open: joined " + two.joined
+      + ", file " + JSON.stringify(two.file) + ", opens " + JSON.stringify(two.opens));
+    if (PLANTS_OFF) skip("962s5i2 lifting plant:joined-many-none names one of the two catalogs at admission");
+    else {
+      const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:joined-many-none") >= 0);
+      let w = null;
+      if (at >= 0) { lines.splice(at, 1); w = await twoAdmitted("s5i-folder-plant", lines.join("\n")); }
+      check(!!w && w.joined && !!w.file, "962s5i2 lifting plant:joined-many-none names one of the two catalogs at admission (FAIL 962s5i): "
+        + (w ? JSON.stringify(w.file) : "plant line absent"));
+    }
+  }
 
   /* ---- the lead a desk compared codes with is the one its first admission must carry ---------------------------- */
   const D4 = newDesk("four", SHARE), me4 = await D4.ask("etiuda:branch-identity", true);
@@ -2927,6 +2964,21 @@ try {
   const olderA1 = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 0 }));
   const newest = await wrapScene("f3-newest", null, TJ, [["a-older.ec", olderA1]]);
   check(JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]), "987r with an older edition listed first, the shell opens the team's newest: " + JSON.stringify(newest.loads));
+  /* 962s5i by the relay: with two of the team's catalogs in the mirror, the shell names neither, and the empty desk opens nothing;
+     one catalog with two editions opens its newest, as 987r. */
+  const annexA1 = JSON.stringify(Object.assign(JSON.parse(A1), { id: "lamp-annex", name: "Lamp Annex" }));
+  const twoRelay = await wrapScene("s5i-relay", null, TJ, [["annex.ec", annexA1]]);
+  check(twoRelay.keyed && twoRelay.loads.length === 0 && JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]),
+    "962s5i3 a relay desk keyed for a team whose catalogs in the mirror are two opens neither by itself, and with one catalog opens its newest: two "
+    + JSON.stringify(twoRelay.loads) + ", one " + JSON.stringify(newest.loads));
+  if (PLANTS_OFF) skip("962s5i4 lifting plant:open-many-none opens one of the two catalogs by itself");
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:open-many-none") >= 0);
+    let w = null;
+    if (at >= 0) { lines.splice(at, 1); w = await wrapScene("s5i-relay-plant", lines.join("\n"), TJ, [["annex.ec", annexA1]]); }
+    check(!!w && w.loads.length === 1, "962s5i4 lifting plant:open-many-none opens one of the two catalogs by itself (FAIL 962s5i3): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
+  }
   if (PLANTS_OFF) skip("987s lifting plant:relay-open-newest names no catalog");
   else {
     const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);

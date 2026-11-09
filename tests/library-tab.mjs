@@ -409,6 +409,53 @@ check("L6 its Close and its cross close the tab and return to the conversation i
     || JSON.stringify({ closed, screenOn: STAB.screenOn, screens: STAB.screens });
 });
 
+/* The section list is the page: four Library sections, one of them on screen, and a click swaps which. */
+check("L7 the Library lists its sections and shows one page, and a section click shows that page", () => {
+  if (wired) return wired;
+  if (STAB.screenOn !== "library") MG.openManage();
+  const root = host().querySelector(".sx.lm-lib");
+  if (!root) return "no library shell";
+  const secs = [...host().querySelectorAll(".sx.lm-lib .sx-sec")];
+  if (secs.length !== 4) return "sections " + secs.length;
+  const shown = [...host().querySelectorAll(".sx.lm-lib details.manage-sec")].filter(d => !d.hasAttribute("hidden"));
+  if (shown.length !== 1) return "shown " + shown.length;
+  const other = secs.find(b => b.getAttribute("data-lm") !== shown[0].getAttribute("data-mg"));
+  if (!other) return "no other section";
+  other.click();
+  const shown2 = [...host().querySelectorAll(".sx.lm-lib details.manage-sec")].filter(d => !d.hasAttribute("hidden"));
+  const title = host().querySelector("#libTitle");
+  const want = (other.querySelector("span") || {}).textContent || "";
+  return shown2.length === 1 && shown2[0].getAttribute("data-mg") === other.getAttribute("data-lm")
+    && !!title && title.textContent === want
+    || JSON.stringify({ n: shown2.length, mg: shown2[0] && shown2[0].getAttribute("data-mg"),
+      lm: other.getAttribute("data-lm"), title: title && title.textContent, want });
+});
+
+/* Maintenance joins the same shell. The readings stay in the page; the click only changes which group is on screen. */
+await checkAsync("L8 the Maintenance tab lists its sections and shows one page, and a section click shows that page", async () => {
+  if (wired) return wired;
+  const MT = await import(MOD("maintenance.js"));
+  MT.openMaintenance();
+  const root = host().querySelector(".sx.lm-mt");
+  if (!root) return "no maintenance shell";
+  const secs = [...root.querySelectorAll(".sx-sec")];
+  if (secs.length < 6) return "sections " + secs.length;
+  const other = secs.find(b => b.getAttribute("data-mt") !== root.getAttribute("data-page"));
+  if (!other) return "no other page";
+  other.click();
+  const now = host().querySelector(".sx.lm-mt");
+  const title = host().querySelector("#mtTitle");
+  const want = (other.querySelector("span") || {}).textContent || "";
+  const nsec = host().querySelectorAll(".mt-sec").length;
+  return !!now && now.getAttribute("data-page") === other.getAttribute("data-mt")
+    && !!title && title.textContent === want
+    && !!host().querySelector(".mt-grid") && nsec >= 6
+    && !!host().querySelector("#mtEject") && !!host().querySelector("#mtCopy")
+    && !!host().querySelector("#mtClose") && !!host().querySelector("#mtMoved")
+    || JSON.stringify({ page: now && now.getAttribute("data-page"), want: other.getAttribute("data-mt"),
+      title: title && title.textContent, nsec });
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */

@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 117;
+const EXPECTED = 126;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -429,9 +429,13 @@ try {
       cards: [{ id: "c-desk", shelf: "t-op", bodyShape: "plain", title: { en: "Desk" },
         body: { en: "A desk copy waits on the bench." } }],
       desk: { id: box.me.id, key: box.me.key, box: box.me.box, name: "North desk" },
-      /* Grown from the catalog the team lists, so it goes to the share as a desk file (board 962, stage 0b). */
-      grew: { id: "not-this", rev: 1, sha: "sha256:" + "ab".repeat(32) },
+      /* Grown from the team's signed edition of the catalog it lists, so it goes to the share as a desk file (board 962, stage
+         0b; stage 5 asks the first hop to be the lead's signed edition, so that edition sits in the share). */
+      grew: { id: "not-this", rev: 1, sha: "" },
     };
+    const notThis = textOf(catalog(1, { id: "not-this", name: "Not this" }));
+    put(box.share, "not-this.ec", notThis);
+    deskDoc.grew.sha = pinOf(box.D, notThis);
     const wrote = await box.D.ask("etiuda:branch-write", stem, JSON.stringify(deskDoc));
     syncMirror(box);
     const read = await box.D.ask("etiuda:catalog-read", stem + ".ec", box.me.id, true, false);
@@ -1349,6 +1353,7 @@ try {
       const box = await arm(name, opt.src);
       join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], opt.catalogs || ["harbour-board"], opt.content, opt.unsaid);
       if (opt.private) box.D.ask("etiuda:team-join", "private", opt.private, "on");
+      for (const [n, t] of opt.shareFiles || []) put(box.share, n, t);
       const dir = folder(name + "-out");
       put(dir, "held.ec", opt.body || b0Body());
       box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
@@ -1740,7 +1745,11 @@ try {
         const a = await b0Ask(name, { catalogs: ["quay-held"], body: grown("quay-held", "harbour-board"), src });
         await writeCopy(a.box, "91919191", "quay-held");
         const aCopy = fs.existsSync(branchAt(a.box, "91919191")) ? JSON.parse(fs.readFileSync(branchAt(a.box, "91919191"), "utf8")) : null;
-        const b = await b0Ask(name + "-reverse", { catalogs: ["quay-held"], body: grown("k-0123456789abcdef-12345678", "quay-held"), src });
+        /* The desk's copy grew from the lead's signed edition, which sits in the share (stage 5's first hop). */
+        const leadEd = b0Body("quay-held"), leadPin = pinOf(a.box.D, leadEd);
+        const grownB = JSON.parse(grown("k-0123456789abcdef-12345678", "quay-held"));
+        grownB.grew.sha = leadPin;
+        const b = await b0Ask(name + "-reverse", { catalogs: ["quay-held"], body: textOf(grownB), src, shareFiles: [["quay-lead.ec", leadEd]] });
         await writeCopy(b.box, "92929292", "k-0123456789abcdef-12345678");
         const bCopy = fs.existsSync(branchAt(b.box, "92929292")) ? JSON.parse(fs.readFileSync(branchAt(b.box, "92929292"), "utf8")) : null;
         return {
@@ -1760,10 +1769,15 @@ try {
     }
     /* ---- stage 3: the desk signs the chain it judged, and a box copy names its team, switch and chain ---- */
     {
+      /* Grown at its first hop from the lead's signed edition, which sits on the share (stage 5's rule since: a copy grown from
+         anything else takes no answer under the team key). */
+      const leadC3 = b0Body("quay-held");
+      const pinC3 = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
       const grownC3 = (id, grewId) => { const c = catalog(4, { id, name: "Quay held", card: B0_MARK, unsigned: true });
-        c.grew = { id: grewId, rev: 3, sha: "sha256:" + "ab".repeat(32) }; return textOf(c); };
+        c.grew = { id: grewId, rev: JSON.parse(leadC3).rev, sha: pinC3(JSON.parse(leadC3)) }; return textOf(c); };
       const chains = async (name, src) => {
-        const t = await b0Ask(name, { catalogs: ["quay-held"], body: grownC3("k-0123456789abcdef-12345678", "quay-held"), src });
+        const t = await b0Ask(name, { catalogs: ["quay-held"], body: grownC3("k-0123456789abcdef-12345678", "quay-held"), src,
+          shareFiles: [["quay-lead.ec", leadC3]] });
         const b = await b0Ask(name + "-box", { src });
         return { team: t.team ? JSON.stringify(t.team.chain) || "none" : "", box: b.lead ? JSON.stringify(b.lead.chain) || "none" : "",
           boxSigned: !!b.lead && b.box.D.api.answerLeadGenuine(b.lead, b.box.me.id, b.box.me.key) };
@@ -1838,6 +1852,141 @@ try {
         check(!!p && p.boxed && !p.renamed && !p.deleted, "c3c2 lifting plant:s3-branch-tidy turns c3c red: the old box copy stays (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
+    /* ---- 962 stage 5 (the design's 3.5): a listed id is not enough. A copy under the listed id itself that is not the lead's own
+       signed edition, an agent's own edit, answers as an unlisted catalog: only an ask naming its pin, and to the lead's box alone.
+       The lead's own edition answers as before. */
+    {
+      const s5 = async (name, src) => {
+        const own = await b0Ask(name + "-own", { catalogs: ["quay-held"], src,
+          body: textOf(catalog(4, { id: "quay-held", name: "Quay held", card: B0_MARK, unsigned: true })) });
+        const ownOut = { written: own.written, lead: !!own.lead && JSON.stringify(own.lead).indexOf(B0_MARK) >= 0, team: !!own.team };
+        if (fs.existsSync(own.ans)) fs.unlinkSync(own.ans);
+        putAsk(own.box, "Asks5other", "sha256:" + "cd".repeat(32));
+        const other = own.again();
+        const leadEd = await b0Ask(name + "-lead", { catalogs: ["quay-held"], src, body: b0Body("quay-held") });
+        return { own: ownOut, otherPin: other.written, leadTeam: !!leadEd.team && JSON.stringify(leadEd.team).indexOf(B0_MARK) >= 0, leadBox: !!leadEd.lead };
+      };
+      const u = await s5("s5u");
+      check(u.own.written && u.own.lead && !u.own.team && !u.otherPin && u.leadTeam && !u.leadBox,
+        "962s5u a copy under a listed id that is not the lead's signed edition is answered only to an ask naming its pin, and to the lead's box alone; the lead's own edition is answered under the team key as before ("
+        + JSON.stringify(u) + ")");
+      if (PLANTS_OFF) skip("962s5u2 lifting plant:s5-listed-lead turns 962s5u red: the agent's own copy under the listed id is answered under the team key");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-listed-lead") >= 0 ? "  /* plant:s5-listed-lead */" : l).join("\n");
+        const p = planted !== SRC ? await s5("s5u-plant", planted) : null;
+        check(!!p && p.own.team && !p.own.lead, "962s5u2 lifting plant:s5-listed-lead turns 962s5u red: the agent's own copy under the listed id is answered under the team key ("
+          + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+    /* ---- 962 stage 5, round two (Claude alpha: "A copy whose recorded grew chain starts at the team's signed edition keeps 12:04's
+       answer"): a copy under an id of its own, grown at its first hop from a catalog that keeps a listed id but is not the lead's
+       signed edition, is unlisted in the answer and the working copy alike; with the switch off, no answer and the copy held. */
+    {
+      const pinV2 = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
+      const firstHop = async (name, src) => {
+        const parentDoc = catalog(4, { id: "quay-held", name: "Quay held", card: B0_MARK, unsigned: true });
+        const copy = catalog(5, { id: "k-0123456789abcdef-56565656", name: "Quay held, grown", card: B0_MARK, unsigned: true });
+        copy.grew = { id: "quay-held", rev: 4, sha: pinV2(parentDoc) };
+        const a = await b0Ask(name, { catalogs: ["quay-held"], content: null, body: textOf(copy), src, shareFiles: [["quay-own.ec", textOf(parentDoc)]] });
+        const tail = "57575757";
+        const doc = branchDoc(a.box, tail, "quay-held");
+        doc.grew.sha = pinV2(parentDoc);
+        const w = await a.box.D.ask("etiuda:branch-write", "quay-" + tail, JSON.stringify(doc));
+        return { answered: a.written, team: !!a.team, held: !!w && w.held === true, written: fs.existsSync(branchAt(a.box, tail)) };
+      };
+      const h = await firstHop("s5u3");
+      check(!h.answered && !h.team && h.held && !h.written,
+        "962s5u3 a copy grown from a catalog that keeps a listed id but is not the lead's signed edition takes no answer under the team key, and with the switch off its working copy is held, not written ("
+        + JSON.stringify(h) + ")");
+      if (PLANTS_OFF) skip("962s5u4 lifting plant:s5-first-hop writes the copy's working copy to the share");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-first-hop") >= 0 ? "  /* plant:s5-first-hop */" : l).join("\n");
+        const p = planted !== SRC ? await firstHop("s5u3-plant", planted) : null;
+        check(!!p && p.written && !p.held, "962s5u4 lifting plant:s5-first-hop writes the copy's working copy to the share (FAIL 962s5u3): "
+          + (p ? JSON.stringify(p) : "plant not found"));
+      }
+    }
+    /* ---- 962 stage 5, round three: a copy of a copy, grown at its first hop from the lead's signed edition, survives a restart:
+       the first hop's grew.sha is read from that copy's own file under desks/, so the withdrawal leaves both on the share. The copy of a copy is named to be read first, before the copy it grew from. */
+    {
+      const pinV3 = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
+      const chainCopy = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const leadEd = b0Body("quay-held");
+        put(box.share, "quay-lead.ec", leadEd);
+        const c1 = branchDoc(box, "62626262", "quay-held");
+        c1.grew.sha = pinV3(JSON.parse(leadEd));
+        const w1 = await box.D.ask("etiuda:branch-write", "quay-62626262", JSON.stringify(c1));
+        const c2 = branchDoc(box, "61616161", c1.id);
+        c2.grew = { id: c1.id, rev: 1, sha: pinV3(c1) };
+        const w2 = await box.D.ask("etiuda:branch-write", "quay-61616161", JSON.stringify(c2));
+        const before = { c1: fs.existsSync(branchAt(box, "62626262")), c2: fs.existsSync(branchAt(box, "61616161")) };
+        const again = loadDesk(box.D.ud, src);
+        again.api.tryCatalogAsk(again.win);
+        return { w1: !!w1 && w1.ok === true && !w1.held, w2: !!w2 && w2.ok === true && !w2.held, before,
+          c1: fs.existsSync(branchAt(box, "62626262")), c2: fs.existsSync(branchAt(box, "61616161")) };
+      };
+      const cc = await chainCopy("s5u5");
+      check(cc.w1 && cc.w2 && cc.before.c2 && cc.c1 && cc.c2,
+        "962s5u5 a copy of a copy grown at its first hop from the lead's signed edition stays on the share after a restart, its first hop read from that copy's own file ("
+        + JSON.stringify(cc) + ")");
+      if (PLANTS_OFF) skip("962s5u6 lifting plant:s5-hop-disk withdraws the copy of a copy after a restart");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-hop-disk") >= 0 ? "  /* plant:s5-hop-disk */" : l).join("\n");
+        const p = planted !== SRC ? await chainCopy("s5u5-plant", planted) : null;
+        check(!!p && p.before.c2 && !p.c2, "962s5u6 lifting plant:s5-hop-disk withdraws the copy of a copy after a restart (FAIL 962s5u5): " + (p ? JSON.stringify(p) : "plant not found"));
+      }
+    }
+    /* ---- 962 stage 5, round four: a forged intermediate, naming this desk's copy's parent and a genuine lead-signed pin, in
+       another desk's folder, or unsigned in this desk's own, leaves the copy unlisted: with the switch on it goes to the lead's box alone.
+       Read as listed, it would not go to the box. */
+    {
+      const pinV4 = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
+      const forgedHop = async (name, src, mine) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const leadEd = b0Body("quay-held");
+        put(box.share, "quay-lead.ec", leadEd);
+        const c1Id = box.me.id + "-63636363", otherDesk = "k-" + "ef".repeat(8);
+        const fake = catalog(1, { id: c1Id, name: "Planted", card: B0_MARK, unsigned: true });
+        fake.grew = { id: "quay-held", rev: 4, sha: pinV4(JSON.parse(leadEd)) };
+        /* Planted where the folder team's mirror carries the share's desk folders, as the syncer brings a teammate's files. */
+        const plantDir = mine === "top" ? path.join(box.D.ud, "folder-mirror", box.team)
+          : path.join(box.D.ud, "folder-mirror", box.team, "desks", mine ? box.me.id : otherDesk);
+        fs.mkdirSync(plantDir, { recursive: true });
+        fs.writeFileSync(path.join(plantDir, "quay-63636363.ec"), textOf(fake), "utf8");
+        /* This desk once saw the chain from that id to the team's catalog, so the copy's chain reads three hops. */
+        const envFile = path.join(box.D.ud, "desk.json"), env = JSON.parse(fs.readFileSync(envFile, "utf8"));
+        env.catalogLineage = Object.assign({}, env.catalogLineage, { [c1Id]: "quay-held" });
+        fs.writeFileSync(envFile, JSON.stringify(env), "utf8");
+        const D = loadDesk(box.D.ud, src);
+        const c2 = branchDoc(box, "64646464", c1Id);
+        c2.grew = { id: c1Id, rev: 1, sha: pinV4(fake) };
+        const w = await D.ask("etiuda:branch-write", "quay-64646464", JSON.stringify(c2));
+        let kind = "";
+        try { kind = JSON.parse(fs.readFileSync(branchAt(box, "64646464"), "utf8")).kind; } catch { kind = ""; }
+        return { held: !!w && w.held === true, boxed: kind === "etiuda-branch-sealed" };
+      };
+      const fh = await forgedHop("s5u7"), fm = await forgedHop("s5u7-mine", undefined, true), ft = await forgedHop("s5u7-top", undefined, "top");
+      check(fh.boxed && !fh.held && fm.boxed && !fm.held && ft.boxed && !ft.held,
+        "962s5u7 a forged intermediate in another desk's folder, unsigned in this desk's own, or unsigned at the top of the shared folder, leaves this desk's copy unlisted: it goes to the lead's box alone ("
+        + JSON.stringify({ other: fh, mine: fm, top: ft }) + ")");
+      if (PLANTS_OFF) {
+        skip("962s5u8 lifting plant:s5-hop-own with plant:s5-hop-genuine reads the forged intermediate as listed");
+        skip("962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed");
+      } else {
+        const NL = String.fromCharCode(10);
+        const lift = (...tags) => SRC.split(NL).map(l => tags.some(tg => l.indexOf(tg) >= 0) ? "  /* lifted */" : l).join(NL);
+        const both = lift("plant:s5-hop-own", "plant:s5-hop-genuine"), gen = lift("plant:s5-hop-genuine");
+        const p = both !== SRC ? await forgedHop("s5u7-plant", both) : null;
+        check(!!p && !p.boxed, "962s5u8 lifting plant:s5-hop-own with plant:s5-hop-genuine reads the forged intermediate as listed (FAIL 962s5u7): "
+          + (p ? JSON.stringify(p) : "plant not found"));
+        const q = gen !== SRC ? await forgedHop("s5u7-plant-mine", gen, true) : null;
+        check(!!q && !q.boxed, "962s5u9 lifting plant:s5-hop-genuine reads an unsigned intermediate in this desk's own folder as listed (FAIL 962s5u7): "
+          + (q ? JSON.stringify(q) : "plant not found"));
+      }
+    }
     /* ---- stage 0b, round five: the test architect's edits on Grok's review ---- */
     {
       /* Edit 1: a copy of a copy whose middle hop this desk never saw is judged by the root it carries (grew.root). */
@@ -1897,7 +2046,9 @@ try {
       if (PLANTS_OFF) skip("r5g letting the root decide listed turns r5f red");
       else {
         const NL = String.fromCharCode(10);
-        const planted = SRC.split(NL).map(l => l.indexOf("plant:s0b-root-listed") >= 0 ? "  const ids = privateChain(lineageOf(doc));" : l).join(NL);
+        /* Stage 5's first-hop check stands behind this one too (its claimed hop is no edition the lead signed), so it is lifted with it. */
+        const planted = SRC.split(NL).map(l => l.indexOf("plant:s0b-root-listed") >= 0 ? "  const ids = privateChain(lineageOf(doc));"
+          : l.indexOf("plant:s5-first-hop") >= 0 ? "  /* plant:s5-first-hop */" : l).join(NL);
         const p = planted !== SRC ? await claimed("r5-claimed-plant", planted) : null;
         check(!!p && p.teamAnswer, "r5g letting the root decide listed turns r5f red: a team-key answer is written (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }

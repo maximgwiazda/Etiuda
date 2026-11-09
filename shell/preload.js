@@ -220,9 +220,22 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   hotkeyState: () => ipcRenderer.sendSync("etiuda:hotkey-state"),
   setHotkey: (accel) => ipcRenderer.invoke("etiuda:hotkey-set", String(accel || "")),
   pauseHotkey: (on) => ipcRenderer.send("etiuda:hotkey-hold", !!on),
+  /* The embedded model: {model} says whether this desk carries it, and the switch is told to the shell as it moves. */
+  aiState: () => ipcRenderer.sendSync("etiuda:ai-state"),
+  setAi: (on) => ipcRenderer.send("etiuda:ai-set", !!on),
   /* The picker opened from the desk itself, by the pointer, as the hotkey opens it. */
   openPicker: () => ipcRenderer.send("etiuda:pick-show"),
   noteOwnText: (text) => ipcRenderer.send("etiuda:own-text", String(text || "")),
+  /* Start with Windows, quit on close, and the tray's notification switch. The login item is read
+     back from Windows. The page stores quit on close itself and tells the shell, so a close before
+     the next read still follows the row. */
+  setLoginItem: (on) => ipcRenderer.send("etiuda:login-item-set", !!on),
+  loginItemState: () => ipcRenderer.sendSync("etiuda:login-item-state"),
+  setClosePolicy: (quit) => ipcRenderer.send("etiuda:close-policy-set", !!quit),
+  setTrayNotes: (on) => ipcRenderer.send("etiuda:tray-notes-set", !!on),
+  trayNotesState: () => ipcRenderer.sendSync("etiuda:tray-notes-state"),
+  notify: (opts) => ipcRenderer.send("etiuda:notify", opts),
+  onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
 });
 
 if (json) {

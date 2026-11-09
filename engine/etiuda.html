@@ -372,15 +372,20 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      box, the hint drawn over it, and every name in the panel beside it. A second literal drifts
      the first time one of the three is tuned. */
   --intent-type:16.5px;
-  /* Widest the intent panel grows to (docked column and overlay peek both use it).
-     JS reads this, the gap below and the app padding to derive the auto-hide threshold, which
-     is the width where this panel would cost a card column - see railDockMin(). */
-  --rail-max:268px;
+  /* Widest the intent panel's own column grows to (the docked grid column and the overlay
+     peek both use it). JS reads this, the gap below and the app padding to derive the
+     auto-hide threshold, which is the width where this panel would cost a card column -
+     see railDockMin(). */
+  --rail-max:228px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
-  /* The docked rail's column: from the window's edge to where the dot field begins, one 12px pitch
-     short of the cards - see .dotfield>div. */
-  --rail-col-w:calc(var(--rail-left,14px) + var(--rail-max) + var(--rail-gap) - 12px);
+  /* The painted side column, from the window's edge to one 12px dot pitch short of the cards.
+     The docked rail and Settings' section list both read it, so a dragged rail and the list
+     stay one width. --app-pad is the page gutter, declared below; --rail-max is the column
+     inside that gutter. The measured --rail-left is not in this sum: it is 0 while a screen
+     tab hides the stage, and the list would shrink for as long as Settings was open. */
+  --side-w:calc(var(--app-pad) + var(--rail-max) + var(--rail-gap) - 12px);
+  --rail-col-w:var(--side-w);
   /* THE SIDE AREA'S LANGUAGE: a column on the header's own ground, a hairline to the cards, a light
      title, quiet rows. The docked intent rail wears it; Settings' side area is to share it. */
   --side-ground:var(--header-bg);
@@ -2363,7 +2368,7 @@ html.raildrag #intentRailList{margin-top:0}
 .cat-slot{flex:0 0 16px;align-self:stretch;display:flex;align-items:center;justify-content:center}
 .cat-slot .cat-ic{width:16px;height:16px;margin:0;color:inherit}
 .rail-item.on .cat-slot{color:var(--go)}
-.rail-item{position:relative;padding-right:32px}
+.rail-item{position:relative;padding-right:8px}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
    notice, and its margins reached these rows through the shared name. */
 .rail-item.rail-nohit{opacity:.35}
@@ -2373,14 +2378,14 @@ html.raildrag #intentRailList{margin-top:0}
   backdrop-filter:var(--mark-filter)}
 .rail-item.rail-kbd .rail-t,.rail-item.rail-kbd .cat-slot{color:var(--accent)}
 /* Favourite star on hover (edit intents only from Manage) */
-/* ABSOLUTE, so the target can grow without taking a letter from any name: what the row
-   reserves is its own padding-right, and the two move together. 6px round a 15px glyph is a
-   27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
+/* ABSOLUTE, so the target can grow without taking a letter from any name. The row reserves
+   padding for it only while it is showing; the rules are with the docked row. 6px round a
+   15px glyph is a 27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
 .rail-fav{position:absolute;right:4px;top:50%;transform:translateY(-50%);
   border:0;background:transparent;color:var(--dim);line-height:1;
   padding:6px;border-radius:6px;cursor:default;opacity:0;
   display:inline-flex;align-items:center;justify-content:center}
-.rail-item:hover .rail-fav,.rail-fav:focus-visible{opacity:1}
+.rail-item:hover .rail-fav,.rail-item:focus-within .rail-fav,.rail-fav:focus-visible{opacity:1}
 .rail-fav:hover{color:var(--fav);background:var(--fav-soft)}
 /* The one control whose resting state is INVISIBLE-until-hover. On a coarse pointer there is
    no hover, so an invisible star is not quiet - it is absent: nothing on a touch screen ever
@@ -2531,7 +2536,20 @@ body.rail-col .rail-head .rail-n{margin-left:0;padding:0;font:13px var(--sans);c
   font-variant-numeric:tabular-nums;opacity:1}
 body.rail-col .rail-head .rail-hid{order:2;opacity:.75}
 body.rail-col .rail-actions{margin-left:auto;order:3;align-self:center}
-body.rail-col .rail-item{padding:7px 36px 7px 10px;gap:11px;align-items:center}
+body.rail-col .rail-item{padding:7px 10px;gap:11px;align-items:center}
+/* The star is absolute, so the name runs to the row's own padding until the star is
+   showing. A starred row keeps the room, because its star stays. A coarse pointer has
+   no hover to reveal a star, so it keeps the room too. */
+@media (hover:hover){
+  .rail-item:is(:hover,:focus-within){padding-right:32px}
+  body.rail-col .rail-item:is(:hover,:focus-within){padding-right:36px}
+}
+.rail-item:has(.rail-fav.on){padding-right:32px}
+body.rail-col .rail-item:has(.rail-fav.on){padding-right:36px}
+@media (pointer:coarse){
+  .rail-item{padding-right:32px}
+  body.rail-col .rail-item{padding-right:36px}
+}
 body.rail-col .rail-item .cat-slot{color:var(--side-dim);opacity:.85}
 /* The chosen row is the panel's own - mint, green name, check - and its mark stays green, which the
    quiet marks above would otherwise grey. */
@@ -3483,13 +3501,17 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
    586 pixels, a 1438 x 879 window at 150 per cent. */
 @media (max-height:700px){
   .mt-row,.mt-tab{font-size:11px;padding:0}
-  .mt-sec{margin-bottom:8px}
-  .mt-screen.screen-page{padding:10px 16px;gap:8px}
-  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:8px}
-  .mt-h{padding:6px 8px;font-size:11px;gap:6px}
-  .mt-h small{font-size:10.5px}
-  .mt-readings{margin:0 0 4px}
-  .mt-moved{margin:6px 0 0}
+  .mt-sec{margin-bottom:4px}
+  .mt-sec h3{margin-bottom:2px}
+  .mt-screen.screen-page{padding:6px 16px;gap:4px}
+  .mt-screen .screen-head h2{font-size:17px}
+  .mt-screen .mt-sub{margin-top:1px;font-size:12px}
+  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:4px}
+  .mt-h{padding:3px 8px;font-size:11px;gap:6px}
+  .mt-h small{font-size:10px}
+  .mt-readings{margin:0 0 2px}
+  .mt-moved{margin:2px 0 0}
+  .mt-grid{columns:200px;column-gap:16px}
 }
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
@@ -3502,7 +3524,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --scrim-filter:none;--mark-filter:none}
 /* ---------- Screen tabs & host (boards 965, 967, 969) ---------- */
 body.screen-on .fab-stack,
-body.screen-on .fills,
 body.screen-on .pills-slot,
 body.screen-on .pills-probe,
 body.screen-on .stage,
@@ -3524,7 +3545,7 @@ body.screen-on #lanes { display: none !important; }
   --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 26%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 4%,transparent)}
 .sx *{box-sizing:border-box}
 .sx-ic{display:block;width:18px;height:18px;flex:0 0 auto}
-.sx-nav{flex:0 0 248px;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
+.sx-nav{flex:0 0 var(--side-w);min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
   background:var(--header-bg);border-right:1px solid var(--line)}
 .sx-nav h1{font:300 26px/1.1 var(--sans-display);margin:4px 10px 14px}
 .sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--field-line);
@@ -3568,6 +3589,75 @@ body.screen-on #lanes { display: none !important; }
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
 .mt-moved{margin:12px 0 0;color:var(--dim);font-size:12.5px}
+/* ---------- Library and Maintenance, in the Settings shell ---------- */
+/* Their own selectors, so a search bar restored on every screen tab can land beside them.
+   The header hide stays the layered rule it is; nothing here fights it. */
+.sx.lm{width:100%;max-width:none;height:100%;overflow:hidden;flex-direction:column}
+.sx.lm:focus{outline:none}
+.sx.lm .lm-split{flex:1 1 auto;min-height:0;min-width:0;display:flex;overflow:hidden}
+.sx.lm .sx-page{min-height:0}
+.sx.lm .screen-actions{flex:0 0 auto;padding:12px 32px 16px}
+.sx.lm .sx-maint{display:inline-flex;align-items:center;gap:6px}
+.sx.lm .sx-maint .sx-ic{width:15px;height:15px}
+.sx.lm .sx-nav .screen-head{display:block;margin:4px 10px 14px;position:relative}
+.sx.lm .sx-nav .screen-head h2{margin:0;font:300 26px/1.1 var(--sans-display)}
+.sx.lm .screen-head .screen-name{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sx.lm-lib details.manage-sec{margin:0;padding:0;border:0}
+.sx.lm-lib details.manage-sec>summary{display:none}
+.sx.lm-lib details.manage-sec[data-mg="data"]>summary,
+.sx.lm-lib.is-find details.manage-sec>summary{display:flex}
+.sx.lm-lib .manage-secbody{padding-top:0}
+.sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
+.sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
+.sx.lm-lib .sx-card .mg-cat:first-child>.mg-cat-row{border-top:0}
+.sx.lm-lib .sx-card .mg-cat-body{padding:0 0 6px 30px}
+.sx.lm-lib .sx-card .mg-int{padding-top:8px;padding-bottom:8px;border-top:1px solid var(--line)}
+.sx.lm-lib .sx-card .mg-int:first-child{border-top:0}
+.sx.lm-lib .sx-card .ec-list{margin:0}
+.sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
+.sx.lm-lib #mgWho{width:min(420px,100%)}
+.sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
+  box-shadow:none;margin:0}
+.sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
+.sx.lm-mt[data-page="health"] #mtLede{display:none}
+.sx.lm-mt:not([data-page="health"]) .mt-sub,
+.sx.lm-mt:not([data-page="health"]) .mt-health,
+.sx.lm-mt:not([data-page="health"]) #mtMoved{display:none}
+.sx.lm-mt .mt-readings{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sx.lm-mt .mt-health{margin:0 0 16px;gap:12px}
+.sx.lm-mt .mt-h{padding:16px 18px}
+.sx.lm-mt .mt-h b{font-size:14.5px}
+.sx.lm-mt .mt-grid{columns:unset;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;
+  align-items:start}
+.sx.lm-mt[data-page="health"] .mt-grid{display:none}
+.sx.lm-mt .mt-sec{display:none;margin:0 0 16px;break-inside:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius-sm);overflow:hidden}
+.sx.lm-mt[data-page="engine"] .mt-sec[data-mt-sec="Engine"],
+.sx.lm-mt[data-page="engine"] .mt-sec[data-mt-sec="Display"],
+.sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog"],
+.sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog file"],
+.sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Storage"],
+.sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Desk"],
+.sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Layout"],
+.sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Intent panel"],
+.sx.lm-mt[data-page="state"] .mt-sec[data-mt-sec="Personal state"]{display:block}
+.sx.lm-mt .mt-sec h3{margin:0;padding:12px 16px 4px;font:600 12px var(--sans);letter-spacing:.06em}
+.sx.lm-mt .mt-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;
+  padding:10px 16px;border-top:1px solid var(--line);font:13.5px var(--sans)}
+.sx.lm-mt .mt-sec h3+.mt-row,.sx.lm-mt .mt-sec h3+.mt-tab{border-top:0}
+.sx.lm-mt .mt-row .v{font:12.5px var(--mono)}
+.sx.lm-mt .mt-tab{padding:10px 16px;border-top:1px solid var(--line)}
+@media (max-width:720px){
+  .sx.lm-mt .mt-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-height:700px){
+  .sx.lm-mt .mt-h{padding:6px 8px}
+  .sx.lm-mt .sx-page{padding:16px 20px 20px}
+  .sx.lm-mt .mt-row{padding:4px 12px;font-size:12px}
+  .sx.lm-mt .screen-actions{padding:8px 20px 10px}
+}
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
@@ -7018,6 +7108,23 @@ What you type stays in this browser only.`;
     "Intents": "Intencje",
     "ROLE suggestions": "Podpowiedzi ROLE",
     "Catalog & data": "Katalog i dane",
+    "Search the library": "Szukaj w Bibliotece",
+    "Categories and cards": "Kategorie i karty",
+    "Each category with its cards, its place in the order, and whether it supports every intent.": "Każda kategoria z kartami, jej miejsce w kolejności i to, czy wspiera każdą intencję.",
+    "Favourites first, hidden intents at the foot.": "Najpierw ulubione, ukryte intencje na końcu.",
+    "Intents: {N}.": "Intencje: {N}.",
+    "The names the ROLE wheel offers, separated by commas.": "Nazwy, które podpowiada pokrętło ROLE, oddzielone przecinkami.",
+    "The catalog in use on this desk, and loading another catalog file.": "Katalog używany na tym stanowisku i wczytanie innego pliku katalogu.",
+    "Health": "Stan",
+    "Engine and display": "Silnik i ekran",
+    "What runs Etiuda here, and what the screen offers it.": "Co uruchamia tu Etiudę i co daje jej ekran.",
+    "The catalog in use, and the file it came from.": "Używany katalog i plik, z którego pochodzi.",
+    "Storage and desk": "Pamięć i stanowisko",
+    "Where the desk keeps its memory, and its own state.": "Gdzie stanowisko przechowuje swoją pamięć i własny stan.",
+    "Layout and intent panel": "Układ i panel intencji",
+    "How the window is laid out, and the intent panel.": "Układ okna i panel intencji.",
+    "What you have made your own on this desk.": "Własne zmiany na tym stanowisku.",
+    "Open Data and defaults": "Otwórz Dane i ustawienia domyślne",
     "Content": "Treść",
     "Category": "Kategoria",
     "Linked intents": "Powiązane intencje",
@@ -7627,8 +7734,35 @@ What you type stays in this browser only.`;
     "Hide categories": "Ukryj kategorie",
     "Show categories": "Pokaż kategorie",
     "Settings": "Ustawienia",
+    "AI": "AI",
+    "Suggest intents with the built-in model": "Suggest intents with the built-in model",
+    // placeholder: Claudette
+    "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.": "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.",
+    // placeholder: Claudette
+    "The model ranks the suggestions; nothing leaves this computer": "The model ranks the suggestions; nothing leaves this computer",
+    // placeholder: Claudette
+    "Suggestions come from matching words, and the model stays unloaded": "Suggestions come from matching words, and the model stays unloaded",
+    // placeholder: Claudette
+    "Suggestions from the built-in model": "Suggestions from the built-in model",
+    // placeholder: Claudette
+    "Suggestions from matching words": "Suggestions from matching words",
+    // placeholder: Claudette
+    "The model built into Etiuda, which works on this computer alone.": "The model built into Etiuda, which works on this computer alone.",
+    // placeholder: Claudette
     "General": "Ogólne",
     "Notifications": "Powiadomienia",
+    "Notifications from Etiuda, also while its window is closed.": "Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",
+    "Tell me when": "Powiadamiaj, gdy",
+    "The team's lead publishes a new edition": "Lider zespołu publikuje nowe wydanie",
+    "A new catalog arrives from the team": "Od zespołu przychodzi nowy katalog",
+    "{LEAD} published a new edition": "Nowe wydanie od lidera zespołu: {LEAD}",
+    "The team's lead published a new edition": "Nowe wydanie od lidera zespołu",
+    "{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.": "{CATALOG}, wydanie {EDITION}. Nic nie zostanie wczytane przed przejrzeniem.",
+    "{CATALOG}. Nothing is loaded until it is looked at.": "{CATALOG}. Nic nie zostanie wczytane przed przejrzeniem.",
+    "Show what changed": "Pokaż zmiany",
+    "A new catalog from {LEAD}": "Nowy katalog od lidera zespołu: {LEAD}",
+    "A new catalog from the team's lead": "Nowy katalog od lidera zespołu",
+    "{CATALOG} is in the Library, ready to open.": "{CATALOG} jest w Bibliotece i można go otworzyć.",
     "Teams and keys": "Zespoły i klucze",
     "Data and defaults": "Dane i ustawienia domyślne",
     "About": "O programie",
@@ -7636,6 +7770,13 @@ What you type stays in this browser only.`;
     "No setting matches this search.": "Żadne ustawienie nie pasuje do tego wyszukiwania.",
     "Open": "Otwórz",
     "Your name, the language, and how Etiuda starts and closes.": "Imię agenta, język oraz sposób uruchamiania i zamykania Etiudy.",
+    "Starting and closing": "Uruchamianie i zamykanie",
+    "Start with Windows": "Uruchamiaj razem z systemem Windows",
+    "Etiuda starts in the tray when this Windows account signs in.": "Etiuda uruchamia się w zasobniku po zalogowaniu do tego konta Windows.",
+    "When the window closes": "Po zamknięciu okna",
+    "Stay in the tray": "Zostaje w zasobniku",
+    "Quit": "Kończy działanie",
+    "In the tray, Etiuda still answers its shortcut and shows notifications.": "W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
     "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
     "How the screen is laid out.": "Jak rozłożony jest ekran.",
     "Every shortcut, and how to change it.": "Wszystkie skróty i sposób ich zmiany.",
@@ -7716,8 +7857,8 @@ What you type stays in this browser only.`;
     "Keep it docked even when the window is narrow, instead of letting it hide itself.": "Panel zostaje zadokowany także przy wąskim oknie, zamiast chować się sam.",
     "Lock the category bar": "Zablokuj pasek kategorii",
     "Keep every category row visible, instead of collapsing to two lines.": "Wszystkie rzędy kategorii pozostają widoczne, zamiast zwijać się do dwóch linii.",
-    "On": "Wł.",
-    "Off": "Wył.",
+    "On": "Włączone",
+    "Off": "Wyłączone",
     "Close": "Zamknij",
     "Minimise": "Minimalizuj",
     "Maximise": "Maksymalizuj",
@@ -9289,8 +9430,8 @@ What you type stays in this browser only.`;
     E_BUILT: () => E_BUILT,
     E_VERSION: () => E_VERSION
   });
-  var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-08";
+  var E_VERSION = "2.1.0";
+  var E_BUILT = "2026-11-09";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -11460,6 +11601,7 @@ What you type stays in this browser only.`;
     escapeHeld: () => escapeHeld,
     escapeLadderStep: () => escapeLadderStep,
     fitTabLabels: () => fitTabLabels,
+    getActiveTabId: () => getActiveTabId,
     initTabs: () => initTabs,
     noteActive: () => noteActive,
     reopenClosedTab: () => reopenClosedTab,
@@ -11478,6 +11620,7 @@ What you type stays in this browser only.`;
     tabSaveTimer: () => tabSaveTimer,
     tabSessionPayload: () => tabSessionPayload,
     tabs: () => tabs,
+    turnScreenTabToCards: () => turnScreenTabToCards,
     watchTabPath: () => watchTabPath,
     wireTabDrag: () => wireTabDrag
   });
@@ -12300,6 +12443,7 @@ What you type stays in this browser only.`;
     _setThrowForTest: () => _setThrowForTest,
     clearScreenOn: () => clearScreenOn,
     closeScreenTab: () => closeScreenTab,
+    dropScreenTab: () => dropScreenTab,
     frontScreenTab: () => frontScreenTab,
     getScreenDef: () => getScreenDef,
     isScreenOn: () => isScreenOn,
@@ -12371,6 +12515,21 @@ What you type stays in this browser only.`;
     }
     if (onScreenChange) onScreenChange();
   }
+  function dropScreenTab(id) {
+    const idx = screens.indexOf(id);
+    if (idx >= 0) screens.splice(idx, 1);
+    if (screenOn === id) {
+      screenOn = "";
+      if (typeof document !== "undefined" && document.body && document.body.classList) {
+        document.body.classList.remove("screen-on");
+      }
+      const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+      if (sh) {
+        sh.innerHTML = "";
+        sh.hidden = true;
+      }
+    }
+  }
   function clearScreenOn() {
     screenOn = "";
     if (typeof document !== "undefined" && document.body && document.body.classList) {
@@ -12398,10 +12557,26 @@ What you type stays in this browser only.`;
   var tabs = [];
   var activeTabId = null;
   var tabSaveTimer = null;
-  wireScreenTabsChange(() => drawTabs());
+  wireScreenTabsChange(() => {
+    if (screenOn) {
+      snapshotActiveTab(true);
+      if (intentEl) {
+        intentEl.value = "";
+        intentEl.classList.remove("set");
+        syncIntentClearBtns();
+      }
+      if (pax) {
+        pax.value = "";
+        const paxClear = $("#paxClear");
+        if (paxClear) paxClear.disabled = true;
+      }
+    }
+    drawTabs();
+    if (typeof hooks.syncRailGeometry === "function") hooks.syncRailGeometry();
+  });
   wireScreenTabsReturn((id) => {
-    if (id && tabs.some((x) => x.id === id)) switchTab(id);
-    else if (tabs[0]) switchTab(tabs[0].id);
+    if (id && tabs.some((x) => x.id === id)) switchTab(id, true);
+    else if (tabs[0]) switchTab(tabs[0].id, true);
     try {
       intentEl && intentEl.focus({ preventScroll: true });
     } catch (_) {
@@ -12506,13 +12681,16 @@ What you type stays in this browser only.`;
     }
     return t("Tab") + " " + ((i != null ? i : tabs.indexOf(tb)) + 1);
   }
+  function getActiveTabId() {
+    return activeTabId;
+  }
   function activeTabName() {
     const i = tabs.findIndex((x) => x.id === activeTabId);
     if (i < 0) return "";
     return tabLabel(Object.assign({}, tabs[i], { pax: pax ? pax.value : tabs[i].pax }), i);
   }
-  function snapshotActiveTab() {
-    if (!activeTabId) return;
+  function snapshotActiveTab(force) {
+    if (screenOn && !force || !activeTabId) return;
     const t2 = tabs.find((x) => x.id === activeTabId);
     if (!t2) return;
     t2.lang = lang;
@@ -12623,7 +12801,36 @@ What you type stays in this browser only.`;
       }
     });
   }
+  function turnScreenTabToCards(val, paxVal) {
+    const sid = screenOn;
+    if (!sid) return;
+    const sidx = screens.indexOf(sid);
+    const stripPos = tabs.length + (sidx >= 0 ? sidx : 0);
+    dropScreenTab(sid);
+    const tb = blankTab();
+    tb.intentBox = String(val != null ? val : "");
+    if (paxVal) tb.pax = String(paxVal);
+    tabs.splice(stripPos, 0, tb);
+    activeTabId = tb.id;
+    setPrevTabId(tb.id);
+    applyTab(tb);
+    saveTabSession();
+    try {
+      if (intentEl) {
+        intentEl.focus({ preventScroll: true });
+        const len = intentEl.value.length;
+        intentEl.setSelectionRange(len, len);
+      }
+    } catch (_) {
+    }
+  }
   function scheduleTabSave() {
+    if (screenOn) {
+      if (pax && pax.value) {
+        turnScreenTabToCards("", pax.value);
+      }
+      return;
+    }
     wirePaxBlur();
     paxTabId = activeTabId;
     const tb = tabs.find((x) => x.id === activeTabId);
@@ -12727,11 +12934,14 @@ What you type stays in this browser only.`;
       scrollTabIntoView(tb.id);
     });
   }
-  function switchTab(id) {
+  function switchTab(id, force) {
+    const fromScreen = Boolean(screenOn) || Boolean(force);
     if (screenOn) clearScreenOn();
-    if (!id || id === activeTabId) return;
-    snapshotActiveTab();
-    endPaxConversation(tabs.find((x) => x.id === activeTabId));
+    if (!id || id === activeTabId && !fromScreen) return;
+    if (!fromScreen) {
+      snapshotActiveTab();
+      endPaxConversation(tabs.find((x) => x.id === activeTabId));
+    }
     const t2 = tabs.find((x) => x.id === id);
     if (!t2) return;
     applyTab(t2);
@@ -12852,8 +13062,9 @@ What you type stays in this browser only.`;
     }));
   }
   function addTab() {
+    const fromScreen = Boolean(screenOn);
     if (screenOn) clearScreenOn();
-    snapshotActiveTab();
+    if (!fromScreen) snapshotActiveTab();
     const t2 = blankTab();
     animateTabInsert(() => {
       tabs.push(t2);
@@ -15119,9 +15330,12 @@ What you type stays in this browser only.`;
   // src/modules/host.js
   var host_exports = {};
   __export(host_exports, {
+    E_AI_OFF_KEY: () => E_AI_OFF_KEY,
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
     dispatchTabChord: () => dispatchTabChord,
+    eAiModel: () => eAiModel,
+    eAiOn: () => eAiOn,
     eBranchIdentity: () => eBranchIdentity,
     eCatalogBuiltIn: () => eCatalogBuiltIn,
     eCatalogEject: () => eCatalogEject,
@@ -15143,6 +15357,7 @@ What you type stays in this browser only.`;
     eHotkey: () => eHotkey,
     eHotkeyLabel: () => eHotkeyLabel,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
+    eNotify: () => eNotify,
     eOnCatalogCopy: () => eOnCatalogCopy,
     eOnCatalogListing: () => eOnCatalogListing,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
@@ -15157,6 +15372,7 @@ What you type stays in this browser only.`;
     eSetMaximized: () => eSetMaximized,
     eSharedRead: () => eSharedRead,
     eSharedWrite: () => eSharedWrite,
+    eTellAi: () => eTellAi,
     eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
     wireFolderLink: () => wireFolderLink,
@@ -15517,6 +15733,27 @@ What you type stays in this browser only.`;
   function eHotkeyLabel(accel) {
     return String(accel || "").split("+").map((k) => k === "Control" ? "Ctrl" : k).join("+");
   }
+  var E_AI_OFF_KEY = "eAiOff";
+  function eAiOn() {
+    return lsGet(E_AI_OFF_KEY) !== "1";
+  }
+  function eAiModel() {
+    const h = eHost();
+    if (!h || typeof h.aiState !== "function") return false;
+    try {
+      const st = h.aiState();
+      return !!(st && st.model);
+    } catch (e) {
+      return false;
+    }
+  }
+  function eTellAi() {
+    const h = eHost();
+    try {
+      if (h && typeof h.setAi === "function") h.setAi(eAiOn());
+    } catch (e) {
+    }
+  }
   function eOpenPicker() {
     const h = eHost();
     if (!h || typeof h.openPicker !== "function") return false;
@@ -15560,6 +15797,24 @@ What you type stays in this browser only.`;
         } catch (e) {
         }
       }));
+    if (typeof h.onTrayGo === "function") h.onTrayGo((kind) => {
+      if (kind === "settings") {
+        try {
+          hooks.openSettings();
+        } catch (e) {
+        }
+      } else if (kind === "library") {
+        try {
+          hooks.openManage();
+        } catch (e) {
+        }
+      } else if (kind === "offer") {
+        try {
+          clearScreenOn();
+        } catch (e) {
+        }
+      }
+    });
     const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
     if (min) min.onclick = () => {
       try {
@@ -15588,6 +15843,16 @@ What you type stays in this browser only.`;
       } catch (e) {
         addEventListener("resize", syncBandHeight, { passive: true });
       }
+    }
+  }
+  function eNotify(opts) {
+    const h = eHost();
+    if (!h || typeof h.notify !== "function") return false;
+    try {
+      h.notify(opts);
+      return true;
+    } catch (e) {
+      return false;
     }
   }
   function eSetMaximized(on) {
@@ -19191,7 +19456,7 @@ What you type stays in this browser only.`;
   }
   function railMaxWidth() {
     const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
-    return v > 0 ? v : 268;
+    return v > 0 ? v : 228;
   }
   var RAIL_DOCK_COLS = 2;
   function railDockMin() {
@@ -20302,12 +20567,21 @@ What you type stays in this browser only.`;
     markEntrySel();
     railDecorate(false);
   }
+  function railStarCut(e) {
+    const row2 = e.target.closest && e.target.closest(".rail-item");
+    if (!row2) return;
+    if ((e.type === "pointerout" || e.type === "focusout") && row2.contains(e.relatedTarget)) return;
+    markCut(row2.querySelector(".rail-t"));
+  }
   function wireRailHover() {
     addEventListener("load", () => {
       setTimeout(() => {
         const l = $("#list"), r = $("#intentRailList");
         if (l) l.addEventListener("mousemove", cardHoverClaim, { passive: true });
-        if (r) r.addEventListener("mousemove", railHoverClaim, { passive: true });
+        if (r) {
+          r.addEventListener("mousemove", railHoverClaim, { passive: true });
+          ["pointerover", "pointerout", "focusin", "focusout"].forEach((type) => r.addEventListener(type, railStarCut));
+        }
       }, 0);
     });
   }
@@ -27027,6 +27301,25 @@ What you type stays in this browser only.`;
     };
   }
 
+  // src/modules/lm-icon.js
+  var LM_ICONS = {
+    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
+    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
+    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
+    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
+    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
+    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
+    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "health": '<path d="M3.5 12.5h4.2l1.7-4.6 2.6 9.2 1.8-4.6H20.5"/>'
+  };
+  function lmIcon(name) {
+    const body = LM_ICONS[name];
+    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
+  }
+
   // src/modules/maintenance.js
   function mtSafe(f) {
     try {
@@ -27471,7 +27764,7 @@ What you type stays in this browser only.`;
     rows.forEach((x) => {
       if (x.sec) {
         if (open) html += "</div>";
-        html += '<div class="mt-sec"><h3>' + esc(tc("maintenance", x.sec)) + "</h3>";
+        html += '<div class="mt-sec" data-mt-sec="' + esc(x.sec) + '"><h3>' + esc(tc("maintenance", x.sec)) + "</h3>";
         open = true;
       } else if (x.tab) {
         const th = (w) => '<span class="h">' + esc(tc("maintenance", w)) + "</span>";
@@ -27497,11 +27790,69 @@ What you type stays in this browser only.`;
     };
   }
   var MT_MOVED = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+  var mtOn = "health";
+  var mtPages = () => [
+    { key: "health", icon: "health", name: t("Health") },
+    { key: "engine", icon: "desks", name: t("Engine and display") },
+    { key: "catalog", icon: "categories", name: t("Catalog") },
+    { key: "storage", icon: "data", name: t("Storage and desk") },
+    { key: "layout", icon: "layout", name: t("Layout and intent panel") },
+    { key: "state", icon: "user", name: t("Personal state") }
+  ];
+  var mtLede = () => ({
+    engine: t("What runs Etiuda here, and what the screen offers it."),
+    catalog: t("The catalog in use, and the file it came from."),
+    storage: t("Where the desk keeps its memory, and its own state."),
+    layout: t("How the window is laid out, and the intent panel."),
+    state: t("What you have made your own on this desk.")
+  });
+  function mtNavHtml() {
+    return mtPages().map((p) => {
+      const on = p.key === mtOn;
+      return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-mt="' + esc(p.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(p.icon) + "<span data-i18n-skip>" + esc(p.name) + "</span></button>";
+    }).join("");
+  }
+  function mtShellHtml() {
+    const pages = mtPages(), page = pages.filter((p) => p.key === mtOn)[0] || pages[0];
+    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+  }
+  function wireMtShell(root) {
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    const buttons = root.querySelectorAll(".sx-sec[data-mt]");
+    if (!buttons || !buttons.length) return;
+    const show = (key) => {
+      mtOn = key || "health";
+      root.setAttribute("data-page", mtOn);
+      root.querySelectorAll(".sx-sec[data-mt]").forEach((b) => {
+        const on = b.getAttribute("data-mt") === mtOn;
+        if (b.classList) b.classList.toggle("on", on);
+        if (on) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      });
+      const page = mtPages().filter((p) => p.key === mtOn)[0];
+      const title = root.querySelector("#mtTitle");
+      if (title && page) title.textContent = page.name;
+      const lede = root.querySelector("#mtLede");
+      if (lede) lede.textContent = mtOn === "health" ? "" : mtLede()[mtOn] || "";
+    };
+    buttons.forEach((b) => {
+      b.onclick = () => show(b.getAttribute("data-mt"));
+    });
+    const gear = root.querySelector("#mtSettings");
+    if (gear) gear.onclick = () => {
+      if (typeof hooks.openSettings === "function") hooks.openSettings();
+    };
+    const data = root.querySelector("#mtOpenData");
+    if (data) data.onclick = () => {
+      if (typeof hooks.openSettings === "function") hooks.openSettings("data");
+    };
+  }
   registerScreen("maintenance", {
     title: () => t("Maintenance"),
     render: (host, closeFn) => {
-      host.innerHTML = '<div class="screen-page mt-screen"><div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div><div class="screen-body">' + mtMaintBody() + '</div><p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + '</p><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+      host.innerHTML = mtShellHtml();
       wireMaintenanceActions(host, closeFn);
+      wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
     }
   });
   function openMaintenanceModal(backFn) {
@@ -29139,6 +29490,7 @@ What you type stays in this browser only.`;
     eOfferCatalogDialog: () => eOfferCatalogDialog,
     eOfferPickedCatalog: () => eOfferPickedCatalog,
     loadCatalogFromFolder: () => loadCatalogFromFolder,
+    onCatalogListing: () => onCatalogListing,
     paintCatNow: () => paintCatNow,
     paintCatWaiting: () => paintCatWaiting,
     paintCatalogList: () => paintCatalogList,
@@ -30083,6 +30435,8 @@ What you type stays in this browser only.`;
     return " · " + esc(t("rev {R}").split("{R}").join(String(name.r))) + (name.e ? ' <span class="ec-ed">' + esc(name.e) + "</span>" : "");
   }
   var offerStanding = null;
+  var offeredNotified = /* @__PURE__ */ new Set();
+  var listingNotified = /* @__PURE__ */ new Set();
   function eOfferCatalogDialog(c, src) {
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
@@ -30147,6 +30501,28 @@ What you type stays in this browser only.`;
     const arriving = fresh && !src.asked && !src.reopened;
     if (arriving) arriveAtName(wrap);
     document.body.appendChild(wrap);
+    if (arriving && lsGet("eNotifyEditionOff") !== "1") {
+      catalogTrust(c).then((state) => {
+        if (state === V2_SIG_VALID) {
+          eCatalogLeads().then((leads) => {
+            if (!leads || !leads.length) return;
+            const sig2 = eCatalogSignature(c);
+            if (!sig2 || offeredNotified.has(sig2)) return;
+            offeredNotified.add(sig2);
+            const tLeads = teamLeads().filter((l) => l && !l.removed);
+            const print = trustPrint(c);
+            const matchLead = tLeads.find((l) => l && l.print === print);
+            const leadName = matchLead && matchLead.lead || tLeads[0] && tLeads[0].lead || "";
+            const catName = catalogNameOfFile(String(src && src.file || "") || E_CATALOG_SCRIPT) || t("Catalog");
+            const ed2 = editionNameOf(c);
+            const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : String(ed2.e || "");
+            const title = leadName ? t("{LEAD} published a new edition").split("{LEAD}").join(leadName) : t("The team's lead published a new edition");
+            const body = edStr ? t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName).split("{EDITION}").join(edStr) : t("{CATALOG}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName);
+            eNotify({ title, body, target: "offer" });
+          });
+        }
+      });
+    }
     const place = () => {
       const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
       const box = wrap.querySelector(".ec-change");
@@ -30444,6 +30820,25 @@ What you type stays in this browser only.`;
   }
   function onCatalogListing(all) {
     paintCatalogList();
+    if (lsGet("eNotifyCatalogOff") !== "1") {
+      const tLeads = teamLeads().filter((l) => l && !l.removed);
+      if (tLeads.length > 0) {
+        const leadName = tLeads[0] && tLeads[0].lead || "";
+        const teamFiles = (all || []).filter((f) => !f.desk && !f.builtIn && !f.sample && f.id);
+        const held2 = storedCatalog();
+        for (const f of teamFiles) {
+          if (held2 && held2.id === f.id) continue;
+          const key = f.id || f.name;
+          if (key && !listingNotified.has(key)) {
+            listingNotified.add(key);
+            const catName = catalogNameOfFile(f.name);
+            const title = leadName ? t("A new catalog from {LEAD}").split("{LEAD}").join(leadName) : t("A new catalog from the team's lead");
+            const body = t("{CATALOG} is in the Library, ready to open.").split("{CATALOG}").join(catName);
+            eNotify({ title, body, target: "library" });
+          }
+        }
+      }
+    }
     const held = storedCatalog();
     if (!held && !catalogLoaded()) {
       offerToLooseAuthor(all);
@@ -31100,8 +31495,108 @@ What you type stays in this browser only.`;
     if (relay.length === 1 && !normCatalogFolder(relay[0].folder)) return relay[0];
     return null;
   }
+  var libOn = "data";
+  var libQuery = "";
+  var libFind = () => t("Search the library");
+  var libSections = () => [
+    { key: "catmac", icon: "categories", name: t("Categories and cards"), lede: t("Each category with its cards, its place in the order, and whether it supports every intent.") },
+    { key: "intents", icon: "intents", name: t("Intents"), lede: t("Favourites first, hidden intents at the foot.") },
+    { key: "who", icon: "user", name: t("ROLE suggestions"), lede: t("The names the ROLE wheel offers, separated by commas.") },
+    { key: "data", icon: "cards", name: t("Catalog & data"), lede: t("The catalog in use on this desk, and loading another catalog file.") }
+  ];
+  function libFold(s) {
+    return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  }
+  function rememberedLib() {
+    const order = ["catmac", "intents", "who", "data"];
+    const open = order.filter((k) => mgOpen.has(k));
+    if (open.length === 1) return open[0];
+    if (open.indexOf(libOn) >= 0) return libOn;
+    return open[0] || "catmac";
+  }
+  function libNavHtml() {
+    const finding = !!libFold(libQuery);
+    return libSections().map((s) => {
+      const on = !finding && s.key === libOn;
+      return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-lm="' + esc(s.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(s.icon) + "<span data-i18n-skip>" + esc(s.name) + "</span></button>";
+    }).join("");
+  }
+  function applyLibView(page) {
+    if (!page || typeof page.querySelectorAll !== "function") return;
+    const buttons = page.querySelectorAll(".sx-sec[data-lm]");
+    if (!buttons || !buttons.length) return;
+    const q = libFold(libQuery);
+    if (page.classList) {
+      if (q) page.classList.add("is-find");
+      else page.classList.remove("is-find");
+    }
+    let countEl = null;
+    page.querySelectorAll("details.manage-sec").forEach((d) => {
+      const key = d.getAttribute("data-mg");
+      const hit = !q || libFold(d.textContent).indexOf(q) >= 0;
+      const show = q ? hit : key === libOn;
+      if (show) d.removeAttribute("hidden");
+      else d.setAttribute("hidden", "");
+      if (!q && key === libOn) {
+        const c = d.querySelector(".mg-count");
+        if (c) countEl = c;
+      }
+    });
+    buttons.forEach((b) => {
+      const on = !q && b.getAttribute("data-lm") === libOn;
+      if (b.classList) b.classList.toggle("on", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+    const sec = libSections().filter((s) => s.key === libOn)[0];
+    const title = page.querySelector("#libTitle");
+    const lede = page.querySelector("#libLede");
+    if (title) title.textContent = q ? String(libQuery || "").trim() : sec ? sec.name : "";
+    if (lede) {
+      const n = countEl && countEl.textContent ? countEl.textContent.trim() : "";
+      lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" && n ? t("Intents: {N}.").replace("{N}", n) + " " + sec.lede : sec.lede;
+    }
+  }
+  function wireLibShell(page) {
+    if (!page || typeof page.querySelectorAll !== "function") return;
+    const buttons = page.querySelectorAll(".sx-sec[data-lm]");
+    if (!buttons || !buttons.length) return;
+    buttons.forEach((b) => {
+      b.onclick = () => {
+        libOn = b.getAttribute("data-lm") || libOn;
+        libQuery = "";
+        mgOpen.add(libOn);
+        paintLibrary();
+      };
+    });
+    const find = page.querySelector("#libSearch");
+    if (find) {
+      find.oninput = () => {
+        libQuery = find.value;
+        const at = find.selectionStart;
+        paintLibrary();
+        const again = document.getElementById("libSearch");
+        if (!again) return;
+        try {
+          again.focus();
+          if (at != null && again.setSelectionRange) again.setSelectionRange(at, at);
+        } catch (e) {
+        }
+      };
+      find.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || !find.value) return;
+        e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        libQuery = "";
+        paintLibrary();
+      });
+    }
+    const mt = page.querySelector("#libMaint");
+    if (mt) mt.onclick = () => openMaintenance();
+  }
   function openManage(justHtml) {
     applyCatsToGlobal();
+    if (!libFold(libQuery)) libOn = rememberedLib();
     const mgGoneIntents = new Set(pack.intentRemoved || []);
     const mgIntentIdxs = intentOrder.filter((i) => !mgGoneIntents.has(intentIdAt(i))).map((i, n) => ({ i, n })).sort((a, b) => {
       const ha = isIntentHiddenIdx(a.i) ? 1 : 0, hb = isIntentHiddenIdx(b.i) ? 1 : 0;
@@ -31189,10 +31684,12 @@ What you type stays in this browser only.`;
       openHistory(host);
       return;
     }
-    host.innerHTML = '<div class="screen-page lib-screen lib-list" tabindex="-1">' + libraryHeadHtml() + '<div class="screen-body">' + (body || openManage(true)) + '</div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
+    const name = catalogFileName();
+    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + '</div></div></div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
     const page = host.querySelector(".lib-list");
     wireLibrary(page);
     translateTree(page);
+    applyLibView(page);
     dressDialogInputs(page);
     markCutText(page);
     const at = document.activeElement;
@@ -31204,6 +31701,7 @@ What you type stays in this browser only.`;
   }
   registerScreen(LIB_SCREEN, { title: () => t("Library"), render: (host) => paintLibrary(host) });
   function wireLibrary(page) {
+    wireLibShell(page);
     $("#mgClose").onclick = () => closeScreenTab(LIB_SCREEN);
     $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
     $("#mgAddCat").onclick = () => startMgCatAdd();
@@ -31592,7 +32090,8 @@ What you type stays in this browser only.`;
     "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
     "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
     "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
-    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>'
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
   };
   function sxIcon(name) {
     const body = SX_ICONS[name];
@@ -31618,9 +32117,13 @@ What you type stays in this browser only.`;
   function keysHtml(chord) {
     return '<span class="sx-keys">' + String(chord || "").split("+").filter(Boolean).map((k) => "<kbd>" + esc(k) + "</kbd>").join("") + "</span>";
   }
+  function closeHost() {
+    const h = eHost();
+    return h && typeof h.setClosePolicy === "function" && typeof h.setLoginItem === "function" && typeof h.loginItemState === "function" ? h : null;
+  }
   function generalGroups() {
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    return [{ rows: [
+    const groups = [{ rows: [
       row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="first name" value="' + esc(agentName()) + '">'),
       row(
         "uilang",
@@ -31630,6 +32133,34 @@ What you type stays in this browser only.`;
         langSel
       )
     ] }];
+    const host = closeHost();
+    if (host) {
+      let startOn = false;
+      try {
+        const s = host.loginItemState();
+        startOn = !!(s && s.openAtLogin);
+      } catch (e) {
+        startOn = false;
+      }
+      const quit = lsGet("eQuitOnClose") === "1";
+      groups.push({ head: t("Starting and closing"), rows: [
+        row(
+          "startwin",
+          "forward",
+          t("Start with Windows"),
+          t("Etiuda starts in the tray when this Windows account signs in."),
+          onoff("startwin", startOn, "", "")
+        ),
+        row(
+          "closehow",
+          "desks",
+          t("When the window closes"),
+          t("In the tray, Etiuda still answers its shortcut and shows notifications."),
+          seg2("closehow", [{ v: "stay", t: t("Stay in the tray") }, { v: "quit", t: t("Quit") }], quit ? "quit" : "stay")
+        )
+      ] });
+    }
+    return groups;
   }
   function appearanceGroups() {
     return [{ rows: [
@@ -31777,6 +32308,27 @@ What you type stays in this browser only.`;
     ));
     return rows.length ? [{ rows }] : [];
   }
+  function aiGroups() {
+    if (!eAiModel()) return [];
+    return [{ rows: [
+      // placeholder: Claudette
+      row(
+        "aisuggest",
+        "ai",
+        t("Suggest intents with the built-in model"),
+        // placeholder: Claudette
+        t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+        onoff(
+          "aisuggest",
+          eAiOn(),
+          // placeholder: Claudette
+          t("The model ranks the suggestions; nothing leaves this computer"),
+          // placeholder: Claudette
+          t("Suggestions come from matching words, and the model stays unloaded")
+        )
+      )
+    ] }];
+  }
   function dataGroups() {
     return [{ rows: [
       row(
@@ -31820,16 +32372,56 @@ What you type stays in this browser only.`;
       )
     ] }];
   }
+  function notificationsGroups() {
+    const h = eHost();
+    let masterOn = true;
+    if (h && typeof h.trayNotesState === "function") {
+      try {
+        const s = h.trayNotesState();
+        masterOn = !(s && s.on === false);
+      } catch (e) {
+      }
+    }
+    return [
+      { rows: [
+        row(
+          "notesmaster",
+          "notifications",
+          t("Notifications"),
+          t("Notifications from Etiuda, also while its window is closed."),
+          onoff("notesmaster", masterOn, "", "")
+        )
+      ] },
+      { head: t("Tell me when"), rows: [
+        row(
+          "noteedition",
+          "cards",
+          t("The team's lead publishes a new edition"),
+          "",
+          onoff("noteedition", lsGet("eNotifyEditionOff") !== "1", "", "")
+        ),
+        row(
+          "notecatalog",
+          "desks",
+          t("A new catalog arrives from the team"),
+          "",
+          onoff("notecatalog", lsGet("eNotifyCatalogOff") !== "1", "", "")
+        )
+      ] }
+    ];
+  }
   function settingsSections() {
     return [
       { id: "general", icon: "general", name: t("General"), lede: t("Your name, the language, and how Etiuda starts and closes."), groups: generalGroups() },
       { id: "appearance", icon: "appearance", name: t("Appearance"), lede: t("How the app looks and moves."), groups: appearanceGroups() },
       { id: "layout", icon: "layout", name: t("Layout"), lede: t("How the screen is laid out."), groups: layoutGroups() },
       { id: "keys", icon: "keys", name: t("Keyboard shortcuts"), lede: t("Every shortcut, and how to change it."), groups: keysGroups() },
-      { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: [] },
+      { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: notificationsGroups() },
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
-      { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() }
+      { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
+      // placeholder: Claudette (the lede; "AI" is hers)
+      { id: "ai", icon: "ai", name: t("AI"), lede: t("The model built into Etiuda, which works on this computer alone."), groups: aiGroups() }
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
@@ -31994,10 +32586,53 @@ What you type stays in this browser only.`;
             else lsDel("eSharedEdit");
             hooks.syncSampleMark();
             toast(on ? t("From now on, changes go into the shared catalog") : t("From now on, changes stay in this desk's own file"));
+          } else if (seg3 === "aisuggest") {
+            if (on) lsDel(E_AI_OFF_KEY);
+            else lsSet(E_AI_OFF_KEY, "1");
+            eTellAi();
+            toast(on ? t("Suggestions from the built-in model") : t("Suggestions from matching words"));
           } else if (seg3 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
           } else if (seg3 === "pillslock") {
             if (pillsLocked() !== on) togglePillsLock();
+          } else if (seg3 === "startwin") {
+            const host = closeHost();
+            if (host) {
+              try {
+                host.setLoginItem(on);
+              } catch (e) {
+              }
+            }
+            toast(on ? t("On") : t("Off"));
+          } else if (seg3 === "closehow") {
+            const quit = v === "quit";
+            if (quit) lsSet("eQuitOnClose", "1");
+            else lsDel("eQuitOnClose");
+            const host = closeHost();
+            if (host) {
+              try {
+                host.setClosePolicy(quit);
+              } catch (e) {
+              }
+            }
+            toast(quit ? t("Quit") : t("Stay in the tray"));
+          } else if (seg3 === "notesmaster") {
+            const host = eHost();
+            if (host && typeof host.setTrayNotes === "function") {
+              try {
+                host.setTrayNotes(on);
+              } catch (e) {
+              }
+            }
+            toast(on ? t("On") : t("Off"));
+          } else if (seg3 === "noteedition") {
+            if (on) lsDel("eNotifyEditionOff");
+            else lsSet("eNotifyEditionOff", "1");
+            toast(on ? t("On") : t("Off"));
+          } else if (seg3 === "notecatalog") {
+            if (on) lsDel("eNotifyCatalogOff");
+            else lsSet("eNotifyCatalogOff", "1");
+            toast(on ? t("On") : t("Off"));
           }
         };
       });
@@ -32062,7 +32697,11 @@ What you type stays in this browser only.`;
       "eFactsH",
       "eCollapsed",
       "eSharedEdit",
-      E_HOTKEY_KEY
+      E_HOTKEY_KEY,
+      "eQuitOnClose",
+      "eNotifyEditionOff",
+      "eNotifyCatalogOff",
+      E_AI_OFF_KEY
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {
@@ -32074,6 +32713,34 @@ What you type stays in this browser only.`;
     was[nsKey("Floor")] = nsGet("Floor");
     nsDel("Cols");
     nsDel("Floor");
+    const host = eHost();
+    let loginWas = false, notesWere = true;
+    if (host && typeof host.loginItemState === "function") {
+      try {
+        const s = host.loginItemState();
+        loginWas = !!(s && s.openAtLogin);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.trayNotesState === "function") {
+      try {
+        const s = host.trayNotesState();
+        notesWere = !(s && s.on === false);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.setLoginItem === "function") {
+      try {
+        host.setLoginItem(false);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.setTrayNotes === "function") {
+      try {
+        host.setTrayNotes(true);
+      } catch (e) {
+      }
+    }
     applyPrefs();
     repaintScreen();
     offerUndo("Settings reset", () => {
@@ -32082,6 +32749,18 @@ What you type stays in this browser only.`;
         if (v == null) lsDel(k);
         else lsSet(k, v);
       });
+      if (host && typeof host.setLoginItem === "function") {
+        try {
+          host.setLoginItem(loginWas);
+        } catch (e) {
+        }
+      }
+      if (host && typeof host.setTrayNotes === "function") {
+        try {
+          host.setTrayNotes(notesWere);
+        } catch (e) {
+        }
+      }
       applyPrefs();
       repaintScreen();
     });
@@ -32143,6 +32822,12 @@ What you type stays in this browser only.`;
       render();
     } catch (e) {
     }
+    try {
+      const host = eHost();
+      if (host && typeof host.setClosePolicy === "function") host.setClosePolicy(lsGet("eQuitOnClose") === "1");
+    } catch (e) {
+    }
+    eTellAi();
   }
   registerScreen("settings", {
     title: () => t("Settings"),
@@ -32331,6 +33016,11 @@ What you type stays in this browser only.`;
   }
   function wireSearchBox() {
     intentEl.oninput = () => {
+      if (screenOn) {
+        turnScreenTabToCards(intentEl.value);
+        queueSearchSettle();
+        return;
+      }
       intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
       syncIntentClearBtns();
       putEntrySel(null);
@@ -32352,6 +33042,15 @@ What you type stays in this browser only.`;
     intentEl.addEventListener("keydown", (e) => {
       if (e.altKey || e.metaKey) return;
       if (e.key === "Escape") {
+        if (screenOn) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
         e.preventDefault();
         e.stopImmediatePropagation();
         escapeHeld(e.repeat);
@@ -34633,6 +35332,23 @@ What you type stays in this browser only.`;
       p.tier3 = next;
     }
   }
+  function intentPassages(catalog) {
+    const tags = (Array.isArray(catalog && catalog.tags) ? catalog.tags : []).filter((t2) => t2 && t2.kind === "request");
+    const out = [];
+    for (const req of tags) {
+      const id = String(req.id || "");
+      if (!id) continue;
+      const topic = req.topic && typeof req.topic === "object" ? req.topic : { "": req.topic };
+      const clause = req.clause && typeof req.clause === "object" ? req.clause : { "": req.clause };
+      const texts = [];
+      for (const code of /* @__PURE__ */ new Set([...Object.keys(topic), ...Object.keys(clause)])) {
+        const text = [topic[code], clause[code]].map((x) => String(x || "").trim()).filter(Boolean).join(" - ");
+        if (text && texts.indexOf(text) < 0) texts.push(text);
+      }
+      if (texts.length) out.push({ id, texts });
+    }
+    return out;
+  }
   function buildSuggestModel(catalog, labels) {
     const weights = buildAffinityWordWeights(catalog || {});
     const profiles = buildProfiles(catalog || {});
@@ -34650,6 +35366,7 @@ What you type stays in this browser only.`;
         topic: p.topicWords,
         clause: p.clauseWords
       })),
+      passages: intentPassages(catalog || {}),
       labels: {
         suggest: String(labels && labels.suggest || ""),
         suggestTip: String(labels && labels.suggestTip || "")
@@ -34998,7 +35715,7 @@ What you type stays in this browser only.`;
       }
       const paxVal = pickDeskPax();
       const curEpoch = suggestEpoch();
-      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, picked: intentIdxs.map((i) => intentIdAt(i)), epoch: curEpoch }, pickFound(""));
+      const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, picked: intentIdxs.map((i) => intentIdAt(i)), epoch: curEpoch, ai: eAiOn() }, pickFound(""));
       if (a.profiles || a.epoch !== void 0 && a.epoch !== curEpoch) {
         try {
           out.profiles = suggestModel();
@@ -35006,6 +35723,17 @@ What you type stays in this browser only.`;
         }
       }
       return withIndex(out, "");
+    }
+    if (op === "suggest-profiles") {
+      const on = eAiOn();
+      const out = { ai: on, epoch: suggestEpoch() };
+      if (on) {
+        try {
+          out.profiles = suggestModel();
+        } catch (e) {
+        }
+      }
+      return out;
     }
     if (op === "suggest-open") {
       bumpSuggestOpen(pack);
