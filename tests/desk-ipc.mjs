@@ -1971,28 +1971,19 @@ try {
   /* Finding 11: Interface language change rebuilds tray menu and syncs jump list */
   let d8LangTraySync = false, d8LangTraySyncWhy = "";
   try {
-    let jlSyncs = 0, trayRebuilds = 0;
-    const oldSync = mainTest.syncJumpList;
-    const oldRebuild = mainTest.rebuildTrayMenu;
-    mainTest.syncJumpList = () => { jlSyncs++; if (typeof oldSync === "function") return oldSync(); };
-    mainTest.rebuildTrayMenu = () => { trayRebuilds++; if (typeof oldRebuild === "function") return oldRebuild(); };
-    try {
-      jlSyncs = 0; trayRebuilds = 0;
-      /* Send desk-save with changed eUiLang */
-      ipcRenderer.sendSync("etiuda:desk-save", JSON.stringify({ eUiLang: "pl" }));
-      const savedOk = jlSyncs > 0 && trayRebuilds > 0;
-
-      jlSyncs = 0; trayRebuilds = 0;
-      /* Send desk-patch-save with changed eUiLang */
-      ipcRenderer.sendSync("etiuda:desk-patch-save", JSON.stringify({ eUiLang: "en" }));
-      const patchOk = jlSyncs > 0 && trayRebuilds > 0;
-
-      d8LangTraySync = savedOk && patchOk;
-      if (!d8LangTraySync) d8LangTraySyncWhy = JSON.stringify({ savedOk, patchOk, jlSyncs, trayRebuilds });
-    } finally {
-      mainTest.syncJumpList = oldSync;
-      mainTest.rebuildTrayMenu = oldRebuild;
-    }
+    /* Seen through the harness's own Electron stubs, never through a seam in the shell: the live tray's rebuilt menu and
+       the jump list the shell last handed app.setJumpList. */
+    const liveTray = () => madeTrays.filter(t => !t.dead).slice(-1)[0] || null;
+    const labels = () => { const t = liveTray(); return t && t.menu && t.menu.items ? t.menu.items.map(i => i && i.label).filter(Boolean).join("|") : ""; };
+    const jump = () => JSON.stringify(electron.app._jumpList || null);
+    const before = { menu: labels(), jump: jump() };
+    ipcRenderer.sendSync("etiuda:desk-save", JSON.stringify({ eUiLang: "pl" }));
+    const pl = { menu: labels(), jump: jump() };
+    ipcRenderer.sendSync("etiuda:desk-patch-save", JSON.stringify({ eUiLang: "en" }));
+    const en = { menu: labels(), jump: jump() };
+    d8LangTraySync = !!liveTray() && pl.menu.indexOf("Otwórz Etiudę") >= 0 && en.menu.indexOf("Open Etiuda") >= 0
+      && pl.jump !== en.jump && pl.jump !== "null";
+    if (!d8LangTraySync) d8LangTraySyncWhy = JSON.stringify({ tray: !!liveTray(), before: before.menu.slice(0, 60), pl: pl.menu.slice(0, 60), en: en.menu.slice(0, 60), jumpChanged: pl.jump !== en.jump });
   } catch (e) { d8LangTraySyncWhy = String(e && e.message || e).split("\n")[0]; }
   check(d8LangTraySync, "D8-lang-tray-sync changing eUiLang rebuilds tray menu and syncs jump list (" + d8LangTraySyncWhy + ")");
 

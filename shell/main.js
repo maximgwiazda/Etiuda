@@ -7304,15 +7304,10 @@ function deskDropOwn(key) {
     deskWritten = true;
   } catch (e) { console.error("etiuda: the desk could not be written - " + e.message); }
 }
+/* The tray menu, its tooltip and the jump list speak the desk's language, so a change of it rebuilds them at once. */
 function onUiLangChanged() {
-  try {
-    if (typeof __test !== "undefined" && typeof __test.rebuildTrayMenu === "function") __test.rebuildTrayMenu();
-    else rebuildTrayMenu();
-  } catch {}
-  try {
-    if (typeof __test !== "undefined" && typeof __test.syncJumpList === "function") __test.syncJumpList();
-    else syncJumpList();
-  } catch {}
+  try { rebuildTrayMenu(); } catch { /* no tray on this desk */ }
+  try { syncJumpList(); } catch { /* the jump list is optional */ }
 }
 
 function writeDesk(text, from) {
