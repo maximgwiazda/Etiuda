@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 106;
+const EXPECTED = 108;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -1848,6 +1848,22 @@ async function main() {
     && removedEdit && removedEdit.confined === true && removedEdit.removed.some(e => e.file === "tests/x.mjs") && removedEdit.added.length === 0,
     "16r one entry added to test selects that file and chain-split: failClosed=" + addedPlan.failClosed
     + " steps=" + [...addedSet].join(","));
+
+  /* 16r2: what selects chain-split for a changed list of tests selects engine-selftest too, whose 31a holds the same list. */
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "engine-selftest.js"), readPkg);
+  writePkg(JSON.parse(baseText));
+  fs.writeFileSync(path.join(pkgLab.lab, "tests", "brand-new.mjs"), readPkg);
+  const newPlan = await gr.planAreaRun(pkgLab.lab, ["tests/brand-new.mjs"], JSON.parse(baseText), "HEAD");
+  const newSet = new Set((newPlan.steps || []).map(s => s.file));
+  check(newSet.has("tests/chain-split.mjs") && newSet.has("tests/engine-selftest.js"),
+    "16r2 a test file new against the base selects chain-split and engine-selftest: steps=" + [...newSet].join(","));
+  writePkg(addedObj);
+  const scriptPlan = await gr.planAreaRun(pkgLab.lab, ["package.json"], JSON.parse(fs.readFileSync(path.join(pkgLab.lab, "package.json"), "utf8")), "HEAD");
+  const scriptSet = new Set((scriptPlan.steps || []).map(s => s.file));
+  check(scriptSet.has("tests/engine-selftest.js"),
+    "16r3 a script chain that gained an entry selects engine-selftest: steps=" + [...scriptSet].join(","));
+  try { fs.unlinkSync(path.join(pkgLab.lab, "tests", "brand-new.mjs")); fs.unlinkSync(path.join(pkgLab.lab, "tests", "engine-selftest.js")); } catch (e) {}
+  writePkg(JSON.parse(baseText));
 
   const bumpObj = JSON.parse(baseText);
   bumpObj.version = "0.0.2";
