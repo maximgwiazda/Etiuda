@@ -204,8 +204,7 @@ function createEmbedSuggest(o) {
       if (searchReady && searchKey === key && searchCards && searchIntents) return { ready: true };
       let unpacked = null;
       try { unpacked = core.unpackSearchCache(cacheRead(key)); } catch (e) { unpacked = null; }
-      const have = unpacked ? unpacked.cards.length + unpacked.intents.length : 0;
-      if (unpacked && have === list.length) {
+      if (unpacked && core.searchCacheFits(unpacked, list)) {
         storeTables(unpacked);
         searchKey = key;
         searchReady = true;

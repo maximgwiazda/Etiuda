@@ -20426,6 +20426,7 @@ What you type stays in this browser only.`;
   var typed = null;
   var boxDirty = false;
   var askedQuery = null;
+  var SEARCH_RETRY_MS = 5e3;
   var cheapSeen = "";
   var sentText = "";
   var sending = "";
@@ -20666,7 +20667,13 @@ What you type stays in this browser only.`;
     if (boxDirty) return;
     if (!acceptSearchAnswer(ticket, { gen: searchGen, query: currentQuery() })) return;
     if (!eSearchOn()) return;
-    if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) return;
+    if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) {
+      if (askedQuery === q) askedQuery = null;
+      setTimeout(() => {
+        if (currentQuery() === q) scheduleSearchRank();
+      }, SEARCH_RETRY_MS);
+      return;
+    }
     meaning = { gen, query: q, cards: ans.cards, intents: ans.intents };
     try {
       hooks.render();

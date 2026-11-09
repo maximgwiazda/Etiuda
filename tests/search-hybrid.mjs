@@ -98,10 +98,13 @@ const ROWS = [
   { surface: "intent", id: "t:lamp", text: "title: mending a lantern | text: the lantern needs mending" },
   { surface: "intent", id: "t:tea", text: "title: brewing tea | text: the kettle brews" }
 ];
-const PACKED = core.packSearchCache({
-  cards: [["lamp", Float32Array.from([1, 0, 0])], ["kettle", Float32Array.from([0, 1, 0])]],
-  intents: [["t:lamp", Float32Array.from([1, 0, 0])], ["t:tea", Float32Array.from([0, 1, 0])]]
-});
+/* Vectors of the model's width, one-hot, so the cache is one the shell trusts (core.searchCacheFits). */
+const ONE = i => { const v = new Float32Array(core.SEARCH_DIM); v[i] = 1; return v; };
+const TABLES = {
+  cards: [["lamp", ONE(0)], ["kettle", ONE(1)]],
+  intents: [["t:lamp", ONE(0)], ["t:tea", ONE(1)]]
+};
+const PACKED = core.packSearchCache(TABLES);
 function cacheFor(buf) {
   return {
     cacheRead: key => (key && buf) || null,
@@ -112,7 +115,7 @@ function cacheFor(buf) {
 const queryAnswer = m => {
   if (m.kind === "boot" || m.kind === "load") return m.kind === "boot" ? { kind: "booted" } : { kind: "ready", epoch: m.epoch };
   if (m.kind === "passages") return { kind: "ready", epoch: m.epoch };
-  if (m.kind === "search-query" || m.kind === "search-doc") return { kind: "search-vector", n: m.n, vec: [1, 0, 0] };
+  if (m.kind === "search-query" || m.kind === "search-doc") return { kind: "search-vector", n: m.n, vec: Array.from(ONE(0)) };
   if (m.kind === "rank") return { kind: "ranked", n: m.n, epoch: m.epoch, rows: [{ id: "t:lamp", score: 1 }] };
   return null;
 };
@@ -180,6 +183,18 @@ try {
     && back.cards[0][1][0] === 1 && back.intents[1][0] === "t:tea";
   check(round && core.unpackSearchCache(Buffer.from("nope")) === null,
     "h3 a cache buffer round-trips, and a buffer that is not one does not");
+
+  /* h3b. A cache of the right shape and count that is not this catalog's rows, or not the model's width, or not finite,
+     is not trusted: the shell re-embeds rather than mis-ordering the search (the test architect's read of fed73e15). */
+  const swapped = core.unpackSearchCache(core.packSearchCache({ cards: [TABLES.cards[1], TABLES.cards[0]], intents: TABLES.intents }));
+  const short = core.unpackSearchCache(core.packSearchCache({ cards: [["lamp", Float32Array.from([1, 0, 0])], TABLES.cards[1]], intents: TABLES.intents }));
+  const nanV = ONE(0); nanV[5] = NaN;
+  const notFinite = core.unpackSearchCache(core.packSearchCache({ cards: [["lamp", nanV], TABLES.cards[1]], intents: TABLES.intents }));
+  const fits = core.searchCacheFits(core.unpackSearchCache(PACKED), ROWS);
+  check(fits && !core.searchCacheFits(swapped, ROWS) && !core.searchCacheFits(short, ROWS) && !core.searchCacheFits(notFinite, ROWS),
+    "h3b the cache is trusted only as this catalog's rows in order, each of the model's width and finite: right "
+    + fits + ", swapped " + core.searchCacheFits(swapped, ROWS) + ", short " + core.searchCacheFits(short, ROWS)
+    + ", NaN " + core.searchCacheFits(notFinite, ROWS));
 
   const tied = core.orderSurfaces(Float32Array.from([0, 0]), [
     ["b", Float32Array.from([0, 0])],

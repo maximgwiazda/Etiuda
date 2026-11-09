@@ -35,6 +35,7 @@ function acceptSearchAnswer(ticket, live) {
 }
 
 let meaning = null, searchGen = 0, typed = null, boxDirty = false, askedQuery = null;
+const SEARCH_RETRY_MS = 5000;
 let cheapSeen = "", sentText = "", sending = "", toasted = "", modelKnown = null;
 
 function currentQuery() {
@@ -258,7 +259,13 @@ async function ask(q) {
   if (boxDirty) return;
   if (!acceptSearchAnswer(ticket, { gen: searchGen, query: currentQuery() })) return;
   if (!eSearchOn()) return;
-  if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) return;
+  if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) {
+    /* No answer yet (the catalog is still being prepared): forget the ask, so the same query is asked again,
+       on the next keystroke or after SEARCH_RETRY_MS, rather than keeping word order until the query is edited. */
+    if (askedQuery === q) askedQuery = null;
+    setTimeout(() => { if (currentQuery() === q) scheduleSearchRank(); }, SEARCH_RETRY_MS);
+    return;
+  }
   meaning = { gen, query: q, cards: ans.cards, intents: ans.intents };
   try { hooks.render(); } catch (e) {}
   try { hooks.drawIntentRail(); } catch (e) {}

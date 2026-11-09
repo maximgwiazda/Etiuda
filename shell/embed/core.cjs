@@ -208,6 +208,27 @@ function packSearchCache(tables) {
   return Buffer.concat(parts);
 }
 
+/* A cache file is trusted only if it is this catalog's rows, in order, each a vector of the model's width with every
+   value finite. The file's name already binds it to the passages, the pin and the prompt style; this catches a damaged
+   file of the right shape (a disk fault, a half-written older format), which would otherwise mis-order the search or
+   feed NaN to the sort. On a miss the caller re-embeds. */
+const SEARCH_DIM = 768;
+function searchCacheFits(unpacked, list) {
+  if (!unpacked || !Array.isArray(unpacked.cards) || !Array.isArray(unpacked.intents) || !Array.isArray(list)) return false;
+  const want = { card: [], intent: [] };
+  for (const r of list) want[r.surface].push(r.id);
+  const sides = [["card", unpacked.cards], ["intent", unpacked.intents]];
+  for (const [surface, rows] of sides) {
+    if (rows.length !== want[surface].length) return false; /* plant:search-cache-fits */
+    for (let i = 0; i < rows.length; i++) {
+      const [id, v] = rows[i];
+      if (id !== want[surface][i]) return false;
+      if (!v || v.length !== SEARCH_DIM) return false;
+      for (let j = 0; j < v.length; j++) if (!Number.isFinite(v[j])) return false;
+    }
+  }
+  return true;
+}
 function unpackSearchCache(buf) {
   try {
     if (!Buffer.isBuffer(buf) || buf.length < 12) return null;
@@ -253,5 +274,5 @@ function cacheKeep(entries, keep) {
 module.exports = {
   EMBED_PROMPT, EMBED_MAX_TOKENS, EMBED_LIMIT, MODEL_PIN, pinRead, pinProblem, pinPresent, passageRows, passagesKey, unit, nearest,
   SEARCH_QUERY_PROMPT, SEARCH_STYLE, SEARCH_MIN_ALNUM, SEARCH_CACHE_KEEP, searchAlnumLen, catalogHashOf, searchCacheKey,
-  orderSurfaces, packSearchCache, unpackSearchCache, cacheKeep
+  orderSurfaces, packSearchCache, unpackSearchCache, searchCacheFits, SEARCH_DIM, cacheKeep
 };
