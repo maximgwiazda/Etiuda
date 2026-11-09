@@ -6,10 +6,10 @@ import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
 import { openSettings } from "./settings.js";
 import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatchesAction,
-  formatChord, saveShortcuts, scMap2, scTake } from "./shortcuts.js";
+  fieldKeyRefusal, formatChord, isRefusedChord, saveShortcuts, scMap2, scTake } from "./shortcuts.js";
 import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture, scListShown } from "./shortcuts-list.js";
 import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } from "./tour.js";
-import { noteUndoTyping, t, takeStandingUndo, toast } from "./ui-lang.js";
+import { noteUndoTyping, t, takeStandingUndo, toast, toastRefusal } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
 import { lanesPageScroller } from "./lanes.js";
 import { $, intentEl } from "./dom.js";
@@ -57,6 +57,18 @@ function wireCaptureKeydown(){
       return;
     }
     const id=scCaptureId, slot=scCaptureSlot;
+    const chord=chordFromEvent(e);
+    if(!chord) return;
+    e.preventDefault(); e.stopPropagation();
+    /* A key a field needs for typing is not taken. The row, its owner and the store stay,
+       and the line says so where the recording happens. */
+    if(isRefusedChord(chord)){
+      scStopCapture();
+      if(scRepaint) scRepaint();
+      toastRefusal(fieldKeyRefusal(chord));
+      return;
+    }
+    /* Unmodified Backspace and Delete are refused above. A modified one still clears the row. */
     if(e.key==="Backspace"||e.key==="Delete"){
       e.preventDefault(); e.stopPropagation();
       const d=SC_DEFS.find(x=>x.id===id);
@@ -65,9 +77,6 @@ function wireCaptureKeydown(){
       toast(slot===2?"Alternative cleared":"Back to the default");
       return;
     }
-    const chord=chordFromEvent(e);
-    if(!chord) return;
-    e.preventDefault(); e.stopPropagation();
     /* THE FIXED KEYS ARE NOT ON OFFER: the list says they keep their own meanings, and the sweep
        below cannot take a chord back off one - it skips them. Refusing the capture is what keeps
        that promise; the row stays open for another key. */

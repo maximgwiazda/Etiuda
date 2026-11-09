@@ -703,6 +703,8 @@ UI_STRINGS.pl={
   "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
   "Saved {KEY}":"Zapisano {KEY}",
+  "{KEY} is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.":"{KEY} jest potrzebny do pisania, więc nie może być skrótem, i nic nie zmieniono. Można wybrać klawisz F albo połączenie z Ctrl lub Alt.",
+  "This key is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.":"Ten klawisz jest potrzebny do pisania, więc nie może być skrótem, i nic nie zmieniono. Można wybrać klawisz F albo połączenie z Ctrl lub Alt.",
   "{N} card":"{N} karta",
   "{N} cards":"{N} kart",
   "few␟{N} cards":"{N} karty",

@@ -39,6 +39,11 @@ function shortcutsListHtml(q){
 /* The capture state is the list's rather than the chord model's: what it is listening
    for, and for which of the two slots. */
 var scCaptureId=null, scCaptureSlot=1;
+/* One write of which row is listening, so every start of a capture does it the same way. */
+function scBeginCapture(id, slot){
+  scCaptureId=id;
+  scCaptureSlot=+slot||1;
+}
 /** Paints the list into `box` and wires capture. `repaint` is how the component asks its host
  *  to draw again - the host owns the surrounding markup, so it decides what redrawing means. */
 /* Whichever surface last painted the list owns the repaint - a rebinding must repaint in
@@ -51,8 +56,7 @@ function wireShortcutsList(box, repaint, q){
   box.querySelectorAll("[data-bind]").forEach(btn=>{
     if(btn.disabled) return;
     btn.onclick=()=>{
-      scCaptureId=btn.getAttribute("data-bind");
-      scCaptureSlot=+btn.getAttribute("data-slot")||1;
+      scBeginCapture(btn.getAttribute("data-bind"), +btn.getAttribute("data-slot")||1);
       repaint();
       toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Backspace to clear)":"Press the new shortcut (Esc to cancel, Backspace for the default)");
     };
@@ -69,6 +73,7 @@ function scListShown(){ return typeof document!=="undefined" && !!document.getEl
 export {
   scCaptureId,
   scCaptureSlot,
+  scBeginCapture,
   scRepaint,
   scStopCapture,
   scFold,

@@ -169,6 +169,40 @@ function formatChord(c, def){
   parts.push(lab);
   return parts.join("+");
 }
+/* A recorded chord a field needs for typing is refused. Shift with a printable key counts as one.
+   Ctrl+Alt with a printable key is AltGr, so it is typing too. F-keys, and Ctrl, Alt or Meta otherwise, stay free. Recording only: scTake still restores a default. */
+function isPrintableKey(c){
+  if(!c) return false;
+  const code=c.code||"", key=c.key||"";
+  if(code.indexOf("Key")===0 || code.indexOf("Digit")===0) return true;
+  return key.length===1 && key!==" ";
+}
+function isRefusedChord(c){
+  if(!c) return false;
+  const ctrl=c.ctrl?1:0, alt=c.alt?1:0, shift=c.shift?1:0, meta=c.meta?1:0;
+  if(ctrl===1 && alt===0 && meta===0 && shift===0){
+    const k=String(c.key||"").toLowerCase(), code=c.code||"";
+    if(["a","c","v","x","y","z"].indexOf(k)>=0 || /^Key[ACVXYZ]$/i.test(code)) return true;
+  }
+  if(ctrl===0 && alt===0 && meta===0 && shift===0){
+    const key=c.key||"", code=c.code||"";
+    if(key===" " || key==="Space" || code==="Space" ||
+       key==="Enter" || code==="Enter" ||
+       key==="Tab" || code==="Tab" ||
+       key==="Backspace" || code==="Backspace" ||
+       key==="Delete" || code==="Delete") return true;
+  }
+  if(ctrl===0 && alt===0 && meta===0 && isPrintableKey(c)) return true;
+  /* AltGr is Ctrl+Alt: on a Polish layout Ctrl+Alt with A, C, E, L, N, O, S, X or Z types a letter (the test architect,
+     2026-11-09), so Ctrl+Alt with a printable key, with or without Shift, is typing too. */
+  if(ctrl===1 && alt===1 && meta===0 && isPrintableKey(c)) return true;
+  return false;
+}
+function fieldKeyRefusal(chord){
+  const key=formatChord(chord);
+  if(key && key!=="-") return t("{KEY} is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.").replace("{KEY}", key);
+  return t("This key is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.");
+}
 // scReady flips true only after SC_DEFS + loadShortcuts. Do not touch SC_DEFS before that
 // (const is in TDZ - even typeof SC_DEFS throws and kills the whole page).
 var scReady=false;
@@ -334,6 +368,8 @@ export {
   chordFromEvent,
   chordsEqual,
   formatChord,
+  isRefusedChord,
+  fieldKeyRefusal,
   chordChips,
   formatActionChord,
   tabAddTitle,

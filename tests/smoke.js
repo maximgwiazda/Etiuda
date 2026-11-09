@@ -2367,8 +2367,11 @@ const t0 = Date.now();
       still: !!scCaptureId,
       said: (document.getElementById("toast") || {}).textContent || ""
     }));
-    check(grab.armed && kept.after === grab.before && kept.still && /fixed/i.test(kept.said),
-      "a capture refuses a fixed key and says which (" + JSON.stringify(kept.said.slice(0, 40)) + ")");
+    /* Enter is fixed, and a field needs it for typing. The typing refusal comes first, so the
+       recording ends, the binding stays, and the line names typing. */
+    check(grab.armed && kept.after === grab.before && !kept.still
+      && kept.said.indexOf("Enter is needed for typing") === 0,
+      "a capture refuses Enter, which a field needs for typing, and says which (" + JSON.stringify(kept.said.slice(0, 48)) + ")");
     await p.keyboard.press("Escape"); await sleep(300);
   } else check(false, "the shortcuts list offered no capture to arm");
   await p.evaluate(() => { if (screenOn === "settings") closeScreenTab("settings"); }); await sleep(500);
