@@ -4,8 +4,8 @@
  *
  * The export tool refuses a file whose sha256 is wrong and writes no ONNX under the model's name (m2).
  * A missing model packs the desk without the AI row (m4). A wrong model file fails the pack (m5).
- * Both installer licence files carry the Gemma notice and the prohibited-use policy, and still close
- * on the trademark (m6). Nothing here downloads a weight or opens a window.
+ * Both installer licence files carry the model attribution, the modification statement and the
+ * Apache Licence 2.0, and still close on the trademark (m6). Nothing here downloads a weight or opens a window.
  */
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -13,13 +13,24 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareEmbed } from "../tools/model.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXPORT = path.join(ROOT, "tools", "model-export", "export.py");
 const PACK = path.join(ROOT, "tools", "model.mjs");
 const WITHOUT = "the desk ships without the built-in model, so suggestions stay on words and the AI row is absent";
+const ATTR = "EmbeddingGemma 2, Google DeepMind, Apache 2.0";
 const POLICY = "https://ai.google.dev/gemma/prohibited_use_policy";
-const NOTICE = "https://ai.google.dev/gemma/docs/gemma_4_license";
+function noticeFaults(text, lang) {
+  const faults = [];
+  if (!text.includes(ATTR)) faults.push("attribution");
+  const modified = lang === "pl" ? text.includes("kwantyzacja") : text.includes("quantisation");
+  if (!modified || !text.includes("ONNX")) faults.push("modification");
+  if (!text.includes("Apache License") || !text.includes("Version 2.0, January 2004")
+      || !text.includes("END OF TERMS AND CONDITIONS")) faults.push("apache");
+  if (text.includes(POLICY) || text.includes("Gemma Terms of Use") || text.includes("gemma_4_license")) faults.push("use-policy");
+  return faults;
+}
 
 let checks = 0, failed = 0;
 function check(ok, what) {
@@ -128,9 +139,13 @@ let copiedHash = "";
 const copiedAt = path.join(destReady, "model", "model_q4.onnx");
 if (fs.existsSync(copiedAt)) copiedHash = sha256(fs.readFileSync(copiedAt));
 const runtimeCopied = fs.existsSync(path.join(destReady, "runtime", "node_modules", runtimeRel));
-check(ready.status === 0 && copiedHash === GOOD_HASH && runtimeCopied,
-  "m5b a model that matches its pin is copied and checked again, with the runtime: exit " + ready.status
-  + " hash=" + copiedHash.slice(0, 12) + " runtime=" + runtimeCopied);
+const noticeTree = path.join(ROOT, "shell", "embed", "third-party.txt");
+const noticeAt = path.join(destReady, "model", "third-party.txt");
+const noticeCopied = fs.existsSync(noticeTree) && fs.existsSync(noticeAt)
+  && fs.readFileSync(noticeAt).equals(fs.readFileSync(noticeTree));
+check(ready.status === 0 && copiedHash === GOOD_HASH && runtimeCopied && noticeCopied,
+  "m5b a model that matches its pin is copied and checked again, with the runtime and the notice: exit " + ready.status
+  + " hash=" + copiedHash.slice(0, 12) + " runtime=" + runtimeCopied + " notice=" + noticeCopied);
 
 const disagreeModel = path.join(LAB, "disagree-model");
 fs.mkdirSync(disagreeModel);
@@ -150,6 +165,23 @@ check(disagree.status === 1 && /disagree/.test((disagree.stderr || "")),
   "m5c bytes that match the export pin and not the shell pin are refused: exit " + disagree.status
   + " " + JSON.stringify((disagree.stderr || "").trim().slice(0, 200)));
 
+let missingNotice = "";
+try {
+  await prepareEmbed({
+    dest: path.join(LAB, "dest-no-notice"),
+    modelDir: readyModel,
+    pin: JSON.parse(fs.readFileSync(readyPin, "utf8")),
+    runtimeDir,
+    runtimeFiles: JSON.parse(fs.readFileSync(runtimePin, "utf8")).files,
+    noticeFile: path.join(LAB, "no-such-notice.txt"),
+    log: () => {},
+  });
+} catch (error) { missingNotice = String((error && error.message) || error); }
+const packedAnyway = fs.existsSync(path.join(LAB, "dest-no-notice", "model", "model_q4.onnx"));
+check(/third-party notice is absent/.test(missingNotice) && !packedAnyway,
+  "m5d a model with no third-party notice is refused and not copied: " + JSON.stringify(missingNotice.slice(0, 120))
+  + " copied=" + packedAnyway);
+
 function licenceClosing(name) {
   const text = fs.readFileSync(path.join(ROOT, "shell", name), "utf8").replace(/^\uFEFF/, "");
   const paras = text.trim().split(/\n\s*\n/);
@@ -157,11 +189,17 @@ function licenceClosing(name) {
 }
 const en = licenceClosing("license_en.txt");
 const pl = licenceClosing("license_pl.txt");
-check(en.text.includes(POLICY) && en.text.includes(NOTICE) && /EmbeddingGemma/.test(en.text) && /Apache/.test(en.text)
+const enFaults = noticeFaults(en.text, "en");
+const plFaults = noticeFaults(pl.text, "pl");
+check(enFaults.length === 0 && plFaults.length === 0
     && en.last === "Etiuda is a trademark of Maxim Gwiazda." && !en.cr && en.bom
-    && pl.text.includes(POLICY) && pl.text.includes(NOTICE) && /EmbeddingGemma/.test(pl.text) && /Apache/.test(pl.text)
     && pl.last === "Etiuda jest znakiem towarowym Maxima Gwiazdy." && !pl.cr && pl.bom,
-  "m6 both licence files carry the Gemma notice and the prohibited-use policy, and still close on the trademark");
+  "m6 both licence files carry the attribution, the modification and the Apache text, and still close on the trademark: "
+  + JSON.stringify({ en: enFaults, pl: plFaults }));
+const withoutAttribution = en.text.replace(ATTR, "a built-in model");
+const restored = en.text + "\n\n" + POLICY;
+check(noticeFaults(withoutAttribution, "en").includes("attribution") && noticeFaults(restored, "en").includes("use-policy"),
+  "m6p without the attribution, or with the use policy put back, the notice is refused");
 
 const runtimeJson = path.join(ROOT, "tools", "model-runtime.json");
 let runtimeList = null;

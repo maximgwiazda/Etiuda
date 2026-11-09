@@ -6,7 +6,8 @@
  *
  * A missing model is a success: the desk ships with word suggestions and no AI row.
  * A file that is present and does not match the pin fails the build. The pin the desk
- * checks at load wins over the export's pin.
+ * checks at load wins over the export's pin. A model that matches also copies the
+ * third-party notice beside it.
  */
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -17,6 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
+const NOTICE_FILE = join(ROOT, "shell", "embed", "third-party.txt");
 export const WITHOUT = "the desk ships without the built-in model, so suggestions stay on words and the AI row is absent";
 
 export function shellPin() {
@@ -98,10 +100,15 @@ export async function prepareEmbed(opts) {
   const runtimeFiles = opts.runtimeFiles || defaultRuntimeFiles();
   if (!runtimeFiles.length) throw new Error("the runtime pin lists no file");
   const runtimeDir = opts.runtimeDir || join(ROOT, "node_modules");
+  /* Beside the weights, not one of them: the desk hashes the pin, and this file is the licence text. */
+  const noticeFile = opts.noticeFile || NOTICE_FILE;
+  if (!existsSync(noticeFile)) throw new Error("the third-party notice is absent");
+  const noticeHash = await sha256File(noticeFile);
   emptyPack(opts.dest);
   for (const file of pin.files) {
     await copyChecked(join(modelDir, file.name), join(opts.dest, "model", file.name), file.sha256);
   }
+  await copyChecked(noticeFile, join(opts.dest, "model", "third-party.txt"), noticeHash);
   for (const file of runtimeFiles) {
     await copyChecked(join(runtimeDir, file.name), join(opts.dest, "runtime", "node_modules", file.name), file.sha256);
   }
