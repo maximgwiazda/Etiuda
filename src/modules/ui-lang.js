@@ -923,13 +923,18 @@ UI_STRINGS.pl={
   "Show categories":"Pokaż kategorie",
   "Settings":"Ustawienia",
   "AI":"AI",
-  "Suggest intents with the built-in model":"Suggest intents with the built-in model", // placeholder: Claudette
-  "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.":"Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.", // placeholder: Claudette
-  "The model ranks the suggestions; nothing leaves this computer":"The model ranks the suggestions; nothing leaves this computer", // placeholder: Claudette
-  "Suggestions come from matching words, and the model stays unloaded":"Suggestions come from matching words, and the model stays unloaded", // placeholder: Claudette
-  "Suggestions from the built-in model":"Suggestions from the built-in model", // placeholder: Claudette
-  "Suggestions from matching words":"Suggestions from matching words", // placeholder: Claudette
-  "The model built into Etiuda, which works on this computer alone.":"The model built into Etiuda, which works on this computer alone.", // placeholder: Claudette
+  "Suggest intents with the built-in model":"Propozycje intencji przy użyciu wbudowanego modelu",
+  "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.":"Odczytuje skopiowaną wiadomość na tym komputerze i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
+  "The model ranks the suggestions; nothing leaves this computer":"Model ustala kolejność propozycji; nic nie opuszcza tego komputera",
+  "Suggestions come from matching words, and the model stays unloaded":"Propozycje wynikają z dopasowania słów, a model nie jest wczytywany",
+  "Suggestions from the built-in model":"Propozycje z wbudowanego modelu",
+  "Suggestions from matching words":"Propozycje z dopasowania słów",
+  "The model built into Etiuda, which works on this computer alone.":"Model wbudowany w Etiudę, działający wyłącznie na tym komputerze.",
+  "Search by meaning with the built-in model":"Wyszukiwanie według znaczenia przy użyciu wbudowanego modelu",
+  "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only.":"Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model na tym komputerze. Wyłączone dopasowuje tylko słowa.",
+  "Preparing the catalog for search by meaning; word search works meanwhile.":"Trwa przygotowanie katalogu do wyszukiwania według znaczenia; w tym czasie działa wyszukiwanie po słowach.",
+  "The model ranks the search beside word matches; nothing leaves this computer":"Model porządkuje wyniki obok dopasowań słów; nic nie opuszcza tego komputera",
+  "Off, it matches words only.":"Wyłączone dopasowuje tylko słowa.",
   "General":"Ogólne",
   "Notifications":"Powiadomienia",
   "Notifications from Etiuda, also while its window is closed.":"Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",

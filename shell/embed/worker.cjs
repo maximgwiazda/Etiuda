@@ -20,9 +20,11 @@ function pinInForce() {
 }
 
 let ort = null, tok = null, session = null, table = null, epoch = null, busy = Promise.resolve();
+const held = [];
 
-async function embed(text) {
-  const ids = tok.encode(core.EMBED_PROMPT + String(text)).ids.slice(0, core.EMBED_MAX_TOKENS);
+/* One encode for both jobs. Classification puts its prompt on in embed(); the search names the string it wants. */
+async function embedText(text) {
+  const ids = tok.encode(String(text)).ids.slice(0, core.EMBED_MAX_TOKENS);
   const n = ids.length;
   const feeds = {};
   for (const name of session.inputNames) {
@@ -36,6 +38,9 @@ async function embed(text) {
   const v = out.sentence_embedding || out[session.outputNames[0]];
   return core.unit(v.data);
 }
+async function embed(text) {
+  return embedText(core.EMBED_PROMPT + String(text));
+}
 
 async function passagesTable(passages) {
   const rows = core.passageRows(passages), out = [];
@@ -43,7 +48,10 @@ async function passagesTable(passages) {
   return out;
 }
 
-async function load(m) {
+/* The session is opened once. A later load, from the picker after the search has already booted, embeds its
+   passages on that session and does not open a second one. */
+async function openSession(m) {
+  if (session) return true;
   const got = await core.pinRead(m.dir, pinInForce());
   if (got.problem) { send({ kind: "refused", why: got.problem.why, name: got.problem.name }); return false; }
   const mods = path.join(String(m.runtime || ""), "node_modules");
@@ -55,27 +63,51 @@ async function load(m) {
   tok = new Tokenizer(JSON.parse(b["tokenizer.json"].toString("utf8")), JSON.parse(b["tokenizer_config.json"].toString("utf8")));
   session = await ort.InferenceSession.create(u8(b["model_q4.onnx"]), { intraOpNumThreads: 2, interOpNumThreads: 1,
     externalData: [{ path: "model_q4.onnx_data", data: u8(b["model_q4.onnx_data"]) }] });
+  return true;
+}
+
+async function load(m) {
+  if (!(await openSession(m))) return false;
   table = await passagesTable(m.passages);
   epoch = m.epoch;
   send({ kind: "ready", epoch });
   return true;
 }
 
-async function handle(m) {
-  if (!m || typeof m !== "object") return;
-  if (m.kind === "load") {
-    if (!(await load(m))) process.exit(0);
-    return;
-  }
-  if (!session) return;
+async function boot(m) {
+  if (!(await openSession(m))) return false;
+  send({ kind: "booted" });
+  return true;
+}
+
+async function dispatch(m) {
   if (m.kind === "passages") {
     table = await passagesTable(m.passages);
     epoch = m.epoch;
     send({ kind: "ready", epoch });
   } else if (m.kind === "rank") {
+    if (!table) return;
     const vec = await embed(String(m.text || ""));
     send({ kind: "ranked", n: m.n, epoch, rows: core.nearest(vec, table, core.EMBED_LIMIT) });
+  } else if (m.kind === "search-doc" || m.kind === "search-query") {
+    const text = m.kind === "search-query" ? core.SEARCH_QUERY_PROMPT + String(m.text || "") : String(m.text || "");
+    const vec = await embedText(text);
+    send({ kind: "search-vector", n: m.n, vec: Array.from(vec) });
   }
+}
+
+async function handle(m) {
+  if (!m || typeof m !== "object") return;
+  if (m.kind === "boot" || m.kind === "load") {
+    const ok = m.kind === "boot" ? await boot(m) : await load(m);
+    if (!ok) { process.exit(0); return; }
+    const rest = held.splice(0, held.length);
+    for (const q of rest) await dispatch(q);
+    return;
+  }
+  /* A search passage posted before the session exists waits here, and runs once boot or load has opened it. */
+  if (!session) { held.push(m); return; }
+  await dispatch(m);
 }
 
 function take(m) {

@@ -12,6 +12,12 @@ const crypto = require("node:crypto");
 const EMBED_PROMPT = "task: classification | query: ";
 const EMBED_MAX_TOKENS = 128;
 const EMBED_LIMIT = 5;
+/* The main search's prompt, measured apart from classification. A passage is embedded as the title and text line
+   itself, with no prompt in front. Under three letters or digits the search never asks. */
+const SEARCH_QUERY_PROMPT = "task: search result | query: ";
+const SEARCH_STYLE = SEARCH_QUERY_PROMPT + "\n" + "title: {title} | text: {text}";
+const SEARCH_MIN_ALNUM = 3;
+const SEARCH_CACHE_KEEP = 3;
 
 /* EmbeddingGemma 2. The tokenizer files are Google's own. The ONNX weights are our own conversion of
    Google's weights, not Hugging Face's. SHIPPED is the width the desk loads. The other list is the
@@ -126,4 +132,126 @@ function nearest(vec, table, limit) {
     .slice(0, limit || EMBED_LIMIT);
 }
 
-module.exports = { EMBED_PROMPT, EMBED_MAX_TOKENS, EMBED_LIMIT, MODEL_PIN, pinRead, pinProblem, pinPresent, passageRows, passagesKey, unit, nearest };
+/* Letters and digits, the same count the measurement used. A space is not one. */
+function searchAlnumLen(text) {
+  const m = String(text == null ? "" : text).match(/\p{L}|\p{N}/gu);
+  return m ? m.length : 0;
+}
+
+/* What the search embedded, in the order the page handed it over. Two catalogs with the same passages hash the same. */
+function catalogHashOf(rows) {
+  const h = crypto.createHash("sha256");
+  for (const r of Array.isArray(rows) ? rows : []) {
+    h.update(String(r && r.surface || ""));
+    h.update("\n");
+    h.update(String(r && r.id || ""));
+    h.update("\n");
+    h.update(String(r && r.text || ""));
+    h.update("\n");
+  }
+  return h.digest("hex");
+}
+
+function pinText(pin) {
+  const name = pin && pin.name ? String(pin.name) : "";
+  const files = pin && Array.isArray(pin.files) ? pin.files : [];
+  let s = name;
+  for (const f of files) s += "\n" + String(f && f.name || "") + " " + String(f && f.sha256 || "") + " " + String(f && f.size != null ? f.size : "");
+  return s;
+}
+
+/* The cache file's name: the passages, the pin, and the prompt style. Any one of the three changing misses. */
+function searchCacheKey(catalogHash, pin, style) {
+  return crypto.createHash("sha256").update(String(catalogHash) + "\n" + pinText(pin) + "\n" + String(style == null ? SEARCH_STYLE : style)).digest("hex");
+}
+
+/* Every id by its best passage, highest first, equal scores by id. No rounding and no cut: the page keeps the
+   word matches and appends the rest of this order. `table` is [[id, unit vector]]. */
+function orderSurfaces(vec, table) {
+  const best = new Map();
+  for (const row of Array.isArray(table) ? table : []) {
+    if (!row) continue;
+    const id = String(row[0]);
+    const v = row[1];
+    if (!v) continue;
+    const c = dot(vec, v);
+    const prev = best.get(id);
+    if (prev === undefined || c > prev) best.set(id, c);
+  }
+  return [...best.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(e => e[0]);
+}
+
+const SEARCH_CACHE_MAGIC = Buffer.from("ETSC");
+
+/* One buffer the shell can store. Passages stay separate, because which passage wins depends on the query. */
+function packSearchCache(tables) {
+  const cards = tables && Array.isArray(tables.cards) ? tables.cards : [];
+  const intents = tables && Array.isArray(tables.intents) ? tables.intents : [];
+  const rows = [];
+  for (const [id, v] of cards) rows.push([1, id, v]);
+  for (const [id, v] of intents) rows.push([2, id, v]);
+  const parts = [SEARCH_CACHE_MAGIC, Buffer.alloc(8)];
+  parts[1].writeUInt32LE(1, 0);
+  parts[1].writeUInt32LE(rows.length, 4);
+  for (const [surface, id, v] of rows) {
+    const name = Buffer.from(String(id), "utf8");
+    const dim = v.length;
+    const head = Buffer.alloc(1 + 2 + name.length + 2);
+    head.writeUInt8(surface, 0);
+    head.writeUInt16LE(name.length, 1);
+    name.copy(head, 3);
+    head.writeUInt16LE(dim, 3 + name.length);
+    const body = Buffer.alloc(dim * 4);
+    for (let i = 0; i < dim; i++) body.writeFloatLE(v[i], i * 4);
+    parts.push(head, body);
+  }
+  return Buffer.concat(parts);
+}
+
+function unpackSearchCache(buf) {
+  try {
+    if (!Buffer.isBuffer(buf) || buf.length < 12) return null;
+    if (!buf.subarray(0, 4).equals(SEARCH_CACHE_MAGIC)) return null;
+    if (buf.readUInt32LE(4) !== 1) return null;
+    const count = buf.readUInt32LE(8);
+    const cards = [], intents = [];
+    let at = 12;
+    for (let n = 0; n < count; n++) {
+      if (at + 3 > buf.length) return null;
+      const surface = buf.readUInt8(at);
+      const idLen = buf.readUInt16LE(at + 1);
+      at += 3;
+      if (idLen > 400 || at + idLen + 2 > buf.length) return null;
+      const id = buf.subarray(at, at + idLen).toString("utf8");
+      at += idLen;
+      const dim = buf.readUInt16LE(at);
+      at += 2;
+      if (dim < 1 || dim > 8192 || at + dim * 4 > buf.length) return null;
+      const v = new Float32Array(dim);
+      for (let i = 0; i < dim; i++) v[i] = buf.readFloatLE(at + i * 4);
+      at += dim * 4;
+      const row = [id, v];
+      if (surface === 1) cards.push(row);
+      else if (surface === 2) intents.push(row);
+      else return null;
+    }
+    if (at !== buf.length) return null;
+    return { cards, intents };
+  } catch (e) { return null; }
+}
+
+/* Names to drop so `keep` files remain, newest first. `entries` is [{name, mtime}]. */
+function cacheKeep(entries, keep) {
+  const n = keep == null ? SEARCH_CACHE_KEEP : (keep | 0);
+  const list = (Array.isArray(entries) ? entries : []).filter(e => e && e.name).slice();
+  list.sort((a, b) => (b.mtime - a.mtime) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const drop = [];
+  for (let i = n; i < list.length; i++) drop.push(String(list[i].name));
+  return drop;
+}
+
+module.exports = {
+  EMBED_PROMPT, EMBED_MAX_TOKENS, EMBED_LIMIT, MODEL_PIN, pinRead, pinProblem, pinPresent, passageRows, passagesKey, unit, nearest,
+  SEARCH_QUERY_PROMPT, SEARCH_STYLE, SEARCH_MIN_ALNUM, SEARCH_CACHE_KEEP, searchAlnumLen, catalogHashOf, searchCacheKey,
+  orderSurfaces, packSearchCache, unpackSearchCache, cacheKeep
+};

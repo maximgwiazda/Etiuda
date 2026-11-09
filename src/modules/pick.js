@@ -1,4 +1,5 @@
 import { eHost, eHotkey, eHotkeyLabel, eAiOn } from "./host.js";
+import { armSearch } from "./search-meaning.js";
 import { cards, intentIdxs, lang, wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms, catalogVocab } from "./spell.js";
 import { rankedCards } from "./render.js";
@@ -419,6 +420,7 @@ function wirePick(){
   const h=eHost();
   if(!h || typeof h.onPickAsk!=="function") return;
   h.onPickAsk((op,arg)=>JSON.stringify(answerPick(String(op||""),arg)));
+  try{ armSearch(); }catch(e){}
 }
 
 export {
