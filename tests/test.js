@@ -5845,7 +5845,7 @@ function checkCatalogRoundTrip() {
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 1324;
-const UI_STRINGS_SHA256 = "6444029f3cbc8bf76701689465083fd65837a71fdc10174f20402b64d37b2a94";
+const UI_STRINGS_SHA256 = "9330a7f7a60c4ba5c348580e03d05de123589a241623b9083ce520e59fc6229c";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or
