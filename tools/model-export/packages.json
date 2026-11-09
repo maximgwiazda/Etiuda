@@ -13,7 +13,8 @@
     {"name": "onnx", "version": "1.23.2", "licence": "Apache-2.0"},
     {"name": "numpy", "version": "2.5.4", "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"},
     {"name": "safetensors", "version": "0.8.0", "licence": "Apache-2.0"},
-    {"name": "pillow", "version": "13.0.0", "licence": "MIT-CMU", "note": "sentence-transformers loads this model's processor, and the PIL class imports only when Pillow is present. No image is sent."}
+    {"name": "pillow", "version": "13.0.0", "licence": "MIT-CMU", "note": "sentence-transformers loads this model's processor, and the PIL class imports only when Pillow is present. No image is sent."},
+    {"name": "torchvision", "version": "0.29.2+cpu", "licence": "BSD-3-Clause", "note": "The video processor imports only when torchvision is present. The CPU wheel accepts torch 2.15.0 and does not replace it. No video is sent."}
   ],
   "notUsed": [
     {"name": "optimum-onnx", "version": "0.1.0", "licence": "Apache-2.0", "why": "Requires transformers below 4.58, so it cannot load this model."}
