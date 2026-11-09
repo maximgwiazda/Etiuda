@@ -7629,6 +7629,16 @@ What you type stays in this browser only.`;
     "Settings": "Ustawienia",
     "General": "Ogólne",
     "Notifications": "Powiadomienia",
+    "Notifications from Etiuda, also while its window is closed.": "Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",
+    "Tell me when": "Powiadamiaj, gdy",
+    "The team's lead publishes a new edition": "Lider zespołu publikuje nowe wydanie",
+    "A new catalog arrives from the team": "Od zespołu przychodzi nowy katalog",
+    "{LEAD} published a new edition": "Nowe wydanie od lidera zespołu: {LEAD}",
+    "{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.": "{CATALOG}, wydanie {EDITION}. Nic nie zostanie wczytane przed przejrzeniem.",
+    "{CATALOG}. Nothing is loaded until it is looked at.": "{CATALOG}. Nic nie zostanie wczytane przed przejrzeniem.",
+    "Show what changed": "Pokaż zmiany",
+    "A new catalog from {LEAD}": "Nowy katalog od lidera zespołu: {LEAD}",
+    "{CATALOG} is in the Library, ready to open.": "{CATALOG} jest w Bibliotece i można go otworzyć.",
     "Teams and keys": "Zespoły i klucze",
     "Data and defaults": "Dane i ustawienia domyślne",
     "About": "O programie",
@@ -9297,7 +9307,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.1.0";
-  var E_BUILT = "2026-11-08";
+  var E_BUILT = "2026-11-09";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -15150,6 +15160,7 @@ What you type stays in this browser only.`;
     eHotkey: () => eHotkey,
     eHotkeyLabel: () => eHotkeyLabel,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
+    eNotify: () => eNotify,
     eOnCatalogCopy: () => eOnCatalogCopy,
     eOnCatalogListing: () => eOnCatalogListing,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
@@ -15573,6 +15584,16 @@ What you type stays in this browser only.`;
           hooks.openSettings();
         } catch (e) {
         }
+      } else if (kind === "library") {
+        try {
+          hooks.openManage();
+        } catch (e) {
+        }
+      } else if (kind === "offer") {
+        try {
+          clearScreenOn();
+        } catch (e) {
+        }
       }
     });
     const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
@@ -15603,6 +15624,16 @@ What you type stays in this browser only.`;
       } catch (e) {
         addEventListener("resize", syncBandHeight, { passive: true });
       }
+    }
+  }
+  function eNotify(opts) {
+    const h = eHost();
+    if (!h || typeof h.notify !== "function") return false;
+    try {
+      h.notify(opts);
+      return true;
+    } catch (e) {
+      return false;
     }
   }
   function eSetMaximized(on) {
@@ -29154,6 +29185,7 @@ What you type stays in this browser only.`;
     eOfferCatalogDialog: () => eOfferCatalogDialog,
     eOfferPickedCatalog: () => eOfferPickedCatalog,
     loadCatalogFromFolder: () => loadCatalogFromFolder,
+    onCatalogListing: () => onCatalogListing,
     paintCatNow: () => paintCatNow,
     paintCatWaiting: () => paintCatWaiting,
     paintCatalogList: () => paintCatalogList,
@@ -30098,6 +30130,8 @@ What you type stays in this browser only.`;
     return " · " + esc(t("rev {R}").split("{R}").join(String(name.r))) + (name.e ? ' <span class="ec-ed">' + esc(name.e) + "</span>" : "");
   }
   var offerStanding = null;
+  var offeredNotified = /* @__PURE__ */ new Set();
+  var listingNotified = /* @__PURE__ */ new Set();
   function eOfferCatalogDialog(c, src) {
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
@@ -30162,6 +30196,28 @@ What you type stays in this browser only.`;
     const arriving = fresh && !src.asked && !src.reopened;
     if (arriving) arriveAtName(wrap);
     document.body.appendChild(wrap);
+    if (arriving && lsGet("eNotifyEditionOff") !== "1") {
+      catalogTrust(c).then((state) => {
+        if (state === V2_SIG_VALID) {
+          eCatalogLeads().then((leads) => {
+            if (!leads || !leads.length) return;
+            const sig2 = eCatalogSignature(c);
+            if (!sig2 || offeredNotified.has(sig2)) return;
+            offeredNotified.add(sig2);
+            const tLeads = teamLeads().filter((l) => l && !l.removed);
+            const print = trustPrint(c);
+            const matchLead = tLeads.find((l) => l && l.print === print);
+            const leadName = matchLead && matchLead.lead || tLeads[0] && tLeads[0].lead || t("The team lead");
+            const catName = catalogNameOfFile(String(src && src.file || "") || E_CATALOG_SCRIPT) || t("Catalog");
+            const ed2 = editionNameOf(c);
+            const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : String(ed2.e || "");
+            const title = t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
+            const body = edStr ? t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName).split("{EDITION}").join(edStr) : t("{CATALOG}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName);
+            eNotify({ title, body, target: "offer" });
+          });
+        }
+      });
+    }
     const place = () => {
       const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
       const box = wrap.querySelector(".ec-change");
@@ -30459,6 +30515,25 @@ What you type stays in this browser only.`;
   }
   function onCatalogListing(all) {
     paintCatalogList();
+    if (lsGet("eNotifyCatalogOff") !== "1") {
+      const tLeads = teamLeads().filter((l) => l && !l.removed);
+      if (tLeads.length > 0) {
+        const leadName = tLeads[0] && tLeads[0].lead || t("The team lead");
+        const teamFiles = (all || []).filter((f) => !f.desk && !f.builtIn && !f.sample && f.id);
+        const held2 = storedCatalog();
+        for (const f of teamFiles) {
+          if (held2 && held2.id === f.id) continue;
+          const key = f.id || f.name;
+          if (key && !listingNotified.has(key)) {
+            listingNotified.add(key);
+            const catName = catalogNameOfFile(f.name);
+            const title = t("A new catalog from {LEAD}").split("{LEAD}").join(leadName);
+            const body = t("{CATALOG} is in the Library, ready to open.").split("{CATALOG}").join(catName);
+            eNotify({ title, body, target: "library" });
+          }
+        }
+      }
+    }
     const held = storedCatalog();
     if (!held && !catalogLoaded()) {
       offerToLooseAuthor(all);
@@ -31867,13 +31942,51 @@ What you type stays in this browser only.`;
       )
     ] }];
   }
+  function notificationsGroups() {
+    const h = eHost();
+    let masterOn = true;
+    if (h && typeof h.trayNotesState === "function") {
+      try {
+        const s = h.trayNotesState();
+        masterOn = !(s && s.on === false);
+      } catch (e) {
+      }
+    }
+    return [
+      { rows: [
+        row(
+          "notesmaster",
+          "notifications",
+          t("Notifications"),
+          t("Notifications from Etiuda, also while its window is closed."),
+          onoff("notesmaster", masterOn, "", "")
+        )
+      ] },
+      { head: t("Tell me when"), rows: [
+        row(
+          "noteedition",
+          "cards",
+          t("The team's lead publishes a new edition"),
+          "",
+          onoff("noteedition", lsGet("eNotifyEditionOff") !== "1", "", "")
+        ),
+        row(
+          "notecatalog",
+          "desks",
+          t("A new catalog arrives from the team"),
+          "",
+          onoff("notecatalog", lsGet("eNotifyCatalogOff") !== "1", "", "")
+        )
+      ] }
+    ];
+  }
   function settingsSections() {
     return [
       { id: "general", icon: "general", name: t("General"), lede: t("Your name, the language, and how Etiuda starts and closes."), groups: generalGroups() },
       { id: "appearance", icon: "appearance", name: t("Appearance"), lede: t("How the app looks and moves."), groups: appearanceGroups() },
       { id: "layout", icon: "layout", name: t("Layout"), lede: t("How the screen is laid out."), groups: layoutGroups() },
       { id: "keys", icon: "keys", name: t("Keyboard shortcuts"), lede: t("Every shortcut, and how to change it."), groups: keysGroups() },
-      { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: [] },
+      { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: notificationsGroups() },
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
       { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() }
@@ -32066,6 +32179,23 @@ What you type stays in this browser only.`;
               }
             }
             toast(quit ? t("Quit") : t("Stay in the tray"));
+          } else if (seg3 === "notesmaster") {
+            const host = eHost();
+            if (host && typeof host.setTrayNotes === "function") {
+              try {
+                host.setTrayNotes(on);
+              } catch (e) {
+              }
+            }
+            toast(on ? t("On") : t("Off"));
+          } else if (seg3 === "noteedition") {
+            if (on) lsDel("eNotifyEditionOff");
+            else lsSet("eNotifyEditionOff", "1");
+            toast(on ? t("On") : t("Off"));
+          } else if (seg3 === "notecatalog") {
+            if (on) lsDel("eNotifyCatalogOff");
+            else lsSet("eNotifyCatalogOff", "1");
+            toast(on ? t("On") : t("Off"));
           }
         };
       });
@@ -32131,7 +32261,9 @@ What you type stays in this browser only.`;
       "eCollapsed",
       "eSharedEdit",
       E_HOTKEY_KEY,
-      "eQuitOnClose"
+      "eQuitOnClose",
+      "eNotifyEditionOff",
+      "eNotifyCatalogOff"
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {

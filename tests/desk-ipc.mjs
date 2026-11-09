@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 107;
+const EXPECTED = 116;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1796,6 +1796,260 @@ try {
 
   if (typeof mainTest.setQuitOnClose === "function") mainTest.setQuitOnClose(true);
   mainTest.setQuitting(false);
+
+  /* D7. Notifications: a lead-signed edition offered while the window is hidden toasts once;
+     the same while focused does not; a refused or unsigned file never toasts;
+     a new team catalog in the listing toasts once; each switch silences its kind;
+     a click shows the window on the offer or the Library tab. */
+  let d7Offer = false, d7OfferWhy = "";
+  let d7Focused = false, d7FocusedWhy = "";
+  let d7Unsigned = false, d7UnsignedWhy = "";
+  let d7Listing = false, d7ListingWhy = "";
+  let d7Switches = false, d7SwitchesWhy = "";
+  let d7Click = false, d7ClickWhy = "";
+  let d7Asked = false, d7AskedWhy = "";
+  let d7NoEdition = false, d7NoEditionWhy = "";
+  let d7NonLead = false, d7NonLeadWhy = "";
+
+  const CO = await import(PLAIN("catalog-offer.js"));
+  const TJ = await import(PLAIN("team-join.js"));
+  const d7LeadPair = crypto.generateKeyPairSync("ed25519");
+  const d7PubHex = d7LeadPair.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+  const d7KeyId = "lead-key-1";
+  const d7Fixture = JSON.parse(fs.readFileSync(path.join(ROOT, "shell", "sample-catalog.ec"), "utf8"));
+
+  const d7Sign = (doc, key, keyId) => {
+    const out = JSON.parse(JSON.stringify(doc));
+    delete out.hash;
+    out.sig = { alg: V2.V2_SIG_ALG, keyId: keyId || d7KeyId };
+    out.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(out)), key).toString("hex");
+    const parsed = CT.parseCatalogFile(JSON.stringify(out));
+    if (doc.rev != null) parsed.rev = doc.rev;
+    if (doc.edition != null) parsed.edition = doc.edition;
+    if (doc.version != null) parsed.version = doc.version;
+    return parsed;
+  };
+
+  const docWasD7 = globalThis.document;
+  const iwWas = globalThis.innerWidth, ihWas = globalThis.innerHeight;
+  globalThis.innerWidth = 1280; globalThis.innerHeight = 800;
+  try {
+    ST.lsSet("eUiLang", "en");
+    d7Fixture.rev = 1;
+    CT.storeCatalog(d7Fixture);
+    ST.nsSet("CatalogTrust", "valid");
+    ST.nsSet("CatalogSigner", d7KeyId);
+    ST.nsSet("CatalogSignerPub", d7PubHex);
+    REAL_HOST.setTrayNotes(true);
+    mainTest.createWindow();
+    const w = madeWins[madeWins.length - 1];
+    w.hides = 0; w.shows = 0;
+    w.hide = () => { w.hides++; };
+    w.show = () => { w.shows++; };
+    w.focus = () => {};
+    w.isMinimized = () => false;
+    w.isVisible = () => false;
+    w.isFocused = () => false;
+
+    REAL_HOST.catalogLeads = () => Promise.resolve([{ keyId: d7KeyId, public: d7PubHex }]);
+    REAL_HOST.teamJoin = (op) => ({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
+    let d7JoinCb = null;
+    REAL_HOST.onTeamJoin = (fn) => { d7JoinCb = fn; };
+    TJ.wireTeamJoin();
+    if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "Anna", print: "1234" }] });
+
+    globalThis.document = new Proxy({}, {
+      set: () => true,
+      get: (t, k) => (
+        k === "readyState" ? "complete"
+        : k === "visibilityState" ? "visible"
+        : (k === "addEventListener" || k === "removeEventListener") ? noop
+        : k === "getElementById" ? () => null
+        : k === "body" ? { appendChild: noop, removeChild: noop, classList: { contains: () => false, add: noop, remove: noop, toggle: noop } }
+        : fake()
+      )
+    });
+
+    const notesStart = madeNotes.length;
+    const signedCat = d7Sign(Object.assign({}, d7Fixture, { rev: 2, edition: "2" }), d7LeadPair.privateKey);
+
+    // 1. Lead-signed edition offered while window is hidden toasts once
+    CO.eOfferCatalogDialog(signedCat, { file: "catalog-alpha.ec", asked: false });
+    await tick(100);
+
+    const note1 = madeNotes[madeNotes.length - 1];
+    const n1Ok = madeNotes.length === notesStart + 1;
+    const title1 = note1 && note1.opts && note1.opts.title;
+    const body1 = note1 && note1.opts && note1.opts.body;
+    const target1 = note1 && note1.opts && note1.opts.target;
+
+    // Second call for same edition must toast once
+    CO.eOfferCatalogDialog(signedCat, { file: "catalog-alpha.ec", asked: false });
+    await tick(100);
+    const n1Once = madeNotes.length === notesStart + 1;
+
+    d7Offer = n1Ok && n1Once && title1 === "Anna published a new edition"
+      && body1.indexOf("edition 2") >= 0 && body1.indexOf("Nothing is loaded until it is looked at.") >= 0;
+    if (!d7Offer) d7OfferWhy = JSON.stringify({ n1Ok, n1Once, notes: madeNotes.length - notesStart, title: title1, body: body1 });
+
+    // 2. Focused window does not toast
+    const notesBeforeFocused = madeNotes.length;
+    w.isFocused = () => true;
+    w.isVisible = () => true;
+    const signedCat2 = d7Sign(Object.assign({}, d7Fixture, { rev: 3, edition: "3" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCat2, { file: "catalog-beta.ec", asked: false });
+    await tick(100);
+    d7Focused = madeNotes.length === notesBeforeFocused;
+    if (!d7Focused) d7FocusedWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeFocused });
+
+    // 3. Refused or unsigned file never toasts
+    w.isFocused = () => false;
+    w.isVisible = () => false;
+    const notesBeforeUnsigned = madeNotes.length;
+    const unsignedCat = JSON.parse(JSON.stringify(d7Fixture));
+    delete unsignedCat.sig;
+    CO.eOfferCatalogDialog(CT.parseCatalogFile(JSON.stringify(unsignedCat)), { file: "unsigned.ec", asked: false });
+    await tick(100);
+    d7Unsigned = madeNotes.length === notesBeforeUnsigned;
+    if (!d7Unsigned) d7UnsignedWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeUnsigned });
+
+    // 4. New team catalog in listing toasts once
+    const notesBeforeListing = madeNotes.length;
+    const newListing = [{ name: "catalog-gamma.ec", id: "k-team-gamma", sha: "sha-gamma-1", rev: 1, mtime: Date.now() }];
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing(newListing);
+    }
+    await tick(100);
+
+    const noteList = madeNotes[madeNotes.length - 1];
+    const nListOk = madeNotes.length === notesBeforeListing + 1;
+    const titleList = noteList && noteList.opts && noteList.opts.title;
+    const bodyList = noteList && noteList.opts && noteList.opts.body;
+
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing(newListing);
+    }
+    await tick(100);
+    const nListOnce = madeNotes.length === notesBeforeListing + 1;
+
+    d7Listing = nListOk && nListOnce && titleList === "A new catalog from Anna"
+      && bodyList.indexOf("is in the Library, ready to open.") >= 0;
+    if (!d7Listing) d7ListingWhy = JSON.stringify({ nListOk, nListOnce, notes: madeNotes.length - notesBeforeListing, title: titleList, body: bodyList });
+
+    // 5. Each switch silences its kind
+    const notesBeforeSwitches = madeNotes.length;
+    ST.lsSet("eNotifyEditionOff", "1");
+    const signedCat4 = d7Sign(Object.assign({}, d7Fixture, { rev: 4, edition: "4" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCat4, { file: "catalog-delta.ec", asked: false });
+    await tick(100);
+    const silEdition = madeNotes.length === notesBeforeSwitches;
+    ST.lsDel("eNotifyEditionOff");
+
+    ST.lsSet("eNotifyCatalogOff", "1");
+    const listing2 = [{ name: "catalog-epsilon.ec", id: "k-team-eps", sha: "sha-eps-1", rev: 1, mtime: Date.now() }];
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing(listing2);
+    }
+    await tick(100);
+    const silCatalog = madeNotes.length === notesBeforeSwitches;
+    ST.lsDel("eNotifyCatalogOff");
+
+    REAL_HOST.setTrayNotes(false);
+    const signedCat5 = d7Sign(Object.assign({}, d7Fixture, { rev: 5, edition: "5" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCat5, { file: "catalog-zeta.ec", asked: false });
+    await tick(100);
+    const silMaster = madeNotes.length === notesBeforeSwitches;
+    REAL_HOST.setTrayNotes(true);
+
+    d7Switches = silEdition && silCatalog && silMaster;
+    if (!d7Switches) d7SwitchesWhy = JSON.stringify({ silEdition, silCatalog, silMaster, notesAdded: madeNotes.length - notesBeforeSwitches });
+
+    // 6. Click shows window on offer or Library tab
+    w.shows = 0;
+    const sentBeforeClick = w.sent.length;
+    if (note1 && note1.handlers && note1.handlers.click) {
+      note1.handlers.click.forEach(fn => fn());
+    }
+    const offerClicked = w.shows === 1 && w.sent.indexOf("etiuda:tray-go") >= 0;
+
+    w.shows = 0;
+    if (noteList && noteList.handlers && noteList.handlers.click) {
+      noteList.handlers.click.forEach(fn => fn());
+    }
+    const libraryClicked = w.shows === 1 && w.sent.indexOf("etiuda:tray-go") >= 0;
+
+    d7Click = offerClicked && libraryClicked;
+    if (!d7Click) d7ClickWhy = JSON.stringify({ offerClicked, libraryClicked, shows: w.shows, sent: w.sent.slice(sentBeforeClick) });
+
+    // 7. Asked or reopened offer shows no toast
+    const notesBeforeAsked = madeNotes.length;
+    const signedCatAsked = d7Sign(Object.assign({}, d7Fixture, { rev: 10, edition: "10" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCatAsked, { file: "catalog-asked.ec", asked: true });
+    await tick(100);
+    const silAsked = madeNotes.length === notesBeforeAsked;
+
+    const notesBeforeReopened = madeNotes.length;
+    const signedCatReopened = d7Sign(Object.assign({}, d7Fixture, { rev: 11, edition: "11" }), d7LeadPair.privateKey);
+    CO.eOfferCatalogDialog(signedCatReopened, { file: "catalog-reopened.ec", asked: false, reopened: true });
+    await tick(100);
+    const silReopened = madeNotes.length === notesBeforeReopened;
+
+    d7Asked = silAsked && silReopened;
+    if (!d7Asked) d7AskedWhy = JSON.stringify({ silAsked, silReopened, notesAdded: madeNotes.length - notesBeforeAsked });
+
+    // 8. Catalog with no edition name shows no number
+    const notesBeforeNoEd = madeNotes.length;
+    const signedCatNoEd = d7Sign(Object.assign({}, d7Fixture, { rev: 7, edition: "", version: "7" }), d7LeadPair.privateKey);
+    delete signedCatNoEd.edition;
+    CO.eOfferCatalogDialog(signedCatNoEd, { file: "catalog-noed.ec", asked: false });
+    await tick(100);
+    const noteNoEd = madeNotes[madeNotes.length - 1];
+    const bodyNoEd = (noteNoEd && noteNoEd.opts && noteNoEd.opts.body) || "";
+    const noEdToasted = madeNotes.length === notesBeforeNoEd + 1;
+    const noEdNoNum = !/[0-9]/.test(bodyNoEd) && bodyNoEd.indexOf("edition") < 0;
+    d7NoEdition = noEdToasted && noEdNoNum && bodyNoEd.indexOf("Nothing is loaded until it is looked at.") >= 0;
+    if (!d7NoEdition) d7NoEditionWhy = JSON.stringify({ noEdToasted, noEdNoNum, body: bodyNoEd });
+
+    // 9. Valid signature from a non-lead key shows no "published" toast
+    const nonLeadPair = crypto.generateKeyPairSync("ed25519");
+    const nonLeadPubHex = nonLeadPair.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const ringWithNonLead = JSON.stringify({ [d7Fixture.id || ""]: { "non-lead-key": nonLeadPubHex } });
+    REAL_HOST.catalogRing = () => Promise.resolve(ringWithNonLead);
+    const notesBeforeNonLead = madeNotes.length;
+    const signedNonLead = d7Sign(Object.assign({}, d7Fixture, { rev: 12, edition: "12" }), nonLeadPair.privateKey, "non-lead-key");
+    CO.eOfferCatalogDialog(signedNonLead, { file: "catalog-nonlead.ec", asked: false });
+    await tick(100);
+    d7NonLead = madeNotes.length === notesBeforeNonLead;
+    if (!d7NonLead) d7NonLeadWhy = JSON.stringify({ notesAdded: madeNotes.length - notesBeforeNonLead });
+    REAL_HOST.catalogRing = () => Promise.resolve("");
+  } catch (err) {
+    const msg = String(err && err.message || err).split("\n")[0];
+    if (!d7OfferWhy) d7OfferWhy = msg;
+    if (!d7FocusedWhy) d7FocusedWhy = msg;
+    if (!d7UnsignedWhy) d7UnsignedWhy = msg;
+    if (!d7ListingWhy) d7ListingWhy = msg;
+    if (!d7SwitchesWhy) d7SwitchesWhy = msg;
+    if (!d7ClickWhy) d7ClickWhy = msg;
+    if (!d7AskedWhy) d7AskedWhy = msg;
+    if (!d7NoEditionWhy) d7NoEditionWhy = msg;
+    if (!d7NonLeadWhy) d7NonLeadWhy = msg;
+  } finally {
+    ST.lsDel("eUiLang");
+    ST.nsDel("Catalog");
+    globalThis.document = docWasD7;
+    globalThis.innerWidth = iwWas;
+    globalThis.innerHeight = ihWas;
+  }
+
+  check(d7Offer, "D7-offer a lead-signed edition offered while the window is hidden toasts once (" + d7OfferWhy + ")");
+  check(d7Focused, "D7-focused the same while focused does not (" + d7FocusedWhy + ")");
+  check(d7Unsigned, "D7-unsigned a refused or unsigned file never toasts (" + d7UnsignedWhy + ")");
+  check(d7Listing, "D7-listing a new team catalog in the listing toasts once (" + d7ListingWhy + ")");
+  check(d7Switches, "D7-switches each switch silences its kind (" + d7SwitchesWhy + ")");
+  check(d7Click, "D7-click a click shows the window on the offer or the Library tab (" + d7ClickWhy + ")");
+  check(d7Asked, "D7-asked an asked or reopened offer shows no toast (" + d7AskedWhy + ")");
+  check(d7NoEdition, "D7-no-edition a catalog with no edition name shows no number (" + d7NoEditionWhy + ")");
+  check(d7NonLead, "D7-non-lead a valid signature from a non-lead key shows no \"published\" toast (" + d7NonLeadWhy + ")");
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");

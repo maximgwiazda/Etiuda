@@ -231,6 +231,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   setClosePolicy: (quit) => ipcRenderer.send("etiuda:close-policy-set", !!quit),
   setTrayNotes: (on) => ipcRenderer.send("etiuda:tray-notes-set", !!on),
   trayNotesState: () => ipcRenderer.sendSync("etiuda:tray-notes-state"),
+  notify: (opts) => ipcRenderer.send("etiuda:notify", opts),
   onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
 });
 

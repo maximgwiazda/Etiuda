@@ -5692,7 +5692,7 @@ function checkTypeableChars() {
    ("... edition " + rev) is read as well as a key. */
 const REV_WORD_RULES = [
   [/\bepo[ck]/i, "says epoch"],
-  [/\b(?:edition|wydani[a-z]*)\s+(?:$|numbers?\b|counter\b|v?[0-9]|\{(?!E\})[A-Z]+\})|\bnumer[a-z]*\s+wydani/i,
+  [/\b(?:edition|wydani[a-z]*)\s+(?:$|numbers?\b|counter\b|v?[0-9]|\{(?!E\}|EDITION\})[A-Z]+\})|\bnumer[a-z]*\s+wydani/i,
     "names a number as an edition"]
 ];
 function revWordFaults(s) { return REV_WORD_RULES.filter(r => r[0].test(s)).map(r => r[1]); }
@@ -5843,8 +5843,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1282;
-const UI_STRINGS_SHA256 = "a9b49e2de8565dfd054385bad0de7a7298aa476eb928707ad57377009d0467d2";
+const UI_STRINGS_COUNT = 1292;
+const UI_STRINGS_SHA256 = "08a039bfa2e71cbd16ee4d14997397dcf99bb246bdd06ec1144f87d7b062d691";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

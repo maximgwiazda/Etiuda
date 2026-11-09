@@ -391,6 +391,26 @@ function aboutGroups(){
       '<button type="button" class="btn" id="setMaint">'+esc(t("Open"))+'</button>'+keysHtml(formatActionChord("maintenance")))
   ]}];
 }
+function notificationsGroups(){
+  const h=eHost();
+  let masterOn=true;
+  if(h && typeof h.trayNotesState==="function"){
+    try{ const s=h.trayNotesState(); masterOn=!(s && s.on===false); }catch(e){}
+  }
+  return [
+    {rows:[
+      row("notesmaster","notifications",t("Notifications"),
+        t("Notifications from Etiuda, also while its window is closed."),
+        onoff("notesmaster", masterOn, "", ""))
+    ]},
+    {head:t("Tell me when"), rows:[
+      row("noteedition","cards",t("The team's lead publishes a new edition"),"",
+        onoff("noteedition", lsGet("eNotifyEditionOff")!=="1", "", "")),
+      row("notecatalog","desks",t("A new catalog arrives from the team"),"",
+        onoff("notecatalog", lsGet("eNotifyCatalogOff")!=="1", "", ""))
+    ]}
+  ];
+}
 /* Every section in its order, each with the groups it holds now; a section without a row is left out.
    AI has no row on this desk, so it is not among them. */
 function settingsSections(){
@@ -399,7 +419,7 @@ function settingsSections(){
     {id:"appearance", icon:"appearance", name:t("Appearance"), lede:t("How the app looks and moves."), groups:appearanceGroups()},
     {id:"layout", icon:"layout", name:t("Layout"), lede:t("How the screen is laid out."), groups:layoutGroups()},
     {id:"keys", icon:"keys", name:t("Keyboard shortcuts"), lede:t("Every shortcut, and how to change it."), groups:keysGroups()},
-    {id:"notifications", icon:"notifications", name:t("Notifications"), lede:t("What the app tells you, also while its window is closed."), groups:[]},
+    {id:"notifications", icon:"notifications", name:t("Notifications"), lede:t("What the app tells you, also while its window is closed."), groups:notificationsGroups()},
     {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsGroups()},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
     {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()}
@@ -594,6 +614,19 @@ function wirePage(box){
           if(host){ try{ host.setClosePolicy(quit); }catch(e){} }
           toast(quit?t("Quit"):t("Stay in the tray"));
         }
+        else if(seg==="notesmaster"){
+          const host=eHost();
+          if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(on); }catch(e){} }
+          toast(on?t("On"):t("Off"));
+        }
+        else if(seg==="noteedition"){
+          if(on) lsDel("eNotifyEditionOff"); else lsSet("eNotifyEditionOff","1");
+          toast(on?t("On"):t("Off"));
+        }
+        else if(seg==="notecatalog"){
+          if(on) lsDel("eNotifyCatalogOff"); else lsSet("eNotifyCatalogOff","1");
+          toast(on?t("On"):t("Off"));
+        }
         /* No repaint: the class above is the whole visual change, and rebuilding would undo the slide it started. */
       };
     });
@@ -639,7 +672,8 @@ function resetShortcuts(){
 function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose"]
+   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose",
+   "eNotifyEditionOff","eNotifyCatalogOff"]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");

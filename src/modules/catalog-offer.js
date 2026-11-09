@@ -9,10 +9,10 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionN
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile, eNeedsNewerLine,
   eUnreadableLine, fileReadCode, fileReadLine } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
-  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
-  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
+  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eCatalogLeads, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
+  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
-import { lsSet, nsGet, nsSet } from "./storage.js";
+import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
 import { markCut } from "./cut-text.js";
@@ -26,7 +26,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
-import { keyTipHtml, leadKeyText, leadsNow } from "./team-join.js";
+import { keyTipHtml, leadKeyText, leadsNow, teamLeads } from "./team-join.js";
 import { V2_SIG_VALID, v2RingRead, v2SigState } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
@@ -522,6 +522,8 @@ function offerEditionHtml(name){
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
 let offerStanding=null;
+const offeredNotified = new Set();
+const listingNotified = new Set();
 /* A BUBBLE HANGING FROM THE TOP BAR'S CATALOG NAME, never a window: the desk stays usable under it,
    and a click anywhere else leaves it standing until it is answered. */
 function eOfferCatalogDialog(c,src){
@@ -639,6 +641,32 @@ function eOfferCatalogDialog(c,src){
   const arriving=fresh && !src.asked && !src.reopened;
   if(arriving) arriveAtName(wrap);
   document.body.appendChild(wrap);
+  if(arriving && lsGet("eNotifyEditionOff")!=="1"){
+    catalogTrust(c).then(state=>{
+      if(state===V2_SIG_VALID){
+        eCatalogLeads().then(leads=>{
+          if(!leads || !leads.length) return;
+          const sig=eCatalogSignature(c);
+          if(!sig || offeredNotified.has(sig)) return;
+          offeredNotified.add(sig);
+          const tLeads=teamLeads().filter(l=>l&&!l.removed);
+          const print=trustPrint(c);
+          const matchLead=tLeads.find(l=>l&&l.print===print);
+          const leadName=(matchLead&&matchLead.lead)||(tLeads[0]&&tLeads[0].lead)||t("The team lead");
+          const catName=catalogNameOfFile(String((src&&src.file)||"")||E_CATALOG_SCRIPT)||t("Catalog");
+          const ed=editionNameOf(c);
+          const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):String(ed.e||"");
+          const title=t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
+          const body=edStr
+            ? t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.")
+                .split("{CATALOG}").join(catName).split("{EDITION}").join(edStr)
+            : t("{CATALOG}. Nothing is loaded until it is looked at.")
+                .split("{CATALOG}").join(catName);
+          eNotify({ title, body, target: "offer" });
+        });
+      }
+    });
+  }
   // Placed against the indicator, and again on a resize, since it may outlive one.
   const place=()=>{
     const at=document.getElementById("catNow"), r=at && at.getBoundingClientRect();
@@ -891,6 +919,25 @@ function eCheckWatchedFile(interactive){
 function onCatalogListing(all){
   // A colleague's file reaches an open Library this way only.
   paintCatalogList();
+  if(lsGet("eNotifyCatalogOff")!=="1"){
+    const tLeads=teamLeads().filter(l=>l&&!l.removed);
+    if(tLeads.length>0){
+      const leadName=(tLeads[0]&&tLeads[0].lead)||t("The team lead");
+      const teamFiles=(all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id);
+      const held=storedCatalog();
+      for(const f of teamFiles){
+        if(held && held.id===f.id) continue;
+        const key=f.id||f.name;
+        if(key && !listingNotified.has(key)){
+          listingNotified.add(key);
+          const catName=catalogNameOfFile(f.name);
+          const title=t("A new catalog from {LEAD}").split("{LEAD}").join(leadName);
+          const body=t("{CATALOG} is in the Library, ready to open.").split("{CATALOG}").join(catName);
+          eNotify({ title, body, target: "library" });
+        }
+      }
+    }
+  }
   const held=storedCatalog();
   if(!held && !catalogLoaded()){ offerToLooseAuthor(all); return; }
   if(!held || !held.id) return;
@@ -993,5 +1040,6 @@ export {
   paintCatNow,
   paintCatWaiting,
   loadCatalogFromFolder,
+  onCatalogListing,
   wireHostCatalogWatch
 };
