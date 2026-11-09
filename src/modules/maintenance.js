@@ -7,7 +7,7 @@ import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { dismissModal, openDialog } from "./dialog.js";
+import { dismissModal, closeModal, openDialog } from "./dialog.js";
 import { E_VERSION } from "./env.js";
 import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
 import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
@@ -617,6 +617,9 @@ function openMaintenanceModal(backFn){
 }
 
 function openMaintenance(backFn){
+  if(typeof closeModal === "function"){
+    try { closeModal(); } catch(_) {}
+  }
   try {
     openScreenTab("maintenance");
     return;

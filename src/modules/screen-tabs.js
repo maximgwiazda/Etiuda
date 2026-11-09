@@ -93,7 +93,8 @@ export function dropScreenTab(id) {
   }
 }
 
-export function clearScreenOn() {
+export function clearScreenOn(returnTab = true) {
+  const wasScreen = Boolean(screenOn);
   screenOn = "";
   if (typeof document !== "undefined" && document.body && document.body.classList) {
     document.body.classList.remove("screen-on");
@@ -103,6 +104,7 @@ export function clearScreenOn() {
     sh.innerHTML = "";
     sh.hidden = true;
   }
+  if (wasScreen && returnTab && onScreenReturn) onScreenReturn(prevTabId);
   if (onScreenChange) onScreenChange();
 }
 

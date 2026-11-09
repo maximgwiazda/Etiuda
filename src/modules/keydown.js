@@ -215,22 +215,22 @@ function wireGlobalKeydown(){
       hooks.runShortcut("tabReopen");
       return;
     }
-    if(typeof document!=="undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")){
-      return;
-    }
-    /* CTRL+C COPIES THE MARKED REPLY, as Enter does, where nothing is selected and nothing is being typed; a selection or
-       a field keeps the key's own meaning, and with no reply marked the key is left alone. The search box has its own. */
-    if(!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code==="KeyC" || e.key==="c" || e.key==="C")
-       && !String((window.getSelection && window.getSelection()) || "")){
-      if(hooks.runShortcut("copyMarked")!==false){ e.preventDefault(); return; }
-    }
+    const isScreen = typeof document!=="undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on");
+    if(!isScreen){
+      /* CTRL+C COPIES THE MARKED REPLY, as Enter does, where nothing is selected and nothing is being typed; a selection or
+         a field keeps the key's own meaning, and with no reply marked the key is left alone. The search box has its own. */
+      if(!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code==="KeyC" || e.key==="c" || e.key==="C")
+         && !String((window.getSelection && window.getSelection()) || "")){
+        if(hooks.runShortcut("copyMarked")!==false){ e.preventDefault(); return; }
+      }
 
-    /* After the rebindable pass, so a binding placed on one of these still wins. Page up and
-       down run from inside the search box too - a caret in a single-line field has no use for
-       them - while Home and End keep their meaning there, behind the guard below. While the lanes
-       show, the four scroll the lanes and the list underneath keeps its place. */
-    const plain=!e.ctrlKey && !e.altKey && !e.metaKey;
-    if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }
+      /* After the rebindable pass, so a binding placed on one of these still wins. Page up and
+         down run from inside the search box too - a caret in a single-line field has no use for
+         them - while Home and End keep their meaning there, behind the guard below. While the lanes
+         show, the four scroll the lanes and the list underneath keeps its place. */
+      const plain=!e.ctrlKey && !e.altKey && !e.metaKey;
+      if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }
+    }
     if(inField) return;
     /* A FOCUSED CONTROL KEEPS ITS OWN TWO KEYS. Enter is the copy key and Space is an ordinary
        character, so both were taken from whatever the keyboard had just walked to: the Menu
@@ -238,22 +238,28 @@ function wireGlobalKeydown(){
        Returning WITHOUT preventDefault hands the press back to the browser, which is what
        activates a control - nothing here decides what the control then does. Modifiers are
        excluded, so Shift+Enter is still the other language's copy. */
+    const plain=!e.ctrlKey && !e.altKey && !e.metaKey;
     const onControl=document.activeElement;
     if(plain && !e.shiftKey && (e.key==="Enter"||e.key===" ") && onControl
        && typeof onControl.matches==="function"
        && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
-    if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }
-    if(eventMatchesAction(e,"navUp")){ e.preventDefault(); hooks.runShortcut("navUp"); return; }
-    if(eventMatchesAction(e,"navDown")){ e.preventDefault(); hooks.runShortcut("navDown"); return; }
-    if(eventMatchesAction(e,"markTop")){ e.preventDefault(); hooks.runShortcut("markTop"); return; }
-    if(eventMatchesAction(e,"markBottom")){ e.preventDefault(); hooks.runShortcut("markBottom"); return; }
-    if(eventMatchesAction(e,"navPillFirst")){ e.preventDefault(); hooks.runShortcut("navPillFirst"); return; }
-    if(eventMatchesAction(e,"navPillLast")){ e.preventDefault(); hooks.runShortcut("navPillLast"); return; }
-    if(eventMatchesAction(e,"navPillLeft")){ e.preventDefault(); hooks.runShortcut("navPillLeft"); return; }
-    if(eventMatchesAction(e,"navPillRight")){ e.preventDefault(); hooks.runShortcut("navPillRight"); return; }
-    if(eventMatchesAction(e,"copyOther")){ e.preventDefault(); hooks.runShortcut("copyOther"); return; }
-    if(eventMatchesAction(e,"copy")){ e.preventDefault(); hooks.runShortcut("copy"); return; }
-    if(eventMatchesAction(e,"escape")){ e.preventDefault(); hooks.runShortcut(e.repeat ? "escapeHeld" : "escape"); return; }
+
+    if(!isScreen){
+      if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }
+      if(eventMatchesAction(e,"navUp")){ e.preventDefault(); hooks.runShortcut("navUp"); return; }
+      if(eventMatchesAction(e,"navDown")){ e.preventDefault(); hooks.runShortcut("navDown"); return; }
+      if(eventMatchesAction(e,"markTop")){ e.preventDefault(); hooks.runShortcut("markTop"); return; }
+      if(eventMatchesAction(e,"markBottom")){ e.preventDefault(); hooks.runShortcut("markBottom"); return; }
+      if(eventMatchesAction(e,"navPillFirst")){ e.preventDefault(); hooks.runShortcut("navPillFirst"); return; }
+      if(eventMatchesAction(e,"navPillLast")){ e.preventDefault(); hooks.runShortcut("navPillLast"); return; }
+      if(eventMatchesAction(e,"navPillLeft")){ e.preventDefault(); hooks.runShortcut("navPillLeft"); return; }
+      if(eventMatchesAction(e,"navPillRight")){ e.preventDefault(); hooks.runShortcut("navPillRight"); return; }
+      if(eventMatchesAction(e,"copyOther")){ e.preventDefault(); hooks.runShortcut("copyOther"); return; }
+      if(eventMatchesAction(e,"copy")){ e.preventDefault(); hooks.runShortcut("copy"); return; }
+      if(eventMatchesAction(e,"escape")){ e.preventDefault(); hooks.runShortcut(e.repeat ? "escapeHeld" : "escape"); return; }
+    } else {
+      if(eventMatchesAction(e,"escape")){ e.preventDefault(); hooks.runShortcut(e.repeat ? "escapeHeld" : "escape"); return; }
+    }
 
     // Nothing focused (e.g. clicked empty space): printable keys go straight into INTENT.
     // First character is inserted manually because focus alone would swallow this keydown.

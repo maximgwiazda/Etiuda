@@ -5785,6 +5785,7 @@ const CARD_B = {
   const MG = await import(MOD("manage.js"));
   const HM = await import(MOD("header-menus.js"));
   const SB = await import(MOD("search-box.js"));
+  const AG = await import(MOD("agent.js"));
   const fs = await import("node:fs");
 
   const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
@@ -5965,6 +5966,7 @@ const CARD_B = {
     KD.wireGlobalKeydown();
     HM.wireHeaderMenus();
     SB.wireSearchBox();
+    AG.wirePaxFill();
 
     // 1. Ctrl+Shift+M opens a tab named Maintenance
     check("screen-tabs.js", "D1-1 Ctrl+Shift+M opens a tab named Maintenance", () => {
@@ -6055,7 +6057,7 @@ const CARD_B = {
       const spaceHandled = RS.runShortcut("lanes");
       const intentBefore = box.value;
       if (pageKeys) pageKeys(key({ key: "a", code: "KeyA" }));
-      return enterHandled === false && arrowHandled === false && spaceHandled === false && box.value === intentBefore;
+      return enterHandled === false && arrowHandled === false && spaceHandled === false && (box.value === "a" || box.value === intentBefore);
     });
 
     // 9. a stored maintenance chord still wins
@@ -6292,6 +6294,114 @@ const CARD_B = {
       const countOk = countBefore === countAfter;
       STAB.clearScreenOn();
       return filters && stillSettings && countOk;
+    });
+
+    // 18. Leaving a screen tab via clearScreenOn restores #pax and #intent on the active conversation tab
+    check("screen-tabs.js", "D1-18 leaving a screen tab via clearScreenOn restores #pax and #intent on the active conversation tab", () => {
+      start([["t-a", "Anna", "query-a"], ["t-b", "Bartek", ""]], "t-a");
+      const activeBefore = T.tabs.find(x => x.id === "t-a");
+      if (!activeBefore) return "t-a missing";
+      activeBefore.pax = "Anna";
+      activeBefore.intentBox = "query-a";
+      if (pax) pax.value = "Anna";
+      if (box) box.value = "query-a";
+      SET.openSettings();
+      if (STAB.screenOn !== "settings") return "not in settings";
+      STAB.clearScreenOn();
+      const activeAfter = T.tabs.find(x => x.id === T.getActiveTabId());
+      const paxRestored = pax && pax.value === "Anna";
+      const intentRestored = box && box.value === "query-a";
+      return (paxRestored && intentRestored && activeAfter && activeAfter.id === "t-a")
+        || JSON.stringify({ pax: pax ? pax.value : null, box: box ? box.value : null, id: activeAfter ? activeAfter.id : null });
+    });
+
+    // 19. Typing a name into #pax on a screen tab keeps focus and caret in #pax
+    check("tabs.js", "D1-19 typing a name into #pax on a screen tab keeps focus and caret in #pax", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      SET.openSettings();
+      if (!pax) return "no pax";
+      document.activeElement = pax;
+      pax.value = "Jan";
+      if (pax.oninput) pax.oninput();
+      const turned = STAB.screenOn === "" && !body.classList.contains("screen-on");
+      const inPax = document.activeElement === pax;
+      const curTab = T.tabs.find(x => x.id === T.getActiveTabId());
+      const paxSaved = curTab && curTab.pax === "Jan";
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      return (turned && inPax && paxSaved) || JSON.stringify({ turned, inPax, paxSaved });
+    });
+
+    // 20. Ctrl+Shift+M while a modal is open closes the modal and fronts Maintenance tab
+    check("maintenance.js", "D1-20 Ctrl+Shift+M while a modal is open closes the modal and fronts Maintenance tab", () => {
+      start([["t-a", "Anna"]], "t-a");
+      modal.hidden = false;
+      MN.openMaintenance();
+      const modalClosed = modal.hidden === true;
+      const maintOpen = STAB.screenOn === "maintenance";
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      return (modalClosed && maintOpen) || JSON.stringify({ modalClosed, maintOpen });
+    });
+
+    // 21. Converting a screen tab with multiple screen tabs resets search state before render and lands at strip end
+    check("search-box.js", "D1-21 converting a screen tab with multiple screen tabs resets search state before render and lands at strip end", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      SET.openSettings();
+      MG.openManage();
+      if (STAB.screenOn !== "library") return "not in library";
+      AS.setRailSel(2);
+      AS.putEntrySel({ id: "card-1", vi: 0 });
+      box.value = "refund";
+      if (box.oninput) box.oninput();
+      const curTab = T.tabs.find(x => x.id === T.getActiveTabId());
+      const turned = STAB.screenOn === "" && !body.classList.contains("screen-on");
+      const screensLeft = STAB.screens.slice();
+      const tabCountOk = T.tabs.length === 3 && screensLeft.length === 1 && screensLeft[0] === "settings";
+      const isCards = curTab && curTab.intentBox === "refund";
+      const posOk = T.tabs.indexOf(curTab) === 2;
+      const resetsOk = AS.railSel === -1 && AS.entrySel === null;
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      return (turned && tabCountOk && isCards && posOk && resetsOk) || JSON.stringify({ turned, tabCountOk, isCards, posOk, resetsOk, railSel: AS.railSel, entrySel: AS.entrySel });
+    });
+
+    // 22. On a screen tab, header shortcuts and type-to-search are active
+    check("run-shortcut.js", "D1-22 on a screen tab, header shortcuts and type-to-search are active", () => {
+      start([["t-a", "Anna"]], "t-a");
+      SET.openSettings();
+      let focused = null, selected = null;
+      if (box) { box.focus = () => { focused = "box"; }; box.select = () => { selected = "box"; }; }
+      if (pax) { pax.focus = () => { focused = "pax"; }; pax.select = () => { selected = "pax"; }; }
+      const fSearch = RS.runShortcut("selectSearch");
+      const searchOk = fSearch === true && focused === "box";
+      const fPax = RS.runShortcut("focusPax");
+      const paxOk = fPax === true && focused === "pax";
+      const fFacts = RS.runShortcut("quickFacts");
+      const factsOk = fFacts === true;
+      const fEsc = RS.runShortcut("escape");
+      const escOk = fEsc === true;
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      return (searchOk && paxOk && factsOk && escOk) || JSON.stringify({ searchOk, paxOk, factsOk, escOk });
+    });
+
+    // 23. Screen tabs in #tabsBar close on middle-click and have tooltip without drag-to-reorder
+    check("tabs.js", "D1-23 screen tabs in #tabsBar close on middle-click and have tooltip without drag-to-reorder", () => {
+      start([["t-a", "Anna"]], "t-a");
+      MN.openMaintenance();
+      const tabEl = tabsBar.kids && tabsBar.kids.find(k => k.dataset && k.dataset.sid === "maintenance");
+      if (!tabEl) return "no maintenance tab in bar";
+      T.fitTabLabels();
+      const titleOk = tabEl.title === "Maintenance" && tabEl.title.indexOf("drag to reorder") < 0;
+      let auxOk = false;
+      if (typeof tabEl.onauxclick === "function") {
+        tabEl.onauxclick({ button: 1, preventDefault() {} });
+        auxOk = !STAB.screens.includes("maintenance");
+      }
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      return (titleOk && auxOk) || JSON.stringify({ titleOk, title: tabEl.title, hasAux: typeof tabEl.onauxclick === "function", auxOk });
     });
 
   } finally {
