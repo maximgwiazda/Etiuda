@@ -521,7 +521,7 @@ function wireMaintenanceActions(root, closeFn){
   const cls = $q("#mtClose"); if(cls) cls.onclick=()=>{ if(closeFn) closeFn(); else dismissModal(); };
 }
 
-const MT_MOVED="Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+const MT_MOVED="Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.";
 let mtOn="health";
 /* Built when asked, so each name and lede is a literal t() call the strings legs count and the
    desk's language reaches. */

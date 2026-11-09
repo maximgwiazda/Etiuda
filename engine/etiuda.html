@@ -3614,6 +3614,7 @@ body.screen-on #lanes { display: none !important; }
    line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
 .mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
+.sx.lm-lib .mg-data-acts>.set-row:first-child{border-top:1px solid var(--line)}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
 .sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
@@ -3856,6 +3857,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The question before Clear local changes: the strip's place, a heading and two lines stacked above its buttons. */
+.e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
+.e-undo.e-clear-ask p{margin:0 0 8px}
+.e-undo.e-clear-ask .tour-actions{justify-content:flex-end;margin-top:12px}
 /* The key that takes it, on the button in the button's own ink. */
 .e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
   border-radius:4px;font:11px var(--mono);font-weight:400}
@@ -7423,11 +7428,16 @@ What you type stays in this browser only.`;
     "Write a new clause for {INTENT}": "Napisz nową frazę dla {INTENT}",
     "Delete this intent": "Usuń tę intencję",
     "Export…": "Eksportuj…",
-    "Clear local memory": "Wyczyść pamięć lokalną",
-    "Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back.": "Usuwa z tego komputera ustawienia i otwarte rozmowy. Katalog, imię agenta i własne zmiany w kartach zostają, a Cofnij przywraca resztę.",
+    "Clear local changes": "Wyczyść zmiany lokalne",
+    "Removes every change made to the content on this computer, so the catalog reads as delivered.": "Usuwa wszystkie zmiany treści wprowadzone na tym komputerze, więc katalog wygląda tak, jak go dostarczono.",
+    "Clear local changes?": "Wyczyścić zmiany lokalne?",
+    "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.": "Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
+    "The catalog file, the team, the licence, the folder setting and the agent's name stay, and Undo, right after, brings the changes back.": "Plik katalogu, zespół, licencja, ustawienie folderu i imię agenta zostają, a przycisk Cofnij tuż po wyczyszczeniu przywraca zmiany.",
+    "Loads a catalog file from this computer.": "Wczytuje plik katalogu z tego komputera.",
+    "Joins a team with an invitation from its lead.": "Dołącza do zespołu na podstawie zaproszenia od lidera.",
     "Eject catalog": "Odłącz katalog",
     "Catalog ejected": "Odłączono katalog",
-    "Local memory cleared": "Wyczyszczono pamięć lokalną",
+    "Local changes cleared": "Wyczyszczono zmiany lokalne",
     "Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?": "Wczytanie katalogu usunie karty utworzone bez katalogu. Najpierw wyeksportować je jako osobny katalog?",
     "Load anyway": "Wczytaj mimo to",
     "Previous": "Poprzedni",
@@ -7797,7 +7807,7 @@ What you type stays in this browser only.`;
     "A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.": "Skrót można zmienić na klawisz F albo połączenie z Ctrl lub Alt, bo klawisze potrzebne do pisania zostają do pisania; klawisze, których Etiuda potrzebuje sama, są oznaczone jako stałe.",
     "Puts every setting back as it ships. Cards and your edits are not touched.": "Przywraca wszystkie ustawienia do stanu wyjściowego. Karty i własne zmiany zostają bez zmian.",
     "What this computer reports, and ways to set things right.": "Co raportuje ten komputer i jak przywrócić porządek.",
-    "Reset defaults and Clear local memory are in Settings, under Data and defaults.": "Przywróć domyślne i Wyczyść pamięć lokalną są w Ustawieniach, w części Dane i ustawienia domyślne.",
+    "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.": "Przywróć domyślne jest w Ustawieniach, w części Dane i ustawienia domyślne, a Wyczyść zmiany lokalne w Bibliotece, w części Katalog i dane.",
     "Readings": "Odczyty",
     "Last start": "Ostatnie uruchomienie",
     "Last crash": "Ostatnia awaria",
@@ -27198,58 +27208,28 @@ What you type stays in this browser only.`;
   // src/modules/local-memory.js
   var local_memory_exports = {};
   __export(local_memory_exports, {
+    askClearLocal: () => askClearLocal,
     clearLocalMemory: () => clearLocalMemory,
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("DeskMark"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
   }
-  var E_WIPE_KEEP = ["eCatalogFolder"];
-  var SHARE_KEEP = ["eAgent", "eLayers"];
-  var PACK_KEEP = ["v", "intentKeys", "editBases", "baseCards", "macroOrder", "baseMacros"];
-  var LAYER_KEEP = ["Exported", "LooseId", "Shared", "SharedOwn", "SharedFile"];
-  function packFileHalf(raw) {
+  var CLEAR_KEEP_LAYER = ["Stats", "Days", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks"];
+  var CLEAR_KEEP_PACK = ["v", "intentKeys", "baseCards", "baseMacros", "useCounts", "useAt", "intentCounts", "searchMisses", "langs", "days", "dayIds", "daysSince"];
+  function packKept(raw, keep) {
     let p = null;
     try {
       p = JSON.parse(raw);
     } catch (e) {
       p = null;
     }
-    if (!p || typeof p !== "object" || Array.isArray(p) || !LOOSE_FIELDS.some((k) => k in p)) return null;
+    if (!p || typeof p !== "object" || Array.isArray(p)) return null;
     const o = {};
-    LOOSE_FIELDS.concat(PACK_KEEP).forEach((k) => {
+    keep.forEach((k) => {
       if (k in p) o[k] = p[k];
     });
     return JSON.stringify(o);
-  }
-  var E_PREF_KEYS = [
-    "eTheme",
-    "eGlassOff",
-    "eMotionOff",
-    "eUiLang",
-    "eLang",
-    "eAgent",
-    "ePax",
-    "eNoteHover",
-    "eDeckOff",
-    "eWho",
-    "ePills",
-    "ePillsLock",
-    "eRail",
-    "eRailLock",
-    "eRailW",
-    "eCollapsed",
-    "eFactsW",
-    "eFactsH",
-    "eShortcuts",
-    "eHdrPills"
-  ];
-  function eKeyIsPref(k) {
-    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("eTour") === 0;
-  }
-  function eKeyIsMine(k, layers) {
-    if (E_NS === "e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS) === 0) return true;
-    return layers.some((ns) => k.indexOf(ns) === 0);
   }
   function keepKeys(keys) {
     try {
@@ -27279,31 +27259,48 @@ What you type stays in this browser only.`;
     hooks.restartDesk();
   }
   function clearLocalMemory() {
-    const layers = eLayers(), spaces = [E_NS].concat(layers), desk = eHasBranch();
-    const kept = new Set(ejectKeys().concat(E_WIPE_KEEP, desk ? SHARE_KEEP.concat(...spaces.map((ns) => LAYER_KEEP.map((n) => ns + n))) : []));
-    const packs = new Set(desk ? spaces.map((ns) => ns + "Pack") : []);
-    const keys = lsKeys().filter((k) => (eKeyIsMine(k, layers) || eKeyIsPref(k)) && !kept.has(k));
+    let keep = { layer: [], pack: [] };
+    keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
+    const spaces = [E_NS].concat(eLayers());
+    const keys = [];
+    spaces.forEach((ns) => LAYER_KEYS.forEach((n) => {
+      if (keep.layer.indexOf(n) < 0 && lsGet(ns + n) != null) keys.push(ns + n);
+    }));
     const was = keepKeys(keys);
-    let handle = null;
-    eWatchGet().then((h) => {
-      handle = h || null;
-    });
-    eWatchClear();
     keys.forEach((k) => {
-      const half = packs.has(k) ? packFileHalf(was.keys[k]) : null;
+      const half = /Pack$/.test(k) ? packKept(was.keys[k], keep.pack) : null;
       if (half != null) lsSet(k, half);
       else lsDel(k);
     });
-    ssDel(TAB_KEY);
     hooks.restartDesk();
-    offerUndo("Local memory cleared", () => {
-      try {
-        if (hooks.tourActive()) hooks.endTour(false);
-      } catch (e) {
-      }
-      if (handle) eWatchPut(handle);
-      putBack(was);
+    offerUndo("Local changes cleared", () => putBack(was));
+  }
+  function askClearLocal() {
+    const was = document.getElementById("eClearAsk");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo e-clear-ask";
+    el.id = "eClearAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("data-side", "none");
+    el.setAttribute("aria-labelledby", "eClearAskT");
+    el.innerHTML = '<h3 id="eClearAskT">' + esc(t("Clear local changes?")) + "</h3><p>" + esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.")) + "</p><p>" + esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay, and Undo, right after, brings the changes back.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eClearGo">' + esc(t("Clear local changes")) + '</button><button type="button" class="btn primary" id="eClearStay">' + esc(t("Cancel")) + "</button></div>";
+    document.body.appendChild(el);
+    el.querySelector("#eClearGo").onclick = () => {
+      dismissNode(el);
+      clearLocalMemory();
+    };
+    el.querySelector("#eClearStay").onclick = () => dismissNode(el);
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      dismissNode(el);
     });
+    try {
+      el.querySelector("#eClearStay").focus({ preventScroll: true });
+    } catch (_) {
+    }
   }
   function ejectKeys() {
     return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
@@ -27460,7 +27457,10 @@ What you type stays in this browser only.`;
     "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
     "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
     "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
-    "health": '<path d="M3.5 12.5h4.2l1.7-4.6 2.6 9.2 1.8-4.6H20.5"/>'
+    "health": '<path d="M3.5 12.5h4.2l1.7-4.6 2.6 9.2 1.8-4.6H20.5"/>',
+    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
+    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
+    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>'
   };
   function lmIcon(name) {
     const body = LM_ICONS[name];
@@ -27936,7 +27936,7 @@ What you type stays in this browser only.`;
       else dismissModal();
     };
   }
-  var MT_MOVED = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+  var MT_MOVED = "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.";
   var mtOn = "health";
   var mtPages = () => [
     { key: "health", icon: "health", name: t("Health") },
@@ -31908,7 +31908,7 @@ What you type stays in this browser only.`;
     mgSec(
       "data",
       "Catalog & data",
-      (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>',
+      (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>' + libraryActionsHtml(),
       null,
       summaryTail
     );
@@ -31941,7 +31941,7 @@ What you type stays in this browser only.`;
     if (!host) return;
     const isHist = libView === "history";
     const name = catalogFileName();
-    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + '</div><div class="screen-actions">' + (isHist ? '<div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button>" : libraryActionsHtml()) + "</div></div>";
+    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
     const page = host.querySelector(".lib-list");
     if (isHist) {
       wireLibShell(page);
@@ -31968,7 +31968,6 @@ What you type stays in this browser only.`;
   registerScreen(LIB_SCREEN, { title: () => t("Library"), render: (host) => paintLibrary(host) });
   function wireLibrary(page) {
     wireLibShell(page);
-    $("#mgClose").onclick = () => closeScreenTab(LIB_SCREEN);
     $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
     $("#mgAddCat").onclick = () => startMgCatAdd();
     if ($("#mgWho")) $("#mgWho").onchange = function() {
@@ -32006,7 +32005,7 @@ What you type stays in this browser only.`;
         });
       };
     });
-    $("#mgWipe").onclick = clearLocalMemory;
+    $("#mgWipe").onclick = askClearLocal;
     wireFolds(
       page,
       "details[data-mg]",
@@ -32156,8 +32155,30 @@ What you type stays in this browser only.`;
   function libraryBodyHtml() {
     return openManage(true);
   }
+  function libraryActRow(key, icon, title, hint, ctl) {
+    return '<div class="set-row" data-row="' + esc(key) + '">' + lmIcon(icon) + '<div class="set-label">' + esc(title) + "<small>" + esc(hint) + '</small></div><div class="set-ctl">' + ctl + "</div></div>";
+  }
   function libraryActionsHtml() {
-    return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + joinDoorButton("mgJoinTeam") + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Saved copies…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>";
+    const join = joinDoorButton("mgJoinTeam");
+    return '<div class="mg-data-acts">' + libraryActRow(
+      "load",
+      "data",
+      t("Load catalog"),
+      t("Loads a catalog file from this computer."),
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'
+    ) + (join ? libraryActRow("join", "teams", t("Join a team"), t("Joins a team with an invitation from its lead."), join) : "") + (eHasHistory() ? libraryActRow(
+      "history",
+      "refresh",
+      t("Saved copies"),
+      t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
+      '<button type="button" class="btn" id="mgHistory">' + esc(t("Saved copies…")) + "</button>"
+    ) : "") + libraryActRow(
+      "clear",
+      "delete",
+      t("Clear local changes"),
+      t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
+      '<button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local changes")) + "</button>"
+    ) + "</div>";
   }
 
   // src/modules/settings.js
@@ -32611,13 +32632,6 @@ What you type stays in this browser only.`;
         t("Reset defaults"),
         t("Puts every setting back as it ships. Cards and your edits are not touched."),
         '<button type="button" class="btn" id="setReset">' + esc(t("Reset defaults")) + "</button>"
-      ),
-      row(
-        "clear",
-        "delete",
-        t("Clear local memory"),
-        t("Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back."),
-        '<button type="button" class="btn danger" id="setClear">' + esc(t("Clear local memory")) + "</button>"
       )
     ] }];
   }
@@ -32808,7 +32822,6 @@ What you type stays in this browser only.`;
       if (b) b.onclick = fn;
     };
     act("#setReset", resetAllSettings);
-    act("#setClear", clearLocalMemory);
     act("#setResetKeys", resetShortcuts);
     act("#setAbout", () => openAbout());
     act("#setTour", () => {
@@ -34461,7 +34474,7 @@ What you type stays in this browser only.`;
           dismissModal();
         } else if (eventMatchesAction(e, "maintenance")) {
           e.preventDefault();
-          const back = $("#mgClose") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
+          const back = $("#mgCatList") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
           if (dismissModal() !== false) {
             openMaintenance(back);
           }

@@ -1,52 +1,34 @@
-import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, eWatchGet, eWatchPut, catalogStoreRefusal, storedCatalog } from "./catalog.js";
-import { LOOSE_FIELDS, tellTaken } from "./catalog-file.js";
-import { eHasBranch, eCatalogEject } from "./host.js";
+import { E_CATALOG_KEY, E_CATALOG_STORE, catalogStoreRefusal, storedCatalog } from "./catalog.js";
+import { tellTaken } from "./catalog-file.js";
+import { eCatalogEject } from "./host.js";
+import { esc } from "./esc.js";
+import { dismissNode } from "./motion.js";
 import { flushStats } from "./pack.js";
-import { E_NS, eDeskFileShown, eLayers, lsDel, lsGet, lsKeys, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
+import { E_NS, LAYER_KEYS, eDeskFileShown, eLayers, lsDel, lsGet, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
-import { offerUndo, toastRefusal } from "./ui-lang.js";
+import { offerUndo, t, toastRefusal } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 
-/* Clearing opens from the Library and from Settings, the eject from Maintenance. FORGETTING WHAT YOU MADE AND
+/* Clearing opens from the Library, the eject from Maintenance. FORGETTING WHAT YOU MADE AND
    PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
-   price of the rare one. The prefix filter is load-bearing - file:// pages can share one
-   storage area, and another local page's keys must be left alone. */
+   price of the rare one. */
 /* Asked for, not held: read at the top level this would take the two catalog keys while
    catalog.js is still being evaluated, which bundled reads undefined in silence. */
 function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample"),nsKey("DeskMark"),nsKey("CatalogTrust"),nsKey("CatalogSigner"),nsKey("CatalogSignerPub"),nsKey("CatalogFrom")]; }
-/* WHERE THE CATALOGS ARE IS NOT HOW THE DESK LOOKS. This one names a folder on the machine, so
-   forgetting it does not return anything to a default: it sends the app looking somewhere else
-   for files it was pointed at once, and the person has to find them again. Kept by the wipe and
-   NOT by catalogKeep above, which the eject deletes. */
-const E_WIPE_KEEP=["eCatalogFolder"];
-/* CLEAR FORGETS WHAT LIVES ONLY ON THIS DESK. What the desk's own file in the shared folder carries stays: the
-   pack's LOOSE_FIELDS with the fields their ids are keyed by, the keys naming that file, the name it is signed with
-   and the list of layers holding them. Emptied, a layer would take its file out of the share at the next write.
-   With no desk file (a browser) all of it is local memory, and all of it goes. */
-const SHARE_KEEP=["eAgent","eLayers"];
-const PACK_KEEP=["v","intentKeys","editBases","baseCards","macroOrder","baseMacros"];
-const LAYER_KEEP=["Exported","LooseId","Shared","SharedOwn","SharedFile"];
-function packFileHalf(raw){
+/* CLEAR TAKES EVERY LOCAL CHANGE TO WHAT THE CATALOG SHOWS, in every personal layer this desk has written,
+   and the catalog reads as delivered. A layer is all it touches: the catalog, its file and folder, the name,
+   the settings, the team and the licence live outside one. Of a layer it keeps what is not a change to the
+   content: the counts, and the keys that name the desk's own file in the share. A field or key moves to the
+   kept side by being added here. */
+const CLEAR_KEEP_LAYER=["Stats","Days","Exported","LooseId","Shared","SharedOwn","SharedFile","EditionMarks"];
+const CLEAR_KEEP_PACK=["v","intentKeys","baseCards","baseMacros","useCounts","useAt","intentCounts","searchMisses","langs","days","dayIds","daysSince"];
+function packKept(raw,keep){
   let p=null;
   try{ p=JSON.parse(raw); }catch(e){ p=null; }
-  if(!p || typeof p!=="object" || Array.isArray(p) || !LOOSE_FIELDS.some(k=>k in p)) return null;
+  if(!p || typeof p!=="object" || Array.isArray(p)) return null;
   const o={};
-  LOOSE_FIELDS.concat(PACK_KEEP).forEach(k=>{ if(k in p) o[k]=p[k]; });
+  keep.forEach(k=>{ if(k in p) o[k]=p[k]; });
   return JSON.stringify(o);
-}
-/* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
-   shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
-   is namespaced, and the trap is that the plain engine's own namespace IS the bare prefix:
-   matching by prefix therefore also matched every OTHER copy's "e<hash>~" keys, and a Reset
-   run in one build was deleting a neighbouring copy's catalog, pack, stars and order. The
-   layers this desk has written are its own by the list storage.js keeps of them. */
-const E_PREF_KEYS=["eTheme","eGlassOff","eMotionOff","eUiLang","eLang","eAgent","ePax","eNoteHover","eDeckOff",
-  "eWho","ePills","ePillsLock","eRail","eRailLock","eRailW","eCollapsed","eFactsW",
-  "eFactsH","eShortcuts","eHdrPills"];
-function eKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("eTour")===0; }
-function eKeyIsMine(k,layers){
-  if(E_NS==="e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS)===0) return true;
-  return layers.some(ns=>k.indexOf(ns)===0);
 }
 /* WHAT AN ACT PUTS DOWN IS KEPT UNTIL ITS UNDO GOES: every key it touches as it stood, and the
    tabs. In memory, since the desk starts again in place and nothing has to cross a reload. What
@@ -65,26 +47,41 @@ function putBack(was){
   if(was.tabs!=null) ssSet(TAB_KEY,was.tabs); else ssDel(TAB_KEY);
   hooks.restartDesk();
 }
-/* CLEARING HAPPENS AT ONCE, and its Undo puts every key back. The watched file's HANDLE lives in
-   IndexedDB, out of any key sweep, so it is read before it goes and given back with the rest. */
+/* THE CLEAR ITSELF, at once once asked, and its Undo puts every key back. */
 function clearLocalMemory(){
-  const layers=eLayers(), spaces=[E_NS].concat(layers), desk=eHasBranch();
-  const kept=new Set(ejectKeys().concat(E_WIPE_KEEP, desk ? SHARE_KEEP.concat(...spaces.map(ns=>LAYER_KEEP.map(n=>ns+n))) : []));
-  const packs=new Set(desk ? spaces.map(ns=>ns+"Pack") : []);
-  const keys=lsKeys().filter(k=>(eKeyIsMine(k,layers)||eKeyIsPref(k)) && !kept.has(k));
+  let keep={layer:[], pack:[]};
+  keep={layer:CLEAR_KEEP_LAYER, pack:CLEAR_KEEP_PACK}; /* plant:clear-keep-list */
+  const spaces=[E_NS].concat(eLayers());
+  const keys=[];
+  spaces.forEach(ns=>LAYER_KEYS.forEach(n=>{ if(keep.layer.indexOf(n)<0 && lsGet(ns+n)!=null) keys.push(ns+n); }));
   const was=keepKeys(keys);
-  let handle=null;
-  eWatchGet().then(h=>{ handle=h||null; });
-  eWatchClear();
-  keys.forEach(k=>{ const half=packs.has(k) ? packFileHalf(was.keys[k]) : null; if(half!=null) lsSet(k,half); else lsDel(k); });
-  ssDel(TAB_KEY);
+  keys.forEach(k=>{ const half=/Pack$/.test(k) ? packKept(was.keys[k],keep.pack) : null; if(half!=null) lsSet(k,half); else lsDel(k); });
   hooks.restartDesk();
-  offerUndo("Local memory cleared", ()=>{
-    // The tour a forgotten first run started goes with the forgetting.
-    try{ if(hooks.tourActive()) hooks.endTour(false); }catch(e){}
-    if(handle) eWatchPut(handle);
-    putBack(was);
+  offerUndo("Local changes cleared", ()=>putBack(was));
+}
+/* THE QUESTION BEFORE THE CLEAR: Cancel holds the focus, so Enter and Escape both keep the changes. */
+function askClearLocal(){
+  const was=document.getElementById("eClearAsk");
+  if(was) was.remove();
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo e-clear-ask";
+  el.id="eClearAsk";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("data-side","none");
+  el.setAttribute("aria-labelledby","eClearAskT");
+  el.innerHTML='<h3 id="eClearAskT">'+esc(t("Clear local changes?"))+'</h3>'
+    +'<p>'+esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered."))+'</p>'
+    +'<p>'+esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay, and Undo, right after, brings the changes back."))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn" id="eClearGo">'+esc(t("Clear local changes"))+'</button>'
+    +'<button type="button" class="btn primary" id="eClearStay">'+esc(t("Cancel"))+'</button></div>';
+  document.body.appendChild(el);
+  el.querySelector("#eClearGo").onclick=()=>{ dismissNode(el); clearLocalMemory(); };
+  el.querySelector("#eClearStay").onclick=()=>dismissNode(el);
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); dismissNode(el);
   });
+  try{ el.querySelector("#eClearStay").focus({preventScroll:true}); }catch(_){}
 }
 /* EJECT HAPPENS AT ONCE, and its Undo loads the same catalog straight back. The personal layer
    stays where it is, with the catalog it orbits, and the empty desk shows its own. */
@@ -114,6 +111,7 @@ function undoEject(was){
 }
 
 export {
+  askClearLocal,
   clearLocalMemory,
   ejectCatalog
 };

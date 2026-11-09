@@ -151,7 +151,7 @@ function wireGlobalKeydown(){
          anything else closes outright. */
       else if(eventMatchesAction(e,"maintenance")){
         e.preventDefault();
-        const back=$("#mgClose")?(()=>hooks.openManage())
+        const back=$("#mgCatList")?(()=>hooks.openManage())
           :$("#setBody")?(()=>openSettings("keys"))
           :null;
         if(dismissModal()!==false){
