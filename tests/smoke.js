@@ -2087,6 +2087,10 @@ const t0 = Date.now();
                         catalogFiles: () => [] };
       closeScreenTab("library"); await wait(350);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
+      /* The path lives on the Catalog and data page. Open that page before measuring it. */
+      const nav = document.querySelector('#screenHost .sx-sec[data-lm="data"]');
+      if (nav) nav.click();
+      await wait(200);
       const el = document.getElementById("mgCatFolderPath");
       if (!el) return null;
       const cs = getComputedStyle(el), card = document.querySelector("#screenHost .lib-list");

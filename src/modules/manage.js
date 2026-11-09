@@ -35,6 +35,9 @@ import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpen
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
 import { closeScreenTab, openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
+import { lmIcon } from "./lm-icon.js";
+import { openMaintenance } from "./maintenance.js";
+import { formatActionChord } from "./shortcuts.js";
 
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
@@ -590,8 +593,104 @@ function libraryRelayLead(){
   if(relay.length===1 && !normCatalogFolder(relay[0].folder)) return relay[0]
   return null
 }
+/* The page is the section left open. Catalog and data starts that way, and a section a person
+   opens stays the page, so a redraw does not jump back to another. */
+let libOn="data";
+let libQuery="";
+// placeholder: Claudette
+const LIB_FIND="Search the library";
+// placeholder: Claudette
+const LIB_SECTIONS=[
+  {key:"catmac", icon:"categories", name:"Categories and cards", lede:"Each category's cards, its role and its order."},
+  {key:"intents", icon:"intents", name:"Intents", lede:"Favourites first, hidden intents at the foot."},
+  {key:"who", icon:"user", name:"Role suggestions", lede:"The names the ROLE wheel offers, comma-separated."},
+  {key:"data", icon:"cards", name:"Catalog and data", lede:"The catalog on this desk, and loading another."}
+];
+function libFold(s){
+  return String(s||"").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+}
+function rememberedLib(){
+  const order=["catmac","intents","who","data"];
+  const open=order.filter(k=>mgOpen.has(k));
+  if(open.length===1) return open[0];
+  if(open.indexOf(libOn)>=0) return libOn;
+  return open[0]||"catmac";
+}
+function libNavHtml(){
+  const finding=!!libFold(libQuery);
+  return LIB_SECTIONS.map(s=>{
+    const on=!finding && s.key===libOn;
+    return '<button type="button" class="sx-sec'+(on?" on":"")+'" data-lm="'+esc(s.key)+'"'
+      +(on?' aria-current="page"':'')+'>'+lmIcon(s.icon)+'<span data-i18n-skip>'+esc(s.name)+'</span></button>';
+  }).join("");
+}
+function applyLibView(page){
+  if(!page||typeof page.querySelectorAll!=="function") return;
+  const buttons=page.querySelectorAll(".sx-sec[data-lm]");
+  if(!buttons||!buttons.length) return;
+  const q=libFold(libQuery);
+  if(page.classList){ if(q) page.classList.add("is-find"); else page.classList.remove("is-find"); }
+  let countEl=null;
+  page.querySelectorAll("details.manage-sec").forEach(d=>{
+    const key=d.getAttribute("data-mg");
+    const hit=!q || libFold(d.textContent).indexOf(q)>=0;
+    const show=q?hit:key===libOn;
+    if(show) d.removeAttribute("hidden"); else d.setAttribute("hidden","");
+    if(!q && key===libOn){ const c=d.querySelector(".mg-count"); if(c) countEl=c; }
+  });
+  buttons.forEach(b=>{
+    const on=!q && b.getAttribute("data-lm")===libOn;
+    if(b.classList) b.classList.toggle("on", on);
+    if(on) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
+  });
+  const sec=LIB_SECTIONS.filter(s=>s.key===libOn)[0];
+  const title=page.querySelector("#libTitle");
+  const lede=page.querySelector("#libLede");
+  if(title) title.textContent=q?String(libQuery||"").trim():(sec?sec.name:"");
+  if(lede){
+    const n=countEl&&countEl.textContent?countEl.textContent.trim():"";
+    lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents"&&n)?(n+" intents. "+sec.lede):sec.lede;
+  }
+}
+function wireLibShell(page){
+  if(!page||typeof page.querySelectorAll!=="function") return;
+  const buttons=page.querySelectorAll(".sx-sec[data-lm]");
+  if(!buttons||!buttons.length) return;
+  buttons.forEach(b=>{
+    b.onclick=()=>{
+      libOn=b.getAttribute("data-lm")||libOn;
+      libQuery="";
+      mgOpen.add(libOn);
+      paintLibrary();
+    };
+  });
+  const find=page.querySelector("#libSearch");
+  if(find){
+    find.oninput=()=>{
+      libQuery=find.value;
+      const at=find.selectionStart;
+      paintLibrary();
+      const again=document.getElementById("libSearch");
+      if(!again) return;
+      try{ again.focus(); if(at!=null && again.setSelectionRange) again.setSelectionRange(at, at); }catch(e){}
+    };
+    /* Escape empties the search and stays on the Library, as it does in Settings. */
+    find.addEventListener("keydown",e=>{
+      if(e.key!=="Escape" || !find.value) return;
+      e.preventDefault();
+      if(e.stopPropagation) e.stopPropagation();
+      libQuery="";
+      paintLibrary();
+    });
+  }
+  const mt=page.querySelector("#libMaint");
+  if(mt) mt.onclick=()=>openMaintenance();
+}
 function openManage(justHtml){
   applyCatsToGlobal();
+  /* The page follows whichever fold is open. A fold the person closed stays closed: the
+     redraw reads mgOpen and does not put a section back. */
+  if(!libFold(libQuery)) libOn=rememberedLib();
 
   /* Full intentOrder, minus deleted ones - hidden stay in place, greyed, with a closed eye.
      The removed filter matters here: Manage is the one surface that shows hidden rows, and
@@ -715,15 +814,28 @@ function paintLibrary(host,body){
   host=host||libHost();
   if(!host) return;
   if(libView==="history"){ openHistory(host); return; }
-  host.innerHTML='<div class="screen-page lib-screen lib-list" tabindex="-1">'+libraryHeadHtml()
-    +'<div class="screen-body">'+(body||openManage(true))+'</div>'
+  const name=catalogFileName();
+  host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1">'
+    +'<div class="lm-split">'
+    +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
+    +'<label class="sx-search">'+lmIcon("search")
+    +'<input type="search" id="libSearch" autocomplete="off" spellcheck="false"'
+    +' placeholder="'+esc(LIB_FIND)+'" aria-label="'+esc(LIB_FIND)+'" value="'+esc(libQuery)+'"></label>'
+    +'<div class="sx-secs" id="libSecs">'+libNavHtml()+'</div>'
+    +'<div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">'+lmIcon("statistics")
+    +esc(t("Maintenance"))+' <kbd>'+esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'
+    +'<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
+    +(name?' · <span data-i18n-skip>'+esc(name)+'</span>':'')+'</div>'
+    +'<h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p>'
+    +'<div class="sx-card">'+(body||openManage(true))+'</div></div></div>'
     /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
        and .mf-left is the group that carries it there. Danger kept, because this one forgets
-       personal state. */
+       personal state. The bar stays under the whole tab so its five actions remain one row. */
     +'<div class="screen-actions">'+libraryActionsHtml()+'</div></div>';
   const page=host.querySelector(".lib-list");
   wireLibrary(page);
   translateTree(page);
+  applyLibView(page);
   dressDialogInputs(page);
   markCutText(page);
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
@@ -733,6 +845,7 @@ function paintLibrary(host,body){
 }
 registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(host) });
 function wireLibrary(page){
+  wireLibShell(page);
   $("#mgClose").onclick=()=>closeScreenTab(LIB_SCREEN);
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();

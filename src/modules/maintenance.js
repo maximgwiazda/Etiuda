@@ -28,6 +28,8 @@ import { copy } from "./mark.js";
 import { pillsLocked } from "./pills-box.js";
 import { cards, lang } from "./app-state.js";
 import { teamLeads } from "./team-join.js";
+import { hooks } from "./hooks.js";
+import { lmIcon } from "./lm-icon.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that
@@ -491,7 +493,7 @@ function mtGridHtml(){
   rows.forEach(x=>{
     if(x.sec){
       if(open) html+='</div>';
-      html+='<div class="mt-sec"><h3>'+esc(tc("maintenance",x.sec))+'</h3>';
+      html+='<div class="mt-sec" data-mt-sec="'+esc(x.sec)+'"><h3>'+esc(tc("maintenance",x.sec))+'</h3>';
       open=true;
     }else if(x.tab){
       const th=w=>'<span class="h">'+esc(tc("maintenance",w))+'</span>';
@@ -520,21 +522,84 @@ function wireMaintenanceActions(root, closeFn){
 }
 
 const MT_MOVED="Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+let mtOn="health";
+// placeholder: Claudette
+const MT_OPEN_DATA="Open Data and defaults";
+// placeholder: Claudette
+const MT_PAGES=[
+  {key:"health", icon:"health", name:"Health"},
+  {key:"engine", icon:"desks", name:"Engine and display"},
+  {key:"catalog", icon:"categories", name:"Catalog"},
+  {key:"storage", icon:"data", name:"Storage and desk"},
+  {key:"layout", icon:"layout", name:"Layout and intent panel"},
+  {key:"state", icon:"user", name:"Personal state"}
+];
+// placeholder: Claudette
+const MT_LEDE={
+  engine:"What runs Etiuda here, and what the screen offers it.",
+  catalog:"The catalog in use, and the file it came from.",
+  storage:"Where the desk keeps its memory, and its own state.",
+  layout:"How the window is laid out, and the intent panel.",
+  state:"What you have made your own on this desk."
+};
+function mtNavHtml(){
+  return MT_PAGES.map(p=>{
+    const on=p.key===mtOn;
+    return '<button type="button" class="sx-sec'+(on?" on":"")+'" data-mt="'+esc(p.key)+'"'
+      +(on?' aria-current="page"':'')+'>'+lmIcon(p.icon)+'<span data-i18n-skip>'+esc(p.name)+'</span></button>';
+  }).join("");
+}
+function mtShellHtml(){
+  const page=MT_PAGES.filter(p=>p.key===mtOn)[0]||MT_PAGES[0];
+  return '<div class="sx lm lm-mt mt-screen" data-page="'+esc(page.key)+'">'
+    +'<div class="lm-split">'
+    +'<nav class="sx-nav" aria-label="'+esc(t("Maintenance"))+'"><h1>'+esc(t("Maintenance"))+'</h1>'
+    +'<div class="sx-secs" id="mtSecs">'+mtNavHtml()+'</div>'
+    +'<div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">'+lmIcon("general")
+    +esc(t("Settings"))+'</button></div></nav>'
+    +'<div class="sx-page" id="mtPage"><div class="sx-crumb">'+esc(t("Maintenance"))+'</div>'
+    +'<h2 id="mtTitle" data-i18n-skip>'+esc(page.name)+'</h2>'
+    +'<p class="lede" id="mtLede" data-i18n-skip>'+esc(page.key==="health"?"":(MT_LEDE[page.key]||""))+'</p>'
+    +mtMaintBody()
+    +'<p class="mt-moved sx-note" id="mtMoved">'+esc(t(MT_MOVED))
+    +' <button type="button" class="btn" id="mtOpenData">'+esc(MT_OPEN_DATA)+'</button></p>'
+    +'</div></div>'
+    +'<div class="screen-actions"><div class="mf-left">'
+    +'<button type="button" class="btn danger" id="mtEject">'+esc(t("Eject catalog"))+'</button></div>'
+    +'<button type="button" class="btn" id="mtCopy" title="'+esc(t("Copy the report: counts and environment only, never your content"))+'">'+esc(t("Copy report"))+'</button>'
+    +'<button type="button" class="btn primary" id="mtClose">'+esc(t("Done"))+'</button>'
+    +'</div></div>';
+}
+function wireMtShell(root){
+  if(!root||typeof root.querySelectorAll!=="function") return;
+  const buttons=root.querySelectorAll(".sx-sec[data-mt]");
+  if(!buttons||!buttons.length) return;
+  const show=key=>{
+    mtOn=key||"health";
+    root.setAttribute("data-page", mtOn);
+    root.querySelectorAll(".sx-sec[data-mt]").forEach(b=>{
+      const on=b.getAttribute("data-mt")===mtOn;
+      if(b.classList) b.classList.toggle("on", on);
+      if(on) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
+    });
+    const page=MT_PAGES.filter(p=>p.key===mtOn)[0];
+    const title=root.querySelector("#mtTitle");
+    if(title&&page) title.textContent=page.name;
+    const lede=root.querySelector("#mtLede");
+    if(lede) lede.textContent=mtOn==="health"?"":(MT_LEDE[mtOn]||"");
+  };
+  buttons.forEach(b=>{ b.onclick=()=>show(b.getAttribute("data-mt")); });
+  const gear=root.querySelector("#mtSettings");
+  if(gear) gear.onclick=()=>{ if(typeof hooks.openSettings==="function") hooks.openSettings(); };
+  const data=root.querySelector("#mtOpenData");
+  if(data) data.onclick=()=>{ if(typeof hooks.openSettings==="function") hooks.openSettings("data"); };
+}
 registerScreen("maintenance", {
   title: () => t("Maintenance"),
   render: (host, closeFn) => {
-    host.innerHTML = '<div class="screen-page mt-screen">'
-      + '<div class="screen-head"><h2>' + esc(t("Maintenance")) + '</h2></div>'
-      + '<div class="screen-body">' + mtMaintBody() + '</div>'
-      + '<p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + '</p>'
-      + '<div class="screen-actions">'
-      + '<div class="mf-left">'
-      + '<button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button>'
-      + '</div>'
-      + '<button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button>'
-      + '<button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + '</button>'
-      + '</div></div>';
+    host.innerHTML = mtShellHtml();
     wireMaintenanceActions(host, closeFn);
+    wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
   }
 });
 
