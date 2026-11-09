@@ -144,11 +144,13 @@ def export_onnx(source, out_dir):
         torch.onnx.export(tower, (sample["input_ids"], sample["attention_mask"]), fp32, **export_args)
 
     import onnx
-    from onnxruntime.quantization import matmul_4bits_quantizer, quant_utils
-    loaded = quant_utils.load_model_with_shape_infer(fp32)
-    quant_config = matmul_4bits_quantizer.DefaultWeightOnlyQuantConfig(
-        block_size=32, is_symmetric=True)
-    quant = matmul_4bits_quantizer.MatMul4BitsQuantizer(loaded, algo_config=quant_config)
+    # onnxruntime 1.31.1 ships this quantiser as MatMulNBitsQuantizer.
+    # The block size and the symmetric 4-bit settings are unchanged.
+    from onnxruntime.quantization.matmul_nbits_quantizer import DefaultWeightOnlyQuantConfig, MatMulNBitsQuantizer
+    from onnxruntime.quantization.quant_utils import load_model_with_shape_infer
+    loaded = load_model_with_shape_infer(fp32)
+    quant_config = DefaultWeightOnlyQuantConfig(block_size=32, is_symmetric=True)
+    quant = MatMulNBitsQuantizer(loaded, algo_config=quant_config)
     quant.process()
     proto = quant.model.model
     onnx_path = os.path.join(out_dir, "model_q4.onnx")

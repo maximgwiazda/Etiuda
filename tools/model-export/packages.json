@@ -9,6 +9,7 @@
     {"name": "transformers", "version": "5.22.2", "licence": "Apache-2.0"},
     {"name": "sentence-transformers", "version": "6.2.0", "licence": "Apache-2.0"},
     {"name": "onnxruntime", "version": "1.31.1", "licence": "MIT"},
+    {"name": "onnx-ir", "version": "1.1.0", "licence": "Apache-2.0", "note": "The 4-bit quantiser in onnxruntime 1.31.1 imports onnx_ir and does not declare the package."},
     {"name": "onnx", "version": "1.23.2", "licence": "Apache-2.0"},
     {"name": "numpy", "version": "2.5.4", "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"},
     {"name": "safetensors", "version": "0.8.0", "licence": "Apache-2.0"}
