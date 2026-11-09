@@ -37,6 +37,7 @@ export const HELPERS = {
   "tests/eject-desk.js": "a machine-window gate, not in either chain",
   "tests/no-crash-dialog.js": "the crash guard loaded into Electron main process, not a gate",
   "tests/no-crash-dialog-desk.js": "a machine-window gate, not in either chain",
+  "tests/lab-owner.mjs": "the lab owner file, exit cleanup and stale sweep tests require, not a gate",
 };
 
 /* Nightly-only legs (rule 7): load-sensitive legs and self-tests that run only in nightly */

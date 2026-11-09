@@ -39,6 +39,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createLab } from "./lab-owner.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
@@ -59,7 +60,10 @@ let syncH1 = () => {};
 let syncRoute = () => {};
 let SHARE, H1, ROUTE;
 
-const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-roster-"));
+const LAB = createLab("etiuda-desk-roster-", {
+  keepEnv: "ETIUDA_DESK_ROSTER_KEEP",
+  stopEnv: "ETIUDA_DESK_ROSTER_STOP",
+});
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");

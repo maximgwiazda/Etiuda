@@ -55,6 +55,7 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createLab } from "./lab-owner.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
@@ -75,81 +76,10 @@ function skip(line) {
   console.log("  SKIP  " + line);
 }
 
-/* The owner is judged by its process id alone: a reused id reads as alive, so its folder stays, the safe way (the test architect, 2026-11-09). */
-function isOwnerAlive(owner) {
-  if (!owner || typeof owner !== "object" || typeof owner.pid !== "number") return true;
-  let alive = false;
-  try {
-    process.kill(owner.pid, 0);
-    alive = true;
-  } catch (e) {
-    alive = e && e.code === "EPERM";
-  }
-  if (!alive) return false;
-  return true;
-}
-
-function cleanStaleLabs(activeLab) {
-  const activeBase = path.basename(activeLab);
-  const tmp = os.tmpdir();
-  let entries = [];
-  try {
-    entries = fs.readdirSync(tmp, { withFileTypes: true });
-  } catch (e) {
-    return;
-  }
-  for (const ent of entries) {
-    if (!ent.isDirectory() || !ent.name.startsWith("etiuda-relay-channel-") || ent.name === activeBase) {
-      continue;
-    }
-    const candidate = path.join(tmp, ent.name);
-    const ownerFile = path.join(candidate, "owner.json");
-    let owner;
-    try {
-      owner = JSON.parse(fs.readFileSync(ownerFile, "utf8"));
-    } catch (e) {
-      /* A folder with no owner.json, which is every folder left before this change, is left alone. */
-      continue;
-    }
-    if (!owner || typeof owner !== "object" || typeof owner.pid !== "number") {
-      continue;
-    }
-    if (isOwnerAlive(owner)) {
-      continue;
-    }
-    try {
-      fs.rmSync(candidate, { recursive: true, force: true });
-    } catch (e) {
-      /* Ignored */
-    }
-  }
-}
-
-const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-relay-channel-"));
-const LAB_OWNER = { pid: process.pid };
-try {
-  fs.writeFileSync(path.join(LAB, "owner.json"), JSON.stringify(LAB_OWNER, null, 2) + "\n");
-} catch (e) {
-  /* Ignored */
-}
-
-process.on("exit", () => {
-  if (process.env.ETIUDA_RELAY_CHANNEL_KEEP === "1" || process.env.ETIUDA_KEEP_LAB === "1") return;
-  try {
-    fs.rmSync(LAB, { recursive: true, force: true });
-  } catch (e) {
-    /* Ignored on exit */
-  }
+const LAB = createLab("etiuda-relay-channel-", {
+  keepEnv: "ETIUDA_RELAY_CHANNEL_KEEP",
+  stopEnv: "ETIUDA_RELAY_CHANNEL_STOP",
 });
-
-cleanStaleLabs(LAB);
-
-if (process.env.ETIUDA_RELAY_CHANNEL_STOP === "exit") {
-  process.exit(0);
-}
-if (process.env.ETIUDA_RELAY_CHANNEL_STOP === "throw") {
-  throw new Error("ETIUDA_RELAY_CHANNEL_STOP=throw");
-}
 const URLV1 = "https://relay.test/relay/v1";
 const hex = n => crypto.randomBytes(n).toString("hex");
 const sha = b => crypto.createHash("sha256").update(b).digest("hex");
