@@ -9734,11 +9734,15 @@ function isOwnText(text) {
 /* THE CLIPBOARD'S TEXT, handed to then(text). Windows' readText answers at once and the opening goes on in the same turn,
    as before; Electron 44 on Linux answers with a Promise (Claude gamma's Ubuntu walk, 2026-11-09), which used to be read
    as "[object Promise]", so a copied message was never suggested there. That one is awaited. */
+const CLIP_WAIT_MS = 1000;
 function withClipText(then) {
   let got = "";
   try { got = clipboard.readText(); } catch (e) { got = ""; }
   if (got && typeof got.then === "function") {
-    Promise.resolve(got).then(t => String(t || ""), () => "").then(then)
+    /* A read that never settles must not leave the picker unable to open again: after CLIP_WAIT_MS it opens with no
+       message to suggest from, as for an empty clipboard. */
+    const late = new Promise(done => setTimeout(() => done(""), CLIP_WAIT_MS));
+    Promise.race([Promise.resolve(got).then(t => String(t || ""), () => ""), late]).then(then)
       .catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
     return;
   }
