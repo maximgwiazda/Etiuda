@@ -5102,10 +5102,13 @@ try {
     const beforeBytes = fs.readFileSync(src), digest = sha(beforeBytes);
     let turned = false, detail = "plant line absent", sites = 0;
     try {
+      /* A tag, or a list of tags lifted together: every tag must find its line. */
+      const tags = Array.isArray(tag) ? tag : [tag];
       const lines = beforeBytes.toString("utf8").split(/\n/);
-      const kept = lines.filter(l => (l.match(/plant:[\w-]+/g) || []).indexOf(tag) < 0);
+      const marks = l => l.match(/plant:[\w-]+/g) || [];
+      const kept = lines.filter(l => !marks(l).some(m => tags.indexOf(m) >= 0));
       sites = lines.length - kept.length;
-      if (sites > 0) {
+      if (sites > 0 && tags.every(tg => lines.some(l => marks(l).indexOf(tg) >= 0))) {
         const dir = fs.mkdtempSync(path.join(LAB, "app-plant-"));
         fs.cpSync(path.join(APP, "shell"), path.join(dir, "shell"), { recursive: true });
         fs.writeFileSync(path.join(dir, "shell", "relay", "channel.cjs"), kept.join("\n"), "utf8");
@@ -6327,10 +6330,11 @@ try {
       check(j.turned && j.back, "994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead, and the product file"
         + " is never written: " + j.detail + ", sha " + (j.back ? "restored" : "differs"));
     }
-    if (PLANTS_OFF) skip("994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head");
+    if (PLANTS_OFF) skip("994k lifting plant:ahead-park with plant:item-held drops what the new key wrote on the first page, so the desk follows without its head");
     else {
-      const k = await liftApp("plant:ahead-park", async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
-      check(k.turned && k.back, "994k lifting plant:ahead-park drops what the new key wrote on the first page, so the desk follows without its head,"
+      /* Paired: stage 5's kept head (plant:item-held) also carries the new key's head across the pages, so ahead-park alone is redundancy. */
+      const k = await liftApp(["plant:ahead-park", "plant:item-held"], async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
+      check(k.turned && k.back, "994k lifting plant:ahead-park with plant:item-held drops what the new key wrote on the first page, so the desk follows without its head,"
         + " and the product file is never written: " + k.detail + ", sha " + (k.back ? "restored" : "differs"));
     }
     const lText = x => (x ? "synced " + x.synced + ", the K3 file by K1 " + x.thief + ", pages from the stand-in " + x.pages + ", desk pin "
