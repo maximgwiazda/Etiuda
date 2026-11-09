@@ -910,6 +910,8 @@ UI_STRINGS.pl={
   "A new catalog arrives from the team":"Od zespołu przychodzi nowy katalog",
   "{LEAD} published a new edition":"Nowe wydanie od lidera zespołu: {LEAD}",
   "{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.":"{CATALOG}, wydanie {EDITION}. Nic nie zostanie wczytane przed przejrzeniem.",
+  // placeholder: Claudette
+  "{CATALOG}. Nothing is loaded until it is looked at.":"{CATALOG}. Nothing is loaded until it is looked at.",
   "Show what changed":"Pokaż zmiany",
   "A new catalog from {LEAD}":"Nowy katalog od lidera zespołu: {LEAD}",
   "{CATALOG} is in the Library, ready to open.":"{CATALOG} jest w Bibliotece i można go otworzyć.",

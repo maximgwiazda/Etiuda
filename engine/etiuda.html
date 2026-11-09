@@ -7635,6 +7635,8 @@ What you type stays in this browser only.`;
     "A new catalog arrives from the team": "Od zespołu przychodzi nowy katalog",
     "{LEAD} published a new edition": "Nowe wydanie od lidera zespołu: {LEAD}",
     "{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.": "{CATALOG}, wydanie {EDITION}. Nic nie zostanie wczytane przed przejrzeniem.",
+    // placeholder: Claudette
+    "{CATALOG}. Nothing is loaded until it is looked at.": "{CATALOG}. Nothing is loaded until it is looked at.",
     "Show what changed": "Pokaż zmiany",
     "A new catalog from {LEAD}": "Nowy katalog od lidera zespołu: {LEAD}",
     "{CATALOG} is in the Library, ready to open.": "{CATALOG} jest w Bibliotece i można go otworzyć.",
@@ -30195,7 +30197,7 @@ What you type stays in this browser only.`;
     const arriving = fresh && !src.asked && !src.reopened;
     if (arriving) arriveAtName(wrap);
     document.body.appendChild(wrap);
-    if (lsGet("eNotifyEditionOff") !== "1") {
+    if (arriving && lsGet("eNotifyEditionOff") !== "1") {
       catalogTrust(c).then((state) => {
         if (state === V2_SIG_VALID) {
           eCatalogLeads().then((leads) => {
@@ -30204,12 +30206,14 @@ What you type stays in this browser only.`;
             if (!sig2 || offeredNotified.has(sig2)) return;
             offeredNotified.add(sig2);
             const tLeads = teamLeads().filter((l) => l && !l.removed);
-            const leadName = tLeads[0] && tLeads[0].lead || t("The team lead");
+            const print = trustPrint(c);
+            const matchLead = tLeads.find((l) => l && l.print === print);
+            const leadName = matchLead && matchLead.lead || tLeads[0] && tLeads[0].lead || t("The team lead");
             const catName = catalogNameOfFile(String(src && src.file || "") || E_CATALOG_SCRIPT) || t("Catalog");
             const ed2 = editionNameOf(c);
-            const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : ed2.r != null ? String(ed2.r) + (ed2.e ? " (" + ed2.e + ")" : "") : String(ed2.e || c.version || "");
+            const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : String(ed2.e || "");
             const title = t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
-            const body = t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName).split("{EDITION}").join(edStr);
+            const body = edStr ? t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName).split("{EDITION}").join(edStr) : t("{CATALOG}. Nothing is loaded until it is looked at.").split("{CATALOG}").join(catName);
             eNotify({ title, body, target: "offer" });
           });
         }

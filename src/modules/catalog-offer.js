@@ -641,7 +641,7 @@ function eOfferCatalogDialog(c,src){
   const arriving=fresh && !src.asked && !src.reopened;
   if(arriving) arriveAtName(wrap);
   document.body.appendChild(wrap);
-  if(lsGet("eNotifyEditionOff")!=="1"){
+  if(arriving && lsGet("eNotifyEditionOff")!=="1"){
     catalogTrust(c).then(state=>{
       if(state===V2_SIG_VALID){
         eCatalogLeads().then(leads=>{
@@ -650,13 +650,18 @@ function eOfferCatalogDialog(c,src){
           if(!sig || offeredNotified.has(sig)) return;
           offeredNotified.add(sig);
           const tLeads=teamLeads().filter(l=>l&&!l.removed);
-          const leadName=(tLeads[0]&&tLeads[0].lead)||t("The team lead");
+          const print=trustPrint(c);
+          const matchLead=tLeads.find(l=>l&&l.print===print);
+          const leadName=(matchLead&&matchLead.lead)||(tLeads[0]&&tLeads[0].lead)||t("The team lead");
           const catName=catalogNameOfFile(String((src&&src.file)||"")||E_CATALOG_SCRIPT)||t("Catalog");
           const ed=editionNameOf(c);
-          const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):(ed.r!=null?(String(ed.r)+(ed.e?" ("+ed.e+")":"")):String(ed.e||c.version||""));
+          const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):String(ed.e||"");
           const title=t("{LEAD} published a new edition").split("{LEAD}").join(leadName);
-          const body=t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.")
-            .split("{CATALOG}").join(catName).split("{EDITION}").join(edStr);
+          const body=edStr
+            ? t("{CATALOG}, edition {EDITION}. Nothing is loaded until it is looked at.")
+                .split("{CATALOG}").join(catName).split("{EDITION}").join(edStr)
+            : t("{CATALOG}. Nothing is loaded until it is looked at.")
+                .split("{CATALOG}").join(catName);
           eNotify({ title, body, target: "offer" });
         });
       }
