@@ -282,17 +282,20 @@ function generalGroups(){
   ]}];
   const host=closeHost();
   if(host){
-    let startOn=false;
-    try{ const s=host.loginItemState(); startOn=!!(s && s.openAtLogin); }catch(e){ startOn=false; }
+    const plat=(host && host.platform) || (typeof process!=="undefined" && process.platform) || "";
     const quit=lsGet("eQuitOnClose")==="1";
-    groups.push({head:t("Starting and closing"), rows:[
-      row("startwin","forward",t("Start with Windows"),
+    const rows=[];
+    if(plat==="win32"){
+      let startOn=false;
+      try{ const s=host.loginItemState(); startOn=!!(s && s.openAtLogin); }catch(e){ startOn=false; }
+      rows.push(row("startwin","forward",t("Start with Windows"),
         t("Etiuda starts in the tray when this Windows account signs in."),
-        onoff("startwin", startOn, "", "")),
-      row("closehow","desks",t("When the window closes"),
-        t("In the tray, Etiuda still answers its shortcut and shows notifications."),
-        seg("closehow",[{v:"stay",t:t("Stay in the tray")},{v:"quit",t:t("Quit")}], quit?"quit":"stay"))
-    ]});
+        onoff("startwin", startOn, "", "")));
+    }
+    rows.push(row("closehow","desks",t("When the window closes"),
+      t("In the tray, Etiuda still answers its shortcut and shows notifications."),
+      seg("closehow",[{v:"stay",t:t("Stay in the tray")},{v:"quit",t:t("Quit")}], quit?"quit":"stay")));
+    groups.push({head:t("Starting and closing"), rows:rows});
   }
   return groups;
 }
