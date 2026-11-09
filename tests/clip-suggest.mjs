@@ -179,5 +179,22 @@ const deCjs = cjs.scoreSuggestions("Guten tag schraube bitte", cjs.buildSuggestM
 check(deCjs.length === 1 && deCjs[0].id === "t:schraube",
   "the shell copy suggests the German-only intent as well");
 
+/* A huge clipboard is read on its first MESSAGE_MAX_CHARS only: the same rows as that slice, the words past it
+   never seen, and the cost of a long message rather than of its megabytes. */
+const head = "please mend lantern today. ";
+let body = head;
+while (body.length < api.MESSAGE_MAX_CHARS) body += "and then a few more words ";
+const huge = body + " brass kettle schraube ".repeat(250000);
+const t0 = process.hrtime.bigint();
+const hugeRows = scoreSuggestions(huge, model);
+const hugeReads = readsLikeMessage(huge);
+const hugeMs = Number(process.hrtime.bigint() - t0) / 1e6;
+const sliceRows = scoreSuggestions(huge.slice(0, api.MESSAGE_MAX_CHARS), model);
+const cjsRows = cjs.scoreSuggestions(huge, cjs.buildSuggestModel(catalog, labels));
+check(api.MESSAGE_MAX_CHARS === 1500 && huge.length > 5e6 && hugeReads && sliceRows.length > 0
+    && JSON.stringify(hugeRows) === JSON.stringify(sliceRows) && JSON.stringify(cjsRows) === JSON.stringify(sliceRows) && hugeMs < 200,
+  "a " + Math.round(huge.length / 1e6) + " MB clipboard is scored on its first " + api.MESSAGE_MAX_CHARS + " characters only, in "
+  + hugeMs.toFixed(1) + " ms: " + JSON.stringify(hugeRows));
+
 console.log("\n#counts checks=" + checks + " failed=" + failed);
 process.exit(failed ? 1 : 0);

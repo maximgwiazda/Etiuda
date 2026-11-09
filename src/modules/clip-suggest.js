@@ -11,6 +11,8 @@ const MESSAGE_WORD_MIN = 3;
 const MESSAGE_LETTER_SHARE = 0.6;
 const SUGGEST_SCORE_FLOOR = 2.5;
 const SUGGEST_LIMIT = 5;
+/* Only this much of a clipboard is ever read, so a huge one costs no more than a long message. */
+const MESSAGE_MAX_CHARS = 1500;
 
 const AFFINITY_STOP = new Set([
   "your", "with", "from", "this", "that", "they", "have", "been", "when", "what",
@@ -56,7 +58,8 @@ function letterShare(text) {
 }
 
 function readsLikeMessage(text) {
-  return messageWords(text).length >= MESSAGE_WORD_MIN && letterShare(text) >= MESSAGE_LETTER_SHARE;
+  const s = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
+  return messageWords(s).length >= MESSAGE_WORD_MIN && letterShare(s) >= MESSAGE_LETTER_SHARE;
 }
 
 function suggestEditDistance1(a, b) {
@@ -297,7 +300,7 @@ function buildSuggestModel(catalog, labels) {
 
 function segmentCustomerMessage(raw) {
   if (!raw || typeof raw !== "string") return [];
-  if (raw.length < 4 || raw.length > 1500) return [];
+  if (raw.length < 4 || raw.length > MESSAGE_MAX_CHARS) return [];
   if (!/\p{L}/u.test(raw)) return [];
   const trimmed = raw.trim();
   if (/^[A-Z0-9]{6,8}$/i.test(trimmed)) return [];
@@ -429,6 +432,7 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
 }
 
 function scoreSuggestions(text, model) {
+  text = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
   if (!readsLikeMessage(text) || !model) return [];
   const profiles = profilesFrom(model);
   const vocab = new Map(model.vocab || []);
@@ -455,6 +459,7 @@ function scoreSuggestions(text, model) {
 
 export {
   MESSAGE_WORD_MIN,
+  MESSAGE_MAX_CHARS,
   MESSAGE_LETTER_SHARE,
   SUGGEST_SCORE_FLOOR,
   SUGGEST_LIMIT,

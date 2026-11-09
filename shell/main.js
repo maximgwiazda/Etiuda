@@ -24,7 +24,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
-const { readsLikeMessage, scoreSuggestions } = require(path.join(__dirname, "clip-suggest.cjs"));
+const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
 let embedLib = null;
 try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
@@ -9253,16 +9253,25 @@ const embedSuggest = (() => {
     }
   });
 })();
-function warmSuggest(passages, epoch, on) {
+/* The model is warmed for what it embeds, the intents' passages, so a save that leaves every intent's words alone
+   (a star, a card edited) re-embeds nothing. */
+const embedKeys = new WeakMap();
+function passagesKeyOf(profiles) {
+  if (!embedLib || !profiles || !Array.isArray(profiles.passages)) return null;
+  if (!embedKeys.has(profiles)) embedKeys.set(profiles, embedLib.passagesKey(profiles.passages));
+  return embedKeys.get(profiles);
+}
+function warmSuggest(profiles, on) {
   if (!embedSuggest) return;
   embedSuggest.setOn(on);
-  if (on && Array.isArray(passages)) embedSuggest.warm(passages, epoch);
+  const key = passagesKeyOf(profiles);
+  if (on && key) embedSuggest.warm(profiles.passages, key);
 }
 /* After the page loads, where the hotkey is held and the model is carried, so the first opening finds it warm. */
 function warmSuggestSoon() {
   if (!embedSuggest || !hotkeyHeld || !embedSuggest.installed()) return;
   askDesk("suggest-profiles", {}).then(r => {
-    if (r) warmSuggest(r.profiles && r.profiles.passages, r.epoch, r.ai !== false);
+    if (r) warmSuggest(r.profiles, r.ai !== false);
   }).catch(() => {});
 }
 
@@ -9297,8 +9306,11 @@ function pickToggle() {
   const isOwn = isOwnText(clip);
   const want = !isOwn && readsLikeMessage(clip);
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
-  const req = want ? (lastProfiles ? { epoch: lastProfilesEpoch } : { profiles: 1 }) : {};
-  const ranked = want && embedSuggest ? embedSuggest.rank(clip, EMBED_BUDGET_MS) : Promise.resolve(null);
+  /* Where the desk carries the model, every opening asks for the catalog's passages, the Menu's included, so the model warms
+     at the first opening of any kind. */
+  const forModel = !!embedSuggest && embedSuggest.installed();
+  const req = (want || forModel) ? (lastProfiles ? { epoch: lastProfilesEpoch } : { profiles: 1 }) : {};
+  const ranked = want && embedSuggest ? embedSuggest.rank(clip.slice(0, MESSAGE_MAX_CHARS), EMBED_BUDGET_MS) : Promise.resolve(null);
   askDesk("open", req).then(open => {
     if (!open) { focusDesk(); return null; }
     if (open.epoch != null && open.epoch !== lastProfilesEpoch) {
@@ -9329,8 +9341,8 @@ function pickToggle() {
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;
-    const byModel = showed && aiOn && !!embedSuggest && embedSuggest.readyFor(open.epoch);
-    if (embedSuggest) warmSuggest(profiles && profiles.passages, open.epoch, aiOn);
+    const byModel = showed && aiOn && !!embedSuggest && embedSuggest.readyFor(passagesKeyOf(profiles));
+    if (embedSuggest) warmSuggest(profiles, aiOn);
     return (byModel ? ranked : Promise.resolve(null)).then(rows => {
       const names = new Map(((profiles && profiles.intents) || []).map(p => [String(p.id), String(p.name || "")]));
       const mine = (Array.isArray(rows) ? rows : []).filter(r => r && names.has(String(r.id)));

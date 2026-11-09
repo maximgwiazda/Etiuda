@@ -33,32 +33,31 @@ const MODEL_PIN = Object.freeze({
   ])
 });
 
-function fileHash(at) {
-  return new Promise((done, fail) => {
-    const h = crypto.createHash("sha256");
-    fs.createReadStream(at).on("error", fail).on("data", b => h.update(b)).on("end", () => done(h.digest("hex")));
-  });
-}
-
-/* Every file of `pin` in `dir`, whole: null when they all are, else the first fault as {why, name}, why being "absent",
-   "size" or "checksum". The size is read before the hash, so a wrong file of another length costs no read. */
-async function pinProblem(dir, pin) {
+/* Every file of `pin` in `dir`, read once and hashed as read: {problem: null, bytes: {name: Buffer}} when all are whole,
+   else {problem: {why, name}}, why being "absent", "size" or "checksum". The size is read before anything else, so a
+   wrong file of another length costs no read. Whatever is loaded afterwards is built from these bytes, never from the
+   path again, so a file changed after the check is not the file loaded. */
+async function pinRead(dir, pin) {
   const files = pin && Array.isArray(pin.files) ? pin.files : [];
-  if (!dir || !files.length) return { why: "absent", name: "" };
+  if (!dir || !files.length) return { problem: { why: "absent", name: "" } };
   for (const f of files) {
     const at = path.join(dir, f.name);
     let st = null;
     try { st = fs.statSync(at); } catch (e) { st = null; }
-    if (!st || !st.isFile()) return { why: "absent", name: f.name };
-    if (st.size !== f.size) return { why: "size", name: f.name };
+    if (!st || !st.isFile()) return { problem: { why: "absent", name: f.name } };
+    if (st.size !== f.size) return { problem: { why: "size", name: f.name } };
   }
+  const bytes = {};
   for (const f of files) {
-    let got = "";
-    try { got = await fileHash(path.join(dir, f.name)); } catch (e) { return { why: "absent", name: f.name }; }
-    if (got !== f.sha256) return { why: "checksum", name: f.name }; /* plant:embed-pin */
+    let b = null;
+    try { b = await fs.promises.readFile(path.join(dir, f.name)); } catch (e) { return { problem: { why: "absent", name: f.name } }; }
+    const got = crypto.createHash("sha256").update(b).digest("hex");
+    if (got !== f.sha256) return { problem: { why: "checksum", name: f.name } }; /* plant:embed-pin */
+    bytes[f.name] = b;
   }
-  return null;
+  return { problem: null, bytes };
 }
+async function pinProblem(dir, pin) { return (await pinRead(dir, pin)).problem; }
 
 /* Whether every file of `pin` is in `dir` at its pinned size: the cheap test of whether the desk carries the model. */
 function pinPresent(dir, pin) {
@@ -97,6 +96,11 @@ function dot(a, b) {
   return s;
 }
 
+/* What the worker has embedded, as one string: equal for two catalogs whose intents read the same, whatever else changed. */
+function passagesKey(passages) {
+  return crypto.createHash("sha256").update(JSON.stringify(passageRows(passages))).digest("hex");
+}
+
 /* The intents nearest `vec`, each scored by its best passage, highest first and equal scores by id: EMBED_LIMIT at most,
    as [{id, score}]. `table` is [[id, unit vector]], one row per passage. */
 function nearest(vec, table, limit) {
@@ -110,4 +114,4 @@ function nearest(vec, table, limit) {
     .slice(0, limit || EMBED_LIMIT);
 }
 
-module.exports = { EMBED_PROMPT, EMBED_MAX_TOKENS, EMBED_LIMIT, MODEL_PIN, pinProblem, pinPresent, passageRows, unit, nearest };
+module.exports = { EMBED_PROMPT, EMBED_MAX_TOKENS, EMBED_LIMIT, MODEL_PIN, pinRead, pinProblem, pinPresent, passageRows, passagesKey, unit, nearest };

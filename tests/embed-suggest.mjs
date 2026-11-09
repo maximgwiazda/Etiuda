@@ -5,8 +5,10 @@
  * The model files are held to their pin (e1); Settings' switch off forks nothing (e2); a desk without the model forks
  * nothing and leaves the words (e3); the real worker, on a stub runtime and a fixture model written here, warms, ranks
  * by the nearer of an intent's passages, and refuses a file off its pin for good (e4); an answer slower than the budget
- * is no answer (e5); the strip's rows are taken only by the agent (e6); nothing in the three files reaches a network or
- * writes a file (e7). Each guard is lifted once in a copy held in memory, and its leg must then fail.
+ * is no answer, and a worker that fails starts again at the next warm, three times at most (e5); the strip's rows are
+ * taken only by the agent (e6); nothing in the three files reaches a network or writes a file (e7); a file swapped after
+ * the check is not what is loaded (e4d); the model re-embeds only when the intents' words change (e9); and every
+ * opening warms it, the Menu's included (e10). Each guard is lifted once in a copy held in memory, and its leg must then fail.
  * e8 runs the real model only where ETIUDA_EMBED_MODEL and ETIUDA_EMBED_RUNTIME name it, and is never a gate.
  */
 import { createRequire } from "node:module";
@@ -16,6 +18,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+process.removeAllListeners("warning");
+process.on("warning", () => {});
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EMBED = path.join(ROOT, "shell", "embed");
@@ -82,9 +86,21 @@ fs.writeFileSync(path.join(ORT, "index.js"), [
   "    const v = new Float32Array(97); for (const id of feeds.input_ids.data) v[Number(id)] += 1;",
   "    if (process.env.STUB_SLOW) await new Promise(d => setTimeout(d, Number(process.env.STUB_SLOW)));",
   "    return { sentence_embedding: { data: v } }; } };",
-  "module.exports = { Tensor, InferenceSession: { create: async () => session } };"].join("\n"));
+  "async function create(model, opts) {",
+  "  if (typeof model === 'string') throw new Error('loaded by path');",
+  "  const d = opts && opts.externalData && opts.externalData[0];",
+  "  if (!d || d.path !== 'model_q4.onnx_data' || !(d.data instanceof Uint8Array)) throw new Error('no weights handed over');",
+  "  if (Buffer.from(d.data).toString('utf8').indexOf('stub weights') !== 0) throw new Error('not the checked weights');",
+  "  return session; }",
+  "module.exports = { Tensor, InferenceSession: { create } };"].join("\n"));
+/* With STUB_SWAP_DIR set, the tokenizer module, which the worker requires only after the pin check, swaps two of the
+   folder's files for other bytes, as anything changing them between the check and the load would. */
 fs.writeFileSync(path.join(TOK, "tokenizers.cjs"), [
-  "class Tokenizer { constructor(json, config) {}",
+  "const fs = require('node:fs'), path = require('node:path');",
+  "const swap = process.env.STUB_SWAP_DIR;",
+  "if (swap) { fs.writeFileSync(path.join(swap, 'tokenizer.json'), '{\"swapped\":true}');",
+  "  fs.writeFileSync(path.join(swap, 'model_q4.onnx_data'), 'swapped weights '); }",
+  "class Tokenizer { constructor(json, config) { if (json && json.swapped) throw new Error('not the checked tokenizer'); }",
   "  encode(text) { const ids = String(text).toLowerCase().split(/[^a-z]+/).filter(Boolean)",
   "    .map(w => { let h = 7; for (const c of w) h = (h * 31 + c.charCodeAt(0)) % 89; return h + 8; }); return { ids }; } }",
   "module.exports = { Tokenizer };"].join("\n"));
@@ -140,7 +156,7 @@ try {
     && core.pinPresent(MODEL, PIN) && !core.pinPresent(gone, PIN),
     "e1 the model files are held to their pin: whole " + JSON.stringify(whole) + ", one byte changed " + JSON.stringify(oneByte)
     + ", a size changed " + JSON.stringify(longer) + ", a file missing " + JSON.stringify(missing));
-  const liftedPin = loadFrom("core.cjs", s => s.replace(/\s*if \(got !== f\.sha256\) return \{ why: "checksum", name: f\.name \}; \/\* plant:embed-pin \*\//, ""));
+  const liftedPin = loadFrom("core.cjs", s => s.replace(/\s*if \(got !== f\.sha256\) return \{ problem: \{ why: "checksum", name: f\.name \} \}; \/\* plant:embed-pin \*\//, ""));
   const planted = await liftedPin.pinProblem(bent, PIN);
   check(!e1(planted), "e1p with the checksum lifted, the leg above fails: the changed byte now reads " + JSON.stringify(planted));
   check(core.MODEL_PIN.files.length === 4 && core.MODEL_PIN.files.every(f => /^[0-9a-f]{64}$/.test(f.sha256) && f.size > 0
@@ -211,6 +227,35 @@ try {
   check(st.status === "refused" && !st.live && after === false && rankAfter === null,
     "e4c a model off its pin is refused inside the worker itself, which ends, and the desk keeps the words for good: " + JSON.stringify(st));
 
+  /* Load what was hashed: two files swapped after the check, by the tokenizer module the worker requires next. */
+  const swapLeg = async workerFile => {
+    const dir = fs.mkdtempSync(path.join(LAB, "swap-"));
+    fs.cpSync(MODEL, dir, { recursive: true });
+    const env = { ETIUDA_EMBED_TEST_PIN: PIN_FILE, STUB_SWAP_DIR: dir };
+    const forker = nodeFork(env);
+    const m = createEmbedSuggest({ fork: f => forker(workerFile || f), dir, runtime: RUNTIME, pin: PIN });
+    m.setOn(true);
+    m.warm(PASSAGES, "S1");
+    await until(() => m.readyFor("S1") || ["failed", "idle"].includes(m.state().status), 8000);
+    const rows = m.readyFor("S1") ? await m.rank("please mend the lantern today", 3000) : null;
+    m.stop();
+    const later = await core.pinProblem(dir, PIN);
+    return { rows, later };
+  };
+  const swapped = await swapLeg();
+  const swapOk = r => !!r.rows && r.rows[0] && r.rows[0].id === "t:lamp" && !!r.later && ["size", "checksum"].includes(r.later.why);
+  check(swapOk(swapped), "e4d a file swapped after the check is not what is loaded: the worker ranks from the checked bytes ("
+    + (swapped.rows && swapped.rows[0] && swapped.rows[0].id) + "), and the next check refuses the swapped file: " + JSON.stringify(swapped.later));
+  const plantDir = path.join(LAB, "plant");
+  fs.mkdirSync(plantDir, { recursive: true });
+  fs.copyFileSync(path.join(EMBED, "core.cjs"), path.join(plantDir, "core.cjs"));
+  const byPath = fs.readFileSync(path.join(EMBED, "worker.cjs"), "utf8").replace('JSON.parse(b["tokenizer.json"].toString("utf8"))',
+    'JSON.parse(require("node:fs").readFileSync(path.join(m.dir, "tokenizer.json"), "utf8"))');
+  fs.writeFileSync(path.join(plantDir, "worker.cjs"), byPath);
+  const plantedSwap = byPath.indexOf("readFileSync(path.join(m.dir") > 0 ? await swapLeg(path.join(plantDir, "worker.cjs")) : null;
+  check(!!plantedSwap && !swapOk(plantedSwap), "e4dp with the tokenizer read again by path after the check, the leg above fails: rows "
+    + JSON.stringify(plantedSwap && plantedSwap.rows));
+
   /* ---- e5 slower than the budget --------------------------------------------------------------------------------- */
   const slowFork = fakeFork(readyOnLoad);
   const slow = createEmbedSuggest({ fork: slowFork, dir: MODEL, runtime: RUNTIME, pin: PIN });
@@ -222,6 +267,7 @@ try {
   const took = Date.now() - t0;
   check(late === null && took >= 55 && took < 400 && slowFork.made[0].posts.some(p => p.kind === "rank"),
     "e5 an answer slower than the budget is none: null after " + took + " ms of a 60 ms budget");
+  /* A worker that dies answers at once with nothing and is started again at the next warm, EMBED_RESTARTS times. */
   const crashFork = fakeFork(readyOnLoad);
   const crash = createEmbedSuggest({ fork: crashFork, dir: MODEL, runtime: RUNTIME, pin: PIN });
   crash.setOn(true);
@@ -230,8 +276,30 @@ try {
   const pending = crash.rank("please mend the lantern today", 5000);
   crashFork.made[0].exit(1);
   const crashed = await pending;
-  check(crashed === null && crash.state().status === "failed" && crash.warm(PASSAGES, "E2") === false,
-    "e5b a worker that dies answers the opening at once with nothing, and is not started again: " + JSON.stringify(crash.state()));
+  const afterOne = crash.state().status;
+  const again1 = crash.warm(PASSAGES, "E1");
+  await until(() => crash.readyFor("E1"), 500);
+  const backUp = crash.readyFor("E1") && crashFork.made.length === 2;
+  const RESTARTS = nodeRequire(path.join(EMBED, "suggest.cjs")).EMBED_RESTARTS;
+  for (let i = 1; i < RESTARTS; i++) {
+    crashFork.made[crashFork.made.length - 1].exit(1);
+    crash.warm(PASSAGES, "E1");
+    await until(() => crash.readyFor("E1") || crash.state().status === "failed", 500);
+  }
+  const forks = crashFork.made.length;
+  check(crashed === null && afterOne === "idle" && again1 === true && backUp && crash.state().status === "failed"
+      && crash.warm(PASSAGES, "E1") === false && forks === RESTARTS,
+    "e5b a worker that dies answers the opening at once with nothing and starts again at the next warm, until it has died "
+    + RESTARTS + " times: back up " + backUp + ", forks " + forks + ", then " + JSON.stringify(crash.state()));
+  const failMsg = fakeFork(m => m.kind === "load" ? { kind: "failed" } : null);
+  const failing = createEmbedSuggest({ fork: failMsg, dir: MODEL, runtime: RUNTIME, pin: PIN });
+  failing.setOn(true);
+  failing.warm(PASSAGES, "E1");
+  await until(() => failing.state().status !== "warming", 500);
+  const failedOnce = failing.state().status;
+  failing.warm(PASSAGES, "E1");
+  check(failedOnce === "idle" && failMsg.made.length === 2 && failMsg.made[0].killed,
+    "e5c a worker that reports a failure is stopped and started again at the next warm: " + failedOnce + ", forks " + failMsg.made.length);
 
   /* ---- e6 no auto-pick ----------------------------------------------------------------------------------------- */
   const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
@@ -267,6 +335,41 @@ try {
   check(odd.length === 0 && reach.length === 0 && reqs.length >= 6,
     "e7 the model's three files require only " + allowed.length + " known modules and reach no network, file write or log: odd "
     + JSON.stringify(odd) + ", reach " + JSON.stringify(reach));
+
+  /* ---- e9 re-embedded only when what is embedded changes ---------------------------------------------------------- */
+  const { buildSuggestModel } = await import(new URL("../src/modules/clip-suggest.js", import.meta.url).href);
+  const cat = { cards: [{ id: "c1", title: { en: "Lamp care" }, body: { en: "Wipe the glass." }, requests: ["t:lamp"] }],
+    tags: [{ kind: "request", id: "t:lamp", topic: { en: "Mending a lantern", pl: "Naprawa latarni" }, clause: { en: "the lantern needs mending" } },
+           { kind: "request", id: "t:tea", topic: { en: "Brewing tea" }, clause: { en: "how the kettle brews" } }] };
+  const other = JSON.parse(JSON.stringify(cat));
+  other.cards[0].title.en = "Lamp care, revised";
+  other.cards.push({ id: "c2", title: { en: "A new card" }, body: { en: "Anything at all." }, requests: ["t:tea"] });
+  const reworded = JSON.parse(JSON.stringify(cat));
+  reworded.tags[1].clause.en = "how the kettle brews a pot";
+  const keyOf = c => core.passagesKey(buildSuggestModel(c, {}).passages);
+  const same = keyOf(cat) === keyOf(other), moved = keyOf(cat) !== keyOf(reworded);
+  const keyFork = fakeFork(readyOnLoad);
+  const keyed = createEmbedSuggest({ fork: keyFork, dir: MODEL, runtime: RUNTIME, pin: PIN });
+  keyed.setOn(true);
+  keyed.warm(buildSuggestModel(cat, {}).passages, keyOf(cat));
+  await until(() => keyed.readyFor(keyOf(cat)), 500);
+  keyed.warm(buildSuggestModel(other, {}).passages, keyOf(other));
+  const posts = keyFork.made[0].posts.map(p => p.kind).join(",");
+  check(same && moved && posts === "load",
+    "e9 a card edited or added leaves the model's key alone and nothing is embedded again (" + posts + "); an intent's words changed move it: "
+    + same + ", " + moved);
+  const keyRoute = src => /readyFor\(passagesKeyOf\(profiles\)\)/.test(src) && /embedSuggest\.warm\(profiles\.passages, key\)/.test(src)
+    && !/readyFor\(open\.epoch\)/.test(src);
+  check(keyRoute(MAIN), "e9b the shell warms and asks by the passages' key, never by the catalog's epoch");
+  check(!keyRoute(MAIN.replace("readyFor(passagesKeyOf(profiles))", "readyFor(open.epoch)")),
+    "e9p with the epoch put back in the shell, the leg above fails");
+
+  /* ---- e10 every opening warms where the model is carried, the Menu's included --------------------------------- */
+  const opensWarm = src => /const forModel = !!embedSuggest && embedSuggest\.installed\(\);\s*const req = \(want \|\| forModel\) \?/.test(src)
+    && /ipcMain\.on\("etiuda:pick-show", \(e\) => \{\s*if \(fromEngine\(e\)[^\n]*pickToggle\(\);/.test(src);
+  check(opensWarm(MAIN), "e10 the picker asks for the passages at every opening while the model is carried, and the Menu's door opens through the same pickToggle");
+  check(!opensWarm(MAIN.replace("const req = (want || forModel) ?", "const req = want ?")),
+    "e10p with the passages asked only for a message, the leg above fails");
 
   /* ---- e8 the real model, opt-in --------------------------------------------------------------------------------- */
   const realModel = process.env.ETIUDA_EMBED_MODEL || "", realRuntime = process.env.ETIUDA_EMBED_RUNTIME || "";
