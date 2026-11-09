@@ -3664,6 +3664,7 @@ function notePinTeam(pin, team) {
   if (was === undefined || was === team) editionTeam.set(pin, team);
 }
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
+const teamListedLast = {};                     // team id -> the catalogs the last file heeded this run listed
 const teamSaid = new Set();
 /* Whether a team file is whole under the lead key it names, which is what the engine's v2TeamSigState says. */
 function teamWhole(doc) {
@@ -4353,6 +4354,11 @@ function heedTeam() {
   /* A file above every one heeded before, naming this desk with a wrap it opened: never a roster read before the request. */
   const admitted = raised && r.key ? r.team : ""; /* plant:c6-fresh */
   finishJoin(admitted); /* plant:n1-heed */
+  /* A heeded file that drops a catalog the last one of this run listed takes back at once what was shared of it, as an ask does.
+     Kept before the call: withdrawClosed heeds again, and a cleared stamp must not take back twice. */
+  const listedNow = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [], listedWas = r.team ? teamListedLast[r.team] : null;
+  if (r.team) teamListedLast[r.team] = listedNow;
+  if (listedWas && listedWas.some(id => listedNow.indexOf(id) < 0)) try { withdrawClosed(); } catch { /* the next pass tries again */ } /* plant:s6-withdraw-unlisted */
 }
 /* The catalog's text inside a sealed envelope, where this desk holds its team's key for its epoch, else null. */
 function teamOpen(data) {
