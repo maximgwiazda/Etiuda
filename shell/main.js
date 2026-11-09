@@ -2843,9 +2843,17 @@ function writeBranch(stem, text) {
     /* A file grown from a catalog this desk opened from an envelope is that catalog, so it is signed and then sealed for the
        team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had, or the
        team has left this desk out, it is held, never written in the clear. */
-    if (grewId && !toLead && doc) {
-      const grewPin = String(doc.grew.sha || "");
-      seal = PIN_RE.test(grewPin) ? sealFor(grewId, grewPin, at.root) : null;
+    let sealId = grewId, sealPin = grewId ? String(doc.grew.sha || "") : "";
+    /* A copy of a copy holds what its chain held: where any hop past its own id was opened from an envelope, it is sealed as the
+       root's first hop was, or held. */
+    if (!grewId && !toLead && doc) {
+      const ids = lineageOf(doc), root = ids.length > 2 ? ids[ids.length - 1] : "";
+      let chained = false;
+      chained = !!root && ids.slice(1).some(c => teamOpened.has(c)); /* plant:e6d-chain-seal */
+      if (chained) { sealId = root; sealPin = firstHopSha(ids[ids.length - 2], root); }
+    }
+    if (sealId && !toLead && doc) {
+      seal = PIN_RE.test(sealPin) ? sealFor(sealId, sealPin, at.root) : null;
       if (!seal) return branchHold(stem, text);
     }
     const same = ownFilesWithId(at.dir, id);

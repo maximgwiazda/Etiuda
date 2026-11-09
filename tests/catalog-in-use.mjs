@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 126;
+const EXPECTED = 128;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -1936,6 +1936,39 @@ try {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s5-hop-disk") >= 0 ? "  /* plant:s5-hop-disk */" : l).join("\n");
         const p = planted !== SRC ? await chainCopy("s5u5-plant", planted) : null;
         check(!!p && p.before.c2 && !p.c2, "962s5u6 lifting plant:s5-hop-disk withdraws the copy of a copy after a restart (FAIL 962s5u5): " + (p ? JSON.stringify(p) : "plant not found"));
+      }
+    }
+    /* ---- E6d (board 962 stage 6, after Argon): on a sealed team, a copy of a copy of a listed catalog whose root this desk opened
+       from the team's envelope is sealed for the team or held, and never reaches the share in the clear. */
+    {
+      const pinE = doc => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(doc))).digest("hex");
+      const kindAt = file => { if (!fs.existsSync(file)) return "none"; try { return String(JSON.parse(fs.readFileSync(file, "utf8")).kind); } catch { return "unread"; } };
+      const said = w => !w ? "no" : w.held ? "held" : w.ok ? "ok" : "no";
+      const copyOfCopy = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"]);
+        const leadEd = b0Body("quay-held");
+        put(box.share, "quay-lead.ec", JSON.stringify(box.D.api.sealCatalog(box.key, box.team, 1, leadEd), null, 1) + "\n");
+        box.D.api.readCatalog();
+        const c1 = branchDoc(box, "65656565", "quay-held");
+        c1.grew.sha = pinOf(box.D, leadEd);
+        const w1 = await box.D.ask("etiuda:branch-write", "quay-65656565", JSON.stringify(c1));
+        const c2 = branchDoc(box, "66666666", c1.id);
+        c2.grew = { id: c1.id, rev: 1, sha: pinE(c1) };
+        const w2 = await box.D.ask("etiuda:branch-write", "quay-66666666", JSON.stringify(c2));
+        const opened = openSealedDoc(box.D, branchAt(box, "66666666"), box.key);
+        return { w1: said(w1), c1: kindAt(branchAt(box, "65656565")), w2: said(w2), c2: kindAt(branchAt(box, "66666666")),
+          opens: !!opened && opened.id === c2.id };
+      };
+      const e = await copyOfCopy("e6d");
+      check(e.w1 === "ok" && e.c1 === "etiuda-sealed" && e.w2 === "ok" && e.c2 === "etiuda-sealed" && e.opens,
+        "e6da on a sealed team, a copy of a copy of a listed catalog whose root came from the team's envelope is sealed for the team, as the copy it grew from is, never written in the clear (" + JSON.stringify(e) + ")");
+      if (PLANTS_OFF) skip("e6db lifting plant:e6d-chain-seal writes the copy of a copy in the clear");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:e6d-chain-seal") >= 0 ? "      /* plant:e6d-chain-seal */" : l).join("\n");
+        const p = planted !== SRC ? await copyOfCopy("e6d-plant", planted) : null;
+        check(!!p && p.c1 === "etiuda-sealed" && p.c2 === "etiuda-catalog", "e6db lifting plant:e6d-chain-seal writes the copy of a copy in the clear (FAIL e6da): "
+          + (p ? JSON.stringify(p) : "plant not found"));
       }
     }
     /* ---- 962 stage 5, round four: a forged intermediate, naming this desk's copy's parent and a genuine lead-signed pin, in
