@@ -3465,7 +3465,10 @@ function withdrawClosed() {
     if (d && d.kind === BRANCH_LEAD_KIND) gone = !open || privateChain(lineageOfId(me.id + "-" + tail[1])).some(id => catalogPrivate.has(id));
     else {
       if (d && d.kind === SEALED_KIND) { const inner = teamOpen(d); try { d = inner === null ? null : JSON.parse(inner); } catch { d = null; } }
-      gone = !!d && typeof d === "object" && !teamListedDoc(d, use);
+      /* Only a file this desk signed is judged: reading another's would teach lineageOf the chain it claims (962s5u7). */
+      let own = true;
+      own = !!d && typeof d === "object" && branchGenuine(d); /* plant:s6-withdraw-own */
+      gone = !!d && typeof d === "object" && own && !teamListedDoc(d, use);
     }
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
