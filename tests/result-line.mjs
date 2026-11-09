@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 108;
+const EXPECTED = 110;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -444,6 +444,7 @@ function realProfileTouchLegs() {
     ETIUDA_LOCK_PATH: path.join(cleanLab.root, "machine.lock"),
     ETIUDA_CHAINS_PATH: cleanChains,
     ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+    ETIUDA_INSTALLED_APP_RUNNING: "0", /* the desk's own installed app must not decide this leg (the test architect, 2026-11-09) */
   });
   const cleanLine = chainLines(cleanChains).pop() || null;
   check(cleanRun.exit === 0 && !!cleanLine && cleanLine.holds === false
@@ -469,6 +470,7 @@ function realProfileTouchLegs() {
     ETIUDA_LOCK_PATH: path.join(touchedLab.root, "machine.lock"),
     ETIUDA_CHAINS_PATH: touchedChains,
     ETIUDA_REAL_PROFILE_OVERRIDE: standIn,
+    ETIUDA_INSTALLED_APP_RUNNING: "0", /* the desk's own installed app must not decide this leg (the test architect, 2026-11-09) */
   });
   const touchedLine = chainLines(touchedChains).pop() || null;
   const touchedReds = touchedLine ? touchedLine.reds : [];
@@ -2027,6 +2029,23 @@ async function main() {
     const mRan = fs.existsSync(path.join(mid.root, "ran-second"));
     check(md.exit === 78 && /node_modules is gone/.test(md.out) && !mRan,
       "nm3 node_modules gone mid-run stops the chain with 78 before the next gate runs: exit " + md.exit + ", second ran " + mRan + " | " + tail(md));
+  }
+
+  /* ---- A RED NAMES ITSELF: its record keeps its FAIL lines and the state lines under them (the test architect, 2026-11-09) */
+  {
+    const fl = makeLab("fail-lines", {
+      red: 'console.log("  ok   leg one");\nconsole.log("  FAIL leg two");\nconsole.log("       state: {\\"interleaved\\":true}");\nconsole.log("  ok   leg three");\nprocess.exit(1);\n',
+      green: 'console.log("  ok   leg one");\nprocess.exit(0);\n',
+    });
+    const rRed = run(fl, ["red"]);
+    const recRed = Object.values(rRed.byGate)[0] || {};
+    const got = Array.isArray(recRed.failLines) ? recRed.failLines : [];
+    check(got.length === 2 && /FAIL leg two/.test(got[0]) && /interleaved/.test(got[1]),
+      "fl1 a red gate's record keeps its FAIL line and the state line under it, and nothing else: " + JSON.stringify(got));
+    const fg = makeLab("fail-lines-green", { green: 'console.log("  ok   leg one");\nprocess.exit(0);\n' });
+    const rGreen = run(fg, ["green"]);
+    const recGreen = Object.values(rGreen.byGate)[0] || {};
+    check(rGreen.exit === 0 && !("failLines" in recGreen), "fl2 THE CONTROL: a green gate's record carries no failLines: exit " + rGreen.exit + ", keys " + Object.keys(recGreen).length);
   }
 
   if (!KEEP) for (const dir of labs) {
