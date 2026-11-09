@@ -813,7 +813,8 @@ carries its fuses, and the unpacked `.deb` holds the AppArmor profile allowing `
 `chrome-sandbox` beside it (made SUID by the after-install only where no user namespace works), a `.desktop` entry that names `application/x-etiuda-catalog` and
 hands the program its file, the MIME file giving that type to `*.ec`, and no updater's file.
 `linux-package.mjs` holds that judge with each of those taken out alone, 24 checks, under 1 s; it
-runs in `npm test` on both platforms.
+runs in `npm test` on both platforms. The Linux block also copies the output folder's `.embed` into
+`resources/embed`, the same place the Windows block copies and the place the shell reads once installed.
 
 `linux-desk.js` is a window gate and runs by hand on a Linux machine, never as root: `<program>` is
 `/opt/Etiuda/etiuda` after `apt install ./etiuda_<version>_amd64.deb`, or the AppImage. It launches

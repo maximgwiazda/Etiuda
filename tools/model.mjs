@@ -77,10 +77,23 @@ async function copyChecked(from, to, sha256) {
   if (got !== sha256) throw new Error(to + " checksum is " + got + " after copy, not " + sha256);
 }
 
+/* common plus the native pair for win32 or linux. A pin that still lists `files` is that list, unchanged. */
+export function runtimeFilesFor(doc, platform) {
+  const which = platform === "linux" ? "linux" : "win32";
+  if (doc && Array.isArray(doc.common) && doc.native && Array.isArray(doc.native[which])) {
+    return doc.common.concat(doc.native[which]);
+  }
+  if (doc && Array.isArray(doc.files)) return doc.files;
+  return [];
+}
+
 export async function prepareEmbed(opts) {
   const say = opts.log || (line => console.log("model: " + line));
   const pin = opts.pin || shellPin();
   const modelDir = opts.modelDir === undefined ? defaultModelDir() : opts.modelDir;
+  const platform = opts.platform === "linux" ? "linux"
+    : opts.platform === "win32" ? "win32"
+    : (process.platform === "linux" ? "linux" : "win32");
   const state = await classify(modelDir, pin);
   if (state.state === "missing") {
     emptyPack(opts.dest);
@@ -97,7 +110,7 @@ export async function prepareEmbed(opts) {
     }
     throw new Error(faultLine(state));
   }
-  const runtimeFiles = opts.runtimeFiles || defaultRuntimeFiles();
+  const runtimeFiles = opts.runtimeFiles || defaultRuntimeFiles(platform);
   if (!runtimeFiles.length) throw new Error("the runtime pin lists no file");
   const runtimeDir = opts.runtimeDir || join(ROOT, "node_modules");
   /* Beside the weights, not one of them: the desk hashes the pin, and this file is the licence text. */
@@ -123,11 +136,11 @@ export function defaultModelDir() {
   return existsSync(local) ? local : null;
 }
 
-function defaultRuntimeFiles() {
+function defaultRuntimeFiles(platform) {
   const file = join(ROOT, "tools", "model-runtime.json");
   if (!existsSync(file)) return [];
-  const parsed = readJson(file);
-  return Array.isArray(parsed.files) ? parsed.files : [];
+  const which = platform || (process.platform === "linux" ? "linux" : "win32");
+  return runtimeFilesFor(readJson(file), which);
 }
 
 function arg(argv, flag) {
@@ -140,19 +153,23 @@ if (invoked) {
   const argv = process.argv.slice(2);
   const dest = arg(argv, "--dest");
   if (!dest) {
-    console.error("usage: node tools/model.mjs --dest <dir> [--model <dir>] [--pin <file>] [--runtime <dir>] [--runtime-pin <file>] [--export-pin <file>]");
+    console.error("usage: node tools/model.mjs --dest <dir> [--model <dir>] [--pin <file>] [--runtime <dir>] [--runtime-pin <file>] [--export-pin <file>] [--platform win32|linux]");
     process.exit(2);
   }
   const pinFile = arg(argv, "--pin");
   const runtimePin = arg(argv, "--runtime-pin");
   const exportPin = arg(argv, "--export-pin");
+  const platform = arg(argv, "--platform");
+  const asked = platform === "linux" ? "linux" : platform === "win32" ? "win32" : undefined;
+  const runtimeDoc = runtimePin ? readJson(runtimePin) : null;
   prepareEmbed({
     dest,
     modelDir: arg(argv, "--model"),
     pin: pinFile ? readJson(pinFile) : undefined,
     runtimeDir: arg(argv, "--runtime"),
-    runtimeFiles: runtimePin ? readJson(runtimePin).files : undefined,
+    runtimeFiles: runtimeDoc ? runtimeFilesFor(runtimeDoc, asked || (process.platform === "linux" ? "linux" : "win32")) : undefined,
     exportPin: exportPin ? readJson(exportPin) : undefined,
+    platform: asked,
   }).then(() => process.exit(0)).catch(error => {
     console.error("model: " + ((error && error.message) || error));
     process.exit(1);

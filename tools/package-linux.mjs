@@ -8,7 +8,9 @@
  *   ETIUDA_DIST=<folder>  where the packages go; dist/ when unset
  *
  * The Windows installer is tools/package.mjs and is untouched by this file. tests/linux-package.mjs
- * drives debTreeProblems on planted trees.
+ * drives debTreeProblems on planted trees. The built-in model is prepared as on Windows, into the
+ * folder electron-builder copies to resources/embed: absent, the desk ships on words; a file that
+ * is present and does not match the pin stops the pack.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -18,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fuseProblems, wantedFuses } from './fuses.mjs';
 import { FILES, NOTICE_FILE, dictionaryProblems, fetchDictionaries } from './dictionaries.mjs';
+import { prepareEmbed } from './model.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -94,6 +97,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   if (!ask0.dictionariesFrom) { console.error('npm run package:linux: electron-builder.js names no folder for the dictionaries'); process.exit(1); }
   try { await fetchDictionaries(ask0.dictionariesFrom); }
   catch (e) { console.error('npm run package:linux: the dictionaries: ' + ((e && e.message) || e)); process.exit(1); }
+  try { await prepareEmbed({ dest: join(DIST, '.embed'), platform: 'linux' }); }
+  catch (e) { console.error('npm run package:linux: the built-in model: ' + ((e && e.message) || e)); process.exit(1); }
   step('electron-builder', [join(ROOT, 'node_modules', 'electron-builder', 'cli.js'), '--linux']);
   const fresh = packages(DIST).filter(row => !before.has(row)).map(row => row.split('\t')[0]);
   const bad = [];
