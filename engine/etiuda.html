@@ -7520,6 +7520,8 @@ What you type stays in this browser only.`;
     "Restore built-in quick facts": "Przywróć wbudowane szybkie fakty",
     "{KEY} is fixed and keeps its own meaning": "{KEY} to klawisz stały i zachowuje swoje znaczenie",
     "Saved {KEY}": "Zapisano {KEY}",
+    "{KEY} is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.": "{KEY} jest potrzebny do pisania, więc nie może być skrótem, i nic nie zmieniono. Można wybrać klawisz F albo połączenie z Ctrl lub Alt.",
+    "This key is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.": "Ten klawisz jest potrzebny do pisania, więc nie może być skrótem, i nic nie zmieniono. Można wybrać klawisz F albo połączenie z Ctrl lub Alt.",
     "{N} card": "{N} karta",
     "{N} cards": "{N} kart",
     "few␟{N} cards": "{N} karty",
@@ -11635,8 +11637,10 @@ What you type stays in this browser only.`;
     cloneChord: () => cloneChord,
     emptyChord: () => emptyChord,
     eventMatchesAction: () => eventMatchesAction,
+    fieldKeyRefusal: () => fieldKeyRefusal,
     formatActionChord: () => formatActionChord,
     formatChord: () => formatChord,
+    isRefusedChord: () => isRefusedChord,
     loadShortcuts: () => loadShortcuts,
     saveShortcuts: () => saveShortcuts,
     scChord: () => scChord,
@@ -12008,6 +12012,31 @@ What you type stays in this browser only.`;
     else if (lab.length === 1) lab = lab.toUpperCase();
     parts2.push(lab);
     return parts2.join("+");
+  }
+  function isPrintableKey(c) {
+    if (!c) return false;
+    const code = c.code || "", key = c.key || "";
+    if (code.indexOf("Key") === 0 || code.indexOf("Digit") === 0) return true;
+    return key.length === 1 && key !== " ";
+  }
+  function isRefusedChord(c) {
+    if (!c) return false;
+    const ctrl = c.ctrl ? 1 : 0, alt = c.alt ? 1 : 0, shift = c.shift ? 1 : 0, meta = c.meta ? 1 : 0;
+    if (ctrl === 1 && alt === 0 && meta === 0 && shift === 0) {
+      const k = String(c.key || "").toLowerCase(), code = c.code || "";
+      if (["a", "c", "v", "x", "y", "z"].indexOf(k) >= 0 || /^Key[ACVXYZ]$/i.test(code)) return true;
+    }
+    if (ctrl === 0 && alt === 0 && meta === 0 && shift === 0) {
+      const key = c.key || "", code = c.code || "";
+      if (key === " " || key === "Space" || code === "Space" || key === "Enter" || code === "Enter" || key === "Tab" || code === "Tab" || key === "Backspace" || code === "Backspace" || key === "Delete" || code === "Delete") return true;
+    }
+    if (ctrl === 0 && alt === 0 && meta === 0 && isPrintableKey(c)) return true;
+    return false;
+  }
+  function fieldKeyRefusal(chord) {
+    const key = formatChord(chord);
+    if (key && key !== "-") return t("{KEY} is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.").replace("{KEY}", key);
+    return t("This key is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.");
   }
   var scReady = false;
   function chordChips(id) {
@@ -16937,6 +16966,7 @@ What you type stays in this browser only.`;
   // src/modules/shortcuts-list.js
   var shortcuts_list_exports = {};
   __export(shortcuts_list_exports, {
+    scBeginCapture: () => scBeginCapture,
     scCaptureId: () => scCaptureId,
     scCaptureSlot: () => scCaptureSlot,
     scFold: () => scFold,
@@ -16972,6 +17002,10 @@ What you type stays in this browser only.`;
   }
   var scCaptureId = null;
   var scCaptureSlot = 1;
+  function scBeginCapture(id, slot) {
+    scCaptureId = id;
+    scCaptureSlot = +slot || 1;
+  }
   var scRepaint = null;
   function wireShortcutsList(box, repaint, q) {
     if (!box) return;
@@ -16980,8 +17014,7 @@ What you type stays in this browser only.`;
     box.querySelectorAll("[data-bind]").forEach((btn) => {
       if (btn.disabled) return;
       btn.onclick = () => {
-        scCaptureId = btn.getAttribute("data-bind");
-        scCaptureSlot = +btn.getAttribute("data-slot") || 1;
+        scBeginCapture(btn.getAttribute("data-bind"), +btn.getAttribute("data-slot") || 1);
         repaint();
         toast(scCaptureSlot === 2 ? "Press the alternative (Esc to cancel, Backspace to clear)" : "Press the new shortcut (Esc to cancel, Backspace for the default)");
       };
@@ -34094,6 +34127,16 @@ What you type stays in this browser only.`;
         return;
       }
       const id = scCaptureId, slot = scCaptureSlot;
+      const chord = chordFromEvent(e);
+      if (!chord) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (isRefusedChord(chord)) {
+        scStopCapture();
+        if (scRepaint) scRepaint();
+        toastRefusal(fieldKeyRefusal(chord));
+        return;
+      }
       if (e.key === "Backspace" || e.key === "Delete") {
         e.preventDefault();
         e.stopPropagation();
@@ -34106,10 +34149,6 @@ What you type stays in this browser only.`;
         toast(slot === 2 ? "Alternative cleared" : "Back to the default");
         return;
       }
-      const chord = chordFromEvent(e);
-      if (!chord) return;
-      e.preventDefault();
-      e.stopPropagation();
       const fixedOwner = SC_DEFS.find((d) => d.fixed && (chordsEqual(d.def, chord) || chordsEqual(d.def2, chord)));
       if (fixedOwner) {
         toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));

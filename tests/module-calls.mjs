@@ -6798,6 +6798,174 @@ const CARD_B = {
   });
 }
 
+/* ------------------------------------------------------------------ field keys during recording
+   A recorded chord a field needs is refused: nothing rebound, no owner moved, nothing stored,
+   and the line is said where the capture hears the key. Shipped defaults stay, and clearing
+   the store then loading again is what Reset shortcuts does. */
+{
+  const S = await import(MOD("shortcuts.js"));
+  const SL = await import(MOD("shortcuts-list.js"));
+  const KD = await import(MOD("keydown.js"));
+  const ST = await import(MOD("storage.js"));
+  const H = await import(MOD("hooks.js"));
+  const Dom = await import(MOD("dom.js"));
+  const LINE = "{KEY} is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.";
+  const LINE_PL = "{KEY} jest potrzebny do pisania, więc nie może być skrótem, i nic nie zmieniono. Można wybrać klawisz F albo połączenie z Ctrl lub Alt.";
+  const THIS = "This key is needed for typing, so it cannot be a shortcut, and nothing was changed. An F key, or a combination with Ctrl or Alt, will do.";
+  const THIS_PL = "Ten klawisz jest potrzebny do pisania, więc nie może być skrótem, i nic nie zmieniono. Można wybrać klawisz F albo połączenie z Ctrl lub Alt.";
+  const hadStore = ST.lsGet("eShortcuts");
+  const hadLang = ST.lsGet("eUiLang");
+  const hadDoc = globalThis.document;
+  const hadAdd = globalThis.addEventListener;
+  const hadCs = globalThis.getComputedStyle;
+  const cls = () => {
+    const s = new Set();
+    return {
+      contains: c => s.has(c),
+      add: c => { s.add(c); },
+      remove: c => { s.delete(c); },
+      toggle(c, on) { if (on) s.add(c); else s.delete(c); }
+    };
+  };
+  const zero = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
+  const toastEl = { classList: cls(), textContent: "", innerHTML: "", style: {}, getBoundingClientRect: zero };
+  const modal = { hidden: true };
+  const listEl = { id: "scListInline" };
+  globalThis.document = {
+    getElementById(id) {
+      if (id === "scListInline") return listEl;
+      if (id === "toast") return toastEl;
+      if (id === "modal") return modal;
+      return null;
+    },
+    querySelector(sel) {
+      if (sel === "#toast") return toastEl;
+      if (sel === "#modal" || sel === "#modalCard") return modal;
+      return null;
+    },
+    querySelectorAll() { return []; },
+    createElement(tag) {
+      if (tag === "canvas") return { getContext() { return { measureText() { return { width: 0 }; } }; } };
+      return {};
+    },
+    createRange() { return { selectNodeContents() {}, getBoundingClientRect: zero }; },
+    body: { classList: cls() },
+    documentElement: { classList: cls(), style: { setProperty() {}, removeProperty() {} } },
+    activeElement: null
+  };
+  globalThis.getComputedStyle = () => ({
+    borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0",
+    fontStyle: "normal", fontWeight: "400", fontSize: "16px", fontFamily: "sans-serif", letterSpacing: "normal"
+  });
+  if (typeof H.hooks.segFolded !== "function") H.hooks.segFolded = () => false;
+  if (typeof H.hooks.updateIntentPlaceholder !== "function") H.hooks.updateIntentPlaceholder = () => {};
+  Dom.grabDom();
+  const heard = [];
+  globalThis.addEventListener = (type, fn) => { if (type === "keydown") heard.push(fn); };
+  KD.wireCaptureKeydown();
+  globalThis.addEventListener = hadAdd;
+  const onKey = heard[0];
+  const ev = (key, extra) => Object.assign({
+    key, code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false,
+    preventDefault() {}, stopPropagation() {}
+  }, extra || {});
+  const sig = id => {
+    const c = S.scChord(id);
+    return [c.code, c.key, c.ctrl, c.alt, c.shift, c.meta].join("/");
+  };
+  const said = () => String(toastEl.innerHTML || "") + String(toastEl.textContent || "");
+  const fresh = lang => {
+    ST.lsDel("eShortcuts");
+    if (lang) ST.lsSet("eUiLang", lang); else ST.lsDel("eUiLang");
+    S.loadShortcuts();
+    toastEl.textContent = "";
+    toastEl.innerHTML = "";
+  };
+  const press = e => {
+    toastEl.textContent = "";
+    toastEl.innerHTML = "";
+    SL.scBeginCapture("rename", 1);
+    onKey(e);
+  };
+  const refused = [
+    { name: "a letter", ev: ev("k", { code: "KeyK" }), key: "K" },
+    { name: "a digit", ev: ev("5", { code: "Digit5" }), key: "5" },
+    { name: "Shift plus a letter", ev: ev("K", { code: "KeyK", shiftKey: true }), key: "Shift+K" },
+    { name: "Space", ev: ev(" ", { code: "Space" }), key: "Space", owner: "lanes", ownerSig: "Space/ /0/0/0/0" },
+    { name: "Enter", ev: ev("Enter", { code: "Enter" }), key: "Enter" },
+    { name: "Tab", ev: ev("Tab", { code: "Tab" }), key: "Tab" },
+    { name: "Backspace", ev: ev("Backspace", { code: "Backspace" }), key: "Backspace", held: true },
+    { name: "Delete", ev: ev("Delete", { code: "Delete" }), key: "Delete", held: true },
+    { name: "Ctrl+A", ev: ev("a", { code: "KeyA", ctrlKey: true }), key: "Ctrl+A", owner: "selectSearch", ownerSig: "KeyA/a/1/0/0/0" },
+    { name: "Ctrl+C", ev: ev("c", { code: "KeyC", ctrlKey: true }), key: "Ctrl+C" },
+    { name: "Ctrl+V", ev: ev("v", { code: "KeyV", ctrlKey: true }), key: "Ctrl+V" },
+    { name: "Ctrl+X", ev: ev("x", { code: "KeyX", ctrlKey: true }), key: "Ctrl+X" },
+    { name: "Ctrl+Y", ev: ev("y", { code: "KeyY", ctrlKey: true }), key: "Ctrl+Y" },
+    { name: "Ctrl+Z", ev: ev("z", { code: "KeyZ", ctrlKey: true }), key: "Ctrl+Z" }
+  ];
+  if (!onKey) {
+    check("keydown.js", "9fk the capture handler is wired", () => "no keydown listener");
+  } else {
+    for (const rc of refused) {
+      fresh("en");
+      if (rc.held) {
+        S.scTake("rename", 1, { code: "F9", key: "F9", ctrl: 0, alt: 0, shift: 0, meta: 0 });
+        S.saveShortcuts();
+      }
+      const before = sig("rename");
+      const ownerBefore = rc.owner ? sig(rc.owner) : "";
+      const stored = ST.lsGet("eShortcuts");
+      press(rc.ev);
+      const line = LINE.replace("{KEY}", rc.key);
+      const ownerOk = !rc.owner || (sig(rc.owner) === rc.ownerSig && sig(rc.owner) === ownerBefore);
+      check("shortcuts.js", "9fk " + rc.name + " is refused, nothing rebound or stored, and the line names it",
+        () => (sig("rename") === before && ST.lsGet("eShortcuts") === stored && ownerOk
+          && SL.scCaptureId == null && said().indexOf(line) >= 0) ? true
+          : "rename " + sig("rename") + " store " + ST.lsGet("eShortcuts") + " said " + said().slice(0, 80));
+    }
+    fresh("pl");
+    press(ev("k", { code: "KeyK" }));
+    check("shortcuts.js", "9fk the refusal line is the Polish sentence",
+      () => said().indexOf(LINE_PL.replace("{KEY}", "K")) >= 0 && sig("rename") === "F2/F2/0/0/0/0" ? true
+        : "said " + said().slice(0, 90) + " rename " + sig("rename"));
+    fresh("en");
+    press(ev("F9", { code: "F9" }));
+    check("shortcuts.js", "9fk an F key is taken and stored",
+      () => sig("rename") === "F9/F9/0/0/0/0" && ST.lsGet("eShortcuts") != null && said().indexOf("F9") >= 0 ? true
+        : sig("rename") + " " + ST.lsGet("eShortcuts"));
+    fresh("en");
+    press(ev("k", { code: "KeyK", ctrlKey: true, altKey: true }));
+    check("shortcuts.js", "9fk Ctrl+Alt plus a letter is taken and stored",
+      () => sig("rename") === "KeyK/k/1/1/0/0" && ST.lsGet("eShortcuts") != null ? true
+        : sig("rename") + " " + ST.lsGet("eShortcuts"));
+    ST.lsDel("eShortcuts");
+    S.loadShortcuts();
+    const spaceEv = ev(" ", { code: "Space" });
+    const ctrlA = ev("a", { code: "KeyA", ctrlKey: true });
+    check("shortcuts.js", "9fk Reset restores the shipped defaults, Space and Ctrl+A included",
+      () => sig("rename") === "F2/F2/0/0/0/0" && sig("lanes") === "Space/ /0/0/0/0"
+        && sig("selectSearch") === "KeyA/a/1/0/0/0" && ST.lsGet("eShortcuts") == null
+        && S.eventMatchesAction(spaceEv, "lanes") && S.eventMatchesAction(ctrlA, "selectSearch") ? true
+        : sig("rename") + " " + sig("lanes") + " " + sig("selectSearch") + " " + ST.lsGet("eShortcuts"));
+    check("shortcuts.js", "9fk a chord with nothing to name says This key, in English and in Polish", () => {
+      if (typeof S.fieldKeyRefusal !== "function") return "fieldKeyRefusal is not there";
+      ST.lsSet("eUiLang", "en");
+      const en = S.fieldKeyRefusal(S.emptyChord());
+      ST.lsSet("eUiLang", "pl");
+      const pl = S.fieldKeyRefusal(S.emptyChord());
+      ST.lsSet("eUiLang", "en");
+      return en === THIS && pl === THIS_PL ? true : en + " | " + pl;
+    });
+  }
+  ST.lsDel("eShortcuts");
+  if (hadStore == null) ST.lsDel("eShortcuts"); else ST.lsSet("eShortcuts", hadStore);
+  if (hadLang == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadLang);
+  S.loadShortcuts();
+  if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+  if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+}
+
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print
    a green line, so the floor is frozen here and a drop reddens the file. */
