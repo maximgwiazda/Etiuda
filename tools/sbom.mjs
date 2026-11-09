@@ -85,6 +85,29 @@ export function productionPackages(root) {
   return { pkg, direct, comps };
 }
 
+/* The embed runtime is a devDependency and ships beside the archive, only when the model is packed.
+   Absent from a tree that has not installed it, so a synthetic tree stays on its own list. A partial
+   install is a refusal: half a runtime is not a runtime. */
+const EMBED_RUNTIME = ["onnxruntime-node", "@huggingface/tokenizers", "onnxruntime-common"];
+export function embedRuntime(root) {
+  const found = EMBED_RUNTIME.map(name => [name, lookup(root, root, name)]);
+  if (found.every(([, at]) => !at)) return [];
+  const missing = found.filter(([, at]) => !at).map(([name]) => name);
+  if (missing.length) throw new SbomRefusal("the embed runtime is only partly installed: " + missing.join(", "));
+  return found.map(([name, at]) => {
+    const p = readJson(join(at, "package.json"));
+    const nm = p.name || name;
+    const ref = purlOf(nm, String(p.version));
+    const component = { type: "library", "bom-ref": ref, name: nm, version: String(p.version), scope: "required", purl: ref,
+      description: "Ships beside the archive only when the built-in model is packed",
+      properties: [{ name: "etiuda:ships", value: "beside-asar" }] };
+    if (nm[0] === "@") { component.group = nm.split("/")[0]; component.name = nm.split("/").slice(1).join("/"); }
+    const lic = licencesOf(p);
+    if (lic) component.licenses = lic;
+    return component;
+  });
+}
+
 /* An asar begins with two Pickles: one uint32 giving the size of the second, which holds the header
    as a length-prefixed JSON string. File bytes follow, at each entry's offset. */
 function readAsar(file, want) {
@@ -182,6 +205,7 @@ export function sbomOf({ root, app, installer, now }) {
   }
 
   const npm = [...comps.values()].sort((a, b) => a.component.purl < b.component.purl ? -1 : 1);
+  const beside = embedRuntime(root);
   return {
     bomFormat: "CycloneDX",
     specVersion: "1.5",
@@ -192,10 +216,10 @@ export function sbomOf({ root, app, installer, now }) {
       tools: { components: [{ type: "application", name: "etiuda tools/sbom.mjs" }] },
       component: subject,
       properties: [{ name: "etiuda:sbom:source", value: source },
-                   { name: "etiuda:sbom:scope", value: "production dependencies only; devDependencies are build tools and do not ship, Electron excepted" }],
+                   { name: "etiuda:sbom:scope", value: "production dependencies, plus Electron and the embed runtime that ships beside the archive when the model is packed" }],
     },
-    components: [electron].concat(npm.map(c => c.component)),
-    dependencies: [{ ref: appRef, dependsOn: [...new Set(direct)].sort().concat([eRef]) },
+    components: [electron].concat(npm.map(c => c.component), beside),
+    dependencies: [{ ref: appRef, dependsOn: [...new Set(direct)].sort().concat([eRef], beside.map(c => c["bom-ref"])) },
                    { ref: eRef, dependsOn: [] }]
       .concat(npm.map(c => ({ ref: c.component["bom-ref"], dependsOn: [...c.dependsOn].sort() }))),
   };

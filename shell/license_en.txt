@@ -24,4 +24,6 @@ Termination. The licence ends whenever you remove the software. We may end it if
 
 Governing law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.
 
+Built-in model. When this installer includes the built-in suggestion model, that model is Google's EmbeddingGemma 2, exported from Google's own weights. The model is under the Apache Licence 2.0 (https://ai.google.dev/gemma/docs/gemma_4_license). Use of the model follows Google's Gemma Prohibited Use Policy (https://ai.google.dev/gemma/prohibited_use_policy). The program does not fetch the model. An install without it suggests from matching words alone.
+
 Etiuda is a trademark of Maxim Gwiazda.

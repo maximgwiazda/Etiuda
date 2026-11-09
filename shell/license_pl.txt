@@ -24,4 +24,6 @@ Zakończenie. Licencja kończy się, kiedy usuwasz oprogramowanie. Możemy ją z
 
 Prawo właściwe. Licencję reguluje prawo polskie. Konsument może wnieść sprawę przed sąd swojego kraju; pozostałe sprawy rozpatrują sądy właściwe dla siedziby sprzedawcy.
 
+Wbudowany model. Gdy ten instalator zawiera wbudowany model podpowiedzi, jest to model EmbeddingGemma 2 firmy Google, wyeksportowany z jej własnych wag. Model jest objęty licencją Apache 2.0 (https://ai.google.dev/gemma/docs/gemma_4_license). Korzystanie z modelu podlega polityce zastosowań zakazanych Gemma firmy Google (https://ai.google.dev/gemma/prohibited_use_policy). Program nie pobiera tego modelu. Instalacja bez niego podpowiada wyłącznie przez dopasowanie słów.
+
 Etiuda jest znakiem towarowym Maxima Gwiazdy.

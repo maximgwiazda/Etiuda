@@ -1,7 +1,7 @@
 /* THE EMBEDDED MODEL'S ARITHMETIC, shared by the suggestion worker and its legs: the pin every model file is held to, the
  * passages an intent is known by, and the five nearest. Node's own modules only; no runtime is loaded here.
- * The bytes are not in this tree: tools that package the desk fetch them by this pin, and the worker checks them again
- * before anything is loaded. */
+ * The bytes are not in this tree. The packer copies a local folder that matches this pin, and ships the desk
+ * without the model when that folder is absent. The worker checks the pin again before anything is loaded. */
 "use strict";
 
 const fs = require("node:fs");
