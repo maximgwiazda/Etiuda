@@ -597,14 +597,14 @@ function libraryRelayLead(){
    opens stays the page, so a redraw does not jump back to another. */
 let libOn="data";
 let libQuery="";
-// placeholder: Claudette
-const LIB_FIND="Search the library";
-// placeholder: Claudette
-const LIB_SECTIONS=[
-  {key:"catmac", icon:"categories", name:"Categories and cards", lede:"Each category's cards, its role and its order."},
-  {key:"intents", icon:"intents", name:"Intents", lede:"Favourites first, hidden intents at the foot."},
-  {key:"who", icon:"user", name:"Role suggestions", lede:"The names the ROLE wheel offers, comma-separated."},
-  {key:"data", icon:"cards", name:"Catalog and data", lede:"The catalog on this desk, and loading another."}
+/* Built when asked, as Settings' sections are, so each name and lede is a literal t() call the
+   strings legs count and the desk's language reaches. */
+const libFind=()=>t("Search the library");
+const libSections=()=>[
+  {key:"catmac", icon:"categories", name:t("Categories and cards"), lede:t("Each category with its cards, its place in the order, and whether it supports every intent.")},
+  {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")},
+  {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, separated by commas.")},
+  {key:"data", icon:"cards", name:t("Catalog & data"), lede:t("The catalog in use on this desk, and loading another catalog file.")}
 ];
 function libFold(s){
   return String(s||"").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
@@ -618,7 +618,7 @@ function rememberedLib(){
 }
 function libNavHtml(){
   const finding=!!libFold(libQuery);
-  return LIB_SECTIONS.map(s=>{
+  return libSections().map(s=>{
     const on=!finding && s.key===libOn;
     return '<button type="button" class="sx-sec'+(on?" on":"")+'" data-lm="'+esc(s.key)+'"'
       +(on?' aria-current="page"':'')+'>'+lmIcon(s.icon)+'<span data-i18n-skip>'+esc(s.name)+'</span></button>';
@@ -643,13 +643,13 @@ function applyLibView(page){
     if(b.classList) b.classList.toggle("on", on);
     if(on) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
   });
-  const sec=LIB_SECTIONS.filter(s=>s.key===libOn)[0];
+  const sec=libSections().filter(s=>s.key===libOn)[0];
   const title=page.querySelector("#libTitle");
   const lede=page.querySelector("#libLede");
   if(title) title.textContent=q?String(libQuery||"").trim():(sec?sec.name:"");
   if(lede){
     const n=countEl&&countEl.textContent?countEl.textContent.trim():"";
-    lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents"&&n)?(n+" intents. "+sec.lede):sec.lede;
+    lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents"&&n)?(t("Intents: {N}.").replace("{N}",n)+" "+sec.lede):sec.lede;
   }
 }
 function wireLibShell(page){
@@ -820,7 +820,7 @@ function paintLibrary(host,body){
     +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
     +'<label class="sx-search">'+lmIcon("search")
     +'<input type="search" id="libSearch" autocomplete="off" spellcheck="false"'
-    +' placeholder="'+esc(LIB_FIND)+'" aria-label="'+esc(LIB_FIND)+'" value="'+esc(libQuery)+'"></label>'
+    +' placeholder="'+esc(libFind())+'" aria-label="'+esc(libFind())+'" value="'+esc(libQuery)+'"></label>'
     +'<div class="sx-secs" id="libSecs">'+libNavHtml()+'</div>'
     +'<div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">'+lmIcon("statistics")
     +esc(t("Maintenance"))+' <kbd>'+esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'

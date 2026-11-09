@@ -7087,6 +7087,23 @@ What you type stays in this browser only.`;
     "Intents": "Intencje",
     "ROLE suggestions": "Podpowiedzi ROLE",
     "Catalog & data": "Katalog i dane",
+    "Search the library": "Szukaj w Bibliotece",
+    "Categories and cards": "Kategorie i karty",
+    "Each category with its cards, its place in the order, and whether it supports every intent.": "Każda kategoria z kartami, jej miejsce w kolejności i to, czy wspiera każdą intencję.",
+    "Favourites first, hidden intents at the foot.": "Najpierw ulubione, ukryte intencje na końcu.",
+    "Intents: {N}.": "Intencje: {N}.",
+    "The names the ROLE wheel offers, separated by commas.": "Nazwy, które podpowiada pokrętło ROLE, oddzielone przecinkami.",
+    "The catalog in use on this desk, and loading another catalog file.": "Katalog używany na tym stanowisku i wczytanie innego pliku katalogu.",
+    "Health": "Stan",
+    "Engine and display": "Silnik i ekran",
+    "What runs Etiuda here, and what the screen offers it.": "Co uruchamia tu Etiudę i co daje jej ekran.",
+    "The catalog in use, and the file it came from.": "Używany katalog i plik, z którego pochodzi.",
+    "Storage and desk": "Pamięć i stanowisko",
+    "Where the desk keeps its memory, and its own state.": "Gdzie stanowisko przechowuje swoją pamięć i własny stan.",
+    "Layout and intent panel": "Układ i panel intencji",
+    "How the window is laid out, and the intent panel.": "Układ okna i panel intencji.",
+    "What you have made your own on this desk.": "Własne zmiany na tym stanowisku.",
+    "Open Data and defaults": "Otwórz Dane i ustawienia domyślne",
     "Content": "Treść",
     "Category": "Kategoria",
     "Linked intents": "Powiązane intencje",
@@ -27601,31 +27618,30 @@ What you type stays in this browser only.`;
   }
   var MT_MOVED = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
   var mtOn = "health";
-  var MT_OPEN_DATA = "Open Data and defaults";
-  var MT_PAGES = [
-    { key: "health", icon: "health", name: "Health" },
-    { key: "engine", icon: "desks", name: "Engine and display" },
-    { key: "catalog", icon: "categories", name: "Catalog" },
-    { key: "storage", icon: "data", name: "Storage and desk" },
-    { key: "layout", icon: "layout", name: "Layout and intent panel" },
-    { key: "state", icon: "user", name: "Personal state" }
+  var mtPages = () => [
+    { key: "health", icon: "health", name: t("Health") },
+    { key: "engine", icon: "desks", name: t("Engine and display") },
+    { key: "catalog", icon: "categories", name: t("Catalog") },
+    { key: "storage", icon: "data", name: t("Storage and desk") },
+    { key: "layout", icon: "layout", name: t("Layout and intent panel") },
+    { key: "state", icon: "user", name: t("Personal state") }
   ];
-  var MT_LEDE = {
-    engine: "What runs Etiuda here, and what the screen offers it.",
-    catalog: "The catalog in use, and the file it came from.",
-    storage: "Where the desk keeps its memory, and its own state.",
-    layout: "How the window is laid out, and the intent panel.",
-    state: "What you have made your own on this desk."
-  };
+  var mtLede = () => ({
+    engine: t("What runs Etiuda here, and what the screen offers it."),
+    catalog: t("The catalog in use, and the file it came from."),
+    storage: t("Where the desk keeps its memory, and its own state."),
+    layout: t("How the window is laid out, and the intent panel."),
+    state: t("What you have made your own on this desk.")
+  });
   function mtNavHtml() {
-    return MT_PAGES.map((p) => {
+    return mtPages().map((p) => {
       const on = p.key === mtOn;
       return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-mt="' + esc(p.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(p.icon) + "<span data-i18n-skip>" + esc(p.name) + "</span></button>";
     }).join("");
   }
   function mtShellHtml() {
-    const page = MT_PAGES.filter((p) => p.key === mtOn)[0] || MT_PAGES[0];
-    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : MT_LEDE[page.key] || "") + "</p>" + mtMaintBody() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(MT_OPEN_DATA) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+    const pages = mtPages(), page = pages.filter((p) => p.key === mtOn)[0] || pages[0];
+    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
   }
   function wireMtShell(root) {
     if (!root || typeof root.querySelectorAll !== "function") return;
@@ -27640,11 +27656,11 @@ What you type stays in this browser only.`;
         if (on) b.setAttribute("aria-current", "page");
         else b.removeAttribute("aria-current");
       });
-      const page = MT_PAGES.filter((p) => p.key === mtOn)[0];
+      const page = mtPages().filter((p) => p.key === mtOn)[0];
       const title = root.querySelector("#mtTitle");
       if (title && page) title.textContent = page.name;
       const lede = root.querySelector("#mtLede");
-      if (lede) lede.textContent = mtOn === "health" ? "" : MT_LEDE[mtOn] || "";
+      if (lede) lede.textContent = mtOn === "health" ? "" : mtLede()[mtOn] || "";
     };
     buttons.forEach((b) => {
       b.onclick = () => show(b.getAttribute("data-mt"));
@@ -31264,12 +31280,12 @@ What you type stays in this browser only.`;
   }
   var libOn = "data";
   var libQuery = "";
-  var LIB_FIND = "Search the library";
-  var LIB_SECTIONS = [
-    { key: "catmac", icon: "categories", name: "Categories and cards", lede: "Each category's cards, its role and its order." },
-    { key: "intents", icon: "intents", name: "Intents", lede: "Favourites first, hidden intents at the foot." },
-    { key: "who", icon: "user", name: "Role suggestions", lede: "The names the ROLE wheel offers, comma-separated." },
-    { key: "data", icon: "cards", name: "Catalog and data", lede: "The catalog on this desk, and loading another." }
+  var libFind = () => t("Search the library");
+  var libSections = () => [
+    { key: "catmac", icon: "categories", name: t("Categories and cards"), lede: t("Each category with its cards, its place in the order, and whether it supports every intent.") },
+    { key: "intents", icon: "intents", name: t("Intents"), lede: t("Favourites first, hidden intents at the foot.") },
+    { key: "who", icon: "user", name: t("ROLE suggestions"), lede: t("The names the ROLE wheel offers, separated by commas.") },
+    { key: "data", icon: "cards", name: t("Catalog & data"), lede: t("The catalog in use on this desk, and loading another catalog file.") }
   ];
   function libFold(s) {
     return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -31283,7 +31299,7 @@ What you type stays in this browser only.`;
   }
   function libNavHtml() {
     const finding = !!libFold(libQuery);
-    return LIB_SECTIONS.map((s) => {
+    return libSections().map((s) => {
       const on = !finding && s.key === libOn;
       return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-lm="' + esc(s.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(s.icon) + "<span data-i18n-skip>" + esc(s.name) + "</span></button>";
     }).join("");
@@ -31315,13 +31331,13 @@ What you type stays in this browser only.`;
       if (on) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
-    const sec = LIB_SECTIONS.filter((s) => s.key === libOn)[0];
+    const sec = libSections().filter((s) => s.key === libOn)[0];
     const title = page.querySelector("#libTitle");
     const lede = page.querySelector("#libLede");
     if (title) title.textContent = q ? String(libQuery || "").trim() : sec ? sec.name : "";
     if (lede) {
       const n = countEl && countEl.textContent ? countEl.textContent.trim() : "";
-      lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" && n ? n + " intents. " + sec.lede : sec.lede;
+      lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" && n ? t("Intents: {N}.").replace("{N}", n) + " " + sec.lede : sec.lede;
     }
   }
   function wireLibShell(page) {
@@ -31452,7 +31468,7 @@ What you type stays in this browser only.`;
       return;
     }
     const name = catalogFileName();
-    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(LIB_FIND) + '" aria-label="' + esc(LIB_FIND) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + '</div></div></div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
+    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + '</div></div></div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
     const page = host.querySelector(".lib-list");
     wireLibrary(page);
     translateTree(page);

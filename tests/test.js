@@ -5843,8 +5843,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1282;
-const UI_STRINGS_SHA256 = "c5f1c1fb86c8f22f98e276db057d864652d2bdfabe7a3fc11ca8e344ea0d6cb8";
+const UI_STRINGS_COUNT = 1299;
+const UI_STRINGS_SHA256 = "50da7f0820b553885abc27063c53dac26dd6333b217c764d4c6ece10cbcb44d6";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or
@@ -5852,20 +5852,7 @@ const UI_STRINGS_SHA256 = "c5f1c1fb86c8f22f98e276db057d864652d2bdfabe7a3fc11ca8e
    and no count moves. Until the copywriter's words land in both languages, each is listed here,
    checked present, and printed as owed. A word that leaves the source leaves this list in the
    same commit, so the count only falls. */
-const OWED_WORDS = [
-  "Search the library",
-  "Categories and cards", "Each category's cards, its role and its order.",
-  "Intents", "Favourites first, hidden intents at the foot.",
-  "Role suggestions", "The names the ROLE wheel offers, comma-separated.",
-  "Catalog and data", "The catalog on this desk, and loading another.",
-  "Open Data and defaults",
-  "Health", "Engine and display", "Catalog", "Storage and desk", "Layout and intent panel", "Personal state",
-  "What runs Etiuda here, and what the screen offers it.",
-  "The catalog in use, and the file it came from.",
-  "Where the desk keeps its memory, and its own state.",
-  "How the window is laid out, and the intent panel.",
-  "What you have made your own on this desk."
-];
+const OWED_WORDS = [];
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

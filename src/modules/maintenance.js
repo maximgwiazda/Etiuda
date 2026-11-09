@@ -523,34 +523,32 @@ function wireMaintenanceActions(root, closeFn){
 
 const MT_MOVED="Reset defaults and Clear local memory are in Settings, under Data and defaults.";
 let mtOn="health";
-// placeholder: Claudette
-const MT_OPEN_DATA="Open Data and defaults";
-// placeholder: Claudette
-const MT_PAGES=[
-  {key:"health", icon:"health", name:"Health"},
-  {key:"engine", icon:"desks", name:"Engine and display"},
-  {key:"catalog", icon:"categories", name:"Catalog"},
-  {key:"storage", icon:"data", name:"Storage and desk"},
-  {key:"layout", icon:"layout", name:"Layout and intent panel"},
-  {key:"state", icon:"user", name:"Personal state"}
+/* Built when asked, so each name and lede is a literal t() call the strings legs count and the
+   desk's language reaches. */
+const mtPages=()=>[
+  {key:"health", icon:"health", name:t("Health")},
+  {key:"engine", icon:"desks", name:t("Engine and display")},
+  {key:"catalog", icon:"categories", name:t("Catalog")},
+  {key:"storage", icon:"data", name:t("Storage and desk")},
+  {key:"layout", icon:"layout", name:t("Layout and intent panel")},
+  {key:"state", icon:"user", name:t("Personal state")}
 ];
-// placeholder: Claudette
-const MT_LEDE={
-  engine:"What runs Etiuda here, and what the screen offers it.",
-  catalog:"The catalog in use, and the file it came from.",
-  storage:"Where the desk keeps its memory, and its own state.",
-  layout:"How the window is laid out, and the intent panel.",
-  state:"What you have made your own on this desk."
-};
+const mtLede=()=>({
+  engine:t("What runs Etiuda here, and what the screen offers it."),
+  catalog:t("The catalog in use, and the file it came from."),
+  storage:t("Where the desk keeps its memory, and its own state."),
+  layout:t("How the window is laid out, and the intent panel."),
+  state:t("What you have made your own on this desk.")
+});
 function mtNavHtml(){
-  return MT_PAGES.map(p=>{
+  return mtPages().map(p=>{
     const on=p.key===mtOn;
     return '<button type="button" class="sx-sec'+(on?" on":"")+'" data-mt="'+esc(p.key)+'"'
       +(on?' aria-current="page"':'')+'>'+lmIcon(p.icon)+'<span data-i18n-skip>'+esc(p.name)+'</span></button>';
   }).join("");
 }
 function mtShellHtml(){
-  const page=MT_PAGES.filter(p=>p.key===mtOn)[0]||MT_PAGES[0];
+  const pages=mtPages(), page=pages.filter(p=>p.key===mtOn)[0]||pages[0];
   return '<div class="sx lm lm-mt mt-screen" data-page="'+esc(page.key)+'">'
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Maintenance"))+'"><h1>'+esc(t("Maintenance"))+'</h1>'
@@ -559,10 +557,10 @@ function mtShellHtml(){
     +esc(t("Settings"))+'</button></div></nav>'
     +'<div class="sx-page" id="mtPage"><div class="sx-crumb">'+esc(t("Maintenance"))+'</div>'
     +'<h2 id="mtTitle" data-i18n-skip>'+esc(page.name)+'</h2>'
-    +'<p class="lede" id="mtLede" data-i18n-skip>'+esc(page.key==="health"?"":(MT_LEDE[page.key]||""))+'</p>'
+    +'<p class="lede" id="mtLede" data-i18n-skip>'+esc(page.key==="health"?"":(mtLede()[page.key]||""))+'</p>'
     +mtMaintBody()
     +'<p class="mt-moved sx-note" id="mtMoved">'+esc(t(MT_MOVED))
-    +' <button type="button" class="btn" id="mtOpenData">'+esc(MT_OPEN_DATA)+'</button></p>'
+    +' <button type="button" class="btn" id="mtOpenData">'+esc(t("Open Data and defaults"))+'</button></p>'
     +'</div></div>'
     +'<div class="screen-actions"><div class="mf-left">'
     +'<button type="button" class="btn danger" id="mtEject">'+esc(t("Eject catalog"))+'</button></div>'
@@ -582,11 +580,11 @@ function wireMtShell(root){
       if(b.classList) b.classList.toggle("on", on);
       if(on) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
     });
-    const page=MT_PAGES.filter(p=>p.key===mtOn)[0];
+    const page=mtPages().filter(p=>p.key===mtOn)[0];
     const title=root.querySelector("#mtTitle");
     if(title&&page) title.textContent=page.name;
     const lede=root.querySelector("#mtLede");
-    if(lede) lede.textContent=mtOn==="health"?"":(MT_LEDE[mtOn]||"");
+    if(lede) lede.textContent=mtOn==="health"?"":(mtLede()[mtOn]||"");
   };
   buttons.forEach(b=>{ b.onclick=()=>show(b.getAttribute("data-mt")); });
   const gear=root.querySelector("#mtSettings");
