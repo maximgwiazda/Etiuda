@@ -408,6 +408,31 @@ def export_onnx(source, out_dir, width, fp16_out, task_root, task_script, pin_ma
     os.makedirs(out_dir, exist_ok=True)
     if width == "q4" and not pin_match and not task_paths_ready(task_root, task_script):
         return 2
+    # Measured 2026-11-09. model_q4.onnx comes out the pin's size and not its bytes when
+    # the current directory is the engine tree, or when this process was started on this
+    # file (its path, and argv[0], sit inside that tree). With the directory, the main
+    # module's file and argv[0] all on the weights folder, the bytes match the pin.
+    previous = os.getcwd()
+    os.chdir(source)
+    main = sys.modules.get("__main__")
+    real_file = getattr(main, "__file__", None) if main is not None else None
+    real_argv = sys.argv[0] if sys.argv else None
+    placed = os.path.join(source, "export.py")
+    if real_file:
+        main.__file__ = placed
+    if real_argv:
+        sys.argv[0] = placed
+    try:
+        return _export_onnx(source, out_dir, width, fp16_out, task_root, task_script, pin_match)
+    finally:
+        if real_file and main is not None:
+            main.__file__ = real_file
+        if real_argv:
+            sys.argv[0] = real_argv
+        os.chdir(previous)
+
+
+def _export_onnx(source, out_dir, width, fp16_out, task_root, task_script, pin_match):
     fp32, tokenizer = export_fp32(source, out_dir)
     alternative = None
     if width == "fp16":
