@@ -26,6 +26,7 @@ const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, setJumpList, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
+const { honourPendingReset, stageReset } = require(path.join(__dirname, "desk-reset.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
 let embedLib = null;
 try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
@@ -8203,6 +8204,26 @@ function listingRows() {
   return rows.map(stripGenuine);
 }
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
+/* The page asks. The files stay until the next start: this process still holds them. The catalog
+   folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
+ipcMain.handle("etiuda:desk-reset", (e) => {
+  if (!fromEngine(e)) return { ok: false, reason: "refused" };
+  const userData = app.getPath("userData");
+  let catalogSetting = "";
+  try {
+    const env = JSON.parse(fs.readFileSync(deskFile(), "utf8"));
+    const keys = typeof env.keys === "string" ? JSON.parse(env.keys || "{}") : (env.keys || {});
+    catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
+  } catch (err) { catalogSetting = ""; }
+  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
+  if (staged && staged.ok) setImmediate(() => {
+    try {
+      if (typeof app.relaunch === "function") app.relaunch();
+      if (typeof app.exit === "function") app.exit(0);
+    } catch (err) { /* the marker still waits for the next start */ }
+  });
+  return staged;
+});
 /* THE LISTING IS SENT, not only asked for: once at boot, and again whenever the set of files in it, by place, id,
    edition and hash, changes, so a rename or a newer edition under another name reaches the page, which decides what
    it means. A date moving alone is no change, and nothing is sent while the folder does not answer. This is not
@@ -10447,6 +10468,10 @@ function dispatchColdStartArgs(win, argv) {
    the lock every double-clicked catalog would open a second window with its own desk file, two
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
    on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
+/* A reset the page staged is finished here, before the lock writes SingletonLock into the desk's
+   folder and before Chromium opens the files a reset has to remove. */
+try { honourPendingReset({ userData: app.getPath("userData") }); }
+catch (e) { console.error("etiuda: a pending reset could not be finished - " + (e && e.message)); }
 const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
   app.quit();

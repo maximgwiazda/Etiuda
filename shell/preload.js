@@ -236,6 +236,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   trayNotesState: () => ipcRenderer.sendSync("etiuda:tray-notes-state"),
   notify: (opts) => ipcRenderer.send("etiuda:notify", opts),
   onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
+  /* Returns this desk to a fresh install. The shell does the work on the next start. */
+  resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),
 });
 
 if (json) {

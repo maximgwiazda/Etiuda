@@ -134,6 +134,11 @@
   ${EndIf}
 !macroend
 
+# ONE SWITCH FOR THE LICENCE. Defined, a ticked Remove my data removes the desk's whole
+# folder, licence included. Comment this line out and the same tick keeps
+# etiuda-license.js and etiuda-revoked.json.
+!define ETIUDA_REMOVE_LICENCE_WITH_DATA ; plant:uninstall-licence-goes
+
 !macro customUnInstall
   # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
   !ifmacrodef unregisterFileAssociations
@@ -142,6 +147,57 @@
     DeleteRegKey HKCU "Software\Classes\etiuda" # plant:f6-link-gone
   ${EndIf}
   !endif
+
+  # An update's silent uninstall carries /KEEP_APP_DATA or --updated. Either one keeps the desk's
+  # data, whatever the checkbox, and this runs before any folder is removed.
+  Push $R0
+  Push $R1
+  Push $R2
+  StrCpy $R0 $CMDLINE
+  unResetScan:
+    StrCpy $R1 $R0 14
+    StrCmp $R1 "/KEEP_APP_DATA" unResetHit
+    StrCpy $R1 $R0 9
+    StrCmp $R1 "--updated" unResetHit
+    StrLen $R2 $R0
+    IntCmp $R2 0 unResetDone
+    StrCpy $R0 $R0 "" 1
+    Goto unResetScan
+  unResetHit:
+    StrCpy $RemoveMyData "0" ; plant:update-keeps-data
+  unResetDone:
+    Pop $R2
+    Pop $R1
+    Pop $R0
+
+  ${If} $RemoveMyData == "1"
+    ${If} $installMode == "all"
+      SetShellVarContext current
+    ${EndIf}
+    !ifdef ETIUDA_REMOVE_LICENCE_WITH_DATA
+      RMDir /r "$APPDATA\${APP_FILENAME}"
+      !ifdef APP_PRODUCT_FILENAME
+        RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+      !endif
+      !ifdef APP_PACKAGE_NAME
+        RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
+      !endif
+    !else
+      Push "$APPDATA\${APP_FILENAME}"
+      Call un.ClearDeskFolder
+      !ifdef APP_PRODUCT_FILENAME
+        Push "$APPDATA\${APP_PRODUCT_FILENAME}"
+        Call un.ClearDeskFolder
+      !endif
+      !ifdef APP_PACKAGE_NAME
+        Push "$APPDATA\${APP_PACKAGE_NAME}"
+        Call un.ClearDeskFolder
+      !endif
+    !endif
+    ${If} $installMode == "all"
+      SetShellVarContext all
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 # THE TURNING SIDEBAR AND HEADER. Looping frames, one every ${TURN_INTERVAL} ms. Frame 0 is the still
@@ -173,6 +229,7 @@
 !macroend
 
 !macro customUnInit
+  StrCpy $RemoveMyData "0"
   ${IfNot} ${Silent}
     InitPluginsDir
     CreateDirectory "$PLUGINSDIR\turn"
@@ -196,6 +253,8 @@ Var TurnHwnd
 Var TurnKind
 Var TurnBmp
 Var TurnReady
+Var RemoveMyData
+Var RemoveDataBox
 
 !macro TurnEmit UN
   !ifdef TURN_PFX
@@ -376,11 +435,15 @@ Var TurnReady
     LangString TurnWelcomeText ${ID} "Etiuda trzyma odpowiedzi zespołu pod ręką, gotowe do skopiowania do każdej rozmowy z klientem.$\r$\n$\r$\nInstalacja dotyczy tylko tego konta Windows, więc przy proponowanym folderze nie są potrzebne uprawnienia administratora. Jeśli Etiuda jest otwarta, instalator poprosi o jej zamknięcie.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
     LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda"
     LangString TurnUnWelcomeText ${ID} "Program Etiuda zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
+    LangString RemoveDataBox ${ID} "Usuń także dane z tego komputera"
+    LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: katalog, ustawienia, rozmowy i licencję."
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
     LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nSetup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
     LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda"
     LangString TurnUnWelcomeText ${ID} "This removes Etiuda from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
+    LangString RemoveDataBox ${ID} "Remove my data"
+    LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: the catalog, settings, conversations and the licence."
   !endif
 !macroend
 !insertmacro TurnLang 1033
@@ -431,4 +494,56 @@ Var TurnReady
     SendMessage $mui.WelcomePage.Title ${WM_SETTEXT} 0 "STR:$(TurnUnWelcomeTitle)"
     SendMessage $mui.WelcomePage.Text ${WM_SETTEXT} 0 "STR:$(TurnUnWelcomeText)"
   FunctionEnd
+  # Leaves the two licence files and the folder. Used only when the licence switch below is commented out.
+  Function un.ClearDeskFolder
+    Exch $R0
+    Push $R1
+    Push $R2
+    IfFileExists "$R0\*.*" 0 unClearDeskDone
+    FindFirst $R1 $R2 "$R0\*.*"
+    unClearDeskLoop:
+      StrCmp $R2 "" unClearDeskClose
+      StrCmp $R2 "." unClearDeskNext
+      StrCmp $R2 ".." unClearDeskNext
+      StrCmp $R2 "etiuda-license.js" unClearDeskNext
+      StrCmp $R2 "etiuda-revoked.json" unClearDeskNext
+      IfFileExists "$R0\$R2\*.*" 0 unClearDeskFile
+        RMDir /r "$R0\$R2"
+        Goto unClearDeskNext
+      unClearDeskFile:
+        Delete "$R0\$R2"
+      unClearDeskNext:
+        FindNext $R1 $R2
+        Goto unClearDeskLoop
+    unClearDeskClose:
+      FindClose $R1
+    unClearDeskDone:
+      Pop $R2
+      Pop $R1
+      Pop $R0
+  FunctionEnd
+  Function un.RemoveDataCreate
+    ${If} ${Silent}
+      Abort
+    ${EndIf}
+    !insertmacro MUI_HEADER_TEXT "$(TurnUnWelcomeTitle)" "$(RemoveDataBox)"
+    nsDialogs::Create 1018
+    Pop $0
+    ${NSD_CreateCheckbox} 0 0 100% 12u "$(RemoveDataBox)"
+    Pop $RemoveDataBox
+    ${NSD_CreateLabel} 0 18u 100% 36u "$(RemoveDataLine)"
+    Pop $0
+    nsDialogs::Show
+  FunctionEnd
+  Function un.RemoveDataLeave
+    Push $0
+    ${NSD_GetState} $RemoveDataBox $0
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $RemoveMyData "1"
+    ${Else}
+      StrCpy $RemoveMyData "0"
+    ${EndIf}
+    Pop $0
+  FunctionEnd
+  UninstPage custom un.RemoveDataCreate un.RemoveDataLeave
 !macroend
