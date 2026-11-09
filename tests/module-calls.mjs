@@ -6344,6 +6344,28 @@ const CARD_B = {
       return (modalClosed && maintOpen) || JSON.stringify({ modalClosed, maintOpen });
     });
 
+    // 20b. Ctrl+Shift+M over an editor with typed, unsaved changes keeps the edit open and does nothing else
+    check("maintenance.js", "D1-20b Ctrl+Shift+M over an editor with unsaved changes keeps the edit open, its text kept, and Maintenance not fronted", () => {
+      start([["t-a", "Anna"]], "t-a");
+      modal.hidden = false;
+      modalCard.className = "modal-card me-card";
+      const cardIn = el({ tagName: "INPUT", type: "text", value: "card text" });
+      modalCard.kids = [cardIn];
+      cardIn.parentNode = modalCard;
+      cardIn.parentElement = modalCard;
+      DL.edMarkClean();
+      cardIn.value = "typed but not saved";
+      MN.openMaintenance();
+      const kept = modal.hidden === false && cardIn.value === "typed but not saved" && STAB.screenOn !== "maintenance";
+      const why = JSON.stringify({ modalHidden: modal.hidden, value: cardIn.value, screenOn: STAB.screenOn });
+      modalCard.kids = [];
+      DL.closeModal();
+      modal.hidden = true;
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      return kept || why;
+    });
+
     // 21. Converting a screen tab with multiple screen tabs resets search state before render and lands at strip end
     check("search-box.js", "D1-21 converting a screen tab with multiple screen tabs resets search state before render and lands at strip end", () => {
       start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");

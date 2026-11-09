@@ -27946,6 +27946,7 @@ What you type stays in this browser only.`;
     });
   }
   function openMaintenance(backFn) {
+    if (typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()) return;
     if (typeof closeModal === "function") {
       try {
         closeModal();
