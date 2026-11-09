@@ -878,6 +878,7 @@ function readCatalog() {
     return null;
   }
   catalogFrom = chosen.file;
+  recordRecentCatalog(chosen.file);
   historySoon(chosen.file, chosen.text);
   const cards = Array.isArray(opened.data.cards) ? opened.data.cards.length : 0;
   console.log("etiuda: catalog read from " + chosen.file + ", " + cards + " cards");
@@ -1329,6 +1330,7 @@ function offerFile(win, file) {
     handAsked(json, "");
     noteHanded(json, "opened");
     catalogFrom = file;
+    recordRecentCatalog(file);
     offeredLead = null;
     rememberOpenedBaseline();
     historySoon(file, text);
@@ -1439,6 +1441,7 @@ function noteOpenedTaken(pin, text, win) {
     releaseOpened();
     catalogFrom = file;
     catalogJson = body;
+    recordRecentCatalog(file);
     return;
   }
   let mine = "";
@@ -1481,6 +1484,20 @@ const handedAsked = new Map(), HANDED_ASKED_MAX = 32;
 const handedUse = new Map();
 let inUseKept = null, catalogAskIds = [], heldInUse = null, heldAnswer = null, ejectOwed = null;
 let loadedText = "", asksWatcher = null, askSettle = null, lastCatalogCopy = "";
+let recentCatalogs = [];
+const RECENT_CATALOGS_MAX = 32;
+function recordRecentCatalog(file) {
+  if (!file || typeof file !== "string" || isBuiltIn(file)) return;
+  let resolved;
+  try { resolved = path.resolve(file); } catch { return; }
+  if (deskKeys === undefined) {
+    try { readDesk(); } catch { /* start fresh */ }
+  }
+  const next = [resolved].concat(recentCatalogs.filter(f => f !== resolved));
+  recentCatalogs = next.slice(0, RECENT_CATALOGS_MAX);
+  try { persistDeskEnvelope(); } catch { /* envelope write best effort */ }
+  try { syncJumpList(); } catch { /* jump list optional */ }
+}
 const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
 /* The catalog text this desk loaded, beside its own desk file. The page keeps the runtime copy,
    not the format-2 document, and the folder's file is not always the one in use, so a restart
@@ -1705,6 +1722,7 @@ function deskEnvelopeBody(keysText) {
     + (inUseN > 0 ? ',"inUseN":' + inUseN : "")
     + (Object.keys(teamPauseSeen).length ? ',"teamPauseSeen":' + JSON.stringify(teamPauseSeen) : "")
     + (Object.keys(teamNeedsFolder).length ? ',"teamNeedsFolder":' + JSON.stringify(teamNeedsFolder) : "")
+    + (recentCatalogs.length ? ',"recentCatalogs":' + JSON.stringify(recentCatalogs) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -6998,6 +7016,11 @@ function readDesk() {
       if (ASK_ID_RE.test(s) && catalogAskIds.indexOf(s) < 0) catalogAskIds.push(s);
     });
     while (catalogAskIds.length > 64) catalogAskIds.shift();
+    if (doc && Array.isArray(doc.recentCatalogs)) doc.recentCatalogs.forEach(f => {
+      const s = String(f || "");
+      if (s && recentCatalogs.indexOf(s) < 0) recentCatalogs.push(s);
+    });
+    while (recentCatalogs.length > RECENT_CATALOGS_MAX) recentCatalogs.pop();
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     reloadLoadedCatalog();
@@ -8100,7 +8123,10 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     historySoon(file, text);
     const json = catalogTextOf(text);
-    if (json) noteHanded(json, "opened");
+    if (json) {
+      noteHanded(json, "opened");
+      recordRecentCatalog(file);
+    }
     const note = rosterNoteText(json);
     return note ? { name: name, text: json, notOnTeam: note } : { name: name, text: json };
   }
@@ -9977,8 +10003,9 @@ function ensureTray() {
   }
   return deskTray;
 }
-/* THE JUMP LIST. Recent catalogs from the Library's files, newest first, five at most,
-   and the four tasks: Bring the replies over any window, New tab, Library, Settings. */
+/* THE JUMP LIST. Recent catalogs this desk itself loaded most recently, newest first,
+   five at most, files that still exist, and the four tasks: Bring the replies over any window,
+   New tab, Library, Settings. A file that is now gone drops out. */
 function syncJumpList() {
   try {
     const w = trayWords();
@@ -9988,9 +10015,14 @@ function syncJumpList() {
       { title: w.jumpLibrary || "Library", args: "--library" },
       { title: w.jumpSettings || w.traySettings || "Settings", args: "--settings" },
     ];
-    const dir = catalogFolder();
-    const files = ecFilesIn(dir);
-    const recent = files.slice(0, 5).map(f => ({
+    const existing = [];
+    for (const f of recentCatalogs) {
+      if (existing.length >= 5) break;
+      try {
+        if (fs.existsSync(f) && fs.statSync(f).isFile()) existing.push(f);
+      } catch { /* file gone */ }
+    }
+    const recent = existing.map(f => ({
       title: path.basename(f, ".ec") || path.basename(f),
       path: f,
     }));

@@ -151,7 +151,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
@@ -1803,16 +1803,29 @@ try {
       d8JumpListWhy = "no syncJumpList";
     } else {
       const catDir = typeof mainTest.catalogFolder === "function" ? mainTest.catalogFolder() : UD;
-      /* Plant 7 catalog files with distinct mtimes in the catalog folder */
-      const baseTime = Date.now();
       const filesCreated = [];
-      for (let i = 1; i <= 7; i++) {
-        const fp = path.join(catDir, "jump-cat-" + i + ".ec");
-        fs.writeFileSync(fp, JSON.stringify({ format: 2, id: "c" + i, rev: 1, cards: [] }));
-        const mtime = new Date(baseTime + i * 1000);
-        fs.utimesSync(fp, mtime, mtime);
-        filesCreated.push(fp);
+      /* 1. Shared folder holds other files from colleagues/lead that this desk never opened */
+      const colleagueFiles = [
+        path.join(catDir, "colleague-lead.ec"),
+        path.join(catDir, "colleague-team.ec"),
+      ];
+      for (const cf of colleagueFiles) {
+        fs.writeFileSync(cf, JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "lead-c", rev: 1, cards: [] }));
+        filesCreated.push(cf);
       }
+
+      /* 2. This desk opens seven catalog files in sequence (1 to 7) */
+      mainTest.createWindow();
+      const w = madeWins[madeWins.length - 1];
+      const openedFiles = [];
+      for (let i = 1; i <= 7; i++) {
+        const fp = path.join(UD, "desk-open-" + i + ".ec");
+        fs.writeFileSync(fp, JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "open-" + i, rev: 1, cards: [] }));
+        filesCreated.push(fp);
+        openedFiles.push(fp);
+        mainTest.offerFile(w, fp);
+      }
+
       electron.app._jumpList = null;
       mainTest.syncJumpList();
       const jl = electron.app._jumpList;
@@ -1830,14 +1843,36 @@ try {
           && taskArgs[2] === "--library" && taskTitles[2] === "Library"
           && taskArgs[3] === "--settings" && taskTitles[3] === "Settings";
         const recentItems = recentCat ? recentCat.items : [];
-        /* Newest 5 files: jump-cat-7.ec down to jump-cat-3.ec */
-        const recentMatch = recentCat && recentCat.name === "Recent catalogs"
+
+        /* Only the files this desk opened, newest first, at most five:
+           desk-open-7.ec down to desk-open-3.ec, none of the colleague files */
+        const recentMatch1 = recentCat && recentCat.name === "Recent catalogs"
           && recentItems.length === 5
-          && recentItems[0].args.indexOf("jump-cat-7.ec") >= 0
-          && recentItems[4].args.indexOf("jump-cat-3.ec") >= 0;
-        d8JumpList = tasksMatch && recentMatch;
+          && recentItems[0].args.indexOf("desk-open-7.ec") >= 0
+          && recentItems[1].args.indexOf("desk-open-6.ec") >= 0
+          && recentItems[2].args.indexOf("desk-open-5.ec") >= 0
+          && recentItems[3].args.indexOf("desk-open-4.ec") >= 0
+          && recentItems[4].args.indexOf("desk-open-3.ec") >= 0
+          && recentItems.every(item => colleagueFiles.every(cf => item.args.indexOf(path.basename(cf)) < 0));
+
+        /* 3. A file this desk opened and that is now gone drops out:
+           delete desk-open-7.ec, sync again -> desk-open-6.ec down to desk-open-2.ec */
+        fs.unlinkSync(openedFiles[6]);
+        mainTest.syncJumpList();
+        const jl2 = electron.app._jumpList;
+        const recentCat2 = jl2 ? jl2.find(c => c.type === "custom") : null;
+        const recentItems2 = recentCat2 ? recentCat2.items : [];
+        const recentMatch2 = recentCat2 && recentItems2.length === 5
+          && recentItems2[0].args.indexOf("desk-open-6.ec") >= 0
+          && recentItems2[1].args.indexOf("desk-open-5.ec") >= 0
+          && recentItems2[2].args.indexOf("desk-open-4.ec") >= 0
+          && recentItems2[3].args.indexOf("desk-open-3.ec") >= 0
+          && recentItems2[4].args.indexOf("desk-open-2.ec") >= 0
+          && recentItems2.every(item => item.args.indexOf("desk-open-7.ec") < 0);
+
+        d8JumpList = tasksMatch && recentMatch1 && recentMatch2;
         if (!d8JumpList) {
-          d8JumpListWhy = JSON.stringify({ tasksMatch, recentMatch, tasksCat, recentCat });
+          d8JumpListWhy = JSON.stringify({ tasksMatch, recentMatch1, recentMatch2, recentItems, recentItems2 });
         }
       }
       /* Clean up created test catalog files */
@@ -1846,7 +1881,7 @@ try {
       }
     }
   } catch (e) { d8JumpListWhy = String(e && e.message || e).split("\n")[0]; }
-  check(d8JumpList, "D8-jump-list the jump list holds at most five Library files and the four tasks (" + d8JumpListWhy + ")");
+  check(d8JumpList, "D8-jump-list on a folder team whose shared folder holds other files, the jump list lists only the files this desk opened, newest first, at most five; a file this desk opened and that is now gone drops out (" + d8JumpListWhy + ")");
 
   let d8Args = false, d8ArgsWhy = "";
   try {
