@@ -2885,7 +2885,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
-.modal-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
+.modal-actions .btn.primary,.screen-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
 /* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
@@ -2903,11 +2903,14 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    cascade layer above all - turns this button pale under the mouse with white text still on
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
-.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
+.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible,
+.screen-actions .btn.primary:hover,.screen-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
   background:var(--accent-fill);border-color:var(--accent-fill)}
 /* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
 :root[data-theme=light] .modal-actions .btn.primary:hover,
-:root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
+:root[data-theme=light] .modal-actions .btn.primary:focus-visible,
+:root[data-theme=light] .screen-actions .btn.primary:hover,
+:root[data-theme=light] .screen-actions .btn.primary:focus-visible{filter:brightness(1.08)}
 /* THE RING IS MIXED INTO THE GROUND, not stated flat. A fixed pale pink is soft on a white
    page and a bright band on a near-black one - the same declaration reading as a warning in
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
@@ -3534,7 +3537,7 @@ body.screen-on #lanes { display: none !important; }
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
-.screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)}
+.screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--line)}
 /* ---------- The Settings screen tab: the section list beside one section's page ---------- */
 /* On the desk's own tokens, never glass. The selected section is one class and the three --sx-sel tokens, so its
    treatment changes in one place: a soft fill of the accent with a fine ring of it, the name bold, the icon in the accent. */
@@ -3605,8 +3608,9 @@ body.screen-on #lanes { display: none !important; }
   clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .sx.lm-lib details.manage-sec{margin:0;padding:0;border:0}
 .sx.lm-lib details.manage-sec>summary{display:none}
-.sx.lm-lib details.manage-sec[data-mg="data"]>summary,
 .sx.lm-lib.is-find details.manage-sec>summary{display:flex}
+.mg-data-bar{display:flex;align-items:center;justify-content:flex-end;padding:10px 16px;border-bottom:1px solid var(--line)}
+.sx.lm-lib.is-find .mg-data-bar{display:none}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
 .sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}

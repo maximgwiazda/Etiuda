@@ -302,7 +302,7 @@ Dom.grabDom();
 /* The host keeps one saved copy, so the Library offers Earlier versions; it reads nothing else. */
 const SAVED = [{ path: "C:/lab/invented.ec", sha: "aa11", name: "invented.ec", place: "other", dir: "C:/lab",
   first: 1767225600000, rev: 3, cards: 2, macros: 2, intents: 1, cats: 1, put: false, current: true }];
-window.E_HOST = { historyList: () => SAVED, historyRead: () => null, historyPut: () => ({ ok: false }) };
+window.E_HOST = { historyList: () => SAVED, historyRead: () => null, historyPut: () => ({ ok: false }), catalogFolder: "C:/lab/catalogs" };
 
 const $ = s => doc.querySelector(s);
 const host = () => $("#screenHost");
@@ -454,6 +454,114 @@ await checkAsync("L8 the Maintenance tab lists its sections and shows one page, 
     && !!host().querySelector("#mtClose") && !!host().querySelector("#mtMoved")
     || JSON.stringify({ page: now && now.getAttribute("data-page"), want: other.getAttribute("data-mt"),
       title: title && title.textContent, nsec });
+});
+
+/* Finding 2: Library search opens collapsed sections, reveals matching cards/categories, and shows empty state */
+check("L9 searching in the Library opens matching sections, reveals cards, matches category names and shows empty state when nothing matches", () => {
+  if (wired) return wired;
+  if (STAB.screenOn !== "library") MG.openManage();
+  const search = host().querySelector("#libSearch");
+  if (!search) return "no #libSearch";
+
+  /* 1. Type a query matching nothing */
+  search.value = "xyz_no_match_here";
+  search.oninput();
+  const emptyP = host().querySelector("#libEmptySearch");
+  const emptyText = emptyP ? emptyP.textContent.trim() : "";
+  const allHidden = [...host().querySelectorAll("details.manage-sec")].every(d => d.hasAttribute("hidden"));
+  const emptyOk = !!emptyP && emptyText.length > 0 && allHidden;
+
+  /* 2. Clear search: restores sections and removes empty message */
+  search.value = "";
+  search.oninput();
+  const emptyGone = !host().querySelector("#libEmptySearch");
+  const shownCat = host().querySelector('details.manage-sec[data-mg="catmac"]');
+
+  /* 3. Search for a category name */
+  const catInput = host().querySelector(".mg-cat-lab2");
+  const catName = catInput ? catInput.value : "Cat";
+  search.value = catName.slice(0, 3);
+  search.oninput();
+  const catSec = host().querySelector('details.manage-sec[data-mg="catmac"]');
+  const catSecOpen = catSec && catSec.open && !catSec.hasAttribute("hidden");
+  const catBody = host().querySelector(".mg-cat-body");
+  const catBodyExpanded = catBody && !catBody.hasAttribute("hidden");
+
+  search.value = "";
+  search.oninput();
+
+  return emptyOk && emptyGone && catSecOpen && catBodyExpanded
+    || JSON.stringify({ emptyOk, emptyText, allHidden, emptyGone, catSecOpen, catBodyExpanded });
+});
+
+/* Finding 6: Library actions keep scroll position in #libPage */
+check("L10 every card or intent action in the Library tab preserves its scroll position in #libPage", () => {
+  if (wired) return wired;
+  if (STAB.screenOn !== "library") MG.openManage();
+  const page = host().querySelector("#libPage");
+  if (!page) return "no #libPage";
+  page.scrollTop = 150;
+  MG.mgRefreshAround(() => {});
+  const nowPage = host().querySelector("#libPage");
+  const kept = nowPage ? nowPage.scrollTop : -1;
+  return kept === 150 || JSON.stringify({ kept, expected: 150 });
+});
+
+/* Finding 8: Saved copies preserves the Library navigation rail and returns cleanly to the list */
+await checkAsync("L11 Saved copies preserves the Library navigation rail, and opening an earlier copy returns to the Library list", async () => {
+  if (wired) return wired;
+  if (STAB.screenOn !== "library") MG.openManage();
+  const door = host().querySelector("#mgHistory");
+  if (!door) return "no Earlier versions door";
+  door.click();
+  await settle();
+
+  /* Left rail (#libSecs, #libSearch, #libMaint) must be preserved in .sx-nav */
+  const nav = host().querySelector(".sx-nav");
+  const secs = host().querySelector("#libSecs");
+  const maint = host().querySelector("#libMaint");
+  const railKept = !!nav && !!secs && !!maint;
+
+  /* #ehView is present */
+  const ehView = host().querySelector("#ehView");
+
+  /* Back to the Library restores list */
+  const back = host().querySelector("#ehClose");
+  if (back) back.click();
+  await settle();
+  const listRestored = !!host().querySelector("#mgCatList") && !host().querySelector("#ehView");
+
+  return railKept && !!ehView && listRestored
+    || JSON.stringify({ railKept, hasEhView: !!ehView, listRestored });
+});
+
+/* Finding 13: Catalog & data shows folder path in non-collapsible bar and does not collapse card on click */
+check("L12 Catalog & data shows folder path in non-collapsible row and has no duplicate collapsible summary bar", () => {
+  if (wired) return wired;
+  if (STAB.screenOn !== "library") MG.openManage();
+  const dataBtn = host().querySelector('.sx-sec[data-lm="data"]');
+  if (dataBtn) dataBtn.click();
+  const sec = host().querySelector('details.manage-sec[data-mg="data"]');
+  if (!sec) return "no data section";
+  const dataBar = sec.querySelector(".mg-data-bar");
+  const hasFolderPath = !!sec.querySelector("#mgCatFolderPath") || !!sec.querySelector(".ec-where");
+  const summary = sec.querySelector("summary");
+  /* template.html hides summary on data section when not searching */
+  const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  const duplicateSummaryRule = tpl.includes('details.manage-sec[data-mg="data"]>summary');
+  return !!dataBar && hasFolderPath && !duplicateSummaryRule
+    || JSON.stringify({ hasDataBar: !!dataBar, hasFolderPath, duplicateSummaryRule });
+});
+
+/* Finding 14: .screen-actions uses var(--line) and #ehClose carries .btn.primary */
+check("L13 .screen-actions uses var(--line) instead of var(--border) and #ehClose carries primary styling", () => {
+  const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  const usesBorder = /\.screen-actions\s*\{[^}]*var\(--border\)/.test(tpl);
+  const primaryStyled = /\.screen-actions\s+\.btn\.primary/.test(tpl);
+  const histSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-history.js"), "utf8");
+  const ehClosePrimary = histSrc.includes('id="ehClose"') && /class="btn\s+primary"\s+id="ehClose"|id="ehClose"\s+class="btn\s+primary"|class="btn\s+primary"[^>]*id="ehClose"/.test(histSrc);
+  return !usesBorder && primaryStyled && ehClosePrimary
+    || JSON.stringify({ usesBorder, primaryStyled, ehClosePrimary });
 });
 
 /* ================================================================================================

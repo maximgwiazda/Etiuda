@@ -7304,11 +7304,23 @@ function deskDropOwn(key) {
     deskWritten = true;
   } catch (e) { console.error("etiuda: the desk could not be written - " + e.message); }
 }
+function onUiLangChanged() {
+  try {
+    if (typeof __test !== "undefined" && typeof __test.rebuildTrayMenu === "function") __test.rebuildTrayMenu();
+    else rebuildTrayMenu();
+  } catch {}
+  try {
+    if (typeof __test !== "undefined" && typeof __test.syncJumpList === "function") __test.syncJumpList();
+    else syncJumpList();
+  } catch {}
+}
+
 function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
   if (!map || typeof map !== "object" || Array.isArray(map)) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   const merged = mergeDesk(deskKeys, deskGiven.get(from) || {}, map);
   /* A write is skipped only where the live file is known to hold exactly this. A desk recovered
      from a backup has not been written yet, and skipping there would leave the refused file. */
@@ -7321,6 +7333,9 @@ function writeDesk(text, from) {
     catalogFolderChanged();
     applyThemeSource();
     syncHotkey();
+    if (merged && merged.eUiLang !== langWas) {
+      onUiLangChanged();
+    }
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -7351,6 +7366,7 @@ function patchDesk(text) {
   const keys = Object.keys(patch);
   if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   /* Ejecting the catalog is the agent leaving the file this launch was opened with, even when
      that key was never stored and the patch then changes nothing. */
   if (Object.prototype.hasOwnProperty.call(patch, "eCatalog") && patch.eCatalog === null) releaseOpened();
@@ -7365,6 +7381,9 @@ function patchDesk(text) {
     catalogFolderChanged();
     applyThemeSource();
     syncHotkey();
+    if (merged && merged.eUiLang !== langWas) {
+      onUiLangChanged();
+    }
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -10000,6 +10019,7 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryLiveStats(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
   win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
   win.webContents.on("did-finish-load", () => { setTimeout(warmSuggestSoon, EMBED_WARM_DELAY_MS); });
+  win.webContents.once("did-finish-load", () => { dispatchColdStartArgs(win); });
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
@@ -10346,6 +10366,20 @@ function onSecondInstance(argv) {
     } catch { /* the page is gone */ }
   }
   if (file) offerFile(win, file);
+}
+
+function dispatchColdStartArgs(win, argv) {
+  const args = Array.isArray(argv) ? argv : (process.argv || []);
+  if (!win || !win.webContents || typeof win.webContents.send !== "function") return;
+  if (args.indexOf("--picker") > -1) {
+    try { pickToggle(); } catch {}
+  } else if (args.indexOf("--settings") > -1) {
+    try { win.webContents.send("etiuda:tray-go", "settings"); } catch {}
+  } else if (args.indexOf("--library") > -1) {
+    try { win.webContents.send("etiuda:tray-go", "library"); } catch {}
+  } else if (args.indexOf("--new-tab") > -1) {
+    try { win.webContents.send("etiuda:tray-go", "new-tab"); } catch {}
+  }
 }
 
 /* ONE ETIUDA AT A TIME, which is what makes the association useful rather than annoying: without

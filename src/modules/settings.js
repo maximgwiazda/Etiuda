@@ -3,7 +3,7 @@ import { loadShortcuts, formatActionChord } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList, shortcutsShown, scFold } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills, drawTabs } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp, counted } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp, counted, translateTree } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -276,7 +276,7 @@ function generalGroups(){
   /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
   const groups=[{rows:[
     row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
-      +' placeholder="first name" value="'+esc(agentName())+'">'),
+      +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">'),
     row("uilang","translate",t("Interface language"),
       t("The language of the buttons and menus, not of the replies: those follow EN|PL in the header"),langSel)
   ]}];
@@ -543,6 +543,7 @@ function paintSettings(){
   paintKeysInline();
   wireHotkeyRow(box);
   wirePage(box);
+  translateTree(box);
 }
 function wirePage(box){
   /* Live while dragging: the whole point is watching the columns re-form. */

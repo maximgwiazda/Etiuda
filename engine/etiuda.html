@@ -2885,7 +2885,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
-.modal-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
+.modal-actions .btn.primary,.screen-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
 /* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
@@ -2903,11 +2903,14 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    cascade layer above all - turns this button pale under the mouse with white text still on
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
-.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
+.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible,
+.screen-actions .btn.primary:hover,.screen-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
   background:var(--accent-fill);border-color:var(--accent-fill)}
 /* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
 :root[data-theme=light] .modal-actions .btn.primary:hover,
-:root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
+:root[data-theme=light] .modal-actions .btn.primary:focus-visible,
+:root[data-theme=light] .screen-actions .btn.primary:hover,
+:root[data-theme=light] .screen-actions .btn.primary:focus-visible{filter:brightness(1.08)}
 /* THE RING IS MIXED INTO THE GROUND, not stated flat. A fixed pale pink is soft on a white
    page and a bright band on a near-black one - the same declaration reading as a warning in
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
@@ -3534,7 +3537,7 @@ body.screen-on #lanes { display: none !important; }
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
-.screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)}
+.screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--line)}
 /* ---------- The Settings screen tab: the section list beside one section's page ---------- */
 /* On the desk's own tokens, never glass. The selected section is one class and the three --sx-sel tokens, so its
    treatment changes in one place: a soft fill of the accent with a fine ring of it, the name bold, the icon in the accent. */
@@ -3605,8 +3608,9 @@ body.screen-on #lanes { display: none !important; }
   clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .sx.lm-lib details.manage-sec{margin:0;padding:0;border:0}
 .sx.lm-lib details.manage-sec>summary{display:none}
-.sx.lm-lib details.manage-sec[data-mg="data"]>summary,
 .sx.lm-lib.is-find details.manage-sec>summary{display:flex}
+.mg-data-bar{display:flex;align-items:center;justify-content:flex-end;padding:10px 16px;border-bottom:1px solid var(--line)}
+.sx.lm-lib.is-find .mg-data-bar{display:none}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
 .sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
@@ -15838,6 +15842,11 @@ What you type stays in this browser only.`;
       } else if (kind === "library") {
         try {
           hooks.openManage();
+        } catch (e) {
+        }
+      } else if (kind === "new-tab") {
+        try {
+          addTab();
         } catch (e) {
         }
       } else if (kind === "offer") {
@@ -29538,6 +29547,7 @@ What you type stays in this browser only.`;
     libraryHeadHtml: () => libraryHeadHtml,
     mgCardRow: () => mgCardRow,
     mgCardsIn: () => mgCardsIn,
+    mgRefreshAround: () => mgRefreshAround,
     mgUsesTip: () => mgUsesTip,
     openManage: () => openManage,
     wireManageDrag: () => wireManageDrag
@@ -30518,7 +30528,7 @@ What you type stays in this browser only.`;
     }
     if (!src.asked && document.getElementById("mgCatList")) {
       paintCatalogList();
-      return false;
+      if (typeof document !== "undefined" && typeof document.hasFocus === "function" && document.hasFocus()) return false;
     }
     if (document.getElementById("eCatalogOffer")) {
       if (!src.asked || !offerStanding) return false;
@@ -31104,6 +31114,7 @@ What you type stays in this browser only.`;
         offTeam,
         foundHtml: esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join("<code>" + esc(name) + "</code>").split("{WHEN}").join(esc(fileStamp(v.first))),
         accept: (sig) => {
+          hooks.openManage(true);
           lsSet(E_CATALOG_KEY, sig);
           return activateCatalog(c, { from: name });
         }
@@ -31136,18 +31147,25 @@ What you type stays in this browser only.`;
     Promise.resolve(h.historyList()).then((list2) => {
       if (box.hidden || screenOn && screenOn !== "library") return;
       const groups = historyGroups(list2), flat = [].concat.apply([], groups);
-      box.innerHTML = '<div class="screen-page lib-screen lib-history" tabindex="-1"><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="screen-body"><div id="ehView">' + historyBodyHtml(groups) + '</div></div><div class="screen-actions"><button type="button" class="btn" id="ehClose">' + esc(t("Back to the Library")) + "</button></div></div>";
-      const view = document.getElementById("ehView");
-      view.querySelectorAll("[data-eh-open]").forEach((b) => {
-        b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
-      });
-      view.querySelectorAll("[data-eh-put]").forEach((b) => {
-        b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
-      });
+      const view = (box.id === "ehView" ? box : box.querySelector && box.querySelector("#ehView")) || null;
+      if (view) {
+        view.innerHTML = historyBodyHtml(groups);
+      } else {
+        box.innerHTML = '<div class="screen-page lib-screen lib-history" tabindex="-1"><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="screen-body"><div id="ehView">' + historyBodyHtml(groups) + '</div></div><div class="screen-actions"><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div></div>";
+      }
+      const ehView = document.getElementById("ehView");
+      if (ehView) {
+        ehView.querySelectorAll("[data-eh-open]").forEach((b) => {
+          b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
+        });
+        ehView.querySelectorAll("[data-eh-put]").forEach((b) => {
+          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
+        });
+      }
       const back = document.getElementById("ehClose");
-      back.onclick = () => hooks.openManage();
+      if (back) back.onclick = () => hooks.openManage();
       try {
-        back.focus({ preventScroll: true });
+        if (back) back.focus({ preventScroll: true });
       } catch (e) {
       }
     }).catch(() => {
@@ -31224,6 +31242,8 @@ What you type stays in this browser only.`;
       mutate();
       return;
     }
+    const pageEl = host && host.querySelector("#libPage") || page.querySelector("#libPage");
+    const keepPage = pageEl ? pageEl.scrollTop : 0;
     const treeBefore = page.querySelector(".mg-tree");
     const keepTree = treeBefore ? treeBefore.scrollTop : 0;
     const keepCard = host ? host.scrollTop : 0;
@@ -31240,17 +31260,18 @@ What you type stays in this browser only.`;
     paintLibrary();
     const now = libPage();
     if (!now) return;
+    const nowPage = host && host.querySelector("#libPage") || now.querySelector("#libPage");
+    if (nowPage) nowPage.scrollTop = keepPage;
     const tree = now.querySelector(".mg-tree");
     if (tree) tree.scrollTop = keepTree;
     if (host) host.scrollTop = keepCard;
     if (mgReduceMotion()) return;
-    const bodyBox = (host || now).getBoundingClientRect();
+    const bodyBox = (nowPage || host || now).getBoundingClientRect();
     const moved = [], dys = [];
     now.querySelectorAll(ROWS).forEach((el) => {
       const b = before[rowKey(el)];
       if (b == null || !el.offsetParent) return;
-      const holder = el.closest(".mg-tree");
-      const box = holder ? holder.getBoundingClientRect() : bodyBox;
+      const box = nowPage ? nowPage.getBoundingClientRect() : bodyBox;
       const r = el.getBoundingClientRect();
       if (r.bottom < box.top - 40 || r.top > box.bottom + 40) return;
       const dy = Math.round(b - r.top);
@@ -31593,17 +31614,98 @@ What you type stays in this browser only.`;
       else page.classList.remove("is-find");
     }
     let countEl = null;
+    let totalHits = 0;
     page.querySelectorAll("details.manage-sec").forEach((d) => {
       const key = d.getAttribute("data-mg");
-      const hit = !q || libFold(d.textContent).indexOf(q) >= 0;
-      const show = q ? hit : key === libOn;
-      if (show) d.removeAttribute("hidden");
-      else d.setAttribute("hidden", "");
-      if (!q && key === libOn) {
-        const c = d.querySelector(".mg-count");
-        if (c) countEl = c;
+      if (!q) {
+        const show = key === libOn;
+        if (show) d.removeAttribute("hidden");
+        else d.setAttribute("hidden", "");
+        d.open = mgOpen.has(key);
+        if (key === libOn) {
+          const c = d.querySelector(".mg-count");
+          if (c) countEl = c;
+        }
+        if (key === "catmac") {
+          d.querySelectorAll(".mg-cat").forEach((cat) => {
+            const k = cat.getAttribute("data-cat");
+            const op = mgOpen.has("cat:" + k);
+            cat.removeAttribute("hidden");
+            if (cat.classList) cat.classList.toggle("is-open", op);
+            const body = cat.querySelector(".mg-cat-body");
+            if (body) {
+              if (op) body.removeAttribute("hidden");
+              else body.setAttribute("hidden", "");
+            }
+            cat.querySelectorAll(".mg-card-row").forEach((r) => r.removeAttribute("hidden"));
+          });
+        } else if (key === "intents") {
+          d.querySelectorAll(".mg-intent-row").forEach((r) => r.removeAttribute("hidden"));
+        }
+      } else {
+        let hit = false;
+        if (key === "catmac") {
+          d.querySelectorAll(".mg-cat").forEach((cat) => {
+            const lab = cat.querySelector(".mg-cat-lab2");
+            const fixed = cat.querySelector(".mg-cat-fixed");
+            const catName = lab && lab.value || (fixed ? fixed.textContent : "") || "";
+            const catMatch = libFold(catName).indexOf(q) >= 0;
+            let anyCardMatch = false;
+            cat.querySelectorAll(".mg-card-row").forEach((crow) => {
+              const cHit = libFold(crow.textContent).indexOf(q) >= 0;
+              if (cHit) anyCardMatch = true;
+              if (catMatch || cHit) crow.removeAttribute("hidden");
+              else crow.setAttribute("hidden", "");
+            });
+            const catHit = catMatch || anyCardMatch;
+            const body = cat.querySelector(".mg-cat-body");
+            if (catHit) {
+              hit = true;
+              cat.removeAttribute("hidden");
+              if (cat.classList) cat.classList.add("is-open");
+              if (body) body.removeAttribute("hidden");
+            } else {
+              cat.setAttribute("hidden", "");
+            }
+          });
+        } else if (key === "intents") {
+          d.querySelectorAll(".mg-intent-row").forEach((r) => {
+            const iHit = libFold(r.textContent).indexOf(q) >= 0;
+            if (iHit) {
+              hit = true;
+              r.removeAttribute("hidden");
+            } else r.setAttribute("hidden", "");
+          });
+        } else if (key === "who") {
+          const whoInput = d.querySelector("#mgWho");
+          const whoVal = whoInput ? whoInput.value : "";
+          hit = libFold(d.textContent).indexOf(q) >= 0 || libFold(whoVal).indexOf(q) >= 0;
+        } else {
+          hit = libFold(d.textContent).indexOf(q) >= 0;
+        }
+        if (hit) {
+          totalHits++;
+          d.removeAttribute("hidden");
+          d.open = true;
+        } else {
+          d.setAttribute("hidden", "");
+        }
       }
     });
+    const card = page.querySelector(".sx-card") || page;
+    let emptyP = page.querySelector("#libEmptySearch");
+    if (q && totalHits === 0) {
+      if (!emptyP) {
+        emptyP = document.createElement("p");
+        emptyP.className = "sx-none";
+        emptyP.id = "libEmptySearch";
+        emptyP.setAttribute("data-i18n-skip", "");
+        emptyP.textContent = "Nothing in the library matches this search.";
+        card.appendChild(emptyP);
+      }
+    } else if (emptyP) {
+      emptyP.remove();
+    }
     buttons.forEach((b) => {
       const on = !q && b.getAttribute("data-lm") === libOn;
       if (b.classList) b.classList.toggle("on", on);
@@ -31625,6 +31727,7 @@ What you type stays in this browser only.`;
     if (!buttons || !buttons.length) return;
     buttons.forEach((b) => {
       b.onclick = () => {
+        libView = "list";
         libOn = b.getAttribute("data-lm") || libOn;
         libQuery = "";
         mgOpen.add(libOn);
@@ -31710,12 +31813,8 @@ What you type stays in this browser only.`;
     mgSec(
       "data",
       "Catalog & data",
-      '<div class="ec-list" id="mgCatList"></div>',
+      (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>',
       null,
-      /* Only where a host answers: a browser has no folder, and the title line is then a title
-         line. The PATH IS THE CONTROL - clicking it opens the folder - and the pencil beside it
-         changes which folder that is; a click inside a summary would toggle the fold, so both
-         stop the event in wireManage. */
       dataTail
     );
     if (justHtml) return mgBody;
@@ -31726,6 +31825,9 @@ What you type stays in this browser only.`;
   }
   function libraryHeadHtml() {
     const name = catalogFileName();
+    if (libView === "history") {
+      return '<div class="sx-nav-title"><h2>' + esc(t("Library")) + "</h2></div>";
+    }
     return '<div class="screen-head"><h2>' + esc(t("Library")) + "</h2>" + (name ? '<span class="screen-name" data-i18n-skip>' + esc(name) + "</span>" : "") + "</div>";
   }
   var LIB_SCREEN = "library";
@@ -31742,18 +31844,25 @@ What you type stays in this browser only.`;
   function paintLibrary(host, body) {
     host = host || libHost();
     if (!host) return;
-    if (libView === "history") {
-      openHistory(host);
-      return;
-    }
+    const isHist = libView === "history";
     const name = catalogFileName();
-    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + '</div></div></div><div class="screen-actions">' + libraryActionsHtml() + "</div></div>";
+    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + '</div><div class="screen-actions">' + (isHist ? '<div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button>" : libraryActionsHtml()) + "</div></div>";
     const page = host.querySelector(".lib-list");
-    wireLibrary(page);
-    translateTree(page);
-    applyLibView(page);
-    dressDialogInputs(page);
-    markCutText(page);
+    if (isHist) {
+      wireLibShell(page);
+      openHistory(host.querySelector("#ehView") || host);
+      const back = host.querySelector("#ehClose");
+      if (back) back.onclick = () => {
+        libView = "list";
+        paintLibrary(host);
+      };
+    } else {
+      wireLibrary(page);
+      translateTree(page);
+      applyLibView(page);
+      dressDialogInputs(page);
+      markCutText(page);
+    }
     const at = document.activeElement;
     if (!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
       try {
@@ -32190,7 +32299,7 @@ What you type stays in this browser only.`;
   function generalGroups() {
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
     const groups = [{ rows: [
-      row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="first name" value="' + esc(agentName()) + '">'),
+      row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">'),
       row(
         "uilang",
         "translate",
@@ -32575,6 +32684,7 @@ What you type stays in this browser only.`;
     paintKeysInline();
     wireHotkeyRow(box);
     wirePage(box);
+    translateTree(box);
   }
   function wirePage(box) {
     syncColFloorRow();

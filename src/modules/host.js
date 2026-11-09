@@ -5,7 +5,7 @@ import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./cat
 import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
-import { askClose } from "./tabs.js";
+import { addTab, askClose } from "./tabs.js";
 import { hooks } from "./hooks.js";
 import { clearScreenOn } from "./screen-tabs.js";
 
@@ -437,6 +437,7 @@ function wireHost(){
   if(typeof h.onTrayGo==="function") h.onTrayGo(kind=>{
     if(kind==="settings"){ try{ hooks.openSettings(); }catch(e){} }
     else if(kind==="library"){ try{ hooks.openManage(); }catch(e){} }
+    else if(kind==="new-tab"){ try{ addTab(); }catch(e){} }
     else if(kind==="offer"){ try{ clearScreenOn(); }catch(e){} }
   });
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
