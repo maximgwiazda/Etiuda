@@ -1813,10 +1813,12 @@ try {
   try {
     delete nodeRequire.cache[nodeRequire.resolve("../electron-builder.js")];
     const bld = nodeRequire(path.join(ROOT, "electron-builder.js"));
-    const files = (bld.linux && bld.linux.files) || bld.files || [];
-    pkgHasPng = files.includes("shell/etiuda-tray.png");
+    /* The root list carries it, and no platform-level `files` exists to stand in for the root list on Linux. */
+    const files = bld.files || [];
+    pkgHasPng = files.includes("shell/etiuda-tray.png") && files.includes("shell/main.js")
+      && !(bld.linux && bld.linux.files) && !(bld.win && bld.win.files);
   } catch {}
-  check(pkgHasPng, "973b shell/etiuda-tray.png is in the package file list for Linux in electron-builder.js");
+  check(pkgHasPng, "973b shell/etiuda-tray.png is in electron-builder.js's root file list beside shell/main.js, with no platform-level list");
 
   /* 973c. Tray built from PNG on linux and .ico on win32 */
   const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
