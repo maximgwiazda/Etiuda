@@ -3,7 +3,8 @@
 import { flushPillState } from "./pill-state.js";
 import { drawIntentRail, railDecorate, railScheduleSort, railSettle } from "./rail-list.js";
 import { syncShortcutTitles } from "./shortcuts.js";
-import { escapeLadderStep, scheduleTabSave, escapeHeld } from "./tabs.js";
+import { escapeLadderStep, scheduleTabSave, escapeHeld, turnScreenTabToCards } from "./tabs.js";
+import { screenOn } from "./screen-tabs.js";
 import { markEntrySel, navEntry } from "./entry-walk.js";
 import { syncIntentClearBtns, syncIntentInput } from "./intent-clear.js";
 import { intentEl, $ } from "./dom.js";
@@ -45,6 +46,11 @@ function queueSearchSettle(){
 }
 function wireSearchBox(){
   intentEl.oninput=()=>{
+    if(screenOn){
+      turnScreenTabToCards(intentEl.value);
+      queueSearchSettle();
+      return;
+    }
     // The query never alters selected intents; picking is Enter's job.
     intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
     syncIntentClearBtns();
@@ -74,7 +80,14 @@ function wireSearchBox(){
   intentEl.addEventListener("keydown",e=>{
     if(e.altKey || e.metaKey) return;
     // The box's door onto the escape ladder.
-    if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); escapeHeld(e.repeat); escapeLadderStep(); escapeHeld(false); return; }
+    if(e.key==="Escape"){
+      if(screenOn){
+        try{ intentEl.blur(); }catch(_){}
+        e.preventDefault(); e.stopImmediatePropagation();
+        return;
+      }
+      e.preventDefault(); e.stopImmediatePropagation(); escapeHeld(e.repeat); escapeLadderStep(); escapeHeld(false); return;
+    }
     /* Caret keys move inside a query; category navigation happens only at the matching edge
        or when the box is empty. Home and End move the caret natively. */
     if(e.key==="ArrowLeft"||e.key==="ArrowRight"){

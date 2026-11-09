@@ -17,14 +17,29 @@ import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js"
 import { pax, intentEl, roleSel, $ } from "./dom.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
+import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, dropScreenTab, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="eSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
 
-wireScreenTabsChange(() => drawTabs());
+wireScreenTabsChange(() => {
+  if (screenOn) {
+    snapshotActiveTab();
+    if (intentEl) {
+      intentEl.value = "";
+      intentEl.classList.remove("set");
+      syncIntentClearBtns();
+    }
+    if (pax) {
+      pax.value = "";
+      const paxClear = $("#paxClear");
+      if (paxClear) paxClear.disabled = true;
+    }
+  }
+  drawTabs();
+});
 /* A closed screen hands the keyboard to the search box, so typing lands there at once. */
 wireScreenTabsReturn(id => {
   if (id && tabs.some(x => x.id === id)) switchTab(id);
@@ -261,7 +276,35 @@ function wirePaxBlur(){
     }
   });
 }
+function turnScreenTabToCards(val, paxVal){
+  const sid = screenOn;
+  if(!sid) return;
+  const sidx = screens.indexOf(sid);
+  const stripPos = tabs.length + (sidx >= 0 ? sidx : 0);
+  dropScreenTab(sid);
+  const tb = blankTab();
+  tb.intentBox = String(val != null ? val : "");
+  if(paxVal) tb.pax = String(paxVal);
+  tabs.splice(stripPos, 0, tb);
+  activeTabId = tb.id;
+  setPrevTabId(tb.id);
+  applyTab(tb);
+  saveTabSession();
+  try{
+    if(intentEl){
+      intentEl.focus({preventScroll:true});
+      const len = intentEl.value.length;
+      intentEl.setSelectionRange(len, len);
+    }
+  }catch(_){}
+}
 function scheduleTabSave(){
+  if(screenOn){
+    if(pax && pax.value){
+      turnScreenTabToCards("", pax.value);
+    }
+    return;
+  }
   wirePaxBlur();
   paxTabId=activeTabId;
   const tb=tabs.find(x=>x.id===activeTabId);
@@ -1463,7 +1506,9 @@ export {
   watchTabPath,
   TAB_KEY,
   tabs,
+  activeTabId,
   tabSaveTimer,
   tabInsertAnimating,
+  turnScreenTabToCards,
   TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName
 };

@@ -3483,13 +3483,17 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
    586 pixels, a 1438 x 879 window at 150 per cent. */
 @media (max-height:700px){
   .mt-row,.mt-tab{font-size:11px;padding:0}
-  .mt-sec{margin-bottom:8px}
-  .mt-screen.screen-page{padding:10px 16px;gap:8px}
-  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:8px}
-  .mt-h{padding:6px 8px;font-size:11px;gap:6px}
-  .mt-h small{font-size:10.5px}
-  .mt-readings{margin:0 0 4px}
-  .mt-moved{margin:6px 0 0}
+  .mt-sec{margin-bottom:4px}
+  .mt-sec h3{margin-bottom:2px}
+  .mt-screen.screen-page{padding:6px 16px;gap:4px}
+  .mt-screen .screen-head h2{font-size:17px}
+  .mt-screen .mt-sub{margin-top:1px;font-size:12px}
+  .mt-health{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:4px}
+  .mt-h{padding:3px 8px;font-size:11px;gap:6px}
+  .mt-h small{font-size:10px}
+  .mt-readings{margin:0 0 2px}
+  .mt-moved{margin:2px 0 0}
+  .mt-grid{columns:200px;column-gap:16px}
 }
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
@@ -3502,7 +3506,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --scrim-filter:none;--mark-filter:none}
 /* ---------- Screen tabs & host (boards 965, 967, 969) ---------- */
 body.screen-on .fab-stack,
-body.screen-on .fills,
 body.screen-on .pills-slot,
 body.screen-on .pills-probe,
 body.screen-on .stage,
@@ -9297,7 +9300,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-08";
+  var E_BUILT = "2026-11-09";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -11452,6 +11455,7 @@ What you type stays in this browser only.`;
     TAB_FLOOR_W: () => TAB_FLOOR_W,
     TAB_KEY: () => TAB_KEY,
     activeHeard: () => activeHeard,
+    activeTabId: () => activeTabId,
     activeTabName: () => activeTabName,
     activeWords: () => activeWords,
     addTab: () => addTab,
@@ -11485,6 +11489,7 @@ What you type stays in this browser only.`;
     tabSaveTimer: () => tabSaveTimer,
     tabSessionPayload: () => tabSessionPayload,
     tabs: () => tabs,
+    turnScreenTabToCards: () => turnScreenTabToCards,
     watchTabPath: () => watchTabPath,
     wireTabDrag: () => wireTabDrag
   });
@@ -12307,6 +12312,7 @@ What you type stays in this browser only.`;
     _setThrowForTest: () => _setThrowForTest,
     clearScreenOn: () => clearScreenOn,
     closeScreenTab: () => closeScreenTab,
+    dropScreenTab: () => dropScreenTab,
     frontScreenTab: () => frontScreenTab,
     getScreenDef: () => getScreenDef,
     isScreenOn: () => isScreenOn,
@@ -12378,6 +12384,21 @@ What you type stays in this browser only.`;
     }
     if (onScreenChange) onScreenChange();
   }
+  function dropScreenTab(id) {
+    const idx = screens.indexOf(id);
+    if (idx >= 0) screens.splice(idx, 1);
+    if (screenOn === id) {
+      screenOn = "";
+      if (typeof document !== "undefined" && document.body && document.body.classList) {
+        document.body.classList.remove("screen-on");
+      }
+      const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
+      if (sh) {
+        sh.innerHTML = "";
+        sh.hidden = true;
+      }
+    }
+  }
   function clearScreenOn() {
     screenOn = "";
     if (typeof document !== "undefined" && document.body && document.body.classList) {
@@ -12405,7 +12426,22 @@ What you type stays in this browser only.`;
   var tabs = [];
   var activeTabId = null;
   var tabSaveTimer = null;
-  wireScreenTabsChange(() => drawTabs());
+  wireScreenTabsChange(() => {
+    if (screenOn) {
+      snapshotActiveTab();
+      if (intentEl) {
+        intentEl.value = "";
+        intentEl.classList.remove("set");
+        syncIntentClearBtns();
+      }
+      if (pax) {
+        pax.value = "";
+        const paxClear = $("#paxClear");
+        if (paxClear) paxClear.disabled = true;
+      }
+    }
+    drawTabs();
+  });
   wireScreenTabsReturn((id) => {
     if (id && tabs.some((x) => x.id === id)) switchTab(id);
     else if (tabs[0]) switchTab(tabs[0].id);
@@ -12630,7 +12666,36 @@ What you type stays in this browser only.`;
       }
     });
   }
+  function turnScreenTabToCards(val, paxVal) {
+    const sid = screenOn;
+    if (!sid) return;
+    const sidx = screens.indexOf(sid);
+    const stripPos = tabs.length + (sidx >= 0 ? sidx : 0);
+    dropScreenTab(sid);
+    const tb = blankTab();
+    tb.intentBox = String(val != null ? val : "");
+    if (paxVal) tb.pax = String(paxVal);
+    tabs.splice(stripPos, 0, tb);
+    activeTabId = tb.id;
+    setPrevTabId(tb.id);
+    applyTab(tb);
+    saveTabSession();
+    try {
+      if (intentEl) {
+        intentEl.focus({ preventScroll: true });
+        const len = intentEl.value.length;
+        intentEl.setSelectionRange(len, len);
+      }
+    } catch (_) {
+    }
+  }
   function scheduleTabSave() {
+    if (screenOn) {
+      if (pax && pax.value) {
+        turnScreenTabToCards("", pax.value);
+      }
+      return;
+    }
     wirePaxBlur();
     paxTabId = activeTabId;
     const tb = tabs.find((x) => x.id === activeTabId);
@@ -32445,6 +32510,11 @@ What you type stays in this browser only.`;
   }
   function wireSearchBox() {
     intentEl.oninput = () => {
+      if (screenOn) {
+        turnScreenTabToCards(intentEl.value);
+        queueSearchSettle();
+        return;
+      }
       intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
       syncIntentClearBtns();
       putEntrySel(null);
@@ -32466,6 +32536,15 @@ What you type stays in this browser only.`;
     intentEl.addEventListener("keydown", (e) => {
       if (e.altKey || e.metaKey) return;
       if (e.key === "Escape") {
+        if (screenOn) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
         e.preventDefault();
         e.stopImmediatePropagation();
         escapeHeld(e.repeat);
