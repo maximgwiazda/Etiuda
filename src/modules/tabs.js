@@ -26,7 +26,7 @@ let tabSaveTimer=null;
 
 wireScreenTabsChange(() => {
   if (screenOn) {
-    snapshotActiveTab();
+    snapshotActiveTab(true);
     if (intentEl) {
       intentEl.value = "";
       intentEl.classList.remove("set");
@@ -42,8 +42,8 @@ wireScreenTabsChange(() => {
 });
 /* A closed screen hands the keyboard to the search box, so typing lands there at once. */
 wireScreenTabsReturn(id => {
-  if (id && tabs.some(x => x.id === id)) switchTab(id);
-  else if (tabs[0]) switchTab(tabs[0].id);
+  if (id && tabs.some(x => x.id === id)) switchTab(id, true);
+  else if (tabs[0]) switchTab(tabs[0].id, true);
   try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
 });
 
@@ -159,13 +159,14 @@ function tabLabel(tb, i){
   return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
 }
 /* The conversation in front as its tab is named, from the name typed in it now. */
+function getActiveTabId(){ return activeTabId; }
 function activeTabName(){
   const i=tabs.findIndex(x=>x.id===activeTabId);
   if(i<0) return "";
   return tabLabel(Object.assign({}, tabs[i], {pax:pax ? pax.value : tabs[i].pax}), i);
 }
-function snapshotActiveTab(){
-  if(!activeTabId) return;
+function snapshotActiveTab(force){
+  if((screenOn && !force) || !activeTabId) return;
   const t=tabs.find(x=>x.id===activeTabId);
   if(!t) return;
   t.lang=lang;
@@ -415,11 +416,14 @@ function applyTab(tb){
     scrollTabIntoView(tb.id);
   });
 }
-function switchTab(id){
+function switchTab(id, force){
+  const fromScreen = Boolean(screenOn) || Boolean(force);
   if(screenOn) clearScreenOn();
-  if(!id||id===activeTabId) return;
-  snapshotActiveTab();
-  endPaxConversation(tabs.find(x=>x.id===activeTabId));
+  if(!id||(id===activeTabId && !fromScreen)) return;
+  if(!fromScreen){
+    snapshotActiveTab();
+    endPaxConversation(tabs.find(x=>x.id===activeTabId));
+  }
   const t=tabs.find(x=>x.id===id);
   if(!t) return;
   applyTab(t);
@@ -559,8 +563,9 @@ function animateTabInsert(mutate){
   }));
 }
 function addTab(){
+  const fromScreen = Boolean(screenOn);
   if(screenOn) clearScreenOn();
-  snapshotActiveTab();
+  if(!fromScreen) snapshotActiveTab();
   const t=blankTab();
   // applyTab() redraws the strip, so the whole insert happens inside the one capture
   animateTabInsert(()=>{ tabs.push(t); applyTab(t); });
@@ -1506,7 +1511,7 @@ export {
   watchTabPath,
   TAB_KEY,
   tabs,
-  activeTabId,
+  getActiveTabId,
   tabSaveTimer,
   tabInsertAnimating,
   turnScreenTabToCards,

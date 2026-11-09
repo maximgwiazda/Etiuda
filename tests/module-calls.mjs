@@ -6255,7 +6255,7 @@ const CARD_B = {
         const notInScreens = !STAB.screens.includes(sid);
         const countAfter = T.tabs.length + STAB.screens.length;
         const countOk = countBefore === countAfter && countAfter === 3;
-        const curTab = T.tabs.find(x => x.id === T.activeTabId);
+        const curTab = T.tabs.find(x => x.id === T.getActiveTabId());
         const tabIsCards = curTab && curTab.id !== "t-a" && curTab.id !== "t-b" && curTab.intentBox === letter;
         const stripPos = T.tabs.indexOf(curTab);
         const posOk = stripPos === 2;

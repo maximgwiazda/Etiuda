@@ -11455,7 +11455,6 @@ What you type stays in this browser only.`;
     TAB_FLOOR_W: () => TAB_FLOOR_W,
     TAB_KEY: () => TAB_KEY,
     activeHeard: () => activeHeard,
-    activeTabId: () => activeTabId,
     activeTabName: () => activeTabName,
     activeWords: () => activeWords,
     addTab: () => addTab,
@@ -11471,6 +11470,7 @@ What you type stays in this browser only.`;
     escapeHeld: () => escapeHeld,
     escapeLadderStep: () => escapeLadderStep,
     fitTabLabels: () => fitTabLabels,
+    getActiveTabId: () => getActiveTabId,
     initTabs: () => initTabs,
     noteActive: () => noteActive,
     reopenClosedTab: () => reopenClosedTab,
@@ -12428,7 +12428,7 @@ What you type stays in this browser only.`;
   var tabSaveTimer = null;
   wireScreenTabsChange(() => {
     if (screenOn) {
-      snapshotActiveTab();
+      snapshotActiveTab(true);
       if (intentEl) {
         intentEl.value = "";
         intentEl.classList.remove("set");
@@ -12443,8 +12443,8 @@ What you type stays in this browser only.`;
     drawTabs();
   });
   wireScreenTabsReturn((id) => {
-    if (id && tabs.some((x) => x.id === id)) switchTab(id);
-    else if (tabs[0]) switchTab(tabs[0].id);
+    if (id && tabs.some((x) => x.id === id)) switchTab(id, true);
+    else if (tabs[0]) switchTab(tabs[0].id, true);
     try {
       intentEl && intentEl.focus({ preventScroll: true });
     } catch (_) {
@@ -12549,13 +12549,16 @@ What you type stays in this browser only.`;
     }
     return t("Tab") + " " + ((i != null ? i : tabs.indexOf(tb)) + 1);
   }
+  function getActiveTabId() {
+    return activeTabId;
+  }
   function activeTabName() {
     const i = tabs.findIndex((x) => x.id === activeTabId);
     if (i < 0) return "";
     return tabLabel(Object.assign({}, tabs[i], { pax: pax ? pax.value : tabs[i].pax }), i);
   }
-  function snapshotActiveTab() {
-    if (!activeTabId) return;
+  function snapshotActiveTab(force) {
+    if (screenOn && !force || !activeTabId) return;
     const t2 = tabs.find((x) => x.id === activeTabId);
     if (!t2) return;
     t2.lang = lang;
@@ -12799,11 +12802,14 @@ What you type stays in this browser only.`;
       scrollTabIntoView(tb.id);
     });
   }
-  function switchTab(id) {
+  function switchTab(id, force) {
+    const fromScreen = Boolean(screenOn) || Boolean(force);
     if (screenOn) clearScreenOn();
-    if (!id || id === activeTabId) return;
-    snapshotActiveTab();
-    endPaxConversation(tabs.find((x) => x.id === activeTabId));
+    if (!id || id === activeTabId && !fromScreen) return;
+    if (!fromScreen) {
+      snapshotActiveTab();
+      endPaxConversation(tabs.find((x) => x.id === activeTabId));
+    }
     const t2 = tabs.find((x) => x.id === id);
     if (!t2) return;
     applyTab(t2);
@@ -12924,8 +12930,9 @@ What you type stays in this browser only.`;
     }));
   }
   function addTab() {
+    const fromScreen = Boolean(screenOn);
     if (screenOn) clearScreenOn();
-    snapshotActiveTab();
+    if (!fromScreen) snapshotActiveTab();
     const t2 = blankTab();
     animateTabInsert(() => {
       tabs.push(t2);
