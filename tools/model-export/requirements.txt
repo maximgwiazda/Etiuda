@@ -10,3 +10,4 @@ onnx-ir==1.1.0
 onnx==1.23.2
 numpy==2.5.4
 safetensors==0.8.0
+pillow==13.0.0
