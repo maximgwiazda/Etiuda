@@ -62,6 +62,9 @@ function statsCompact(pack){
   // A pair names both of its ids by place too (bumpPair), and an id only a pair names is still used.
   const pairs=fn=>Object.keys(days).forEach(d=>{ const b=days[d]; if(b&&b.p&&typeof b.p==="object") fn(b); });
   pairs(b=>Object.keys(b.p).forEach(a=>{ used.add(a); Object.keys(b.p[a]||{}).forEach(z=>used.add(z)); }));
+  // A card's languages name it by place too. The codes under that place are not places.
+  const cardLangs=fn=>Object.keys(days).forEach(d=>{ const b=days[d]; if(b&&b.k&&typeof b.k==="object"&&!Array.isArray(b.k)) fn(b); });
+  cardLangs(b=>Object.keys(b.k).forEach(a=>used.add(a)));
   const to=Object.create(null), keep=[];
   ids.forEach((id,at)=>{ if(id!=null && used.has(String(at))){ to[at]=keep.length; keep.push(id); } });
   if(keep.length===ids.length && used.size===keep.length) return;
@@ -79,6 +82,15 @@ function statsCompact(pack){
       Object.keys(row).forEach(z=>{ if(z in to) r[to[z]]=row[z]; });
     });
     b.p=out;
+  });
+  cardLangs(b=>{
+    const out={};
+    Object.keys(b.k).forEach(a=>{
+      const row=b.k[a];
+      if(!(a in to)||!row||typeof row!=="object"||Array.isArray(row)) return;
+      out[to[a]]=row;
+    });
+    b.k=out;
   });
   pack.dayIds=keep;
 }
@@ -131,6 +143,18 @@ function bumpLang(pack, lang, at){
   const b=statsDay(pack, at);
   b.l[code]=(b.l[code]|0)+1;
 }
+/* A COUNTER PER CARD AND LANGUAGE ACTUALLY COPIED IN. The day's `k` is made by the first
+   such copy, keyed by the card's place and then by code, so a day without one keeps its
+   shape. A key that is not a usable code is refused, the same way bumpLang refuses it. */
+function bumpCardLang(pack, id, lang, at){
+  if(!id) return;
+  const code=String(lang==null?"":lang);
+  if(!code||/[\s:]/.test(code)) return;
+  const b=statsDay(pack, at), k=statsIdAt(pack, String(id));
+  if(!b.k||typeof b.k!=="object"||Array.isArray(b.k)) b.k={};
+  const row=(b.k[k]&&typeof b.k[k]==="object"&&!Array.isArray(b.k[k]))?b.k[k]:(b.k[k]={});
+  row[code]=(row[code]|0)+1;
+}
 /* A suggestion taken, and an opening that showed any, as counts only. The day's bucket gains
    g or o on the first of that kind, so a day with neither keeps the shape it had. */
 function bumpSuggest(pack, at){
@@ -154,7 +178,11 @@ function statsForgetCards(pack, keep){
   let n=0;
   Object.keys(pack.days||{}).forEach(d=>{
     const c=pack.days[d]&&pack.days[d].c, p=pack.days[d]&&pack.days[d].p;
+    const langs=pack.days[d]&&pack.days[d].k;
     if(c) Object.keys(c).forEach(k=>{ if(!keep(ids[k])){ delete c[k]; n++; } });
+    if(langs&&typeof langs==="object"&&!Array.isArray(langs)) Object.keys(langs).forEach(k=>{
+      if(!keep(ids[k])){ delete langs[k]; n++; }
+    });
     // A pair goes with either of its cards.
     if(p&&typeof p==="object") Object.keys(p).forEach(a=>{
       const row=p[a];
@@ -229,7 +257,8 @@ function statsLearntAfter(pack, from, today){
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without
    a whole span the answer is the lifetime counters, as every answer was before. A span's answer
-   also carries `pairs` [{from, to, n}] summed from the same days, and omits the key when none. */
+   also carries `pairs` [{from, to, n}] summed from the same days, and omits the key when none.
+   A card carries `langs` only for a span whose days counted that card by language. */
 function statsDoc(pack, info){
   const from=String(info&&info.period&&info.period.from||"");
   const to=String(info&&info.period&&info.period.to||"");
@@ -240,6 +269,7 @@ function statsDoc(pack, info){
   let suggestTaken=(pack&&pack.suggestTaken)|0, suggestOpen=(pack&&pack.suggestOpen)|0;
   let since="";
   const pr=new Map();
+  const cl={};
   if(spanned){
     const days=(pack&&pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days))?pack.days:{};
     const ids=(pack&&Array.isArray(pack.dayIds))?pack.dayIds:[];
@@ -254,6 +284,18 @@ function statsDoc(pack, info){
       });
       Object.keys(b.i||{}).forEach(k=>{ const id=ids[k]; if(id!=null) ic[id]=(ic[id]|0)+(b.i[k]|0); });
       Object.keys(b.l||{}).forEach(c=>{ lc[c]=(lc[c]|0)+(b.l[c]|0); });
+      const bk=b.k&&typeof b.k==="object"&&!Array.isArray(b.k)?b.k:{};
+      Object.keys(bk).forEach(k=>{
+        const id=ids[k], row=bk[k];
+        if(id==null||!row||typeof row!=="object"||Array.isArray(row)) return;
+        Object.keys(row).forEach(code=>{
+          if(!code||/[\s:]/.test(code)) return;
+          const n=row[code]|0;
+          if(n<=0) return;
+          const bag=cl[id]||(cl[id]={});
+          bag[code]=(bag[code]|0)+n;
+        });
+      });
       misses+=b.m|0;
       const bp=b.p&&typeof b.p==="object"?b.p:{};
       Object.keys(bp).forEach(a=>{
@@ -276,6 +318,12 @@ function statsDoc(pack, info){
     if(!n) return;
     const row={id:String(id),n:n};
     if(at[id]) row.at=String(at[id]);
+    const bag=cl[id];
+    if(bag){
+      const langs={};
+      Object.keys(bag).forEach(code=>{ if(bag[code]|0) langs[code]=bag[code]|0; });
+      if(Object.keys(langs).length) row.langs=langs;
+    }
     cards.push(row);
   });
   const intents=[];
@@ -305,6 +353,7 @@ function statsDoc(pack, info){
 export {
   STATS_DAYS_KEPT,
   STATS_PAIR_DAYS,
+  bumpCardLang,
   bumpIntent,
   bumpLang,
   bumpMiss,
