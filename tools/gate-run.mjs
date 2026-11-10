@@ -153,9 +153,9 @@ export function compareRealProfileSnapshots(snapBefore, snapAfter) {
 
 
 
-/* The relay core for an unmapped engine relay file, the test architect's choice (2026-10-28 00:13): the five relay files
-   once each, whole, about three minutes. No single-leg switch exists in relay-unit or relay-channel, so legs named one by one
-   ran each file whole, nine times over. It changes by his word only, or when real switches land. */
+/* The relay core for an unmapped engine relay file, the test architect's choice (2026-10-28 00:13): five relay files,
+   once each. relay-unit, relay-blob, relay-stub and relay-workerd stay whole. relay-channel is narrowed by
+   narrowRelayChannel to the parts the diff can change; the bare step here is what that narrowing replaces. */
 export const RELAY_CORE = [
   { step: "relay-unit", leg: "whole", file: "tests/relay-unit.mjs", env: {} },
   { step: "relay-channel", leg: "whole", file: "tests/relay-channel.mjs", env: {} },
@@ -163,6 +163,13 @@ export const RELAY_CORE = [
   { step: "relay-stub", leg: "whole", file: "tests/relay-stub.mjs", env: {} },
   { step: "relay-workerd", leg: "whole", file: "tests/relay-workerd.mjs", env: {} },
 ];
+
+/* The relay-channel part bound by many desks and restarts (about six minutes). A merge drops it.
+   The release profile runs the file with RELAY_CHANNEL_ONLY unset, so the part still runs there. */
+export const RELEASE_ONLY_PARTS = ["p939"];
+
+/* Sealing, signatures and refusals. A relay-layer diff keeps these even when the part graph missed them. */
+const CHANNEL_SEAL_PARTS = ["p940", "p944", "p946", "p919", "p947", "p951", "p952", "p956", "p981", "p938", "p1165"];
 
 export const RELEASE_ONLY_LEGS = [
   "tests/desk-growth.mjs",
@@ -866,6 +873,64 @@ function closePlan(root, wholeChain, changed, gf, reason, extra) {
   return Object.assign({ failClosed: true, reason, steps, walled }, extra || {});
 }
 
+/* A bare tests/relay-channel.mjs step runs every part. Replace it with the parts that read the diff,
+   leaving out the release-only part. The suite's own change runs every part that is not release-only.
+   A relay file keeps the sealing and refusal parts on that pass. No part means a bare step goes.
+   A diff the graph hits, with no bare step yet, gains one step: team-join is not relay code and is not
+   a text scan, so nothing else schedules the file. An empty part list leaves a bare step whole, so a
+   parse that found nothing cannot drop the file. */
+function narrowRelayChannel(steps, root, changed, gf, isRelayCode) {
+  if (!gf || typeof gf.relayChannelParts !== "function" || typeof gf.relayChannelPartIds !== "function") return;
+  const order = gf.relayChannelPartIds(root);
+  if (!order.length) return;
+  const release = new Set(RELEASE_ONLY_PARTS);
+  const own = (changed || []).some(f => normRel(f) === "tests/relay-channel.mjs");
+  let chosen;
+  if (own) {
+    chosen = order.filter(id => !release.has(id));
+  } else {
+    const hit = new Set(gf.relayChannelParts(root, (changed || []).map(normRel)));
+    if ((changed || []).some(f => isRelayCode(normRel(f)))) {
+      for (const id of CHANNEL_SEAL_PARTS) hit.add(id);
+    }
+    chosen = order.filter(id => hit.has(id) && !release.has(id));
+  }
+  const bare = [];
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    if (normRel(s.file) !== "tests/relay-channel.mjs") continue;
+    if (s.env && s.env.RELAY_CHANNEL_ONLY) continue;
+    bare.push(i);
+  }
+  if (!chosen.length) {
+    if (!bare.length) return;
+    for (let k = bare.length - 1; k >= 0; k--) steps.splice(bare[k], 1);
+    console.log("gate-run area: no relay-channel part reads this diff");
+    return;
+  }
+  const envOnly = { RELAY_CHANNEL_ONLY: chosen.join(",") };
+  const note = "relay-channel parts (" + chosen.length + ")";
+  if (!bare.length) {
+    steps.push({
+      script: "area",
+      cmd: "node tests/relay-channel.mjs",
+      file: "tests/relay-channel.mjs",
+      args: [],
+      env: envOnly,
+      note,
+    });
+  } else {
+    const first = bare[0];
+    steps[first] = Object.assign({}, steps[first], {
+      args: (steps[first].args || []).slice(),
+      env: Object.assign({}, steps[first].env, envOnly),
+      note,
+    });
+    for (let k = bare.length - 1; k >= 1; k--) steps.splice(bare[k], 1);
+  }
+  console.log("gate-run area: relay-channel runs " + chosen.length + " part(s)");
+}
+
 export async function planAreaRun(root, changed, pkg, base = "main", ready) {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
@@ -1087,6 +1152,7 @@ export async function planAreaRun(root, changed, pkg, base = "main", ready) {
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
   appendTextScans(steps, addedFiles, windowGates, root, changed, gf);
+  narrowRelayChannel(steps, root, changed, gf, isRelayCode);
   return { failClosed: false, reason: "", plan: toolsOnly ? "gate tools" : "mapped", steps, gaps, walled: windowGates };
 }
 

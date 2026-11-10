@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 25;
+const EXPECTED = 31;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31) */
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -438,6 +438,39 @@ try {
   check(subjectMiss.length === 0,
     "gf25 every subject path is a tracked file and the result line's subject is the gate tools: "
     + (subjectMiss.length ? subjectMiss.join("; ") : Object.keys(subject).length + " legs"));
+
+  /* Relay-channel parts: a file selects the parts that import or read it. The release part p939 is still
+     named by the graph; the merge plan drops it. While relayChannelParts is missing, these are red. */
+  const channelParts = typeof gfTool.relayChannelParts === "function" ? gfTool.relayChannelParts : null;
+  const joinParts = channelParts ? channelParts(ROOT, ["src/modules/team-join.js"]) : null;
+  check(Array.isArray(joinParts) && joinParts.includes("p987") && !joinParts.includes("p940") && !joinParts.includes("p921") && !joinParts.includes("p939"),
+    "gf26 src/modules/team-join.js selects p987 and not the channel, cancel or live-path parts: "
+    + (joinParts ? joinParts.join(",") : "relayChannelParts missing"));
+  const attackParts = channelParts ? channelParts(ROOT, ["relay/test/attacks.mjs"]) : null;
+  check(Array.isArray(attackParts) && attackParts.includes("p943") && attackParts.length === 1,
+    "gf27 relay/test/attacks.mjs selects p943 only: " + (attackParts ? attackParts.join(",") : "relayChannelParts missing"));
+  const packParts = channelParts ? channelParts(ROOT, ["src/modules/pack.js"]) : null;
+  check(Array.isArray(packParts) && packParts.length === 0,
+    "gf28 src/modules/pack.js selects no relay-channel part: " + (packParts ? String(packParts.length) : "relayChannelParts missing"));
+
+  const releaseParts = grTool.RELEASE_ONLY_PARTS;
+  check(Array.isArray(releaseParts) && releaseParts.includes("p939") && !releaseParts.includes("p919") && !releaseParts.includes("p921"),
+    "gf31 the live-path part p939 is release-only, and the refusal parts stay at merge: "
+    + (Array.isArray(releaseParts) ? releaseParts.join(",") : "RELEASE_ONLY_PARTS missing"));
+
+  function channelOnly(plan) {
+    const steps = (plan && plan.steps || []).filter(s => String(s.file || "").replace(/\\/g, "/") === "tests/relay-channel.mjs");
+    if (steps.length !== 1) return "steps " + steps.length;
+    return String((steps[0].env || {}).RELAY_CHANNEL_ONLY || "");
+  }
+  const joinPlan = await grTool.planAreaRun(ROOT, ["src/modules/team-join.js"], pkgNow);
+  const joinOnly = channelOnly(joinPlan).split(",").filter(Boolean);
+  check(joinOnly.includes("p987") && !joinOnly.includes("p939") && !joinOnly.includes("p921"),
+    "gf29 a team-join change runs p987 and not the live path or the cancel part: " + joinOnly.join(","));
+  const shellPlan = await grTool.planAreaRun(ROOT, ["shell/main.js"], pkgNow);
+  const shellOnly = channelOnly(shellPlan).split(",").filter(Boolean);
+  check(shellOnly.includes("p919") && shellOnly.includes("p940") && shellOnly.includes("p946") && !shellOnly.includes("p939"),
+    "gf30 a shell change keeps the sealing and refusal parts and drops the live path: " + shellOnly.join(","));
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {
