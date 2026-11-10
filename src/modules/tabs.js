@@ -23,7 +23,9 @@ import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, dropS
 const TAB_KEY="eSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
-let tabOrder=[];
+/* One array for the life of the page, changed in place and never reassigned: the bundled page reads the binding it
+   took at load, so a reassignment would leave it on the old order (split-guard's bridge). */
+const tabOrder=[];
 let editingTabId=null;
 
 /* The strip is redrawn, then the rail is measured. Leaving a screen gives the pill bar
@@ -228,7 +230,7 @@ function getTabOrder(){
       out.push(s);
     }
   });
-  tabOrder = out.slice();
+  tabOrder.splice(0, tabOrder.length, ...out);
   return tabOrder;
 }
 /* The conversation in front as its tab is named, from the name typed in it now. */
@@ -432,9 +434,9 @@ function loadTabSession(){
       });
     }
     if(Array.isArray(data.order)){
-      tabOrder = data.order.filter(id => typeof id === "string" && (tabs.some(t => t.id === id) || (typeof screens !== "undefined" && screens.includes(id))));
+      tabOrder.splice(0, tabOrder.length, ...data.order.filter(id => typeof id === "string" && (tabs.some(t => t.id === id) || (typeof screens !== "undefined" && screens.includes(id)))));
     } else {
-      tabOrder = tabs.map(t => t.id).concat(typeof screens !== "undefined" && Array.isArray(screens) ? screens : []);
+      tabOrder.splice(0, tabOrder.length, ...tabs.map(t => t.id).concat(typeof screens !== "undefined" && Array.isArray(screens) ? screens : []));
     }
     return true;
   }catch(e){ return false; }
@@ -888,7 +890,7 @@ function moveTab(from,to){
   animateTabReorder(()=>{
     const [moved]=order.splice(from,1);
     order.splice(to,0,moved);
-    tabOrder=order.slice();
+    tabOrder.splice(0, tabOrder.length, ...order);
     tabs.sort((a,b)=>tabOrder.indexOf(a.id)-tabOrder.indexOf(b.id));
     if(typeof screens !== "undefined" && Array.isArray(screens)){
       screens.sort((a,b)=>tabOrder.indexOf(a)-tabOrder.indexOf(b));
