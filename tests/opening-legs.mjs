@@ -11,6 +11,7 @@
  *   957o6 a frame that throws still gives way
  *   957o7 no frames and a ready that never comes gives way by the failsafe
  *   957o8 reduced motion: a ready that never comes gives way by the failsafe
+ *   1110o9 a folder that holds nothing does not say a catalog is offered; a listing that holds one does, in English and in Polish
  *
  * Exit code is the number of failed checks.
  */
@@ -458,6 +459,72 @@ async function run() {
       });
       const ok8 = beforeFailsafe.launchActive && !beforeFailsafe.ended && afterFailsafe.launchGone && afterFailsafe.reasonFailsafe;
       check(ok8, "957o8 reduced motion: a ready that never comes gives way by the failsafe");
+      await page.close();
+    }
+
+    /* -------------------------------------------------------------------------
+     * 1110o9: a set folder says a catalog is offered only when the folder holds one
+     * ------------------------------------------------------------------------- */
+    {
+      const page = await browser.newPage();
+      await page.evaluateOnNewDocument(() => {
+        try { localStorage.setItem("eUiLang", "en"); } catch (e) {}
+        window.__foldListing = null;
+        window.E_HOST = {
+          platform: "win32",
+          catalogFolder: "C:\\Docs\\Etiuda",
+          catalogFile: "",
+          catalogIn: "",
+          catalogBuiltIn: false,
+          catalogFiles: () => Promise.resolve([]),
+          onCatalogFile: () => {},
+          onCatalogListing: (fn) => { window.__foldListing = fn; },
+          openCatalogFolder: () => Promise.resolve(true)
+        };
+      });
+      await page.goto("file://" + ENGINE_HTML);
+      const t0 = Date.now();
+      let ready = false;
+      while (Date.now() - t0 < 8000) {
+        ready = await page.evaluate(() => !!document.querySelector(".empty-desk"));
+        if (ready) break;
+        await sleep(100);
+      }
+      const readDesk = () => page.evaluate(() => {
+        const desk = document.querySelector(".empty-desk");
+        const code = document.querySelector("#emptyCatFolder");
+        return {
+          text: desk ? desk.textContent : "",
+          folder: code ? code.textContent : "",
+          listed: typeof window.__foldListing === "function"
+        };
+      });
+      const send = rows => page.evaluate((list) => {
+        if (typeof window.__foldListing !== "function") return false;
+        window.__foldListing(list);
+        return true;
+      }, rows);
+      const emptyEn = ready ? await readDesk() : { text: "", folder: "", listed: false };
+      const heldSent = emptyEn.listed ? await send([{ name: "shop.ec", mtime: 1, cards: 3, id: "shop", rev: 1 }]) : false;
+      const heldEn = await readDesk();
+      await page.evaluate(() => { try { localStorage.setItem("eUiLang", "pl"); } catch (e) {} });
+      const quietSent = await send([]);
+      const emptyPl = await readDesk();
+      const againSent = await send([{ name: "shop.ec", mtime: 1, cards: 3, id: "shop", rev: 1 }]);
+      const heldPl = await readDesk();
+      const offerEn = "offers you the newest catalog";
+      const offerPl = "proponuje najnowszy";
+      const ok9 = ready && emptyEn.listed && heldSent && quietSent && againSent
+        && emptyEn.folder.length > 0 && heldEn.folder.length > 0
+        && emptyPl.folder.length > 0 && heldPl.folder.length > 0
+        && !emptyEn.text.includes(offerEn) && heldEn.text.includes(offerEn)
+        && !emptyPl.text.includes(offerPl) && heldPl.text.includes(offerPl);
+      check(ok9, "1110o9 a folder that holds nothing does not say a catalog is offered; a listing that holds one does, in English and in Polish"
+        + " (ready " + ready + ", listed " + emptyEn.listed
+        + ", empty-en " + JSON.stringify(emptyEn.text.slice(0, 140))
+        + ", held-en " + JSON.stringify(heldEn.text.slice(0, 140))
+        + ", empty-pl " + JSON.stringify(emptyPl.text.slice(0, 140))
+        + ", held-pl " + JSON.stringify(heldPl.text.slice(0, 140)) + ")");
       await page.close();
     }
   } finally {

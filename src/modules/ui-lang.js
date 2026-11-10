@@ -1114,6 +1114,8 @@ UI_STRINGS.pl={
   "The tour carries on once this tab is closed.":"Przewodnik ruszy dalej, gdy ta zakładka się zamknie.",
   "That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.":"To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon=\"settings\"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.",
   "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.":"Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
+  // placeholder: Claudette
+  "A catalog kept in {FOLDER} is read from there. A catalog kept anywhere else loads with Load catalog.":"Katalog z {FOLDER} jest odczytywany stamtąd; katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
   "The catalog you load stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
   "Load catalog…":"Wczytaj katalog…",
   "Saved copies…":"Zapisane kopie…",

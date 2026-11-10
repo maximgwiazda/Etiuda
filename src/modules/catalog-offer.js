@@ -10,7 +10,7 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionN
   eUnreadableLine, fileReadCode, fileReadLine } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eCatalogLeads, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
-  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify } from "./host.js";
+  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify, noteCatalogFolderHold } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
 import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
@@ -919,6 +919,13 @@ function eCheckWatchedFile(interactive){
    file of it and is valid under the ring (offered). A colleague's file is never any of these, and a file with no ring
    line is never a successor. */
 function onCatalogListing(all){
+  /* The empty desk's folder line follows whether this listing holds a catalog. Only a change, and
+     only while that desk is what is on screen, draws it again. */
+  let flipped=false;
+  try{ flipped=noteCatalogFolderHold(all); }catch(e){ flipped=false; }
+  try{
+    if(flipped && wholeThingEmpty() && document.querySelector(".empty-desk") && typeof hooks.render==="function") hooks.render();
+  }catch(e){}
   // A colleague's file reaches an open Library this way only.
   paintCatalogList();
   if(lsGet("eNotifyCatalogOff")!=="1"){

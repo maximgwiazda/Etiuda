@@ -145,6 +145,35 @@ function eOnCatalogListing(fn){
   if(!h || typeof h.onCatalogListing!=="function") return;
   h.onCatalogListing(rows=>fn(mapListing(rows)));
 }
+/* WHETHER THE FOLDER HOLDS A CATALOG THE DESK CAN OPEN. Unknown until a listing arrives, and until
+   then the file this load is running answers: it holds one when that file sits in the folder and
+   is not the copy Etiuda ships. A later listing replaces that answer. A row with no card count
+   still counts, because a caller that hands the listing without one has already decided the file
+   is a catalog; a count of -1 is a file that did not read. */
+let folderHold=null;
+function normFolder(p){
+  return String(p||"").replace(/\\/g,"/").replace(/\/+$/,"").toLowerCase();
+}
+function bootFolderHolds(){
+  if(!eCatalogFile() || eCatalogBuiltIn()) return false;
+  const folder=eCatalogFolder();
+  if(!folder) return false;
+  return normFolder(eCatalogIn())===normFolder(folder);
+}
+function eFolderHoldsCatalog(){
+  return folderHold===null ? bootFolderHolds() : folderHold;
+}
+function rowHoldsCatalog(f){
+  if(!f || !f.name || f.builtIn || f.desk) return false;
+  if(f.cards==null) return true;
+  return +f.cards>=0;
+}
+/* True when the answer changed, so the empty desk can draw its line again. */
+function noteCatalogFolderHold(rows){
+  const prev=eFolderHoldsCatalog();
+  folderHold=Array.isArray(rows) && rows.some(rowHoldsCatalog);
+  return folderHold!==prev;
+}
 /* WHICH FILE IN THAT FOLDER IS THE ONE LOADED, so a list can mark it. The name is written when a
    catalog is activated from the folder and blanked by every other route, so "" means the loaded
    catalog came from somewhere else. A desk that predates the key has no answer at all, and the
@@ -487,6 +516,8 @@ export {
   eCatalogFolderShort,
   eCatalogFiles,
   eOnCatalogListing,
+  eFolderHoldsCatalog,
+  noteCatalogFolderHold,
   eCatalogRing,
   eCatalogLeads,
   eChooseCatalogFolder,
