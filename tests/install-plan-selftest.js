@@ -284,6 +284,91 @@ ok(pages.every(([, a, b]) => !!a && a === b),
 const drifted = pages[0][1] ? pages[0][1].replace("#list .card", "#list .cards") : "";
 ok(!!drifted && drifted !== pages[0][2], "6b control: one selector changed in a copy of SEEN reads as different");
 
+/* ---- 7. semver comparison with pre-release tags and installer actions ------------------------ */
+
+const semverCases = [
+  ["2.0.0-dev", "2.0.0", -1, "2.0.0-dev is older than 2.0.0"],
+  ["2.0.0", "2.0.0", 0, "equal strings are the same"],
+  ["2.0.1", "2.0.0", 1, "2.0.1 is newer than 2.0.0"],
+  ["1.9.9", "2.0.0", -1, "1.9.9 is older than 2.0.0"],
+  ["2.0.0-alpha", "2.0.0-beta", -1, "alpha is older than beta"],
+  ["2.0.0-beta.1", "2.0.0-beta.2", -1, "beta.1 is older than beta.2"],
+  ["2.0.0-beta.2", "2.0.0-beta.11", -1, "beta.2 is older than beta.11 (numeric prerelease)"],
+  ["2.0.0-alpha", "2.0.0-alpha.1", -1, "fewer prerelease fields has lower precedence"],
+  ["2.0.0-1", "2.0.0-2", -1, "numeric prerelease comparison"],
+  ["2.0.0+build1", "2.0.0+build2", 0, "build metadata is ignored in precedence"],
+  ["invalid", "2.0.0", null, "unparseable string answers null"],
+  ["", "2.0.0", null, "empty string answers null"],
+];
+for (const [a, b, expected, msg] of semverCases) {
+  let cmp;
+  try { cmp = P.compareSemver(a, b); } catch (e) { cmp = "THREW"; }
+  ok(cmp === expected, "7a semver: " + msg + " (" + a + " vs " + b + " -> " + cmp + ")");
+}
+
+const outcomeCases = [
+  ["1.9.0", "2.0.0", "older", "Update"],
+  ["2.0.0-dev", "2.0.0", "older", "Update"],
+  ["2.0.0", "2.0.0", "same", "Reinstall"],
+  ["2.1.0", "2.0.0", "newer", "Reinstall"],
+  ["unreadable", "2.0.0", "unreadable", "Reinstall"],
+  ["", "2.0.0", "unreadable", "Reinstall"],
+  [null, "2.0.0", "unreadable", "Reinstall"],
+];
+for (const [installed, current, outcome, action] of outcomeCases) {
+  let gotOutcome, gotAction;
+  try {
+    gotOutcome = P.recogniseOutcome(installed, current);
+    gotAction = P.recogniseAction(gotOutcome);
+  } catch (e) { gotOutcome = "THREW"; gotAction = "THREW"; }
+  ok(gotOutcome === outcome && gotAction === action,
+    "7b outcome: installed " + JSON.stringify(installed) + " vs current " + current
+    + " maps to " + gotOutcome + " -> " + gotAction);
+}
+
+/* ---- 8. installer script recognition verification ------------------------------------------- */
+
+let recogInfo;
+try {
+  const nsh = fs.readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
+  recogInfo = P.readInstallerRecognise(nsh);
+} catch (e) { recogInfo = { error: e.message }; }
+
+ok(recogInfo && recogInfo.inCustomInit === true,
+  "8a recognition runs in the install side's init (customInit), before any file is written");
+ok(recogInfo && recogInfo.readsInstalledVersion === true,
+  "8b recognition reads the installed version from the key electron-builder writes (${UNINSTALL_REGISTRY_KEY})");
+ok(recogInfo && recogInfo.comparesVersions === true,
+  "8c recognition compares versions and handles older, same, newer and unreadable");
+ok(recogInfo && recogInfo.silentSkips === true,
+  "8d silent install skips the dialog entirely");
+ok(recogInfo && recogInfo.cancelQuits === true,
+  "8e cancel quits without change");
+ok(recogInfo && recogInfo.hasCopywriterWordsEn === true && recogInfo.hasCopywriterWordsPl === true,
+  "8f copywriter words present for English and Polish exactly");
+ok(recogInfo && recogInfo.placeholdersMarked === true,
+  "8g placeholders in LangString lines are marked with '; placeholder: Claudette'");
+
+/* ---- 9. package-time patch verification ---------------------------------------------------- */
+
+let patchStatus;
+try {
+  const patchTool = require("../tools/patch-nsis.cjs");
+  patchStatus = patchTool.verifyNsisPatches(path.join(__dirname, ".."));
+} catch (e) {
+  try {
+    const P_tool = P.readNsisPatchStatus(path.join(__dirname, ".."));
+    patchStatus = P_tool;
+  } catch (err) { patchStatus = { error: err.message }; }
+}
+
+ok(patchStatus && patchStatus.multiUserUiPatched === true,
+  "9a multiUserUi.nsh checks elevated child exit code $2 on $1 = 1 rather than bare Quit");
+ok(patchStatus && patchStatus.installSectionPatched === true,
+  "9b installSection.nsh runs CHECK_APP_RUNNING without UAC_IsInnerInstance guard");
+ok(recogInfo && recogInfo.bringsInnerToFront === true,
+  "9c elevated inner copy is brought to front with BringToFront in skipLicenseIfInner");
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);

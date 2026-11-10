@@ -15,6 +15,7 @@
 !macro customHeader
   Function skipLicenseIfInner
     ${If} ${UAC_IsInnerInstance}
+      BringToFront
       SendMessage $HWNDPARENT 0x408 1 0
       SendMessage $HWNDPARENT 0x408 1 0
     ${EndIf}
@@ -24,6 +25,355 @@
       Call TurnPrepare
     !endif
   FunctionEnd
+
+  !ifndef BUILD_UNINSTALLER
+  Function CompareSemver
+    # Compares $0 (v1, installed) with $1 (v2, installer).
+    # Returns $0: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2, 2 if unreadable.
+    Push $1
+    Push $2
+    Push $3
+    Push $4
+    Push $5
+    Push $6
+    Push $7
+    Push $8
+    Push $9
+    Push $R0
+    Push $R1
+    Push $R2
+    Push $R3
+    Push $R4
+
+    StrCmp $0 $1 CmpEqual 0
+    StrCmp $0 "" CmpUnreadable 0
+    StrCmp $1 "" CmpUnreadable 0
+
+    # Strip build metadata (+...) from $0 into $R0
+    StrCpy $R0 $0
+    StrCpy $2 0
+    LoopStripBuild0:
+      StrCpy $3 $R0 1 $2
+      StrCmp $3 "" DoneStripBuild0
+      StrCmp $3 "+" 0 NextStripBuild0
+      StrCpy $R0 $R0 $2
+      Goto DoneStripBuild0
+      NextStripBuild0:
+      IntOp $2 $2 + 1
+      Goto LoopStripBuild0
+    DoneStripBuild0:
+
+    # Strip build metadata (+...) from $1 into $R1
+    StrCpy $R1 $1
+    StrCpy $2 0
+    LoopStripBuild1:
+      StrCpy $3 $R1 1 $2
+      StrCmp $3 "" DoneStripBuild1
+      StrCmp $3 "+" 0 NextStripBuild1
+      StrCpy $R1 $R1 $2
+      Goto DoneStripBuild1
+      NextStripBuild1:
+      IntOp $2 $2 + 1
+      Goto LoopStripBuild1
+    DoneStripBuild1:
+
+    # Split prerelease (-...) from $R0 -> Core0 ($R0), Pre0 ($R2)
+    StrCpy $R2 ""
+    StrCpy $2 0
+    LoopSplitPre0:
+      StrCpy $3 $R0 1 $2
+      StrCmp $3 "" DoneSplitPre0
+      StrCmp $3 "-" 0 NextSplitPre0
+      IntOp $4 $2 + 1
+      StrCpy $R2 $R0 "" $4
+      StrCpy $R0 $R0 $2
+      Goto DoneSplitPre0
+      NextSplitPre0:
+      IntOp $2 $2 + 1
+      Goto LoopSplitPre0
+    DoneSplitPre0:
+
+    # Split prerelease (-...) from $R1 -> Core1 ($R1), Pre1 ($R3)
+    StrCpy $R3 ""
+    StrCpy $2 0
+    LoopSplitPre1:
+      StrCpy $3 $R1 1 $2
+      StrCmp $3 "" DoneSplitPre1
+      StrCmp $3 "-" 0 NextSplitPre1
+      IntOp $4 $2 + 1
+      StrCpy $R3 $R1 "" $4
+      StrCpy $R1 $R1 $2
+      Goto DoneSplitPre1
+      NextSplitPre1:
+      IntOp $2 $2 + 1
+      Goto LoopSplitPre1
+    DoneSplitPre1:
+
+    # Parse Core0 ($R0) into Major0 ($4), Minor0 ($5), Patch0 ($6)
+    StrCpy $2 0
+    LoopCore0Dot1:
+      StrCpy $3 $R0 1 $2
+      StrCmp $3 "" CmpUnreadable
+      StrCmp $3 "." FoundCore0Dot1 NextCore0Dot1
+      NextCore0Dot1:
+      IntOp $2 $2 + 1
+      Goto LoopCore0Dot1
+    FoundCore0Dot1:
+      StrCpy $4 $R0 $2
+      IntOp $2 $2 + 1
+      StrCpy $R4 $R0 "" $2
+
+    StrCpy $2 0
+    LoopCore0Dot2:
+      StrCpy $3 $R4 1 $2
+      StrCmp $3 "" CmpUnreadable
+      StrCmp $3 "." FoundCore0Dot2 NextCore0Dot2
+      NextCore0Dot2:
+      IntOp $2 $2 + 1
+      Goto LoopCore0Dot2
+    FoundCore0Dot2:
+      StrCpy $5 $R4 $2
+      IntOp $2 $2 + 1
+      StrCpy $6 $R4 "" $2
+
+    # Parse Core1 ($R1) into Major1 ($7), Minor1 ($8), Patch1 ($9)
+    StrCpy $2 0
+    LoopCore1Dot1:
+      StrCpy $3 $R1 1 $2
+      StrCmp $3 "" CmpUnreadable
+      StrCmp $3 "." FoundCore1Dot1 NextCore1Dot1
+      NextCore1Dot1:
+      IntOp $2 $2 + 1
+      Goto LoopCore1Dot1
+    FoundCore1Dot1:
+      StrCpy $7 $R1 $2
+      IntOp $2 $2 + 1
+      StrCpy $R4 $R1 "" $2
+
+    StrCpy $2 0
+    LoopCore1Dot2:
+      StrCpy $3 $R4 1 $2
+      StrCmp $3 "" CmpUnreadable
+      StrCmp $3 "." FoundCore1Dot2 NextCore1Dot2
+      NextCore1Dot2:
+      IntOp $2 $2 + 1
+      Goto LoopCore1Dot2
+    FoundCore1Dot2:
+      StrCpy $8 $R4 $2
+      IntOp $2 $2 + 1
+      StrCpy $9 $R4 "" $2
+
+    # Validate that numeric parts are non-empty
+    StrCmp $4 "" CmpUnreadable 0
+    StrCmp $5 "" CmpUnreadable 0
+    StrCmp $6 "" CmpUnreadable 0
+    StrCmp $7 "" CmpUnreadable 0
+    StrCmp $8 "" CmpUnreadable 0
+    StrCmp $9 "" CmpUnreadable 0
+
+    IntCmp $4 $7 0 CmpLess CmpGreater
+    IntCmp $5 $8 0 CmpLess CmpGreater
+    IntCmp $6 $9 0 CmpLess CmpGreater
+
+    # Major, minor and patch are equal. Compare pre-releases
+    StrCmp $R2 $R3 CmpEqual 0
+    StrCmp $R2 "" CmpGreater 0 # no prerelease is newer than prerelease
+    StrCmp $R3 "" CmpLess 0    # prerelease is older than no prerelease
+
+    LoopCmpPre:
+      StrCpy $2 0
+      LoopId0:
+        StrCpy $3 $R2 1 $2
+        StrCmp $3 "" FoundEndId0
+        StrCmp $3 "." FoundDotId0
+        IntOp $2 $2 + 1
+        Goto LoopId0
+      FoundDotId0:
+        StrCpy $4 $R2 $2
+        IntOp $2 $2 + 1
+        StrCpy $R2 $R2 "" $2
+        Goto DoneId0
+      FoundEndId0:
+        StrCpy $4 $R2
+        StrCpy $R2 ""
+      DoneId0:
+
+      StrCpy $2 0
+      LoopId1:
+        StrCpy $3 $R3 1 $2
+        StrCmp $3 "" FoundEndId1
+        StrCmp $3 "." FoundDotId1
+        IntOp $2 $2 + 1
+        Goto LoopId1
+      FoundDotId1:
+        StrCpy $7 $R3 $2
+        IntOp $2 $2 + 1
+        StrCpy $R3 $R3 "" $2
+        Goto DoneId1
+      FoundEndId1:
+        StrCpy $7 $R3
+        StrCpy $R3 ""
+      DoneId1:
+
+      StrCmp $4 "" CmpLess 0
+      StrCmp $7 "" CmpGreater 0
+
+      # Check if $4 is numeric
+      StrCpy $2 0
+      StrCpy $5 1
+      LoopNum4:
+        StrCpy $3 $4 1 $2
+        StrCmp $3 "" DoneNum4
+        ${If} $3 < "0"
+        ${OrIf} $3 > "9"
+          StrCpy $5 0
+          Goto DoneNum4
+        ${EndIf}
+        IntOp $2 $2 + 1
+        Goto LoopNum4
+      DoneNum4:
+
+      # Check if $7 is numeric
+      StrCpy $2 0
+      StrCpy $8 1
+      LoopNum7:
+        StrCpy $3 $7 1 $2
+        StrCmp $3 "" DoneNum7
+        ${If} $3 < "0"
+        ${OrIf} $3 > "9"
+          StrCpy $8 0
+          Goto DoneNum7
+        ${EndIf}
+        IntOp $2 $2 + 1
+        Goto LoopNum7
+      DoneNum7:
+
+      ${If} $5 == 1
+      ${AndIf} $8 == 1
+        IntCmp $4 $7 0 CmpLess CmpGreater
+      ${ElseIf} $5 == 1
+      ${AndIf} $8 == 0
+        Goto CmpLess
+      ${ElseIf} $5 == 0
+      ${AndIf} $8 == 1
+        Goto CmpGreater
+      ${Else}
+        StrCmp $4 $7 +3 0
+        ${If} "$4" < "$7"
+          Goto CmpLess
+        ${Else}
+          Goto CmpGreater
+        ${EndIf}
+      ${EndIf}
+
+      StrCmp $R2 "" 0 LoopCmpPre
+      StrCmp $R3 "" 0 LoopCmpPre
+      Goto CmpEqual
+
+    CmpLess:
+      StrCpy $0 -1
+      Goto DoneCmp
+    CmpEqual:
+      StrCpy $0 0
+      Goto DoneCmp
+    CmpGreater:
+      StrCpy $0 1
+      Goto DoneCmp
+    CmpUnreadable:
+      StrCpy $0 2
+      Goto DoneCmp
+
+    DoneCmp:
+    Pop $R4
+    Pop $R3
+    Pop $R2
+    Pop $R1
+    Pop $R0
+    Pop $9
+    Pop $8
+    Pop $7
+    Pop $6
+    Pop $5
+    Pop $4
+    Pop $3
+    Pop $2
+    Pop $1
+  FunctionEnd
+
+  Function RecogniseExistingInstallation
+    Push $0
+    Push $1
+    Push $R1
+    Push $R2
+
+    StrCpy $InstalledVersion ""
+    StrCpy $R2 "0"
+
+    # Check HKLM
+    ReadRegStr $0 HKLM "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion"
+    ${If} $0 != ""
+      StrCpy $InstalledVersion $0
+      StrCpy $R2 "1"
+    ${Else}
+      ReadRegStr $0 HKLM "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+      ${If} $0 != ""
+        StrCpy $R2 "1"
+      ${EndIf}
+    ${EndIf}
+
+    # Check HKCU
+    ${If} $R2 == "0"
+    ${OrIf} $installMode == "CurrentUser"
+      ReadRegStr $1 HKCU "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion"
+      ${If} $1 != ""
+        StrCpy $InstalledVersion $1
+        StrCpy $R2 "1"
+      ${Else}
+        ReadRegStr $1 HKCU "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+        ${If} $1 != ""
+          StrCpy $R2 "1"
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+
+    ${If} $hasPerMachineInstallation == "1"
+    ${OrIf} $hasPerUserInstallation == "1"
+      StrCpy $R2 "1"
+    ${EndIf}
+
+    ${If} $R2 == "0"
+      Goto DoneRecognise
+    ${EndIf}
+
+    ${If} $InstalledVersion == ""
+      StrCpy $RecogniseMsg "$(RecogniseUnreadableText)"
+    ${Else}
+      StrCpy $0 $InstalledVersion
+      StrCpy $1 "${VERSION}"
+      Call CompareSemver
+      ${If} $0 == -1
+        StrCpy $RecogniseMsg "$(RecogniseOlderText)"
+      ${ElseIf} $0 == 0
+        StrCpy $RecogniseMsg "$(RecogniseSameText)"
+      ${ElseIf} $0 == 1
+        StrCpy $RecogniseMsg "$(RecogniseNewerText)"
+      ${Else}
+        StrCpy $RecogniseMsg "$(RecogniseUnreadableText)"
+      ${EndIf}
+    ${EndIf}
+
+    MessageBox MB_OKCANCEL|MB_ICONQUESTION "$RecogniseMsg" /SD IDOK IDOK Proceed IDCANCEL Cancel
+    Cancel:
+      Quit
+    Proceed:
+
+    DoneRecognise:
+    Pop $R2
+    Pop $R1
+    Pop $1
+    Pop $0
+  FunctionEnd
+  !endif
 !macroend
 
 # The cache directory, taken from electron-builder's own define rather than spelled a second time
@@ -157,6 +507,9 @@
 
 !macro customInit
   ${IfNot} ${Silent}
+    ${IfNot} ${UAC_IsInnerInstance}
+      Call RecogniseExistingInstallation
+    ${EndIf}
     InitPluginsDir
     CreateDirectory "$PLUGINSDIR\turn"
     Push $0
@@ -196,6 +549,8 @@ Var TurnHwnd
 Var TurnKind
 Var TurnBmp
 Var TurnReady
+Var InstalledVersion
+Var RecogniseMsg
 
 !macro TurnEmit UN
   !ifdef TURN_PFX
@@ -376,11 +731,43 @@ Var TurnReady
     LangString TurnWelcomeText ${ID} "Etiuda trzyma odpowiedzi zespołu pod ręką, gotowe do skopiowania do każdej rozmowy z klientem.$\r$\n$\r$\nInstalacja dotyczy tylko tego konta Windows, więc przy proponowanym folderze nie są potrzebne uprawnienia administratora. Jeśli Etiuda jest otwarta, instalator poprosi o jej zamknięcie.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
     LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda"
     LangString TurnUnWelcomeText ${ID} "Program Etiuda zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
+
+    LangString RecogniseOlderTitle ${ID} "Aktualizacja programu Etiuda" ; placeholder: Claudette
+    LangString RecogniseSameTitle ${ID} "Ponowna instalacja programu Etiuda" ; placeholder: Claudette
+    LangString RecogniseNewerTitle ${ID} "Instalacja programu Etiuda" ; placeholder: Claudette
+    LangString RecogniseUnreadableTitle ${ID} "Instalacja programu Etiuda" ; placeholder: Claudette
+
+    LangString RecogniseOlderText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, a ten instalator zawiera nowszą wersję ${VERSION}. Zaktualizować do wersji ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+    LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+    LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+    LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+
+    LangString RecogniseBtnUpdate ${ID} "Aktualizuj" ; placeholder: Claudette
+    LangString RecogniseBtnReinstall ${ID} "Zainstaluj ponownie" ; placeholder: Claudette
+    LangString RecogniseBtnCancel ${ID} "Anuluj" ; placeholder: Claudette
+    LangString RecogniseAppRunningRetry ${ID} "${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów." ; placeholder: Claudette
+    LangString RecogniseAppRunningClose ${ID} "${PRODUCT_NAME} jest uruchomiony; instalator zamknie go przed kontynuacją." ; placeholder: Claudette
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
     LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nSetup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
     LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda"
     LangString TurnUnWelcomeText ${ID} "This removes Etiuda from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
+
+    LangString RecogniseOlderTitle ${ID} "Update Etiuda" ; placeholder: Claudette
+    LangString RecogniseSameTitle ${ID} "Reinstall Etiuda" ; placeholder: Claudette
+    LangString RecogniseNewerTitle ${ID} "Install Etiuda" ; placeholder: Claudette
+    LangString RecogniseUnreadableTitle ${ID} "Install Etiuda" ; placeholder: Claudette
+
+    LangString RecogniseOlderText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, and this installer holds ${VERSION}, which is newer. Update to ${VERSION}?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+    LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+    LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+    LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+
+    LangString RecogniseBtnUpdate ${ID} "Update" ; placeholder: Claudette
+    LangString RecogniseBtnReinstall ${ID} "Reinstall" ; placeholder: Claudette
+    LangString RecogniseBtnCancel ${ID} "Cancel" ; placeholder: Claudette
+    LangString RecogniseAppRunningRetry ${ID} "${PRODUCT_NAME} is running. Close it, then choose Retry." ; placeholder: Claudette
+    LangString RecogniseAppRunningClose ${ID} "${PRODUCT_NAME} is running, and the installer will close it before going on." ; placeholder: Claudette
   !endif
 !macroend
 !insertmacro TurnLang 1033

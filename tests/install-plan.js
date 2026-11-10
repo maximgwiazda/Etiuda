@@ -255,6 +255,154 @@ function judgeAllUsers(f) {
   return rows;
 }
 
+/** SemVer 2.0.0 comparison with pre-release tags. Pure function.
+ *  Answers -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2, or null if unparseable. */
+function compareSemver(v1, v2) {
+  if (typeof v1 !== "string" || typeof v2 !== "string") return null;
+  const s1 = v1.trim(), s2 = v2.trim();
+  if (!s1 || !s2) return null;
+  if (s1 === s2) return 0;
+
+  const SEMVER_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+  const m1 = SEMVER_RE.exec(s1);
+  const m2 = SEMVER_RE.exec(s2);
+  if (!m1 || !m2) return null;
+
+  const [maj1, min1, pat1] = [Number(m1[1]), Number(m1[2]), Number(m1[3])];
+  const [maj2, min2, pat2] = [Number(m2[1]), Number(m2[2]), Number(m2[3])];
+
+  if (maj1 !== maj2) return maj1 < maj2 ? -1 : 1;
+  if (min1 !== min2) return min1 < min2 ? -1 : 1;
+  if (pat1 !== pat2) return pat1 < pat2 ? -1 : 1;
+
+  const pre1 = m1[4], pre2 = m2[4];
+  if (pre1 === undefined && pre2 === undefined) return 0;
+  // A version with pre-release is older (lower precedence) than a normal release.
+  if (pre1 !== undefined && pre2 === undefined) return -1;
+  if (pre1 === undefined && pre2 !== undefined) return 1;
+
+  const ids1 = pre1.split(".");
+  const ids2 = pre2.split(".");
+  const len = Math.max(ids1.length, ids2.length);
+
+  for (let i = 0; i < len; i++) {
+    if (i >= ids1.length) return -1; // fewer fields has lower precedence
+    if (i >= ids2.length) return 1;
+
+    const id1 = ids1[i], id2 = ids2[i];
+    const num1 = /^\d+$/.test(id1), num2 = /^\d+$/.test(id2);
+
+    if (num1 && num2) {
+      const n1 = Number(id1), n2 = Number(id2);
+      if (n1 !== n2) return n1 < n2 ? -1 : 1;
+    } else if (num1 && !num2) {
+      return -1; // numeric has lower precedence than non-numeric
+    } else if (!num1 && num2) {
+      return 1;
+    } else {
+      if (id1 !== id2) return id1 < id2 ? -1 : 1;
+    }
+  }
+
+  return 0;
+}
+
+/** The three recognition outcomes (older, same, newer, or unreadable). */
+function recogniseOutcome(installedVersion, installerVersion) {
+  if (!installedVersion) return "unreadable";
+  const cmp = compareSemver(installedVersion, installerVersion);
+  if (cmp === null) return "unreadable";
+  if (cmp < 0) return "older";
+  if (cmp === 0) return "same";
+  return "newer";
+}
+
+/** Maps outcome to user action: older -> Update; same, newer, unreadable -> Reinstall. */
+function recogniseAction(outcome) {
+  return outcome === "older" ? "Update" : "Reinstall";
+}
+
+/** Parses shell/installer.nsh and verifies recognition logic and copywriter words. */
+function readInstallerRecognise(nsh) {
+  const text = String(nsh || "");
+  const macro = name => (new RegExp("!macro\\s+" + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
+  const customInit = macro("customInit");
+  const skipLicense = (/Function\s+skipLicenseIfInner\r?\n([\s\S]*?)FunctionEnd/.exec(text) || [])[1] || "";
+
+  const inCustomInit = /RecogniseExistingInstallation|RecogniseInstallation/.test(customInit)
+    || (/DisplayVersion/.test(customInit) && /MessageBox/.test(customInit));
+
+  const readsInstalledVersion = /ReadRegStr[^\n]+UNINSTALL_REGISTRY_KEY[^\n]+DisplayVersion/i.test(text)
+    || (/\$\{UNINSTALL_REGISTRY_KEY\}/.test(text) && /DisplayVersion/.test(text));
+
+  const comparesVersions = /CompareSemver|compareSemver|SemverCompare/i.test(text)
+    && /RecogniseOlder|older/i.test(text) && /RecogniseSame|same/i.test(text)
+    && /RecogniseNewer|newer/i.test(text) && /RecogniseUnreadable|unreadable/i.test(text);
+
+  const silentSkips = /\$\{IfNot\}\s+\$\{Silent\}[\s\S]*?(?:RecogniseExistingInstallation|MessageBox)[\s\S]*?\$\{EndIf\}/.test(customInit);
+
+  const cancelQuits = /\bQuit\b/.test(customInit) || /RecogniseExistingInstallation[\s\S]*?\bQuit\b/.test(text);
+
+  const EN_OLDER = "is installed on this computer, and this installer holds";
+  const EN_SAME = "is already installed on this computer, the same version as this installer";
+  const EN_NEWER = "is installed on this computer, which is newer than this installer's";
+  const EN_UNREADABLE = "is already installed on this computer, but its version cannot be read";
+  const EN_UNDER = "Data on this computer and the licence stay as they are.";
+
+  const PL_OLDER = "Na tym komputerze jest już program";
+  const PL_SAME = "tej samej co w instalatorze";
+  const PL_NEWER = "nowszej niż wersja";
+  const PL_UNREADABLE = "ale nie da się odczytać jego wersji";
+  const PL_UNDER = "Dane na tym komputerze i licencja zostają bez zmian.";
+
+  const hasCopywriterWordsEn = text.includes(EN_OLDER) && text.includes(EN_SAME)
+    && text.includes(EN_NEWER) && text.includes(EN_UNREADABLE) && text.includes(EN_UNDER);
+
+  const hasCopywriterWordsPl = text.includes(PL_OLDER) && text.includes(PL_SAME)
+    && text.includes(PL_NEWER) && text.includes(PL_UNREADABLE) && text.includes(PL_UNDER);
+
+  // Check that every placeholder in LangString lines has "; placeholder: Claudette"
+  const langLines = text.split(/\r?\n/).filter(l => /^\s*LangString\s+/i.test(l));
+  const placeholderLines = langLines.filter(l => /placeholder/i.test(l) || /Title/i.test(l) && !/Turn/i.test(l));
+  const placeholdersMarked = placeholderLines.length > 0
+    && placeholderLines.every(l => /;\s*placeholder:\s*Claudette\b/i.test(l));
+
+  const bringsInnerToFront = /\$\{If\}\s+\$\{UAC_IsInnerInstance\}[\s\S]*?BringToFront[\s\S]*?SendMessage\s+\$HWNDPARENT\s+0x408/i.test(skipLicense);
+
+  return {
+    inCustomInit: !!inCustomInit,
+    readsInstalledVersion: !!readsInstalledVersion,
+    comparesVersions: !!comparesVersions,
+    silentSkips: !!silentSkips,
+    cancelQuits: !!cancelQuits,
+    hasCopywriterWordsEn,
+    hasCopywriterWordsPl,
+    placeholdersMarked,
+    bringsInnerToFront: !!bringsInnerToFront,
+  };
+}
+
+/** Checks whether app-builder-lib templates have been patched. */
+function readNsisPatchStatus(rootDir) {
+  const root = rootDir || path.resolve(__dirname, "..");
+  const libTemplates = path.join(root, "node_modules", "app-builder-lib", "templates", "nsis");
+  const multiUserUiPath = path.join(libTemplates, "multiUserUi.nsh");
+  const installSectionPath = path.join(libTemplates, "installSection.nsh");
+
+  const multiUserUi = fs.existsSync(multiUserUiPath) ? fs.readFileSync(multiUserUiPath, "utf8") : "";
+  const installSection = fs.existsSync(installSectionPath) ? fs.readFileSync(installSectionPath, "utf8") : "";
+
+  const multiUserUiPatched = /\$\{If\}\s+\$1\s*=\s*1\r?\n\s*\$\{If\}\s+\$2\s*=\s*0\r?\n\s*Quit\b/i.test(multiUserUi)
+    && /loginWithAdminAccount/.test(multiUserUi);
+
+  const installSectionPatched = !/\$\{ifNot\}\s+\$\{UAC_IsInnerInstance\}\r?\n\s*!insertmacro\s+CHECK_APP_RUNNING/i.test(installSection)
+    && /!insertmacro\s+CHECK_APP_RUNNING/i.test(installSection);
+
+  return { multiUserUiPatched, installSectionPatched };
+}
+
 module.exports = { BUILDER_NS, uuidV5, appGuid, registryKeys, badInstallDir, installArgs, uninstallArgs, plainArgs,
                    argsFault, scratchHome, userDataName, defaultUserInstallDir, samePath,
-                   judgeUpdate, judgeUpdatedRun, judgeAllUsers };
+                   judgeUpdate, judgeUpdatedRun, judgeAllUsers,
+                   compareSemver, recogniseOutcome, recogniseAction,
+                   readInstallerRecognise, readNsisPatchStatus };
