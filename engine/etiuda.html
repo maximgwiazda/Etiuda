@@ -12893,7 +12893,7 @@ What you type stays in this browser only.`;
         out.push(s);
       }
     });
-    tabOrder = out.slice();
+    tabOrder.splice(0, tabOrder.length, ...out);
     return tabOrder;
   }
   function getActiveTabId() {
@@ -13092,9 +13092,9 @@ What you type stays in this browser only.`;
         });
       }
       if (Array.isArray(data.order)) {
-        tabOrder = data.order.filter((id) => typeof id === "string" && (tabs.some((t2) => t2.id === id) || typeof screens !== "undefined" && screens.includes(id)));
+        tabOrder.splice(0, tabOrder.length, ...data.order.filter((id) => typeof id === "string" && (tabs.some((t2) => t2.id === id) || typeof screens !== "undefined" && screens.includes(id))));
       } else {
-        tabOrder = tabs.map((t2) => t2.id).concat(typeof screens !== "undefined" && Array.isArray(screens) ? screens : []);
+        tabOrder.splice(0, tabOrder.length, ...tabs.map((t2) => t2.id).concat(typeof screens !== "undefined" && Array.isArray(screens) ? screens : []));
       }
       return true;
     } catch (e) {
@@ -13535,7 +13535,7 @@ What you type stays in this browser only.`;
     animateTabReorder(() => {
       const [moved] = order.splice(from, 1);
       order.splice(to, 0, moved);
-      tabOrder = order.slice();
+      tabOrder.splice(0, tabOrder.length, ...order);
       tabs.sort((a, b) => tabOrder.indexOf(a.id) - tabOrder.indexOf(b.id));
       if (typeof screens !== "undefined" && Array.isArray(screens)) {
         screens.sort((a, b) => tabOrder.indexOf(a) - tabOrder.indexOf(b));
