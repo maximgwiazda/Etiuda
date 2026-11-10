@@ -2479,9 +2479,13 @@ const placeEc = (dir, from, as, minutesOld) => {
     const card = document.querySelector("#screenHost .lib-list");
     const acts = card && card.querySelector(".mg-data-acts");
     if (!card || !acts) return { step: "missing" };
-    const c = card.getBoundingClientRect();
     const btns = Array.from(acts.querySelectorAll("button")).filter(b => b.offsetParent);
+    /* Since the Library's footer went (ebcb34f0) the last rows sit in the scrolling list, below its visible bottom at
+       this width; a person scrolls to them. Each is brought into view first, as a scroll would, then read where it
+       stands (the test architect, 2026-11-10). */
     const out = btns.map(b => {
+      b.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+      const c = card.getBoundingClientRect();
       const r = b.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return { id: b.id, inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5
@@ -3493,6 +3497,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   await variant(plant);
   const plantedInAsar = asar.extractFile(ASAR, "engine/etiuda.html").toString("utf8");
   s = await launch(newUserData("plant1"));
+  /* The refusals are counted from this reload on. Whether the first load's refusal reached the listener depends on how
+     soon the leg connected, which changed when the window legs moved to E.connectShell (engine fold 19): the count read 2,
+     one per load (the test architect, 2026-11-10). */
+  const inlineBefore = s.inline().length;
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const planted = await s.p.evaluate(SEEN);
@@ -3503,9 +3511,12 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " characters, tail " + JSON.stringify(plantedInAsar.trim().slice(-plantTail.length)) + "), the"
     + " engine still boots (" + planted.booted + ") and window.__planted is "
     + (planted.planted ? "SET" : "undefined"));
-  check(s.inline().length === 1 && s.inline().some(t => t.indexOf(PLANT_HASH) > -1),
-    "6b and Chromium refused exactly that one inline script, quoting the hash this file computed"
-    + " for the plant itself: " + s.inline().length + " refusal(s)");
+  const reloadRefused = s.inline().slice(inlineBefore);
+  check(reloadRefused.length === 1 && reloadRefused.some(t => t.indexOf(PLANT_HASH) > -1)
+        && s.inline().every(t => t.indexOf(PLANT_HASH) > -1),
+    "6b and Chromium refused exactly that one inline script on the reload, quoting the hash this file computed"
+    + " for the plant itself, and refused nothing else on any load: " + reloadRefused.length + " refusal(s) on the reload, "
+    + s.inline().length + " in all");
   await s.stop();
 
   await variant(w => {
