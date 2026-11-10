@@ -931,7 +931,7 @@ function narrowRelayChannel(steps, root, changed, gf, isRelayCode) {
   console.log("gate-run area: relay-channel runs " + chosen.length + " part(s)");
 }
 
-export async function planAreaRun(root, changed, pkg, base = "main") {
+export async function planAreaRun(root, changed, pkg, base = "main", ready) {
   const gf = await loadGatesFor();
   const isSharedCode = gf && gf.isSharedCode ? gf.isSharedCode : () => false;
   const isProductFile = gf && gf.isProductFile ? gf.isProductFile : () => false;
@@ -968,7 +968,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   /* No "more than half" fail-close since 2026-11-08 18:36: a file runs the legs gates-for maps it to. */
   const gatedChanged = changed.filter(f => !(acceptedScript && normRel(f) === "package.json"));
   let rows = [];
-  if (!toolsOnly) { try { rows = gatesFor(root, gatedChanged); } catch { rows = []; } }
+  if (!toolsOnly) { try { rows = gatesFor(root, gatedChanged, ready); } catch { rows = []; } }
 
   /* A window gate is walled (rule 13's window wall): it runs only when argued, never picked up by a merge, as the whole run
      never runs one. The area run names it and leaves it out, so it stays a subset of the whole run plus the floor. */
@@ -1041,7 +1041,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
         addedFiles.add(e.file);
       }
       let mapped = [];
-      try { mapped = gatesFor(root, [e.file]); } catch (err) { mapped = []; }
+      try { mapped = gatesFor(root, [e.file], ready); } catch (err) { mapped = []; }
       for (const row of mapped) {
         if (row.kind === "window") {
           if (!windowGates.includes(row.gate)) {

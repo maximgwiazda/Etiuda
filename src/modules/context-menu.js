@@ -15,7 +15,7 @@ import { setEntrySel } from "./mark.js";
 import { entrySel, intentIdxs, cats } from "./app-state.js";
 import { isCollapsed } from "./collapse.js";
 import { animateFoldAll } from "./list-pointer.js";
-import { tabs, addTab, closeTabById, closeOtherTabs, reopenClosedTab, closedTabCount } from "./tabs.js";
+import { tabs, addTab, closeTabById, closeOtherTabs, reopenClosedTab, closedTabCount, beginTabRename, clearTabRename } from "./tabs.js";
 
 let ctxEl=null, ctxBack=null;
 
@@ -104,7 +104,20 @@ function pillRows(pill){
 
 function tabRows(tab){
   const id=tab.dataset.tid;
-  const rows=[{ label:t("New tab"), act:()=>addTab() }, "-", { label:t("Close this tab"), act:()=>closeTabById(id) }];
+  const tb=tabs.find(x=>x.id===id);
+  const rows=[];
+  rows.push({ label:t("Rename tab"), act:()=>beginTabRename(id) });
+  if(tb && ((tb.customName && tb.customName.trim()) || (tb.title && tb.title.trim()))){
+    rows.push({
+      label:t("Use the automatic name"),
+      hint:t("Names the tab after the customer's first name, or New chat while there is none."),
+      act:()=>clearTabRename(id)
+    });
+  }
+  rows.push("-");
+  rows.push({ label:t("New tab"), act:()=>addTab() });
+  rows.push("-");
+  rows.push({ label:t("Close this tab"), act:()=>closeTabById(id) });
   if(tabs.length>1) rows.push({ label:t("Close the other tabs"), act:()=>closeOtherTabs(id) });
   if(closedTabCount()) rows.push({ label:t("Reopen the last closed tab"), act:()=>reopenClosedTab() });
   return rows;
@@ -132,6 +145,7 @@ function openCtxMenu(rows, x, y, byKey){
     const b=document.createElement("button");
     b.type="button";
     b.setAttribute("role","menuitem");
+    if(r.hint) b.title=r.hint;
     if(r.key){
       b.innerHTML='<span>'+esc(r.label)+'</span><small>'+esc(r.key)+'</small>';
     } else {

@@ -1152,7 +1152,7 @@ try {
   /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
     "node:worker_threads", "./folder/syncer.cjs",
-    "./win-proxy.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
+    "./win-proxy.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./desk-reset.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
     .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
   const strange = reqs.filter(r => MODS.indexOf(r) < 0);
@@ -1656,8 +1656,9 @@ try {
     globalThis.addEventListener = addWas2;
     if (hostWas2 === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas2;
   }
-  check(rows7.join(" | ") === "<span>Bring the replies over any window</span><kbd data-i18n-skip>Ctrl+Shift+Space</kbd> | "
-    + "<span>Bring the replies over any window</span> | hidden | hidden" && clicked === "1/shut" && /Settings/.test(mrow.title),
+  const pickerMark = '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/></svg>';
+  check(rows7.join(" | ") === pickerMark + "<span>Bring the replies over any window</span><kbd data-i18n-skip>Ctrl+Shift+Space</kbd> | "
+    + pickerMark + "<span>Bring the replies over any window</span> | hidden | hidden" && clicked === "1/shut" && /Settings/.test(mrow.title),
     "7m the Menu has a row for the picker where the host has one, showing the combination while it is held; a click shuts the Menu and"
     + " opens the picker: " + rows7.join(" | ") + " / " + clicked);
 

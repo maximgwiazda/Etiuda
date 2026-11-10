@@ -1794,7 +1794,10 @@ async function main() {
   /* The runner never schedules itself. gates-for names tools/gate-run.mjs as a gate (npm run gates runs it, and its lists
      name relay legs), and an area run that called it bare refused with 78 (the workerd-sweep merge, 2026-10-28). */
   const selfPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-  const selfPlan = await gr.planAreaRun(ROOT, ["tests/relay-workerd.mjs"], selfPkg, "origin/main");
+  /* 16p and each chain file below ask the same question of one unchanged tree. One analysis
+     answers all of them. A lab that edits files plans itself and does not use this tree. */
+  const areaTree = typeof gfFloor.analyzeTree === "function" ? gfFloor.analyzeTree(ROOT) : null;
+  const selfPlan = await gr.planAreaRun(ROOT, ["tests/relay-workerd.mjs"], selfPkg, "origin/main", areaTree);
   check(!selfPlan.failClosed && selfPlan.steps.length > 0 && !selfPlan.steps.some(s => s.file === "tools/gate-run.mjs"),
     "16p an area run never schedules the gate runner itself: for tests/relay-workerd.mjs it runs "
     + selfPlan.steps.map(s => s.file).join(", "));
@@ -1827,7 +1830,7 @@ async function main() {
   chainAllow.delete("tools/gate-run.mjs");
   const chainOutside = [];
   for (const file of chainFiles) {
-    const one = await gr.planAreaRun(ROOT, [file], selfPkg);
+    const one = await gr.planAreaRun(ROOT, [file], selfPkg, "main", areaTree);
     for (const s of one.steps || []) {
       const rel = String(s.file || "").replace(/\\/g, "/");
       const isFloor = floorCmds.has(s.cmd);

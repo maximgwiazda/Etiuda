@@ -123,7 +123,11 @@ function watchPage(win, o) {
     const w = o.words();
     askInWindow(win, w, w.gone, [w.restart, w.close], null, o).then(r => {
       if (win.isDestroyed()) return;
-      if (r.response === 0) recover(); else if (r.response === 1) win.close();
+      if (r.response === 0) recover();
+      else if (r.response === 1) {
+        if (typeof o.quit === "function") o.quit();
+        else win.close();
+      }
     });
   });
   win.on("unresponsive", () => {

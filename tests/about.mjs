@@ -41,7 +41,7 @@ const ROWS = {
     items: [
       ["The team's catalog in editions.", "When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded."],
       ["Signed by the team's lead.", "A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed."],
-      ["The conversation's path.", "Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back."],
+      ["The timeline.", "Space turns from the cards to the timeline of the conversation in front: what has been sent, the last reply whole, and what can follow it. Space again brings the cards back."],
       ["Next replies on {KEY1} to {KEY4}.", "After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt."],
     ],
     licTitle: "Etiuda End-User Licence Agreement",
@@ -64,7 +64,7 @@ const ROWS = {
     items: [
       ["Nowe wydania katalogu.", "Gdy pojawi się nowe wydanie katalogu zespołu, stanowisko je proponuje i jeszcze przed wczytaniem pokazuje, karta po karcie, co się zmieniło."],
       ["Podpis lidera zespołu.", "Stanowisko, które dołącza do zespołu, zapamiętuje klucz lidera i według niego sprawdza każde kolejne wydanie, więc plik zmieniony po podpisaniu nie przejdzie niezauważony."],
-      ["Ścieżka rozmowy.", "Spacja przenosi od kart do bieżącej rozmowy: widać, co już w niej wysłano i co może nastąpić dalej. Ponowna spacja wraca do kart."],
+      ["Oś czasu.", "Spacja przenosi od kart do osi czasu bieżącej rozmowy: widać, co już wysłano, ostatnią odpowiedź w całości i to, co może po niej nastąpić. Ponowna spacja wraca do kart."],
       ["Kolejne odpowiedzi pod {KEY1} do {KEY4}.", "Po każdej wysłanej odpowiedzi czekają do czterech następnych, każda pod własnym klawiszem: najpierw te z katalogu, potem te z praktyki tego stanowiska."],
     ],
     licTitle: "Umowa licencyjna Etiudy",

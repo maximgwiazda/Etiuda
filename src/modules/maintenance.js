@@ -547,6 +547,97 @@ function mtNavHtml(){
       +(on?' aria-current="page"':'')+'>'+lmIcon(p.icon)+'<span data-i18n-skip>'+esc(p.name)+'</span></button>';
   }).join("");
 }
+function mtResetRow(){
+  return '<div class="set-row mt-reset" id="mtResetRow"><div class="set-label">'+esc(t("Reset Etiuda"))
+    +'<small>'+esc(t("Returns this desk to a fresh install, keeping only the licence."))+'</small></div>'
+    +'<div class="set-ctl"><button type="button" class="btn danger" id="mtReset">'+esc(t("Reset Etiuda"))+'</button></div></div>';
+}
+/* The press stays disabled until the field is exactly the word, and the page never touches the disk. */
+function openResetConfirm(){
+  openDialog({
+    cls:"mt-reset-confirm",
+    title:"Reset Etiuda?",
+    body:'<p>'+esc(t("Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence."))+'</p>'
+      +'<p class="mt-reset-warn">'+esc(t("There is no Undo. Joining the team again takes a new invitation from its lead."))+'</p>'
+      +'<label class="mf">'+esc(t("Type RESET to confirm."))
+      +'<input type="text" id="mtResetWord" autocomplete="off" spellcheck="false"></label>',
+    actions:'<button type="button" class="btn" id="mtResetCancel">'+esc(t("Cancel"))+'</button>'
+      +'<button type="button" class="btn danger" id="mtResetGo" disabled>'+esc(t("Reset Etiuda"))+'</button>',
+    wire:()=>{
+      const word=$("#mtResetWord"), go=$("#mtResetGo");
+      const ready=()=>!!word && /^reset$/i.test(String(word.value||"").trim());
+      const sync=()=>{ if(go) go.disabled=!ready(); };
+      if(word) word.addEventListener("input", sync);
+      sync();
+      const cancel=$("#mtResetCancel");
+      if(cancel) cancel.onclick=()=>dismissModal();
+      if(go) go.onclick=()=>{
+        if(!ready()) return;
+        dismissModal();
+        const h=eHost();
+        if(!h || typeof h.resetDesk!=="function") return;
+        let answer=null;
+        try{ answer=h.resetDesk(); }catch(e){ return; }
+        const say=()=>{ try{ toast(t("Etiuda is starting again as freshly installed.")); }catch(e){} };
+        if(answer && typeof answer.then==="function") answer.then(r=>{ if(r && r.ok) say(); },()=>{});
+        else if(answer && answer.ok) say();
+      };
+    }
+  });
+}
+const RESET_LEFT="The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
+const RESET_NEXT="Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
+function unfinishedLine(info){
+  const names=info && Array.isArray(info.paths) ? info.paths.filter(p=>typeof p==="string" && p) : [];
+  return t(RESET_LEFT).replace("{PATH}", names.join(", "));
+}
+/* Said at the start that found the reset unfinished. The path is filled after translation,
+   so the sentence stays the copywriter's in both languages. */
+function openUnfinishedReset(info){
+  const line=unfinishedLine(info);
+  openDialog({
+    cls:"mt-reset-unfinished",
+    title:RESET_LEFT,
+    body:'<p>'+esc(RESET_NEXT)+'</p>',
+    actions:'<button type="button" class="btn" id="mtResetStop">'+esc(t("Stop the reset"))+'</button>'
+      +'<button type="button" class="btn danger" id="mtResetAgain">'+esc(t("Try again"))+'</button>',
+    wire:()=>{
+      const title=document.querySelector("#modalTitle .modal-t");
+      if(title){
+        title.textContent=line;
+        title.setAttribute("data-i18n-skip","");
+      }
+      const stop=$("#mtResetStop"), again=$("#mtResetAgain");
+      if(stop) stop.onclick=()=>{
+        const h=eHost();
+        const done=()=>dismissModal();
+        if(!h || typeof h.stopReset!=="function"){ done(); return; }
+        let answer=null;
+        try{ answer=h.stopReset(); }catch(e){ done(); return; }
+        if(answer && typeof answer.then==="function") answer.then(done, done);
+        else done();
+      };
+      if(again) again.onclick=()=>{
+        const h=eHost();
+        if(!h || typeof h.retryReset!=="function") return;
+        let answer=null;
+        try{ answer=h.retryReset(); }catch(e){ return; }
+        const take=r=>{
+          if(r && r.ok){ dismissModal(); return; }
+          if(r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({paths:r.paths});
+        };
+        if(answer && typeof answer.then==="function") answer.then(take, ()=>{});
+        else take(answer);
+      };
+    }
+  });
+}
+function armResetNotice(){
+  const h=eHost();
+  if(!h || typeof h.onResetUnfinished!=="function" || h._resetNoticeArmed) return;
+  h._resetNoticeArmed=true;
+  h.onResetUnfinished(info=>openUnfinishedReset(info));
+}
 function mtShellHtml(){
   const pages=mtPages(), page=pages.filter(p=>p.key===mtOn)[0]||pages[0];
   return '<div class="sx lm lm-mt mt-screen" data-page="'+esc(page.key)+'">'
@@ -559,6 +650,7 @@ function mtShellHtml(){
     +'<h2 id="mtTitle" data-i18n-skip>'+esc(page.name)+'</h2>'
     +'<p class="lede" id="mtLede" data-i18n-skip>'+esc(page.key==="health"?"":(mtLede()[page.key]||""))+'</p>'
     +mtMaintBody()
+    +mtResetRow()
     +'<p class="mt-moved sx-note" id="mtMoved">'+esc(t(MT_MOVED))
     +' <button type="button" class="btn" id="mtOpenData">'+esc(t("Open Data and defaults"))+'</button></p>'
     +'</div></div>'
@@ -591,6 +683,8 @@ function wireMtShell(root){
   if(gear) gear.onclick=()=>{ if(typeof hooks.openSettings==="function") hooks.openSettings(); };
   const data=root.querySelector("#mtOpenData");
   if(data) data.onclick=()=>{ if(typeof hooks.openSettings==="function") hooks.openSettings("data"); };
+  const reset=root.querySelector("#mtReset");
+  if(reset) reset.onclick=()=>openResetConfirm();
 }
 registerScreen("maintenance", {
   title: () => t("Maintenance"),
@@ -634,6 +728,7 @@ function openMaintenance(backFn){
 }
 
 export {
+  armResetNotice,
   wireMaintenanceWatch,
   mtRefreshLive,
   openMaintenance,

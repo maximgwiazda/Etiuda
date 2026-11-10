@@ -32,7 +32,7 @@ import { scheduleCutScan } from "./cut-text.js";
 import { markSearchHits } from "./search-marks.js";
 import { syncEmptyMark } from "./empty-mark.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, wireFolderLink } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eFolderHoldsCatalog, wireFolderLink } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
@@ -102,6 +102,21 @@ function rankedCards(terms,keep){
   return {hits,sc};
 }
 
+/* The search's empty line, one block, so a meaning-only list can keep the same sentence the empty list shows. */
+function searchMissHtml(){
+  return '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
+    +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>';
+}
+/* The model's cards, after the word matches. noMatchHtml and label are already escaped. Nothing is drawn
+   when the model added no card. With no word match the empty line stays, or the list would read as a word hit. */
+function meaningBoundaryHtml(wordCount, tailCount, noMatchHtml, label){
+  if(!tailCount) return "";
+  let h="";
+  if(!wordCount && noMatchHtml) h+=noMatchHtml;
+  h+='<div class="list-sep e-meaning"><i></i><span>'+label+'</span><i></i></div>';
+  return h;
+}
+
 function render(){
   remPx();   // while the style is still clean: see remPx
   closeNotePane();
@@ -113,6 +128,8 @@ function render(){
   const ranked=rankedCards(terms,keep);
   const sc=ranked.sc;
   const mixed=mixCards(ranked.hits,keep);
+  const wordN=mixed?ranked.hits.length:0;
+  const tailN=mixed?mixed.length-ranked.hits.length:0;
   setShown(mixed||ranked.hits);
 
   if(!shown.length){
@@ -121,8 +138,7 @@ function render(){
        add-card can stand in - a search with no hits, or All on an empty Etiuda. */
     const oneCat=(cats.length===1) ? cats[0] : null;
     list.innerHTML=terms.length
-      ? '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
-        +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
+      ? searchMissHtml()
       /* While the folder team's mirror has no listing yet, the empty desk says so, and not that there is no team. */
       : (wholeThingEmpty() && teamReadingEmptyHtml()) ? teamReadingEmptyHtml()
       /* A sealed catalog this desk cannot open, or a request to join its team, is what the empty desk says first. */
@@ -137,7 +153,9 @@ function render(){
             : '')
           + '<div class="mid-folder p2">'
           + (eCatalogFolder()
-            ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
+            ? (eFolderHoldsCatalog()
+              ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
+              : t("There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog."))
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')
@@ -234,6 +252,10 @@ function render(){
        drag resolves through .closest(".card"), block focus walks .txt; this is neither. */
     if(terms.length && i>0 && sepGroup(shown[i-1])===0 && sepGroup(m)===1){
       sepH+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
+    }
+    /* The model's cards start at wordN, after every card the words matched. */
+    if(tailN && i===wordN){
+      sepH+=meaningBoundaryHtml(wordN,tailN,wordN?"":searchMissHtml(),esc(t("Close in meaning")));
     }
     /* Resting landmarks: the favourites header, the INTENT band header, then a category
        separator at every change below - all between cards, no part in drag or focus.

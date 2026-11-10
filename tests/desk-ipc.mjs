@@ -318,7 +318,9 @@ try {
   window.E_HOST = REAL_HOST;
   listeners.window = {}; listeners.document = {};
   globalThis.addEventListener = window.addEventListener;
-  invokeHandlers["etiuda:desk-write"](eventFor(ENGINE_FRAME), JSON.stringify(Object.assign({}, onDisk(), { "e~carried": "1" })));
+  /* A person's own layer of a catalog (cards and stars), e<ns>~Pack: the Reset must not take it (board D7b, 2026-11-10). */
+  const OWN_LAYER = "e1abc~Pack", OWN_BODY = JSON.stringify({ cards: { "c-own": { title: "a card the person wrote" } }, favs: ["c-own"] });
+  invokeHandlers["etiuda:desk-write"](eventFor(ENGINE_FRAME), JSON.stringify(Object.assign({}, onDisk(), { "e~carried": "1", [OWN_LAYER]: OWN_BODY })));
   const P = await import(pathToFileURL(path.join(ROOT, "src", "modules", "pack.js")).href);
   const R = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
   Object.assign(window, R);                        // as main.js puts every export on the page
@@ -352,7 +354,10 @@ try {
   fire("window", "beforeunload");
   fire("window", "pagehide");
   await tick(5); await tick(5);
-  const left = onDisk(), stayed = Object.keys(left).filter(k => /^e(?:[A-Z]|[0-9a-z]+~)/.test(k));
+  const left = onDisk(), stayed = Object.keys(left).filter(k => /^e(?:[A-Z]|[0-9a-z]+~)/.test(k) && !/^e[0-9a-z]+~Pack$/.test(k));
+  check(left[OWN_LAYER] === OWN_BODY,
+    "5b2 the Reset keeps the person's own layer of a catalog, their cards and stars (" + OWN_LAYER + "): "
+    + (left[OWN_LAYER] === OWN_BODY ? "kept byte for byte" : "GONE (" + JSON.stringify(left[OWN_LAYER]) + ")"));
   check(!stayed.length && left["e~carried"] === "1",
     "5b the Reset's cleared desk is what remains after the page leaves: " + stayed.length + " app key(s) back on the disk"
     + (stayed.length ? " (" + stayed.slice(0, 4).join(", ") + ")" : "") + ", the carried mark " + left["e~carried"]);
@@ -368,6 +373,21 @@ try {
   check(planted2 && hatchTabs === null && mainTab() === null && ssCleared === 2,
     "5e the #reset hatch's clearState(false) clears the tabs too, in main and in the page: planted " + planted2 + ", the plant reads back "
     + JSON.stringify(hatchTabs) + ", main holds " + JSON.stringify(mainTab()) + ", sessionStorage cleared " + ssCleared + " time(s) in all");
+
+  /* ---- the same Reset when the app never loaded: no eResetClear on the page, so the boot guard edits the desk file
+     itself (clearState's host branch); the person's own layer stays there too (board D7b). */
+  {
+    invokeHandlers["etiuda:desk-write"](eventFor(ENGINE_FRAME), JSON.stringify({ eSomeSetting: "1", [OWN_LAYER]: OWN_BODY, "e~carried": "1" }));
+    const bare = { E_HOST: REAL_HOST };
+    const clearBare = new Function("window", "localStorage", "sessionStorage",
+      slice("hostDesk") + "\n" + slice("ownLayer") + "\n" + slice("clearState") + "\nreturn clearState;")(bare, lsStub, { clear: noop });
+    clearBare(true);
+    await tick(5);
+    const after = onDisk();
+    check(after[OWN_LAYER] === OWN_BODY && after.eSomeSetting === undefined && after["e~carried"] === "1",
+      "5b3 with no app loaded, the boot guard's own Reset clears the settings on the desk file and keeps the person's own layer: "
+      + JSON.stringify({ own: after[OWN_LAYER] === OWN_BODY, setting: after.eSomeSetting, carried: after["e~carried"] }));
+  }
 
   /* ---- what the start-failure banner offers. The boot guard clears the app's state once by itself and reloads; a
      crash that comes back after that is the code's, not the settings', and a Reset that clears them again and reloads
@@ -1641,7 +1661,7 @@ try {
     d6Stay = held === true && e1.prevented === true && w.hides === 2 && w.shows === 1
       && madeNotes.length === notesBefore + 1 && meta.x === 3 && meta.trayTold === true
       && title === "Etiuda keeps running in the tray"
-      && body === "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this."
+      && body === "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead."
       && Array.isArray(note.opts.actions) && note.opts.actions.length === 0;
     if (!d6Stay) d6StayWhy = JSON.stringify({ held: held, prevented: e1.prevented, hides: w.hides, shows: w.shows, notes: madeNotes.length - notesBefore, title: title, x: meta.x, told: meta.trayTold });
   } catch (e) { d6StayWhy = String(e && e.message || e).split("\n")[0]; }

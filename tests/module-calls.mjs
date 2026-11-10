@@ -1474,12 +1474,13 @@ const CARD_B = {
 }
 
 /* ------------------------------------------------------------------ local-memory.js
-   The two acts are the module's whole surface: nothing parks across a reload any more, so nothing
-   else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
+   The eject, the clear and the question are the acts. The cleared layer is held in memory on this
+   page, for the Library row, and is not written. What they do is driven in tests/test.js and, in
+   a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "the module exports the eject, the clear and the question before it, and nothing else",
-    () => eq(Object.keys(L).sort().join(","), "askClearLocal,clearLocalMemory,ejectCatalog"));
+  check("local-memory.js", "the module exports the eject, the clear, the question before it and the way back held on this page",
+    () => eq(Object.keys(L).sort().join(","), "askClearLocal,bringBackCleared,clearLocalMemory,clearedHeld,ejectCatalog"));
 }
 
 /* ==================================================================================
@@ -3447,6 +3448,57 @@ const CARD_B = {
       check("lanes.js", "1008w2 with nothing marked, Enter in the lanes copies nothing and marks row 0; a second Enter copies row 0",
         () => eq([pathBefore.join(","), pathFirst.join(","), markedFirst, pathSecond.join(",")].join("|"),
           "c-warn-now|c-warn-now|true|c-warn-now,c-warn-next"));
+
+      /* E1 and D4: the then-line separates titles in text, and Next rows draw every part of a multi-part card */
+      lanesBox.contains = () => true;
+      body.appendChild = () => {};
+      const hadToast = byId["#toast"], hadRange = document.createRange;
+      document.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) });
+      Dom.grabDom();
+      byId["#toast"] = el({ classList: on(new Set()), getBoundingClientRect: () => ({ left: 0, top: 0, right: 100, bottom: 20, width: 100, height: 20 }) });
+      const hadSec2 = globalThis.window.isSecureContext, hadClip2 = navigator.clipboard, hadCs = globalThis.getComputedStyle;
+      globalThis.window.isSecureContext = true;
+      navigator.clipboard = { writeText: () => Promise.resolve() };
+      globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
+      AS.setCards([
+        { id: "c-e1-now", c: "orders", t: "Card Now", en: "Now body", next: [{ to: "c-e1-two" }] },
+        { id: "c-e1-two", c: "orders", alt: 1, t: "Two Part", en: "First part text\n\nSecond part text", next: [{ to: "c-e1-a" }, { to: "c-e1-b" }] },
+        { id: "c-e1-a", c: "orders", t: "Alpha", en: "Body A" },
+        { id: "c-e1-b", c: "orders", t: "Beta", en: "Body B" },
+      ]);
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, "null");
+      T.initTabs();
+      LP.bumpUseCount("c-e1-now", "en", 0);
+      LN.toggleLanes(true);
+      const lanesHtmlNow = lanesBox.innerHTML;
+      const thenHtml = (lanesHtmlNow.match(/<div class="ln-then"[^>]*>[\s\S]*?<\/div>/) || [""])[0];
+      const thenText = thenHtml.replace(/<[^>]+>/g, "");
+      check("lanes.js", "814e1 the then-line's text content separates the titles",
+        () => eq([thenText.indexOf("AlphaBeta") === -1, /Alpha[^\w]+Beta/.test(thenText)].join(","), "true,true"));
+
+      const twoRow = lanesHtmlNow.split('<div class="card ln-row')[1] || "";
+      const rowEl = { dataset: { k: "0", to: "c-e1-two" } };
+      const part1El = { dataset: { b: "1" }, closest: s => (s === ".ln-txt" ? part1El : s === ".ln-row" ? rowEl : null) };
+      ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: part1El }));
+      await new Promise(r => setTimeout(r, 30));
+      const lastSent = (T.tabs[0].log || []).slice(-1)[0] || {};
+      globalThis.window.isSecureContext = hadSec2;
+      if (hadClip2) navigator.clipboard = hadClip2; else delete navigator.clipboard;
+      if (hadCs !== undefined) globalThis.getComputedStyle = hadCs; else delete globalThis.getComputedStyle;
+      if (hadToast !== undefined) byId["#toast"] = hadToast; else delete byId["#toast"];
+      document.createRange = hadRange;
+      LN.toggleLanes(false);
+      check("lanes.js", "814d4 (ln-row) a two-part card draws both parts or a 1/2 mark, and a click on the second copies part 1",
+        () => eq([twoRow.indexOf("First part text") > -1, twoRow.indexOf("Second part text") > -1,
+          /1\/2/.test(twoRow), lastSent.id, lastSent.b].join("|"),
+          "true|true|true|c-e1-two|1"));
+      check("lanes.js", "814d4 (ln-part) chip placed in box top-right corner",
+        () => {
+          const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+          const lnPart = (/\.ln-part\{([^}]+)\}/.exec(sheet) || [])[1] || "";
+          return eq([/position:\s*absolute/.test(lnPart), /top:\s*8px/.test(lnPart), /right:\s*10px/.test(lnPart), !/margin-bottom/.test(lnPart)].join(","), "true,true,true,true");
+        });
     } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);
@@ -4380,11 +4432,17 @@ const CARD_B = {
         const high = 10 + 50 * tags.length;
         const c = { nodeType: 1, dataset: { id: m.id }, classList: flip(new Set(["card"])), style: box(), hover: false, tags, offsetHeight: high,
           getBoundingClientRect: () => ({ top, bottom: top + high, left: 0, right: 300, width: 300, height: high }),
-          querySelectorAll: () => c.slabs, querySelector: () => null, closest: s => (s === ".card.deck" && c.classList.contains("deck") ? c : null),
+          querySelectorAll: sel => (sel && sel.includes(".txt") ? c.slabs : c.slabs),
+          querySelector: sel => {
+            const mv = sel && sel.match(/data-v="(\d+)"/);
+            return mv ? c.slabs.find(s => s.dataset && s.dataset.v === mv[1]) || null : null;
+          },
+          closest: s => (s === ".card.deck" && c.classList.contains("deck") ? c : null),
           matches: s => (s === ":hover" ? c.hover : s === ".card[data-id]"), contains: n => n === c || c.slabs.includes(n),
           getAttribute: () => [...c.classList.s].join(" ") };
-        c.slabs = tags.map((tag, k) => ({ nodeType: 1, tag, offsetTop: 10 + 50 * k, offsetHeight: 40, offsetWidth: 300, classList: flip(new Set(["txt"])),
+        c.slabs = tags.map((tag, k) => ({ nodeType: 1, tag, dataset: { v: String(k) }, offsetTop: 10 + 50 * k, offsetHeight: 40, offsetWidth: 300, classList: flip(new Set(["txt"])),
           style: box(), scrolled: 0, scrollIntoView() { this.scrolled++; },
+          getBoundingClientRect: () => ({ top: top + 10 + 50 * k, bottom: top + 50 + 50 * k, left: 0, right: 300, width: 300, height: 40 }),
           closest(s) { return s === ".card.deck" ? c.closest(s) : s === ".txt.deck-back" && this.classList.contains("deck-back") ? this : null; } }));
         return c;
       };
@@ -4393,9 +4451,22 @@ const CARD_B = {
       const l = listOf(cards), each = l.querySelectorAll.bind(l);
       l.querySelectorAll = sel => sel.split(",").map(x => x.trim())
         .flatMap(c => (c.startsWith(".txt") ? cards.flatMap(k => k.slabs || []).filter(e => hit(e, c)) : each(c)));
-      l.querySelector = sel => l.querySelectorAll(sel)[0] || null;
+      l.querySelector = sel => {
+        const m = sel && sel.match(/\[data-id="([^"]+)"\]/);
+        if (m) {
+          const card = cards.find(c => c.dataset && c.dataset.id === m[1]);
+          if (!card) return null;
+          if (sel.includes(".txt")) return card.querySelector(sel);
+          return card;
+        }
+        return l.querySelectorAll(sel)[0] || null;
+      };
+      l.offsetHeight = 1000;
       Object.assign(l, { nodeType: 1, addEventListener: on, closest: () => null, contains: n => cards.includes(n) });
       byId["#list"] = l;
+      const hadDocEl = doc.documentElement;
+      const docEl = part({ classList: flip(new Set()), addEventListener() {} });
+      doc.documentElement = docEl;
       Dom.grabDom();
       /* What a card shows: flat, every reply in its place with no deck class and no length on it or its replies; tucked,
          a deck with its height and every reply but the first behind it. */
@@ -4416,7 +4487,7 @@ const CARD_B = {
             if (!b || typeof b.onclick !== "function") throw new Error("no " + name + " " + val + " among " + segs.map(x => x.attrs["data-seg"]).join(","));
             b.onclick(); return String(toastEl.textContent || toastEl.innerHTML || ""); } };
       };
-      return { rig, run, fire, alt, under, steps, l, body, says, settings, made, byId, away: { closest: () => null }, now: () => now,
+      return { rig, run, fire, alt, under, steps, cards, drawn, l, body, docEl, says, settings, made, byId, away: { closest: () => null }, now: () => now,
         wire: () => DK.wireDeck(), cls: () => [...body.classList.s].filter(k => k.startsWith("deck")).join("+"),
         watched: () => rig.mo + "/" + rig.ro,
         restore() {
@@ -4424,6 +4495,7 @@ const CARD_B = {
           try { rig.restore(); } finally {
             g.setTimeout = had.st; g.clearTimeout = had.ct; doc.addEventListener = had.add; doc.querySelector = had.q; doc.createElement = had.make;
             for (const [k, v] of [["body", had.body], ["getElementById", had.gid], ["querySelectorAll", had.all], ["activeElement", had.active]]) if (v === undefined) delete doc[k]; else doc[k] = v;
+            if (hadDocEl === undefined) delete doc.documentElement; else doc.documentElement = hadDocEl;
             if (had.gcs === undefined) delete g.getComputedStyle; else g.getComputedStyle = had.gcs;
             for (const [k, v] of [["eMotionOff", had.motion], ["eDeckOff", had.deck]]) if (v == null) ST.lsDel(k); else ST.lsSet(k, v);
             AS.putLang(had.lang); DLG.accOpen.clear(); had.acc.forEach(k => DLG.accOpen.add(k));
@@ -4471,6 +4543,63 @@ const CARD_B = {
           ST.lsDel("eDeckOff"); DK.syncDeck(); w.rig.run();
           return eq(off + " || " + act(), "false,false,false,false,false,0/2 alternatives:flat/3 steps:flat || true,true,true,true,true,1");
         } finally { w.restore(); }
+      });
+    /* A click during the 70 ms dwell, and one with no rest at all, used to be stopped and left the stack shut. */
+    check("deck.js", "1110dk6 a click on a tucked reply before the stack opens deals it, at rest and during the 70 ms dwell, and does not copy; a click after it has opened is not held, and the peek is a hit target",
+      () => {
+        const w = world();
+        try {
+          ST.lsDel("eDeckOff");
+          w.wire();
+          DK.deckSettle();
+          const back = w.alt.slabs[1];
+          if (!back.classList.contains("deck-back")) return "the second reply was not tucked";
+          const click = () => {
+            let held = false;
+            w.fire("click", { target: back, stopPropagation() { held = true; }, preventDefault() {} });
+            return held;
+          };
+          const coldHeld = click();
+          const coldOpen = w.alt.classList.contains("deck-open");
+          w.alt.hover = false;
+          w.alt.classList.remove("deck-open", "deck-up", "deck-moving", "deck-return");
+          w.fire("pointerover", { target: w.alt.slabs[0], relatedTarget: null });
+          w.run(w.now() + 30);
+          const during = w.alt.classList.contains("deck-open");
+          const dwellHeld = click();
+          const dwellOpen = w.alt.classList.contains("deck-open");
+          w.run(w.now() + 500);
+          const laterHeld = click();
+          const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+          const rule = css.match(/\.card\.deck:not\(\.deck-open\)>\.txt\.deck-back\{[^}]*\}/);
+          const peekHits = !!rule && !/pointer-events:\s*none/.test(rule[0]);
+          const got = [coldHeld, coldOpen, during, dwellHeld, dwellOpen, laterHeld, peekHits].join(",");
+          return eq(got, "true,true,false,true,true,false,true");
+        } finally { w.restore(); }
+      });
+    /* The peek's click is the resting deck's alone: a deck still dealing gives its slabs no pointer, so a press aimed at the
+       front card's controls mid-deal is not caught by a reply in flight (D3, the test architect's edit of 2026-11-10). */
+    check("deck.js", "1110dk7 a dealing deck's slabs take no pointer and a resting closed deck's peek does",
+      () => {
+        const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const moving = css.match(/\.card\.deck\.deck-moving>\.txt\.deck-back\{[^}]*\}/);
+        const resting = css.match(/\.card\.deck:not\(\.deck-open\)>\.txt\.deck-back\{[^}]*\}/);
+        const got = [!!moving && /pointer-events:\s*none/.test(moving[0]), !!resting && !/pointer-events:\s*none/.test(resting[0])].join(",");
+        return eq(got, "true,true");
+      });
+    /* A wheel focused from the keyboard draws its ring whole: the fade leaves the box for its words, so the ring is under no mask
+       (board 976, the test architect's edit of 2026-11-10). Read from the sheet, both drums. */
+    check("gender-turn.js", "1110wh1 a focused wheel's ring is under no mask and its words keep the fade, for the role and the gender drums",
+      () => {
+        const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const got = [["#roleDrum", ".rd-track"], ["#genderDrum", ".gd-track"]].map(([box, track]) => {
+          const esc = (s) => s.replace(/[.#]/g, (c) => "\\" + c);
+          const own = css.match(new RegExp(esc(box) + ":focus-visible\{[^}]*\}"));
+          const words = css.match(new RegExp(esc(box) + ":focus-visible " + esc(track) + "\{[^}]*\}"));
+          return !!own && /outline:2px/.test(own[0]) && /(^|[;{])mask-image:none/.test(own[0])
+            && !!words && /(^|[;{])mask-image:linear-gradient/.test(words[0]);
+        }).join(",");
+        return eq(got, "true,true");
       });
     check("settings.js", "1016dk3 Layout's switch pressed off in Settings lays an open deck flat at once: its classes, height and lengths gone, the card it faded given back, the scan it owed let go and the list no longer watched, with eDeckOff stored and a toast that says so; pressed on, every deck is tucked anew without a reload, the list watched again and the key forgotten",
       () => {
@@ -4523,6 +4652,90 @@ const CARD_B = {
             "cols,raillock,pillslock,notehover,deck/on/off || null,2 alternatives:tucked,none,true/true || 1,2 alternatives:flat,deck-off,false/false"
             + " || deck-off,false/false,2 alternatives:flat,3 steps:flat || none,true/true,2 alternatives:tucked,3 steps:tucked || true");
         } finally { if (fresh) fresh.restore(); if (w) w.restore(); }
+      });
+    check("deck.js", "1016dk6 a stacked card opened stays open through every order change of a drag that reorders its macros, closes if a drag ends off it or a re-render happens with the pointer elsewhere, and stays open after a drop on it",
+      async () => {
+        const { animateTxtReorder } = await import(MOD("card-blocks.js"));
+        const P = await import(MOD("pack.js"));
+        const CM = await import(MOD("content-model.js"));
+        const hadLangs = CM.CONTENT_LANGS.slice(), hadCards = AS.cards.slice(), hadBase = P.BASE_M.slice(), hadCustom = P.pack.custom, hadOverrides = Object.assign({}, P.pack.overrides);
+        const hadRebuild = HK.hooks.rebuildCards;
+        CM.setContentLangs(["en", "pl"]); AS.putLang("en");
+        const base = { id: "c-fit", c: "orders", alt: 1, seq: 1, t: "Fitting a shade",
+          en: ["Loosen the ring.", "Set the shade on the holder.", "Tighten the ring."].join(GAP),
+          pl: ["Poluzuj pierscien.", "Zaloz abazur.", "Dokrec pierscien."].join(GAP) };
+        P.BASE_M.length = 0; P.BASE_M.push(base); P.pack.custom = []; P.pack.overrides = {};
+        AS.setCards([Object.assign({}, base)]);
+        if (!globalThis.document) globalThis.document = { querySelector: () => null, createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
+        const w = world();
+        try {
+          ST.lsDel("eDeckOff"); w.wire(); DK.deckSettle();
+          w.steps.hover = true;
+          w.fire("pointerover", { target: w.steps.slabs[0], relatedTarget: null });
+          w.run(w.now() + 400);
+          const opened = w.steps.classList.contains("deck-open");
+
+          HK.hooks.rebuildCards = () => {
+            const wasHover = w.steps ? w.steps.hover : false;
+            const ov = P.pack.overrides["c-fit"];
+            const current = ov ? Object.assign({}, base, ov) : Object.assign({}, base);
+            AS.setCards([current]);
+            const newSteps = w.drawn(current, 400);
+            newSteps.hover = wasHover;
+            w.cards[2] = newSteps;
+            w.steps = newSteps;
+            DK.deckSettle();
+          };
+
+          // Case 1: hover-open, re-render with the pointer elsewhere, and the card is closed
+          w.steps.hover = false;
+          HK.hooks.rebuildCards();
+          const closedAfterRerender = !w.steps.classList.contains("deck-open");
+
+          // Re-open for drag test
+          w.steps.hover = true;
+          w.fire("pointerover", { target: w.steps.slabs[0], relatedTarget: null });
+          w.run(w.now() + 400);
+          const reOpened = w.steps.classList.contains("deck-open");
+
+          // Case 2: card open while its macros are dragged stays open through each re-render and the drop while the pointer is on it
+          globalThis.document.documentElement.classList.add("txtdrag");
+
+          animateTxtReorder("c-fit", 0, 1, true);
+          w.run(w.now() + 250);
+          const openAfterSwap1 = w.steps.classList.contains("deck-open");
+
+          animateTxtReorder("c-fit", 1, 2, true);
+          w.run(w.now() + 250);
+          const openAfterSwap2 = w.steps.classList.contains("deck-open");
+
+          globalThis.document.documentElement.classList.remove("txtdrag");
+          w.fire("pointerup", {});
+          const openAfterDrop = w.steps.classList.contains("deck-open");
+
+          const ov = P.pack.overrides["c-fit"] || {};
+          const landedEn = ov.en || "";
+          const expectedEn = ["Set the shade on the holder.", "Tighten the ring.", "Loosen the ring."].join(GAP);
+          const orderMatches = landedEn === expectedEn;
+
+          // Case 3: a drag ending off the card closes it
+          globalThis.document.documentElement.classList.add("txtdrag");
+          w.steps.hover = false;
+          w.fire("pointerout", { target: w.steps, relatedTarget: null });
+          const openMidDragOffCard = w.steps.classList.contains("deck-open");
+
+          globalThis.document.documentElement.classList.remove("txtdrag");
+          w.fire("pointerup", {});
+          const closedAfterDropOffCard = !w.steps.classList.contains("deck-open");
+
+          return eq([opened, closedAfterRerender, reOpened, openAfterSwap1, openAfterSwap2, openAfterDrop, orderMatches, openMidDragOffCard, closedAfterDropOffCard].join(","),
+            "true,true,true,true,true,true,true,true,true");
+        } finally {
+          CM.setContentLangs(hadLangs); AS.putLang("en"); AS.setCards(hadCards);
+          P.BASE_M.length = 0; hadBase.forEach(m => P.BASE_M.push(m)); P.pack.custom = hadCustom; P.pack.overrides = hadOverrides;
+          if (hadRebuild === undefined) delete HK.hooks.rebuildCards; else HK.hooks.rebuildCards = hadRebuild;
+          w.restore();
+        }
       });
     /* The sheet's half. With the switch off no deck class is on any card or reply (1016dk1 to dk3), so a deck rule is
        off with it if it asks for one; the fade's transition on every card and rule asks for none, so it asks for a body
@@ -4879,7 +5092,7 @@ const CARD_B = {
       const plNameless = who();
       UILANG_STORE.lsDel("eUiLang");
       check("pick.js", "901p1 the picker is told which conversation fills the reply, by its tab's name: the first name typed in it now, else its number",
-        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|Tab 2|Rozmowa 2"));
+        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|New chat|Nowa rozmowa"));
     }
 
     /* The window's close: the shell asks, and the conversations answer. */
@@ -5038,7 +5251,7 @@ const CARD_B = {
     const closedBefore = [strip().split(",").map((t) => t.split(":")[0]).join(","), pax.value].join("/");
     check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
       () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind, closedBefore].join("|"),
-        "New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
+        "Rename tab|-|New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
         + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna|dp-b,dp-c/Celina Nowak"));
 
     const pageListen = {};
@@ -5813,7 +6026,7 @@ const CARD_B = {
     const e = Object.assign({
       hidden: false, attrs: {}, _html: "",
       get innerHTML() { return this._html || ""; },
-      set innerHTML(v) { this._html = String(v); for (const k of Object.keys(made)) delete made[k]; },
+      set innerHTML(v) { this._html = String(v); if (v === "") this.kids = []; for (const k of Object.keys(made)) delete made[k]; },
       value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
       get textContent() {
         if (this._text !== undefined) return this._text;
@@ -6434,6 +6647,127 @@ const CARD_B = {
       STAB.clearScreenOn();
       STAB.screens.length = 0;
       return (titleOk && auxOk) || JSON.stringify({ titleOk, title: tabEl.title, hasAux: typeof tabEl.onauxclick === "function", auxOk });
+    });
+
+    // 24. order after a drag, persisted and restored
+    check("tabs.js", "order after a drag, persisted and restored", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      MN.openMaintenance();
+      if (typeof T.moveTab !== "function") return "no moveTab";
+      T.moveTab(2, 0);
+      const orderAfter = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
+      T.saveTabSession();
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      T.tabs.splice(0, T.tabs.length);
+      T.initTabs();
+      const restoredOrder = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
+      return (orderAfter.join(",") === "maintenance,t-a,t-b" && restoredOrder.join(",") === "maintenance,t-a,t-b") || JSON.stringify({ orderAfter, restoredOrder });
+    });
+
+    // 25. a new tab last with screen tabs present
+    check("tabs.js", "a new tab last with screen tabs present", () => {
+      start([["t-a", "Anna"]], "t-a");
+      MN.openMaintenance();
+      T.addTab();
+      const order = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
+      const lastKey = order[order.length - 1];
+      const lastTab = T.tabs.find(t => t.id === lastKey);
+      return Boolean(lastTab && lastKey !== "maintenance" && order.indexOf("maintenance") < order.length - 1);
+    });
+
+    // 26. the label 'New chat' and no 'Tab N' left in the source
+    check("tabs.js", "the label 'New chat' and no 'Tab N' left in the source", () => {
+      start([["t-blank", ""]], "t-blank");
+      UILANG_STORE.lsSet("eUiLang", "en");
+      T.drawTabs();
+      const tabElEn = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
+      const nameEn = tabElEn && tabElEn.querySelector(".tab-label") && tabElEn.querySelector(".tab-label").textContent;
+      UILANG_STORE.lsSet("eUiLang", "pl");
+      T.drawTabs();
+      const tabElPl = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
+      const namePl = tabElPl && tabElPl.querySelector(".tab-label") && tabElPl.querySelector(".tab-label").textContent;
+      UILANG_STORE.lsDel("eUiLang");
+      T.drawTabs();
+      const tabsSrc = fs.readFileSync(join(MODDIR, "tabs.js"), "utf8");
+      const tplSrc = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+      const noTabN = !/Tab\s+[0-9N]/.test(tabsSrc) && !/Tab\s+[0-9N]/.test(tplSrc);
+      return (nameEn === "New chat" && namePl === "Nowa rozmowa" && noTabN) || JSON.stringify({ nameEn, namePl, noTabN });
+    });
+
+    // 27. PAX rename
+    check("tabs.js", "PAX rename", () => {
+      start([["t-pax", ""]], "t-pax");
+      pax.value = "Jan Kowalski";
+      T.scheduleTabSave();
+      const nameTyped = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      const nameCleared = T.activeTabName();
+      return nameTyped === "Jan" && nameCleared === "New chat";
+    });
+
+    // 28. a manual rename winning over PAX and surviving a restart
+    check("tabs.js", "a manual rename winning over PAX and surviving a restart", () => {
+      start([["t-man", "Jan Kowalski"]], "t-man");
+      if (typeof T.beginTabRename !== "function" || typeof T.finishTabRename !== "function") return "no rename functions";
+      T.beginTabRename("t-man");
+      T.finishTabRename("t-man", "VIP Support");
+      const nameMan = T.activeTabName();
+      pax.value = "Anna Nowak";
+      T.scheduleTabSave();
+      const nameStillMan = T.activeTabName();
+      T.saveTabSession();
+      T.initTabs();
+      const nameRestored = T.activeTabName();
+      return nameMan === "VIP Support" && nameStillMan === "VIP Support" && nameRestored === "VIP Support";
+    });
+
+    // 29. the empty rename handing back
+    check("tabs.js", "the empty rename handing back", () => {
+      start([["t-hb", "Jan Kowalski"]], "t-hb");
+      if (typeof T.beginTabRename !== "function" || typeof T.finishTabRename !== "function" || typeof T.clearTabRename !== "function") return "no rename functions";
+      T.beginTabRename("t-hb");
+      T.finishTabRename("t-hb", "Custom Name");
+      T.clearTabRename("t-hb");
+      const nameBackToPax = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      const nameBackToNewChat = T.activeTabName();
+      return nameBackToPax === "Jan" && nameBackToNewChat === "New chat";
+    });
+
+    // 30. a small press still a click
+    check("tabs.js", "a small press still a click", () => {
+      start([["t-c1", "First"], ["t-c2", "Second"]], "t-c1");
+      MN.openMaintenance();
+      const screenTabEl = tabsBar.kids.find(k => k.dataset && k.dataset.sid === "maintenance");
+      if (!screenTabEl) return "no screen tab";
+      if (typeof screenTabEl.onpointerdown !== "function") return "screen tab has no onpointerdown";
+      screenTabEl.closest = () => null;
+      screenTabEl.onpointerdown({ pointerType: "mouse", button: 0, clientX: 100, clientY: 50, target: screenTabEl });
+      screenTabEl.onclick({ target: screenTabEl });
+      const convTabEl = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-c2");
+      if (!convTabEl) return "no conv tab";
+      convTabEl.closest = () => null;
+      convTabEl.onpointerdown({ pointerType: "mouse", button: 0, clientX: 100, clientY: 50, target: convTabEl });
+      convTabEl.onclick({ target: convTabEl });
+      return STAB.screenOn === "" && T.getActiveTabId() === "t-c2";
+    });
+
+    // 31. a session saved while renaming was retired keeps its title inert (the test architect's edit of 965)
+    check("tabs.js", "965e1 a saved title with no customName restores as New chat, and the customer's name still names it", () => {
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "t-old", tabs: [Object.assign(tab("t-old", ""), { title: "Old" })] }));
+      T.initTabs();
+      const nameless = T.activeTabName();
+      const kept = (T.tabs.find(x => x.id === "t-old") || {}).customName;
+      pax.value = "Jan Kowalski";
+      T.scheduleTabSave();
+      const named = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      return (nameless === "New chat" && kept === "" && named === "Jan") || JSON.stringify({ nameless, kept, named });
     });
 
   } finally {

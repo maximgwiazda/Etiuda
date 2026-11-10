@@ -26,6 +26,7 @@ const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, setJumpList, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
+const { honourPendingReset, stageReset, deliverResetNotice, retryPendingReset, stopPendingReset } = require(path.join(__dirname, "desk-reset.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
 let embedLib = null;
 try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
@@ -333,6 +334,8 @@ function catalogPlaces() {
    switches travel in the same array and a shortcut may carry any of them. Named first among the
    places above, so the file a person double-clicked is the one this load is offered. */
 let openedWith = "";
+/* Set when a reset pass leaves paths behind, and sent once the page has loaded. */
+let resetNotice = null;
 /* The highest rev the lead had already signed in the folder, per catalog id, when the outside
    file was opened. A later file has to be above that before it is offered. */
 let openedBaseline = null;
@@ -2464,16 +2467,46 @@ function joinGenuine(doc, folder) {
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
 }
-/* What the lead's file of openings, beside the team file, says to one request: {lead, nonce}, {refused: true},
-   or null. It is not signed; the code covers the lead's key and nonce, so a forged opening shows a wrong code. */
-function joinOpening(joins, teamId, deskId, commit) {
+/* The bytes the lead's file of openings is signed over: its own prefix, then the folded form a team file uses. */
+function joinsSignedBytes(doc) {
+  return Buffer.concat([Buffer.from("etiuda-team-joins\n", "utf8"), signedBytesOf(doc)]);
+}
+/* What that file says to one request: {lead, nonce}, {refused: true}, or null. It counts only when its signature
+   is one of `trust` (the pin, or the lead of the folder's whole team file). Unsigned, or signed by anyone else, it says nothing. */
+function joinOpening(joins, teamId, deskId, commit, trust) {
   const lead = joins && joins.lead, open = joins && Array.isArray(joins.open) ? joins.open : [];
   if (!joins || +joins.format !== 1 || joins.kind !== JOINS_KIND || joins.team !== teamId || !lead || typeof lead.keyId !== "string"
     || !JOIN_HEX_RE.test(String(lead.public))) return null;
+  const pubs = Array.isArray(trust) ? trust.map(String).filter(p => JOIN_HEX_RE.test(p)) : [];
+  const sig = joins.sig;
+  let signed = false;
+  try {
+    if (pubs.length && sig && sig.alg === "Ed25519" && /^[0-9a-f]{128}$/.test(String(sig.value))) {
+      const bytes = joinsSignedBytes(joins), value = Buffer.from(String(sig.value), "hex");
+      signed = pubs.some(pub => crypto.verify(null, bytes, crypto.createPublicKey({
+        key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" }), value));
+    }
+  } catch { signed = false; }
+  if (!signed) return null;
   const e = open.find(x => !!x && x.desk === deskId && x.commit === commit);
   if (!e) return null;
   if (e.refused === true) return { refused: true };
   return JOIN_HEX_RE.test(String(e.nonce)) ? { lead: { keyId: lead.keyId, public: lead.public }, nonce: e.nonce } : null;
+}
+/* Publics that may sign the joins file for this team. The pin, where this desk has one. The lead of the folder's
+   whole team file when there is no pin, or when that lead is the pin, or a handover from it. */
+function joinTrustPubs(team, root) {
+  const pubs = [];
+  const pin = team && teamPins[team];
+  if (pin && JOIN_HEX_RE.test(String(pin.public))) pubs.push(String(pin.public));
+  let chosen = null;
+  try { chosen = root ? teamTextChosen(root).doc : null; } catch { chosen = null; }
+  const named = chosen && chosen.lead;
+  if (chosen && chosen.id === team && teamWhole(chosen) && named && JOIN_HEX_RE.test(String(named.public))) {
+    const pub = String(named.public);
+    if (!pin || pub === String(pin.public) || handedTo(chosen, pin)) pubs.push(pub);
+  }
+  return pubs;
 }
 
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
@@ -5395,7 +5428,7 @@ function joinView() {
     if (!j.opened && !j.refused) {
       let joins = null;
       try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
-      const got = joinOpening(joins, j.team, me.id, j.commit);
+      const got = joinOpening(joins, j.team, me.id, j.commit, joinTrustPubs(j.team, root));
       if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
       else if (got) {
         try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }
@@ -6064,6 +6097,35 @@ function forkDismissed(team) {
   }
   return joinView();
 }
+/* The mirror this team's row is read from: the relay mirror while this desk follows that team, otherwise the folder mirror. */
+function teamStateMirror(team) {
+  if (teamChannel[team] && teamChannel[team].kind === "relay") {
+    const here = relayHere();
+    if (!here || here.team !== team) return "";
+    return relayMirrorOf(here.rt);
+  }
+  return folderMirrorOf(team);
+}
+/* True while the team's file lists a catalog the mirror holds no edition of. An edition is a catalog file there,
+   signed so this desk accepts it. The head's announcement is not one: the file is. An empty list, or a team file
+   that is not whole under the pinned lead, says nothing. */
+function awaitsFirstEdition(team) {
+  const pin = teamPins[team];
+  if (!pin) return false;
+  const root = teamStateMirror(team);
+  if (!root || !folderAnswers(root)) return false;
+  const doc = teamTextChosen(root).doc;
+  if (!doc || !teamWhole(doc) || String(doc.id) !== team || !doc.lead
+    || doc.lead.keyId !== pin.keyId || doc.lead.public !== pin.public
+    || !Array.isArray(doc.catalogs) || !doc.catalogs.length) return false;
+  const have = new Set();
+  for (const f of ecFilesIn(root)) {
+    let facts = null;
+    try { facts = ecFacts(f, ""); } catch { facts = null; }
+    if (facts && facts.id && Number.isFinite(+facts.rev) && +facts.rev >= 0 && facts.genuine) have.add(String(facts.id));
+  }
+  return doc.catalogs.some(id => !have.has(String(id)));
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
@@ -6097,6 +6159,7 @@ function leadsView() {
     }
     /* The same sentence the log says, on this team's row, until the listing lands. The page prints it. */
     if (reading && ftHere && t === ftHere.team) row.reading = reading; /* plant:still-reading-shown */
+    if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
   });
 }
@@ -7773,14 +7836,15 @@ function closeHeld(win, e) {
   /* Hide does not run the window's own place-keeping: a stay is not a close, and the place file stays as it was
      unless the first-close toast has something to remember. No tray is not a stay: hiding would leave the desk
      running with nothing to open it, so that close falls through. */
-  if (decision === "hide" && ensureTray()) {
+  const lost = win && win.webContents && win.webContents.etiudaLost;
+  /* A stopped page that has not come back is not hidden: the tray would show an empty pane. */
+  if (decision === "hide" && ensureTray() && !(lost && !lost.back)) {
     try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
     try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
     try { maybeFirstClose(win); } catch { /* the toast is a courtesy */ }
     return true;
   }
   if (win && (win.etiudaInstallerClose || win.etiudaSessionEnd || win.etiudaRefusalClose)) return false;
-  const lost = win.webContents.etiudaLost;
   if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
   e.preventDefault();
   win.etiudaCloseAsking = true;
@@ -8216,6 +8280,47 @@ function listingRows() {
   return rows.map(stripGenuine);
 }
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
+/* The page asks. The files stay until the next start: this process still holds them. The catalog
+   folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
+/* The new process asks for the single-instance lock. Releasing it first is what lets that
+   process get it; the marker waits if the new process never arrives. */
+function relaunchAfterReset() {
+  setImmediate(() => {
+    try {
+      if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock();
+      if (typeof app.relaunch === "function") app.relaunch();
+      if (typeof app.quit === "function") app.quit();
+      else if (typeof app.exit === "function") app.exit(0);
+    } catch (err) { /* the marker still waits for the next start */ }
+  });
+}
+ipcMain.handle("etiuda:desk-reset", (e) => {
+  if (!fromEngine(e)) return { ok: false, reason: "refused" };
+  const userData = app.getPath("userData");
+  let catalogSetting = "";
+  try {
+    const env = JSON.parse(fs.readFileSync(deskFile(), "utf8"));
+    const keys = typeof env.keys === "string" ? JSON.parse(env.keys || "{}") : (env.keys || {});
+    catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
+  } catch (err) { catalogSetting = ""; }
+  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
+  if (staged && staged.ok) relaunchAfterReset();
+  return staged;
+});
+ipcMain.handle("etiuda:reset-retry", (e) => {
+  if (!fromEngine(e)) return { ok: false, reason: "refused" };
+  const result = retryPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+  if (result && result.ok) {
+    resetNotice = null;
+    relaunchAfterReset();
+  }
+  return result || { ok: false };
+});
+ipcMain.handle("etiuda:reset-stop", (e) => {
+  if (!fromEngine(e)) return { ok: false, reason: "refused" };
+  resetNotice = null;
+  return stopPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+});
 /* THE LISTING IS SENT, not only asked for: once at boot, and again whenever the set of files in it, by place, id,
    edition and hash, changes, so a rename or a newer edition under another name reaches the page, which decides what
    it means. A date moving alone is no change, and nothing is sent while the folder does not answer. This is not
@@ -8722,7 +8827,7 @@ const SHELL_WORDS = {
         trayQuit: "Quit Etiuda",
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda keeps running in the tray",
-        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this.",
+        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead.",
         jumpRecent: "Recent catalogs",
         jumpReplies: "Bring the replies over any window",
         jumpNewTab: "New tab",
@@ -8746,7 +8851,7 @@ const SHELL_WORDS = {
         trayQuit: "Zakończ Etiudę",
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda działa dalej w zasobniku",
-        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka się z ikony w zasobniku, a to zachowanie zmienia się w Ustawieniach, w części Ogólne.",
+        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka pozycja Zakończ Etiudę w menu ikony zasobnika; w Ustawieniach, w części Ogólne, można ustawić, by zamknięcie okna kończyło działanie.",
         jumpRecent: "Ostatnie katalogi",
         jumpReplies: "Przywołaj odpowiedzi nad dowolne okno",
         jumpNewTab: "Nowa rozmowa",
@@ -8801,6 +8906,12 @@ function pageWatchFor(win) {
     log: line => console.error("etiuda: " + line),
     lost: d => { win.webContents.etiudaLost = { reason: String(d.reason), exitCode: d.exitCode, at: Date.now() }; },
     reloading: () => { recovering.add(win.webContents.id); },
+    /* Close Etiuda quits. A bare close hides into the tray and the dead page comes back empty. */
+    quit: () => {
+      if (typeof win.quit === "function") { win.quit(); return; }
+      quitting = true;
+      try { app.quit(); } catch (e) { /* already leaving */ }
+    },
   };
 }
 /* ---- THE PICKER: the desk's replies over the window in use, by a hotkey -------------------------
@@ -10157,6 +10268,7 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
   win.webContents.on("did-finish-load", () => { setTimeout(warmSuggestSoon, EMBED_WARM_DELAY_MS); });
   win.webContents.once("did-finish-load", () => { dispatchColdStartArgs(win); });
+  win.webContents.on("did-finish-load", () => { if (resetNotice) deliverResetNotice(win, resetNotice); });
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
@@ -10525,10 +10637,18 @@ function dispatchColdStartArgs(win, argv) {
    the lock every double-clicked catalog would open a second window with its own desk file, two
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
    on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
+/* The lock is taken first. Only the process that holds it finishes a pending reset, and it
+   does that before anything else in this folder is read. The lock's own files stay. */
 const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
   app.quit();
 } else {
+  try {
+    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+    if (honoured && honoured.notice && Array.isArray(honoured.paths) && honoured.paths.length)
+      resetNotice = { paths: honoured.paths.slice() };
+  }
+  catch (e) { console.error("etiuda: a pending reset could not be finished - " + (e && e.message)); }
   registerEtiudaLink();
   app.on("second-instance", (e, argv) => { onSecondInstance(argv); });
   const link = linkArgFrom(process.argv);

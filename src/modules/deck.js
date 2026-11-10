@@ -32,12 +32,15 @@ function deckLengths(tops, heights, width, natural){
 }
 
 function deckReset(card){
+  const id=card&&card.dataset&&card.dataset.id;
+  if(id) deckOpenIds.delete(id);
   card.classList.remove("deck","deck-open","deck-up","deck-moving","deck-return","deck-near");
   ["height","--deck-rest-bottom","--deck-extra"].forEach(p=>card.style.removeProperty(p));
   deckSlabs(card).forEach(s=>{ s.classList.remove("deck-back"); DECK_SLAB_PROPS.forEach(p=>s.style.removeProperty(p)); });
   clearTimeout(card._deckT); card._deckGrow=0;
 }
 let deckRaf=0, deckKbdCard=null, deckObs=null, deckListW=-1;
+const deckOpenIds=new Set();
 /* A deck whose own box sits more than one viewport outside the screen keeps the list's
    content-visibility. Inside that band it is measured, which is what deck-near records. */
 function deckView(){
@@ -50,14 +53,22 @@ function deckInRange(c){
   return r.bottom>=-h && r.top<=h+h;
 }
 function deckLive(c){
-  return c.classList.contains("deck-open")||c.classList.contains("deck-up")||deckInRange(c);
+  const id=c.dataset&&c.dataset.id;
+  return (id&&deckOpenIds.has(id))||c.classList.contains("deck-open")||c.classList.contains("deck-up")||deckInRange(c);
 }
 /* Every card in the band is measured afresh after any change in the list. A card's height is
    let go for all of them first, then every slab is read, then every length written, so the
    list costs one layout rather than one per card. A deck outside the band is not read. */
 function deckMeasure(todo){
   if(!todo.length) return;
-  todo.forEach(c=>{ c.style.removeProperty("height"); c.classList.add("deck","deck-near"); });
+  const dragging=deckDragging();
+  todo.forEach(c=>{
+    const id=c.dataset&&c.dataset.id;
+    if(!dragging && !c.matches(":hover")){ if(id) deckOpenIds.delete(id); }
+    else if(c.classList.contains("deck-open") && id) deckOpenIds.add(id);
+    c.style.removeProperty("height");
+    c.classList.add("deck","deck-near");
+  });
   const read=todo.map(c=>{
     const s=deckSlabs(c);
     return {c, s, L:deckLengths(s.map(e=>e.offsetTop), s.map(e=>e.offsetHeight), s[0].offsetWidth, c.offsetHeight)};
@@ -75,7 +86,11 @@ function deckMeasure(todo){
       e.style.setProperty("--deck-dy",deckPx(v.dy)); e.style.setProperty("--deck-sx",String(v.sx));
       e.style.setProperty("--deck-clip",deckPx(v.clip)); e.style.setProperty("--deck-dim",String(v.dim));
     });
-    if(c.matches(":hover") || c===deckKbdCard) deckSetOpen(c,true,true);
+    const id=c.dataset&&c.dataset.id;
+    if(deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id===id) deckKbdCard=c;
+    const shouldOpen=(id&&deckOpenIds.has(id)&&(dragging||c.matches(":hover"))) || c.matches(":hover") || c===deckKbdCard;
+    if(shouldOpen) deckSetOpen(c,true,true);
+    else if(c.classList.contains("deck-open")) deckSetOpen(c,false,true);
   });
 }
 function deckScan(){
@@ -159,6 +174,9 @@ function deckMarkLive(){
 
 function deckSetOpen(card, open, instant){
   clearTimeout(card._deckT);
+  const id=card&&card.dataset&&card.dataset.id;
+  if(open){ if(id) deckOpenIds.add(id); }
+  else { if(id) deckOpenIds.delete(id); }
   if(open===card.classList.contains("deck-open")) return;
   // Only a change cancels the deal's end: a repeated ask that did would leave deck-moving on, and the click guard holding.
   clearTimeout(card._deckM);
@@ -287,9 +305,22 @@ function deckKbdSync(){
   if(!was) setTimeout(()=>sel.scrollIntoView({block:"nearest", behavior:mgReduceMotion()?"auto":"smooth"}), mgReduceMotion()?0:200);
 }
 
+function deckDragging(){
+  const cl=document.documentElement&&document.documentElement.classList;
+  return !!(cl && (cl.contains("txtdrag")||cl.contains("carddrag")||cl.contains("pilldrag")||cl.contains("tabdrag")));
+}
+
+function deckDragEnd(){
+  if(!list) return;
+  list.querySelectorAll(".card.deck.deck-open").forEach(c=>{
+    if(c!==deckKbdCard && !c.matches(":hover")) deckSetOpen(c,false);
+  });
+}
+
 /* A module may not register a listener at load: boot calls this after the note pane's. */
 function wireDeck(){
   if(!list) return;
+  deckOpenIds.clear();
   deckObs=new MutationObserver(ms=>{
     const h=deckHeard(ms);
     if(h.shape) deckLater();
@@ -313,24 +344,31 @@ function wireDeck(){
   // The pointer deals after a short rest, so a sweep across the desk deals nothing, and leaves
   // after a grace that covers the gap between two slabs.
   document.addEventListener("pointerover",e=>{
+    if(deckDragging()) return;
     const c=deckAt(e.target), from=deckAt(e.relatedTarget);
     if(c && c!==from) deckWant(c,true,DECK_DWELL);
     if(from && from!==c) deckWant(from,false,DECK_GRACE);
   },true);
   document.addEventListener("pointerout",e=>{
+    if(deckDragging()) return;
     const c=deckAt(e.target), to=deckAt(e.relatedTarget);
     if(c && c!==to && !e.relatedTarget) deckWant(c,false,DECK_GRACE);
   },true);
+  document.addEventListener("pointerup",deckDragEnd,true);
+  document.addEventListener("pointercancel",deckDragEnd,true);
   addEventListener("keydown",()=>setTimeout(deckKbdSync,0),true);
   addEventListener("mousemove",()=>{
     if(!deckKbdCard || document.body.classList.contains("e-kbdnav")) return;
     const c=deckKbdCard; deckKbdCard=null;
     if(!c.matches(":hover")) deckWant(c,false,DECK_GRACE);
   },{passive:true});
-  // A click on a reply still on its way is held: what is copied is what was there when the hand aimed.
+  /* A click on a tucked reply opens the deck and is not copied. One still travelling is held:
+     what is copied is what was there when the hand aimed. */
   document.addEventListener("click",e=>{
     const t=e.target && e.target.closest ? e.target.closest(".txt.deck-back") : null, c=t && deckAt(t);
-    if(c && (c.classList.contains("deck-moving") || !c.classList.contains("deck-open"))){ e.stopPropagation(); e.preventDefault(); }
+    if(!c) return;
+    if(!c.classList.contains("deck-open")){ e.stopPropagation(); e.preventDefault(); deckWant(c,true,0); return; }
+    if(c.classList.contains("deck-moving")){ e.stopPropagation(); e.preventDefault(); }
   },true);
   deckLater();
 }
@@ -380,6 +418,7 @@ function deckWatch(on){
 function deckFlat(){
   [deckRaf,deckFadeRaf,deckApproachRaf].forEach(id=>{ if(id) cancelAnimationFrame(id); });
   deckRaf=0; deckFadeRaf=0; deckApproachRaf=0; deckKbdCard=null;
+  deckOpenIds.clear();
   if(deckIO){ deckIO.disconnect(); deckIO=null; }
   list.querySelectorAll(".card.deck").forEach(c=>{ clearTimeout(c._deckM); deckReset(c); });
   list.querySelectorAll(".deck-under, .deck-fresh").forEach(e=>e.classList.remove("deck-under","deck-fresh"));
@@ -406,4 +445,5 @@ export {
   deckOn,
   syncDeck,
   wireDeck,
+  deckDragEnd,
 };

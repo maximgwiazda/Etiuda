@@ -429,8 +429,8 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
     const en = draw("en"), pl = draw("pl");
     ST.lsDel("eUiLang");
     return eq([en, pl, face].join(" ## "),
-      ["0/tab/Marta/Marta/a//false//false || 0/tab/Tab 2/Tab 2/b//false//false || 1",
-        "0/tab/Marta/Marta/a//false//false || 0/tab/Rozmowa 2/Rozmowa 2/b//false//false || 1",
+      ["0/tab/Marta/Marta/a//false//false || 0/tab/New chat/New chat/b//false//false || 1",
+        "0/tab/Marta/Marta/a//false//false || 0/tab/Nowa rozmowa/Nowa rozmowa/b//false//false || 1",
         true].join(" ## "));
   });
 

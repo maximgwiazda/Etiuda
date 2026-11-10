@@ -109,6 +109,20 @@ export const SHARED = [
 export const GATE_TOOLS = ["tools/gate-run.mjs", "tools/gates-for.mjs", "tools/child-cap.mjs", "tests/result-line.mjs",
   "tests/gates-for.mjs", "tests/child-cap.mjs"];
 
+/* A leg whose trace follows a whole directory. A merge runs it only when the diff reaches one of
+   these files, or the leg itself. The trace still records the wide reads; this list is a ceiling. */
+export const SUBJECT = {
+  "tests/catalog-trust-desk.mjs": [
+    "src/modules/catalog-trust.js",
+    "src/modules/catalog-v2.js",
+    "src/modules/catalog-offer.js",
+    "src/modules/catalog-boot.js",
+    "src/modules/catalog-file.js",
+    "src/modules/catalog.js",
+  ],
+  "tests/result-line.mjs": GATE_TOOLS,
+};
+
 const globCache = new Map();
 
 function expandBraces(glob) {
@@ -1622,14 +1636,24 @@ function covers(gate, file) {
   return false;
 }
 
-export function gatesFor(root, files) {
-  const tree = analyzeTree(root);
+/* No subject: the trace decides. A subject drops a file the trace reached that the leg does not judge. */
+function subjectAllows(gateRel, rel) {
+  const list = SUBJECT[gateRel];
+  if (!list) return true;
+  return rel === gateRel || list.includes(rel);
+}
+
+/* ready is an analyzeTree result for this root. A caller that plans the same tree many times
+   passes it; a lab that edits files omits it and is read afresh. */
+export function gatesFor(root, files, ready) {
+  const sameRoot = !!(ready && ready.gates && path.resolve(ready.root) === path.resolve(root));
+  const tree = sameRoot ? ready : analyzeTree(root);
   const rows = [];
   for (const g of tree.gates) {
     const chains = [];
     for (const f of files) {
       const rel = path.isAbsolute(f) ? (relOf(root, f) || f) : f.split(path.sep).join("/");
-      if (!covers(g, rel)) continue;
+      if (!covers(g, rel) || !subjectAllows(g.rel, rel)) continue;
       chains.push({ file: rel, chain: chainFor(g, rel) });
     }
     if (!chains.length) continue;

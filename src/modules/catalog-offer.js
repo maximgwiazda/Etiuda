@@ -2,7 +2,7 @@
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
-  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog, deskBranchHolds } from "./catalog-file.js";
+  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog, deskBranchHolds, sha256Hex } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionNameOf, editionLabel, editionSaid,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -10,7 +10,7 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionN
   eUnreadableLine, fileReadCode, fileReadLine } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eCatalogLeads, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
-  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify } from "./host.js";
+  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify, noteCatalogFolderHold } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
 import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
@@ -27,7 +27,7 @@ import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
 import { keyTipHtml, leadKeyText, leadsNow, teamLeads } from "./team-join.js";
-import { V2_SIG_VALID, v2RingRead, v2SigState } from "./catalog-v2.js";
+import { V2_SIG_VALID, v2RingRead, v2SigState, v2SignedBytes } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
 import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
@@ -79,7 +79,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn,offTeam){
   const mine=!!file && !!dir && dir===eCatalogFolder();
   const shown=eOfferCatalogDialog(c,{
     file:file, foundHtml:eFoundHtml(file,dir,shipped),
-    refusedKey:"CatalogNo", force:!!force, asked:!!asked,
+    refusedKey:"CatalogNo", force:!!force, asked:!!asked, fromList:mine,
     /* Only an off-roster note changes this offer: it is asked about, even on an empty desk. A file
        with no note keeps the direct the caller omitted, so a folder watch does not load at once. */
     ...(offTeam ? { direct:false, offTeam:true } : {}),
@@ -145,7 +145,7 @@ function loadCatalogFromFolder(name,mtime,desk){
     const offTeam=!!got.notOnTeam;
     const shown=eOfferCatalogDialog(c,{
       file:got.name, foundHtml:eFoundHtml(got.name,desk?deskFolderOf(desk):eCatalogFolder()),
-      refusedKey:"CatalogNo", force:true, asked:true, direct:!offTeam, offTeam:offTeam,
+      refusedKey:"CatalogNo", force:true, asked:true, direct:!offTeam, offTeam:offTeam, fromList:!desk,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
     });
@@ -521,7 +521,7 @@ function offerEditionHtml(name){
 /* Every channel ends here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
-let offerStanding=null;
+let offerStanding=null, offerShown=null;
 const offeredNotified = new Set();
 const listingNotified = new Set();
 /* A BUBBLE HANGING FROM THE TOP BAR'S CATALOG NAME, never a window: the desk stays usable under it,
@@ -707,8 +707,9 @@ function eOfferCatalogDialog(c,src){
       place();
     }
   });
-  const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
+  const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; if(offerShown&&offerShown.close===close) offerShown=null; };
   offerStanding=close;
+  if(src.fromList) offerShown={c:c, src:src, close:close};
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question
      to the next launch; it is the bubble's own key, and only while the keyboard is inside it. */
   wrap.addEventListener("keydown",e=>{
@@ -918,7 +919,45 @@ function eCheckWatchedFile(interactive){
    of it sits under another name (offered, whatever the file's date), or a SUCCESSOR grew from it or from this desk's own
    file of it and is valid under the ring (offered). A colleague's file is never any of these, and a file with no ring
    line is never a successor. */
+/* The pin the listing carries for an edition: sha256 of its signed bytes, the same string the shell sends as sha. */
+function offerPin(c){
+  const doc=catalogDocOf(c);
+  if(!doc) return (c && typeof c.pin==="string") ? c.pin : "";
+  try{ return "sha256:"+sha256Hex(v2SignedBytes(doc)); }
+  catch(e){ return (c && typeof c.pin==="string") ? c.pin : ""; }
+}
+/* Whether the listing still holds the edition an offer names: that file's name, or the same id and the same pin
+   under another name. A colleague's file and a built-in file do not count. */
+function listingHolds(c, file, files){
+  const name=String(file||""), id=String(c&&c.id||""), pin=offerPin(c);
+  return (files||[]).some(f=>{
+    if(!f || f.desk || f.builtIn) return false;
+    if(name && f.name===name) return true;
+    return !!(id && pin && String(f.id||"")===id && f.sha===pin);
+  });
+}
+/* An offer that came from the catalog folder, and the waiting dot beside the name, go when that edition leaves
+   the listing. A file pointed at outside the folder is left as it stands. */
+function dropOffersLeft(all){
+  const files=(all||[]).filter(f=>f && !f.desk && !f.builtIn);
+  if(offerShown && offerShown.src && offerShown.src.fromList && !listingHolds(offerShown.c, offerShown.src.file, files)){
+    const close=offerShown.close;
+    offerShown=null;
+    if(typeof close==="function") close();
+  }
+  if(edWaiting && edWaiting.src && edWaiting.src.fromList && !listingHolds(edWaiting.c, edWaiting.src.file, files)){
+    edWaiting=null;
+    paintCatWaiting();
+  }
+}
 function onCatalogListing(all){
+  /* The empty desk's folder line follows whether this listing holds a catalog. Only a change, and
+     only while that desk is what is on screen, draws it again. */
+  let flipped=false;
+  try{ flipped=noteCatalogFolderHold(all); }catch(e){ flipped=false; }
+  try{
+    if(flipped && wholeThingEmpty() && document.querySelector(".empty-desk") && typeof hooks.render==="function") hooks.render();
+  }catch(e){}
   // A colleague's file reaches an open Library this way only.
   paintCatalogList();
   if(lsGet("eNotifyCatalogOff")!=="1"){
@@ -940,6 +979,7 @@ function onCatalogListing(all){
       }
     }
   }
+  dropOffersLeft(all);
   const held=storedCatalog();
   if(!held && !catalogLoaded()){ offerToLooseAuthor(all); return; }
   if(!held || !held.id) return;

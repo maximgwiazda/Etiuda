@@ -388,6 +388,7 @@ function loadPack(){
   let p=null;
   adoptStrandedPack();
   try{ const raw=lyGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
+  if(!p||typeof p!=="object"||Array.isArray(p)) p=null;
   p=withCounts(p);
   /* If the rename cannot be applied to what is stored, say so rather than starting quietly with
      an empty ordering - the user would see their arrangement gone with no explanation. The boot
@@ -398,19 +399,21 @@ function loadPack(){
   if(p){ delete p.macroOrder; delete p.baseMacros; }
   pack=Object.assign(emptyPack(), p||{});
   if(!Array.isArray(pack.hidden)) pack.hidden=[];
-  if(!pack.overrides||typeof pack.overrides!=="object") pack.overrides={};
+  if(!pack.overrides||typeof pack.overrides!=="object"||Array.isArray(pack.overrides)) pack.overrides={};
+  else Object.keys(pack.overrides).forEach(k=>{ if(!pack.overrides[k]||typeof pack.overrides[k]!=="object"||Array.isArray(pack.overrides[k])) delete pack.overrides[k]; });
   if(!Array.isArray(pack.custom)) pack.custom=[];
-  if(!pack.catLabels||typeof pack.catLabels!=="object") pack.catLabels={};
+  else pack.custom=pack.custom.filter(m=>m&&typeof m==="object"&&!Array.isArray(m));
+  if(!pack.catLabels||typeof pack.catLabels!=="object"||Array.isArray(pack.catLabels)) pack.catLabels={};
   /* The user's Polish name for a category, beside their English one. Absent in every pack
      written before this, which is why it is normalised here rather than assumed. */
-  if(!pack.catLabelsPl||typeof pack.catLabelsPl!=="object") pack.catLabelsPl={};
+  if(!pack.catLabelsPl||typeof pack.catLabelsPl!=="object"||Array.isArray(pack.catLabelsPl)) pack.catLabelsPl={};
   /* Absent in older packs; both fall back to a name guess, so an upgrade shows icons at
      once and stores nothing until the user actually picks one. */
-  if(!pack.catIcons||typeof pack.catIcons!=="object") pack.catIcons={};
-  if(!pack.catColors||typeof pack.catColors!=="object") pack.catColors={};
-  if(!pack.customCats||typeof pack.customCats!=="object") pack.customCats={};
+  if(!pack.catIcons||typeof pack.catIcons!=="object"||Array.isArray(pack.catIcons)) pack.catIcons={};
+  if(!pack.catColors||typeof pack.catColors!=="object"||Array.isArray(pack.catColors)) pack.catColors={};
+  if(!pack.customCats||typeof pack.customCats!=="object"||Array.isArray(pack.customCats)) pack.customCats={};
   if(!Array.isArray(pack.intentHidden)) pack.intentHidden=[];
-  if(!pack.intentOverrides||typeof pack.intentOverrides!=="object") pack.intentOverrides={};
+  if(!pack.intentOverrides||typeof pack.intentOverrides!=="object"||Array.isArray(pack.intentOverrides)) pack.intentOverrides={};
   if(!Array.isArray(pack.intentCustom)) pack.intentCustom=[];
   if(!Array.isArray(pack.favourites)) pack.favourites=[];
   if(!Array.isArray(pack.intentFavourites)) pack.intentFavourites=[];
@@ -441,6 +444,7 @@ function loadPack(){
   if(pack.baseCards!=null && !Array.isArray(pack.baseCards)) pack.baseCards=null;
   if(Array.isArray(pack.baseCards)&&!pack.baseCards.length) pack.baseCards=null;
   if(!pack.editBases||typeof pack.editBases!=="object"||Array.isArray(pack.editBases)) pack.editBases={};
+  else Object.keys(pack.editBases).forEach(k=>{ if(!pack.editBases[k]||typeof pack.editBases[k]!=="object"||Array.isArray(pack.editBases[k])) delete pack.editBases[k]; });
   if(pack.intentKeys!==TAG_KEYED) pack.intentKeys="";
   migrateBpToCin();
   /* Last, so it re-keys what the normalisation above has already made whole - and after

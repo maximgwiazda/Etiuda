@@ -840,7 +840,7 @@ const t0 = Date.now();
   clean(e, "the theme control");
 
   /* THE DOT FIELD STANDS STILL WHILE THE CARDS SCROLL (Maxim, 2026-09-26). One patch of the page,
-     photographed, the list scrolled by 7 px - not a multiple of the field's 12 px pitch, so a field
+     photographed, the list scrolled by 7 px - not a multiple of the field's 16 px pitch, so a field
      riding the scroll cannot come back to the same picture - and the same patch photographed again.
      The cards are hidden for the three pictures and keep their boxes, so the patch is the field
      alone and a card sliding through it cannot pass for dots that moved; the card's own rectangle is
@@ -881,8 +881,8 @@ const t0 = Date.now();
      THE MEASURE IS INK IN A STRIP, whichever element carries the field: the cards are hidden (their
      boxes kept), a strip of the window outside main's column is photographed, the field is switched
      off wherever it is painted and the same strip is photographed again, and a strip that holds
-     any dot differs from its twin by more than one level of a channel. A strip is at least 12 px each way, the field's pitch, so a field
-     reaching it cannot fall between its dots. The control is the same photograph of a patch INSIDE
+     any dot differs from its twin by more than one level of a channel. A strip is at least 12 px each way, the field's reach past the cards. The pitch is 16 px, so a band this narrow can miss a dot.
+     The control is the same photograph of a patch INSIDE
      main, which must differ: a leg that sees no dots anywhere passes every strip for free. Four
      states, each with the intent panel docked or not, and with the shell's backdrop class or not -
      under it the ground is the field's layer and the field has to stand above it, which a
@@ -906,8 +906,9 @@ const t0 = Date.now();
         const sc = document.getElementById("pageScroll").getBoundingClientRect(),
           m = document.querySelector("main").getBoundingClientRect(), w = innerWidth,
           y = Math.round(sc.top + sc.height / 2), clip = (x, yy, wd, ht) => ({ x: x, y: yy, width: wd, height: ht });
-        /* The field reaches one pitch (12 px) past main on each side: leftBand and rightBand are that pitch and
-           hold dots; left and right are what lies beyond it, to the window's edge, and hold none. */
+        /* The field reaches 12 px past main on each side: leftBand and rightBand are that reach and
+           hold dots; left and right are what lies beyond it, to the window's edge, and hold none.
+           The pitch is 16 px, so the right band can miss a dot. */
         return { inside: clip(Math.round(m.left + 40), y, 48, 48),
           leftBand: clip(Math.round(m.left) - 12, y, 12, 48),
           left: clip(0, y, Math.min(Math.round(m.left) - 12, 600), 48),
@@ -963,7 +964,7 @@ const t0 = Date.now();
   const extentBand = ["inside", "leftBand", "rightBand"];
   check(extentStates.length === 4 && extentStates.every(s => s.small.length === 0
       && s.holds.every(n => extentBand.indexOf(n) > -1) && s.holds.indexOf("leftBand") > -1 && s.holds.indexOf("rightBand") > -1),
-    "the dot field reaches one 12 px pitch past the cards on the left and on the right and no further: dots in both bands,"
+    "the dot field reaches 12 px past the cards on the left and on the right and no further: dots in both bands,"
     + " none beyond them, above the list, beside a docked intent panel, in the scrollbar lane or at the window's bottom edge: " + extentSaid);
   check(extentStates.length === 4 && extentStates.every(s => s.holds.indexOf("inside") > -1),
     "and the leg still sees the dots where they belong: a 48x48 patch inside the cards' column holds"

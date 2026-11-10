@@ -419,7 +419,7 @@ function openCardEditor(id, presetCat, fromManage){
         const paxTag='<span class="fillmiss">PAX</span>';
         /* And the green tag as a card wears it, so a flag about intents names the mark rather
            than a word for it. Its own title glosses the abbreviation. */
-        const intTag='<span class="cbadge hit" title="'+esc(t("Intent"))+'">'+esc(t("int"))+'</span>';
+        const intTag='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("Linked"))+'</span>';
         const box=(id,on,dis,tip,label)=>rows.push('<label title="'+esc(t(tip))+'">'
           +'<input type="checkbox" id="'+id+'"'+(on?" checked":"")+(dis?" disabled":"")+'> '
           +esc(t(label)).split("{PAX}").join(paxTag).split("{INT}").join(intTag)+'</label>');
@@ -445,10 +445,10 @@ function openCardEditor(id, presetCat, fromManage){
           +'<div class="mf-own-off">'+esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag)+'</div></div>');
         box("meAllIntents",m.allIntents,false,
             "Rings green under every intent - for text that always applies, like an opener.",
-            "Linked to every {INT}");
+            "Wears {INT} under every intent");
         box("meIntentTop",m.intentTop,false,
             "Sorts above the other linked cards when an intent is picked.",
-            "Top of the {INT} group");
+            "First among the cards marked {INT}");
         /* THE LANGUAGE PIN. Off by default, and off means "follow the EN/PL toggle", which is
            what every card did before this existed. On, the card shows that version and resolves
            every token in it whatever the toggle says - which is what an internal comment wants,

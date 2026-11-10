@@ -583,6 +583,7 @@ function runUnitTests() {
   catalogIdentityTests();
   catalogNsTests();
   strandedAdoptionTests();
+  unreadablePackTests();
   langSegWiringTests();
   deskStatsTests();
   ejectUndoTests();
@@ -658,7 +659,8 @@ function ejectUndoTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
   const loose = extractDecl(fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8"), "const LOOSE_FIELDS=");
   const markers = ["function catalogKeep(", "const CLEAR_KEEP_LAYER=", "const CLEAR_KEEP_PACK=", "function packKept(",
-    "function keepKeys(", "function putBack(", "function clearLocalMemory(",
+    "function keepKeys(", "function putBack(", "let clearedHold=", "function clearedHeld(", "function clearLocalMemory(",
+    "function bringBackCleared(",
     "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
   const OWN_PACK = JSON.stringify({ overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], favourites: ["c1"], hidden: ["c2"],
     intentFavourites: ["i1"], intentHidden: ["i2"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"], cardOrder: ["c1"] });
@@ -673,7 +675,8 @@ function ejectUndoTests() {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
         "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS",
-        loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
+        loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n")
+        + "\nreturn {ejectCatalog, clearLocalMemory, bringBackCleared: typeof bringBackCleared==='function' ? bringBackCleared : null};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
         ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
         k => (k in w.ls ? w.ls[k] : null), (k, v) => { w.ls[k] = String(v); return true; }, k => { delete w.ls[k]; },
@@ -714,6 +717,31 @@ function ejectUndoTests() {
     + " are not a change to the content", JSON.parse(w.ls["eab12~Pack"] || "null"), { intentKeys: "tag" });
   if (w.undo) w.undo();
   eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
+  /* The toast's Undo still ends at UNDO_MS. The cleared layer is a different hold: it survives that
+     wait and a later undoable act, and comes back byte for byte until the page closes. */
+  const undoMs = +((/const UNDO_MS=(\d+)/.exec(fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8")) || [])[1] || 0);
+  const late = world(true);
+  late.F.clearLocalMemory();
+  const stripped = late.ls["eab12~Pack"] !== OWN_PACK;
+  let clock = 0;
+  clock += undoMs + 1;
+  late.undo = null;
+  late.F.ejectCatalog();
+  const bring = late.F.bringBackCleared;
+  const brought = typeof bring === "function" && bring() === true;
+  eq("past UNDO_MS, and after another undoable act, the cleared layer still comes back byte for byte",
+    [undoMs >= 10000, clock > undoMs, stripped, late.said === "Catalog ejected", brought,
+     late.ls["eab12~Pack"], late.ls["eab12~CatOrder"], late.ls["eab12~LinksAside"], late.ls.ePack],
+    [true, true, true, true, true, OWN_PACK, "[\"t2\",\"t1\"]", "{}", "[\"loose\"]"]);
+  const twice = world(true);
+  twice.F.clearLocalMemory();
+  twice.ls["eab12~Pack"] = JSON.stringify({ overrides: { c1: { t: "edited" } }, intentKeys: "tag" });
+  twice.F.clearLocalMemory();
+  const twiceBring = twice.F.bringBackCleared;
+  const twiceBrought = typeof twiceBring === "function" && twiceBring() === true;
+  eq("a second clear while a layer is held keeps the first, so bring back returns the person's original layer byte for byte",
+    [twiceBrought, twice.ls["eab12~Pack"], twice.ls["eab12~CatOrder"], twice.ls["eab12~LinksAside"], twice.ls.ePack],
+    [true, OWN_PACK, "[\"t2\",\"t1\"]", "{}", "[\"loose\"]"]);
   const page = world(true, false);
   const pageBefore = sorted(page.ls) + sorted(page.ss);
   page.F.clearLocalMemory();
@@ -2317,6 +2345,63 @@ function strandedAdoptionTests() {
      JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
 }
 
+/* THE PACK LOADER TOLERATES AN UNREADABLE LAYER, not JSON or JSON of the wrong shape: the desk starts,
+   the catalog shows as delivered, and the unreadable text is not thrown away silently. */
+function unreadablePackTests() {
+  const cp = require("child_process");
+  const script = [
+    'process.removeAllListeners("warning");',
+    'process.on("warning", () => {});',
+    'import { pathToFileURL } from "node:url";',
+    'import { join } from "node:path";',
+    'const root = process.env.UNREADABLE_PACK_ROOT;',
+    'const mod = (n) => pathToFileURL(join(root, "src", "modules", n)).href;',
+    'const ST = await import(mod("storage.js"));',
+    'const PK = await import(mod("pack.js"));',
+    'const cases = [',
+    '  "{ unreadable not JSON",',
+    '  "123",',
+    '  JSON.stringify([1, 2, 3]),',
+    '  JSON.stringify("just a string"),',
+    '  JSON.stringify({ overrides: [1, 2] }),',
+    '  JSON.stringify({ overrides: "bad" }),',
+    '  JSON.stringify({ custom: 123 }),',
+    '  JSON.stringify({ hidden: 456 }),',
+    '  JSON.stringify({ favourites: "nope" }),',
+    '  JSON.stringify({ cardOrder: "nope" }),',
+    '  JSON.stringify({ baseCards: "nope" }),',
+    '];',
+    'const results = [];',
+    'for (const raw of cases) {',
+    '  ST.setLayer("eab12~");',
+    '  ST.lsSet("eab12~Pack", raw);',
+    '  PK.resetPack();',
+    '  let threw = false;',
+    '  try { PK.loadPack(); } catch (e) { threw = true; }',
+    '  const delivered = !threw && typeof PK.pack === "object" && !Array.isArray(PK.pack)',
+    '    && Object.keys(PK.pack).filter(k => /^\\d+$/.test(k)).length === 0',
+    '    && typeof PK.pack.overrides === "object" && !Array.isArray(PK.pack.overrides)',
+    '    && Object.keys(PK.pack.overrides).length === 0',
+    '    && Array.isArray(PK.pack.custom) && PK.pack.custom.length === 0',
+    '    && Array.isArray(PK.pack.hidden) && PK.pack.hidden.length === 0',
+    '    && Array.isArray(PK.pack.favourites) && PK.pack.favourites.length === 0',
+    '    && PK.pack.baseCards === null;',
+    '  const kept = ST.lsGet("eab12~Pack") === raw;',
+    '  results.push(delivered && kept);',
+    '}',
+    'process.stdout.write(JSON.stringify(results));',
+  ].join("\n");
+  const r = cp.spawnSync(process.execPath, ["--input-type=module", "-"], {
+    input: script, encoding: "utf8", cwd: E.ROOT, timeout: 60000, windowsHide: true,
+    env: Object.assign({}, process.env, { UNREADABLE_PACK_ROOT: E.ROOT })
+  });
+  let results = [];
+  try { results = JSON.parse(r.stdout.trim().split(/\r?\n/).filter(Boolean).pop() || "[]"); } catch (e) {}
+  eq("the pack loader tolerates an unreadable layer (not JSON, or JSON of the wrong shape): the desk starts, the catalog shows as delivered, and the unreadable text is kept as it was",
+    [r.status === 0, results.length === 11, results.every(Boolean)],
+    [true, true, true]);
+}
+
 /* EVERY LANGUAGE BUTTON THE HEADER HOLDS ANSWERS A PRESS, however it got there. The desk starts
    again in place (restart.js), which rebuilds the buttons for the new catalog's languages and does
    not run the boot's wiring again. The sync and the boot's wiring sliced out of lang-seg.js over a
@@ -3866,12 +3951,17 @@ function installerUpdateTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   const tpl = n => fs.readFileSync(path.join(lib, "templates", "nsis", n), "utf8");
   const macro = (text, name) => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
-  const EN = "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: Etiuda keeps its open conversations and their drafts and brings them back at its next start, or, where it cannot, asks first while a conversation is in progress. The installation carries on once it has closed; if it stays open, close it by hand and press Retry.";
-  const PL = "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: Etiuda zachowa otwarte rozmowy wraz z wersjami roboczymi i przywróci je przy następnym uruchomieniu, a jeśli to niemożliwe, przy trwającej rozmowie najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę.";
+  /* The copywriter's two lines. ${PRODUCT_NAME} is electron-builder's define, so the desk says Etiuda and Studio
+     says Etiuda Studio from the same hook. The first is said while the installer asks the app to close; the second
+     when it is still open and the person must close it and choose Retry. */
+  const EN_CLOSE = "${PRODUCT_NAME} is running, and the installer will close it before going on.";
+  const EN_RETRY = "${PRODUCT_NAME} is running. Close it, then choose Retry.";
+  const PL_CLOSE = "Program ${PRODUCT_NAME} jest uruchomiony; instalator zamknie go przed kontynuacją.";
+  const PL_RETRY = "Program ${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów.";
   const asks = text => {
     const m = macro(text, "customCheckAppRunning");
     return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
-      !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R9"/.test(m),
+      !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R6"/.test(m),
       /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 2\r?\n\s*Quit\b/.test(m)];
   };
   const keeps = text => {
@@ -3888,9 +3978,13 @@ function installerUpdateTests() {
   eq("1152a the installer asks a running Etiuda to close with taskkill and no /F, the close its window's X sends, says so, asks for Retry where it stays open, and a silent install gives up with error level 2 rather than stopping it; electron-builder inserts this in place of its own check",
     got, [true, true, true, true, true, true, true]);
   const words = macro(nsh, "customCheckAppRunning");
-  got = [/\$\{If\} \$LANGUAGE == 1045\r?\n\s*(?:#[^\r\n]*\r?\n\s*)?StrCpy \$R9 "([^"]*)"/.exec(words), /\$\{Else\}\r?\n\s*(?:#[^\r\n]*\r?\n\s*)?StrCpy \$R9 "([^"]*)"/.exec(words)].map(m => m && m[1]);
-  eq("1152b the installer's line is the copywriter's, Polish under the Polish LCID and English otherwise, with its sentence on work in progress kept at the close, and the Polish names Windows's own Retry button",
-    got, [PL, EN]);
+  const grab = head => {
+    const m = new RegExp(head + "\\r?\\n\\s*(?:#[^\\r\\n]*\\r?\\n\\s*)?StrCpy \\$R6 \"([^\"]*)\"\\r?\\n\\s*StrCpy \\$R9 \"([^\"]*)\"").exec(words);
+    return m ? [m[1], m[2]] : [null, null];
+  };
+  got = grab("\\$\\{If\\} \\$LANGUAGE == 1045").concat(grab("\\$\\{Else\\}"));
+  eq("1152b the installer's two lines are the copywriter's, Polish under the Polish LCID and English otherwise: the first names the app while the installer closes it, the second when it is still open and the person must close it and choose Retry, and each carries ${PRODUCT_NAME}",
+    got, [PL_CLOSE, PL_RETRY, EN_CLOSE, EN_RETRY]);
   try {
     const un = tpl("uninstaller.nsh");
     got = keeps(nsh).concat([/!ifmacrodef customRemoveFiles\r?\n\s*!insertmacro customRemoveFiles\r?\n\s*!else/.test(un)]);
@@ -3910,16 +4004,18 @@ function installerUpdateTests() {
     const mk = JSON.parse(String(where.stdout).trim().split(/\r?\n/).pop());
     const script = ["Unicode true", "!include LogicLib.nsh", "!define APP_EXECUTABLE_FILENAME \"Etiuda.exe\"", "!define isUpdated \"$0 == 1\"",
       "!define APP_INSTALLER_STORE_FILE \"etiuda-updater\\installer.exe\"",
+      "!define PRODUCT_NAME \"Etiuda Studio\"",
       "!include /CHARSET=UTF8 \"" + path.join(root, "shell", "installer.nsh") + "\"",
       "Section", "!insertmacro customCheckAppRunning", "!insertmacro customRemoveFiles", "SectionEnd", ""].join("\n");
     const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
       { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
     const out = String(r.stdout || "");
+    const named = s => out.indexOf(s.split("${PRODUCT_NAME}").join("Etiuda Studio")) > -1;
     got = r.status !== 0 ? "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ")
-      : [/taskkill \/IM "Etiuda\.exe"/.test(out), out.indexOf(EN) > -1, out.indexOf(PL) > -1, /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
+      : [/taskkill \/IM "Etiuda\.exe"/.test(out), named(EN_CLOSE), named(EN_RETRY), named(PL_CLOSE), named(PL_RETRY), /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
   } catch (e) { got = "makensis could not be asked: " + e.message; }
-  eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, both lines, the removal and the give-up intact",
-    got, [true, true, true, true, true]);
+  eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, the four lines with the product's name, the removal and the give-up intact",
+    got, [true, true, true, true, true, true, true]);
 }
 function ecTypeNameTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
@@ -4276,6 +4372,7 @@ function pageWatchTests() {
     reload() { log.push(recovering.delete(7) ? "reload marked" : "reload unmarked"); },
     forcefullyCrashRenderer() { log.push("kill"); } };
   const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); },
+    quit() { log.push("quit"); },
     getBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }) };
   class Box {
     constructor(o) { const self = this; this.o = o; this.wcOn = {}; this.winOn = {}; this.closed = false;
@@ -4309,7 +4406,7 @@ function pageWatchTests() {
   eq("a second loss within a minute asks in the recovery window, and its Restart reloads, marked",
     step(gone("crashed")), ["asks gone", "reload marked"]);
   clock += 10000; answers.push(1);
-  eq("and its Close closes the window", step(gone("crashed")), ["asks gone", "close"]);
+  eq("choosing Close, index 1, records a quit, not a bare close", step(gone("crashed")), ["asks gone", "quit"]);
   eq("a page that closed on its own is left alone", step(gone("clean-exit")), []);
   answers.push(0);
   eq("the hang window's Wait leaves the page alone", step(() => winOn.unresponsive()), ["asks hung"]);
@@ -4382,9 +4479,13 @@ function recoveryWindowTests() {
   const stopped = [nav("https://example.com/"), nav(base + "?answer-7")];
   const unsettled = !a.p.settled;
   const chose = nav(base + "?answer-1");
+  const watchSrc = fs.readFileSync(path.join(E.ROOT, "shell", "page-watch.cjs"), "utf8");
+  const quitsOnClose = /response === 1\)/.test(watchSrc) && /o\.quit\(\)/.test(watchSrc) && !/response === 1\) win\.close\(\)/.test(watchSrc);
   eq("it shows when drawn, refuses every navigation and new window, passes over a query that is no choice, answers the chosen link's index, closes and takes its file away",
     [a.w.shown, stopped, a.w.opener && a.w.opener().action, unsettled, chose, a.p.value, a.w.closed, fs.existsSync(a.w.file)],
     ["show", [true, true], "deny", true, true, { response: 1 }, true, false]);
+  eq("choosing index 1 records a quit, not a bare close",
+    [a.p.value, quitsOnClose], [{ response: 1 }, true]);
 
   const b = ask(R, PL.gone, [PL.restart, PL.close]);
   b.w.wcOn["before-input-event"]({ preventDefault() {} }, { type: "keyDown", key: "Escape" });
@@ -5861,8 +5962,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1335;
-const UI_STRINGS_SHA256 = "a4587aaf23e3ac9d58ea5432c6b3db78e7fd59c110a91a9695739cc45dd48eed";
+const UI_STRINGS_COUNT = 1355;
+const UI_STRINGS_SHA256 = "8da005d02338ce9cb8889212bf35385e81012e152bc34d46fbcf6fc4bbf1a9a5";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or

@@ -46,6 +46,9 @@
   /* The key shape below is E_KEY_RE's in storage.js, repeated because this script imports nothing.
      withDesk is a person's Reset and nothing else: the silent repair below leaves an installed
      desk as it is. */
+  /* THE PERSON'S OWN LAYER OF A CATALOG (e<ns>~Pack: the cards they wrote and changed, their stars) is
+     theirs, not a setting: a Reset clears settings and the session and keeps it (board D7b, 2026-11-10). */
+  function ownLayer(k){ return /^e[0-9a-z]+~Pack$/.test(k); }
   function clearState(withDesk){
     /* A Reset hands the desk to the app's storage where it loaded (eResetClear), before anything is
        cleared; a page leaving would otherwise send the app's copy back over this. */
@@ -53,7 +56,7 @@
     if(withDesk) try{ done=typeof window.eResetClear==="function" && window.eResetClear()===true; }catch(e){}
     try{
       var keys=[],i;
-      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)) keys.push(k); }
+      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)&&!ownLayer(k)) keys.push(k); }
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
@@ -61,7 +64,7 @@
     var h=withDesk && !done && hostDesk();
     if(h) try{
       var map=JSON.parse(h.deskRead()||"{}"), kept={};
-      for(var key in map) if(!/^e(?:[A-Z]|[0-9a-z]+~)/.test(key)) kept[key]=map[key];
+      for(var key in map) if(!/^e(?:[A-Z]|[0-9a-z]+~)/.test(key) || ownLayer(key)) kept[key]=map[key];
       h.deskSave(JSON.stringify(kept));
     }catch(e){}
   }
@@ -410,7 +413,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --rail-max:228px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
-  /* The painted side column, from the window's edge to one 12px dot pitch short of the cards.
+  /* The painted side column, from the window's edge to 12px short of the cards, where the dot field begins.
      The docked rail and Settings' section list both read it, so a dragged rail and the list
      stay one width. --app-pad is the page gutter, declared below; --rail-max is the column
      inside that gutter. The measured --rail-left is not in this sum: it is 0 while a screen
@@ -447,7 +450,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      transparent. All four token blocks. */
   --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
-  --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
+  --card-border:var(--line);   /* a hairline; dark keeps its own seam */
   /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
      so the card ground gets its own token - see the dark blocks. */
   --card-bg:var(--panel);
@@ -466,10 +469,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The bevel at alpha zero, the same three lines in every theme, so a transition to --bevel
      fades the cut in place - the pill bar's two states, as with --shadow-pop-off. */
   --bevel-off:inset 0 1px 0 #0000,inset 0 -1px 0 #0000,inset 1px 0 0 #0000;
-  /* Lift apart from card shadow: the intent panel wears the lift under its bevel, and a dark
-     card wears the bevel alone - see the dark blocks. */
+  /* Lift apart from card shadow: the intent panel wears both layers under its bevel. A light
+     card's own shadow is the near layer only; dark wears the bevel alone. See the dark blocks. */
   --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
-  --card-shadow:var(--card-lift);
+  --card-shadow:0 1px 2px rgba(15,23,42,.05);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
@@ -586,7 +589,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bub:#0e67d8; --bub-shadow:rgba(14,103,216,.30);
   --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
-  --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
+  --card-border:var(--line);   /* a hairline; dark keeps its own seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
   --shadow-pop:0 18px 48px rgba(0,0,0,.28);
@@ -599,7 +602,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
   --bevel:inset 0 1px 0 #fff,inset 0 -1px 0 rgba(0,0,0,.08),inset 1px 0 0 rgba(255,255,255,.7);
   --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
-  --card-shadow:var(--card-lift);
+  /* The panel wears the two-layer lift above. A light card takes the near layer only. */
+  --card-shadow:0 1px 2px rgba(15,23,42,.05);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
@@ -926,7 +930,7 @@ span[data-icon]{line-height:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
-  max-width:210px;min-width:100px;/* the floor where "Tab 99" and its dot fit whole - see TAB_FLOOR_W */
+  max-width:210px;min-width:100px;/* the floor where a tab and its dot fit whole - see TAB_FLOOR_W */
   /* hidden, NOT clip-with-a-margin: the accent marker's trim to the corner radius depends
      on this clip, and any clip margin lets the bar run past the corners. The cover strip
      that once needed to escape is a box-shadow now - shadows paint outside the border box. */
@@ -1007,6 +1011,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   padding-left:12px;overflow:hidden;white-space:nowrap;font-weight:600}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
+.tab-rename-input{display:block;width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:600;color:inherit;background:transparent;border:none;outline:none;padding:0;margin:0;line-height:inherit}
+.tab-rename-input::placeholder{color:inherit;opacity:.5}
 /* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
    through the same [data-ec] -> --ecat plumbing the pills use (see syncTabAccent), blended
    when several categories are filtered, the band's ink when none is (dark on a pale band, white
@@ -1105,11 +1111,17 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    are both measured from the wrap's padding box, so the same two numbers put them in the same
    box, to the pixel. */
 #intentPh{position:absolute;left:12px;right:34px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;gap:8px;
   pointer-events:none;white-space:nowrap;overflow:hidden;
   font:var(--intent-type) var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px;vertical-align:1px}
+/* The keys sit at the far end, a step smaller than the lead, and the dot between them is quieter than either. */
+#intentPh .ph-keys{margin-left:auto;display:inline-flex;align-items:center;gap:5px;
+  font-size:12.5px;color:var(--dim);white-space:nowrap}
+#intentPh .ph-keys kbd{font:11.5px var(--mono);padding:0 5px}
+#intentPh .ph-dot{opacity:.5;margin:0 3px}
 /* A held query keeps its accent ink; the box stays the same quiet line as PAX and ROLE - the
    outline is not the signal, the colour of the words is. Green stays the selection colour and
    lives in the rail. Focus is the wrap's - see .fill input. */
@@ -1215,25 +1227,30 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
 #settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-/* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
-   picture beside a word. The language badge fills the same slot the drawings do, so the three
-   rows share one left edge. */
-.menu.menu-ic button{display:flex;align-items:center;gap:9px}
-.menu.menu-ic button .ic{flex:0 0 auto;color:inherit}
+/* A menu row is an icon and a word. The icon is dim until the pointer or the keyboard reaches
+   the row, when it turns accent; the words stay ink. The language badge fills the same slot the
+   icons do, so those rows share one left edge. */
+.menu.menu-ic button{display:flex;align-items:center;gap:10px}
+.menu.menu-ic button .ic{flex:0 0 auto;color:var(--dim)}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
-  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
+  font:700 10.5px var(--sans);letter-spacing:.4px;color:var(--dim)}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
-.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:232px;
   background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
-  box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
-.menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
+  box-shadow:var(--shadow-pop);padding:6px;display:flex;flex-direction:column;gap:2px}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
-.menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.menu button .sx-ic,.menu button .ic{flex:none;width:16px;height:16px;color:var(--dim)}
+.menu button:hover,.menu button:focus-visible{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--ink);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
+.menu button:hover .sx-ic,.menu button:focus-visible .sx-ic,
+.menu button:hover .ic,.menu button:focus-visible .ic,
+.menu button:hover .more-lang-badge,.menu button:focus-visible .more-lang-badge{color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
-#menuPicker{display:flex;align-items:center;gap:18px}
+#menuPicker{display:flex;align-items:center;gap:10px}
 #menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
@@ -1384,40 +1401,51 @@ body.pills-off.pills-peek .pills-slot{display:block}
    and the naked input are every field's arrangement - see .fill input - so the pair needs
    only the share of the box the name takes. */
 .paxrole #pax{flex:1 1 auto}
-/* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
-   peek at the edges so it reads as turnable. The wheel and the arrow keys turn it
-   (stepRoleDrum); the hidden roleSel stays the one value {ROLE} reads. */
+/* The drum: a slot wheel over whoOptions() plus an empty notch that clears. The neighbours
+   rest hidden and come in with the pointer or the keyboard, so it reads as turnable when it
+   is being used. The wheel and the arrow keys turn it (stepRoleDrum); the hidden roleSel
+   stays the one value {ROLE} reads. */
 /* 70px: the widest class word (purchaser, 56px at this font) plus the 6px insets - the
    drum earns no width beyond its longest word. */
 #roleDrum{position:relative;flex:0 0 auto;width:70px;border-right:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
-  border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
+  border-radius:var(--radius-sm) 0 0 var(--radius-sm);
+  -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
+  mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 /* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
    for the keyboard, which now reaches this box through the tab order. */
-#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Focused from the keyboard, the fade moves from the box to its words, so the ring is drawn whole: a keyboard
+   user has to see where focus is (board 976, the test architect's edit). At rest the box fades as drawn. */
+#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;-webkit-mask-image:none;mask-image:none}
+#roleDrum:focus-visible .rd-track{-webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 body.role-waits #roleDrum{display:none}
 #roleDrum .rd-track{position:absolute;inset:0}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
   overflow:hidden;color:var(--ink)}
 #roleDrum .rd-cur{top:50%;transform:translateY(-50%);font:600 12.5px var(--sans)}
-#roleDrum .rd-cur.rd-empty{color:var(--dim);font:italic 400 12.5px var(--sans)}
-#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:.35}
-#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
+#roleDrum .rd-cur.rd-empty{color:var(--dim);font:400 12.5px var(--sans)}
+#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum:hover .rd-prev,#roleDrum:hover .rd-next,#roleDrum:focus-visible .rd-prev,#roleDrum:focus-visible .rd-next{opacity:.5}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 /* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
    set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
 #genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
-  border-radius:0 var(--radius-sm) var(--radius-sm) 0}
-#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
+  mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
+#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;-webkit-mask-image:none;mask-image:none}
+#genderDrum:focus-visible .gd-track{-webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 .paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
 #genderDrum .gd-track{position:absolute;inset:0}
 #genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
 #genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
 #genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
 #genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
-  color:var(--ink);opacity:.35}
+  color:var(--ink);opacity:0;transition:opacity var(--m-tone) ease}
+#genderDrum:hover .gd-prev,#genderDrum:hover .gd-next,#genderDrum:focus-visible .gd-prev,#genderDrum:focus-visible .gd-next{opacity:.6}
 #genderDrum .gd-prev{top:0}
 #genderDrum .gd-next{bottom:0}
 #genderDrum.gd-hand::after{content:"";position:absolute;right:4px;top:50%;width:4px;height:4px;margin-top:-2px;
@@ -1566,36 +1594,33 @@ body.e-take-drag .pills-slot.pills-overflow::before,
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-/* THE WEIGHT BELONGS TO THE RING, NEVER TO SELECTION. Bold on the selected pill widened it by
-   ~2px and pushed every pill after it along the bar, and a bar that moves under the pointer is
-   worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
-   below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
-   the same width picked or not, and picking is the one thing that never changes a width. */
+/* THE WEIGHT STAYS OFF THE RING AND OFF THE SELECTION. Bold on a pill widened it by ~2px and
+   pushed every pill after it along the bar, and a bar that moves under the pointer is worse than
+   any gain in emphasis; the cobalt fill and the white text already say which slice is below.
+   Hint, hint2 and both .on pairs are 400, so a ringed pill is the same width picked or not, and
+   picking is the one thing that never changes a width. */
 .pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
 html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.dragging{opacity:.55}
-/* No bold-width ghost; the ~2px width breath when a hint ring lights is accepted, and it is a
-   separate question from selection, which takes none. If the judder ever returns, two lessons
-   bind: the ghost must be ::before (an inline-block takes its baseline from its LAST line box,
-   unless its overflow is hidden - see footer .nw), and the count stays outside the reservation. */
-/* category the selected {INTENT} belongs to (blue outline when not selected) */
-/* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
-   the ring is the state, the label is just a name. Selected pills still go white. */
-/* The intent's green lived on an underline for one rung and there is no underline to return
-   it to: in the pill idiom its home is the ring and the halo, which is what hint2 always was. */
-.pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
-  box-shadow:0 0 0 2px var(--accent-soft)}
+/* No width ghost. If a weight returns, two lessons bind: the ghost must be ::before (an
+   inline-block takes its baseline from its LAST line box, unless its overflow is hidden - see
+   footer .nw), and the count stays outside the reservation. */
+/* A hint is a thin ring in its own colour, and the label stays quiet ink. The ring is the
+   state. Selected pills still go white, and they keep the halo. The label keeps its bold
+   (Max, 2026-11-10: "Let's leave the bold font as it is"). */
+.pill.hint{border-color:color-mix(in srgb,var(--accent) 55%,transparent);color:var(--dim);font-weight:650;
+  box-shadow:none}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
-.pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
-  box-shadow:0 0 0 2px var(--go-soft)}
+.pill.hint2{border-color:color-mix(in srgb,var(--go) 60%,transparent);color:var(--dim);font-weight:650;
+  box-shadow:none}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
-.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
-.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
-/* selected + intent-relevant: blue fill, keep green border ring */
+.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--go) 60%,transparent)}
+/* selected + intent-relevant: blue fill, keep the green border and its halo */
 .pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
@@ -1709,8 +1734,8 @@ body.rail-peek #railHit{width:min(300px,90vw)}
 /* The 80px gap belongs to the LIST, not to main: hung on main it strands the footer 80px short
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
-/* THE DOT FIELD. A ground for the card area, at the pitch and the contrast the reference
-   uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
+/* THE DOT FIELD. A ground for the card area: one dot of --dots-ink, solid out to .7px and faded
+   to that ink at zero alpha by 1.2px, on a 16px pitch, in both themes. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
 /* A LAYER OF ITS OWN, UNDER THE SCROLLER IN THE SCROLLER'S GRID CELL. Nothing that scrolls carries the field, so
@@ -1720,27 +1745,20 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* The lane is reserved the way the scroller reserves it, so the right margin is measured from the same edge.
    Under body.e-backdrop this layer is the window's ground and the scroller above it is clear. */
 /* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
-   and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
-/* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
-   pixel takes the colour at its centre, so one hard .75px edge painted 4 pixels at 100%, 1 at 125%
-   and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
-   (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
-   disc and 150% paints what it did; shell smoke 2k6 holds it. */
+   and the ramp between the stops would then pass through grey on a pale ground. */
 .dotfield{pointer-events:none;overflow:hidden;scrollbar-gutter:stable;padding:16px var(--app-pad) var(--app-pad)}
-/* ONE PITCH PAST THE CARDS ON EACH SIDE (Maxim, 2026-10-03 21:01: "ever so slightly bigger, so that it extends just so
-   beyond the cards"). 12px is the background-size below, a whole pitch, so the pattern's phase on the window is the
-   one it had at main's edges. On the left it ends in the docked panel's gap (18px) and never under the panel; on the
-   right it stops short of the scrollbar lane, which the padding keeps clear. */
+/* THE FIELD REACHES 12px PAST THE CARDS ON EACH SIDE. That inset ends inside the docked panel's gap
+   (18px) and 2px short of the scrollbar lane, whose padding is 14px. The reach is not the pitch:
+   the pitch is 16px, and a reach of one pitch would cross the lane. */
 .dotfield>div{height:100%;margin-left:calc(var(--rail-col,0px) + var(--rail-colgap,0px) - 12px);margin-right:-12px;
-  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
-    color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
-    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
-  background-size:12px 12px}
+  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .7px,
+    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px);
+  background-size:16px 16px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
-.list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
-  opacity:.75;font-variant-numeric:tabular-nums}
+.list-sep .sep-n{flex:none;margin-left:8px;font:600 12px/calc(11px * 1.5) var(--sans);color:var(--dim);
+  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 8px}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
@@ -1796,9 +1814,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 .card{background:transparent;border:0;border-radius:0;
   position:relative;margin-bottom:20px;overflow:visible;box-shadow:none}
 /* The two rings follow the panel down: a ring round a group of slabs would enclose whitespace
-   and the caption as well, which is what the ring was never about. --go-edge on the linked
-   one, so dark murmurs where twenty matched borders would shout. */
-.card.intent-hit>.txt{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
+   and the caption as well, which is what the ring was never about. A linked card wears a
+   hairline of --go, and the badge already says the match, so there is no second ring. */
+.card.intent-hit>.txt{border-color:color-mix(in srgb,var(--go) 45%,transparent);box-shadow:var(--card-shadow,none)}
 .card.cat-hit>.txt{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
 /* OFF-SCREEN CARDS ARE NOT LAID OUT. A real desk's catalog is a few hundred cards and around
@@ -1820,9 +1838,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
-.cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
-.cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
-.cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
+.cbadge.hit{background:var(--go-soft);color:var(--go)}
+.cbadge.cat{background:var(--accent-soft);color:var(--accent)}
+.cbadge.fav{background:var(--fav-soft);color:var(--fav)}
 /* The hue is worn by exactly TWO things: the pill's dot and the card's top-edge tag -
    NO icon carries it, so the editor's swatch means the dot and the edge, nothing else.
    Shape stays the channel that survives colour-blindness. All is chrome and wears nothing. */
@@ -1946,6 +1964,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .lang-tabs button[data-alt].on::after{background:var(--pl)}
 .lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
+.modal .lang-tabs-lab{font:12.5px var(--sans);letter-spacing:0;text-transform:none;color:var(--dim)}
 .lang-pane{display:none}
 .lang-pane.on{display:block}
 /* THE FIELDS ARE ONE SET SAID TWICE, so a swap should read as that set moving rather than as
@@ -1985,9 +2004,13 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   text-decoration-color:color-mix(in srgb,var(--ink) 45%,transparent)}
 /* A token that resolved to NOTHING. Reads as a slot waiting to be filled rather than as a
    fault: the agent has simply not picked an intent yet, which is a normal state and not an
-   error. Never copied - see FILL_M_A. */
+   error. In a reply it is a soft chip. The note, the editor columns and the tour keep the
+   outlined tag: the tour sits on a filled panel, and the override below only recolours it.
+   Never copied. See FILL_M_A. */
 .mf-cols .cbadge{vertical-align:1px}
-.txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
+.txt .fillmiss{background:var(--accent-soft);color:var(--accent);border:0;border-radius:6px;
+  padding:1px 5px;font:600 11px var(--sans);letter-spacing:.2px}
+.mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
 /* The PL claim is a QUIET FIELD - 7% violet folded into the panel, no edge of its own: the
@@ -2001,6 +2024,8 @@ body:not(.e-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accen
    body.e-kbdnav so a resting pointer cannot show a second mark while the keyboard
    drives; the first mousemove hands the mark back to the pointer. */
 .txt.sel{border-color:var(--accent);background:var(--accent-soft)}
+body:not(.e-kbdnav) .txt:hover .fillmiss,
+.txt.sel .fillmiss{background:var(--panel)}
 .txt.dragging{opacity:.55;z-index:2}
 html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
@@ -2017,10 +2042,14 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 #list .card.deck.deck-up{z-index:6}
 .card.deck>.txt{z-index:var(--deck-z,1);
   transition:box-shadow var(--m-move) ease}
+/* The peek is a hit target: a click there opens the deck. A deck still dealing takes no pointer on its
+   slabs, so a click mid-deal reaches the front card beneath, as before the peek took clicks (D3, the
+   test architect's edit of 2026-11-10). */
+.card.deck.deck-moving>.txt.deck-back{pointer-events:none}
 .card.deck:not(.deck-open)>.txt.deck-back{
   transform:translateY(var(--deck-dy)) scaleX(var(--deck-sx));transform-origin:50% 100%;
   clip-path:inset(var(--deck-clip) -3px -3px -3px round var(--radius));
-  filter:brightness(var(--deck-dim));pointer-events:none}
+  filter:brightness(var(--deck-dim))}
 /* On a light desk the edges darken a third as much: grey bars under white read as weight, not depth. */
 :root[data-theme=light] .card.deck:not(.deck-open)>.txt.deck-back{
   filter:brightness(calc(1 - (1 - var(--deck-dim)) / 3));box-shadow:none}
@@ -2116,9 +2145,15 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
    only one not the edge of something; the slab-as-card removes the card's own top border, so
    the premise is gone and the rule can be what a section rule should be. ONE GREY whatever it
    names - the hue already identifies a category on its icon and on every slab it holds. The
-   tier divider's own <i> pair wears the same line, in one voice. */
+   group rule is the stronger line. The tier divider's own <i> stays the quiet one. */
 .list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:1px;
-  margin-left:10px;border-radius:0;align-self:center;background:var(--line)}
+  margin-left:10px;border-radius:0;align-self:center;background:var(--line-strong)}
+/* The name and the count sit on the page's ground, so the dot field stops at the word.
+   The 12px face keeps the 11px group's strut (body's 1.5): a 12px face on that 1.5 is an
+   18px row, and a taller row moves every card under it. */
+.list-sep.e-catsep>span:first-child,.list-sep.e-favsep>span:first-child{font-size:12px;
+  line-height:calc(11px * 1.5);letter-spacing:.07em;color:var(--dim);opacity:1;
+  background:var(--bg);padding:0 8px 0 0}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
@@ -2683,12 +2718,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
-.cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
-  background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
-.cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
-/* What a loaded edition brought, worn until the card is next copied: the family's own accent, with the
-   border the others carry so every badge sits one height. */
-.cbadge.edn{border:1px solid transparent}
+.cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
+  background:var(--accent-soft);color:var(--accent);text-transform:none}
+.cbadge.ed{background:var(--ed-soft);color:var(--ed)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
 .modal,.bub{user-select:none;-webkit-user-select:none}
@@ -2846,6 +2878,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .nw{white-space:nowrap}
 .mf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .mf>label{font:12px var(--mono);color:var(--dim)}
+/* The card form's own labels: the interface face, full ink. A direct child only, so a
+   checklist nested in a fold keeps the rule written for it. */
+.modal .mf>label{font:600 12.5px var(--sans);letter-spacing:0;color:var(--ink);text-transform:none}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
 .mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
@@ -2990,6 +3025,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    sits in a clickable row. */
 .manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec,.about-h{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
+/* The card form's fold headings out-specify this: sentence case, the interface face, full ink. */
 /* Section header states for all three accordion screens - base, open, hover, focus, in
    that order, in this one place; hover wins by source order at equal weight, so nobody
    counts classes. Exclusive accordions mean exactly one bright heading per screen. One rule
@@ -3186,6 +3222,14 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* A form field that folds. Shares the disclosure triangle and the animation with Manage's
    sections, but keeps the look of a label: no border, no uppercase heading, and the summary
    line reports what is inside so a closed fold still answers its own question. */
+/* Each fold after Content sits on a hairline. The heading is the interface face at 14px,
+   and the value beside it is the same face at 12.5px, dim, at full strength. */
+.modal .mf-fold{border-top:1px solid var(--line);padding-top:2px}
+.modal .mf-fold.mf-main{border-top:0}
+.modal .mf-fold>summary .mf-lab{font:600 14px var(--sans);letter-spacing:0;text-transform:none;color:var(--ink)}
+.modal .mf-fold>summary .mf-lab::first-letter{text-transform:uppercase}
+.modal .mf-sum{font:12.5px var(--sans);letter-spacing:0;color:var(--dim);opacity:1}
+.modal ::placeholder{color:color-mix(in srgb,var(--dim) 70%,transparent)}
 details.mf-fold>summary{list-style:none;cursor:default;display:flex;align-items:baseline;gap:8px;
   user-select:none;border-radius:var(--radius-xs)}
 details.mf-fold>summary::-webkit-details-marker{display:none}
@@ -3683,6 +3727,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog file"],
 .sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Storage"],
 .sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Desk"],
+.sx.lm-mt:not([data-page="storage"]) .mt-reset{display:none}
+.sx.lm-mt .mt-reset{grid-template-columns:minmax(0,1fr) auto;margin-top:16px}
 .sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Layout"],
 .sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Intent panel"],
 .sx.lm-mt[data-page="state"] .mt-sec[data-mt-sec="Personal state"]{display:block}
@@ -3950,8 +3996,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* A BADGE INSIDE THE PROSE IS AN OUTLINE, NOT A CHIP. Their tonal grounds are mixed against
    the PAGE and measure 1.25:1 to 4.24:1 on the fill; hollowed out they carry the panel's own
    white at 5.17:1 and keep their hue on the rule round them. The tinted chip is what a card
-   shows, and the card is where the hue is learned. */
-.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)}
+   shows, and the card is where the hue is learned. The face is restated here so the card's
+   chip does not land in the sentence. */
+.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);
+  font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;text-transform:uppercase}
 .bub .cbadge.hit{border-color:#d1fae5}
 .bub .cbadge.fav{border-color:#fef3c7}
 .bub .cbadge.ed{border-color:#eff6ff}
@@ -4082,7 +4130,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* THE LANES, over the list while they show: under the header and the round buttons, on the list's own dot
    field, which stays. The list keeps its place and its scroll unseen; the category bar leaves. */
 #lanes{position:fixed;left:0;right:0;bottom:0;top:calc(var(--rail-top,120px) - 8px);z-index:47;
-  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default}
+  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default;
+  --ln-chip:color-mix(in srgb,var(--ink) 9%,transparent)}
+:root[data-theme=light] #lanes{--ln-chip:color-mix(in srgb,var(--ink) 6%,transparent)}
 body.e-lanes #pageScroll>.shell{opacity:0}
 body.e-lanes #pageScroll{scrollbar-color:transparent transparent}
 body.e-lanes #pageScroll::-webkit-scrollbar-thumb{background-color:transparent}
@@ -4098,29 +4148,32 @@ body.e-lanes #pillsSlot{display:none}
 .ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
 .ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--dim)}
 .ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
-.ln-hint kbd,.ln-key{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
+.ln-hint kbd{margin-right:6px;font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
   color:var(--dim);background:var(--panel)}
-.ln-hint kbd{margin-right:6px}
 .ln-key{flex:none}
+#lanes .ln-lang,#lanes .ln-key{border:0;background:var(--ln-chip);color:var(--ink);border-radius:6px;padding:1px 6px;
+  font:600 10.5px var(--sans)}
 .ln-empty{margin:48px 0;text-align:center;font-size:14px;color:var(--dim)}
-.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.15fr) minmax(0,1.3fr);
-  column-gap:64px;row-gap:2px;align-items:start}
+.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.25fr);
+  column-gap:88px;row-gap:2px;align-items:start}
 .ln-h{grid-row:1;padding:0 2px 8px;font:600 11.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
 .ln-h1{grid-column:1}
 .ln-h2{grid-column:2}
 .ln-h3{grid-column:3}
 /* A reply sent: its time, card and language on the head line the thread passes through, its first words under it. */
-.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 20px}
-.ln-sent-h{display:flex;align-items:center;gap:7px;min-width:0}
-.ln-sent .ctitle{min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 24px}
+.ln-sent-h{display:flex;align-items:baseline;gap:7px;min-width:0}
+.ln-sent .ctitle{min-width:0;font-size:14px}
+#lanes .ln-sent .ctitle,#lanes .ln-row .ctitle,#lanes .ln-now .ctitle{white-space:normal;overflow:visible;-webkit-mask-image:none;mask-image:none}
 .ln-at{flex:none;font:12.5px var(--mono);color:var(--dim)}
-.ln-lang{flex:none;margin-left:auto;font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ln-lang{flex:none;margin-left:auto}
 .ln-first{margin-top:3px;font-size:13px;line-height:1.45;color:var(--dim)}
 .ln-clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .ln-when{flex:none;margin-left:auto;font:12px var(--mono);color:var(--dim)}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}
+#lanes .ln-now .txt{box-shadow:0 0 0 1.5px var(--accent),var(--card-shadow,0 0 #0000)}
 /* One track no wider than the lane: left to its rows' longest line, Next ran off a narrow window. */
 .ln-next{grid-column:3;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start}
 .ln-row{margin:0}
@@ -4129,12 +4182,16 @@ body.e-lanes #pillsSlot{display:none}
 .ln-txt{white-space:normal;margin-bottom:4px}
 .ln-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .ln-txt:hover,.ln-blk:hover{border-color:var(--accent)}
-.ln-then{padding:0 3px;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.ln-then{display:flex;align-items:center;flex-wrap:wrap;gap:6px;white-space:normal;overflow:visible;padding:2px 3px 0;font-size:12.5px;color:var(--dim)}
+.ln-then-l{font-size:12px;color:var(--dim);margin-right:2px}
+.ln-chip{display:inline-flex;align-items:center;padding:2px 9px;border-radius:7px;background:var(--ln-chip);color:var(--ink);font-size:12.5px;white-space:nowrap}
+.ln-part{position:absolute;top:8px;right:10px}
+.ln-sep{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .ln-wires{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-.ln-w{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-w{fill:none;stroke:var(--accent);stroke-width:1.7}
 .ln-w-learnt{stroke:var(--dim);stroke-dasharray:2 4}
-.ln-dot{fill:var(--accent)}
-.ln-dot-open{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-dot{fill:var(--accent);stroke:var(--bg);stroke-width:2.5}
+.ln-arrow{fill:var(--accent)}
 /* Editing the list in the lanes: the grip and the row's own action show under the pointer or the keyboard. */
 .ln-acts{margin-left:auto;flex:none;display:inline-flex;align-items:center}
 .ln-row .nx-grip,.ln-row .ln-acts{opacity:0;transition:opacity var(--m-tone) ease}
@@ -4350,11 +4407,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
       </div></div>
     <div class="fill">
       <div class="combo" id="intentComboWrap">
-        <input id="intent" placeholder="search intents and cards"
+        <input id="intent" placeholder="Search intents and cards"
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="One search: intents rank in the panel, cards filter below">
-        <span id="intentPh" aria-hidden="true"></span>
+        <!-- Painted whole by updateIntentPlaceholder. Two sentences, and a sweep would translate the key names apart from them. -->
+        <span id="intentPh" aria-hidden="true" data-i18n-skip></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
     <!-- THE FOUR TOOLS, in the box the agent's name used to hold. They left the band because
@@ -6254,7 +6312,7 @@ What you type stays in this browser only.`;
     eWiping = true;
     if (!E_DESK) return false;
     Object.keys(E_DESK.map).forEach((k) => {
-      if (E_KEY_RE.test(k)) {
+      if (E_KEY_RE.test(k) && !/^e[0-9a-z]+~Pack$/.test(k)) {
         delete E_DESK.map[k];
         eDeskOwed.add(k);
       }
@@ -7015,6 +7073,8 @@ What you type stays in this browser only.`;
     "Clear search text": "Wyczyść tekst wyszukiwania",
     "not linked to your intent": "niepowiązane z wybraną intencją",
     "also mentions your search": "zawierają też szukane słowa",
+    // placeholder: Claudette
+    "Close in meaning": "Bliskie znaczeniem",
     "A search ranks the cards by relevance; clear it to order them yourself": "Wyszukiwanie porządkuje karty według trafności; po jego wyczyszczeniu kolejność można ustawić ręcznie",
     "Drag header to reorder within the same highlight group": "Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu",
     "Drag header to reorder within the same highlight group; same category only": "Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu i w tej samej kategorii",
@@ -7023,8 +7083,8 @@ What you type stays in this browser only.`;
     "Alternatives, split by blank lines": "Warianty oddzielone pustymi liniami",
     "Steps, in order (STEP badges)": "Kolejne kroki (znaczniki KROK)",
     "{PAX} as first name only": "{PAX} jako samo imię",
-    "Linked to every {INT}": "Powiązanie ze wszystkimi {INT}",
-    "Top of the {INT} group": "Na górze grupy {INT}",
+    "Wears {INT} under every intent": "Oznaczenie {INT} przy każdej intencji",
+    "First among the cards marked {INT}": "Pierwsza wśród kart oznaczonych {INT}",
     "steps": "kroki",
     "alt": "alt",
     /* Two senses, one English phrase: the agent typing their own name is asked for a first
@@ -7117,9 +7177,9 @@ What you type stays in this browser only.`;
     "you typed": "wpisano",
     "Toggle theme": "Przełącz motyw",
     "Switch language": "Przełącz język kart",
-    "int": "int",
+    "Linked": "Powiązana",
     "In a supporting category, relevant regardless of the intent": "W kategorii wspierającej, przydatna niezależnie od intencji",
-    "sup": "wsp",
+    "Also helps": "Także przydatna",
     "fav": "fav",
     "mod": "mod",
     "Put this card away: it greys out at the foot of this category and loses its star": "Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii i straci gwiazdkę",
@@ -7189,8 +7249,8 @@ What you type stays in this browser only.`;
     "When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded.": "Gdy pojawi się nowe wydanie katalogu zespołu, stanowisko je proponuje i jeszcze przed wczytaniem pokazuje, karta po karcie, co się zmieniło.",
     "Signed by the team's lead.": "Podpis lidera zespołu.",
     "A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed.": "Stanowisko, które dołącza do zespołu, zapamiętuje klucz lidera i według niego sprawdza każde kolejne wydanie, więc plik zmieniony po podpisaniu nie przejdzie niezauważony.",
-    "The conversation's path.": "Ścieżka rozmowy.",
-    "Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back.": "Spacja przenosi od kart do bieżącej rozmowy: widać, co już w niej wysłano i co może nastąpić dalej. Ponowna spacja wraca do kart.",
+    "The timeline.": "Oś czasu.",
+    "Space turns from the cards to the timeline of the conversation in front: what has been sent, the last reply whole, and what can follow it. Space again brings the cards back.": "Spacja przenosi od kart do osi czasu bieżącej rozmowy: widać, co już wysłano, ostatnią odpowiedź w całości i to, co może po niej nastąpić. Ponowna spacja wraca do kart.",
     "Next replies on {KEY1} to {KEY4}.": "Kolejne odpowiedzi pod {KEY1} do {KEY4}.",
     "After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt.": "Po każdej wysłanej odpowiedzi czekają do czterech następnych, każda pod własnym klawiszem: najpierw te z katalogu, potem te z praktyki tego stanowiska.",
     "Etiuda End-User Licence Agreement": "Umowa licencyjna Etiudy",
@@ -7204,6 +7264,11 @@ What you type stays in this browser only.`;
     "Next tab": "Następna rozmowa",
     "Previous tab": "Poprzednia rozmowa",
     "New tab": "Nowa rozmowa",
+    "New chat": "Nowa rozmowa",
+    "Rename tab": "Zmień nazwę rozmowy",
+    "Tab name": "Nazwa rozmowy",
+    "Use the automatic name": "Przywróć nazwę automatyczną",
+    "Names the tab after the customer's first name, or New chat while there is none.": "Nadaje rozmowie imię klienta, a dopóki go nie ma, nazwę Nowa rozmowa.",
     "Open the Menu": "Otwórz Menu",
     "Your name": "Imię agenta",
     "Personal": "Osobiste",
@@ -7466,6 +7531,10 @@ What you type stays in this browser only.`;
     "Delete this intent": "Usuń tę intencję",
     "Export…": "Eksportuj…",
     "Clear local changes": "Wyczyść zmiany lokalne",
+    // placeholder: Claudette
+    "Bring back local changes": "Przywróć zmiany lokalne",
+    // placeholder: Claudette
+    "These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered.": "Zmiany zostają na tym stanowisku do zamknięcia Etiudy, a ponowne uruchomienie zostawia katalog w postaci dostarczonej.",
     "Removes every change made to the content on this computer, so the catalog reads as delivered.": "Usuwa wszystkie zmiany treści wprowadzone na tym komputerze, więc katalog wygląda tak, jak go dostarczono.",
     "Clear local changes?": "Wyczyścić zmiany lokalne?",
     "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.": "Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
@@ -7501,6 +7570,16 @@ What you type stays in this browser only.`;
     "The saved card arrangement could not be read.": "Nie udało się odczytać zapisanego układu kart.",
     "This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh.": "Ta wersja przechowuje układ w nowy sposób, a zapisanej tutaj kopii nie dało się przekształcić. Katalog jest nienaruszony, a Etiuda działa normalnie; zmiana dotyczy tylko zapisanych tutaj: kolejności kart, ukrytych kart i ulubionych. Wyczyść dane własne usuwa je i pozwala zacząć od nowa.",
     "Reset Etiuda": "Zresetuj Etiudę",
+    "Returns this desk to a fresh install, keeping only the licence.": "Przywraca stanowisko do stanu po świeżej instalacji; zostaje tylko licencja.",
+    "Reset Etiuda?": "Zresetować Etiudę?",
+    "Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.": "Reset usuwa każdy katalog z własnego folderu Etiudy, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Pliki katalogów w każdym innym folderze zostają, podobnie jak licencja.",
+    "There is no Undo. Joining the team again takes a new invitation from its lead.": "Tego nie da się cofnąć. Ponowne dołączenie do zespołu wymaga nowego zaproszenia od lidera.",
+    "Type RESET to confirm.": "Do potwierdzenia trzeba wpisać RESET.",
+    "Etiuda is starting again as freshly installed.": "Etiuda uruchamia się ponownie jak po świeżej instalacji.",
+    "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.": "Reset Etiudy nie został dokończony. Nie udało się usunąć elementów, których być może używa inny program albo otwarty folder: {PATH}.",
+    "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.": "Ponowna próba dokończy reset po ich zamknięciu; przerwanie zostawi stanowisko w obecnym stanie.",
+    "Try again": "Spróbuj ponownie",
+    "Stop the reset": "Przerwij reset",
     "Edit card": "Edytuj kartę",
     "Edit this intent": "Edytuj tę intencję",
     "hold Ctrl to edit, Shift to hide": "przytrzymaj Ctrl, aby edytować, Shift, aby ukryć",
@@ -7695,10 +7774,10 @@ What you type stays in this browser only.`;
     "PAX": "PAX",
     "INTENT": "INTENCJA",
     "Intents arrive with a catalog.": "Intencje przynosi katalog.",
-    "search intents and cards": "szukaj intencji i kart",
+    "Search intents and cards": "Wyszukiwanie intencji i kart",
     "Search": "Szukaj",
     "One search: intents rank in the panel, cards filter below": "Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
-    "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
+    "<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "<kbd>Enter</kbd> wybiera<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
     "Search cleared": "Wyczyszczono wyszukiwanie",
     "ROLE": "ROLA",
     "EN": "EN",
@@ -7832,6 +7911,7 @@ What you type stays in this browser only.`;
     "When the window closes": "Po zamknięciu okna",
     "Stay in the tray": "Zostaje w zasobniku",
     "Quit": "Kończy działanie",
+    "Closing the window will quit Etiuda.": "Zamknięcie okna zakończy działanie Etiudy.",
     "In the tray, Etiuda still answers its shortcut and shows notifications.": "W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
     "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
     "How the screen is laid out.": "Jak rozłożony jest ekran.",
@@ -7978,6 +8058,7 @@ What you type stays in this browser only.`;
     "The tour carries on once this tab is closed.": "Przewodnik ruszy dalej, gdy ta zakładka się zamknie.",
     'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.',
     "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
+    "There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog.": "W folderze {FOLDER} nie ma jeszcze katalogu. Katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Load catalog…": "Wczytaj katalog…",
     "Saved copies…": "Zapisane kopie…",
@@ -8122,6 +8203,7 @@ What you type stays in this browser only.`;
     "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.": "Lider zespołu nadal widzi nazwę i wydanie tego katalogu, ale jego treść i zmiany wprowadzone w nim na tym stanowisku nigdy nie są wysyłane. Oznaczenie wycofuje to, co stanowisko z niego udostępniło; tego, co lider zespołu już otworzył, nie da się odebrać.",
     "This catalog is no longer private, and the team's rules apply to it again.": "Ten katalog nie jest już prywatny i znów obowiązują go zasady zespołu.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
+    "This desk waits for the team's lead to publish a first edition.": "To stanowisko czeka na pierwsze wydanie od lidera zespołu.",
     "Another catalog of the team has a newer edition.": "Inny katalog zespołu ma nowsze wydanie.",
     "Other catalogs of the team with a newer edition: {N}.": "Inne katalogi zespołu z nowszym wydaniem: {N}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -8194,7 +8276,7 @@ What you type stays in this browser only.`;
     "Copy the second of the replies offered after the last one sent": "Kopiuje drugą odpowiedź proponowaną po ostatnio wysłanej",
     "Copy the third of the replies offered after the last one sent": "Kopiuje trzecią odpowiedź proponowaną po ostatnio wysłanej",
     "Copy the fourth of the replies offered after the last one sent": "Kopiuje czwartą odpowiedź proponowaną po ostatnio wysłanej",
-    "Show the conversation's path": "Pokaż ścieżkę rozmowy",
+    "Show the timeline": "Pokaż oś czasu",
     "Back to the cards": "Wróć do kart",
     "This conversation": "Ta rozmowa",
     "{KEY} back to the cards": "{KEY}: powrót do kart",
@@ -8206,14 +8288,13 @@ What you type stays in this browser only.`;
     "just now": "przed chwilą",
     "{N} min ago": "{N} min temu",
     "at {TIME}": "o {TIME}",
-    "then: {LIST}": "potem: {LIST}",
+    "then": "potem",
     "often": "często",
     "One of the cards this desk has used most lately": "Jedna z kart ostatnio najczęściej używanych na tym stanowisku",
     "To choose from next: {N}.": "Dalej do wyboru: {N}.",
     "What comes next is chosen with Add a reply.": 'Następną odpowiedź wybiera się przyciskiem "Dodaj odpowiedź".',
-    "Cards or the conversation's path": "Karty albo ścieżka rozmowy",
-    "Switch between the cards and the conversation's path while nothing is being typed": "Przełącza między kartami a ścieżką rozmowy, gdy nic nie jest wpisywane",
-    "path": "ścieżka",
+    "Cards or the timeline": "Karty albo oś czasu",
+    "Switch between the cards and the timeline while nothing is being typed": "Przełącza między kartami a osią czasu, gdy nic nie jest wpisywane",
     "Add it to the list": "Dodaj do listy",
     "Taken off the list": "Usunięto z listy",
     "{NAME}, a teammate": "Członek zespołu: {NAME}",
@@ -9257,6 +9338,7 @@ What you type stays in this browser only.`;
       if (raw) p = JSON.parse(raw);
     } catch (e) {
     }
+    if (!p || typeof p !== "object" || Array.isArray(p)) p = null;
     p = withCounts(p);
     try {
       migratePackKeys(p);
@@ -9273,15 +9355,19 @@ What you type stays in this browser only.`;
     }
     pack = Object.assign(emptyPack(), p || {});
     if (!Array.isArray(pack.hidden)) pack.hidden = [];
-    if (!pack.overrides || typeof pack.overrides !== "object") pack.overrides = {};
+    if (!pack.overrides || typeof pack.overrides !== "object" || Array.isArray(pack.overrides)) pack.overrides = {};
+    else Object.keys(pack.overrides).forEach((k) => {
+      if (!pack.overrides[k] || typeof pack.overrides[k] !== "object" || Array.isArray(pack.overrides[k])) delete pack.overrides[k];
+    });
     if (!Array.isArray(pack.custom)) pack.custom = [];
-    if (!pack.catLabels || typeof pack.catLabels !== "object") pack.catLabels = {};
-    if (!pack.catLabelsPl || typeof pack.catLabelsPl !== "object") pack.catLabelsPl = {};
-    if (!pack.catIcons || typeof pack.catIcons !== "object") pack.catIcons = {};
-    if (!pack.catColors || typeof pack.catColors !== "object") pack.catColors = {};
-    if (!pack.customCats || typeof pack.customCats !== "object") pack.customCats = {};
+    else pack.custom = pack.custom.filter((m) => m && typeof m === "object" && !Array.isArray(m));
+    if (!pack.catLabels || typeof pack.catLabels !== "object" || Array.isArray(pack.catLabels)) pack.catLabels = {};
+    if (!pack.catLabelsPl || typeof pack.catLabelsPl !== "object" || Array.isArray(pack.catLabelsPl)) pack.catLabelsPl = {};
+    if (!pack.catIcons || typeof pack.catIcons !== "object" || Array.isArray(pack.catIcons)) pack.catIcons = {};
+    if (!pack.catColors || typeof pack.catColors !== "object" || Array.isArray(pack.catColors)) pack.catColors = {};
+    if (!pack.customCats || typeof pack.customCats !== "object" || Array.isArray(pack.customCats)) pack.customCats = {};
     if (!Array.isArray(pack.intentHidden)) pack.intentHidden = [];
-    if (!pack.intentOverrides || typeof pack.intentOverrides !== "object") pack.intentOverrides = {};
+    if (!pack.intentOverrides || typeof pack.intentOverrides !== "object" || Array.isArray(pack.intentOverrides)) pack.intentOverrides = {};
     if (!Array.isArray(pack.intentCustom)) pack.intentCustom = [];
     if (!Array.isArray(pack.favourites)) pack.favourites = [];
     if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
@@ -9311,6 +9397,9 @@ What you type stays in this browser only.`;
     if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
     if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
     if (!pack.editBases || typeof pack.editBases !== "object" || Array.isArray(pack.editBases)) pack.editBases = {};
+    else Object.keys(pack.editBases).forEach((k) => {
+      if (!pack.editBases[k] || typeof pack.editBases[k] !== "object" || Array.isArray(pack.editBases[k])) delete pack.editBases[k];
+    });
     if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
     migrateBpToCin();
     migrateIntentKeys();
@@ -10701,6 +10790,7 @@ What you type stays in this browser only.`;
   var deck_exports = {};
   __export(deck_exports, {
     deckCovers: () => deckCovers,
+    deckDragEnd: () => deckDragEnd,
     deckFade: () => deckFade,
     deckLengths: () => deckLengths,
     deckOn: () => deckOn,
@@ -10751,6 +10841,8 @@ What you type stays in this browser only.`;
     };
   }
   function deckReset(card) {
+    const id = card && card.dataset && card.dataset.id;
+    if (id) deckOpenIds.delete(id);
     card.classList.remove("deck", "deck-open", "deck-up", "deck-moving", "deck-return", "deck-near");
     ["height", "--deck-rest-bottom", "--deck-extra"].forEach((p) => card.style.removeProperty(p));
     deckSlabs(card).forEach((s) => {
@@ -10764,6 +10856,7 @@ What you type stays in this browser only.`;
   var deckKbdCard = null;
   var deckObs = null;
   var deckListW = -1;
+  var deckOpenIds = /* @__PURE__ */ new Set();
   function deckView() {
     const h = globalThis.innerHeight;
     return typeof h === "number" && h > 0 ? h : 800;
@@ -10774,11 +10867,17 @@ What you type stays in this browser only.`;
     return r.bottom >= -h && r.top <= h + h;
   }
   function deckLive(c) {
-    return c.classList.contains("deck-open") || c.classList.contains("deck-up") || deckInRange(c);
+    const id = c.dataset && c.dataset.id;
+    return id && deckOpenIds.has(id) || c.classList.contains("deck-open") || c.classList.contains("deck-up") || deckInRange(c);
   }
   function deckMeasure(todo) {
     if (!todo.length) return;
+    const dragging = deckDragging();
     todo.forEach((c) => {
+      const id = c.dataset && c.dataset.id;
+      if (!dragging && !c.matches(":hover")) {
+        if (id) deckOpenIds.delete(id);
+      } else if (c.classList.contains("deck-open") && id) deckOpenIds.add(id);
       c.style.removeProperty("height");
       c.classList.add("deck", "deck-near");
     });
@@ -10805,7 +10904,11 @@ What you type stays in this browser only.`;
         e.style.setProperty("--deck-clip", deckPx(v.clip));
         e.style.setProperty("--deck-dim", String(v.dim));
       });
-      if (c.matches(":hover") || c === deckKbdCard) deckSetOpen(c, true, true);
+      const id = c.dataset && c.dataset.id;
+      if (deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id === id) deckKbdCard = c;
+      const shouldOpen = id && deckOpenIds.has(id) && (dragging || c.matches(":hover")) || c.matches(":hover") || c === deckKbdCard;
+      if (shouldOpen) deckSetOpen(c, true, true);
+      else if (c.classList.contains("deck-open")) deckSetOpen(c, false, true);
     });
   }
   function deckScan() {
@@ -10881,6 +10984,12 @@ What you type stays in this browser only.`;
   }
   function deckSetOpen(card, open, instant) {
     clearTimeout(card._deckT);
+    const id = card && card.dataset && card.dataset.id;
+    if (open) {
+      if (id) deckOpenIds.add(id);
+    } else {
+      if (id) deckOpenIds.delete(id);
+    }
     if (open === card.classList.contains("deck-open")) return;
     clearTimeout(card._deckM);
     const now = mgReduceMotion() || instant, travel = now ? 0 : M_MS.travel, move = now ? 0 : M_MS.move;
@@ -11008,8 +11117,19 @@ What you type stays in this browser only.`;
     deckSetOpen(c, true);
     if (!was) setTimeout(() => sel.scrollIntoView({ block: "nearest", behavior: mgReduceMotion() ? "auto" : "smooth" }), mgReduceMotion() ? 0 : 200);
   }
+  function deckDragging() {
+    const cl2 = document.documentElement && document.documentElement.classList;
+    return !!(cl2 && (cl2.contains("txtdrag") || cl2.contains("carddrag") || cl2.contains("pilldrag") || cl2.contains("tabdrag")));
+  }
+  function deckDragEnd() {
+    if (!list) return;
+    list.querySelectorAll(".card.deck.deck-open").forEach((c) => {
+      if (c !== deckKbdCard && !c.matches(":hover")) deckSetOpen(c, false);
+    });
+  }
   function wireDeck() {
     if (!list) return;
+    deckOpenIds.clear();
     deckObs = new MutationObserver((ms) => {
       const h = deckHeard(ms);
       if (h.shape) deckLater();
@@ -11037,14 +11157,18 @@ What you type stays in this browser only.`;
       deckFadeLater();
     });
     document.addEventListener("pointerover", (e) => {
+      if (deckDragging()) return;
       const c = deckAt(e.target), from = deckAt(e.relatedTarget);
       if (c && c !== from) deckWant(c, true, DECK_DWELL);
       if (from && from !== c) deckWant(from, false, DECK_GRACE);
     }, true);
     document.addEventListener("pointerout", (e) => {
+      if (deckDragging()) return;
       const c = deckAt(e.target), to = deckAt(e.relatedTarget);
       if (c && c !== to && !e.relatedTarget) deckWant(c, false, DECK_GRACE);
     }, true);
+    document.addEventListener("pointerup", deckDragEnd, true);
+    document.addEventListener("pointercancel", deckDragEnd, true);
     addEventListener("keydown", () => setTimeout(deckKbdSync, 0), true);
     addEventListener("mousemove", () => {
       if (!deckKbdCard || document.body.classList.contains("e-kbdnav")) return;
@@ -11054,7 +11178,14 @@ What you type stays in this browser only.`;
     }, { passive: true });
     document.addEventListener("click", (e) => {
       const t2 = e.target && e.target.closest ? e.target.closest(".txt.deck-back") : null, c = t2 && deckAt(t2);
-      if (c && (c.classList.contains("deck-moving") || !c.classList.contains("deck-open"))) {
+      if (!c) return;
+      if (!c.classList.contains("deck-open")) {
+        e.stopPropagation();
+        e.preventDefault();
+        deckWant(c, true, 0);
+        return;
+      }
+      if (c.classList.contains("deck-moving")) {
         e.stopPropagation();
         e.preventDefault();
       }
@@ -11119,6 +11250,7 @@ What you type stays in this browser only.`;
     deckFadeRaf = 0;
     deckApproachRaf = 0;
     deckKbdCard = null;
+    deckOpenIds.clear();
     if (deckIO) {
       deckIO.disconnect();
       deckIO = null;
@@ -11700,6 +11832,9 @@ What you type stays in this browser only.`;
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
     askClose: () => askClose,
+    beginTabRename: () => beginTabRename,
+    cancelTabRename: () => cancelTabRename,
+    clearTabRename: () => clearTabRename,
     closeActiveTab: () => closeActiveTab,
     closeOtherTabs: () => closeOtherTabs,
     closeTabById: () => closeTabById,
@@ -11709,9 +11844,12 @@ What you type stays in this browser only.`;
     escCloseAllTabsStep: () => escCloseAllTabsStep,
     escapeHeld: () => escapeHeld,
     escapeLadderStep: () => escapeLadderStep,
+    finishTabRename: () => finishTabRename,
     fitTabLabels: () => fitTabLabels,
     getActiveTabId: () => getActiveTabId,
+    getTabOrder: () => getTabOrder,
     initTabs: () => initTabs,
+    moveTab: () => moveTab,
     noteActive: () => noteActive,
     reopenClosedTab: () => reopenClosedTab,
     saveTabSession: () => saveTabSession,
@@ -11724,6 +11862,7 @@ What you type stays in this browser only.`;
     syncTabBeads: () => syncTabBeads,
     tabBeadsHtml: () => tabBeadsHtml,
     tabInsertAnimating: () => tabInsertAnimating,
+    tabOrder: () => tabOrder,
     tabPathNow: () => tabPathNow,
     tabPathStep: () => tabPathStep,
     tabSaveTimer: () => tabSaveTimer,
@@ -11929,8 +12068,8 @@ What you type stays in this browser only.`;
        (lanesKeyFree). */
     {
       id: "lanes",
-      label: "Cards or the conversation's path",
-      hint: "Switch between the cards and the conversation's path while nothing is being typed",
+      label: "Cards or the timeline",
+      hint: "Switch between the cards and the timeline while nothing is being typed",
       def: { code: "Space", key: " ", ctrl: 0, alt: 0, shift: 0, meta: 0 },
       inField: 1
     },
@@ -12696,6 +12835,8 @@ What you type stays in this browser only.`;
   var tabs = [];
   var activeTabId = null;
   var tabSaveTimer = null;
+  var tabOrder = [];
+  var editingTabId = null;
   wireScreenTabsChange(() => {
     if (screenOn) {
       snapshotActiveTab(true);
@@ -12725,6 +12866,7 @@ What you type stays in this browser only.`;
     return {
       id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       title: "",
+      customName: "",
       /* Seeded from the language on screen, which at boot is the one restored from storage and
          thereafter is the active tab's. So a new tab opens in the language you are already working
          in, and a fresh launch resumes where you left off - neither snaps back to English. */
@@ -12814,11 +12956,91 @@ What you type stays in this browser only.`;
       name: tb ? String(tb.pax || "").trim().split(/\s+/)[0] : ""
     };
   }
-  function tabLabel(tb, i) {
-    if (tb && tb.pax && String(tb.pax).trim()) {
-      return String(tb.pax).trim().split(/\s+/)[0];
+  function tabLabel(tb) {
+    if (tb) {
+      const manual = typeof tb.customName === "string" && tb.customName.trim() ? tb.customName.trim() : "";
+      if (manual) return manual;
+      if (tb.pax && String(tb.pax).trim()) {
+        return String(tb.pax).trim().split(/\s+/)[0];
+      }
     }
-    return t("Tab") + " " + ((i != null ? i : tabs.indexOf(tb)) + 1);
+    return t("New chat");
+  }
+  function beginTabRename(id) {
+    editingTabId = id;
+    drawTabs();
+    const el = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="' + id + '"] .tab-rename-input');
+    if (el) {
+      try {
+        el.focus();
+        el.select();
+      } catch (_) {
+      }
+    }
+  }
+  function finishTabRename(id, val) {
+    editingTabId = null;
+    const tb = tabs.find((x) => x.id === id);
+    if (tb) {
+      const trimmed = String(val != null ? val : "").trim();
+      tb.customName = trimmed;
+      tb.title = trimmed;
+      saveTabSession();
+    }
+    drawTabs();
+    const lab = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="' + id + '"] .tab-label');
+    if (lab) {
+      try {
+        lab.focus({ preventScroll: true });
+      } catch (_) {
+      }
+    }
+  }
+  function cancelTabRename(id) {
+    editingTabId = null;
+    drawTabs();
+    const lab = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="' + id + '"] .tab-label');
+    if (lab) {
+      try {
+        lab.focus({ preventScroll: true });
+      } catch (_) {
+      }
+    }
+  }
+  function clearTabRename(id) {
+    editingTabId = null;
+    const tb = tabs.find((x) => x.id === id);
+    if (tb) {
+      tb.customName = "";
+      tb.title = "";
+      saveTabSession();
+    }
+    drawTabs();
+  }
+  function getTabOrder() {
+    const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
+    const known = /* @__PURE__ */ new Set();
+    const out = [];
+    tabOrder.forEach((id) => {
+      if ((tabs.some((t2) => t2.id === id) || screenList.includes(id)) && !known.has(id)) {
+        known.add(id);
+        out.push(id);
+      }
+    });
+    tabs.forEach((t2) => {
+      if (!known.has(t2.id)) {
+        known.add(t2.id);
+        out.push(t2.id);
+      }
+    });
+    screenList.forEach((s) => {
+      if (!known.has(s)) {
+        known.add(s);
+        out.push(s);
+      }
+    });
+    tabOrder.splice(0, tabOrder.length, ...out);
+    return tabOrder;
   }
   function getActiveTabId() {
     return activeTabId;
@@ -12847,7 +13069,8 @@ What you type stays in this browser only.`;
     snapshotActiveTab();
     const convTabs = tabs.filter((t2) => !t2.id.startsWith("screen-") && t2.id !== "maintenance");
     const active = screenOn ? convTabs[0] ? convTabs[0].id : activeTabId : activeTabId;
-    return { v: 1, tabs: convTabs, activeTabId: active };
+    const curScreens = typeof screens !== "undefined" && Array.isArray(screens) ? screens.slice() : [];
+    return { v: 1, tabs: convTabs, activeTabId: active, order: getTabOrder().slice(), screens: curScreens };
   }
   function saveTabSession() {
     try {
@@ -13003,10 +13226,22 @@ What you type stays in this browser only.`;
         cats: Array.isArray(t2.cats) ? t2.cats.filter(catOk) : [],
         path: Array.isArray(t2.path) ? t2.path.filter((x) => typeof x === "string" && x).slice(-TAB_PATH_MAX) : [],
         log: Array.isArray(t2.log) ? t2.log.filter(tabLogEntry).slice(-TAB_LOG_MAX) : [],
-        paxNamed: Boolean(t2.paxNamed || String(t2.pax || "").trim())
+        paxNamed: Boolean(t2.paxNamed || String(t2.pax || "").trim()),
+        customName: typeof t2.customName === "string" ? t2.customName : "",
+        title: typeof t2["title"] === "string" ? t2["title"] : typeof t2.customName === "string" ? t2.customName : ""
       }));
       activeTabId = data.activeTabId;
       if (!tabs.some((t2) => t2.id === activeTabId)) activeTabId = tabs[0].id;
+      if (Array.isArray(data.screens) && typeof screens !== "undefined" && Array.isArray(screens)) {
+        data.screens.forEach((s) => {
+          if (typeof s === "string" && s && !screens.includes(s)) screens.push(s);
+        });
+      }
+      if (Array.isArray(data.order)) {
+        tabOrder.splice(0, tabOrder.length, ...data.order.filter((id) => typeof id === "string" && (tabs.some((t2) => t2.id === id) || typeof screens !== "undefined" && screens.includes(id))));
+      } else {
+        tabOrder.splice(0, tabOrder.length, ...tabs.map((t2) => t2.id).concat(typeof screens !== "undefined" && Array.isArray(screens) ? screens : []));
+      }
       return true;
     } catch (e) {
       return false;
@@ -13092,23 +13327,24 @@ What you type stays in this browser only.`;
     saveTabSession();
   }
   function stepTab(dir) {
-    const allScreens = screens || [];
-    const total = tabs.length + allScreens.length;
+    const order = typeof getTabOrder === "function" ? getTabOrder() : tabs.map((t2) => t2.id);
+    const total = order.length;
     if (total < 2) return;
-    let cur = 0;
+    let cur = -1;
     if (screenOn) {
-      const sidx = allScreens.indexOf(screenOn);
-      cur = tabs.length + (sidx >= 0 ? sidx : 0);
+      cur = order.indexOf(screenOn);
     } else {
-      const tidx = tabs.findIndex((x) => x.id === activeTabId);
-      cur = tidx >= 0 ? tidx : 0;
+      cur = order.indexOf(activeTabId);
     }
+    if (cur < 0) cur = 0;
     const next = (cur + dir + total) % total;
-    if (next < tabs.length) {
-      switchTab(tabs[next].id);
+    const nextId = order[next];
+    const allScreens = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
+    if (allScreens.includes(nextId)) {
+      frontScreenTab(nextId);
     } else {
-      const target = allScreens[next - tabs.length];
-      if (target) frontScreenTab(target);
+      if (screenOn) clearScreenOn(false);
+      switchTab(nextId);
     }
   }
   var tabInsertAnimating = false;
@@ -13210,8 +13446,10 @@ What you type stays in this browser only.`;
     if (screenOn) clearScreenOn(false);
     if (!fromScreen) snapshotActiveTab();
     const t2 = blankTab();
+    if (typeof getTabOrder === "function") getTabOrder();
+    tabs.push(t2);
+    if (!tabOrder.includes(t2.id)) tabOrder.push(t2.id);
     animateTabInsert(() => {
-      tabs.push(t2);
       applyTab(t2);
     });
     saveTabSession();
@@ -13407,14 +13645,15 @@ What you type stays in this browser only.`;
       return;
     }
     const before = {};
-    bar.querySelectorAll(".tab[data-tid]").forEach((el) => {
-      before[el.dataset.tid] = el.getBoundingClientRect();
+    bar.querySelectorAll(".tab[data-tid], .tab[data-sid]").forEach((el) => {
+      const id = el.dataset.tid || el.dataset.sid;
+      if (id) before[id] = el.getBoundingClientRect();
     });
     mutate();
     drawTabs();
     const moved = [];
-    bar.querySelectorAll(".tab[data-tid]").forEach((el) => {
-      const id = el.dataset.tid, b = id && before[id];
+    bar.querySelectorAll(".tab[data-tid], .tab[data-sid]").forEach((el) => {
+      const id = el.dataset.tid || el.dataset.sid, b = id && before[id];
       if (!b) return;
       const a = el.getBoundingClientRect();
       const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
@@ -13437,9 +13676,16 @@ What you type stays in this browser only.`;
     });
   }
   function moveTab(from, to) {
-    if (from === to || from < 0 || to < 0) return;
+    const order = typeof getTabOrder === "function" ? getTabOrder() : tabs.map((t2) => t2.id);
+    if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) return;
     animateTabReorder(() => {
-      tabs.splice(to, 0, tabs.splice(from, 1)[0]);
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      tabOrder.splice(0, tabOrder.length, ...order);
+      tabs.sort((a, b) => tabOrder.indexOf(a.id) - tabOrder.indexOf(b.id));
+      if (typeof screens !== "undefined" && Array.isArray(screens)) {
+        screens.sort((a, b) => tabOrder.indexOf(a) - tabOrder.indexOf(b));
+      }
     });
   }
   function endTabDrag() {
@@ -13768,110 +14014,167 @@ What you type stays in this browser only.`;
     bar.innerHTML = "";
     const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
     const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
-    tabs.forEach((tb, i) => {
-      const b = document.createElement("div"), on = !curScreen && tb.id === activeTabId;
-      b.className = "tab" + (on ? " on" : "") + (tabDrag && tabDrag.moved && tabDrag.key === tb.id ? " dragging" : "");
-      b.dataset.tid = tb.id;
-      b.title = t("Click to switch, or drag to reorder");
-      const lab = document.createElement("span");
-      lab.className = "tab-label";
-      lab.setAttribute("role", "tab");
-      lab.setAttribute("aria-selected", on ? "true" : "false");
-      const name = tabLabel(tb, i);
-      lab.tabIndex = 0;
-      lab.setAttribute("aria-label", name);
-      lab.onkeydown = (e) => {
-        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        e.stopPropagation();
-        switchTab(tb.id);
-      };
-      lab.onfocus = () => scrollTabIntoView(tb.id);
-      const labViz = document.createElement("span");
-      labViz.textContent = name;
-      lab.appendChild(labViz);
-      const x = document.createElement("button");
-      x.type = "button";
-      x.className = "tab-x";
-      x.title = t(tabs.length === 1 ? "Clear tab fields" : "Close tab");
-      x.setAttribute("aria-label", t(tabs.length === 1 ? "Clear tab" : "Close tab"));
-      x.innerHTML = ICON_TAB_X;
-      x.onclick = (e) => closeTab(tb.id, e);
-      b.appendChild(lab);
-      b.appendChild(x);
-      b.onpointerdown = (e) => {
-        if (e.pointerType === "touch") return;
-        if (e.button !== 0) return;
-        if (e.target.closest(".tab-x")) return;
-        tabSuppressClick = false;
-        tabDrag = { key: tb.id, x: e.clientX, y: e.clientY, moved: false };
-      };
-      b.onclick = (e) => {
-        if (tabSuppressClick) {
-          tabSuppressClick = false;
-          return;
-        }
-        if (e.target.closest(".tab-x")) return;
-        switchTab(tb.id);
-      };
-      b.onmousedown = (e) => {
-        if (e.button === 1) e.preventDefault();
-      };
-      b.onauxclick = (e) => {
-        if (e.button === 1) closeTab(tb.id, e);
-      };
-      bar.appendChild(b);
-    });
-    screenList.forEach((sid) => {
-      const b = document.createElement("div"), on = sid === curScreen;
-      b.className = "tab screen" + (on ? " on" : "");
-      b.dataset.sid = sid;
-      const def = typeof getScreenDef === "function" ? getScreenDef(sid) : null;
-      const name = def && typeof def.title === "function" ? def.title() : sid === "maintenance" ? t("Maintenance") : sid;
-      b.title = name;
-      const lab = document.createElement("span");
-      lab.className = "tab-label";
-      lab.setAttribute("role", "tab");
-      lab.setAttribute("aria-selected", on ? "true" : "false");
-      lab.tabIndex = 0;
-      lab.setAttribute("aria-label", name);
-      lab.onkeydown = (e) => {
-        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof frontScreenTab === "function") frontScreenTab(sid);
-      };
-      const labViz = document.createElement("span");
-      labViz.textContent = name;
-      lab.appendChild(labViz);
-      const x = document.createElement("button");
-      x.type = "button";
-      x.className = "tab-x";
-      x.title = t("Close tab");
-      x.setAttribute("aria-label", t("Close tab"));
-      x.innerHTML = ICON_TAB_X;
-      x.onclick = (e) => {
-        e.stopPropagation();
-        if (typeof closeScreenTab === "function") closeScreenTab(sid);
-      };
-      b.appendChild(lab);
-      b.appendChild(x);
-      b.onmousedown = (e) => {
-        if (e.button === 1) e.preventDefault();
-      };
-      b.onauxclick = (e) => {
-        if (e.button === 1) {
+    const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map((tb) => tb.id).concat(screenList);
+    order.forEach((id) => {
+      if (screenList.includes(id)) {
+        const sid = id;
+        const b = document.createElement("div"), on = sid === curScreen;
+        b.className = "tab screen" + (on ? " on" : "") + (tabDrag && tabDrag.moved && tabDrag.key === sid ? " dragging" : "");
+        b.dataset.sid = sid;
+        const def = typeof getScreenDef === "function" ? getScreenDef(sid) : null;
+        const name = def && typeof def.title === "function" ? def.title() : sid === "maintenance" ? t("Maintenance") : sid;
+        b.title = name;
+        const lab = document.createElement("span");
+        lab.className = "tab-label";
+        lab.setAttribute("role", "tab");
+        lab.setAttribute("aria-selected", on ? "true" : "false");
+        lab.tabIndex = 0;
+        lab.setAttribute("aria-label", name);
+        lab.onkeydown = (e) => {
+          if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+          if (e.key !== "Enter") return;
           e.preventDefault();
+          e.stopPropagation();
+          if (typeof frontScreenTab === "function") frontScreenTab(sid);
+        };
+        const labViz = document.createElement("span");
+        labViz.textContent = name;
+        lab.appendChild(labViz);
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "tab-x";
+        x.title = t("Close tab");
+        x.setAttribute("aria-label", t("Close tab"));
+        x.innerHTML = ICON_TAB_X;
+        x.onclick = (e) => {
+          e.stopPropagation();
           if (typeof closeScreenTab === "function") closeScreenTab(sid);
+        };
+        b.appendChild(lab);
+        b.appendChild(x);
+        b.onpointerdown = (e) => {
+          if (e.pointerType === "touch") return;
+          if (e.button !== 0) return;
+          if (e.target.closest && e.target.closest(".tab-x")) return;
+          tabSuppressClick = false;
+          tabDrag = { key: sid, x: e.clientX, y: e.clientY, moved: false };
+        };
+        b.onmousedown = (e) => {
+          if (e.button === 1) e.preventDefault();
+        };
+        b.onauxclick = (e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            if (typeof closeScreenTab === "function") closeScreenTab(sid);
+          }
+        };
+        b.onclick = (e) => {
+          if (tabSuppressClick) {
+            tabSuppressClick = false;
+            return;
+          }
+          if (e.target.closest && e.target.closest(".tab-x")) return;
+          if (typeof frontScreenTab === "function") frontScreenTab(sid);
+        };
+        bar.appendChild(b);
+      } else {
+        const tb = (tabs || []).find((x2) => x2.id === id);
+        if (!tb) return;
+        const on = !curScreen && tb.id === activeTabId;
+        const b = document.createElement("div");
+        b.className = "tab" + (on ? " on" : "") + (tabDrag && tabDrag.moved && tabDrag.key === tb.id ? " dragging" : "");
+        b.dataset.tid = tb.id;
+        b.title = t("Click to switch, or drag to reorder");
+        const lab = document.createElement("span");
+        lab.className = "tab-label";
+        lab.setAttribute("role", "tab");
+        lab.setAttribute("aria-selected", on ? "true" : "false");
+        const name = tabLabel(tb);
+        lab.tabIndex = 0;
+        lab.setAttribute("aria-label", name);
+        lab.onkeydown = (e) => {
+          if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          e.stopPropagation();
+          switchTab(tb.id);
+        };
+        lab.onfocus = () => scrollTabIntoView(tb.id);
+        if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
+          const inp = document.createElement("input");
+          inp.type = "text";
+          inp.className = "tab-rename-input";
+          inp.value = tb.customName != null && tb.customName !== "" ? tb.customName : "";
+          inp.placeholder = t("Tab name");
+          inp.setAttribute("aria-label", t("Tab name"));
+          inp.autocomplete = "off";
+          inp.spellcheck = false;
+          inp.onkeydown = (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              if (typeof finishTabRename === "function") finishTabRename(tb.id, inp.value);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              if (typeof cancelTabRename === "function") cancelTabRename(tb.id);
+            }
+          };
+          inp.onblur = () => {
+            if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
+              if (typeof finishTabRename === "function") finishTabRename(tb.id, inp.value);
+            }
+          };
+          inp.onpointerdown = (e) => e.stopPropagation();
+          inp.onmousedown = (e) => e.stopPropagation();
+          inp.onclick = (e) => e.stopPropagation();
+          lab.appendChild(inp);
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(() => {
+              try {
+                inp.focus();
+                inp.select();
+              } catch (_) {
+              }
+            });
+          }
+        } else {
+          const labViz = document.createElement("span");
+          labViz.textContent = name;
+          lab.appendChild(labViz);
         }
-      };
-      b.onclick = (e) => {
-        if (e.target.closest && e.target.closest(".tab-x")) return;
-        if (typeof frontScreenTab === "function") frontScreenTab(sid);
-      };
-      bar.appendChild(b);
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "tab-x";
+        x.title = t(tabs.length === 1 ? "Clear tab fields" : "Close tab");
+        x.setAttribute("aria-label", t(tabs.length === 1 ? "Clear tab" : "Close tab"));
+        x.innerHTML = ICON_TAB_X;
+        x.onclick = (e) => closeTab(tb.id, e);
+        b.appendChild(lab);
+        b.appendChild(x);
+        b.onpointerdown = (e) => {
+          if (e.pointerType === "touch") return;
+          if (e.button !== 0) return;
+          if (e.target.closest && e.target.closest(".tab-x")) return;
+          tabSuppressClick = false;
+          tabDrag = { key: tb.id, x: e.clientX, y: e.clientY, moved: false };
+        };
+        b.onclick = (e) => {
+          if (tabSuppressClick) {
+            tabSuppressClick = false;
+            return;
+          }
+          if (e.target.closest && e.target.closest(".tab-x")) return;
+          switchTab(tb.id);
+        };
+        b.onmousedown = (e) => {
+          if (e.button === 1) e.preventDefault();
+        };
+        b.onauxclick = (e) => {
+          if (e.button === 1) closeTab(tb.id, e);
+        };
+        bar.appendChild(b);
+      }
     });
     const wrap = $("#tabsWrap") || bar.parentElement;
     if (wrap) {
@@ -13894,10 +14197,13 @@ What you type stays in this browser only.`;
     if (!tabDrag || !tabDrag.moved) return;
     if (Date.now() - tabSwapLock < 120) return;
     const under = document.elementFromPoint(cx, cy);
-    const t2 = under && under.closest ? under.closest(".tab[data-tid]") : null;
-    if (!t2 || t2.dataset.tid === tabDrag.key) return;
-    const from = tabs.findIndex((x) => x.id === tabDrag.key);
-    const to = tabs.findIndex((x) => x.id === t2.dataset.tid);
+    const t2 = under && under.closest ? under.closest(".tab[data-tid], .tab[data-sid]") : null;
+    if (!t2) return;
+    const targetKey = t2.dataset.tid || t2.dataset.sid;
+    if (!targetKey || targetKey === tabDrag.key) return;
+    const order = typeof getTabOrder === "function" ? getTabOrder() : tabs.map((x) => x.id);
+    const from = order.indexOf(tabDrag.key);
+    const to = order.indexOf(targetKey);
     if (from < 0 || to < 0 || from === to) return;
     const rect = t2.getBoundingClientRect();
     const q = rect.width * 0.25;
@@ -13929,7 +14235,8 @@ What you type stays in this browser only.`;
         if (Math.abs(e.clientX - tabDrag.x) + Math.abs(e.clientY - tabDrag.y) < 5) return;
         tabDrag.moved = true;
         document.documentElement.classList.add("tabdrag");
-        const el = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="' + tabDrag.key + '"]');
+        const bar = $("#tabsBar");
+        const el = bar && (bar.querySelector('.tab[data-tid="' + tabDrag.key + '"]') || bar.querySelector('.tab[data-sid="' + tabDrag.key + '"]'));
         if (el) el.classList.add("dragging");
         requestAnimationFrame(tabDragAutoScroll);
       }
@@ -14837,6 +15144,7 @@ What you type stays in this browser only.`;
   // src/modules/maintenance.js
   var maintenance_exports = {};
   __export(maintenance_exports, {
+    armResetNotice: () => armResetNotice,
     mtGridHtml: () => mtGridHtml,
     mtHealthHtml: () => mtHealthHtml,
     mtHealthTiles: () => mtHealthTiles,
@@ -15507,6 +15815,7 @@ What you type stays in this browser only.`;
     eCatalogRing: () => eCatalogRing,
     eCatalogTaken: () => eCatalogTaken,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
+    eFolderHoldsCatalog: () => eFolderHoldsCatalog,
     eHasBranch: () => eHasBranch,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
@@ -15534,6 +15843,7 @@ What you type stays in this browser only.`;
     eTellAi: () => eTellAi,
     eTellSearch: () => eTellSearch,
     eWriteBranch: () => eWriteBranch,
+    noteCatalogFolderHold: () => noteCatalogFolderHold,
     syncBandHeight: () => syncBandHeight,
     wireFolderLink: () => wireFolderLink,
     wireHost: () => wireHost
@@ -15675,6 +15985,29 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h || typeof h.onCatalogListing !== "function") return;
     h.onCatalogListing((rows) => fn(mapListing(rows)));
+  }
+  var folderHold = null;
+  function normFolder(p) {
+    return String(p || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  }
+  function bootFolderHolds() {
+    if (!eCatalogFile() || eCatalogBuiltIn()) return false;
+    const folder = eCatalogFolder();
+    if (!folder) return false;
+    return normFolder(eCatalogIn()) === normFolder(folder);
+  }
+  function eFolderHoldsCatalog() {
+    return folderHold === null ? bootFolderHolds() : folderHold;
+  }
+  function rowHoldsCatalog(f) {
+    if (!f || !f.name || f.builtIn || f.desk) return false;
+    if (f.cards == null) return true;
+    return +f.cards >= 0;
+  }
+  function noteCatalogFolderHold(rows) {
+    const prev = eFolderHoldsCatalog();
+    folderHold = Array.isArray(rows) && rows.some(rowHoldsCatalog);
+    return folderHold !== prev;
   }
   function eLoadedCatalogFile() {
     const set = nsGet("CatalogFile");
@@ -16460,6 +16793,7 @@ What you type stays in this browser only.`;
         if (fork) row2.fork = fork;
         if (l.stranded && typeof l.stranded === "object") row2.stranded = { seen: l.stranded.seen === true };
         if (l.needsFolder === true) row2.needsFolder = true;
+        if (l.awaitsEdition === true) row2.awaitsEdition = true;
         if (typeof l.reading === "string" && l.reading) row2.reading = String(l.reading);
         return row2;
       }) : []
@@ -22517,8 +22851,8 @@ What you type stays in this browser only.`;
     cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
     cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
-    const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("int")) + "</span>";
-    const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("sup")) + "</span>";
+    const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
+    const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("Also helps")) + "</span>";
     if (hit) cardH += hitBadge;
     if (catHit) cardH += catBadge;
     if (fav) cardH += '<span class="cbadge fav" title="' + esc(t("In Favourites")) + '">' + esc(t("fav")) + "</span>";
@@ -24244,6 +24578,16 @@ What you type stays in this browser only.`;
     }
     return { hits, sc };
   }
+  function searchMissHtml() {
+    return '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>";
+  }
+  function meaningBoundaryHtml(wordCount, tailCount, noMatchHtml, label2) {
+    if (!tailCount) return "";
+    let h = "";
+    if (!wordCount && noMatchHtml) h += noMatchHtml;
+    h += '<div class="list-sep e-meaning"><i></i><span>' + label2 + "</span><i></i></div>";
+    return h;
+  }
   function render() {
     remPx();
     closeNotePane();
@@ -24255,10 +24599,12 @@ What you type stays in this browser only.`;
     const ranked = rankedCards(terms, keep);
     const sc = ranked.sc;
     const mixed = mixCards(ranked.hits, keep);
+    const wordN = mixed ? ranked.hits.length : 0;
+    const tailN = mixed ? mixed.length - ranked.hits.length : 0;
     setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? (eFolderHoldsCatalog() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.") : t("There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog.")).split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
@@ -24309,6 +24655,9 @@ What you type stays in this browser only.`;
       let sepH = "";
       if (terms.length && i > 0 && sepGroup(shown[i - 1]) === 0 && sepGroup(m) === 1) {
         sepH += '<div class="list-sep"><i></i><span>' + esc(sepLabel) + "</span><i></i></div>";
+      }
+      if (tailN && i === wordN) {
+        sepH += meaningBoundaryHtml(wordN, tailN, wordN ? "" : searchMissHtml(), esc(t("Close in meaning")));
       }
       if (groupList && !soloCat) {
         const prevM = i > 0 ? shown[i - 1] : null;
@@ -24416,7 +24765,7 @@ What you type stays in this browser only.`;
   var ABOUT_NEW = [
     { title: "The team's catalog in editions.", body: "When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded." },
     { title: "Signed by the team's lead.", body: "A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed." },
-    { title: "The conversation's path.", body: "Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back." },
+    { title: "The timeline.", body: "Space turns from the cards to the timeline of the conversation in front: what has been sent, the last reply whole, and what can follow it. Space again brings the cards back." },
     { title: "Next replies on {KEY1} to {KEY4}.", body: "After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt." }
   ];
   var ABOUT_EARLIER = [
@@ -24684,8 +25033,75 @@ What you type stays in this browser only.`;
     }) : null;
   }
 
+  // src/modules/sx-icons.js
+  var SX_ICONS = {
+    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
+    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
+    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
+    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
+    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
+    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
+    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
+    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
+    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
+    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
+    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
+    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
+    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
+    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
+    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
+    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
+    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
+    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
+  };
+  function sxIcon(name) {
+    const body = SX_ICONS[name];
+    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
+  }
+
   // src/modules/header-menus.js
+  var MENU_ICON = {
+    manage: "cards",
+    settings: "general",
+    join: "desks",
+    picker: "expand",
+    rail: "intents",
+    pills: "categories",
+    tour: "forward",
+    about: "about"
+  };
+  function paintMenuIcons() {
+    const menu = $("#settingsMenu");
+    if (!menu || typeof menu.querySelectorAll !== "function") return;
+    menu.querySelectorAll("button[data-act]").forEach((b) => {
+      const name = b.dataset && MENU_ICON[b.dataset.act];
+      if (!name || typeof b.querySelector !== "function" || b.querySelector(".sx-ic")) return;
+      if (typeof b.insertBefore !== "function" || typeof document.createElement !== "function") return;
+      const hold = document.createElement("span");
+      hold.innerHTML = sxIcon(name);
+      const icon = hold.firstChild;
+      if (icon) b.insertBefore(icon, b.firstChild);
+    });
+  }
+  function menuLabel(btn, text) {
+    if (!btn) return;
+    let n = null;
+    for (let i = 0; i < btn.childNodes.length; i++) {
+      const c = btn.childNodes[i];
+      if (c.nodeType === 3 && c.nodeValue.trim()) {
+        n = c;
+        break;
+      }
+    }
+    if (n) n.nodeValue = text;
+    else btn.appendChild(document.createTextNode(text));
+  }
   function wireHeaderMenus() {
+    paintMenuIcons();
     const host = eHost(), canClose = !!(host && typeof host.close === "function");
     ["#menuQuit", "#menuQuitSep"].forEach((s) => {
       const el = $(s);
@@ -24820,20 +25236,21 @@ What you type stays in this browser only.`;
     row2.hidden = !hk || !h || typeof h.openPicker !== "function";
     if (row2.hidden) return;
     const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
-    row2.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
+    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
     row2.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
   }
   function syncSettingsMenu() {
+    paintMenuIcons();
     syncPickerRow();
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
-      pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
+      menuLabel(pillsBtn, pillsWanted() ? t("Hide categories") : t("Show categories"));
       const hold = scReady ? formatActionChord("expandPills") : "Hold Ctrl";
       pillsBtn.title = pillsWanted() ? pillsLocked() ? t("Hide the category bar, which is locked fully expanded when shown") : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}", hold) : t("Show the category bar under the header.");
     }
     if (railBtn) {
-      railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+      menuLabel(railBtn, railWanted() ? t("Hide intent panel") : t("Show intent panel"));
       railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
     }
     syncRailPinBtn();
@@ -27603,7 +28020,9 @@ What you type stays in this browser only.`;
   var local_memory_exports = {};
   __export(local_memory_exports, {
     askClearLocal: () => askClearLocal,
+    bringBackCleared: () => bringBackCleared,
     clearLocalMemory: () => clearLocalMemory,
+    clearedHeld: () => clearedHeld,
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
@@ -27652,6 +28071,10 @@ What you type stays in this browser only.`;
     else ssDel(TAB_KEY);
     hooks.restartDesk();
   }
+  var clearedHold = null;
+  function clearedHeld() {
+    return !!clearedHold;
+  }
   function clearLocalMemory() {
     let keep = { layer: [], pack: [] };
     keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
@@ -27666,8 +28089,19 @@ What you type stays in this browser only.`;
       if (half != null) lsSet(k, half);
       else lsDel(k);
     });
+    if (!clearedHold) clearedHold = was;
     hooks.restartDesk();
-    offerUndo("Local changes cleared", () => putBack(was));
+    offerUndo("Local changes cleared", () => {
+      if (clearedHold === was) clearedHold = null;
+      putBack(was);
+    });
+  }
+  function bringBackCleared() {
+    const was = clearedHold;
+    if (!was) return false;
+    clearedHold = null;
+    putBack(was);
+    return true;
   }
   function askClearLocal() {
     const was = document.getElementById("eClearAsk");
@@ -28353,9 +28787,120 @@ What you type stays in this browser only.`;
       return '<button type="button" class="sx-sec' + (on ? " on" : "") + '" data-mt="' + esc(p.key) + '"' + (on ? ' aria-current="page"' : "") + ">" + lmIcon(p.icon) + "<span data-i18n-skip>" + esc(p.name) + "</span></button>";
     }).join("");
   }
+  function mtResetRow() {
+    return '<div class="set-row mt-reset" id="mtResetRow"><div class="set-label">' + esc(t("Reset Etiuda")) + "<small>" + esc(t("Returns this desk to a fresh install, keeping only the licence.")) + '</small></div><div class="set-ctl"><button type="button" class="btn danger" id="mtReset">' + esc(t("Reset Etiuda")) + "</button></div></div>";
+  }
+  function openResetConfirm() {
+    openDialog({
+      cls: "mt-reset-confirm",
+      title: "Reset Etiuda?",
+      body: "<p>" + esc(t("Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.")) + '</p><p class="mt-reset-warn">' + esc(t("There is no Undo. Joining the team again takes a new invitation from its lead.")) + '</p><label class="mf">' + esc(t("Type RESET to confirm.")) + '<input type="text" id="mtResetWord" autocomplete="off" spellcheck="false"></label>',
+      actions: '<button type="button" class="btn" id="mtResetCancel">' + esc(t("Cancel")) + '</button><button type="button" class="btn danger" id="mtResetGo" disabled>' + esc(t("Reset Etiuda")) + "</button>",
+      wire: () => {
+        const word = $("#mtResetWord"), go = $("#mtResetGo");
+        const ready = () => !!word && /^reset$/i.test(String(word.value || "").trim());
+        const sync = () => {
+          if (go) go.disabled = !ready();
+        };
+        if (word) word.addEventListener("input", sync);
+        sync();
+        const cancel = $("#mtResetCancel");
+        if (cancel) cancel.onclick = () => dismissModal();
+        if (go) go.onclick = () => {
+          if (!ready()) return;
+          dismissModal();
+          const h = eHost();
+          if (!h || typeof h.resetDesk !== "function") return;
+          let answer = null;
+          try {
+            answer = h.resetDesk();
+          } catch (e) {
+            return;
+          }
+          const say = () => {
+            try {
+              toast(t("Etiuda is starting again as freshly installed."));
+            } catch (e) {
+            }
+          };
+          if (answer && typeof answer.then === "function") answer.then((r) => {
+            if (r && r.ok) say();
+          }, () => {
+          });
+          else if (answer && answer.ok) say();
+        };
+      }
+    });
+  }
+  var RESET_LEFT = "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
+  var RESET_NEXT = "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
+  function unfinishedLine(info) {
+    const names = info && Array.isArray(info.paths) ? info.paths.filter((p) => typeof p === "string" && p) : [];
+    return t(RESET_LEFT).replace("{PATH}", names.join(", "));
+  }
+  function openUnfinishedReset(info) {
+    const line = unfinishedLine(info);
+    openDialog({
+      cls: "mt-reset-unfinished",
+      title: RESET_LEFT,
+      body: "<p>" + esc(RESET_NEXT) + "</p>",
+      actions: '<button type="button" class="btn" id="mtResetStop">' + esc(t("Stop the reset")) + '</button><button type="button" class="btn danger" id="mtResetAgain">' + esc(t("Try again")) + "</button>",
+      wire: () => {
+        const title = document.querySelector("#modalTitle .modal-t");
+        if (title) {
+          title.textContent = line;
+          title.setAttribute("data-i18n-skip", "");
+        }
+        const stop = $("#mtResetStop"), again = $("#mtResetAgain");
+        if (stop) stop.onclick = () => {
+          const h = eHost();
+          const done = () => dismissModal();
+          if (!h || typeof h.stopReset !== "function") {
+            done();
+            return;
+          }
+          let answer = null;
+          try {
+            answer = h.stopReset();
+          } catch (e) {
+            done();
+            return;
+          }
+          if (answer && typeof answer.then === "function") answer.then(done, done);
+          else done();
+        };
+        if (again) again.onclick = () => {
+          const h = eHost();
+          if (!h || typeof h.retryReset !== "function") return;
+          let answer = null;
+          try {
+            answer = h.retryReset();
+          } catch (e) {
+            return;
+          }
+          const take = (r) => {
+            if (r && r.ok) {
+              dismissModal();
+              return;
+            }
+            if (r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({ paths: r.paths });
+          };
+          if (answer && typeof answer.then === "function") answer.then(take, () => {
+          });
+          else take(answer);
+        };
+      }
+    });
+  }
+  function armResetNotice() {
+    const h = eHost();
+    if (!h || typeof h.onResetUnfinished !== "function" || h._resetNoticeArmed) return;
+    h._resetNoticeArmed = true;
+    h.onResetUnfinished((info) => openUnfinishedReset(info));
+  }
   function mtShellHtml() {
     const pages = mtPages(), page = pages.filter((p) => p.key === mtOn)[0] || pages[0];
-    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + mtResetRow() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
   }
   function wireMtShell(root) {
     if (!root || typeof root.querySelectorAll !== "function") return;
@@ -28387,6 +28932,8 @@ What you type stays in this browser only.`;
     if (data) data.onclick = () => {
       if (typeof hooks.openSettings === "function") hooks.openSettings("data");
     };
+    const reset = root.querySelector("#mtReset");
+    if (reset) reset.onclick = () => openResetConfirm();
   }
   registerScreen("maintenance", {
     title: () => t("Maintenance"),
@@ -29679,7 +30226,7 @@ What you type stays in this browser only.`;
           body: (function() {
             const rows = [];
             const paxTag = '<span class="fillmiss">PAX</span>';
-            const intTag = '<span class="cbadge hit" title="' + esc(t("Intent")) + '">' + esc(t("int")) + "</span>";
+            const intTag = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
             const box = (id2, on, dis, tip, label2) => rows.push('<label title="' + esc(t(tip)) + '"><input type="checkbox" id="' + id2 + '"' + (on ? " checked" : "") + (dis ? " disabled" : "") + "> " + esc(t(label2)).split("{PAX}").join(paxTag).split("{INT}").join(intTag) + "</label>");
             box(
               "meAlt",
@@ -29718,14 +30265,14 @@ What you type stays in this browser only.`;
               m.allIntents,
               false,
               "Rings green under every intent - for text that always applies, like an opener.",
-              "Linked to every {INT}"
+              "Wears {INT} under every intent"
             );
             box(
               "meIntentTop",
               m.intentTop,
               false,
               "Sorts above the other linked cards when an intent is picked.",
-              "Top of the {INT} group"
+              "First among the cards marked {INT}"
             );
             const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
             const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
@@ -30634,6 +31181,7 @@ What you type stays in this browser only.`;
       refusedKey: "CatalogNo",
       force: !!force,
       asked: !!asked,
+      fromList: mine,
       /* Only an off-roster note changes this offer: it is asked about, even on an empty desk. A file
          with no note keeps the direct the caller omitted, so a folder watch does not load at once. */
       ...offTeam ? { direct: false, offTeam: true } : {},
@@ -30696,6 +31244,7 @@ What you type stays in this browser only.`;
         asked: true,
         direct: !offTeam,
         offTeam,
+        fromList: !desk,
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
           return activateCatalog(c, desk ? { file: "", from: got.name } : { file: got.name, fileAt: +mtime || 0 });
@@ -30990,6 +31539,7 @@ What you type stays in this browser only.`;
     return " · " + esc(t("rev {R}").split("{R}").join(String(name.r))) + (name.e ? ' <span class="ec-ed">' + esc(name.e) + "</span>" : "");
   }
   var offerStanding = null;
+  var offerShown = null;
   var offeredNotified = /* @__PURE__ */ new Set();
   var listingNotified = /* @__PURE__ */ new Set();
   function eOfferCatalogDialog(c, src) {
@@ -31115,8 +31665,10 @@ What you type stays in this browser only.`;
       removeEventListener("resize", place);
       dismissNode(wrap);
       if (offerStanding === close) offerStanding = null;
+      if (offerShown && offerShown.close === close) offerShown = null;
     };
     offerStanding = close;
+    if (src.fromList) offerShown = { c, src, close };
     wrap.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -31373,7 +31925,46 @@ What you type stays in this browser only.`;
       if (interactive) toastRefusal(t("Could not read the watched file."));
     });
   }
+  function offerPin(c) {
+    const doc = catalogDocOf(c);
+    if (!doc) return c && typeof c.pin === "string" ? c.pin : "";
+    try {
+      return "sha256:" + sha256Hex(v2SignedBytes(doc));
+    } catch (e) {
+      return c && typeof c.pin === "string" ? c.pin : "";
+    }
+  }
+  function listingHolds(c, file, files) {
+    const name = String(file || ""), id = String(c && c.id || ""), pin = offerPin(c);
+    return (files || []).some((f) => {
+      if (!f || f.desk || f.builtIn) return false;
+      if (name && f.name === name) return true;
+      return !!(id && pin && String(f.id || "") === id && f.sha === pin);
+    });
+  }
+  function dropOffersLeft(all) {
+    const files = (all || []).filter((f) => f && !f.desk && !f.builtIn);
+    if (offerShown && offerShown.src && offerShown.src.fromList && !listingHolds(offerShown.c, offerShown.src.file, files)) {
+      const close = offerShown.close;
+      offerShown = null;
+      if (typeof close === "function") close();
+    }
+    if (edWaiting && edWaiting.src && edWaiting.src.fromList && !listingHolds(edWaiting.c, edWaiting.src.file, files)) {
+      edWaiting = null;
+      paintCatWaiting();
+    }
+  }
   function onCatalogListing(all) {
+    let flipped = false;
+    try {
+      flipped = noteCatalogFolderHold(all);
+    } catch (e) {
+      flipped = false;
+    }
+    try {
+      if (flipped && wholeThingEmpty() && document.querySelector(".empty-desk") && typeof hooks.render === "function") hooks.render();
+    } catch (e) {
+    }
     paintCatalogList();
     if (lsGet("eNotifyCatalogOff") !== "1") {
       const tLeads = teamLeads().filter((l) => l && !l.removed);
@@ -31394,6 +31985,7 @@ What you type stays in this browser only.`;
         }
       }
     }
+    dropOffersLeft(all);
     const held = storedCatalog();
     if (!held && !catalogLoaded()) {
       offerToLooseAuthor(all);
@@ -32399,7 +32991,10 @@ What you type stays in this browser only.`;
         });
       };
     });
-    $("#mgWipe").onclick = askClearLocal;
+    const wipe = $("#mgWipe");
+    if (wipe) wipe.onclick = askClearLocal;
+    const bring = $("#mgBring");
+    if (bring) bring.onclick = bringBackCleared;
     wireFolds(
       page,
       "details[data-mg]",
@@ -32566,13 +33161,19 @@ What you type stays in this browser only.`;
       t("Saved copies"),
       t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
       '<button type="button" class="btn" id="mgHistory">' + esc(t("Saved copies…")) + "</button>"
-    ) : "") + libraryActRow(
+    ) : "") + (clearedHeld() ? libraryActRow(
+      "clear",
+      "delete",
+      t("Bring back local changes"),
+      t("These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered."),
+      '<button type="button" class="btn" id="mgBring">' + esc(t("Bring back local changes")) + "</button>"
+    ) : libraryActRow(
       "clear",
       "delete",
       t("Clear local changes"),
       t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
       '<button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local changes")) + "</button>"
-    ) + "</div>";
+    )) + "</div>";
   }
 
   // src/modules/settings.js
@@ -32720,6 +33321,7 @@ What you type stays in this browser only.`;
       l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ];
     if (l.head) notes.push(teamHeadNote(l.head));
+    if (l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
     if (l.lapse) notes.push(lapseNote(l.lapse));
     if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
     if (l.reading) notes.push(l.reading);
@@ -32754,34 +33356,6 @@ What you type stays in this browser only.`;
         if (document.getElementById("setBody")) paintSettings();
       });
     });
-  }
-  var SX_ICONS = {
-    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
-    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
-    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
-    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
-    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
-    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
-    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
-    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
-    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
-    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
-    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
-    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
-    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
-    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
-    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
-    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
-    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
-    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
-    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
-    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
-    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
-    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
-  };
-  function sxIcon(name) {
-    const body = SX_ICONS[name];
-    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
   }
   function seg2(name, opts, cur) {
     return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
@@ -33319,7 +33893,7 @@ What you type stays in this browser only.`;
               } catch (e) {
               }
             }
-            toast(quit ? t("Quit") : t("Stay in the tray"));
+            toast(quit ? t("Closing the window will quit Etiuda.") : t("Stay in the tray"));
           } else if (seg3 === "notesmaster") {
             const host = eHost();
             if (host && typeof host.setTrayNotes === "function") {
@@ -33699,9 +34273,9 @@ What you type stays in this browser only.`;
   // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
-    intentEl.placeholder = t("search intents and cards");
+    intentEl.placeholder = t("Search intents and cards");
     const ph = $("#intentPh");
-    if (ph) ph.innerHTML = t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
+    if (ph) ph.innerHTML = "<span>" + t("Search intents and cards") + '</span><span class="ph-keys">' + t("<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several") + "</span>";
   }
   function clearSearchQuery() {
     if (intentEl) intentEl.value = "";
@@ -34069,7 +34643,7 @@ What you type stays in this browser only.`;
     fab.hidden = !n && !now.path.length && !lanes;
     const badge = fab.querySelector(".fab-badge");
     if (badge) badge.textContent = n ? String(n) : "";
-    fab.title = t(lanes ? "Back to the cards" : "Show the conversation's path");
+    fab.title = t(lanes ? "Back to the cards" : "Show the timeline");
     fab.setAttribute("aria-label", t("Next replies") + ": " + n);
     fab.setAttribute("aria-pressed", lanes ? "true" : "false");
     if (arrived === true && now.rows.some((r) => !r.used)) {
@@ -34376,7 +34950,13 @@ What you type stays in this browser only.`;
     const off = r.learnt || r.used;
     const grip = off ? "" : '<button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>';
     const act = off ? '<button type="button" class="ln-keep" title="' + esc(t("Add it to the list")) + '" aria-label="' + esc(t("Add it to the list")) + '">' + ICON_PLUS + "</button>" : '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button>";
-    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + escFilled(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then">' + esc(t("then: {LIST}").replace("{LIST}", then.join(LN_DOT))) + "</div>" : "") + "</div>";
+    const l = cardLang(m), ps = parts(m, l), blocks = Math.max(1, ps.length);
+    let txts = "";
+    for (let b = 0; b < blocks; b++) {
+      const chip = blocks > 1 ? '<span class="ln-chip ln-part">' + (b + 1) + "/" + blocks + "</span>" : "";
+      txts += '<div class="txt ln-txt' + (i === laneMark && b === 0 ? " sel" : "") + '" role="button" data-b="' + b + '">' + chip + '<span class="ln-clamp">' + escFilled(laneBody(m, b).replace(/\s+/g, " ").trim()) + "</span></div>";
+    }
+    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + "</span></div>" + txts + (then.length ? '<div class="ln-then" role="list"><span class="ln-then-l">' + esc(t("then")) + "</span>" + then.map((n) => '<span class="ln-chip" role="listitem">' + esc(n) + "</span>").join('<span class="ln-sep">' + esc(LN_DOT) + "</span>") + "</div>" : "") + "</div>";
   }
   function laneEditHtml(st) {
     const own = st.fold && st.fold.own ? '<div class="ln-src"><span class="nx-who own">' + esc(t("Your list")) + '</span><button type="button" class="btn ln-back">' + esc(t("Back to the catalog's")) + "</button></div>" : "";
@@ -34401,37 +34981,43 @@ What you type stays in this browser only.`;
   function drawWires() {
     const el = lanesEl(), cols = el && el.querySelector(".ln-cols"), svg = cols && cols.querySelector(".ln-wires");
     if (!svg) return;
-    const o = cols.getBoundingClientRect(), at = (r) => ({ l: r.left - o.left, t: r.top - o.top, r: r.right - o.left, b: r.bottom - o.top });
+    const o = cols.getBoundingClientRect();
+    const at = (r) => ({ l: r.left - o.left, t: r.top - o.top, r: r.right - o.left, b: r.bottom - o.top, y: (r.top + r.bottom) / 2 - o.top });
     const now = cols.querySelector(".ln-now"), nh = now && now.querySelector(".chead");
     if (!now || !nh) return;
-    const n = at(now.getBoundingClientRect()), h = at(nh.getBoundingClientRect()), hy = (h.t + h.b) / 2;
-    let d = "", dots = "";
-    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length).map((e) => {
-      const r = at(e.getBoundingClientRect()), h2 = at((e.firstElementChild || e).getBoundingClientRect());
-      return { l: r.l, t: h2.t, b: h2.b };
-    });
+    const h = at(nh.getBoundingClientRect());
+    let d = "", arrows = "", ports = "";
+    const arrow = (x, y) => {
+      arrows += '<path class="ln-arrow" d="M' + (x - 1) + " " + y + 'l-9 -4.5v9z"/>';
+    };
+    const port = (x, y) => {
+      ports += '<circle class="ln-dot" cx="' + x + '" cy="' + y + '" r="6"/>';
+    };
+    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length);
     if (sent.length) {
-      const x = sent[0].l + 4, y0 = (sent[0].t + sent[0].b) / 2;
-      d += '<path class="ln-w" d="M' + x + " " + y0 + "V" + hy + "H" + (h.l - 10) + '"/>';
+      const heads = sent.map((e) => at((e.firstElementChild || e).getBoundingClientRect()));
+      const box = at(sent[sent.length - 1].getBoundingClientRect());
+      const x = box.l + 4, y0 = heads[0].y;
+      d += '<path class="ln-w" d="M' + x + " " + y0 + "V" + (h.y - 10) + "Q" + x + " " + h.y + " " + (x + 10) + " " + h.y + "H" + (h.l - 9) + '"/>';
       if (cols.querySelector(".ln-older")) d += '<path class="ln-w ln-w-learnt" d="M' + x + " " + (y0 - 18) + "V" + y0 + '"/>';
-      sent.forEach((r) => {
-        dots += '<circle class="ln-dot" cx="' + x + '" cy="' + (r.t + r.b) / 2 + '" r="4"/>';
-      });
+      arrow(h.l, h.y);
+      heads.forEach((q) => port(x, q.y));
     }
-    dots += '<circle class="ln-dot ln-dot-open" cx="' + (h.l - 6) + '" cy="' + hy + '" r="4"/>';
+    const slab = now.querySelector(".txt") || now, n = at(slab.getBoundingClientRect());
     const rows = [...cols.querySelectorAll(".ln-row")];
     rows.forEach((row2, i) => {
       const rh = row2.querySelector(".chead");
       if (!rh) return;
-      const r = at(rh.getBoundingClientRect()), y1 = (r.t + r.b) / 2, x1 = r.l - 8;
-      const y0 = n.t + 18 + i * Math.min(14, Math.max(0, n.b - n.t - 36) / Math.max(1, rows.length - 1)), x0 = n.r;
-      const dx = Math.max(12, (x1 - x0) / 2);
-      d += '<path class="ln-w' + (row2.hasAttribute("data-learnt") || row2.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + x1 + " " + y1 + '"/>';
-      dots += '<circle class="ln-dot" cx="' + x1 + '" cy="' + y1 + '" r="3.5"/>';
+      const b = at(rh.getBoundingClientRect()), x1 = b.l - 2, y1 = b.y;
+      const y0 = n.t + 20 + i * Math.min(20, Math.max(0, n.b - n.t - 40) / Math.max(1, rows.length - 1)), x0 = n.r;
+      const dx = Math.max(40, (x1 - x0) * 0.55);
+      d += '<path class="ln-w' + (row2.hasAttribute("data-learnt") || row2.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + (x1 - 7) + " " + y1 + '"/>';
+      arrow(x1, y1);
+      port(x0, y0);
     });
     svg.setAttribute("width", String(cols.scrollWidth));
     svg.setAttribute("height", String(cols.scrollHeight));
-    svg.innerHTML = d + dots;
+    svg.innerHTML = d + arrows + ports;
   }
   var walkRuns = [];
   var walkGhost = null;
@@ -34552,10 +35138,13 @@ What you type stays in this browser only.`;
     const el = lanesEl();
     return el ? el.querySelector('.ln-row[data-k="' + k + '"]') : null;
   }
-  function laneCopy(k, other) {
+  function laneCopy(k, other, part) {
     const r = laneRows[k];
     if (!r) return false;
-    copyCardPart(r.id, 0, laneRowEl(k), other);
+    const b = part != null ? part | 0 : 0;
+    const el = laneRowEl(k);
+    const anchor = el ? el.querySelector('.ln-txt[data-b="' + b + '"]') || el : null;
+    copyCardPart(r.id, b, anchor, other);
     return true;
   }
   function lanesShortcut(id) {
@@ -34671,7 +35260,9 @@ What you type stays in this browser only.`;
         laneTake(hit.getAttribute("data-to"));
         return true;
       }
-      return k < 0 ? false : (laneCopy(k), true);
+      const txt = at.closest(".ln-txt");
+      const part = txt && txt.dataset.b != null ? +txt.dataset.b : 0;
+      return k < 0 ? false : (laneCopy(k, false, part), true);
     });
     el.addEventListener("pointerdown", (e) => {
       if (e.target && e.target.closest && e.target.closest(".nx-hit")) e.preventDefault();
@@ -35165,7 +35756,20 @@ What you type stays in this browser only.`;
   }
   function tabRows(tab) {
     const id = tab.dataset.tid;
-    const rows = [{ label: t("New tab"), act: () => addTab() }, "-", { label: t("Close this tab"), act: () => closeTabById(id) }];
+    const tb = tabs.find((x) => x.id === id);
+    const rows = [];
+    rows.push({ label: t("Rename tab"), act: () => beginTabRename(id) });
+    if (tb && (tb.customName && tb.customName.trim() || tb.title && tb.title.trim())) {
+      rows.push({
+        label: t("Use the automatic name"),
+        hint: t("Names the tab after the customer's first name, or New chat while there is none."),
+        act: () => clearTabRename(id)
+      });
+    }
+    rows.push("-");
+    rows.push({ label: t("New tab"), act: () => addTab() });
+    rows.push("-");
+    rows.push({ label: t("Close this tab"), act: () => closeTabById(id) });
     if (tabs.length > 1) rows.push({ label: t("Close the other tabs"), act: () => closeOtherTabs(id) });
     if (closedTabCount()) rows.push({ label: t("Reopen the last closed tab"), act: () => reopenClosedTab() });
     return rows;
@@ -35202,6 +35806,7 @@ What you type stays in this browser only.`;
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("role", "menuitem");
+      if (r.hint) b.title = r.hint;
       if (r.key) {
         b.innerHTML = "<span>" + esc(r.label) + "</span><small>" + esc(r.key) + "</small>";
       } else {
@@ -36734,6 +37339,7 @@ What you type stays in this browser only.`;
     putLang(lsGet("eLang") || uiLang());
     grabDom();
     wireHost();
+    armResetNotice();
     suppressBrowserSuggest();
     wireMaintenanceWatch();
     wireKbdNav();
