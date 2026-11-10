@@ -558,6 +558,20 @@ function deskKeepsDataStep(text) {
   const use = t.search(/^[ \t]*\$\{If\} \$RemoveMyData == "1"/m);
   return at > -1 && use > at;
 }
+/* makensis treats warning 6010 (an unreferenced function) as an error here, so un.ClearDeskFolder, which only the
+   licence-keeping branch calls, is compiled only where that branch is: under !ifndef ETIUDA_REMOVE_LICENCE_WITH_DATA. */
+function clearDeskOnlyWhenCalled(text) {
+  const t = String(text || "");
+  const fn = t.search(/^[ \t]*Function un\.ClearDeskFolder\b/m);
+  if (fn < 0) return true;
+  const head = t.slice(0, fn).split(/\r?\n/).filter(l => /^[ \t]*!(if|endif)/.test(l));
+  let open = null, depth = 0;
+  for (const l of head) {
+    if (/^[ \t]*!if/.test(l)) { depth++; if (/!ifndef[ \t]+ETIUDA_REMOVE_LICENCE_WITH_DATA\b/.test(l)) open = depth; }
+    else { if (open === depth) open = null; depth--; }
+  }
+  return open !== null;
+}
 function licenceDefine(text) {
   return /^[ \t]*!define ETIUDA_REMOVE_LICENCE_WITH_DATA\b.*plant:uninstall-licence-goes/m.test(text);
 }
@@ -567,6 +581,8 @@ function installLeg(decision) {
   try { nsh = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
   check(nsh.indexOf(BOX_EN) >= 0 && nsh.indexOf(LINE_EN) >= 0 && nsh.indexOf(BOX_PL) >= 0 && nsh.indexOf(LINE_PL) >= 0 && boxOff(nsh),
     "4d7 the checkbox is off by default and carries the copywriter's line in both languages");
+  check(clearDeskOnlyWhenCalled(nsh) && !clearDeskOnlyWhenCalled(nsh.replace(/^([ \t]*)!ifndef ETIUDA_REMOVE_LICENCE_WITH_DATA\r?\n([ \t]*Function un\.ClearDeskFolder)/m, "$2")),
+    "4d12 un.ClearDeskFolder is compiled only under !ifndef ETIUDA_REMOVE_LICENCE_WITH_DATA, so the licence switch leaves makensis no unreferenced function (warning 6010 fails the package)");
   check(deskKeepsDataStep(nsh) && !deskKeepsDataStep(nsh.replace(/^(!macro customUnInstall)/m, "!define OWN_UNINSTALL_DATA_STEP\n$1")),
     "4d11 the desk's script never defines OWN_UNINSTALL_DATA_STEP, so its own Remove my data step is emitted, and a define of it reads red");
   if (typeof decision !== "function") {

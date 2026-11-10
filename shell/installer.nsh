@@ -915,7 +915,10 @@ Var RemoveDataBox
     SendMessage $mui.WelcomePage.Title ${WM_SETTEXT} 0 "STR:$(TurnUnWelcomeTitle)"
     SendMessage $mui.WelcomePage.Text ${WM_SETTEXT} 0 "STR:$(TurnUnWelcomeText)"
   FunctionEnd
-  # Leaves the two licence files and the folder. Used only when the licence switch below is commented out.
+  # Leaves the two licence files and the folder. Used only when the licence switch (ETIUDA_REMOVE_LICENCE_WITH_DATA)
+  # is commented out; while it is defined nothing calls this, and makensis's warning 6010 for an unreferenced
+  # function is an error in this build, so the function is compiled only when it is called.
+  !ifndef ETIUDA_REMOVE_LICENCE_WITH_DATA
   Function un.ClearDeskFolder
     Exch $R0
     Push $R1
@@ -943,6 +946,7 @@ Var RemoveDataBox
       Pop $R1
       Pop $R0
   FunctionEnd
+  !endif
   Function un.RemoveDataCreate
     ${If} ${Silent}
       Abort
