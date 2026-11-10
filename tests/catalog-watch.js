@@ -223,7 +223,7 @@ async function page(b) { return (await b.pages())[0]; }
     console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
     if (!reachedEnd) {
       console.log("  SUITE DID NOT COMPLETE");
-      process.exit(78);
+      process.exit(E.shellStartFailed() ? 1 : 78);
     }
     console.log(fails ? "RESULT: " + fails + " of " + checks + " failed" : "RESULT: OK, " + checks + " checks");
     process.exit(E.exitOf(fails));

@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 112;
+const EXPECTED = 113;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -2082,6 +2082,14 @@ async function main() {
     const rGreen = run(fg, ["green"]);
     const recGreen = Object.values(rGreen.byGate)[0] || {};
     check(rGreen.exit === 0 && !("failLines" in recGreen), "fl2 THE CONTROL: a green gate's record carries no failLines: exit " + rGreen.exit + ", keys " + Object.keys(recGreen).length);
+    const sh = makeLab("fail-lines-shell", {
+      red: 'console.log("  ok   leg one");\nconsole.log("SHELL DID NOT START: the port was closed");\nprocess.exit(1);\n',
+    });
+    const rShell = run(sh, ["red"]);
+    const recShell = Object.values(rShell.byGate)[0] || {};
+    const gotShell = Array.isArray(recShell.failLines) ? recShell.failLines : [];
+    check(rShell.exit === 1 && gotShell.length === 1 && gotShell[0].indexOf("SHELL DID NOT START: the port was closed") >= 0,
+      "fl3 a red gate's record keeps the line that says the shell did not start: " + JSON.stringify(gotShell));
   }
 
   if (!KEEP) for (const dir of labs) {

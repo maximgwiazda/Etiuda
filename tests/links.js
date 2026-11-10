@@ -229,5 +229,5 @@ function buildApp() {
   console.log("#counts checks=" + checks + " failed=" + fails);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails + " failed, "
     + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(fails ? E.exitOf(fails) : (reachedEnd ? 0 : E.NO_VERDICT));
+  process.exit(E.shellStartFailed() ? 1 : (fails ? E.exitOf(fails) : (reachedEnd ? 0 : E.NO_VERDICT)));
 });

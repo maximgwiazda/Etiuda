@@ -720,5 +720,5 @@ async function startOn(appDir, ud) {
   console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + notRun.length + " not run, " + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(fails ? E.exitOf(fails) : (reachedEnd && !notRun.length ? 0 : E.NO_VERDICT));
+  process.exit(E.shellStartFailed() ? 1 : (fails ? E.exitOf(fails) : (reachedEnd && !notRun.length ? 0 : E.NO_VERDICT)));
 });

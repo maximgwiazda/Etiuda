@@ -155,5 +155,5 @@ async function launch(theme, quiet) {
   if (done && checks !== EXPECTED) { console.log("  FAIL ran " + checks + " checks, expected " + EXPECTED); fails++; }
   console.log((fails ? "FAIL " : "PASS ") + "opening-frame: " + (checks - Math.min(fails, checks)) + "/" + checks + " checks"
     + (done ? "" : " - SUITE DID NOT COMPLETE"));
-  process.exit(done ? E.exitOf(fails) : 78);
+  process.exit(E.shellStartFailed() ? 1 : (done ? E.exitOf(fails) : 78));
 })();

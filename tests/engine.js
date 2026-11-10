@@ -1582,6 +1582,9 @@ function suiteVerdict(o) {
   /* Board item 613. Said at the verdict, on every run that is not on Windows, because this is
      where a reader decides what the run means. */
   offWindowsNotice().forEach(l => lines.push(l));
+  /* A shell that never started is a failure, exit 1, even though the suite did not reach its end.
+     Exit 78 stays the other reason a run has no verdict. */
+  if (shellFailed) return { exit: 1, noVerdict: false, lines: lines };
   return { exit: noVerdict ? NO_VERDICT : exitOf(fails), noVerdict: noVerdict, lines: lines };
 }
 
@@ -1653,11 +1656,18 @@ function copyShellApp(dir) {
   }
 }
 
-/* A launch that dies is a failure, exit 1, one line. Exit 78 stays the wall's refusal and a suite that never reached its end. */
+/* A launch that dies is a failure, exit 1, one line. Printed and marked here, then thrown, so the
+   leg's own finally still removes its lab and prints its counts. That finally exits 1 when the
+   mark is set. Exit 78 stays the wall's refusal and a suite that stopped for any other reason. */
+let shellFailed = false;
+function shellStartFailed() { return shellFailed; }
 function shellDidNotStart(why) {
   const text = String(why == null || why === "" ? "the shell did not start" : why).replace(/\s+/g, " ").trim();
   console.log("SHELL DID NOT START: " + text);
-  process.exit(1);
+  shellFailed = true;
+  const err = new Error("SHELL DID NOT START: " + text);
+  err.shellDidNotStart = true;
+  throw err;
 }
 
 function shellStartWhy(info) {
@@ -1709,7 +1719,7 @@ async function connectShell(opts) {
 }
 
 module.exports = { shellAppFiles, copyShellApp, NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
-                   shellDidNotStart, shellStartWhy, connectShell,
+                   shellDidNotStart, shellStartFailed, shellStartWhy, connectShell,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch, unsignedEnv,

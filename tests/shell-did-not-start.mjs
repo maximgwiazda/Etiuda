@@ -61,6 +61,34 @@ const deadOut = String(dead.stdout || "");
 check(dead.status === 1 && deadOut.indexOf("SHELL DID NOT START: the shell exited 3: stand-in said boom") >= 0,
   "a stand-in that has already exited is a start failure, exit 1, naming the exit: " + JSON.stringify(deadOut.trim()));
 
+/* A leg shaped like the window legs: a temp folder, a shell that never answers, and a finally that
+   removes the folder, prints the counts and exits 1 when the launch helper has marked the failure. */
+const lab = path.join(wallDir, "lab");
+fs.mkdirSync(lab);
+const standFile = path.join(wallDir, "stand.mjs");
+fs.writeFileSync(standFile, [
+  "import { createRequire } from 'node:module';",
+  "import fs from 'node:fs';",
+  "const require = createRequire(import.meta.url);",
+  "const E = require(" + JSON.stringify(path.join(HERE, "engine.js")) + ");",
+  "const lab = process.argv[2];",
+  "try {",
+  "  await E.connectShell({ port: 1, said: ['stand-in never answered'], waitMs: 700, step: 200 });",
+  "} finally {",
+  "  try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}",
+  "  console.log('#counts checks=0 failed=0');",
+  "  const marked = typeof E.shellStartFailed === 'function' && E.shellStartFailed();",
+  "  process.exit(marked ? 1 : 78);",
+  "}",
+  "",
+].join("\n"));
+const stood = spawnSync(process.execPath, [standFile, lab], { encoding: "utf8", timeout: 20000 });
+const stoodOut = String(stood.stdout || "");
+const labGone = !fs.existsSync(lab);
+check(stood.status === 1 && labGone && stoodOut.indexOf("#counts ") >= 0 && stoodOut.indexOf("SHELL DID NOT START:") >= 0,
+  "a stand-in whose shell never answers leaves no temp folder, prints its counts and exits 1: exit "
+  + stood.status + ", gone " + labGone + ", " + JSON.stringify(stoodOut.trim().slice(0, 400)));
+
 try { fs.rmSync(wallDir, { recursive: true, force: true }); } catch (e) { /* the temp folder can wait */ }
 process.stdout.write("shell-did-not-start: " + (failed ? failed + " failure(s)" : "ok") + "\n");
 process.exit(failed ? 1 : 0);

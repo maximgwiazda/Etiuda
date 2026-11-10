@@ -115,5 +115,6 @@ async function main() {
 
 main().catch(err => {
   console.error("  FAIL " + (err && err.message || err));
+  console.log("#counts checks=" + checks + " failed=" + fails);
   process.exit(1);
 });

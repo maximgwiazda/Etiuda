@@ -1228,15 +1228,15 @@ const RESERVED = ["ok", "fail", "exitCode"];
 
 /* A RED NAMES ITSELF IN ITS RECORD (the test architect, 2026-11-09): three team-lock reds under load held counts only, and the
    leg was green alone, so nothing said which check had failed. A red gate's record keeps each FAIL line, the indented lines that
-   follow it (where a leg prints its state) and any SUITE DID NOT COMPLETE, at most 40 lines of at most 400 characters. A test's
-   own output only: fixtures are invented, and the record stays on this machine. */
+   follow it (where a leg prints its state), any SUITE DID NOT COMPLETE and any SHELL DID NOT START, at most 40 lines of at most
+   400 characters. A test's own output only: fixtures are invented, and the record stays on this machine. */
 function failLinesOf(out) {
   const lines = String(out || "").split(/\r?\n/);
   const kept = [];
   let follow = 0;
   for (const l of lines) {
     if (kept.length >= 40) break;
-    if (/^\s*FAIL\b/.test(l) || /SUITE DID NOT COMPLETE/.test(l)) { kept.push(l.slice(0, 400)); follow = 3; continue; } /* plant:fail-lines */
+    if (/^\s*FAIL\b/.test(l) || /SUITE DID NOT COMPLETE/.test(l) || /SHELL DID NOT START:/.test(l)) { kept.push(l.slice(0, 400)); follow = 3; continue; } /* plant:fail-lines */
     if (follow > 0 && /^\s{5,}\S/.test(l)) { kept.push(l.slice(0, 400)); follow--; continue; }
     follow = 0;
   }

@@ -514,5 +514,5 @@ process.on("exit", () => {
   console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails + " failed, "
     + Math.round((Date.now() - t0) / 1000) + "s" + (KEEP ? "; --keep: the lab stands at " + LAB : ""));
-  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
+  process.exit(E.shellStartFailed() ? 1 : (reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT)));
 });
