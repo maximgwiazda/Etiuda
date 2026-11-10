@@ -1230,7 +1230,7 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 /* A menu row is an icon and a word. The icon is dim until the pointer or the keyboard reaches
    the row, when it turns accent; the words stay ink. The language badge fills the same slot the
    icons do, so those rows share one left edge. */
-.menu.menu-ic button{display:flex;align-items:center;gap:10px}
+.menu.menu-ic button{display:flex;align-items:center;gap:9px}
 .menu.menu-ic button .ic{flex:0 0 auto;color:var(--dim)}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
   font:700 10.5px var(--sans);letter-spacing:.4px;color:var(--dim)}
@@ -1238,25 +1238,25 @@ body.shed-segfold #seg::before{width:100%;transform:none}
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
 .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:232px;
-  background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
-  box-shadow:var(--shadow-pop);padding:6px;display:flex;flex-direction:column;gap:2px}
-.menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:7px;
-  background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
+  background:var(--panel-raised);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow-pop);padding:5px;display:flex;flex-direction:column;gap:1px}
+.menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:4px 10px;border:0;border-radius:6px;
+  background:transparent;color:var(--ink);font:13px/20px var(--sans);cursor:default}
 .menu button .sx-ic,.menu button .ic{flex:none;width:16px;height:16px;color:var(--dim)}
 .menu button:hover,.menu button:focus-visible{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--ink);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
 .menu button:hover .sx-ic,.menu button:focus-visible .sx-ic,
 .menu button:hover .ic,.menu button:focus-visible .ic,
 .menu button:hover .more-lang-badge,.menu button:focus-visible .more-lang-badge{color:var(--accent)}
-.menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
+.menu .menu-sep{height:1px;margin:3px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
-#menuPicker{display:flex;align-items:center;gap:10px}
+#menuPicker{display:flex;align-items:center;gap:9px}
 #menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
 .menu.e-ctx:focus{outline:none}
 .menu.e-ctx button{display:flex;align-items:center;justify-content:space-between;width:100%}
-.menu.e-ctx button small{margin-left:auto;padding-left:14px;font:12px var(--sans);color:var(--dim)}
+.menu.e-ctx button small{margin-left:auto;padding-left:14px;font:11.5px var(--sans);color:var(--dim)}
 body.pills-off .pills-slot{display:none}
 /* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
    back into flow: the snap has already taken its final display. */
@@ -1699,10 +1699,10 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
    for the last intent. It straddles the edge 3px either side, which makes a 1px border
    grabbable. Gone entirely when locked, not disabled: absent reads as locked, inert reads
    as broken - so the lock needs no separate indicator. */
-.rail-resize{position:absolute;top:0;right:-3px;width:7px;height:100%;
+.rail-resize{position:absolute;top:50%;right:-3px;width:7px;height:26px;transform:translateY(-50%);
   cursor:ew-resize;z-index:2;touch-action:none}
-.rail-resize::after{content:"";position:absolute;top:50%;right:3px;width:1px;height:26px;
-  transform:translateY(-50%);background:var(--line-strong);opacity:0;transition:opacity var(--m-tone)}
+.rail-resize::after{content:"";position:absolute;top:0;right:3px;width:1px;height:26px;
+  background:var(--line-strong);opacity:0;transition:opacity var(--m-tone)}
 #intentRail:hover .rail-resize::after{opacity:.75}
 #intentRail.rail-fixed .rail-resize{display:none}
 html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!important}
@@ -3727,11 +3727,11 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog file"],
 .sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Storage"],
 .sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Desk"],
-.sx.lm-mt:not([data-page="storage"]) .mt-reset{display:none}
-.sx.lm-mt .mt-reset{grid-template-columns:minmax(0,1fr) auto;margin-top:16px}
 .sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Layout"],
 .sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Intent panel"],
 .sx.lm-mt[data-page="state"] .mt-sec[data-mt-sec="Personal state"]{display:block}
+.sx.lm-mt:not([data-page="storage"]) .mt-reset{display:none}
+.sx.lm-mt .mt-reset{grid-template-columns:minmax(0,1fr) auto;margin-top:16px}
 .sx.lm-mt .mt-sec h3{margin:0;padding:12px 16px 4px;font:600 12px var(--sans);letter-spacing:.06em}
 .sx.lm-mt .mt-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;
   padding:10px 16px;border-top:1px solid var(--line);font:13.5px var(--sans)}
