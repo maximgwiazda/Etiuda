@@ -454,6 +454,7 @@ async function launch(plan) {
       const [op, a, b] = String(arg).split(","), dir = path.join(LAB, "catalogs");
       if (op === "rename") fs.renameSync(path.join(dir, a), path.join(dir, b));
       else if (op === "copy") fs.copyFileSync(path.join(dir, a), path.join(dir, b));
+      else if (op === "unlink") fs.unlinkSync(path.join(dir, a));
       else throw new Error("fsop " + op);
     },
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
@@ -706,7 +707,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 136;
+  const EXPECTED = 138;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -951,6 +952,29 @@ async function parent() {
     const o72 = f72.offers[0] || {};
     check(o72.shown === true && o72.files.includes("lamp-v2.ec") && f72.fileAtEnd === "lamp.ec",
       "72e a higher edition of the catalog in use under another name and an older date is offered (" + JSON.stringify(o72.files || null) + ")");
+    const signedHigher = sign(Object.assign({}, payload("2026-09-01"), { rev: 2, date: "2026-09-20" }));
+    const lab72p = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    run(lab72p, ["boot", "settle", "offer", "yes", "settle"]);
+    fs.writeFileSync(path.join(lab72p, "catalogs", "lamp-v2.ec"), JSON.stringify(signedHigher), "utf8");
+    later(lab72p, "lamp-v2.ec", -7200);
+    const p72 = run(lab72p, ["boot", "listing", "offer", "readwait", "fsop:unlink,lamp-v2.ec", "listing", "offer", "readwait"], true, { band: true });
+    const up72 = ((p72.read || {}).wait || [])[0] || {}, down72 = ((p72.read || {}).wait || [])[1] || {};
+    check((p72.offers[0] || {}).shown === true && up72.waiting === true && up72.dot === true && up72.offer === 1
+      && (p72.offers[1] || {}).shown === false && down72.waiting === false && down72.dot === false && down72.offer === 0
+      && p72.fileAtEnd === "lamp.ec" && !(p72.errors || []).length,
+      "72p the offer of a higher edition, and the waiting dot beside the name, go when that file leaves the listing (before "
+      + JSON.stringify({ shown: (p72.offers[0] || {}).shown, waiting: up72.waiting, dot: up72.dot, offer: up72.offer })
+      + ", after " + JSON.stringify({ shown: (p72.offers[1] || {}).shown, waiting: down72.waiting, dot: down72.dot, offer: down72.offer }) + ")");
+    const lab72q = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    run(lab72q, ["boot", "settle", "offer", "yes", "settle"]);
+    fs.writeFileSync(path.join(lab72q, "catalogs", "lamp-v2.ec"), JSON.stringify(signedHigher), "utf8");
+    later(lab72q, "lamp-v2.ec", -7200);
+    const q72 = run(lab72q, ["boot", "listing", "offer", "readwait", "fsop:rename,lamp-v2.ec,lamp-v2b.ec", "listing", "offer", "readwait"], true, { band: true });
+    const stay0 = ((q72.read || {}).wait || [])[0] || {}, stay1 = ((q72.read || {}).wait || [])[1] || {};
+    check((q72.offers[0] || {}).shown === true && stay0.waiting === true && stay0.dot === true && stay0.offer === 1
+      && (q72.offers[1] || {}).shown === true && stay1.waiting === true && stay1.dot === true && stay1.offer === 1
+      && q72.fileAtEnd === "lamp.ec" && !(q72.errors || []).length,
+      "72q the same bytes under a new name keep that offer and that dot (after " + JSON.stringify({ shown: (q72.offers[1] || {}).shown, waiting: stay1.waiting, dot: stay1.dot }) + ")");
     const lab72e = accepted();
     const reworded = JSON.parse(JSON.stringify(wanted)); reworded.cards[0].title.en = "Warm opening, reworded";
     fs.writeFileSync(path.join(lab72e, "catalogs", "lamp-same.ec"), JSON.stringify(reworded), "utf8");
@@ -1029,7 +1053,7 @@ async function parent() {
     check(p1.fileAtEnd === "lamp-renamed.ec" && !(p1.offers[0] || {}).shown && !(p1.errors || []).length,
       "72o a rename of the file in use is followed while a colleague's genuine file of it, named by the same stem (desks/<id>/lamp.ec), sits in the folder: only the filter keeps its row from hiding the rename (remembered "
       + JSON.stringify(p1.fileAtEnd) + ")");
-    const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72, p1].flatMap(o => o.errors || []);
+    const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72, p1, p72, q72].flatMap(o => o.errors || []);
     check(!errs72.length, "72l those launches ran their acts without an error" + (errs72.length ? ": " + errs72.length + ", first " + errs72[0] : ""));
     /* 73: AN EMPTY DESK THAT MADE A CATALOG FROM NOTHING, and the lead's import of that file published beside a newer
        catalog, so the boot's newest-file offer is not the lineage's: the boot's offer is escaped, and then the listing. */

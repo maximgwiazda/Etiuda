@@ -30639,6 +30639,7 @@ What you type stays in this browser only.`;
       refusedKey: "CatalogNo",
       force: !!force,
       asked: !!asked,
+      fromList: mine,
       /* Only an off-roster note changes this offer: it is asked about, even on an empty desk. A file
          with no note keeps the direct the caller omitted, so a folder watch does not load at once. */
       ...offTeam ? { direct: false, offTeam: true } : {},
@@ -30701,6 +30702,7 @@ What you type stays in this browser only.`;
         asked: true,
         direct: !offTeam,
         offTeam,
+        fromList: !desk,
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
           return activateCatalog(c, desk ? { file: "", from: got.name } : { file: got.name, fileAt: +mtime || 0 });
@@ -30995,6 +30997,7 @@ What you type stays in this browser only.`;
     return " · " + esc(t("rev {R}").split("{R}").join(String(name.r))) + (name.e ? ' <span class="ec-ed">' + esc(name.e) + "</span>" : "");
   }
   var offerStanding = null;
+  var offerShown = null;
   var offeredNotified = /* @__PURE__ */ new Set();
   var listingNotified = /* @__PURE__ */ new Set();
   function eOfferCatalogDialog(c, src) {
@@ -31120,8 +31123,10 @@ What you type stays in this browser only.`;
       removeEventListener("resize", place);
       dismissNode(wrap);
       if (offerStanding === close) offerStanding = null;
+      if (offerShown && offerShown.close === close) offerShown = null;
     };
     offerStanding = close;
+    if (src.fromList) offerShown = { c, src, close };
     wrap.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -31378,6 +31383,35 @@ What you type stays in this browser only.`;
       if (interactive) toastRefusal(t("Could not read the watched file."));
     });
   }
+  function offerPin(c) {
+    const doc = catalogDocOf(c);
+    if (!doc) return c && typeof c.pin === "string" ? c.pin : "";
+    try {
+      return "sha256:" + sha256Hex(v2SignedBytes(doc));
+    } catch (e) {
+      return c && typeof c.pin === "string" ? c.pin : "";
+    }
+  }
+  function listingHolds(c, file, files) {
+    const name = String(file || ""), id = String(c && c.id || ""), pin = offerPin(c);
+    return (files || []).some((f) => {
+      if (!f || f.desk || f.builtIn) return false;
+      if (name && f.name === name) return true;
+      return !!(id && pin && String(f.id || "") === id && f.sha === pin);
+    });
+  }
+  function dropOffersLeft(all) {
+    const files = (all || []).filter((f) => f && !f.desk && !f.builtIn);
+    if (offerShown && offerShown.src && offerShown.src.fromList && !listingHolds(offerShown.c, offerShown.src.file, files)) {
+      const close = offerShown.close;
+      offerShown = null;
+      if (typeof close === "function") close();
+    }
+    if (edWaiting && edWaiting.src && edWaiting.src.fromList && !listingHolds(edWaiting.c, edWaiting.src.file, files)) {
+      edWaiting = null;
+      paintCatWaiting();
+    }
+  }
   function onCatalogListing(all) {
     paintCatalogList();
     if (lsGet("eNotifyCatalogOff") !== "1") {
@@ -31399,6 +31433,7 @@ What you type stays in this browser only.`;
         }
       }
     }
+    dropOffersLeft(all);
     const held = storedCatalog();
     if (!held && !catalogLoaded()) {
       offerToLooseAuthor(all);
