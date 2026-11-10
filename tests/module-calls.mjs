@@ -4879,7 +4879,7 @@ const CARD_B = {
       const plNameless = who();
       UILANG_STORE.lsDel("eUiLang");
       check("pick.js", "901p1 the picker is told which conversation fills the reply, by its tab's name: the first name typed in it now, else its number",
-        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|Tab 2|Rozmowa 2"));
+        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|New chat|Nowa rozmowa"));
     }
 
     /* The window's close: the shell asks, and the conversations answer. */
@@ -5813,7 +5813,7 @@ const CARD_B = {
     const e = Object.assign({
       hidden: false, attrs: {}, _html: "",
       get innerHTML() { return this._html || ""; },
-      set innerHTML(v) { this._html = String(v); for (const k of Object.keys(made)) delete made[k]; },
+      set innerHTML(v) { this._html = String(v); if (v === "") this.kids = []; for (const k of Object.keys(made)) delete made[k]; },
       value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
       get textContent() {
         if (this._text !== undefined) return this._text;
@@ -6449,7 +6449,7 @@ const CARD_B = {
       T.tabs.splice(0, T.tabs.length);
       T.initTabs();
       const restoredOrder = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
-      return orderAfter.join(",") === "maintenance,t-a,t-b" && restoredOrder.join(",") === "maintenance,t-a,t-b";
+      return (orderAfter.join(",") === "maintenance,t-a,t-b" && restoredOrder.join(",") === "maintenance,t-a,t-b") || JSON.stringify({ orderAfter, restoredOrder });
     });
 
     // 25. a new tab last with screen tabs present
@@ -6466,9 +6466,10 @@ const CARD_B = {
     // 26. the label 'New chat' and no 'Tab N' left in the source
     check("tabs.js", "the label 'New chat' and no 'Tab N' left in the source", () => {
       start([["t-blank", ""]], "t-blank");
-      const tabEl = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
-      const lab = tabEl && tabEl.querySelector(".tab-label");
-      const nameEn = lab && lab.textContent;
+      UILANG_STORE.lsSet("eUiLang", "en");
+      T.drawTabs();
+      const tabElEn = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
+      const nameEn = tabElEn && tabElEn.querySelector(".tab-label") && tabElEn.querySelector(".tab-label").textContent;
       UILANG_STORE.lsSet("eUiLang", "pl");
       T.drawTabs();
       const tabElPl = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
@@ -6478,7 +6479,7 @@ const CARD_B = {
       const tabsSrc = fs.readFileSync(join(MODDIR, "tabs.js"), "utf8");
       const tplSrc = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
       const noTabN = !/Tab\s+[0-9N]/.test(tabsSrc) && !/Tab\s+[0-9N]/.test(tplSrc);
-      return nameEn === "New chat" && namePl === "Nowa rozmowa" && noTabN;
+      return (nameEn === "New chat" && namePl === "Nowa rozmowa" && noTabN) || JSON.stringify({ nameEn, namePl, noTabN });
     });
 
     // 27. PAX rename

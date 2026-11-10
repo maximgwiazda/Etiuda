@@ -908,7 +908,7 @@ span[data-icon]{line-height:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
-  max-width:210px;min-width:100px;/* the floor where "Tab 99" and its dot fit whole - see TAB_FLOOR_W */
+  max-width:210px;min-width:100px;/* the floor where a tab and its dot fit whole - see TAB_FLOOR_W */
   /* hidden, NOT clip-with-a-margin: the accent marker's trim to the corner radius depends
      on this clip, and any clip margin lets the bar run past the corners. The cover strip
      that once needed to escape is a box-shadow now - shadows paint outside the border box. */
@@ -989,6 +989,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   padding-left:12px;overflow:hidden;white-space:nowrap;font-weight:600}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
+.tab-rename-input{display:block;width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:600;color:inherit;background:transparent;border:none;outline:none;padding:0;margin:0;line-height:inherit}
+.tab-rename-input::placeholder{color:inherit;opacity:.5}
 /* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
    through the same [data-ec] -> --ecat plumbing the pills use (see syncTabAccent), blended
    when several categories are filtered, the band's ink when none is (dark on a pale band, white
