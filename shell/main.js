@@ -2467,16 +2467,46 @@ function joinGenuine(doc, folder) {
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
 }
-/* What the lead's file of openings, beside the team file, says to one request: {lead, nonce}, {refused: true},
-   or null. It is not signed; the code covers the lead's key and nonce, so a forged opening shows a wrong code. */
-function joinOpening(joins, teamId, deskId, commit) {
+/* The bytes the lead's file of openings is signed over: its own prefix, then the folded form a team file uses. */
+function joinsSignedBytes(doc) {
+  return Buffer.concat([Buffer.from("etiuda-team-joins\n", "utf8"), signedBytesOf(doc)]);
+}
+/* What that file says to one request: {lead, nonce}, {refused: true}, or null. It counts only when its signature
+   is one of `trust` (the pin, or the lead of the folder's whole team file). Unsigned, or signed by anyone else, it says nothing. */
+function joinOpening(joins, teamId, deskId, commit, trust) {
   const lead = joins && joins.lead, open = joins && Array.isArray(joins.open) ? joins.open : [];
   if (!joins || +joins.format !== 1 || joins.kind !== JOINS_KIND || joins.team !== teamId || !lead || typeof lead.keyId !== "string"
     || !JOIN_HEX_RE.test(String(lead.public))) return null;
+  const pubs = Array.isArray(trust) ? trust.map(String).filter(p => JOIN_HEX_RE.test(p)) : [];
+  const sig = joins.sig;
+  let signed = false;
+  try {
+    if (pubs.length && sig && sig.alg === "Ed25519" && /^[0-9a-f]{128}$/.test(String(sig.value))) {
+      const bytes = joinsSignedBytes(joins), value = Buffer.from(String(sig.value), "hex");
+      signed = pubs.some(pub => crypto.verify(null, bytes, crypto.createPublicKey({
+        key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" }), value));
+    }
+  } catch { signed = false; }
+  if (!signed) return null;
   const e = open.find(x => !!x && x.desk === deskId && x.commit === commit);
   if (!e) return null;
   if (e.refused === true) return { refused: true };
   return JOIN_HEX_RE.test(String(e.nonce)) ? { lead: { keyId: lead.keyId, public: lead.public }, nonce: e.nonce } : null;
+}
+/* Publics that may sign the joins file for this team. The pin, where this desk has one. The lead of the folder's
+   whole team file when there is no pin, or when that lead is the pin, or a handover from it. */
+function joinTrustPubs(team, root) {
+  const pubs = [];
+  const pin = team && teamPins[team];
+  if (pin && JOIN_HEX_RE.test(String(pin.public))) pubs.push(String(pin.public));
+  let chosen = null;
+  try { chosen = root ? teamTextChosen(root).doc : null; } catch { chosen = null; }
+  const named = chosen && chosen.lead;
+  if (chosen && chosen.id === team && teamWhole(chosen) && named && JOIN_HEX_RE.test(String(named.public))) {
+    const pub = String(named.public);
+    if (!pin || pub === String(pin.public) || handedTo(chosen, pin)) pubs.push(pub);
+  }
+  return pubs;
 }
 
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
@@ -5398,7 +5428,7 @@ function joinView() {
     if (!j.opened && !j.refused) {
       let joins = null;
       try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
-      const got = joinOpening(joins, j.team, me.id, j.commit);
+      const got = joinOpening(joins, j.team, me.id, j.commit, joinTrustPubs(j.team, root));
       if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
       else if (got) {
         try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }

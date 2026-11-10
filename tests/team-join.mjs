@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 174;
+const EXPECTED = 176;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -50,7 +50,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-join-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
+const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinsSignedBytes", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
   "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks"];
 const noop = () => {};
@@ -322,7 +322,15 @@ try {
   const teamFile = (roster, o) => sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
     lead: (o && o.lead) || LEAD, sealed: true, exportsSealed: false, epoch: 1, roster: roster },
     (o && o.signer) || lead.privateKey, LEAD.keyId);
-  const joins = (open, o) => ({ format: 1, kind: "etiuda-team-joins", team: TEAM, lead: (o && o.lead) || LEAD, open: open });
+  const signJoins = (doc, key, keyId) => {
+    const out = JSON.parse(JSON.stringify(doc));
+    out.sig = { alg: "Ed25519", keyId: keyId };
+    out.sig.value = crypto.sign(null, P.joinsSignedBytes(out), key).toString("hex");
+    return out;
+  };
+  const joins = (open, o) => signJoins(
+    { format: 1, kind: "etiuda-team-joins", team: TEAM, lead: (o && o.lead) || LEAD, open: open },
+    (o && o.signer) || lead.privateKey, ((o && o.lead) || LEAD).keyId);
   const nonce = () => crypto.randomBytes(32).toString("hex");
   const reqOf = me => path.join(SHARE, "desks", me.id, "join.json");
   const request = me => { try { return JSON.parse(fs.readFileSync(reqOf(me), "utf8")); } catch { return null; } };
@@ -410,6 +418,44 @@ try {
   check(gone.join === null && !fs.existsSync(reqOf(me3)) && !kept(D3) && gone.sealed && gone.sealed.file === "lamps.ec",
     "15o cancelling takes the request off the share and out of the envelope, and the sealed catalog is still said");
 
+  /* A joins file the lead of the whole team file did not sign. This desk has no pin, so that lead is the only key it
+     trusts. The page lists a request as asks while the opening says nothing and the nonce stays unrevealed. */
+  const signJoinsDoc = (open, key, who) => {
+    const doc = { format: 1, kind: "etiuda-team-joins", team: TEAM, lead: who, open: open };
+    doc.sig = { alg: "Ed25519", keyId: who.keyId };
+    const bytes = typeof P.joinsSignedBytes === "function"
+      ? P.joinsSignedBytes(doc)
+      : Buffer.concat([Buffer.from("etiuda-team-joins\n", "utf8"), Buffer.from(JSON.stringify(doc), "utf8")]);
+    doc.sig.value = crypto.sign(null, bytes, key).toString("hex");
+    return doc;
+  };
+  const listedAs = (doc, deskId, commit, req) => {
+    const said = P.joinOpening(doc, TEAM, deskId, commit, [LEAD.public]);
+    if (said && said.refused) return "hidden";
+    if (req && req.reveal !== undefined) return "spent";
+    return "asks";
+  };
+  const Dforge = newDesk("forge-no", SHARE), meForge = await Dforge.ask("etiuda:branch-identity", true);
+  await Dforge.join("ask", "lamps.ec", "Una");
+  const rForge = request(meForge);
+  const forgedRefusal = signJoinsDoc([{ desk: meForge.id, commit: rForge.commit, refused: true }], forger.privateKey, FORGED);
+  put(SHARE, P.JOINS_NAME, forgedRefusal);
+  const refusalState = await Dforge.join("state");
+  check(!!(refusalState.join && refusalState.join.state === "waiting") && listedAs(forgedRefusal, meForge.id, rForge.commit, request(meForge)) === "asks"
+    && fs.existsSync(reqOf(meForge)) && request(meForge).reveal === undefined,
+    "15na a refusal signed by anyone but the lead of the folder's whole team file leaves the desk waiting and the request listed as asks ("
+    + (refusalState.join ? refusalState.join.state : "no join") + ", " + listedAs(forgedRefusal, meForge.id, rForge.commit, request(meForge)) + ")");
+  const Dopen = newDesk("forge-open", SHARE), meOpen = await Dopen.ask("etiuda:branch-identity", true);
+  await Dopen.join("ask", "lamps.ec", "Nela");
+  const rOpen = request(meOpen);
+  const forgedOpen = signJoinsDoc([{ desk: meOpen.id, commit: rOpen.commit, nonce: nonce() }], forger.privateKey, FORGED);
+  put(SHARE, P.JOINS_NAME, forgedOpen);
+  const openState = await Dopen.join("state");
+  const openSaid = P.joinOpening(forgedOpen, TEAM, meOpen.id, rOpen.commit, [LEAD.public]);
+  check(!!(openState.join && openState.join.state === "waiting") && request(meOpen).reveal === undefined && !request(meOpen).opened && openSaid == null,
+    "15nb an opening signed by anyone but that lead is not taken: the desk waits and reveals nothing ("
+    + (openState.join ? openState.join.state : "no join") + ", said " + JSON.stringify(openSaid) + ")");
+
   /* ---- the envelope keeps the request across a restart ------------------------------------------------------------ */
   const D1r = loadDesk(D1.ud);
   const again = await D1r.join("state");
@@ -488,6 +534,8 @@ try {
     + " opens nothing, is not said as joined, and the log names no lead the desk has not yet been told");
   const D6 = newDesk("six", SHARE), me6 = await D6.ask("etiuda:branch-identity", true);
   await D6.join("ask", "lamps.ec", "Iga");
+  /* 15t left the forger's team file in the share. The refusal is the real lead's, so that lead's file is what the desk reads it against. */
+  put(SHARE, "etiuda-team.json", teamFile([entry(me2, K1, 1)]));
   put(SHARE, P.JOINS_NAME, joins([{ desk: me6.id, commit: request(me6).commit, refused: true }]));
   const refusedFirst = await D6.join("state");
   put(SHARE, "etiuda-team.json", teamFile([entry(me6, K1, 1)], { lead: FORGED, signer: forger.privateKey }));
@@ -535,6 +583,8 @@ try {
     + " nothing again, in this run or a fresh one: the catalog is shut and said sealed again, barred " + JSON.stringify(after.teamBarred));
 
   await fresh7.join("ask", "lamps.ec", "Zoe");
+  /* 15x left the forger's team file. The opening the real lead signs is read against that lead's file, and this desk is not on it yet. */
+  put(SHARE, "etiuda-team.json", teamFile([entry(me2, K1, 1)]));
   put(SHARE, P.JOINS_NAME, joins([{ desk: me7.id, commit: (request(me7) || {}).commit, nonce: nonce() }]));
   await fresh7.join("state");
   put(SHARE, "etiuda-team.json", teamFile([entry(me7, K1, 1)]));
