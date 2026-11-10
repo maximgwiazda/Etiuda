@@ -36,6 +36,7 @@ import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, wireFolderLink }
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
+import { mixCards, scheduleSearchRank } from "./search-meaning.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
@@ -106,10 +107,13 @@ function render(){
   closeNotePane();
   cancelLangChunks();
   const terms=cardSearchTerms();
+  scheduleSearchRank();
   syncPillCounts();
-  const ranked=rankedCards(terms,m=>cardInActiveCats(m,terms));
+  const keep=m=>cardInActiveCats(m,terms);
+  const ranked=rankedCards(terms,keep);
   const sc=ranked.sc;
-  setShown(ranked.hits);
+  const mixed=mixCards(ranked.hits,keep);
+  setShown(mixed||ranked.hits);
 
   if(!shown.length){
     /* An empty category needs no prose: the add-card is the whole answer and already

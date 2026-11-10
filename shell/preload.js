@@ -223,6 +223,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* The embedded model: {model} says whether this desk carries it, and the switch is told to the shell as it moves. */
   aiState: () => ipcRenderer.sendSync("etiuda:ai-state"),
   setAi: (on) => ipcRenderer.send("etiuda:ai-set", !!on),
+  /* The main search's own switch, the passages it should embed, and the ranking of one query. */
+  setSearchAi: (on) => ipcRenderer.send("etiuda:search-set", !!on),
+  searchPrepare: (rows) => ipcRenderer.invoke("etiuda:search-prepare", Array.isArray(rows) ? rows : []),
+  searchRank: (text) => ipcRenderer.invoke("etiuda:search-rank", String(text || "")),
   /* The picker opened from the desk itself, by the pointer, as the hotkey opens it. */
   openPicker: () => ipcRenderer.send("etiuda:pick-show"),
   noteOwnText: (text) => ipcRenderer.send("etiuda:own-text", String(text || "")),

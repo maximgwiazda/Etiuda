@@ -340,14 +340,15 @@ try {
     check(undone && dUndo.length === 0, "3a Eject and its Undo, in place, leave the desk a fresh start with A and its layer"
       + (dUndo.length ? ": " + dUndo.slice(0, 8).join(" ; ") : ""));
     const standingBefore = await q.evaluate(STANDING);
+    const agentWas = await q.evaluate(() => localStorage.getItem("eAgent"));
     const cleared = await inPlace(q, () => clearLocalMemory());
     const clearedShows = await q.evaluate(m => ({ cards: cards.length, own: cards.some(c => c.id === "u:swapown"),
       star: isFavourite(m.starred), agent: localStorage.getItem("eAgent"), undo: !!document.getElementById("eUndoBtn") }), made);
     clearedShows.standing = await q.evaluate(STANDING);
-    check(cleared && clearedShows.cards > 0 && !clearedShows.own && !clearedShows.star && clearedShows.agent === null
+    check(cleared && clearedShows.cards > 0 && !clearedShows.own && !clearedShows.star && clearedShows.agent === agentWas
           && clearedShows.undo && clearedShows.standing === standingBefore,
-      "3b clearing local memory happens at once, asks nothing, keeps the catalog and offers Undo, and with no desk file it forgets"
-      + " all of it: the own card, the star and the name (" + JSON.stringify(clearedShows) + ")");
+      "3b the clear itself, once asked, happens at once, keeps the catalog and the name and offers Undo, and takes the own card"
+      + " and the star (" + JSON.stringify(clearedShows) + ")");
     const unCleared = await inPlace(q, () => { const b = document.getElementById("eUndoBtn"); if (b) b.click(); });
     const afterClearUndo = await fingerprint(q);
     const dClearUndo = diff(notLoose(afterClearUndo), notLoose(withLayer));

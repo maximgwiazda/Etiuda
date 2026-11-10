@@ -10,7 +10,7 @@ import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
-import { clearLocalMemory } from "./local-memory.js";
+import { askClearLocal } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
@@ -34,7 +34,7 @@ import { eHasHistory, openHistory } from "./catalog-history.js";
 import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
-import { closeScreenTab, openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
+import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
 import { lmIcon } from "./lm-icon.js";
 import { openMaintenance } from "./maintenance.js";
 import { formatActionChord } from "./shortcuts.js";
@@ -655,7 +655,9 @@ function applyLibView(page){
     if(!q){
       const show=key===libOn;
       if(show) d.removeAttribute("hidden"); else d.setAttribute("hidden","");
-      d.open=mgOpen.has(key);
+      /* The page's fold has no summary to open it by, and a hidden fold left open shuts it: the
+         folds are an accordion, whose toggle runs after this paint. */
+      d.open=show; /* plant:library-page-open */
       if(key===libOn){ const c=d.querySelector(".mg-count"); if(c) countEl=c; }
       if(key==="catmac"){
         d.querySelectorAll(".mg-cat").forEach(cat=>{
@@ -816,7 +818,7 @@ function openManage(justHtml){
   const catCount=Object.keys(CATS).length;
   /* Hiding is the one personal act with no way back at scale: hidden things are
      invisible BY DESIGN, accumulate quietly, and cannot be undone by finding them -
-     finding them is the problem; the only other cure, Clear local memory, is a cliff
+     finding them is the problem; the only other cure, Clear local changes, is a cliff
      where a step was wanted. The count is IN the label, so a greyed "(0)" answers "did I
      hide anything?" by itself. Not danger-red: showing again destroys nothing.
      NO equivalent for favourites, weighed and declined: a star is visible, leads every
@@ -864,12 +866,13 @@ function openManage(justHtml){
        the two sections above. Not called "administrative" or "compliance": nothing is gated
        and nobody is being administered. */
     /* NOTHING IN THIS SECTION FLOATS. Every act belongs to the thing it acts on: the folder is
-       the list's header and sits on the title line, a catalog's own acts ride in its row, and
+       the list's header and sits on Catalog and data's bar (.mg-data-bar), a catalog's own acts ride in its row, and
        bringing one in is the Library's, so it stands in the Library's bar. What is left here is
        the list, which is the answer to "what is on this desk". */
     mgSec("data","Catalog & data",
       (dataTail ? '<div class="mg-data-bar">'+dataTail+'</div>' : '')+
-      '<div class="ec-list" id="mgCatList"></div>',
+      '<div class="ec-list" id="mgCatList"></div>'+
+      libraryActionsHtml(),
       null,
       summaryTail
     );
@@ -924,7 +927,7 @@ function paintLibrary(host,body){
         +'<h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p>'
         +'<div class="sx-card">'+(body||openManage(true))+'</div></div>')
     +'</div>'
-    +'<div class="screen-actions">'+(isHist ? '<div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button>' : libraryActionsHtml())+'</div></div>';
+    +(isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button></div>' : '')+'</div>';
   const page=host.querySelector(".lib-list");
   if(isHist){
     wireLibShell(page);
@@ -946,7 +949,6 @@ function paintLibrary(host,body){
 registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(host) });
 function wireLibrary(page){
   wireLibShell(page);
-  $("#mgClose").onclick=()=>closeScreenTab(LIB_SCREEN);
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
   /* Commit on change (blur or Enter), not per keystroke - a half-typed word is not a list.
@@ -985,8 +987,7 @@ function wireLibrary(page){
       });
     };
   });
-  // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
-  $("#mgWipe").onclick=clearLocalMemory;
+  $("#mgWipe").onclick=askClearLocal;
   /* Remember which groups are open, so the re-render after every edit does not shut them.
      Written on toggle rather than read back later because openManage() replaces the nodes. */
   wireFolds(page,"details[data-mg]","details.manage-sec",
@@ -1124,18 +1125,23 @@ function wireLibrary(page){
 
 function libraryBodyHtml(){ return openManage(true); }
 
-/* Join sits beside Load. It does not replace the catalog this desk has open. */
+/* WHAT ACTS ON THE WHOLE LIBRARY, as rows of the Catalog and data page in the Settings row's own form. Join
+   sits beside Load and does not replace the catalog this desk has open. */
+function libraryActRow(key,icon,title,hint,ctl){
+  return '<div class="set-row" data-row="'+esc(key)+'">'+lmIcon(icon)+'<div class="set-label">'+esc(title)
+    +'<small>'+esc(hint)+'</small></div><div class="set-ctl">'+ctl+'</div></div>';
+}
 function libraryActionsHtml(){
-  return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local memory"))+'</button>'+
-    /* A hairline rather than a gap: two buttons at the same edge with space between them read
-       as one group loosely spaced, and one of these forgets your work while the other brings
-       a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
-    '<span class="mf-sep" aria-hidden="true"></span>'+
-    '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
-    joinDoorButton("mgJoinTeam")+
-    (eHasHistory()?'<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>':'')+
-    '</div>'+
-    '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>';
+  const join=joinDoorButton("mgJoinTeam");
+  return '<div class="mg-data-acts">'
+    +libraryActRow("load","data",t("Load catalog"),t("Loads a catalog file from this computer."),
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>')
+    +(join?libraryActRow("join","teams",t("Join a team"),t("Joins a team with an invitation from its lead."),join):'')
+    +(eHasHistory()?libraryActRow("history","refresh",t("Saved copies"),t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
+      '<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>'):'')
+    +libraryActRow("clear","delete",t("Clear local changes"),t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
+      '<button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local changes"))+'</button>')
+    +'</div>';
 }
 
 export {

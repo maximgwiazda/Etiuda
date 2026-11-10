@@ -58,7 +58,7 @@ const PLAN = [
   { id: "menu", next: true, aim: "#settingsBtn" },
   { id: "picker", host: true, next: true, aim: '#settingsMenu [data-act="picker"]' },
   { id: "library", click: ['#settingsMenu [data-act="manage"]'], into: "libraryIn", again: { next: true } },
-  { id: "libraryIn", inside: true, aim: "#screenHost details.manage-sec", back: true, again: { close: "#mgClose" } },
+  { id: "libraryIn", inside: true, aim: "#screenHost details.manage-sec", back: true, again: { close: '#tabsBar .tab.screen[data-sid="library"] .tab-x' } },
   { id: "settings", click: ["#settingsBtn", '#settingsMenu [data-act="settings"]'], into: "settingsIn" },
   { id: "settingsIn", inside: true, aim: "#setBody", next: true },
   { id: "done", next: true }

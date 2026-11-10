@@ -92,8 +92,14 @@
        document left stays on screen and nothing half-built is painted. Where blocking is not
        understood, the body stays unseen. */
     var host=window.E_HOST;
-    if(host && host.recovering){
-      root.classList.add("e-arriving");
+    if(host && host.recovering) root.classList.add("e-arriving");
+    /* THE OPENING IS THE WINDOW'S FIRST FRAME: a launch, the window session's first load unless quiet (on-open.js
+       deskLaunch), is held the same way, so the shell shows the launch's ground and never the page half-built. */
+    var launching=false;
+    if(!root.classList.contains("e-still")) try{
+      launching=!((dh && typeof host.session==="function") ? host.session("get","eLaunched") : sessionStorage.getItem("eLaunched"));
+    }catch(e){}
+    if(root.classList.contains("e-arriving") || launching){
       var hold=document.createElement("link");
       if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
         hold.rel="expect"; hold.href="#eBooted"; hold.setAttribute("blocking","render");
@@ -105,6 +111,12 @@
       var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
+  }catch(e){}
+  /* The theme before the first frame, chosen as theme.js applyTheme chooses it: the stored choice, else the system's. */
+  try{
+    var th=desk ? desk.eTheme : localStorage.getItem("eTheme");
+    if(th!=="light" && th!=="dark") th=matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", th);
   }catch(e){}
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
@@ -139,6 +151,7 @@
   window.E_BOOT_OK=function(){
     booted=true;
     arrive();
+    document.documentElement.classList.remove("e-veiled");   // a launch held where blocking is not understood
     try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
@@ -3529,10 +3542,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 body.screen-on .fab-stack,
 body.screen-on .pills-slot,
 body.screen-on .pills-probe,
-body.screen-on .stage,
 body.screen-on #railHit,
 body.screen-on #lanes { display: none !important; }
-#screenHost{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
+/* THE WORK STAYS LAID OUT UNDER A SCREEN, skipped rather than undisplayed: display:none drops every card's style,
+   and the way back restyled them all inside the press. The screen covers the stage's own cell. */
+body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-visibility:hidden}
+/* Skipped, the column keeps its last height, or the scroller would clamp to the top and lose its place. */
+.stage>.scroller>.shell{contain-intrinsic-size:auto none}
+#screenHost{grid-area:1/1;position:relative;z-index:1;display:flex;flex-direction:column;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
 #screenHost[hidden]{display:none!important}
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
@@ -3614,6 +3631,7 @@ body.screen-on #lanes { display: none !important; }
    line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
 .mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
+.sx.lm-lib .mg-data-acts>.set-row:first-child{border-top:1px solid var(--line)}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
 .sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
@@ -3660,6 +3678,9 @@ body.screen-on #lanes { display: none !important; }
 .sx.lm-mt .mt-tab{padding:10px 16px;border-top:1px solid var(--line)}
 @media (max-width:720px){
   .sx.lm-mt .mt-grid{grid-template-columns:minmax(0,1fr)}
+  /* The Library's acts carry long buttons (Saved copies, Clear local changes): narrow, the button goes under its words. */
+  .sx.lm-lib .mg-data-acts>.set-row{grid-template-columns:28px minmax(0,1fr)}
+  .sx.lm-lib .mg-data-acts>.set-row>.set-ctl{grid-column:2;justify-content:flex-start}
 }
 @media (max-height:700px){
   .sx.lm-mt .mt-h{padding:6px 8px}
@@ -3858,6 +3879,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The question before Clear local changes: the strip's place, a heading and two lines stacked above its buttons. */
+.e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
+.e-undo.e-clear-ask p{margin:0 0 8px}
+.e-undo.e-clear-ask .tour-actions{justify-content:flex-end;margin-top:12px}
 /* The key that takes it, on the button in the button's own ink. */
 .e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
   border-radius:4px;font:11px var(--mono);font-weight:400}
@@ -4393,8 +4418,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
-<div id="screenHost" class="screen-host" hidden></div>
-
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">
 <div class="dotfield" id="dotField" aria-hidden="true"><div></div></div>
@@ -4426,6 +4449,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </main>
 </div>
 </div>
+<div id="screenHost" class="screen-host" hidden></div>
 </div>
 
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
@@ -7425,11 +7449,17 @@ What you type stays in this browser only.`;
     "Write a new clause for {INTENT}": "Napisz nową frazę dla {INTENT}",
     "Delete this intent": "Usuń tę intencję",
     "Export…": "Eksportuj…",
-    "Clear local memory": "Wyczyść pamięć lokalną",
-    "Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back.": "Usuwa z tego komputera ustawienia i otwarte rozmowy. Katalog, imię agenta i własne zmiany w kartach zostają, a Cofnij przywraca resztę.",
+    "Clear local changes": "Wyczyść zmiany lokalne",
+    "Removes every change made to the content on this computer, so the catalog reads as delivered.": "Usuwa wszystkie zmiany treści wprowadzone na tym komputerze, więc katalog wygląda tak, jak go dostarczono.",
+    "Clear local changes?": "Wyczyścić zmiany lokalne?",
+    "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.": "Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
+    "On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.": "W zespole znikają też zmiany, które to stanowisko udostępniło liderowi zespołu, także te, których lider jeszcze nie przejrzał.",
+    "The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.": "Plik katalogu, zespół, licencja, ustawienie folderu i imię agenta zostają. Przycisk Cofnij przywraca zmiany na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu nic już nie wróci.",
+    "Loads a catalog file from this computer.": "Wczytuje plik katalogu z tego komputera.",
+    "Joins a team with an invitation from its lead.": "Dołącza do zespołu na podstawie zaproszenia od lidera.",
     "Eject catalog": "Odłącz katalog",
     "Catalog ejected": "Odłączono katalog",
-    "Local memory cleared": "Wyczyszczono pamięć lokalną",
+    "Local changes cleared": "Wyczyszczono zmiany lokalne",
     "Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?": "Wczytanie katalogu usunie karty utworzone bez katalogu. Najpierw wyeksportować je jako osobny katalog?",
     "Load anyway": "Wczytaj mimo to",
     "Previous": "Poprzedni",
@@ -7753,20 +7783,18 @@ What you type stays in this browser only.`;
     "Show categories": "Pokaż kategorie",
     "Settings": "Ustawienia",
     "AI": "AI",
-    "Suggest intents with the built-in model": "Suggest intents with the built-in model",
-    // placeholder: Claudette
-    "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.": "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.",
-    // placeholder: Claudette
-    "The model ranks the suggestions; nothing leaves this computer": "The model ranks the suggestions; nothing leaves this computer",
-    // placeholder: Claudette
-    "Suggestions come from matching words, and the model stays unloaded": "Suggestions come from matching words, and the model stays unloaded",
-    // placeholder: Claudette
-    "Suggestions from the built-in model": "Suggestions from the built-in model",
-    // placeholder: Claudette
-    "Suggestions from matching words": "Suggestions from matching words",
-    // placeholder: Claudette
-    "The model built into Etiuda, which works on this computer alone.": "The model built into Etiuda, which works on this computer alone.",
-    // placeholder: Claudette
+    "Suggest intents with the built-in model": "Propozycje intencji przy użyciu wbudowanego modelu",
+    "Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words.": "Odczytuje skopiowaną wiadomość na tym komputerze i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
+    "The model ranks the suggestions; nothing leaves this computer": "Model ustala kolejność propozycji; nic nie opuszcza tego komputera",
+    "Suggestions come from matching words, and the model stays unloaded": "Propozycje wynikają z dopasowania słów, a model nie jest wczytywany",
+    "Suggestions from the built-in model": "Propozycje z wbudowanego modelu",
+    "Suggestions from matching words": "Propozycje z dopasowania słów",
+    "The model built into Etiuda, which works on this computer alone.": "Model wbudowany w Etiudę, działający wyłącznie na tym komputerze.",
+    "Search by meaning with the built-in model": "Wyszukiwanie według znaczenia przy użyciu wbudowanego modelu",
+    "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only.": "Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model na tym komputerze. Wyłączone dopasowuje tylko słowa.",
+    "Preparing the catalog for search by meaning; word search works meanwhile.": "Trwa przygotowanie katalogu do wyszukiwania według znaczenia; w tym czasie działa wyszukiwanie po słowach.",
+    "The model ranks the search beside word matches; nothing leaves this computer": "Model porządkuje wyniki obok dopasowań słów; nic nie opuszcza tego komputera",
+    "Off, it matches words only.": "Wyłączone dopasowuje tylko słowa.",
     "General": "Ogólne",
     "Notifications": "Powiadomienia",
     "Notifications from Etiuda, also while its window is closed.": "Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",
@@ -7805,7 +7833,7 @@ What you type stays in this browser only.`;
     "A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.": "Skrót można zmienić na klawisz F albo połączenie z Ctrl lub Alt, bo klawisze potrzebne do pisania zostają do pisania; klawisze, których Etiuda potrzebuje sama, są oznaczone jako stałe.",
     "Puts every setting back as it ships. Cards and your edits are not touched.": "Przywraca wszystkie ustawienia do stanu wyjściowego. Karty i własne zmiany zostają bez zmian.",
     "What this computer reports, and ways to set things right.": "Co raportuje ten komputer i jak przywrócić porządek.",
-    "Reset defaults and Clear local memory are in Settings, under Data and defaults.": "Przywróć domyślne i Wyczyść pamięć lokalną są w Ustawieniach, w części Dane i ustawienia domyślne.",
+    "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.": "Przywróć domyślne jest w Ustawieniach, w części Dane i ustawienia domyślne, a Wyczyść zmiany lokalne w Bibliotece, w części Katalog i dane.",
     "Readings": "Odczyty",
     "Last start": "Ostatnie uruchomienie",
     "Last crash": "Ostatnia awaria",
@@ -9502,7 +9530,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-09";
+  var E_BUILT = "2026-11-10";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -13998,9 +14026,9 @@ What you type stays in this browser only.`;
     if (!inp || !prev) return null;
     const shown2 = signLines(raw);
     const sync = () => {
-      const typed = inp.value.trim();
-      const who = typed ? esc(typed) : '<span class="e-name-ph">' + esc(t("Kate")) + "</span>";
-      const init = esc(agentParts(typed || t("Kate")).init);
+      const typed2 = inp.value.trim();
+      const who = typed2 ? esc(typed2) : '<span class="e-name-ph">' + esc(t("Kate")) + "</span>";
+      const init = esc(agentParts(typed2 || t("Kate")).init);
       if (!shown2.length) {
         const parts2 = greetLine("{NAME}", lang).split("{NAME}");
         prev.innerHTML = esc(parts2[0]) + who + esc(parts2[1] || "");
@@ -15452,6 +15480,7 @@ What you type stays in this browser only.`;
     E_AI_OFF_KEY: () => E_AI_OFF_KEY,
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
+    E_SEARCH_AI_OFF_KEY: () => E_SEARCH_AI_OFF_KEY,
     dispatchTabChord: () => dispatchTabChord,
     eAiModel: () => eAiModel,
     eAiOn: () => eAiOn,
@@ -15487,11 +15516,13 @@ What you type stays in this browser only.`;
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
     eSaveCatalogFile: () => eSaveCatalogFile,
+    eSearchOn: () => eSearchOn,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
     eSharedRead: () => eSharedRead,
     eSharedWrite: () => eSharedWrite,
     eTellAi: () => eTellAi,
+    eTellSearch: () => eTellSearch,
     eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
     wireFolderLink: () => wireFolderLink,
@@ -15870,6 +15901,17 @@ What you type stays in this browser only.`;
     const h = eHost();
     try {
       if (h && typeof h.setAi === "function") h.setAi(eAiOn());
+    } catch (e) {
+    }
+  }
+  var E_SEARCH_AI_OFF_KEY = "eSearchAiOff";
+  function eSearchOn() {
+    return lsGet(E_SEARCH_AI_OFF_KEY) !== "1";
+  }
+  function eTellSearch() {
+    const h = eHost();
+    try {
+      if (h && typeof h.setSearchAi === "function") h.setSearchAi(eSearchOn());
     } catch (e) {
     }
   }
@@ -16533,7 +16575,7 @@ What you type stays in this browser only.`;
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
     if (joinMode === "confirm" && joinOffer) {
-      const o = joinOffer, ask = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
+      const o = joinOffer, ask2 = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
       const title = o.left ? t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)) : t("Join this team?");
       if (o.relay) {
         const line = t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
@@ -16551,7 +16593,7 @@ What you type stays in this browser only.`;
       return {
         title,
         line: joinWhere(o),
-        body: absent + '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
+        body: absent + '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask2) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
         acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
       };
     }
@@ -16677,7 +16719,7 @@ What you type stays in this browser only.`;
       body: joinCodeHtml("") + meta,
       acts: [["cancel", t("Cancel the request")]]
     };
-    const ask = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
+    const ask2 = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
     const acts = [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]];
     const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
     if (gone) {
@@ -16687,10 +16729,10 @@ What you type stays in this browser only.`;
       if (hushLine) return {
         title,
         line: t("The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
-        body: ask,
+        body: ask2,
         acts
       };
-      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask, acts };
+      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask2, acts };
     }
     let line = t("Once the team's lead lets this desk in, the catalog opens here by itself.");
     if (askWhy === "no-identity") {
@@ -16703,7 +16745,7 @@ What you type stays in this browser only.`;
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line,
-      body: ask,
+      body: ask2,
       acts
     };
   }
@@ -19699,6 +19741,7 @@ What you type stays in this browser only.`;
     return Math.ceil(bottom);
   }
   function syncRailGeometry() {
+    if (document.body.classList.contains("screen-on")) return;
     const root = document.documentElement;
     document.body.classList.add("rail-ready");
     const edge = railHeaderEdge(), top = edge + 8;
@@ -20388,6 +20431,331 @@ What you type stays in this browser only.`;
     ePickTailT2 = 0;
   }
 
+  // src/modules/search-meaning.js
+  var search_meaning_exports = {};
+  __export(search_meaning_exports, {
+    acceptSearchAnswer: () => acceptSearchAnswer,
+    armSearch: () => armSearch,
+    clearSearchMeaning: () => clearSearchMeaning,
+    hybridIds: () => hybridIds,
+    mixCards: () => mixCards,
+    mixIntentRows: () => mixIntentRows,
+    noteSearchTyping: () => noteSearchTyping,
+    scheduleSearchRank: () => scheduleSearchRank,
+    searchAlnumLen: () => searchAlnumLen,
+    searchOnSettle: () => searchOnSettle,
+    searchPassages: () => searchPassages
+  });
+  function searchAlnumLen(text) {
+    const m = String(text == null ? "" : text).match(/\p{L}|\p{N}/gu);
+    return m ? m.length : 0;
+  }
+  function hybridIds(wordIds, meaningIds) {
+    if (!Array.isArray(wordIds)) return [];
+    if (!Array.isArray(meaningIds)) return wordIds;
+    return wordIds.concat(meaningIds.filter((id) => wordIds.indexOf(id) < 0));
+  }
+  function acceptSearchAnswer(ticket, live) {
+    if (!ticket || !live) return false;
+    if (ticket.gen !== live.gen || ticket.query !== live.query) return false;
+    return true;
+  }
+  var meaning = null;
+  var searchGen = 0;
+  var typed = null;
+  var boxDirty = false;
+  var askedQuery = null;
+  var SEARCH_RETRY_MS = 5e3;
+  var SEARCH_RETRY_MAX = 30;
+  var retryQuery = null;
+  var retryCount = 0;
+  var cheapSeen = "";
+  var sentText = "";
+  var sending = "";
+  var toasted = "";
+  var modelKnown = null;
+  function currentQuery() {
+    try {
+      return intentEl ? String(intentEl.value || "").trim() : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function modelHere() {
+    if (modelKnown === null) {
+      try {
+        modelKnown = !!eAiModel();
+      } catch (e) {
+        modelKnown = false;
+      }
+    }
+    return modelKnown;
+  }
+  function meaningLive() {
+    return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery() && searchAlnumLen(currentQuery()) >= 3);
+  }
+  function catEnOf(key) {
+    const over = pack.catLabels && pack.catLabels[key];
+    if (over) return String(over).trim();
+    return String(BASE_CATS[key] || "").trim();
+  }
+  function catPlOf(key) {
+    const over = pack.catLabelsPl && pack.catLabelsPl[key];
+    if (over) return String(over).trim();
+    return String(CAT_LABELS_PL[key] || "").trim();
+  }
+  function joinParts2(parts2) {
+    const out = [];
+    for (let i = 0; i < parts2.length; i++) {
+      const s = String(parts2[i] || "").trim();
+      if (s) out.push(s);
+    }
+    return out.join("\n");
+  }
+  function searchPassages() {
+    const out = [];
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (!m || m.id == null) continue;
+      for (let pass = 0; pass < 2; pass++) {
+        const pl = pass === 1;
+        const title = String(pl ? m.tPl || "" : m.t || "").trim();
+        const body = expandSearchPlaceholders(pl ? m.pl : m.en);
+        const note = String(pl ? m.notePl || "" : m.note || "").trim();
+        const keys = String(m.k || "").trim();
+        const catEn = catEnOf(m.c);
+        const catPl = catPlOf(m.c);
+        const catOwn = pl && catPl && catPl !== catEn ? catPl : "";
+        const classText = joinParts2([title, keys, catEn, catOwn, body, note]);
+        if (!classText) continue;
+        const searchBody = joinParts2([keys, catEn, catOwn, body, note]);
+        out.push({
+          surface: "card",
+          id: String(m.id),
+          text: "title: " + (title || "none") + " | text: " + searchBody
+        });
+      }
+    }
+    const n = intentCount();
+    for (let i = 0; i < n; i++) {
+      const id = String(intentIdAt(i));
+      for (let pass = 0; pass < 2; pass++) {
+        const lang2 = pass === 0 ? "en" : "pl";
+        const topic = String(intentFieldAt(i, "topic", lang2) || "").trim();
+        const clause = String(intentFieldAt(i, "clause", lang2) || "").trim();
+        if (!topic && !clause) continue;
+        out.push({
+          surface: "intent",
+          id,
+          text: "title: " + (topic || "none") + " | text: " + clause
+        });
+      }
+    }
+    return out;
+  }
+  function mixHash(s, h) {
+    const t2 = String(s || "");
+    for (let i = 0; i < t2.length; i++) h = Math.imul(h, 33) ^ t2.charCodeAt(i);
+    return h >>> 0;
+  }
+  function cheapStamp() {
+    let n = 0, chars = 0, labels = 5381;
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (!m) continue;
+      n++;
+      chars += String(m.t || "").length + String(m.tPl || "").length + String(m.en || "").length + String(m.pl || "").length + String(m.k || "").length + String(m.note || "").length + String(m.notePl || "").length;
+    }
+    const keys = Object.keys(BASE_CATS);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      labels = mixHash(k, labels);
+      labels = mixHash(BASE_CATS[k], labels);
+      labels = mixHash(pack.catLabels && pack.catLabels[k], labels);
+      labels = mixHash(pack.catLabelsPl && pack.catLabelsPl[k], labels);
+      labels = mixHash(CAT_LABELS_PL[k], labels);
+    }
+    return String(ePackEpoch) + "|" + n + "|" + chars + "|" + labels.toString(16) + "|" + intentCount();
+  }
+  function textStamp(rows) {
+    let h = 5381;
+    for (let i = 0; i < rows.length; i++) {
+      h = mixHash(rows[i].surface, h);
+      h = mixHash(rows[i].id, h);
+      h = mixHash(rows[i].text, h);
+    }
+    return h.toString(16);
+  }
+  function noteCatalog() {
+    if (!eSearchOn() || !modelHere()) return;
+    const cheap = cheapStamp();
+    if (cheap === cheapSeen && (sentText || sending)) return;
+    const rows = searchPassages();
+    const stamp = textStamp(rows);
+    if (stamp === sentText || stamp === sending) {
+      cheapSeen = cheap;
+      return;
+    }
+    const h = eHost();
+    if (!h || typeof h.searchPrepare !== "function") return;
+    sending = stamp;
+    const mine = stamp;
+    Promise.resolve(h.searchPrepare(rows)).then((res) => {
+      if (!res || res.skipped) {
+        if (sending === mine) sending = "";
+        return;
+      }
+      sentText = mine;
+      if (res.ready === false && toasted !== mine) {
+        toasted = mine;
+        try {
+          toast(t("Preparing the catalog for search by meaning; word search works meanwhile."));
+        } catch (e) {
+        }
+      }
+    }).catch(() => {
+      if (sending === mine) sending = "";
+    });
+    meaning = null;
+    askedQuery = null;
+    searchGen++;
+    cheapSeen = cheap;
+  }
+  function mixCards(wordHits, keep) {
+    if (!meaningLive() || !Array.isArray(wordHits)) return null;
+    const byId = /* @__PURE__ */ new Map();
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (m && m.id != null && !byId.has(m.id)) byId.set(m.id, m);
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const tail = [];
+    for (let i = 0; i < wordHits.length; i++) seen.add(wordHits[i].id);
+    const order = hybridIds(wordHits.map((m) => m.id), meaning.cards);
+    for (let i = wordHits.length; i < order.length; i++) {
+      const m = byId.get(order[i]);
+      if (!m || seen.has(m.id)) continue;
+      if (keep && !keep(m)) continue;
+      seen.add(m.id);
+      tail.push(m);
+    }
+    return wordHits.concat(tail);
+  }
+  function mixIntentRows(rows) {
+    if (!meaningLive() || !Array.isArray(rows)) return null;
+    const byIdx = /* @__PURE__ */ new Map();
+    const byId = /* @__PURE__ */ new Map();
+    for (let i = 0; i < rows.length; i++) {
+      byIdx.set(rows[i].idx, rows[i]);
+      if (!byId.has(rows[i].id)) byId.set(rows[i].id, rows[i]);
+    }
+    const hits = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (let i = 0; i < railOrder.length; i++) {
+      const row2 = byIdx.get(railOrder[i]);
+      if (!row2 || seen.has(row2.id)) continue;
+      hits.push(row2);
+      seen.add(row2.id);
+    }
+    const restIds = hybridIds(hits.map((r) => r.id), meaning.intents);
+    const tail = [];
+    for (let i = hits.length; i < restIds.length; i++) {
+      const row2 = byId.get(restIds[i]);
+      if (!row2 || seen.has(row2.id)) continue;
+      seen.add(row2.id);
+      tail.push(row2);
+    }
+    for (let i = 0; i < rows.length; i++) {
+      if (seen.has(rows[i].id)) continue;
+      seen.add(rows[i].id);
+      tail.push(rows[i]);
+    }
+    return hits.concat(tail);
+  }
+  function noteSearchTyping() {
+    const q = currentQuery();
+    if (typed !== null && q !== typed) boxDirty = true;
+    typed = q;
+  }
+  function searchOnSettle() {
+    const q = currentQuery();
+    if (!eSearchOn()) {
+      meaning = null;
+      askedQuery = null;
+      boxDirty = false;
+      typed = q;
+      return;
+    }
+    if (boxDirty) {
+      meaning = null;
+      askedQuery = null;
+      boxDirty = false;
+    }
+    typed = q;
+  }
+  async function ask(q) {
+    const gen = ++searchGen;
+    const ticket = { gen, query: q };
+    let ans = null;
+    try {
+      const h = eHost();
+      if (h && typeof h.searchRank === "function") ans = await h.searchRank(q);
+    } catch (e) {
+      ans = null;
+    }
+    if (boxDirty) return;
+    if (!acceptSearchAnswer(ticket, { gen: searchGen, query: currentQuery() })) return;
+    if (!eSearchOn()) return;
+    if (!ans || !Array.isArray(ans.cards) || !Array.isArray(ans.intents)) {
+      if (retryQuery !== q) {
+        retryQuery = q;
+        retryCount = 0;
+      }
+      if (++retryCount > SEARCH_RETRY_MAX) return;
+      if (askedQuery === q) askedQuery = null;
+      setTimeout(() => {
+        if (currentQuery() === q) scheduleSearchRank();
+      }, SEARCH_RETRY_MS);
+      return;
+    }
+    meaning = { gen, query: q, cards: ans.cards, intents: ans.intents };
+    try {
+      hooks.render();
+    } catch (e) {
+    }
+    try {
+      hooks.drawIntentRail();
+    } catch (e) {
+    }
+  }
+  function scheduleSearchRank() {
+    if (!eSearchOn() || !modelHere()) return;
+    noteCatalog();
+    const q = currentQuery();
+    if (searchAlnumLen(q) < 3) return;
+    if (meaning && meaning.query === q && meaning.gen === searchGen) return;
+    if (askedQuery === q) return;
+    askedQuery = q;
+    void ask(q);
+  }
+  function clearSearchMeaning() {
+    meaning = null;
+    askedQuery = null;
+    boxDirty = false;
+    searchGen++;
+  }
+  function armSearch() {
+    try {
+      eTellSearch();
+    } catch (e) {
+    }
+    if (!eSearchOn() || !modelHere()) return;
+    noteCatalog();
+  }
+
   // src/modules/rail-list.js
   var railDrag = null;
   var railSwapLock = 0;
@@ -20519,6 +20887,7 @@ What you type stays in this browser only.`;
     clearTimeout(railSortT);
     setRailSortT(0);
     if (typeof dragState !== "undefined" && dragState) return;
+    searchOnSettle();
     const cardsBefore = captureSettle();
     if (catsDropArmed) {
       setCatsDropArmed(false);
@@ -20744,7 +21113,9 @@ What you type stays in this browser only.`;
     if (!box) return;
     hooks.syncIntentOrder();
     const keepScroll = box.scrollTop;
-    const rows = displayIntentRows();
+    let rows = displayIntentRows();
+    const mixedRows = mixIntentRows(rows);
+    if (mixedRows) rows = mixedRows;
     if (!intentCount()) {
       if (!box.querySelector(".rail-empty"))
         box.innerHTML = '<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">' + esc(t("Intents arrive with a catalog.")) + "</p>";
@@ -23368,7 +23739,7 @@ What you type stays in this browser only.`;
     }
   }
   var currentOpeningFig = null;
-  var launchStateRecord = { reason: "", ms: 0 };
+  var launchStateRecord = { reason: "", ms: 0, first: 0 };
   function launchMark(opts) {
     const o = opts || {};
     const doc = typeof document !== "undefined" ? document : null;
@@ -23388,6 +23759,7 @@ What you type stays in this browser only.`;
       isStill: isStillMotion
     };
     const t0 = win && win.performance ? win.performance.now() : Date.now();
+    launchStateRecord.first = 0;
     let rafId = 0;
     let failsafeTimer = 0;
     let coverHoldTimer = 0;
@@ -23669,6 +24041,7 @@ What you type stays in this browser only.`;
     }
     function drawFrame(now) {
       if (state.ended) return;
+      if (!launchStateRecord.first) launchStateRecord.first = now;
       const dt = Math.max(0, now - lastFrameTime);
       if (framed && dt >= SHORTEST_FRAME_MS && dt <= Math.max(2 * frameGap, 1e3 / 60) + 1e-4) {
         gapSamples.push(dt);
@@ -23722,7 +24095,16 @@ What you type stays in this browser only.`;
         rafId = win.requestAnimationFrame(renderFrame);
       }
     }
+    let onScreen = typeof o.shown !== "function";
     function startOpening() {
+      if (state.ended) return;
+      if (!onScreen) {
+        o.shown(() => {
+          onScreen = true;
+          startOpening();
+        });
+        return;
+      }
       if (isCovered()) {
         coverHoldTimer = setTimeout(startOpening, 150);
         return;
@@ -23748,7 +24130,7 @@ What you type stays in this browser only.`;
     };
   }
   function launchState() {
-    return launchStateRecord.reason ? { reason: launchStateRecord.reason, ms: launchStateRecord.ms } : null;
+    return launchStateRecord.reason ? { reason: launchStateRecord.reason, ms: launchStateRecord.ms, first: launchStateRecord.first } : null;
   }
 
   // src/modules/empty-mark.js
@@ -23857,10 +24239,13 @@ What you type stays in this browser only.`;
     closeNotePane();
     cancelLangChunks();
     const terms = cardSearchTerms();
+    scheduleSearchRank();
     syncPillCounts();
-    const ranked = rankedCards(terms, (m) => cardInActiveCats(m, terms));
+    const keep = (m) => cardInActiveCats(m, terms);
+    const ranked = rankedCards(terms, keep);
     const sc = ranked.sc;
-    setShown(ranked.hits);
+    const mixed = mixCards(ranked.hits, keep);
+    setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
@@ -24407,15 +24792,15 @@ What you type stays in this browser only.`;
       syncRowShed();
       syncMoreBtn();
     };
-    const ask = () => {
+    const ask2 = () => {
       if (!raf) raf = requestAnimationFrame(run);
       if (!belt) belt = setTimeout(run, 200);
     };
-    window.scheduleHeaderSync = ask;
-    addEventListener("resize", ask);
-    document.addEventListener("visibilitychange", ask);
+    window.scheduleHeaderSync = ask2;
+    addEventListener("resize", ask2);
+    document.addEventListener("visibilitychange", ask2);
     if (typeof MutationObserver === "function") {
-      new MutationObserver(ask).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
     }
     run();
   }
@@ -24642,6 +25027,7 @@ What you type stays in this browser only.`;
       region,
       still: mgReduceMotion,
       covered: markCovered,
+      shown: afterShown,
       phase: fifthPhase,
       ready: new Promise((r) => afterShown(() => requestAnimationFrame(() => r())))
     });
@@ -27206,58 +27592,28 @@ What you type stays in this browser only.`;
   // src/modules/local-memory.js
   var local_memory_exports = {};
   __export(local_memory_exports, {
+    askClearLocal: () => askClearLocal,
     clearLocalMemory: () => clearLocalMemory,
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("DeskMark"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
   }
-  var E_WIPE_KEEP = ["eCatalogFolder"];
-  var SHARE_KEEP = ["eAgent", "eLayers"];
-  var PACK_KEEP = ["v", "intentKeys", "editBases", "baseCards", "macroOrder", "baseMacros"];
-  var LAYER_KEEP = ["Exported", "LooseId", "Shared", "SharedOwn", "SharedFile"];
-  function packFileHalf(raw) {
+  var CLEAR_KEEP_LAYER = ["Stats", "Days", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks"];
+  var CLEAR_KEEP_PACK = ["v", "intentKeys", "baseCards", "baseMacros", "useCounts", "useAt", "intentCounts", "searchMisses", "langs", "days", "dayIds", "daysSince"];
+  function packKept(raw, keep) {
     let p = null;
     try {
       p = JSON.parse(raw);
     } catch (e) {
       p = null;
     }
-    if (!p || typeof p !== "object" || Array.isArray(p) || !LOOSE_FIELDS.some((k) => k in p)) return null;
+    if (!p || typeof p !== "object" || Array.isArray(p)) return null;
     const o = {};
-    LOOSE_FIELDS.concat(PACK_KEEP).forEach((k) => {
+    keep.forEach((k) => {
       if (k in p) o[k] = p[k];
     });
     return JSON.stringify(o);
-  }
-  var E_PREF_KEYS = [
-    "eTheme",
-    "eGlassOff",
-    "eMotionOff",
-    "eUiLang",
-    "eLang",
-    "eAgent",
-    "ePax",
-    "eNoteHover",
-    "eDeckOff",
-    "eWho",
-    "ePills",
-    "ePillsLock",
-    "eRail",
-    "eRailLock",
-    "eRailW",
-    "eCollapsed",
-    "eFactsW",
-    "eFactsH",
-    "eShortcuts",
-    "eHdrPills"
-  ];
-  function eKeyIsPref(k) {
-    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("eTour") === 0;
-  }
-  function eKeyIsMine(k, layers) {
-    if (E_NS === "e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS) === 0) return true;
-    return layers.some((ns) => k.indexOf(ns) === 0);
   }
   function keepKeys(keys) {
     try {
@@ -27287,31 +27643,48 @@ What you type stays in this browser only.`;
     hooks.restartDesk();
   }
   function clearLocalMemory() {
-    const layers = eLayers(), spaces = [E_NS].concat(layers), desk = eHasBranch();
-    const kept = new Set(ejectKeys().concat(E_WIPE_KEEP, desk ? SHARE_KEEP.concat(...spaces.map((ns) => LAYER_KEEP.map((n) => ns + n))) : []));
-    const packs = new Set(desk ? spaces.map((ns) => ns + "Pack") : []);
-    const keys = lsKeys().filter((k) => (eKeyIsMine(k, layers) || eKeyIsPref(k)) && !kept.has(k));
+    let keep = { layer: [], pack: [] };
+    keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
+    const spaces = [E_NS].concat(eLayers());
+    const keys = [];
+    spaces.forEach((ns) => LAYER_KEYS.forEach((n) => {
+      if (keep.layer.indexOf(n) < 0 && lsGet(ns + n) != null) keys.push(ns + n);
+    }));
     const was = keepKeys(keys);
-    let handle = null;
-    eWatchGet().then((h) => {
-      handle = h || null;
-    });
-    eWatchClear();
     keys.forEach((k) => {
-      const half = packs.has(k) ? packFileHalf(was.keys[k]) : null;
+      const half = /Pack$/.test(k) ? packKept(was.keys[k], keep.pack) : null;
       if (half != null) lsSet(k, half);
       else lsDel(k);
     });
-    ssDel(TAB_KEY);
     hooks.restartDesk();
-    offerUndo("Local memory cleared", () => {
-      try {
-        if (hooks.tourActive()) hooks.endTour(false);
-      } catch (e) {
-      }
-      if (handle) eWatchPut(handle);
-      putBack(was);
+    offerUndo("Local changes cleared", () => putBack(was));
+  }
+  function askClearLocal() {
+    const was = document.getElementById("eClearAsk");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo e-clear-ask";
+    el.id = "eClearAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("data-side", "none");
+    el.setAttribute("aria-labelledby", "eClearAskT");
+    el.innerHTML = '<h3 id="eClearAskT">' + esc(t("Clear local changes?")) + "</h3><p>" + esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.")) + "</p>" + (eHasBranch() ? "<p>" + esc(t("On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.")) + "</p>" : "") + "<p>" + esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eClearGo">' + esc(t("Clear local changes")) + '</button><button type="button" class="btn primary" id="eClearStay">' + esc(t("Cancel")) + "</button></div>";
+    document.body.appendChild(el);
+    el.querySelector("#eClearGo").onclick = () => {
+      dismissNode(el);
+      clearLocalMemory();
+    };
+    el.querySelector("#eClearStay").onclick = () => dismissNode(el);
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      dismissNode(el);
     });
+    try {
+      el.querySelector("#eClearStay").focus({ preventScroll: true });
+    } catch (_) {
+    }
   }
   function ejectKeys() {
     return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
@@ -27468,7 +27841,10 @@ What you type stays in this browser only.`;
     "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
     "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
     "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
-    "health": '<path d="M3.5 12.5h4.2l1.7-4.6 2.6 9.2 1.8-4.6H20.5"/>'
+    "health": '<path d="M3.5 12.5h4.2l1.7-4.6 2.6 9.2 1.8-4.6H20.5"/>',
+    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
+    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
+    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>'
   };
   function lmIcon(name) {
     const body = LM_ICONS[name];
@@ -27944,7 +28320,7 @@ What you type stays in this browser only.`;
       else dismissModal();
     };
   }
-  var MT_MOVED = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
+  var MT_MOVED = "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.";
   var mtOn = "health";
   var mtPages = () => [
     { key: "health", icon: "health", name: t("Health") },
@@ -28425,8 +28801,8 @@ What you type stays in this browser only.`;
       };
       const next = {};
       INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = intentFieldKey(f, l), typed = ieVal(f, l);
-        next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
+        const k = intentFieldKey(f, l), typed2 = ieVal(f, l);
+        next[k] = typed2 != null ? typed2 : f === "clause" ? "" : val[k];
       }));
       const primary = CONTENT_LANGS[0], clauseKey = intentFieldKey("clause", primary);
       const nen = next[clauseKey];
@@ -29236,13 +29612,13 @@ What you type stays in this browser only.`;
     if (!b) return;
     const one = cats.length === 1 && CATS[cats[0]] ? cats[0] : null;
     b.hidden = !Object.keys(CATS).length;
-    const ask = !!one && !cardCounts[one];
-    if (ask && b.dataset.nudged !== one) {
+    const ask2 = !!one && !cardCounts[one];
+    if (ask2 && b.dataset.nudged !== one) {
       b.classList.remove("nudge");
       void b.offsetWidth;
     }
-    b.classList.toggle("nudge", ask);
-    if (ask) b.dataset.nudged = one;
+    b.classList.toggle("nudge", ask2);
+    if (ask2) b.dataset.nudged = one;
     else delete b.dataset.nudged;
     b.title = one ? t("Create a card in {CAT}").replace("{CAT}", CATS[one]) : t("Create a card");
     b.setAttribute("aria-label", b.title);
@@ -31770,7 +32146,7 @@ What you type stays in this browser only.`;
         const show = key === libOn;
         if (show) d.removeAttribute("hidden");
         else d.setAttribute("hidden", "");
-        d.open = mgOpen.has(key);
+        d.open = show;
         if (key === libOn) {
           const c = d.querySelector(".mg-count");
           if (c) countEl = c;
@@ -31957,13 +32333,13 @@ What you type stays in this browser only.`;
        the two sections above. Not called "administrative" or "compliance": nothing is gated
        and nobody is being administered. */
     /* NOTHING IN THIS SECTION FLOATS. Every act belongs to the thing it acts on: the folder is
-       the list's header and sits on the title line, a catalog's own acts ride in its row, and
+       the list's header and sits on Catalog and data's bar (.mg-data-bar), a catalog's own acts ride in its row, and
        bringing one in is the Library's, so it stands in the Library's bar. What is left here is
        the list, which is the answer to "what is on this desk". */
     mgSec(
       "data",
       "Catalog & data",
-      (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>',
+      (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>' + libraryActionsHtml(),
       null,
       summaryTail
     );
@@ -31996,7 +32372,7 @@ What you type stays in this browser only.`;
     if (!host) return;
     const isHist = libView === "history";
     const name = catalogFileName();
-    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + '</div><div class="screen-actions">' + (isHist ? '<div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button>" : libraryActionsHtml()) + "</div></div>";
+    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
     const page = host.querySelector(".lib-list");
     if (isHist) {
       wireLibShell(page);
@@ -32023,7 +32399,6 @@ What you type stays in this browser only.`;
   registerScreen(LIB_SCREEN, { title: () => t("Library"), render: (host) => paintLibrary(host) });
   function wireLibrary(page) {
     wireLibShell(page);
-    $("#mgClose").onclick = () => closeScreenTab(LIB_SCREEN);
     $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
     $("#mgAddCat").onclick = () => startMgCatAdd();
     if ($("#mgWho")) $("#mgWho").onchange = function() {
@@ -32061,7 +32436,7 @@ What you type stays in this browser only.`;
         });
       };
     });
-    $("#mgWipe").onclick = clearLocalMemory;
+    $("#mgWipe").onclick = askClearLocal;
     wireFolds(
       page,
       "details[data-mg]",
@@ -32211,8 +32586,30 @@ What you type stays in this browser only.`;
   function libraryBodyHtml() {
     return openManage(true);
   }
+  function libraryActRow(key, icon, title, hint, ctl) {
+    return '<div class="set-row" data-row="' + esc(key) + '">' + lmIcon(icon) + '<div class="set-label">' + esc(title) + "<small>" + esc(hint) + '</small></div><div class="set-ctl">' + ctl + "</div></div>";
+  }
   function libraryActionsHtml() {
-    return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + joinDoorButton("mgJoinTeam") + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Saved copies…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>";
+    const join = joinDoorButton("mgJoinTeam");
+    return '<div class="mg-data-acts">' + libraryActRow(
+      "load",
+      "data",
+      t("Load catalog"),
+      t("Loads a catalog file from this computer."),
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'
+    ) + (join ? libraryActRow("join", "teams", t("Join a team"), t("Joins a team with an invitation from its lead."), join) : "") + (eHasHistory() ? libraryActRow(
+      "history",
+      "refresh",
+      t("Saved copies"),
+      t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
+      '<button type="button" class="btn" id="mgHistory">' + esc(t("Saved copies…")) + "</button>"
+    ) : "") + libraryActRow(
+      "clear",
+      "delete",
+      t("Clear local changes"),
+      t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
+      '<button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local changes")) + "</button>"
+    ) + "</div>";
   }
 
   // src/modules/settings.js
@@ -32640,20 +33037,28 @@ What you type stays in this browser only.`;
   function aiGroups() {
     if (!eAiModel()) return [];
     return [{ rows: [
-      // placeholder: Claudette
       row(
         "aisuggest",
         "ai",
         t("Suggest intents with the built-in model"),
-        // placeholder: Claudette
         t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
         onoff(
           "aisuggest",
           eAiOn(),
-          // placeholder: Claudette
           t("The model ranks the suggestions; nothing leaves this computer"),
-          // placeholder: Claudette
           t("Suggestions come from matching words, and the model stays unloaded")
+        )
+      ),
+      row(
+        "aisearch",
+        "ai",
+        t("Search by meaning with the built-in model"),
+        t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+        onoff(
+          "aisearch",
+          eSearchOn(),
+          t("The model ranks the search beside word matches; nothing leaves this computer"),
+          t("Off, it matches words only.")
         )
       )
     ] }];
@@ -32666,13 +33071,6 @@ What you type stays in this browser only.`;
         t("Reset defaults"),
         t("Puts every setting back as it ships. Cards and your edits are not touched."),
         '<button type="button" class="btn" id="setReset">' + esc(t("Reset defaults")) + "</button>"
-      ),
-      row(
-        "clear",
-        "delete",
-        t("Clear local memory"),
-        t("Forgets the settings and open conversations kept on this computer. The catalog, your name and your own changes to cards stay, and Undo brings the rest back."),
-        '<button type="button" class="btn danger" id="setClear">' + esc(t("Clear local memory")) + "</button>"
       )
     ] }];
   }
@@ -32749,7 +33147,6 @@ What you type stays in this browser only.`;
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
       { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
-      // placeholder: Claudette (the lede; "AI" is hers)
       { id: "ai", icon: "ai", name: t("AI"), lede: t("The model built into Etiuda, which works on this computer alone."), groups: aiGroups() }
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
@@ -32863,7 +33260,6 @@ What you type stays in this browser only.`;
       if (b) b.onclick = fn;
     };
     act("#setReset", resetAllSettings);
-    act("#setClear", clearLocalMemory);
     act("#setResetKeys", resetShortcuts);
     act("#setAbout", () => openAbout());
     act("#setTour", () => {
@@ -32921,6 +33317,21 @@ What you type stays in this browser only.`;
             else lsSet(E_AI_OFF_KEY, "1");
             eTellAi();
             toast(on ? t("Suggestions from the built-in model") : t("Suggestions from matching words"));
+          } else if (seg3 === "aisearch") {
+            if (on) lsDel(E_SEARCH_AI_OFF_KEY);
+            else lsSet(E_SEARCH_AI_OFF_KEY, "1");
+            eTellSearch();
+            if (on) armSearch();
+            else clearSearchMeaning();
+            try {
+              render();
+            } catch (e) {
+            }
+            try {
+              hooks.drawIntentRail();
+            } catch (e) {
+            }
+            toast(on ? t("The model ranks the search beside word matches; nothing leaves this computer") : t("Off, it matches words only."));
           } else if (seg3 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
           } else if (seg3 === "pillslock") {
@@ -33031,7 +33442,8 @@ What you type stays in this browser only.`;
       "eQuitOnClose",
       "eNotifyEditionOff",
       "eNotifyCatalogOff",
-      E_AI_OFF_KEY
+      E_AI_OFF_KEY,
+      E_SEARCH_AI_OFF_KEY
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {
@@ -33148,6 +33560,7 @@ What you type stays in this browser only.`;
       drawPills();
     } catch (e) {
     }
+    eTellSearch();
     try {
       render();
     } catch (e) {
@@ -33346,6 +33759,7 @@ What you type stays in this browser only.`;
   }
   function wireSearchBox() {
     intentEl.oninput = () => {
+      noteSearchTyping();
       if (screenOn) {
         setRailSettled(false);
         putEntrySel(null);
@@ -34516,7 +34930,7 @@ What you type stays in this browser only.`;
           dismissModal();
         } else if (eventMatchesAction(e, "maintenance")) {
           e.preventDefault();
-          const back = $("#mgClose") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
+          const back = $("#mgCatList") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
           if (dismissModal() !== false) {
             openMaintenance(back);
           }
@@ -36212,10 +36626,14 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h || typeof h.onPickAsk !== "function") return;
     h.onPickAsk((op, arg) => JSON.stringify(answerPick(String(op || ""), arg)));
+    try {
+      armSearch();
+    } catch (e) {
+    }
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

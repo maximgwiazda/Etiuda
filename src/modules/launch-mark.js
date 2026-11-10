@@ -335,7 +335,8 @@ function syncLaunchMark(host, opts) {
 
 /* ---- The opening launch ---- */
 let currentOpeningFig = null;
-let launchStateRecord = { reason: "", ms: 0 };
+/* first: the page time of the opening's first drawn frame, which a leg reads against the page's first paint. */
+let launchStateRecord = { reason: "", ms: 0, first: 0 };
 
 function launchMark(opts) {
   const o = opts || {};
@@ -359,6 +360,7 @@ function launchMark(opts) {
   };
 
   const t0 = (win && win.performance ? win.performance.now() : Date.now());
+  launchStateRecord.first = 0;
   let rafId = 0;
   let failsafeTimer = 0;
   let coverHoldTimer = 0;
@@ -631,6 +633,7 @@ function launchMark(opts) {
 
   function drawFrame(now) {
     if (state.ended) return;
+    if (!launchStateRecord.first) launchStateRecord.first = now;
     const dt = Math.max(0, now - lastFrameTime);
     if (framed && dt >= SHORTEST_FRAME_MS && dt <= Math.max(2 * frameGap, 1000 / 60) + 1e-4) {
       gapSamples.push(dt);
@@ -691,7 +694,14 @@ function launchMark(opts) {
     }
   }
 
+  /* o.shown runs its function once the window is on screen: the opening starts on that word, not on the next look. */
+  let onScreen = typeof o.shown !== "function";
   function startOpening() {
+    if (state.ended) return;
+    if (!onScreen) {
+      o.shown(() => { onScreen = true; startOpening(); });
+      return;
+    }
     if (isCovered()) {
       coverHoldTimer = setTimeout(startOpening, 150);
       return;
@@ -713,7 +723,7 @@ function launchMark(opts) {
 }
 
 function launchState() {
-  return launchStateRecord.reason ? { reason: launchStateRecord.reason, ms: launchStateRecord.ms } : null;
+  return launchStateRecord.reason ? { reason: launchStateRecord.reason, ms: launchStateRecord.ms, first: launchStateRecord.first } : null;
 }
 
 export {

@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 133;
+const EXPECTED = 136;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -303,7 +303,7 @@ try {
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
       args && args[0] === "which" ? caret.front : "", ""));
   } });
-  let suspended = null, clipReads = 0, clipHeld = "";
+  let suspended = null, clipReads = 0, clipHeld = "", clipAsPromise = false, clipNever = false;
   const onH = {}, invH = {};
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
   let cursor = { x: 300, y: 200 };
@@ -314,7 +314,7 @@ try {
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
     BrowserWindow: BW, Menu: anything(), dialog: anything(), net: anything(), protocol: anything(), session: anything(),
-    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipHeld; } },
+    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipNever ? new Promise(() => {}) : clipAsPromise ? Promise.resolve(clipHeld) : clipHeld; } },
     globalShortcut: { register: (a, fn) => { if (taken.has(a)) return false; held.set(a, fn); return true; },
       unregister: a => { held.delete(a); }, unregisterAll: () => held.clear(), setSuspended: v => { suspended = !!v; } },
     screen: { getCursorScreenPoint: () => cursor, getDisplayNearestPoint: () => ({ workArea: area }),
@@ -529,6 +529,42 @@ try {
   check(!!(afterBad.suggest && afterBad.suggest.length),
     "6r own-text takes a string within its cap only: after a non-string and a 300,001-character send, a customer's message still"
     + " shows its strip: " + JSON.stringify((afterBad.suggest || []).length));
+
+  /* 6s. Electron 44 on Linux answers clipboard.readText() with a Promise (Claude gamma's Ubuntu walk, 2026-11-09); the
+     shell read it as "[object Promise]", so a copied message was never suggested there. The same message, read through a
+     Promise, shows its strip. */
+  clipAsPromise = true;
+  clipHeld = fresh6r + " Again.";
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const viaPromise = opened[opened.length - 1];
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  clipAsPromise = false;
+  check(!!(viaPromise.suggest && viaPromise.suggest.length),
+    "6s a clipboard that answers with a Promise, as on Linux, still shows a customer's message its strip: "
+    + JSON.stringify((viaPromise.suggest || []).length));
+
+  /* 6t. A clipboard read that never settles must not lock the picker: it opens after the wait with no message strip, and
+     opens again on the next press. */
+  clipNever = true;
+  const t6 = Date.now();
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const neverOpenMs = Date.now() - t6;
+  const neverOpen = opened[opened.length - 1];
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  clipNever = false;
+  clipHeld = "";
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const reopened = pw.visible;
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  check(!(neverOpen.suggest && neverOpen.suggest.length) && reopened && neverOpenMs < 5000,
+    "6t a clipboard read that never settles opens the picker after the wait with no strip, and the next press opens it again: "
+    + neverOpenMs + " ms, reopened " + reopened);
 
   /* Row 7: Two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB. */
   let modelBuilds = 0;
@@ -1257,6 +1293,16 @@ try {
     + (missing.join(", ") || "none") + "), and release.mjs " + (J(releaseList) === J(sortedFiles) ? "states" : "does NOT state")
     + ", shell-smoke " + (smokeOk ? "states" : "does NOT state") + " and reinstall " + (reinstallOk ? "states" : "does NOT state")
     + " the same " + sortedFiles.length + " files");
+  /* 5i. A picture the shell reads beside itself at run time (the tray's, by a file name held in a variable, which 5h's
+     require walk cannot see) is in the builder's files too: the desk shipped without its tray picture on 2026-11-09. */
+  const mainText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  const pictures = [...new Set([...mainText.matchAll(/"([\w.-]+\.(?:ico|png))"/g)].map(m => "shell/" + m[1]))];
+  /* A picture main.js names that is not under shell/ at all (renamed or deleted) would fail only at run time. */
+  const picturesAbsent = pictures.filter(rel => !fs.existsSync(path.join(ROOT, rel)));
+  const picturesMissing = pictures.filter(rel => filesList.indexOf(rel) < 0);
+  check(pictures.indexOf("shell/etiuda.ico") >= 0 && picturesMissing.length === 0 && picturesAbsent.length === 0,
+    "5i every picture shell/main.js names beside itself is under shell/ and in the builder's files (" + pictures.length
+    + " named; not in the files: " + (picturesMissing.join(", ") || "none") + "; not on disk: " + (picturesAbsent.join(", ") || "none") + ")");
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
   console.log("\n[6/7] the most used replies first: the picker at rest, a search, and what stays as it was");

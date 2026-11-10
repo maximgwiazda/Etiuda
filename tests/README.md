@@ -23,6 +23,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/tab-focus.mjs                          no fixtures, Tab walks the main screen, Ctrl+Tab and Ctrl+T move the conversations, the middle button closes one, covers and dialogs keep their own Tab
     node tests/library-tab.mjs                        no fixtures, the desk's Library as a screen tab: the Menu opens it named Library, a second open fronts it, an editor closes back onto it, Earlier versions is a page in it with Back, a restart in place comes back on it; two plants lifted in a scratch copy
+    node tests/screen-switch.mjs                      no fixtures, leaving Settings, Maintenance or the Library restyles what a conversation switch restyles, counted from the trace, its time to paint printed; the stage undisplayed under a screen is its control
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
     node tests/desk-ipc.mjs, legs 77a to 82h          no fixtures, the desk's own signed file under desks/<branch id>/: key pair, name, retry of a held write, a replaced pair, the edition kept past a removal, the category fields, a catalog taken while the identity is asked (78k), a catalog made from nothing on the empty desk (82)
     node tests/catalog-history.mjs                    no fixtures, the desk's hidden backups: a catalog it reads or writes kept once per content beside desk.json and never in the catalog folder, a colleague's file not kept, 30 days from last seen with the newest of each file kept longer, the list, the open and the putting back, never for a signed or sealed catalog nor over one, and an index that will not read losing nothing; the page's grouping imported from src/modules/catalog-history.js
@@ -59,6 +60,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
+    node tests/opening-frame.js                      the desk's first frame is the opening's ground in the desk's theme, read from the frame itself in an unpackaged Electron, against the system's theme and a quiet desk
     ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panels, the menus, Quick facts, the pill bar and a dialog: painted in dark, absent in light, a quiet line along the top and bottom, Chrome
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard. node tests/pick-desk.js --guards proves the desk guards on stand-ins and opens nothing

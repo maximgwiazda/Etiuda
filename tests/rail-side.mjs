@@ -194,15 +194,15 @@ function railFrame() {
 }
 
 /* The return is the current conversation tab, which is already the active one, so the screen
-   closes without the tab being applied again. Settings is left only once the rail has taken
-   the short header: that is the value a stay writes, and the first frame is read then. */
+   closes without the tab being applied again. Settings is left only once the header has taken
+   its short height under the screen, which a screen tab leaves the rail's vars beside, and the
+   first frame is read then. */
 async function titleHold(page) {
   const before = await page.evaluate(railFrame);
   await openSettings(page);
   await page.waitForFunction(() => {
     const headerB = document.querySelector("header").getBoundingClientRect().bottom;
-    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-col-top"));
-    return headerB > 0 && headerB < 120 && Math.abs(top - headerB) <= 2;
+    return document.body.classList.contains("screen-on") && headerB > 0 && headerB < 120;
   }, { timeout: 5000 });
   const first = await page.evaluate(() => new Promise(resolve => {
     document.querySelector("#tabsBar .tab[data-tid]").click();

@@ -86,10 +86,10 @@ class El {
   set tabIndex(v) { this.setAttribute("tabindex", v); }
   get value() { return this._value !== undefined ? this._value : (this.attrs.get("value") || ""); }
   set value(v) { this._value = String(v); }
-  setAttribute(k, v) { this.attrs.set(String(k).toLowerCase(), String(v)); }
+  setAttribute(k, v) { k = String(k).toLowerCase(); const had = this.attrs.has(k); this.attrs.set(k, String(v)); if (!had) detailsToggle(this, k, "closed"); }
   getAttribute(k) { const v = this.attrs.get(String(k).toLowerCase()); return v === undefined ? null : v; }
   hasAttribute(k) { return this.attrs.has(String(k).toLowerCase()); }
-  removeAttribute(k) { this.attrs.delete(String(k).toLowerCase()); }
+  removeAttribute(k) { k = String(k).toLowerCase(); const had = this.attrs.has(k); this.attrs.delete(k); if (had) detailsToggle(this, k, "open"); }
   get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n === this.ownerDocument.documentElement; }
   appendChild(n) { if (n.parentNode) n.parentNode._drop(n); n.parentNode = this; this.childNodes.push(n); return n; }
   append(...ns) { ns.forEach(n => this.appendChild(typeof n === "string" ? new TextNode(n) : n)); }
@@ -146,6 +146,15 @@ class El {
   getAnimations() { return []; }
   scrollIntoView() {}
   getContext() { return { font: "", measureText: t => ({ width: String(t).length * 7 }) }; }
+}
+/* A details element's toggle, as the HTML standard queues it: on the open attribute added or removed,
+   parsed markup included, fired a task later with any pending one folded in, so it sees the final state. */
+function detailsToggle(el, k, was) {
+  if (k !== "open" || el.localName !== "details") return;
+  if (el._toggle) { was = el._toggle.was; clearImmediate(el._toggle.id); }
+  const id = setImmediate(() => { el._toggle = null;
+    (el.listeners.toggle || []).slice().forEach(fn => fn({ type: "toggle", target: el, oldState: was, newState: el.open ? "open" : "closed" })); });
+  el._toggle = { id, was };
 }
 function serial(n) {
   if (n.nodeType === 3) return n.data;
@@ -340,6 +349,12 @@ const pressMenuLibrary = () => {
   $("#settingsMenu").onclick({ target: $('#settingsMenu [data-act="manage"]'), stopPropagation() {} });
 };
 const conversations = () => doc.querySelectorAll("#tabsBar .tab").filter(b => !b.classList.contains("screen"));
+/* The Library closes by its tab's cross, as every tab does. */
+const crossLibrary = () => {
+  const x = libraryStrip()[0] && libraryStrip()[0].querySelector(".tab-x");
+  if (x) x.onclick({ stopPropagation() {} });
+  return !!x;
+};
 
 ssSetTabs();
 function ssSetTabs() {
@@ -359,7 +374,7 @@ check("L1 the Menu's Library opens a tab named Library, in front, with the Libra
   const page = host().querySelector(".lib-list");
   return STAB.screenOn === "library" && strip.length === 1 && name === "Library" && strip[0].classList.contains("on")
     && !host().hidden && doc.body.classList.contains("screen-on") && modal().hidden
-    && !!page && !!host().querySelector("#mgCatList") && !!host().querySelector("#mgClose")
+    && !!page && !!host().querySelector("#mgCatList")
     && (host().querySelector(".screen-head h2") || {}).textContent === "Library"
     || JSON.stringify({ screenOn: STAB.screenOn, strip: strip.length, name, hostHidden: host().hidden, modalHidden: modal().hidden, page: !!page });
 });
@@ -421,19 +436,14 @@ check("L5 the desk started again in place (a catalog loaded, put down or cleared
     || JSON.stringify({ screenOn: STAB.screenOn, hostHidden: host().hidden, repainted: !!after && after !== before });
 });
 
-check("L6 its Close and its cross close the tab and return to the conversation in front before it", () => {
+check("L6 its cross closes the tab and returns to the conversation in front before it", () => {
   if (wired) return wired;
   conversations()[1].click();
   MG.openManage();
-  host().querySelector("#mgClose").click();
-  const closed = STAB.screenOn === "" && !STAB.screens.includes("library") && host().hidden && libraryStrip().length === 0
-    && conversations()[1].classList.contains("on");
-  MG.openManage();
-  const x = libraryStrip()[0] && libraryStrip()[0].querySelector(".tab-x");
-  if (!x) return "no cross on the Library's tab";
-  x.onclick({ stopPropagation() {} });
-  return closed && STAB.screenOn === "" && !STAB.screens.includes("library") && libraryStrip().length === 0
-    || JSON.stringify({ closed, screenOn: STAB.screenOn, screens: STAB.screens });
+  if (!crossLibrary()) return "no cross on the Library's tab";
+  return STAB.screenOn === "" && !STAB.screens.includes("library") && host().hidden && libraryStrip().length === 0
+    && conversations()[1].classList.contains("on")
+    || JSON.stringify({ screenOn: STAB.screenOn, screens: STAB.screens, hostHidden: host().hidden });
 });
 
 /* The section list is the page: four Library sections, one of them on screen, and a click swaps which. */
@@ -606,10 +616,7 @@ check("L14 closing the Library drops a filter whose category was deleted while i
   H.hooks.rebuildCards = RB.rebuildCards;
   H.hooks.render = RD.render;
   try {
-    if (STAB.screenOn === "library") {
-      const shut = host().querySelector("#mgClose");
-      if (shut) shut.click();
-    }
+    if (STAB.screenOn === "library") crossLibrary();
     PK.pack.customCats = Object.assign({}, hadCats, { shelf: "Shelf" });
     PK.pack.custom = hadCustom.concat([{ id: "u:desk-card", c: "gen", t: "Desk card", en: "A reply on the desk." }]);
     RB.rebuildCards();
@@ -627,9 +634,7 @@ check("L14 closing the Library drops a filter whose category was deleted while i
     const liveWhileOpen = AS.cats.slice();
     const storedWhileOpen = tab() ? tab().cats.slice() : [];
     const gone = !CM.CATS.shelf;
-    const shut = host().querySelector("#mgClose");
-    if (!shut) return "no Close";
-    shut.click();
+    if (!crossLibrary()) return "no cross on the Library's tab";
     const live = AS.cats.slice();
     const stored = tab() ? tab().cats.slice() : [];
     const cardThere = !!doc.querySelector('#list .card[data-id="u:desk-card"]');
@@ -659,12 +664,186 @@ check("L13 .screen-actions uses var(--line) instead of var(--border) and #ehClos
     || JSON.stringify({ usesBorder, primaryStyled, ehClosePrimary });
 });
 
+/* The invented catalog L16 and L18 put on the desk: two shelves, two requests, two names. */
+async function putInvented() {
+  const CAT = await import(MOD("catalog.js"));
+  const invented = {
+    format: 2, kind: "etiuda-catalog", id: "harbour-lamps", rev: 1, name: "Harbour Lamps", date: "2026-01-09",
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [
+      { id: "t-op", kind: "shelf", label: { en: "Openers", pl: "Powitania" } },
+      { id: "t-rt", kind: "shelf", label: { en: "Returns", pl: "Zwroty" } },
+      { id: "t-wick", kind: "request", clause: { en: "a new wick", pl: "nowy knot" },
+        action: { en: "sent a wick", pl: "wysłano knot" }, topic: { en: "the wick", pl: "knot" } },
+      { id: "t-shade", kind: "request", clause: { en: "a shade swap", pl: "wymianę klosza" },
+        action: { en: "swapped the shade", pl: "wymieniono klosz" }, topic: { en: "the shade", pl: "klosz" } },
+    ],
+    cards: [
+      { id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening", pl: "Ciepłe powitanie" },
+        body: { en: "Good day.", pl: "Dzień dobry." } },
+      { id: "c-wick", shelf: "t-rt", bodyShape: "plain", requests: ["t-wick"], title: { en: "Wick", pl: "Knot" },
+        body: { en: "A wick is on its way.", pl: "Knot jest w drodze." } },
+      { id: "c-shade", shelf: "t-rt", bodyShape: "plain", requests: ["t-shade"], title: { en: "Shade", pl: "Klosz" },
+        body: { en: "The shade is swapped.", pl: "Klosz wymieniony." } },
+    ],
+    role: ["Concierge", "Porter"],
+  };
+  if (!CAT.storeCatalog(CAT.parseCatalogFile(JSON.stringify(invented)))) return "the invented catalog was not stored";
+  H.hooks.restartDesk();
+  return "";
+}
+/* A page's fold has no summary on screen, so a page whose details element is shut shows its title and
+   nothing under it: shown means not hidden AND open, and the toggle the stub page now fires is what shut
+   them. Run late, because it puts a catalog on the desk. */
+await checkAsync("L16 every Library page holds its content when reached from another page, Categories and cards included", async () => {
+  if (wired) return wired;
+  const why = await putInvented();
+  if (why) return why;
+  if (STAB.screenOn !== "library") MG.openManage();
+  await settle();
+  const holds = {
+    catmac: d => d.querySelectorAll(".mg-cat").length >= 2,
+    intents: d => d.querySelectorAll(".manage-row.mg-int").length === 2,
+    who: d => /Concierge, Porter/.test((d.querySelector("#mgWho") || {}).value || ""),
+    data: d => /3\scards[\s\S]*2\sintents/.test((d.querySelector("#mgCatList .ec-row.is-loaded") || {}).textContent || ""),
+  };
+  const seen = [];
+  let all = true;
+  for (const k of ["catmac", "intents", "catmac", "who", "catmac", "data", "intents", "who", "data", "catmac"]) {
+    const b = host().querySelector('.sx-sec[data-lm="' + k + '"]');
+    if (!b) return "no section " + k + " in the nav";
+    b.click();
+    await settle();
+    const shown = host().querySelectorAll(".sx.lm-lib details.manage-sec").filter(d => !d.hasAttribute("hidden"));
+    const page = shown.length === 1 && shown[0].getAttribute("data-mg") === k ? shown[0] : null;
+    const ok = !!page && page.open && holds[k](page);
+    if (!ok) all = false;
+    seen.push(k + ":" + (page ? (page.open ? "open" : "shut") + (holds[k](page) ? "+content" : "-content")
+      : "shown " + shown.map(d => d.getAttribute("data-mg")).join("|")));
+  }
+  return all || seen.join(" ");
+});
+
+/* THE FOOTER GOES (Maxim, 2026-11-09 20:31, finding 3): no Close and no bar under the list; Load catalog, Join a team,
+   Saved copies and Clear local changes are rows of Catalog and data, each doing what its button did. The host offers a
+   picker and a join for this leg only. */
+const ST = await import(MOD("storage.js"));
+await checkAsync("L17 the Library has no footer, and Catalog and data holds Load catalog, Join a team, Saved copies and Clear local changes as rows, each acting as its button did", async () => {
+  if (wired) return wired;
+  const picked = [];
+  window.E_HOST.pickCatalogFile = () => { picked.push(1); return Promise.resolve(null); };
+  window.E_HOST.teamJoin = () => ({});
+  try {
+    MG.openManage();
+    host().querySelector('.sx-sec[data-lm="data"]').click();
+    await settle();
+    const data = host().querySelector('details.manage-sec[data-mg="data"]');
+    const rows = data ? data.querySelectorAll(".mg-data-acts > .set-row").map(r => r.getAttribute("data-row")) : [];
+    const footer = !!host().querySelector(".screen-actions") || !!host().querySelector("#mgClose");
+    const btnIn = (row, id) => !!(data && data.querySelector('.set-row[data-row="' + row + '"] #' + id));
+    const homes = btnIn("load", "mgImportCatalog") && btnIn("join", "mgJoinTeam") && btnIn("history", "mgHistory") && btnIn("clear", "mgWipe");
+    host().querySelector("#mgImportCatalog").click();
+    await settle();
+    const loads = picked.length === 1;
+    host().querySelector("#mgJoinTeam").click();
+    await settle();
+    const joins = !!doc.querySelector("[data-join]");
+    host().querySelector("#mgWipe").click();
+    const ask = doc.querySelector("#eClearAsk");
+    const asks = !!ask && !!ask.querySelector("#eClearGo") && !!ask.querySelector("#eClearStay");
+    if (ask) ask.querySelector("#eClearStay").click();
+    await settle();
+    host().querySelector("#mgHistory").click();
+    await settle();
+    const history = !!host().querySelector("#ehView");
+    const back = host().querySelector("#ehClose");
+    if (back) back.click();
+    await settle();
+    return !footer && rows.join() === "load,join,history,clear" && homes && loads && joins && asks && history
+      || JSON.stringify({ footer, rows, homes, loads, joins, asks, history });
+  } finally {
+    delete window.E_HOST.pickCatalogFile;
+    delete window.E_HOST.teamJoin;
+    doc.querySelectorAll("[data-join]").forEach(n => { const b = n.closest(".bub"); if (b) b.remove(); });
+  }
+});
+
+/* CLEAR LOCAL CHANGES puts the catalog back as delivered and keeps what lets the desk work: the catalog and its file,
+   the folder, the agent's name, the layer's keys naming the desk's own file in the share, and the counts; and it calls
+   the host for nothing that writes, the team and the licence being the host's. Its Undo puts the changes back. */
+const SET = await import(MOD("settings.js"));
+let clearHeld = null;
+await checkAsync("L18 Clear local changes takes an override, an own card, an intent edit and a star, and keeps the catalog file, the team's share keys, the folder, the name and the counts", async () => {
+  if (wired) return wired;
+  if (!ST.lsGet(ST.nsKey("Catalog"))) { const why = await putInvented(); if (why) return why; }
+  ST.nsSet("CatalogFile", "harbour.ec");
+  ST.lsSet("eCatalogFolder", "C:/lab/catalogs");
+  ST.lsSet("eAgent", "Ala K.");
+  ST.lySet("SharedFile", "harbour-0a1b2c3d.ec");
+  ST.lySet("LooseId", "harbour-own");
+  PK.pack.overrides["c-warm"] = { t: "My opening", en: "Good morning." };
+  PK.pack.custom.push({ id: "u:mine", c: "t-op", t: "Mine", en: "One of mine." });
+  PK.pack.intentOverrides["t:t-wick"] = { en: "a fresh wick" };
+  PK.pack.favourites.push("c-wick");
+  PK.pack.useCounts["c-warm"] = 3;
+  PK.savePack();
+  const kept = () => JSON.stringify([ST.lsGet(ST.nsKey("Catalog")), ST.nsGet("CatalogFile"), ST.lsGet("eCatalogFolder"),
+    ST.lsGet("eAgent"), ST.lyGet("SharedFile"), ST.lyGet("LooseId")]);
+  const keptBefore = kept();
+  const made = JSON.parse(ST.lyGet("Pack") || "{}");
+  const had = !!(made.overrides || {})["c-warm"] && (made.custom || []).length === 1 && !!(made.intentOverrides || {})["t:t-wick"];
+  const writes = [];
+  const realHost = window.E_HOST;
+  window.E_HOST = new Proxy(realHost, { get: (o, k) => typeof o[k] === "function" && /^(team|licen|setCatalogFolder|chooseCatalogFolder|catalogEject|writeBranch)/i.test(String(k))
+    ? (...a) => { writes.push(String(k)); return o[k](...a); } : o[k] });
+  try {
+    MG.openManage();
+    host().querySelector('.sx-sec[data-lm="data"]').click();
+    await settle();
+    host().querySelector("#mgWipe").click();
+    const go = doc.querySelector("#eClearAsk #eClearGo");
+    if (!go) return "no question before the clear";
+    clearHeld = { keptBefore, pack: ST.lyGet("Pack") };
+    go.click();
+    await settle();
+  } finally { window.E_HOST = realHost; }
+  const now = JSON.parse(ST.lyGet("Pack") || "{}");
+  const took = !(now.overrides || {})["c-warm"] && !(now.custom || []).length && !(now.intentOverrides || {})["t:t-wick"]
+    && !(now.favourites || []).length && !PK.pack.overrides["c-warm"] && !PK.pack.custom.length && !PK.pack.favourites.length;
+  const counts = (JSON.parse(ST.lyGet("Stats") || "{}").useCounts || {})["c-warm"] === 3 && PK.pack.useCounts["c-warm"] === 3;
+  return had && took && counts && kept() === keptBefore && writes.length === 0 && !!doc.querySelector("#eUndoBtn")
+    || JSON.stringify({ had, took, counts, kept: kept() === keptBefore ? "same" : kept(), writes, undo: !!doc.querySelector("#eUndoBtn") });
+});
+
+await checkAsync("L19 the clear's Undo puts back the override, the own card, the intent edit and the star", async () => {
+  if (wired) return wired;
+  if (!clearHeld) return "L18 did not clear";
+  const undo = doc.querySelector("#eUndoBtn");
+  if (!undo) return "no Undo standing";
+  undo.click();
+  await settle();
+  const back = ST.lyGet("Pack");
+  return back === clearHeld.pack && !!PK.pack.overrides["c-warm"] && PK.pack.custom.some(c => c.id === "u:mine")
+    && !!PK.pack.intentOverrides["t:t-wick"] && PK.pack.favourites.includes("c-wick")
+    || JSON.stringify({ same: back === clearHeld.pack, override: !!PK.pack.overrides["c-warm"], custom: PK.pack.custom.length,
+      favourites: PK.pack.favourites });
+});
+
+check("L20 Settings no longer offers Clear local changes or Clear local memory, and Reset defaults stands as it did", () => {
+  const body = SET.settingsBodyHtml();
+  const reset = body.indexOf('id="setReset"') >= 0 && body.indexOf("Puts every setting back as it ships. Cards and your edits are not touched.") >= 0;
+  const clear = /setClear|Clear local/.test(body);
+  return reset && !clear || JSON.stringify({ reset, clear });
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
 const PLANTS = [
   { tag: "library-editor-closes-back", file: "manage.js", leg: "L3" },
   { tag: "restart-keeps-screen", file: "restart.js", leg: "L5" },
+  { tag: "library-page-open", file: "manage.js", leg: "L16" },
+  { tag: "clear-keep-list", file: "local-memory.js", leg: "L18" },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {

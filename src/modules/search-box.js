@@ -15,6 +15,7 @@ import { copyEntrySel } from "./copy-entry.js";
 import { t, toast } from "./ui-lang.js";
 import { setRailSel, railSortT, setRailSortT, setRailSettled, putEntrySel, setRailMarkUsed, setSemiKind, cats, setCatsDropArmed, semiKind, railOrder, entrySel, railSel, railMarkIdx, railMarkUsed, pickRun, intentIdxs, setPickRun, setIntentIdxs, setIntentText } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { noteSearchTyping } from "./search-meaning.js";
 
 function updateIntentPlaceholder(){
   if(!intentEl) return;
@@ -46,6 +47,7 @@ function queueSearchSettle(){
 }
 function wireSearchBox(){
   intentEl.oninput=()=>{
+    noteSearchTyping();
     if(screenOn){
       setRailSettled(false);
       putEntrySel(null); markEntrySel(); setRailSel(-1); setRailMarkUsed(false); setSemiKind(null);

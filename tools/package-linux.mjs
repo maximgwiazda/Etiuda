@@ -108,6 +108,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const exe = join(DIST, 'linux-unpacked', ask.exe);
   if (!existsSync(exe)) bad.push(exe + ' is not there, so no fuse was read from it');
   else for (const line of await fuseProblems(exe, wantedFuses())) bad.push('fuse: ' + line);
+  /* The tray's picture on Linux is read from the asar at run time (shell/main.js trayIcon); a build without it makes a
+     desk with no tray, which quits on close (Max's Windows finding of 2026-11-09, the same gap). A listing that throws
+     leaves nothing listed, so the check fails closed. */
+  let packed = [];
+  try { packed = (await import('@electron/asar')).listPackage(join(DIST, 'linux-unpacked', 'resources', 'app.asar')).map(p => p.replace(/\\/g, '/')); } catch {}
+  if (packed.indexOf('/shell/etiuda-tray.png') < 0) bad.push('the asar lacks /shell/etiuda-tray.png, so the desk would have no tray');
   const deb = fresh.find(n => n.endsWith('.deb'));
   if (deb) {
     const tree = mkdtempSync(join(tmpdir(), 'etiuda-deb-'));

@@ -542,26 +542,6 @@ function folderMember(ud, share, teamId, lead) {
 
 /* ---- what a launch is asked ---------------------------------------------------------------- */
 
-/* Board 415: the destructive control sits at the actions bar's LEFT edge and the closing one at
-   its right, so a reflex click on Close cannot land on the wipe. Measured against the bar's own
-   content box rather than against each other, because two buttons merely far apart pass a gap
-   test and still fail the promise. */
-const BAR_ENDS = (leftId, rightId) => {
-  const a = document.getElementById(leftId), b = document.getElementById(rightId);
-  const acts = a && a.closest(".modal-actions, .screen-actions");
-  if (!acts || !a || !b) return { step: "missing", acts: !!acts, left: !!a, right: !!b };
-  const cs = getComputedStyle(acts);
-  const r = acts.getBoundingClientRect();
-  const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-  const round = n => Math.round(n * 10) / 10;
-  return {
-    step: "read",
-    leftGap: round(ra.left - (r.left + parseFloat(cs.paddingLeft))),
-    rightGap: round((r.right - parseFloat(cs.paddingRight)) - rb.right),
-    topDelta: round(ra.top - rb.top),
-    between: round(rb.left - ra.right),
-  };
-};
 /* The rev a folder row is labelled with. The host sends `+rev || 0` (shell/main.js, ecFacts),
    so a file with no rev field still arrives as 0, and 0 is a rev. */
 function hostRevOf(file) {
@@ -698,8 +678,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   const inTree = E.sha256(E.ENGINE_PATH);
   console.log("       built in " + built + "s into " + LAB);
-  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/clip-suggest.cjs,shell/desk-reset.cjs,shell/embed/core.cjs,shell/embed/suggest.cjs,shell/embed/worker.cjs,shell/etiuda-tray.png,shell/folder/syncer-worker.cjs,shell/folder/syncer.cjs,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/relay/blob.cjs,shell/relay/channel.cjs,shell/sample-catalog.ec,shell/tray.cjs,shell/win-proxy.cjs",
-    "the asar holds the nineteen allowlisted files and nothing else: " + names.join(", "));
+  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/clip-suggest.cjs,shell/desk-reset.cjs,shell/embed/core.cjs,shell/embed/suggest.cjs,shell/embed/worker.cjs,shell/etiuda-tray.png,shell/etiuda.ico,shell/folder/syncer-worker.cjs,shell/folder/syncer.cjs,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/relay/blob.cjs,shell/relay/channel.cjs,shell/sample-catalog.ec,shell/tray.cjs,shell/win-proxy.cjs",
+    "the asar holds the twenty allowlisted files and nothing else: " + names.join(", "));
   check(inAsar === inTree,
     "the engine inside the asar is the engine in the tree, sha256 " + inAsar.slice(0, 16)
     + (inAsar === inTree ? "" : " against the tree's " + inTree.slice(0, 16)));
@@ -1246,9 +1226,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(800);
-    /* WHERE EVERY ACT OF THIS SECTION LIVES NOW, board 452: the folder on the title line, a
-       catalog's own acts in its row, the Library's own in the Library's bar. Read as places
-       rather than as presence - a button that exists in the wrong home is the failure. */
+    /* WHERE EVERY ACT OF THIS SECTION LIVES NOW, board 452: the folder named on the title line, a
+       catalog's own acts in its row, the Library's own in Catalog and data's rows. Read as places
+       rather than as presence - a button that exists in the wrong home is the failure.
+       Since 8f62feae (2026-11-09) the folder's path and its Change button (the ids) stand on the
+       section's data bar, the list's header inside the fold, and the Library tab hides the title
+       line except while searching, when the bar hides and the title line shows the same folder
+       without ids. So the bar is a home, not a stray, and the title line's copy is read as present
+       (the test architect, 2026-11-10). */
     const q = sel => document.querySelector(sel);
     const pathEl = q("#mgCatFolderPath"), change = q("#mgCatFolder");
     const exp = q("#mgExportCatalog"), imp = q("#mgImportCatalog"), close = q("#mgClose");
@@ -1257,15 +1242,18 @@ const placeEc = (dir, from, as, minutesOld) => {
                   short: pathEl ? pathEl.textContent : null,
                   button: !!change && !!r && r.width > 0 && r.height > 0,
                   pencil: !!change && !!change.querySelector("svg"),
-                  inSummary: !!pathEl && !!pathEl.closest("summary") && !!change.closest("summary"),
+                  onBar: !!pathEl && !!change && !!pathEl.closest('details.manage-sec[data-mg="data"] .mg-data-bar')
+                    && !!change.closest('details.manage-sec[data-mg="data"] .mg-data-bar'),
+                  titleNames: [...document.querySelectorAll('details.manage-sec[data-mg="data"] > summary .ec-where .open-folder')]
+                    .some(n => !!pathEl && n.title === pathEl.title),
                   loadedRow: !!document.querySelector("#mgCatList .ec-row.is-loaded"),
                   exportInRow: !!exp && !!exp.closest(".ec-row.is-loaded"),
-                  importInBar: !!imp && !!imp.closest(".screen-actions .mf-left"),
-                  closeAlone: !!close && !close.closest(".mf-left"),
+                  importInRow: !!imp && !!imp.closest('.mg-data-acts .set-row[data-row="load"]'),
+                  noClose: !close,
                   oldOnes: ["#mgCatOpen"].filter(x => !!q(x)).length,
                   strays: [...document.querySelectorAll('details.manage-sec[data-mg="data"] .manage-secbody > *')]
                             .map(n => n.className) };
-    document.querySelector("#mgClose").click(); await wait(600);
+    document.querySelector('#tabsBar .tab.screen[data-sid="library"] .tab-x').click(); await wait(600);
     /* Settings is opened last and left open: the leg below reads its actions bar. */
     if (!(await menu("settings"))) return { step: "no Settings item in the menu" };
     return Object.assign({ step: "open" }, got,
@@ -1273,10 +1261,10 @@ const placeEc = (dir, from, as, minutesOld) => {
                     .map(d => d.getAttribute("data-sx")) });
   });
   check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
-        && row.button && row.pencil && row.inSummary && row.exportInRow === row.loadedRow
-        && row.importInBar
-        && row.closeAlone && row.oldOnes === 0 && row.strays.join(",") === "ec-list",
-    "2h the folder is named and changed in the Library alone, on its title line, with each act in"
+        && row.button && row.pencil && row.onBar && row.titleNames && row.exportInRow === row.loadedRow
+        && row.importInRow
+        && row.noClose && row.oldOnes === 0 && row.strays.join(",") === "mg-data-bar,ec-list,mg-data-acts",
+    "2h the folder is named and changed in the Library alone, on Catalog and data's bar (the title line naming it for search), with each act in"
     + " the home it belongs to and nothing floating in the body; Settings offers no catalog"
     + " section at all (452): " + JSON.stringify(row));
   const setBar = await s.p.evaluate(() => {
@@ -1961,7 +1949,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const open = document.querySelector("#mgCatFolderPath");
     const path = open ? open.title : "";
-    document.querySelector("#mgClose").click(); await wait(600);
+    document.querySelector('#tabsBar .tab.screen[data-sid="library"] .tab-x').click(); await wait(600);
     document.getElementById("settingsBtn").click(); await wait(400);
     document.querySelector('#settingsMenu [data-act="settings"]').click(); await wait(900);
     return { step: "open", path,
@@ -2468,40 +2456,33 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(!noBuild.html && noBuild.catalog,
     "2s8 the Library open has no #mgExportHtml, and Export catalog is still there: "
     + JSON.stringify(noBuild));
-  const wipeBar = await (await s.b.pages())[0].evaluate(() => {
-    const acts = document.querySelector("#screenHost .screen-actions");
-    const ids = acts ? Array.from(acts.querySelectorAll("button")).map(b => b.id) : [];
-    const wipe = document.getElementById("mgWipe");
-    const close = document.getElementById("mgClose");
+  /* THE FOOTER WENT (Maxim, 2026-11-09 20:31): no Close and no bar under the list; Clear local changes is a row of
+     Catalog and data, still danger. */
+  const wipeRow = await (await s.b.pages())[0].evaluate(() => {
+    const page = document.querySelector('#screenHost .sx-sec[data-lm="data"]');
+    if (page) page.click();
     const fold = document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
+    const wipe = document.getElementById("mgWipe");
     return {
-      wipeInBar: !!(acts && wipe && acts.contains(wipe)),
-      closeInBar: !!(acts && close && acts.contains(close)),
-      wipeInFold: !!(fold && wipe && fold.contains(wipe)),
+      footer: !!document.querySelector("#screenHost .lib-list .screen-actions"),
+      close: !!document.getElementById("mgClose"),
+      wipeInRow: !!(fold && wipe && wipe.closest('.mg-data-acts .set-row[data-row="clear"]') && fold.contains(wipe)),
       danger: !!(wipe && wipe.classList.contains("danger")),
-      ids,
-      wipeBeforeClose: ids.indexOf("mgWipe") > -1 && ids.indexOf("mgClose") > -1
-        && ids.indexOf("mgWipe") < ids.indexOf("mgClose")
+      rows: fold ? Array.from(fold.querySelectorAll(".mg-data-acts > .set-row")).map(r => r.getAttribute("data-row")) : []
     };
   });
-  const wipeEnds = await (await s.b.pages())[0].evaluate(BAR_ENDS, "mgWipe", "mgClose");
-  check(wipeBar.wipeInBar && wipeBar.closeInBar && !wipeBar.wipeInFold
-        && wipeBar.danger && wipeBar.wipeBeforeClose
-        && wipeEnds.step === "read" && Math.abs(wipeEnds.leftGap) <= 1
-        && Math.abs(wipeEnds.rightGap) <= 1 && Math.abs(wipeEnds.topDelta) <= 1
-        && wipeEnds.between > 0,
-    "2s9 Clear local memory sits in the Library's actions bar before Close, at its left edge with"
-    + " Close at the right, still danger, and not in the Catalog & data fold: "
-    + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
-  /* The one-row bar holds only on a window wide enough for it (template.html, the Library's
-     bar). At 600px wide the bar wraps instead, and every button stays inside the card and is the
-     element under its own centre, so a person can press it. Read by hit test, never by a click:
-     Clear local memory restarts the app. */
+  check(!wipeRow.footer && !wipeRow.close && wipeRow.wipeInRow && wipeRow.danger && wipeRow.rows[0] === "load"
+        && wipeRow.rows[wipeRow.rows.length - 1] === "clear",
+    "2s9 the Library has no footer and no Close, and Clear local changes is the last row of Catalog and data, still danger: "
+    + JSON.stringify(wipeRow));
+
+  /* At 600px wide every button of Catalog and data's rows stays inside the card and is the element
+     under its own centre, so a person can press it. Read by hit test, never by a click. */
   await s.p.setViewport({ width: 600, height: 880 });
   await sleep(400);
   const narrowBar = await s.p.evaluate(() => {
     const card = document.querySelector("#screenHost .lib-list");
-    const acts = card && card.querySelector(".screen-actions");
+    const acts = card && card.querySelector(".mg-data-acts");
     if (!card || !acts) return { step: "missing" };
     const c = card.getBoundingClientRect();
     const btns = Array.from(acts.querySelectorAll("button")).filter(b => b.offsetParent);
@@ -2516,9 +2497,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   await s.p.setViewport(null);
   await sleep(400);
-  check(narrowBar.step === "read" && narrowBar.width === 600 && narrowBar.n >= 3
+  check(narrowBar.step === "read" && narrowBar.width === 600 && narrowBar.n >= 2
         && narrowBar.out.every(b => b.inside && b.hit),
-    "2s9w at 600px wide the Library's bar wraps, and every button lies inside the card and is"
+    "2s9w at 600px wide every button of Catalog and data's rows lies inside the card and is"
     + " the element under its own centre: " + JSON.stringify(narrowBar));
 
   /* Eject from that row: the Library is still there over the desk started again in place, showing
@@ -2545,8 +2526,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* Clear local memory is driven at 2w below, in a launch of its own: it restarts the app, and
      the legs here are about a dialog that has to still be standing afterwards. */
 
-  /* THE CONTROL, and the whole reason the legs above are not vacuous: the three ways a person
-     closes the Library's tab still close it, its Close, its cross and Ctrl+W. */
+  /* THE CONTROL, and the whole reason the legs above are not vacuous: the two ways a person
+     closes the Library's tab still close it, its cross and Ctrl+W. */
   closed = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const out = {};
@@ -2555,9 +2536,6 @@ const placeEc = (dir, from, as, minutesOld) => {
       document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1000);
       return !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     };
-    out.openedA = await open();
-    document.getElementById("mgClose").click(); await wait(700);
-    out.afterClose = !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]');
     out.openedB = await open();
     const x = document.querySelector('#tabsBar .tab.screen[data-sid="library"] .tab-x');
     out.hasX = !!x;
@@ -2575,9 +2553,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(900);
   const afterEsc = await (await s.b.pages())[0].evaluate(() =>
     !!document.querySelector('#screenHost details.manage-sec[data-mg="data"]'));
-  check(closed.openedA && !closed.afterClose && closed.openedB && closed.hasX && !closed.afterX
+  check(closed.openedB && closed.hasX && !closed.afterX
         && reopened && !afterEsc,
-    "2s6 control: Close, the tab's cross and Ctrl+W all still close it, so 2s to 2s5 are a tab that stays"
+    "2s6 control: the tab's cross and Ctrl+W both still close it, so 2s to 2s5 are a tab that stays"
     + " open rather than one nothing can shut: " + JSON.stringify(closed)
     + ", reopened " + reopened + ", after Ctrl+W " + afterEsc);
   await s.stop();
@@ -2594,30 +2572,31 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
   await sleep(7000);
   let wp = (await s.b.pages())[0];
-  /* Two preferences of exactly the kind the wipe is FOR, so the leg can tell a wipe from a
-     button that did nothing. Neither is the catalog folder and neither is namespaced. */
-  await wp.evaluate(() => { window.lsSet("eTheme", "light"); window.lsSet("eNoteHover", "0"); });
+  /* A star, the kind of change the clear is FOR, so the leg can tell a clear from a button that did
+     nothing; and two settings, which a clear leaves to Reset defaults. */
+  await wp.evaluate(() => { window.lsSet("eTheme", "light"); window.lsSet("eNoteHover", "0");
+    const c = document.querySelector(".card[data-id]"); window.__starred = c ? c.getAttribute("data-id") : "";
+    if (window.__starred && !window.isFavourite(window.__starred)) window.toggleFavourite(window.__starred); });
   await sleep(1200);
   const beforeWipe = await wp.evaluate(() => ({
-    folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
+    folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"), starred: window.__starred,
+    star: !!window.__starred && window.isFavourite(window.__starred),
     hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
   /* Clear happens at once with its Undo standing (2026-09-28 20:06); the Undo is READ BACK, since a
      press that did nothing looks exactly like a dead button. It is left unanswered. */
   const stubbed = await wp.evaluate(() => { clearLocalMemory(); return !!document.getElementById("eUndoBtn"); });
   await sleep(9000);
   wp = (await s.b.pages())[0];
-  const afterWipe = await wp.evaluate(() => ({
-    folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
-    hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
+  const afterWipe = await wp.evaluate(id => ({
+    folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"), star: !!id && window.isFavourite(id),
+    hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }), beforeWipe.starred);
   check(stubbed && beforeWipe.folder === catFolder("wipe") && afterWipe.folder === catFolder("wipe"),
-    "2w Clear local memory leaves eCatalogFolder where it was: " + JSON.stringify(beforeWipe.folder)
+    "2w Clear local changes leaves eCatalogFolder where it was: " + JSON.stringify(beforeWipe.folder)
     + " before, " + JSON.stringify(afterWipe.folder) + " after");
-  check(beforeWipe.theme === "light" && beforeWipe.hover === "0"
-        && afterWipe.theme == null && afterWipe.hover == null,
-    "2w2 control: the same press did forget the two preferences beside it, so 2w is a key kept"
-    + " rather than a wipe that never ran - theme " + JSON.stringify(beforeWipe.theme) + " to "
-    + JSON.stringify(afterWipe.theme) + ", note-hover " + JSON.stringify(beforeWipe.hover)
-    + " to " + JSON.stringify(afterWipe.hover));
+  check(beforeWipe.star && !afterWipe.star && afterWipe.theme === "light" && afterWipe.hover === "0",
+    "2w2 control: the same press did take the star, so 2w is a key kept rather than a clear that never ran, and it"
+    + " left the two settings to Reset defaults - star " + beforeWipe.star + " to " + afterWipe.star + ", theme "
+    + JSON.stringify(afterWipe.theme) + ", note-hover " + JSON.stringify(afterWipe.hover));
   await s.stop();
   s = await launch(udW);
   const wipedSaid = s.said.some(l => l.indexOf("catalog folder " + catFolder("wipe")) > -1);

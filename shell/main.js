@@ -9709,6 +9709,37 @@ let lastProfiles = null, lastProfilesEpoch = null;
    warm for this catalog, fills that strip with its five instead, if they come within EMBED_BUDGET_MS of the press. */
 const EMBED_BUDGET_MS = 250;
 const EMBED_WARM_DELAY_MS = 15000;
+/* Search passage vectors, in the desk's own user-data folder. The name is the cache key, 64 hex, so a path cannot escape. */
+function searchCacheDir() { return path.join(app.getPath("userData"), "search-embed"); }
+function searchCacheFile(key) {
+  return /^[0-9a-f]{64}$/.test(String(key || "")) ? path.join(searchCacheDir(), String(key) + ".bin") : "";
+}
+function searchCacheRead(key) {
+  const at = searchCacheFile(key);
+  if (!at) return null;
+  try { return fs.readFileSync(at); } catch (e) { return null; }
+}
+function searchCacheWrite(key, buf) {
+  const at = searchCacheFile(key);
+  if (!at || !Buffer.isBuffer(buf)) return;
+  fs.mkdirSync(searchCacheDir(), { recursive: true });
+  const tmp = at + ".tmp";
+  fs.writeFileSync(tmp, buf);
+  renamePatiently(tmp, at);
+}
+function searchCachePrune(keep) {
+  let names = [];
+  try { names = fs.readdirSync(searchCacheDir()); } catch (e) { return; }
+  const entries = [];
+  for (const name of names) {
+    if (!/^[0-9a-f]{64}\.bin$/.test(name)) continue;
+    try { entries.push({ name, mtime: fs.statSync(path.join(searchCacheDir(), name)).mtimeMs }); } catch (e) { /* gone already */ }
+  }
+  if (!embedLib) return;
+  for (const name of embedLib.cacheKeep(entries, keep)) {
+    try { fs.unlinkSync(path.join(searchCacheDir(), name)); } catch (e) { /* already gone */ }
+  }
+}
 const embedSuggest = (() => {
   if (!embedLib) return null;
   const base = INSTALLED ? path.join(String(process.resourcesPath || ""), "embed") : "";
@@ -9718,7 +9749,10 @@ const embedSuggest = (() => {
     fork: file => {
       const c = utilityProcess.fork(file, [], { serviceName: "Etiuda suggestions", stdio: "ignore" });
       return { post: m => c.postMessage(m), onMessage: fn => c.on("message", fn), onExit: fn => c.on("exit", fn), kill: () => c.kill() };
-    }
+    },
+    cacheRead: searchCacheRead,
+    cacheWrite: searchCacheWrite,
+    cachePrune: searchCachePrune
   });
 })();
 /* The model is warmed for what it embeds, the intents' passages, so a save that leaves every intent's words alone
@@ -9752,9 +9786,22 @@ function isOwnText(text) {
   const h = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
   return h === lastOwnText;
 }
-function readClipText() {
-  try { return String(clipboard.readText() || ""); }
-  catch (e) { return ""; }
+/* THE CLIPBOARD'S TEXT, handed to then(text). Windows' readText answers at once and the opening goes on in the same turn,
+   as before; Electron 44 on Linux answers with a Promise (Claude gamma's Ubuntu walk, 2026-11-09), which used to be read
+   as "[object Promise]", so a copied message was never suggested there. That one is awaited. */
+const CLIP_WAIT_MS = 1000;
+function withClipText(then) {
+  let got = "";
+  try { got = clipboard.readText(); } catch (e) { got = ""; }
+  if (got && typeof got.then === "function") {
+    /* A read that never settles must not leave the picker unable to open again: after CLIP_WAIT_MS it opens with no
+       message to suggest from, as for an empty clipboard. */
+    const late = new Promise(done => setTimeout(() => done(""), CLIP_WAIT_MS));
+    Promise.race([Promise.resolve(got).then(t => String(t || ""), () => ""), late]).then(then)
+      .catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
+    return;
+  }
+  then(String(got || ""));
 }
 /* THE HOTKEY. A second press while the picker stands closes it; otherwise the desk's page is asked
    for what to show, the picker is filled while hidden and shown only once its page says it has
@@ -9769,8 +9816,10 @@ function pickToggle() {
   const press = ++pickPress;
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
-  let clip = "";
-  try { clip = readClipText(); } catch (e) { clip = ""; }
+  withClipText(text => pickWithClip(press, which, text));
+}
+function pickWithClip(press, which, text) {
+  let clip = text;
   const isOwn = isOwnText(clip);
   const want = !isOwn && readsLikeMessage(clip);
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
@@ -9901,6 +9950,22 @@ ipcMain.on("etiuda:ai-state", (e) => {
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;
   if (on) { embedSuggest.setOn(true); warmSuggestSoon(); } else embedSuggest.setOn(false);
+});
+/* The main search's own switch, and the ranking it asks for. Preparation returns at once; the passages embed in the
+   worker afterwards. A rank before they are ready, or under three letters, is null, and the page keeps the word order. */
+ipcMain.on("etiuda:search-set", (e, on) => {
+  if (!fromEngine(e) || !embedSuggest) return;
+  embedSuggest.setSearchOn(!!on);
+});
+ipcMain.handle("etiuda:search-prepare", (e, rows) => {
+  if (!fromEngine(e)) return null;
+  if (!embedSuggest) return { ready: false, skipped: true };
+  try { return embedSuggest.prepareSearch(rows) || { ready: false, skipped: true }; }
+  catch (err) { return { ready: false, skipped: true }; }
+});
+ipcMain.handle("etiuda:search-rank", (e, text) => {
+  if (!fromEngine(e) || !embedSuggest) return null;
+  return embedSuggest.searchRank(String(text == null ? "" : text));
 });
 /* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
    nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */

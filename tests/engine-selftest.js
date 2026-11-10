@@ -1746,6 +1746,7 @@ Module.prototype._compile = function (content, filename) {
     "update-install.js": "a machine-window gate: it needs an older installer, and for --all-users an elevated shell, so no chain can run it; its plan and verdicts are held by tests/install-plan-selftest.js",
     "silent-update-desk.js": "a machine-window gate: an installer-style close with draft kept; its node half is tests/desk-ipc.mjs in npm test",
     "eject-desk.js": "a machine-window gate: Eject leaves the window answering; its node half is desk-ipc 1153 in npm test",
+    "opening-frame.js": "a machine-window gate: the desk's first frame read in the shell; its node half is the head guard's and the opening's legs in tests/test.js",
     "no-crash-dialog-desk.js": "a machine-window gate: an uncaught load error in Electron main process; its node half is tests/no-crash-dialog.mjs in npm test",
     "linux-desk.js": "a machine-window gate on Linux: it needs the .deb installed or the AppImage and a display, so it runs by hand; its packages are judged by tests/linux-package.mjs in npm test",
     "linux-keyring.js": "a machine-window gate on Linux: it needs the .deb installed, a display, D-Bus and gnome-keyring, so it runs by hand; the shell's keyring choice is held in node by tests/shell-office.mjs 14 in npm test",

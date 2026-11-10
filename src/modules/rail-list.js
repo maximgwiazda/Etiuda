@@ -22,6 +22,7 @@ import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch,
 import { captureSettle, glideSettle } from "./paint.js";
 import { hooks } from "./hooks.js";
 import { catalogVariables } from "./variables.js";
+import { mixIntentRows, searchOnSettle } from "./search-meaning.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.
@@ -182,6 +183,7 @@ function railScheduleSort(){
 function railSettle(){
   clearTimeout(railSortT); setRailSortT(0);
   if(typeof dragState!=="undefined" && dragState) return;   // never mid-drag, as with pills
+  searchOnSettle();
   const cardsBefore=captureSettle();
   /* The armed filter drops here, so the bar, the numbers and the cards state one thing at one
      moment. Nothing to drop if the box ended up empty again: a letter typed and erased is not
@@ -442,7 +444,9 @@ function drawIntentRailCore(){
   // Clearing innerHTML collapses the scroller and drops scrollTop to 0, which both loses the
   // user's place and makes the reorder animation measure against the wrong geometry.
   const keepScroll=box.scrollTop;
-  const rows=displayIntentRows();
+  let rows=displayIntentRows();
+  const mixedRows=mixIntentRows(rows);
+  if(mixedRows) rows=mixedRows;
   /* THE EMPTY RAIL SAYS ONE LINE, as the card area beside it does: a bare panel reads as not
      loaded. Ahead of the reuse path, which answers an empty map for nothing to draw. */
   if(!intentCount()){

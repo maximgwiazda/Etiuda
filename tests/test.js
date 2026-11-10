@@ -63,7 +63,7 @@ function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
    catalogue of the file's prose in the test and make every reflow a diff.
    IT SCANS BLOCKS, NOT LINE STARTS: this file writes continuations without a leading star, so
    matching on the first character counted a ten-line comment as one and waved essays through. */
-const COMMENT_ESSAY_BUDGET = 51;
+const COMMENT_ESSAY_BUDGET = 50;
 function checkCommentCeiling(src) {
   const lines = src.split(/\r?\n/), found = [];
   let i = 0;
@@ -657,12 +657,13 @@ function lanePageKeyTests() {
 function ejectUndoTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
   const loose = extractDecl(fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8"), "const LOOSE_FIELDS=");
-  const markers = ["function catalogKeep(", "const E_WIPE_KEEP=", "const SHARE_KEEP=", "const PACK_KEEP=", "const LAYER_KEEP=",
-    "function packFileHalf(", "const E_PREF_KEYS=", "function eKeyIsPref(",
-    "function eKeyIsMine(", "function keepKeys(", "function putBack(", "function clearLocalMemory(",
+  const markers = ["function catalogKeep(", "const CLEAR_KEEP_LAYER=", "const CLEAR_KEEP_PACK=", "function packKept(",
+    "function keepKeys(", "function putBack(", "function clearLocalMemory(",
     "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
   const OWN_PACK = JSON.stringify({ overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], favourites: ["c1"], hidden: ["c2"],
     intentFavourites: ["i1"], intentHidden: ["i2"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"], cardOrder: ["c1"] });
+  const LAYER = extractDecl(fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8"), "const LAYER_KEYS=")
+    .replace(/^const LAYER_KEYS=/, "").replace(/;\s*$/, "");
   const world = (ssOk, desk = true) => {
     const w = { ls: {}, ss: {}, restarts: 0, undo: null, said: null, reloads: 0 };
     const ns = k => "e" + k;
@@ -671,7 +672,7 @@ function ejectUndoTests() {
     try {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
-        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch",
+        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS",
         loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
         ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
@@ -679,7 +680,7 @@ function ejectUndoTests() {
         () => Object.keys(w.ls), () => ["eab12~"],
         () => Promise.resolve(null), () => Promise.resolve(), () => {},
         (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
-        { reload: () => { w.reloads++; } }, () => desk);
+        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER));
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
              eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": OWN_PACK, ePack: "[\"loose\"]",
@@ -703,27 +704,21 @@ function ejectUndoTests() {
   eq("its Undo puts back every key the eject took and the conversations, byte for byte, and starts the desk again",
     [sorted(w.ls) + sorted(w.ss) === before, w.reloads, w.restarts], [true, 0, 2]);
   w.F.clearLocalMemory();
-  eq("a clear forgets what lives only on this desk (the preferences, the counts, the orders, the asides, a pack with nothing a"
-    + " file carries), keeps the catalog with what names it, the folder, a neighbour's keys, the name the desk's file is signed"
-    + " with, the keys naming that file and the layer list, and starts the desk again once",
-    [Object.keys(w.ls).sort(), w.reloads, w.restarts, w.said],
-    [["e1zz~Pack", "eAgent", "eCatalog", "eCatalogFile", "eCatalogFileAt", "eCatalogFolder", "eCatalogFrom", "eCatalogNo", "eCatalogOk",
-      "eCatalogTrust", "eLayers", "eSample", "eab12~LooseId", "eab12~Pack", "eab12~SharedFile"], 0, 3, "Local memory cleared"]);
-  eq("and of a layer's pack it keeps what the desk's own file carries with the fields its ids are keyed by, and forgets the"
-    + " stars and the hides (Maxim, 2026-10-05, 12c: only what is actually in the local memory)",
-    JSON.parse(w.ls["eab12~Pack"] || "null"),
-    { overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], cardOrder: ["c1"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"] });
+  const KEPT = ["e1zz~Pack", "eAgent", "eCatalog", "eCatalogFile", "eCatalogFileAt", "eCatalogFolder", "eCatalogFrom", "eCatalogNo",
+    "eCatalogOk", "eCatalogTrust", "eLayers", "eSample", "eTheme", "eTourDone_v3", "eab12~LooseId", "eab12~Pack", "eab12~SharedFile", "eab12~Stats"].sort();
+  eq("a clear takes every change to the content from each layer this desk wrote (the loose pack, the orders, the asides) and"
+    + " keeps the rest: the catalog with what names it, the folder, the name, the settings, the tour, the counts, the keys naming"
+    + " the desk's own file, the layer list and a neighbour's keys; it starts the desk again once (Maxim, 2026-11-09 20:31)",
+    [Object.keys(w.ls).sort(), w.reloads, w.restarts, w.said], [KEPT, 0, 3, "Local changes cleared"]);
+  eq("and of a layer's pack it takes the edits, the own cards, the stars, the hides and the order, and keeps the fields that"
+    + " are not a change to the content", JSON.parse(w.ls["eab12~Pack"] || "null"), { intentKeys: "tag" });
   if (w.undo) w.undo();
   eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
   const page = world(true, false);
   const pageBefore = sorted(page.ls) + sorted(page.ss);
   page.F.clearLocalMemory();
-  eq("with no desk file (a browser), a clear forgets the own cards, edits and deletions with every layer's pack, the keys"
-    + " naming a file, the name and the layer list, and keeps the catalog with what names it, the folder and a neighbour's keys"
-    + " (12c: in a browser all of it is local memory)",
-    [Object.keys(page.ls).sort(), page.restarts, page.said],
-    [["e1zz~Pack", "eCatalog", "eCatalogFile", "eCatalogFileAt", "eCatalogFolder", "eCatalogFrom", "eCatalogNo", "eCatalogOk",
-      "eCatalogTrust", "eSample"], 1, "Local memory cleared"]);
+  eq("with no desk file (a browser) the clear is the same",
+    [Object.keys(page.ls).sort(), page.restarts, page.said], [KEPT, 1, "Local changes cleared"]);
   if (page.undo) page.undo();
   eq("and its Undo puts every key back, byte for byte", sorted(page.ls) + sorted(page.ss) === pageBefore, true);
   const deaf = world(false);
@@ -2526,9 +2521,8 @@ function recoveryTests() {
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
   const guard = m ? m[1] : "";
-  const run = (host, arriving) => {
+  const run = (host, store, quiet) => {
     const cls = new Set(), head = [];
-    const store = arriving ? { eArriving: "1" } : {};
     const el = () => ({ style: { setProperty() {} }, setAttribute(k, v) { this[k] = v; },
       blocking: { supports: w => w === "render" }, appendChild() {} });
     const sb = {
@@ -2537,7 +2531,8 @@ function recoveryTests() {
         head: { appendChild: n => head.push(n) }, createElement: el, getElementById: () => null, querySelector: () => null },
       sessionStorage: { getItem: k => store[k] || null, removeItem: k => { delete store[k]; }, setItem: (k, v) => { store[k] = v; }, clear() {} },
       localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
-      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      matchMedia: q => ({ matches: !!quiet && /reduced-motion/.test(q) }),
+      location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
       navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
       setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
     };
@@ -2547,13 +2542,17 @@ function recoveryTests() {
     return [cls.has("e-arriving"), hold.length];
   };
   let got;
+  const seen = { eLaunched: "1" };
   try {
-    got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
+    got = [run({ recovering: true }, seen), run({ recovering: true }, {}), run({ recovering: false }, seen),
+      run(null, { eArriving: "1", eLaunched: "1" }), run(null, {}), run(null, {}, true)];
   } catch (e) { got = "the boot guard threw: " + e.message; }
   /* The page no longer reloads itself to change catalogs, so a session mark alone, which only that
-     reload wrote, holds nothing: the third case is the one that changed. */
-  eq("the guard holds the first frame for the shell's recovery, and for nothing else, a stray session mark included",
-    got, [[true, 1], [false, 0], [false, 0], [false, 0]]);
+     reload wrote, holds nothing. A launch, the session's first load with motion on, is held for the opening
+     (Max, 2026-11-09 20:26: "the opening animation should play right away, with no empty state desk showing up
+     before it starts playing"); a load the session has launched before, and a quiet one, are not. */
+  eq("the guard holds the first frame for the shell's recovery and for a launch, once each, and for nothing else: not a load the session launched before, a stray session mark or a quiet desk",
+    got, [[true, 1], [true, 1], [false, 0], [false, 0], [false, 1], [false, 0]]);
 }
 /* THE FIRST PAINT READS THE SETTINGS WHERE THEY ARE KEPT: an installed Etiuda keeps them in its desk
    file and never in localStorage, so the head script reads the desk the shell hands it, once, and
@@ -3365,6 +3364,24 @@ function launchMarkTests() {
   eq("given way by itself, the work rises in over 350 ms and the drawing stops with the veil", got, ["time", "350ms", true, false, false]);
 
   try {
+    /* The opening starts on the window's word that it is on screen, not on the next look 150 ms on: the word at 40 ms
+       asks for the first frame at once; without the word the look at 150 ms is the first that asks. */
+    const word = withWord => {
+      let seen = false, tell = null;
+      const L = launchLab({ covered: () => !seen });
+      L.launch(withWord ? { shown: fn => { if (seen) fn(); else tell = fn; } } : {});
+      const before = L.frames();
+      L.timersTo(40); seen = true; if (tell) tell();
+      const at = L.frames();
+      L.timersTo(160);
+      return [before, at, L.frames()];
+    };
+    got = [word(true), word(false)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the opening asks for its first frame on the window's word that it is shown, at once, and not on the next look 150 ms on",
+    got, [[0, 1, 1], [0, 0, 1]]);
+
+  try {
     const L = launchLab({ still: true }), h = L.launch(); const framesAsked = L.frames(), dots = L.drawn.arc, img = L.drawn.image;
     L.ready(); L.timersTo(6000);
     // the control: moving, the same launch asks for frames and draws nothing until one comes
@@ -3446,13 +3463,13 @@ function launchMarkTests() {
       require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
       const o = calls[0];
       return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.markCovered, typeof o.ready.then,
-        o.phase === sb.fifthPhase, o.R || null] : null, handed.length];
+        o.phase === sb.fifthPhase, o.R || null, o.shown === sb.afterShown] : null, handed.length];
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock",
-    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0], [0, [], null, 0],
-      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null], 0]]);
+    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null, true], 0], [0, [], null, 0],
+      [1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true, null, true], 0]]);
 
   try {
     // with a launch arriving, the chrome is already repainted and the menu's warm copy is what waits
@@ -5844,8 +5861,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1330;
-const UI_STRINGS_SHA256 = "37b0fd61438ac477858388e8d88b80dd559948aa4b3923353da34178c8e83d6e";
+const UI_STRINGS_COUNT = 1341;
+const UI_STRINGS_SHA256 = "1404668ff515aa08cac8e6a124230c535bb57a86cfb29581cd8a76190ec385b8";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or

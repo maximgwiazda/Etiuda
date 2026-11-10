@@ -153,14 +153,22 @@ try {
       'if (process.env.FUSES_LAB_PROGRAM) fs.copyFileSync(process.env.FUSES_LAB_PROGRAM, p.join(d, "win-unpacked", "Etiuda.exe"));',
       'fs.mkdirSync(p.join(d, "win-unpacked", "resources"), { recursive: true });',
       'if (!process.env.FUSES_LAB_NO_CARET) fs.writeFileSync(p.join(d, "win-unpacked", "resources", "caret.exe"), "a stub helper");',
+      'if (process.env.FUSES_LAB_ASAR) fs.copyFileSync(process.env.FUSES_LAB_ASAR, p.join(d, "win-unpacked", "resources", "app.asar"));',
       'fs.writeFileSync(p.join(d, "etiuda-lab-setup.exe"), "a stub installer");'].join('\n'));
     fs.writeFileSync(path.join(LAB, 'node_modules', '.bin', 'electron-builder.cmd'), '@node "%~dp0..\\..\\stub.cjs" %*\r\n');
+    /* The step reads the tray's picture back out of the asar before the caret helper, so the stub's build carries a
+       small real asar holding it; the fuse and caret checks are what 5a to 5d read. */
+    const ASAR_SRC = path.join(TMP, 'asar-src'), ASAR = path.join(TMP, 'lab-app.asar');
+    fs.mkdirSync(path.join(ASAR_SRC, 'shell'), { recursive: true });
+    fs.writeFileSync(path.join(ASAR_SRC, 'shell', 'etiuda.ico'), 'a stub picture');
+    await require('@electron/asar').createPackage(ASAR_SRC, ASAR);
     const pack = (name, file, noCaret) => {
       const env = { ...process.env, ETIUDA_DIST: path.join(TMP, 'out-' + name) };
       delete env.FUSES_LAB_PROGRAM;
       delete env.FUSES_LAB_NO_CARET;
       if (file) env.FUSES_LAB_PROGRAM = file;
       if (noCaret) env.FUSES_LAB_NO_CARET = '1';
+      env.FUSES_LAB_ASAR = ASAR;
       const r = spawnSync(process.execPath, [path.join(LAB, 'tools', 'package.mjs')],
         { cwd: LAB, env, encoding: 'utf8', windowsHide: true, timeout: 60000 });
       return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };

@@ -88,7 +88,7 @@ module.exports = {
   copyright: "Copyright (c) 2026 Maxim Gwiazda",
   extraMetadata: { version },
   directories: { output, buildResources: "shell" },
-  // An allowlist, the same discipline as .gitignore's blocklist in reverse: nineteen files go in
+  // An allowlist, the same discipline as .gitignore's blocklist in reverse: twenty files go in
   // and the src tree, the harness and the tools stay out of a customer's machine. The pin
   // travels with the artefact it describes, or the shell serves script-src 'none' and the
   // packaged app opens on a blank window. The last is the sample catalog the shell puts in the
@@ -103,7 +103,10 @@ module.exports = {
           "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec",
           // The tray's PNG, which Linux reads where it reads an .ico as empty (board 973). In the root list, not a
           // linux-level `files`, so it can never stand in for the root list.
-          "shell/etiuda-tray.png"],
+          "shell/etiuda-tray.png",
+          // The tray's picture on Windows, read from the asar at run time; the installer's and the exe's icon
+          // (`icon:` below) is a build input and never reaches the asar by itself (Max's finding, 2026-11-09).
+          "shell/etiuda.ico"],
   asar: true,
   // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
   // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read

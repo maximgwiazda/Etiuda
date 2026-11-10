@@ -1579,29 +1579,32 @@ const t0 = Date.now();
     "Settings holds General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About, the name above the"
     + " language and nothing about catalogs: " + JSON.stringify(setSecs));
   await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
-  /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
-     fact worth asserting is the one the app owns: that the fold a person left open is still open
-     when Manage is drawn again. This read mgOpen until 2026-09-13 - the module's own Set, reached
-     off the page through the bridge - which is the module asserting its own opinion, board item
-     264's fault. What is on screen is details[open] after a redraw, so that is what is read, and
-     the section is put back the way it was found. */
+  /* THE LIBRARY'S PAGES. Each section is a page, its fold's summary hidden, so a page whose fold is shut shows its
+     title and nothing under it (Max's finding of 2026-11-09). What is asserted is what is on screen after a redraw:
+     the page left on is the page again, open, and a page whose fold a script shut is open when drawn. */
   await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(900);
+  const shownPage = () => p.evaluate(() => { const d = [...document.querySelectorAll("#screenHost details[data-mg]")].filter(x => !x.hidden);
+    return d.length === 1 ? { key: d[0].getAttribute("data-mg"), open: d[0].open } : { key: null, n: d.length }; });
   const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#screenHost details[data-mg]")];
-    const d = ds.find(x => !x.open); if (!d) return { n: ds.length, key: null };
-    d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
-    return { n: ds.length, key: d.getAttribute("data-mg"), toggled: d.open }; });
-  const reopen = k => p.evaluate(async key => { closeScreenTab("library"); await new Promise(r => setTimeout(r, 400));
-    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700));
-    const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
-    return d ? d.open : null; }, k);
-  const mgAfter = mgKey.key === null ? null : await reopen(mgKey.key);
+    const d = ds.find(x => x.hidden); if (!d) return { n: ds.length, key: null };
+    const key = d.getAttribute("data-mg");
+    document.querySelector('#screenHost .sx-sec[data-lm="' + key + '"]').click(); await new Promise(r => setTimeout(r, 450));
+    const now = document.querySelector('#screenHost details[data-mg="' + key + '"]');
+    return { n: ds.length, key, toggled: !!now && !now.hidden && now.open }; });
+  const reopen = () => p.evaluate(async () => { closeScreenTab("library"); await new Promise(r => setTimeout(r, 400));
+    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700)); });
+  if (mgKey.key !== null) await reopen();
+  const mgAfter = mgKey.key === null ? null : await shownPage();
   if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#screenHost details[data-mg="' + key + '"]');
-    if (d && d.open) d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
-  const mgBack = mgKey.key === null ? null : await reopen(mgKey.key);
+    if (d && d.open) d.open = false; await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
+  if (mgKey.key !== null) await reopen();
+  const mgBack = mgKey.key === null ? null : await shownPage();
   check(mgKey.n > 0 && mgKey.key !== null && mgKey.toggled === true,
-    "a closed Manage section opens on its summary (" + mgKey.n + " sections)");
-  check(mgAfter === true, "and is still open when Manage is drawn again (details[open] " + mgAfter + ")");
-  check(mgBack === false, "and closing it survives the same redraw (details[open] " + mgBack + ")");
+    "a Library section click shows its page, open (" + mgKey.n + " sections)");
+  check(!!mgAfter && mgAfter.key === mgKey.key && mgAfter.open === true,
+    "and that page is the one shown, open, when the Library is drawn again (" + JSON.stringify(mgAfter) + ")");
+  check(!!mgBack && mgBack.key === mgKey.key && mgBack.open === true,
+    "and a page whose fold was shut is open when drawn, a page having no summary to open it by (" + JSON.stringify(mgBack) + ")");
 
   /* THE SAME LIST A DESK HAS, in a browser that has no folder to read: one row, the catalog this
      page is holding, marked and offering Eject. The file-backed rows are the host's, so what is
@@ -1645,10 +1648,9 @@ const t0 = Date.now();
     + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
 
-  /* 2s9x: THE LIBRARY'S BAR ON A NARROW WINDOW, the desk's whole bar in Polish, its longest. A
-     browser has no host, so Join a team and Earlier versions are added as the desk draws them.
-     At 600 by 880 every button lies inside the card and is the element under its own centre (a
-     hit test: Clear local memory restarts the app); at 1280 the bar is still one row. */
+  /* 2s9x: CATALOG AND DATA'S ROWS ON A NARROW WINDOW, in Polish, its longest. A browser has no host,
+     so Join a team and Saved copies are added as the desk draws them. At 600 and at 1280 by 880 every
+     button lies inside the card and is the element under its own centre, read by hit test. */
   const libBar = async (width) => {
     await p.setViewport({ width, height: 880 }); await sleep(500);
     return p.evaluate(async () => {
@@ -1656,8 +1658,10 @@ const t0 = Date.now();
       closeScreenTab("library"); await wait(300);
       setUiLang("pl"); await wait(400);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
+      const page = document.querySelector('#screenHost .sx-sec[data-lm="data"]');
+      if (page) { page.click(); await wait(300); }
       const card = document.querySelector("#screenHost .lib-list"), load = document.getElementById("mgImportCatalog");
-      const acts = card && card.querySelector(".screen-actions");
+      const acts = card && card.querySelector(".mg-data-acts");
       if (!acts || !load) return { step: "missing" };
       for (const [id, label] of [["mgJoinTeam", "Dołącz do zespołu"], ["mgHistory", "Zapisane kopie…"]]) {
         if (document.getElementById(id)) continue;
@@ -1682,12 +1686,11 @@ const t0 = Date.now();
   };
   const bar600 = await libBar(600), bar1280 = await libBar(1280);
   await p.setViewport({ width: 1500, height: 950 }); await sleep(500);
-  check(bar600.step === "read" && bar600.width === 600 && bar600.lang === "pl" && bar600.n === 5
+  check(bar600.step === "read" && bar600.width === 600 && bar600.lang === "pl" && bar600.n === 4
         && bar600.out.every(b => b.inside && b.hit)
-        && bar1280.step === "read" && bar1280.width === 1280 && bar1280.n === 5 && bar1280.rows === 1,
-    "2s9x the Library's whole bar in Polish: at 600px every button lies inside the card and is the"
-    + " element under its own centre, and at 1280px it is one row: "
-    + JSON.stringify({ bar600, bar1280: { rows: bar1280.rows, n: bar1280.n } }));
+        && bar1280.step === "read" && bar1280.width === 1280 && bar1280.n === 4 && bar1280.out.every(b => b.inside && b.hit),
+    "2s9x Catalog and data's rows in Polish: at 600px and at 1280px every button lies inside the card and is the"
+    + " element under its own centre: " + JSON.stringify({ bar600, bar1280: { n: bar1280.n } }));
 
   /* THE AWAITING MARK ON THE LIBRARY ROW, board 571. A whole catalog never draws it. The
      catalog is the invented sample with every key named pl taken off, langs still declaring
@@ -2846,9 +2849,9 @@ const t0 = Date.now();
         && undoLeg.moved && undoLeg.retyped,
     "a card deleted from its editor goes at once with no box and Undo brings the same one back, and an entry left"
     + " unsaved is left at once and Undo returns to it with the typing in place: " + JSON.stringify(undoLeg));
-  check(undoLeg.asked === 0 && !undoLeg.cleared.window && undoLeg.cleared.undo && undoLeg.cleared.hover === null
+  check(undoLeg.asked === 0 && !undoLeg.cleared.window && undoLeg.cleared.undo && undoLeg.cleared.hover === "0"
         && undoLeg.cleared.cards > 0 && undoLeg.after.hover && undoLeg.after.cards,
-    "and Clear local memory happens at once with no window, keeps the catalog, and its Undo gives back what it cleared: "
+    "and the clear itself, once asked, happens at once with no window, keeps the catalog and the settings, and its Undo gives back what it cleared: "
     + JSON.stringify({ asked: undoLeg.asked, cleared: undoLeg.cleared, after: undoLeg.after }));
   /* UNDO PUTS BACK THE ACT, NOT THE DESK AS IT STOOD (data-1): a star given while the Undo bubble
      is still up survives the Undo of the deletion before it. Read off the stored pack, and the

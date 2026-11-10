@@ -1478,8 +1478,8 @@ const CARD_B = {
    else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "the module exports the eject and the clear, and nothing else",
-    () => eq(Object.keys(L).sort().join(","), "clearLocalMemory,ejectCatalog"));
+  check("local-memory.js", "the module exports the eject, the clear and the question before it, and nothing else",
+    () => eq(Object.keys(L).sort().join(","), "askClearLocal,clearLocalMemory,ejectCatalog"));
 }
 
 /* ==================================================================================
@@ -5729,7 +5729,7 @@ const CARD_B = {
       }
     });
 
-    check("maintenance.js", "D3-7 Clear local memory and Reset shortcuts are no longer in Maintenance, tab or rescue window, which says where they went; Settings has both", () => {
+    check("maintenance.js", "D3-7 Clear local changes and Reset shortcuts are not in Maintenance, tab or rescue window, which says where they went; Settings has Reset shortcuts and no Clear", () => {
       shutAll();
       MN.openMaintenance();
       const tab = screenHost.innerHTML;
@@ -5737,11 +5737,12 @@ const CARD_B = {
       modal.hidden = true;
       MN.openMaintenanceModal();
       const rescue = modalCard.innerHTML + " " + (byId["#modalCard"].innerHTML || "");
-      const said = "Reset defaults and Clear local memory are in Settings, under Data and defaults.";
-      const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local memory<") < 0 && h.indexOf(">Reset shortcuts<") < 0;
+      const said = "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog &amp; data.";
+      const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local") < 0 && h.indexOf(">Reset shortcuts<") < 0;
       const all = SET.settingsBodyHtml();
       return (gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') >= 0 && gone(modalCard.innerHTML + rescue)
-        && all.indexOf('id="setClear"') >= 0 && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
+        && all.indexOf('id="setClear"') < 0 && all.indexOf(">Clear local") < 0 && all.indexOf('id="setReset"') >= 0
+        && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
     });
 
     check("settings.js", "D3-8 Reset shortcuts on the Keyboard shortcuts page puts every rebinding back, with an Undo", () => {
@@ -7110,6 +7111,52 @@ const CARD_B = {
   if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
   if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
   if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+}
+
+/* ------------------------------------------------------------------ AN IMPORT CALLED AS A FUNCTION IS ONE.
+   2026-11-10: search-meaning.js called ePackEpoch(), which pack.js exports as a number, and the desk died at start
+   with "ePackEpoch is not a function" the moment a packed model made that line run; no leg had run it. So every
+   module's named imports from ./x.js are read from its source, the exporting module is loaded through node's own
+   loader, and a binding the importer calls (a bare name followed by an open bracket, not a member and not a
+   declaration) must be a function there. A module that cannot load in bare node is skipped and counted, never passed. */
+{
+  const fsI = await import("node:fs"), pathI = await import("node:path");
+  const DIR = MODDIR;
+  const files = fsI.readdirSync(DIR).filter(f => f.endsWith(".js"));
+  const loaded = {}, unloadable = [];
+  const nsOf = async f => {
+    if (f in loaded) return loaded[f];
+    try { loaded[f] = await import(MOD(f)); } catch (e) { loaded[f] = null; unloadable.push(f); }
+    return loaded[f];
+  };
+  const wrong = [];
+  let pairs = 0;
+  for (const f of files) {
+    const src = fsI.readFileSync(pathI.join(DIR, f), "utf8");
+    const body = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'\\])\/\/[^\n]*/g, "$1");
+    for (const m of body.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+)["']/g)) {
+      const from = m[2];
+      for (const spec of m[1].split(",").map(x => x.trim()).filter(Boolean)) {
+        const parts = spec.split(/\s+as\s+/);
+        const exported = parts[0].trim(), local = (parts[1] || parts[0]).trim();
+        const called = new RegExp("(^|[^.\\w$])" + local.replace(/\$/g, "\\$") + "\\s*\\(", "m");
+        const declared = new RegExp("function\\s+" + local.replace(/\$/g, "\\$") + "\\s*\\(");
+        if (!called.test(body.replace(declared, ""))) continue;
+        const ns = await nsOf(from);
+        if (!ns) continue;
+        pairs++;
+        /* A slot set later (let x = null, assigned when its owner mounts) is a function only once set, so every call of it
+           must stand behind its own test on the same line: if (x) x() or x && x(). */
+        const v = ns[exported], esc = local.replace(/\$/g, "\\$");
+        const guardedAll = v == null && body.split("\n").filter(l => called.test(l))
+          .every(l => new RegExp("(if\\s*\\(\\s*" + esc + "\\s*\\)|" + esc + "\\s*&&)\\s*" + esc + "\\s*\\(").test(l));
+        if (typeof v !== "function" && !guardedAll) wrong.push(f + " calls " + local + "() from " + from + ", which exports a " + typeof ns[exported]);
+      }
+    }
+  }
+  check("module-calls", "every named import a module calls is a function in the module that exports it: " + pairs
+    + " called import(s) checked over " + files.length + " module(s), " + unloadable.length + " exporter(s) not loadable in bare node"
+    + (unloadable.length ? " " + JSON.stringify(unloadable) : ""), () => wrong.length === 0 && pairs > 50 ? true : JSON.stringify(wrong));
 }
 
 /* ------------------------------------------------------------------ the count, and this

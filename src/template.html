@@ -92,8 +92,14 @@
        document left stays on screen and nothing half-built is painted. Where blocking is not
        understood, the body stays unseen. */
     var host=window.E_HOST;
-    if(host && host.recovering){
-      root.classList.add("e-arriving");
+    if(host && host.recovering) root.classList.add("e-arriving");
+    /* THE OPENING IS THE WINDOW'S FIRST FRAME: a launch, the window session's first load unless quiet (on-open.js
+       deskLaunch), is held the same way, so the shell shows the launch's ground and never the page half-built. */
+    var launching=false;
+    if(!root.classList.contains("e-still")) try{
+      launching=!((dh && typeof host.session==="function") ? host.session("get","eLaunched") : sessionStorage.getItem("eLaunched"));
+    }catch(e){}
+    if(root.classList.contains("e-arriving") || launching){
       var hold=document.createElement("link");
       if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
         hold.rel="expect"; hold.href="#eBooted"; hold.setAttribute("blocking","render");
@@ -105,6 +111,12 @@
       var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
+  }catch(e){}
+  /* The theme before the first frame, chosen as theme.js applyTheme chooses it: the stored choice, else the system's. */
+  try{
+    var th=desk ? desk.eTheme : localStorage.getItem("eTheme");
+    if(th!=="light" && th!=="dark") th=matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", th);
   }catch(e){}
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
@@ -139,6 +151,7 @@
   window.E_BOOT_OK=function(){
     booted=true;
     arrive();
+    document.documentElement.classList.remove("e-veiled");   // a launch held where blocking is not understood
     try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
@@ -3529,10 +3542,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 body.screen-on .fab-stack,
 body.screen-on .pills-slot,
 body.screen-on .pills-probe,
-body.screen-on .stage,
 body.screen-on #railHit,
 body.screen-on #lanes { display: none !important; }
-#screenHost{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
+/* THE WORK STAYS LAID OUT UNDER A SCREEN, skipped rather than undisplayed: display:none drops every card's style,
+   and the way back restyled them all inside the press. The screen covers the stage's own cell. */
+body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-visibility:hidden}
+/* Skipped, the column keeps its last height, or the scroller would clamp to the top and lose its place. */
+.stage>.scroller>.shell{contain-intrinsic-size:auto none}
+#screenHost{grid-area:1/1;position:relative;z-index:1;display:flex;flex-direction:column;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
 #screenHost[hidden]{display:none!important}
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
@@ -3614,6 +3631,7 @@ body.screen-on #lanes { display: none !important; }
    line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
 .mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
+.sx.lm-lib .mg-data-acts>.set-row:first-child{border-top:1px solid var(--line)}
 .sx.lm-lib .manage-secbody{padding-top:0}
 .sx.lm-lib .sx-page details.manage-sec .manage-secbody{display:block}
 .sx.lm-lib .sx-card .mg-cat-row{padding:6px 12px 6px 10px;border-top:1px solid var(--line)}
@@ -3660,6 +3678,9 @@ body.screen-on #lanes { display: none !important; }
 .sx.lm-mt .mt-tab{padding:10px 16px;border-top:1px solid var(--line)}
 @media (max-width:720px){
   .sx.lm-mt .mt-grid{grid-template-columns:minmax(0,1fr)}
+  /* The Library's acts carry long buttons (Saved copies, Clear local changes): narrow, the button goes under its words. */
+  .sx.lm-lib .mg-data-acts>.set-row{grid-template-columns:28px minmax(0,1fr)}
+  .sx.lm-lib .mg-data-acts>.set-row>.set-ctl{grid-column:2;justify-content:flex-start}
 }
 @media (max-height:700px){
   .sx.lm-mt .mt-h{padding:6px 8px}
@@ -3858,6 +3879,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The question before Clear local changes: the strip's place, a heading and two lines stacked above its buttons. */
+.e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
+.e-undo.e-clear-ask p{margin:0 0 8px}
+.e-undo.e-clear-ask .tour-actions{justify-content:flex-end;margin-top:12px}
 /* The key that takes it, on the button in the button's own ink. */
 .e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
   border-radius:4px;font:11px var(--mono);font-weight:400}
@@ -4393,8 +4418,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
-<div id="screenHost" class="screen-host" hidden></div>
-
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">
 <div class="dotfield" id="dotField" aria-hidden="true"><div></div></div>
@@ -4426,6 +4449,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </main>
 </div>
 </div>
+<div id="screenHost" class="screen-host" hidden></div>
 </div>
 
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
