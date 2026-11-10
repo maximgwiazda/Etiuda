@@ -1562,11 +1562,12 @@ body.e-take-drag .pills-slot.pills-overflow::before,
    counter-scale by the same value the pill scales by. */
 @property --pill-sx{syntax:"<number>";inherits:true;initial-value:1}
 .pill{display:inline-flex;align-items:center;
-  padding:5px 11px;border:1px solid transparent;border-radius:9px;
+  padding:5px 11px;border:1px solid transparent;border-radius:999px;
   background:color-mix(in srgb,var(--ink) 5%,transparent);
   color:var(--dim);font-size:13px;cursor:default;user-select:none}
-/* Pills that wear a swatch tuck it toward the cap. 4px keeps the 21px dot off the corner
-   of the 9px radius. All carries no swatch and keeps the text inset. */
+/* Pills that wear a swatch tuck it toward the cap - a coloured block can sit nearer the
+   curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
+   All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 /* THE WEIGHT BELONGS TO THE RING, NEVER TO SELECTION. Bold on the selected pill widened it by

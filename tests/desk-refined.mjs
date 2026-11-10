@@ -3,7 +3,7 @@
  *   node tests/desk-refined.mjs
  *
  * Proposal A's desk, and nothing of the Lanes or of Studio: the dot field, an empty fill as a
- * chip, the category pill's radius, and a light card's hairline and lift. Dark cards, the ink
+ * chip, and a light card's hairline and lift. The category pills stay fully round (Max, 2026-11-10 18:07). Dark cards, the ink
  * of the field, the intent panel's lift and the add pill's disc are held where they were.
  *
  * THE CONTROLS run on a synthetic sheet before the real one is read. Each plants one previous
@@ -66,7 +66,7 @@ function findings(css) {
   need(".txt .fillmiss", "padding", "1px 5px", "empty fill");
   need(".txt .fillmiss", "font", "600 11px var(--sans)", "empty fill");
   need(".txt .fillmiss", "letter-spacing", ".2px", "empty fill");
-  need(".pill", "border-radius", "9px", "category pill");
+  need(".pill", "border-radius", "999px", "category pill, fully round");
   need(".pill-add", "border-radius", "999px", "add pill");
   for (const sel of [":root", ":root[data-theme=light]"]) {
     need(sel, "--card-border", "var(--line)", "light card edge");
@@ -99,7 +99,7 @@ const GOOD = [
   "--card-shadow:var(--bevel);--card-lift:0 0 #0000}",
   ".dotfield>div{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .7px,color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px);background-size:16px 16px}",
   ".txt .fillmiss{background:var(--accent-soft);color:var(--accent);border:0;border-radius:6px;padding:1px 5px;font:600 11px var(--sans);letter-spacing:.2px}",
-  ".pill{border-radius:9px}",
+  ".pill{border-radius:999px}",
   ".pill-add{border-radius:999px}",
   ".txt{border:1px solid var(--card-border,var(--line));box-shadow:var(--card-shadow,none)}",
   ".txt::before{width:3px}",
@@ -109,7 +109,7 @@ const GOOD = [
 
 const plants = [
   ["pitch 12px", GOOD.replace("background-size:16px 16px", "background-size:12px 12px")],
-  ["pill disc", GOOD.replace(".pill{border-radius:9px}", ".pill{border-radius:999px}")],
+  ["pill not round", GOOD.replace(".pill{border-radius:999px}", ".pill{border-radius:9px}")],
   ["two-layer card shadow", GOOD.replaceAll("--card-shadow:0 1px 2px rgba(15,23,42,.05);", "--card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);")],
   ["monospace fill", GOOD.replace("font:600 11px var(--sans)", "font:600 11px var(--mono)")],
   ["dark lift moved", GOOD.replaceAll("--card-lift:0 0 #0000", "--card-lift:0 1px 2px rgba(15,23,42,.05)")],
