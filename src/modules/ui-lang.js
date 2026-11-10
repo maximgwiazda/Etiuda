@@ -149,6 +149,8 @@ UI_STRINGS.pl={
   "Clear search text":"Wyczyść tekst wyszukiwania",
   "not linked to your intent":"niepowiązane z wybraną intencją",
   "also mentions your search":"zawierają też szukane słowa",
+  // placeholder: Claudette
+  "Close in meaning":"Bliskie znaczeniem",
   "A search ranks the cards by relevance; clear it to order them yourself":"Wyszukiwanie porządkuje karty według trafności; po jego wyczyszczeniu kolejność można ustawić ręcznie",
   "Drag header to reorder within the same highlight group":"Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu",
   "Drag header to reorder within the same highlight group; same category only":"Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu i w tej samej kategorii",

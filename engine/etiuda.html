@@ -7015,6 +7015,8 @@ What you type stays in this browser only.`;
     "Clear search text": "Wyczyść tekst wyszukiwania",
     "not linked to your intent": "niepowiązane z wybraną intencją",
     "also mentions your search": "zawierają też szukane słowa",
+    // placeholder: Claudette
+    "Close in meaning": "Bliskie znaczeniem",
     "A search ranks the cards by relevance; clear it to order them yourself": "Wyszukiwanie porządkuje karty według trafności; po jego wyczyszczeniu kolejność można ustawić ręcznie",
     "Drag header to reorder within the same highlight group": "Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu",
     "Drag header to reorder within the same highlight group; same category only": "Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu i w tej samej kategorii",
@@ -24248,6 +24250,16 @@ What you type stays in this browser only.`;
     }
     return { hits, sc };
   }
+  function searchMissHtml() {
+    return '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>";
+  }
+  function meaningBoundaryHtml(wordCount, tailCount, noMatchHtml, label2) {
+    if (!tailCount) return "";
+    let h = "";
+    if (!wordCount && noMatchHtml) h += noMatchHtml;
+    h += '<div class="list-sep e-meaning"><i></i><span>' + label2 + "</span><i></i></div>";
+    return h;
+  }
   function render() {
     remPx();
     closeNotePane();
@@ -24259,10 +24271,12 @@ What you type stays in this browser only.`;
     const ranked = rankedCards(terms, keep);
     const sc = ranked.sc;
     const mixed = mixCards(ranked.hits, keep);
+    const wordN = mixed ? ranked.hits.length : 0;
+    const tailN = mixed ? mixed.length - ranked.hits.length : 0;
     setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
@@ -24313,6 +24327,9 @@ What you type stays in this browser only.`;
       let sepH = "";
       if (terms.length && i > 0 && sepGroup(shown[i - 1]) === 0 && sepGroup(m) === 1) {
         sepH += '<div class="list-sep"><i></i><span>' + esc(sepLabel) + "</span><i></i></div>";
+      }
+      if (tailN && i === wordN) {
+        sepH += meaningBoundaryHtml(wordN, tailN, wordN ? "" : searchMissHtml(), esc(t("Close in meaning")));
       }
       if (groupList && !soloCat) {
         const prevM = i > 0 ? shown[i - 1] : null;
