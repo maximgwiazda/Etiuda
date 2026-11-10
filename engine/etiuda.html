@@ -185,6 +185,7 @@
   var WORDS={
     en:{ failed:"Etiuda could not start.",
       damaged:"Its saved settings on this computer look damaged. Resetting clears them and starts Etiuda again; catalog files are not touched.",
+      fault:"The fault is in this version of Etiuda, not in its settings, so resetting would not help. The line below says what failed; catalog files are not touched.", /* placeholder: Claudette */
       reset:"Reset Etiuda", orHash:"or add <b>#reset</b> to the address and press Enter", dismiss:"Dismiss",
       stuck:"Startup did not finish.",
       unsaved:"Etiuda cannot save its settings here.",
@@ -198,6 +199,7 @@
       refused:"The browser refused to store anything for this file. Opening it from a different folder, or in a normal (non-private) window, is usually enough." },
     pl:{ failed:"Nie udało się uruchomić Etiudy.",
       damaged:"Ustawienia zapisane na tym komputerze wyglądają na uszkodzone. Reset je wyczyści i uruchomi Etiudę od nowa, a pliki katalogów zostaną nietknięte.",
+      fault:"Błąd tkwi w tej wersji Etiudy, nie w jej ustawieniach, więc reset nic nie da. Wiersz poniżej mówi, co zawiodło; pliki katalogów zostają nietknięte.", /* placeholder: Claudette */
       reset:"Zresetuj Etiudę", orHash:"można też dopisać <b>#reset</b> do adresu i nacisnąć Enter", dismiss:"Zamknij",
       stuck:"Uruchamianie nie dobiegło końca.",
       unsaved:"Etiuda nie może tu zapisywać ustawień.",
@@ -248,13 +250,21 @@
 
     return W.refused;
   }
+  /* WHAT THE BANNER IS ABOUT. Storage that cannot be written is "broken": no Reset, which is the failing operation. The
+     boot guard clears the app's state once by itself and reloads (layer 2 below), so a crash that comes back after that
+     is the code's, "fault": a Reset would clear the settings again and reload into the same fault, and the banner must
+     not blame the person's settings. Only a first crash is "damaged", and only it offers Reset (2026-11-10). */
+  function rescueKind(broken, tries){
+    if(broken) return "broken";
+    return tries>=1 ? "fault" : "damaged";
+  }
   /* THE RESCUE WEARS THE FAMILY'S BUBBLE (.bub-ask, its type and its entrance) under the band, which
      holds the window's controls; the fill and the ink are written here as well, so it still
      reads if the sheet does not. Its text and every error line are text nodes, never markup. */
   function banner(msg, broken){
     document.documentElement.classList.remove("e-arriving","e-veiled");
     if(document.getElementById("eRescue")) return;
-    var W=words(), inHost=!!hostDesk();
+    var W=words(), inHost=!!hostDesk(), kind=rescueKind(broken, tries);
     var band=document.querySelector(".row"), top=band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0;
     var d=document.createElement("div");
     d.id="eRescue";
@@ -273,7 +283,7 @@
     var lead=document.createElement("b");
     lead.textContent=broken ? W.unsaved : W.failed;
     say.appendChild(lead);
-    say.appendChild(document.createTextNode(" "+(broken ? W.forgets : W.damaged)));
+    say.appendChild(document.createTextNode(" "+(broken ? W.forgets : kind==="fault" ? W.fault : W.damaged)));
     d.appendChild(say);
     /* The advice carries its own emphasis, so it is the one piece set as markup; every string in
        it is this script's own. */
@@ -284,14 +294,14 @@
     });
     var acts=document.createElement("div");
     acts.className="tour-actions";
-    if(!broken && !inHost){
+    if(kind==="damaged" && !inHost){
       var hint=document.createElement("span"); hint.className="e-notice-hint"; hint.innerHTML=W.orHash; acts.appendChild(hint);
     }
     var hide=document.createElement("button");
     hide.type="button"; hide.className="btn"; hide.id="eRescueHide"; hide.textContent=W.dismiss;
     hide.onclick=function(){ d.remove(); };
     acts.appendChild(hide);
-    if(!broken){
+    if(kind==="damaged"){
       var go=document.createElement("button");
       go.type="button"; go.className="btn primary"; go.id="eRescueGo"; go.textContent=W.reset;
       go.onclick=function(){ clearState(true); location.replace(location.href.split("#")[0]); };

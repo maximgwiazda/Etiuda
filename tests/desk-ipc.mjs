@@ -369,6 +369,22 @@ try {
     "5e the #reset hatch's clearState(false) clears the tabs too, in main and in the page: planted " + planted2 + ", the plant reads back "
     + JSON.stringify(hatchTabs) + ", main holds " + JSON.stringify(mainTab()) + ", sessionStorage cleared " + ssCleared + " time(s) in all");
 
+  /* ---- what the start-failure banner offers. The boot guard clears the app's state once by itself and reloads; a
+     crash that comes back after that is the code's, not the settings', and a Reset that clears them again and reloads
+     into the same fault does nothing (Max's install of 2026-11-10, "ePackEpoch is not a function"). So the template
+     decides: storage unusable is "broken", a first crash is "damaged" (Reset offered), a crash after the silent
+     repair is "fault" (no Reset, nothing said about settings). */
+  {
+    let kindOf = null, err = "";
+    try { kindOf = new Function(slice("rescueKind") + "\nreturn rescueKind;")(); } catch (e) { err = String(e && e.message || e); }
+    const got = kindOf ? [kindOf(true, 0), kindOf(true, 1), kindOf(false, 0), kindOf(false, 1), kindOf(false, 2)] : [];
+    const banner = (() => { try { return slice("banner"); } catch (e) { return ""; } })();
+    check(JSON.stringify(got) === JSON.stringify(["broken", "broken", "damaged", "fault", "fault"])
+      && /rescueKind\(\s*broken\s*,\s*tries\s*\)/.test(banner) && /kind\s*===\s*"damaged"/.test(banner),
+      "5f a crash after the boot guard's own repair is the code's: no Reset and no word about damaged settings; a first crash"
+      + " still offers Reset, unusable storage still says so: " + (err || JSON.stringify(got)));
+  }
+
   /* ---- a click on a link, at the preload's two listeners: only a middle click, besides the primary
      one, hands its address to main, and so licenses it; a right click on a link is a context menu ---- */
   const LINK = "https://links.invalid/right-click-probe";
