@@ -26,7 +26,7 @@ const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, setJumpList, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
-const { honourPendingReset, stageReset } = require(path.join(__dirname, "desk-reset.cjs"));
+const { honourPendingReset, stageReset, deliverResetNotice, retryPendingReset, stopPendingReset } = require(path.join(__dirname, "desk-reset.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
 let embedLib = null;
 try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
@@ -334,6 +334,8 @@ function catalogPlaces() {
    switches travel in the same array and a shortcut may carry any of them. Named first among the
    places above, so the file a person double-clicked is the one this load is offered. */
 let openedWith = "";
+/* Set when a reset pass leaves paths behind, and sent once the page has loaded. */
+let resetNotice = null;
 /* The highest rev the lead had already signed in the folder, per catalog id, when the outside
    file was opened. A later file has to be above that before it is offered. */
 let openedBaseline = null;
@@ -8206,6 +8208,17 @@ function listingRows() {
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
 /* The page asks. The files stay until the next start: this process still holds them. The catalog
    folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
+/* The new process asks for the single-instance lock. Releasing it first is what lets that
+   process get it; the marker waits if the new process never arrives. */
+function relaunchAfterReset() {
+  setImmediate(() => {
+    try {
+      if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock();
+      if (typeof app.relaunch === "function") app.relaunch();
+      if (typeof app.exit === "function") app.exit(0);
+    } catch (err) { /* the marker still waits for the next start */ }
+  });
+}
 ipcMain.handle("etiuda:desk-reset", (e) => {
   if (!fromEngine(e)) return { ok: false, reason: "refused" };
   const userData = app.getPath("userData");
@@ -8216,13 +8229,28 @@ ipcMain.handle("etiuda:desk-reset", (e) => {
     catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
   } catch (err) { catalogSetting = ""; }
   const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
-  if (staged && staged.ok) setImmediate(() => {
-    try {
-      if (typeof app.relaunch === "function") app.relaunch();
-      if (typeof app.exit === "function") app.exit(0);
-    } catch (err) { /* the marker still waits for the next start */ }
-  });
+  if (staged && staged.ok) relaunchAfterReset();
   return staged;
+});
+ipcMain.handle("etiuda:reset-retry", (e) => {
+  if (!fromEngine(e)) return { ok: false, reason: "refused" };
+  const result = retryPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+  if (result && result.ok) {
+    resetNotice = null;
+    relaunchAfterReset();
+  } else if (result && result.notice && Array.isArray(result.paths) && result.paths.length) {
+    resetNotice = { paths: result.paths.slice() };
+    try {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      if (win) deliverResetNotice(win, resetNotice);
+    } catch (err) { /* the page still has the answer */ }
+  }
+  return result || { ok: false };
+});
+ipcMain.handle("etiuda:reset-stop", (e) => {
+  if (!fromEngine(e)) return { ok: false, reason: "refused" };
+  resetNotice = null;
+  return stopPendingReset({ userData: app.getPath("userData"), holdsLock: true });
 });
 /* THE LISTING IS SENT, not only asked for: once at boot, and again whenever the set of files in it, by place, id,
    edition and hash, changes, so a rename or a newer edition under another name reaches the page, which decides what
@@ -10165,6 +10193,7 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
   win.webContents.on("did-finish-load", () => { setTimeout(warmSuggestSoon, EMBED_WARM_DELAY_MS); });
   win.webContents.once("did-finish-load", () => { dispatchColdStartArgs(win); });
+  win.webContents.on("did-finish-load", () => { if (resetNotice) deliverResetNotice(win, resetNotice); });
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
@@ -10539,7 +10568,11 @@ const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
   app.quit();
 } else {
-  try { honourPendingReset({ userData: app.getPath("userData"), holdsLock: true }); }
+  try {
+    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+    if (honoured && honoured.notice && Array.isArray(honoured.paths) && honoured.paths.length)
+      resetNotice = { paths: honoured.paths.slice() };
+  }
   catch (e) { console.error("etiuda: a pending reset could not be finished - " + (e && e.message)); }
   registerEtiudaLink();
   app.on("second-instance", (e, argv) => { onSecondInstance(argv); });

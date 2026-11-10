@@ -7491,6 +7491,10 @@ What you type stays in this browser only.`;
     "There is no Undo. Joining the team again takes a new invitation from its lead.": "Tego nie da się cofnąć. Ponowne dołączenie do zespołu wymaga nowego zaproszenia od lidera.",
     "Type RESET to confirm.": "Do potwierdzenia trzeba wpisać RESET.",
     "Etiuda is starting again as freshly installed.": "Etiuda uruchamia się ponownie jak po świeżej instalacji.",
+    "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.": "Reset Etiudy nie został dokończony. Nie udało się usunąć elementów, których być może używa inny program albo otwarty folder: {PATH}.",
+    "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.": "Ponowna próba dokończy reset po ich zamknięciu; przerwanie zostawi stanowisko w obecnym stanie.",
+    "Try again": "Spróbuj ponownie",
+    "Stop the reset": "Przerwij reset",
     "Edit card": "Edytuj kartę",
     "Edit this intent": "Edytuj tę intencję",
     "hold Ctrl to edit, Shift to hide": "przytrzymaj Ctrl, aby edytować, Shift, aby ukryć",
@@ -14827,6 +14831,7 @@ What you type stays in this browser only.`;
   // src/modules/maintenance.js
   var maintenance_exports = {};
   __export(maintenance_exports, {
+    armResetNotice: () => armResetNotice,
     mtGridHtml: () => mtGridHtml,
     mtHealthHtml: () => mtHealthHtml,
     mtHealthTiles: () => mtHealthTiles,
@@ -28388,6 +28393,72 @@ What you type stays in this browser only.`;
       }
     });
   }
+  var RESET_LEFT = "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
+  var RESET_NEXT = "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
+  function unfinishedLine(info) {
+    const names = info && Array.isArray(info.paths) ? info.paths.filter((p) => typeof p === "string" && p) : [];
+    return t(RESET_LEFT).replace("{PATH}", names.join(", "));
+  }
+  function openUnfinishedReset(info) {
+    const line = unfinishedLine(info);
+    openDialog({
+      cls: "mt-reset-unfinished",
+      title: RESET_LEFT,
+      body: "<p>" + esc(RESET_NEXT) + "</p>",
+      actions: '<button type="button" class="btn" id="mtResetStop">' + esc(t("Stop the reset")) + '</button><button type="button" class="btn danger" id="mtResetAgain">' + esc(t("Try again")) + "</button>",
+      wire: () => {
+        const title = document.querySelector("#modalTitle .modal-t");
+        if (title) {
+          title.textContent = line;
+          title.setAttribute("data-i18n-skip", "");
+        }
+        const stop = $("#mtResetStop"), again = $("#mtResetAgain");
+        if (stop) stop.onclick = () => {
+          const h = eHost();
+          const done = () => dismissModal();
+          if (!h || typeof h.stopReset !== "function") {
+            done();
+            return;
+          }
+          let answer = null;
+          try {
+            answer = h.stopReset();
+          } catch (e) {
+            done();
+            return;
+          }
+          if (answer && typeof answer.then === "function") answer.then(done, done);
+          else done();
+        };
+        if (again) again.onclick = () => {
+          const h = eHost();
+          if (!h || typeof h.retryReset !== "function") return;
+          let answer = null;
+          try {
+            answer = h.retryReset();
+          } catch (e) {
+            return;
+          }
+          const take = (r) => {
+            if (r && r.ok) {
+              dismissModal();
+              return;
+            }
+            if (r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({ paths: r.paths });
+          };
+          if (answer && typeof answer.then === "function") answer.then(take, () => {
+          });
+          else take(answer);
+        };
+      }
+    });
+  }
+  function armResetNotice() {
+    const h = eHost();
+    if (!h || typeof h.onResetUnfinished !== "function" || h._resetNoticeArmed) return;
+    h._resetNoticeArmed = true;
+    h.onResetUnfinished((info) => openUnfinishedReset(info));
+  }
   function mtShellHtml() {
     const pages = mtPages(), page = pages.filter((p) => p.key === mtOn)[0] || pages[0];
     return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + mtResetRow() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
@@ -36771,6 +36842,7 @@ What you type stays in this browser only.`;
     putLang(lsGet("eLang") || uiLang());
     grabDom();
     wireHost();
+    armResetNotice();
     suppressBrowserSuggest();
     wireMaintenanceWatch();
     wireKbdNav();

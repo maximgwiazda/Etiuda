@@ -207,10 +207,86 @@ function applyReset(plan) {
       return { ok: false, reason: "refused", changed: changed };
     if (plan.userData && samePath(remove[i], plan.userData)) continue;
     const err = removeEntry(remove[i]);
-    if (err) return { ok: false, reason: String(err.code || err.message || "refused"), changed: changed };
+    if (err) return {
+      ok: false, reason: String(err.code || err.message || "refused"), changed: changed,
+      owed: expandRemaining(remove, i),
+      blocked: err.path ? path.resolve(String(err.path)) : remove[i]
+    };
     changed = true;
   }
-  return { ok: true, changed: changed };
+  return { ok: true, changed: changed, owed: [] };
+}
+
+/* What a failed pass still has to remove: the entry that stopped it, and every later entry,
+   each directory listed as the files still inside it and then itself. A later start unlinks
+   those paths and does not walk again, so a file created after the pass is not among them. */
+function expandRemaining(remove, fromIndex) {
+  const out = [];
+  const walk = (p) => {
+    const st = lstatOf(p);
+    if (!st) return;
+    if (st.isSymbolicLink() || !st.isDirectory()) { out.push(path.resolve(p)); return; }
+    const names = namesOf(p);
+    for (let i = 0; i < names.length; i++) walk(path.join(p, names[i]));
+    out.push(path.resolve(p));
+  };
+  for (let i = fromIndex; i < remove.length; i++) walk(remove[i]);
+  return out;
+}
+
+function removeExact(p) {
+  const st = lstatOf(p);
+  if (!st) return null;
+  if (st.isSymbolicLink() || !st.isDirectory()) return attempt(() => fs.unlinkSync(p));
+  return attempt(() => fs.rmdirSync(p));
+}
+
+function owedAllowed(p, user, roots) {
+  if (!p || pathOutside(roots, p) || realOutside(roots, p)) return false;
+  if (samePath(p, user)) return false;
+  const base = path.basename(p);
+  if (base.toLowerCase() === MARKER_NAME.toLowerCase()) return false;
+  if (!samePath(path.dirname(p), user)) return true;
+  if (isLockName(base) || isLicenceName(base)) return false;
+  return true;
+}
+
+/* Only the paths the failed pass recorded. A file newer than that pass is left, and stays owed
+   so the reset does not end by itself. */
+function applyOwed(doc, roots) {
+  const owed = Array.isArray(doc.owed) ? doc.owed : [];
+  const user = doc.userData;
+  const owedAt = Date.parse(doc.owedAt || "") || 0;
+  const left = [];
+  let changed = false;
+  let blocked = "";
+  for (let i = 0; i < owed.length; i++) {
+    const p = path.resolve(String(owed[i] || ""));
+    if (!owedAllowed(p, user, roots)) continue;
+    const st = lstatOf(p);
+    if (!st) continue;
+    if (owedAt && st.mtimeMs > owedAt) {
+      left.push(p);
+      if (!blocked) blocked = p;
+      continue;
+    }
+    const err = removeExact(p);
+    if (err) {
+      left.push(p);
+      for (let j = i + 1; j < owed.length; j++) {
+        const rest = path.resolve(String(owed[j] || ""));
+        if (owedAllowed(rest, user, roots) && lstatOf(rest)) left.push(rest);
+      }
+      return {
+        ok: false, changed: changed, owed: left,
+        blocked: err.path ? path.resolve(String(err.path)) : p,
+        reason: String(err.code || err.message || "refused")
+      };
+    }
+    changed = true;
+  }
+  if (left.length) return { ok: false, changed: changed, owed: left, blocked: blocked, reason: "newer" };
+  return { ok: true, changed: changed, owed: [] };
 }
 
 function commitReset(opts) {
@@ -274,6 +350,91 @@ function honourPendingReset(opts) {
     dropMarker(marker);
     return { pending: true, ok: false, changed: false };
   }
+  const planOpts = {
+    userData: user,
+    catalogSetting: doc.catalogSetting,
+    defaultCatalog: doc.defaultCatalog
+  };
+  let done;
+  if (Array.isArray(doc.owed) && doc.owed.length) {
+    const plan = planReset(planOpts);
+    if (!plan.ok) return { pending: true, ok: false, changed: false };
+    done = applyOwed(doc, plan.roots);
+  } else done = commitReset(planOpts);
+  if (done && done.ok) {
+    dropMarker(marker);
+    return { pending: true, ok: true, changed: true };
+  }
+  return rememberOwed(user, doc, done);
+}
+
+function noticePaths(blocked) {
+  const list = Array.isArray(blocked) ? blocked : (blocked ? [blocked] : []);
+  const names = [];
+  for (let i = 0; i < list.length; i++) {
+    const base = path.basename(String(list[i] || ""));
+    if (base && names.indexOf(base) < 0) names.push(base);
+  }
+  return names;
+}
+
+function writeMarker(user, doc) {
+  const marker = path.join(user, MARKER_NAME);
+  if (pathOutside([user], marker)) return false;
+  const tmp = marker + ".tmp";
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(doc));
+    fs.renameSync(tmp, marker);
+    return true;
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (err) { /* the marker was not written */ }
+    return false;
+  }
+}
+
+/* The marker keeps the paths still owed and the time of the pass that failed. A later start
+   reads that list. The names are what the page says is in the way. */
+function rememberOwed(user, doc, done) {
+  if (!done || !Array.isArray(done.owed) || !done.owed.length) {
+    return { pending: true, ok: false, changed: !!(done && done.changed) };
+  }
+  const blocked = done.blocked || done.owed[0];
+  const next = {
+    v: 1,
+    userData: user,
+    catalogSetting: String(doc.catalogSetting || ""),
+    defaultCatalog: String(doc.defaultCatalog || ""),
+    attempts: (doc.attempts || 0) + 1,
+    owed: done.owed,
+    owedAt: doc.owedAt || new Date().toISOString(),
+    blocked: blocked || ""
+  };
+  writeMarker(user, next);
+  return {
+    pending: true, ok: false, changed: !!done.changed, notice: true,
+    paths: noticePaths(blocked), owed: done.owed
+  };
+}
+
+/* The person's Try again: the desk as it is now, not the list from the failed pass. */
+function retryPendingReset(opts) {
+  if (!opts || opts.holdsLock !== true) return { ok: false, reason: "refused", changed: false };
+  const raw = String(opts.userData || "");
+  if (!path.isAbsolute(raw)) return { ok: false, reason: "refused", changed: false };
+  const user = path.resolve(raw);
+  const marker = path.join(user, MARKER_NAME);
+  const mst = lstatOf(marker);
+  if (!mst || mst.isSymbolicLink() || !mst.isFile()) return { ok: false, reason: "none", changed: false };
+  let doc = null;
+  try { doc = JSON.parse(fs.readFileSync(marker, "utf8")); }
+  catch (e) {
+    dropMarker(marker);
+    return { ok: false, reason: "refused", changed: false };
+  }
+  if (!doc || doc.v !== 1 || !samePath(doc.userData, user)) {
+    dropMarker(marker);
+    return { ok: false, reason: "refused", changed: false };
+  }
   const done = commitReset({
     userData: user,
     catalogSetting: doc.catalogSetting,
@@ -281,9 +442,30 @@ function honourPendingReset(opts) {
   });
   if (done && done.ok) {
     dropMarker(marker);
-    return { pending: true, ok: true, changed: true };
+    return { ok: true, changed: true };
   }
-  return { pending: true, ok: false, changed: !!(done && done.changed) };
+  const held = rememberOwed(user, { v: 1, userData: user, catalogSetting: doc.catalogSetting, defaultCatalog: doc.defaultCatalog, attempts: doc.attempts }, done);
+  return held;
+}
+
+function stopPendingReset(opts) {
+  if (!opts || opts.holdsLock !== true) return { ok: false, reason: "refused" };
+  const raw = String(opts.userData || "");
+  if (!path.isAbsolute(raw)) return { ok: false, reason: "refused" };
+  const user = path.resolve(raw);
+  const marker = path.join(user, MARKER_NAME);
+  if (pathOutside([user], marker)) return { ok: false, reason: "refused" };
+  dropMarker(marker);
+  return { ok: true };
+}
+
+const RESET_NOTICE_CHANNEL = "etiuda:reset-unfinished";
+
+function deliverResetNotice(win, notice) {
+  const paths = notice && Array.isArray(notice.paths) ? notice.paths.filter(p => typeof p === "string" && p) : [];
+  if (!paths.length || !win || !win.webContents || typeof win.webContents.send !== "function") return false;
+  win.webContents.send(RESET_NOTICE_CHANNEL, { paths: paths });
+  return true;
 }
 
 /* What readDesk calls a first run: no desk file and no backup of one. A missing folder is not. */
@@ -305,6 +487,9 @@ module.exports = {
   commitReset: commitReset,
   stageReset: stageReset,
   honourPendingReset: honourPendingReset,
+  retryPendingReset: retryPendingReset,
+  stopPendingReset: stopPendingReset,
+  deliverResetNotice: deliverResetNotice,
   wouldStartNew: wouldStartNew,
   MARKER_NAME: MARKER_NAME,
   LICENCE_FILES: LICENCE_FILES,

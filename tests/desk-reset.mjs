@@ -43,9 +43,19 @@ const ASK = "Type RESET to confirm.";
 const ROW = "Returns this desk to a fresh install, keeping only the licence.";
 const AGAIN = "Etiuda is starting again as freshly installed.";
 const BOX_EN = "Remove my data";
-const LINE_EN = "Also removes Etiuda's data on this computer: the catalog, settings, conversations and the licence.";
+const LINE_EN = "Also removes Etiuda's data on this computer: settings, conversations and the licence. The catalog files stay.";
 const BOX_PL = "Usuń także dane z tego komputera";
-const LINE_PL = "Usuwa również dane Etiudy z tego komputera: katalog, ustawienia, rozmowy i licencję.";
+const LINE_PL = "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy i licencję. Pliki katalogów zostają.";
+const UNFINISHED = "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
+const UNFINISHED_NEXT = "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
+const TRY_AGAIN = "Try again";
+const STOP_RESET = "Stop the reset";
+const UNFINISHED_PL = {
+  [UNFINISHED]: "Reset Etiudy nie został dokończony. Nie udało się usunąć elementów, których być może używa inny program albo otwarty folder: {PATH}.",
+  [UNFINISHED_NEXT]: "Ponowna próba dokończy reset po ich zamknięciu; przerwanie zostawi stanowisko w obecnym stanie.",
+  [TRY_AGAIN]: "Spróbuj ponownie",
+  [STOP_RESET]: "Przerwij reset"
+};
 const PL = {
   "Returns this desk to a fresh install, keeping only the licence.": "Przywraca stanowisko do stanu po świeżej instalacji; zostaje tylko licencja.",
   "Reset Etiuda?": "Zresetować Etiudę?",
@@ -621,12 +631,127 @@ function plantLeg(mod, decision) {
 }
 function outsidePath(held) { return held; }
 
+/* A path that never unlinks, then a file written after that pass. The next start may finish
+   only what the failed pass still owed. The notice travels the shell's channel to the page. */
+async function unfinishedLeg(mod) {
+  if (!mod || typeof mod.honourPendingReset !== "function") {
+    check(false, "4d10 the reset is not there to leave a path undone");
+    return;
+  }
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-undone-"));
+  const nodeFs = require("node:fs");
+  const origUnlink = nodeFs.unlinkSync;
+  const dir = path.join(lab, "desk");
+  try {
+    fs.mkdirSync(dir);
+    write(path.join(dir, "desk.json"), "old");
+    write(path.join(dir, "stuck.txt"), "held");
+    write(path.join(dir, mod.MARKER_NAME), markerBody(dir));
+    nodeFs.unlinkSync = function (p) {
+      if (String(p).toLowerCase().endsWith("stuck.txt")) {
+        const err = new Error("busy");
+        err.code = "EBUSY";
+        err.path = p;
+        throw err;
+      }
+      return origUnlink.call(nodeFs, p);
+    };
+    const first = mod.honourPendingReset({ userData: dir, holdsLock: true });
+    const fresh = path.join(dir, "since.txt");
+    write(fresh, "kept");
+    const second = mod.honourPendingReset({ userData: dir, holdsLock: true });
+    let survived = false, stuckLeft = false, recorded = false;
+    try { survived = fs.readFileSync(fresh, "utf8") === "kept"; } catch (e) { survived = false; }
+    try { stuckLeft = fs.readFileSync(path.join(dir, "stuck.txt"), "utf8") === "held"; } catch (e) { stuckLeft = false; }
+    try {
+      const doc = JSON.parse(fs.readFileSync(path.join(dir, mod.MARKER_NAME), "utf8"));
+      recorded = Array.isArray(doc.owed) && doc.owed.some(p => String(p).toLowerCase().endsWith("stuck.txt")) && !!doc.owedAt;
+    } catch (e) { recorded = false; }
+    const names = second && Array.isArray(second.paths) ? second.paths : [];
+    check(!!first && first.ok === false && !!second && second.ok === false && survived && stuckLeft && recorded,
+      "4d10 a file written after a failed pass survives the next start, and the stuck file stays owed");
+    check(names.indexOf("stuck.txt") >= 0, "4d10 the pass names what is in the way: " + names.join(", "));
+    const stopped = typeof mod.stopPendingReset === "function"
+      ? mod.stopPendingReset({ userData: dir, holdsLock: true }) : null;
+    let kept = false;
+    try { kept = fs.readFileSync(fresh, "utf8") === "kept"; } catch (e) { kept = false; }
+    check(!!stopped && stopped.ok === true && gone(path.join(dir, mod.MARKER_NAME)) && kept,
+      "4d10 stopping the reset drops the marker and keeps what was written since");
+  } finally {
+    nodeFs.unlinkSync = origUnlink;
+    try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) { /* the temp folder */ }
+  }
+  await noticePage(mod);
+}
+
+async function noticePage(mod) {
+  let maint = null;
+  try { maint = await import(MOD("maintenance.js")); } catch (e) { maint = null; }
+  const mainTxt = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  const preTxt = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+  const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plOk = Object.keys(UNFINISHED_PL).every(en => lang.indexOf(JSON.stringify(en) + ":" + JSON.stringify(UNFINISHED_PL[en])) >= 0);
+  const wired = mainTxt.indexOf("deliverResetNotice(") >= 0 && preTxt.indexOf("etiuda:reset-unfinished") >= 0;
+  const releases = /releaseSingleInstanceLock[\s\S]{0,240}relaunch/.test(mainTxt);
+  if (!mod || typeof mod.deliverResetNotice !== "function" || !maint || typeof maint.armResetNotice !== "function") {
+    check(false, "4d10 the page does not carry the notice");
+    check(plOk, "4d10 the notice is the copywriter's, both languages");
+    check(wired, "4d10 the shell tells the page on its channel");
+    check(releases, "4d10 a relaunch lets go of the single-instance lock before it asks again");
+    return;
+  }
+  const heard = {};
+  const invoked = [];
+  const ipcRenderer = {
+    /* The preload reads the host synchronously while it loads. A null answer throws before the page can hear the notice. */
+    sendSync: (ch) => (ch === "etiuda:host"
+      ? { platform: "win32", backdrop: null, maximized: false, shown: true }
+      : null),
+    send: (ch) => { invoked.push(ch); },
+    invoke: (ch) => { invoked.push(ch); return Promise.resolve({ ok: true }); },
+    on: (ch, fn) => { heard[ch] = fn; }
+  };
+  const contextBridge = {
+    exposeInMainWorld: (k, v) => { globalThis[k] = v; },
+    executeInMainWorld() {}
+  };
+  const preload = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+  new Function("require", preload)(n => (n === "electron" ? { contextBridge, ipcRenderer } : require(n)));
+  maint.armResetNotice();
+  const win = { webContents: { send: (ch, payload) => { if (typeof heard[ch] === "function") heard[ch]({}, payload); } } };
+  const sent = mod.deliverResetNotice(win, { paths: ["stuck.txt"] });
+  const card = globalThis.document.getElementById("modalCard");
+  const said = card ? card.textContent : "";
+  check(sent === true && said.indexOf("The reset of Etiuda did not finish") >= 0 && said.indexOf("stuck.txt") >= 0
+    && said.indexOf(UNFINISHED_NEXT) >= 0 && said.indexOf(TRY_AGAIN) >= 0 && said.indexOf(STOP_RESET) >= 0,
+    "4d10 the page carries the notice through the shell's channel");
+  const again = globalThis.document.getElementById("mtResetAgain");
+  const stop = globalThis.document.getElementById("mtResetStop");
+  if (again) again.click();
+  if (stop) stop.click();
+  await new Promise(r => setImmediate(r));
+  check(invoked.indexOf("etiuda:reset-retry") >= 0 && invoked.indexOf("etiuda:reset-stop") >= 0,
+    "4d10 Try again and Stop the reset ask the shell (" + invoked.join(", ") + ")");
+  check(plOk, "4d10 the notice is the copywriter's, both languages");
+  check(wired, "4d10 the shell tells the page on its channel");
+  check(releases, "4d10 a relaunch lets go of the single-instance lock before it asks again");
+  if (globalThis.localStorage) globalThis.localStorage.setItem("eUiLang", "pl");
+  mod.deliverResetNotice(win, { paths: ["stuck.txt"] });
+  const plCard = globalThis.document.getElementById("modalCard");
+  const plSaid = plCard ? plCard.textContent : "";
+  check(plSaid.indexOf("Reset Etiudy nie został dokończony") >= 0 && plSaid.indexOf("stuck.txt") >= 0
+    && plSaid.indexOf(UNFINISHED_PL[TRY_AGAIN]) >= 0 && plSaid.indexOf(UNFINISHED_PL[STOP_RESET]) >= 0,
+    "4d10 the Polish notice is the copywriter's, with the path");
+  if (globalThis.localStorage) globalThis.localStorage.setItem("eUiLang", "en");
+}
+
 let mod = null, decision = null;
 try { mod = require(path.join(ROOT, "shell", "desk-reset.cjs")); } catch (e) { mod = null; }
 try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallDataDecision; } catch (e) { decision = null; }
 
 await uiLeg();
 shellLeg(mod);
+await unfinishedLeg(mod);
 installLeg(decision);
 plantLeg(mod, decision);
 console.log("desk-reset " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted

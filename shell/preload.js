@@ -242,6 +242,12 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
   /* Returns this desk to a fresh install. The shell does the work on the next start. */
   resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),
+  /* A reset that could not finish. The page asks to try again, or to stop and keep the desk. */
+  onResetUnfinished: (fn) => ipcRenderer.on("etiuda:reset-unfinished", (_e, v) => {
+    try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ }
+  }),
+  retryReset: () => ipcRenderer.invoke("etiuda:reset-retry"),
+  stopReset: () => ipcRenderer.invoke("etiuda:reset-stop"),
 });
 
 if (json) {

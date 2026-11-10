@@ -585,6 +585,59 @@ function openResetConfirm(){
     }
   });
 }
+const RESET_LEFT="The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
+const RESET_NEXT="Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
+function unfinishedLine(info){
+  const names=info && Array.isArray(info.paths) ? info.paths.filter(p=>typeof p==="string" && p) : [];
+  return t(RESET_LEFT).replace("{PATH}", names.join(", "));
+}
+/* Said at the start that found the reset unfinished. The path is filled after translation,
+   so the sentence stays the copywriter's in both languages. */
+function openUnfinishedReset(info){
+  const line=unfinishedLine(info);
+  openDialog({
+    cls:"mt-reset-unfinished",
+    title:RESET_LEFT,
+    body:'<p>'+esc(RESET_NEXT)+'</p>',
+    actions:'<button type="button" class="btn" id="mtResetStop">'+esc(t("Stop the reset"))+'</button>'
+      +'<button type="button" class="btn danger" id="mtResetAgain">'+esc(t("Try again"))+'</button>',
+    wire:()=>{
+      const title=document.querySelector("#modalTitle .modal-t");
+      if(title){
+        title.textContent=line;
+        title.setAttribute("data-i18n-skip","");
+      }
+      const stop=$("#mtResetStop"), again=$("#mtResetAgain");
+      if(stop) stop.onclick=()=>{
+        const h=eHost();
+        const done=()=>dismissModal();
+        if(!h || typeof h.stopReset!=="function"){ done(); return; }
+        let answer=null;
+        try{ answer=h.stopReset(); }catch(e){ done(); return; }
+        if(answer && typeof answer.then==="function") answer.then(done, done);
+        else done();
+      };
+      if(again) again.onclick=()=>{
+        const h=eHost();
+        if(!h || typeof h.retryReset!=="function") return;
+        let answer=null;
+        try{ answer=h.retryReset(); }catch(e){ return; }
+        const take=r=>{
+          if(r && r.ok){ dismissModal(); return; }
+          if(r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({paths:r.paths});
+        };
+        if(answer && typeof answer.then==="function") answer.then(take, ()=>{});
+        else take(answer);
+      };
+    }
+  });
+}
+function armResetNotice(){
+  const h=eHost();
+  if(!h || typeof h.onResetUnfinished!=="function" || h._resetNoticeArmed) return;
+  h._resetNoticeArmed=true;
+  h.onResetUnfinished(info=>openUnfinishedReset(info));
+}
 function mtShellHtml(){
   const pages=mtPages(), page=pages.filter(p=>p.key===mtOn)[0]||pages[0];
   return '<div class="sx lm lm-mt mt-screen" data-page="'+esc(page.key)+'">'
@@ -675,6 +728,7 @@ function openMaintenance(backFn){
 }
 
 export {
+  armResetNotice,
   wireMaintenanceWatch,
   mtRefreshLive,
   openMaintenance,

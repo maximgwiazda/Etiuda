@@ -437,14 +437,14 @@ Var RemoveDataBox
     LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda"
     LangString TurnUnWelcomeText ${ID} "Program Etiuda zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
     LangString RemoveDataBox ${ID} "Usuń także dane z tego komputera"
-    LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: katalog, ustawienia, rozmowy i licencję."
+    LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy i licencję. Pliki katalogów zostają."
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
     LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nSetup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
     LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda"
     LangString TurnUnWelcomeText ${ID} "This removes Etiuda from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
     LangString RemoveDataBox ${ID} "Remove my data"
-    LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: the catalog, settings, conversations and the licence."
+    LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: settings, conversations and the licence. The catalog files stay."
   !endif
 !macroend
 !insertmacro TurnLang 1033
