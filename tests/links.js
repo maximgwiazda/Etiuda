@@ -116,12 +116,7 @@ function buildApp() {
   const hear = d => String(d).split(/\r?\n/).forEach(l => { if (l.trim()) said.push(l.trim()); });
   child.stdout.on("data", hear);
   child.stderr.on("data", hear);
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  const b = await E.connectShell({ port: PORT, child, said });
   const p = (await b.pages())[0];
   const t = E.lowerTree(child.pid);
   console.log("       the window: " + (t.asked ? t.below + " of " + t.n + " Electron process(es) at below-normal priority" : "priority not lowered"));

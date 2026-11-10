@@ -337,6 +337,14 @@ process.on("exit", () => { releaseLock(); });
 process.on("SIGINT", () => { releaseLock(); process.exit(130); });
 process.on("SIGTERM", () => { releaseLock(); process.exit(143); });
 
+/* etiuda is the engine tree and etiuda-studio is Studio. A path is not a repository: two trees can share a folder spelling. */
+export function repoOfPackage(pkg) {
+  const name = pkg && typeof pkg.name === "string" ? pkg.name : "";
+  if (name === "etiuda") return "engine";
+  if (name === "etiuda-studio") return "studio";
+  return "";
+}
+
 export function appendChainLine(record, chainsPath = CHAINS_PATH) {
   const dir = path.dirname(chainsPath);
   try { fs.mkdirSync(dir, { recursive: true }); } catch {}
@@ -365,6 +373,9 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
     /* The window gates this run's diff reached and left out: a merge that needs an argued window run, counted by the week review. */
     walled: record.walled || [],
   };
+  /* The repository is the package name. An area run also records why the plan chose its legs; other runs have no plan. */
+  line.repo = record.repo;
+  if (record.gate === "area") line.plan = record.plan;
   /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree. */
   if (record.inherits) line.inherits = record.inherits;
   /* Every run records which files ran, so an area run can check coverage (the test architect's criterion, 2026-11-08). */
@@ -883,7 +894,8 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   for (const f of toolsOnly ? [] : changed) {
     if (isSharedCode(f)) {
       if (normRel(f) === "package.json" && acceptedScript) continue; /* plant:script-chain */
-      return closePlan(root, wholeChain, changed, gf, "fail-closed to whole chain: change in shared code " + f);
+      return closePlan(root, wholeChain, changed, gf, "fail-closed to whole chain: change in shared code " + f,
+        { plan: "fail-closed: " + normRel(f) });
     }
   }
 
@@ -1074,7 +1086,7 @@ export async function planAreaRun(root, changed, pkg, base = "main") {
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
   appendTextScans(steps, addedFiles, windowGates, root, changed, gf);
-  return { failClosed: false, reason: "", steps, gaps, walled: windowGates };
+  return { failClosed: false, reason: "", plan: toolsOnly ? "gate tools" : "mapped", steps, gaps, walled: windowGates };
 }
 
 function git(args) {
@@ -1343,12 +1355,16 @@ async function main() {
   }
 
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const repo = repoOfPackage(pkg);
+  if (!repo) refuse("the package name does not say which repository this is, and the path is not a substitute",
+    "package.json name is etiuda or etiuda-studio");
   let steps = [];
   let initialProfileSteps = [];
   let isHeavy = process.env.ETIUDA_HEAVY === "1";
   let customEnv = {};
   let gateLabel = asked.join(" ");
   let walled = [];
+  let areaPlan = "";
 
   if (mode === "area") {
     const base = asked[1] || "main...HEAD";
@@ -1356,6 +1372,7 @@ async function main() {
     const changed = gf ? gf.changedFiles(ROOT, base) : [];
     console.log("gate-run area: base " + base + ", " + changed.length + " changed file(s)");
     const plan = await planAreaRun(ROOT, changed, pkg, base);
+    areaPlan = plan.plan || "";
     if (plan.failClosed) {
       console.log("gate-run area: fail-closed to whole chain: " + plan.reason);
       isHeavy = true;
@@ -1806,6 +1823,8 @@ async function main() {
     walled,
     inherits,
     ran: ranFiles,
+    repo,
+    plan: areaPlan,
   }, CHAINS_PATH);
 
   /* Whole-run summary for a release or nightly profile run (state/briefs/reform-2026-10-27/test-regimen.md rule 4, decisions 2026-11-05 11:43). */

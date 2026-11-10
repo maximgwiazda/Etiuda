@@ -86,7 +86,7 @@ function setupLab() {
   fs.copyFileSync(path.join(ROOT, "tools", "gates-for.mjs"), path.join(lab, "tools", "gates-for.mjs"));
 
   const pkg = {
-    name: "gate-run-lab",
+    name: "etiuda",
     private: true,
     version: "0.0.0",
     scripts: {

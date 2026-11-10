@@ -1653,7 +1653,63 @@ function copyShellApp(dir) {
   }
 }
 
+/* A launch that dies is a failure, exit 1, one line. Exit 78 stays the wall's refusal and a suite that never reached its end. */
+function shellDidNotStart(why) {
+  const text = String(why == null || why === "" ? "the shell did not start" : why).replace(/\s+/g, " ").trim();
+  console.log("SHELL DID NOT START: " + text);
+  process.exit(1);
+}
+
+function shellStartWhy(info) {
+  const o = info || {};
+  const child = o.child;
+  const bits = [];
+  const exited = child && ((child.exitCode !== null && child.exitCode !== undefined) || child.signalCode);
+  if (exited) {
+    const how = child.exitCode !== null && child.exitCode !== undefined ? String(child.exitCode) : String(child.signalCode);
+    bits.push("the shell exited " + how);
+  } else {
+    const secs = Math.round((o.waitMs || 20000) / 1000);
+    bits.push("the shell did not answer on the debugging port" + (o.port ? " " + o.port : "") + " within " + secs + " s");
+  }
+  const said = Array.isArray(o.said) ? o.said.filter(Boolean).join(" | ") : String(o.said || "");
+  if (said.trim()) bits.push(said.trim());
+  return bits.join(": ");
+}
+
+/* Poll the debugging port. A shell that has already exited, or that never answers, stops here.
+   A connect that succeeds returns the browser and does not wait for the page. */
+async function connectShell(opts) {
+  const o = opts || {};
+  const waitMs = o.waitMs || 20000;
+  const step = o.step || 500;
+  const child = o.child || null;
+  const port = o.port;
+  const connectOpts = { browserURL: "http://127.0.0.1:" + port, defaultViewport: null };
+  if (o.protocolTimeout) connectOpts.protocolTimeout = o.protocolTimeout;
+  let browser = null;
+  const deadline = Date.now() + waitMs;
+  const dead = () => child && (child.exitCode !== null || child.signalCode);
+  while (Date.now() < deadline && !browser) {
+    if (dead()) break;
+    await new Promise(r => setTimeout(r, step));
+    if (dead()) break;
+    try {
+      const lib = o.puppeteer || require("puppeteer-core");
+      browser = await lib.connect(connectOpts);
+    } catch (e) { browser = null; }
+  }
+  if (browser) return browser;
+  if (typeof o.beforeExit === "function") {
+    try { o.beforeExit(); } catch (e) { /* the line below is the verdict */ }
+  } else if (child && child.pid) {
+    try { killTree(child.pid); } catch (e) { /* already gone */ }
+  }
+  shellDidNotStart(shellStartWhy({ child: child, port: port, said: o.said, waitMs: waitMs }));
+}
+
 module.exports = { shellAppFiles, copyShellApp, NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
+                   shellDidNotStart, shellStartWhy, connectShell,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch, unsignedEnv,

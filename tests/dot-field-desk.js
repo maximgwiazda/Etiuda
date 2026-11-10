@@ -98,12 +98,7 @@ const ROWS_OF = async (d, strip) => {
     { stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: path.join(APP, "documents"), [E.OFFSCREEN_KEY]: "2" }) });
   child.stdout.on("data", () => {}); child.stderr.on("data", () => {});
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  const b = await E.connectShell({ port: PORT, child });
   const p = (await b.pages())[0];
   const t = E.lowerTree(child.pid);
   console.log("       the window: " + (t.asked ? t.below + " of " + t.n + " Electron process(es) at below-normal priority" : "priority not lowered"));

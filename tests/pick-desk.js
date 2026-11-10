@@ -132,11 +132,7 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) { /* not up yet */ }
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  b = await E.connectShell({ port: PORT, child, said });
   let desk = (await b.pages())[0];
   await require("./launch-wait.js").waitLaunchGone(desk, { who: "tests/pick-desk.js", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(2500);

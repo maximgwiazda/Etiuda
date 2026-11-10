@@ -35,12 +35,8 @@ function electronExe() {
   return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
 }
 
-async function connected(port) {
-  for (let i = 0; i < 40; i++) {
-    await sleep(500);
-    try { return await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null, protocolTimeout: 20000 }); } catch (x) { /* not up yet */ }
-  }
-  throw new Error("the desk did not answer on the debugging port within 20 s");
+async function connected(port, proc) {
+  return E.connectShell({ port: port, child: proc, protocolTimeout: 20000 });
 }
 
 /* An answer within the bound, or null: a stuck renderer never answers, and a leg has to say so rather than wait with it. */
@@ -67,7 +63,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
-    browser = await connected(PORT);
+    browser = await connected(PORT, child);
     E.lowerTree(child.pid);
     const page = (await browser.pages())[0];
     await waitLaunchGone(page, { who: WHO, ready: "typeof window.E_VERSION === \"string\"" });

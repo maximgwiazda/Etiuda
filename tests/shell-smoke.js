@@ -418,12 +418,7 @@ async function launch(ud, args, env, assocExe, realCatalogFolder, waitOpts) {
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
-  let b = null;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
-  }
-  if (!b) { killPid(child.pid); throw new Error("the packaged app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
+  const b = await E.connectShell({ port, child, said, beforeExit: () => killPid(child.pid) });
   /* The debugging port answers before the window's page is attached, so the page is waited for (2026-11-02,
      [8/8] threw on p.on). A page that is not about:blank is preferred for up to 5 s: 5f2's decoy is one. */
   let p = null;

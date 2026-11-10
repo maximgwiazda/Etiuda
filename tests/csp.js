@@ -174,12 +174,7 @@ async function launch(dir, port) {
   const shellSaid = [];
   child.stdout.on("data", d => shellSaid.push(String(d).trim()));
   child.stderr.on("data", d => shellSaid.push(String(d).trim()));
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port " + port + " within 20 s");
+  const b = await E.connectShell({ port, child, said: shellSaid });
   const p = (await b.pages())[0];
   const said = [];
   p.on("console", m => { if (m.type() === "error") said.push(m.text()); });

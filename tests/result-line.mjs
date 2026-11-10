@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 110;
+const EXPECTED = 112;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -83,7 +83,7 @@ function makeLab(kind, stubs, opts) {
     fs.writeFileSync(path.join(lab, "tests", name + ".mjs"), stubs[name]);
   }
   fs.writeFileSync(path.join(lab, "package.json"),
-    JSON.stringify({ name: "lab", version: "0.0.0", scripts }, null, 2) + "\n");
+    JSON.stringify({ name: "etiuda", version: "0.0.0", scripts }, null, 2) + "\n");
   const extra = (opts && opts.files) || {};
   for (const rel of Object.keys(extra)) {
     const at = path.join(lab, rel);
@@ -1421,7 +1421,8 @@ async function main() {
   try { chainLines = fs.readFileSync(chainsPath, "utf8").trim().split(/\r?\n/).map(JSON.parse); } catch (e) {}
   check(chainLines.length === 1 && chainLines[0].gate === "okgate" && chainLines[0].tree
     && chainLines[0].head && chainLines[0].treeSha && chainLines[0].start && chainLines[0].end
-    && chainLines[0].counts && Array.isArray(chainLines[0].reds) && chainLines[0].reds.length === 0,
+    && chainLines[0].counts && Array.isArray(chainLines[0].reds) && chainLines[0].reds.length === 0
+    && chainLines[0].repo === "engine" && !Object.prototype.hasOwnProperty.call(chainLines[0], "plan"),
     "14a gate-run appends one JSON line per run to chains.jsonl with gate, tree, head, treeSha, start, end, counts and reds: "
     + JSON.stringify(chainLines[0]));
 
@@ -1436,6 +1437,26 @@ async function main() {
   check(timed.length === 2 && timed.every(g => Array.isArray(g) && g.length === 1 && Number.isFinite(g[0].wallMs) && g[0].wallMs >= 0)
     && timed[0][0].exit === 0 && timed[1][0].exit !== 0 && !!redEntry && timed[1][0].gate === redEntry.gate,
     "14c each chains line says which gates ate its run, one {gate, wallMs, exit} per gate run: " + JSON.stringify(timed));
+
+  const badLab = makeLab("bad-name", { okgate: prints(1, 0, "process.exit(0);") });
+  const badPkg = JSON.parse(fs.readFileSync(path.join(badLab.lab, "package.json"), "utf8"));
+  badPkg.name = "lab";
+  fs.writeFileSync(path.join(badLab.lab, "package.json"), JSON.stringify(badPkg, null, 2) + "\n");
+  const badChains = path.join(badLab.root, "chains-bad.jsonl");
+  const badRun = run(badLab, ["okgate"], null, { ETIUDA_CHAINS_PATH: badChains });
+  badPkg.name = badLab.lab;
+  fs.writeFileSync(path.join(badLab.lab, "package.json"), JSON.stringify(badPkg, null, 2) + "\n");
+  const pathChains = path.join(badLab.root, "chains-path.jsonl");
+  const pathRun = run(badLab, ["okgate"], null, { ETIUDA_CHAINS_PATH: pathChains });
+  check(gr.repoOfPackage({ name: "etiuda" }) === "engine"
+    && gr.repoOfPackage({ name: "etiuda-studio" }) === "studio"
+    && gr.repoOfPackage({ name: "lab" }) === ""
+    && gr.repoOfPackage({ name: badLab.lab }) === ""
+    && badRun.exit === 78 && pathRun.exit === 78
+    && /does not say which repository/.test(badRun.out) && /does not say which repository/.test(pathRun.out)
+    && !fs.existsSync(badChains) && !fs.existsSync(pathChains),
+    "14d a package name that is not etiuda or etiuda-studio is refused, and a path is not a repository: exits "
+    + badRun.exit + ", " + pathRun.exit);
 
   /* ---- 15. THE NIGHTLY PROFILE (rule 3) --------------------------------------------------- */
   const nightlyLab = makeLab("nightly", {
@@ -1565,6 +1586,9 @@ async function main() {
     + Object.keys(areaRun1.byGate).join(", ") + "]; exit " + areaRun1.exit
     + (/rerunning nothing/.test(areaRun1.out) ? "; it reused a recorded tree" : ""));
 
+  let mappedChain = null;
+  try { mappedChain = JSON.parse(fs.readFileSync(path.join(areaLab.root, "chains.jsonl"), "utf8").trim().split(/\r?\n/).pop()); } catch (e) {}
+
   fs.writeFileSync(path.join(areaLab.lab, "package.json"), JSON.stringify(areaPkg, null, 2) + " ");
   const areaRunShared = run(areaLab, ["area", "HEAD"], null, {
     ETIUDA_LOCK_PATH: path.join(areaLab.root, "machine.lock"),
@@ -1592,6 +1616,18 @@ async function main() {
       && areaRunShared2.out.indexOf("> node tests/kin-contrast.mjs") < 0 && areaRunShared2.out.indexOf("visual leg(s) left to the release profile") >= 0,
     "16d a change to a SHARED file runs the whole run, its visual legs left to the release profile: "
     + areaRunShared2.out.trim().split(/\r?\n/).filter(l => /fail-closed/i.test(l)).join(" | "));
+  let closedChain = null;
+  try { closedChain = JSON.parse(fs.readFileSync(path.join(areaLab.root, "chains.jsonl"), "utf8").trim().split(/\r?\n/).pop()); } catch (e) {}
+  const toolsPlan = await gr.planAreaRun(ROOT, ["tools/gate-run.mjs"], JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")));
+  const closedFile = closedChain && String(closedChain.plan || "").indexOf("fail-closed: ") === 0 ? closedChain.plan.slice("fail-closed: ".length) : "";
+  check(!!mappedChain && mappedChain.repo === "engine" && mappedChain.plan === "mapped" && mappedChain.gate === "area"
+    && !!closedChain && closedChain.repo === "engine" && closedChain.plan.indexOf("fail-closed: ") === 0
+    && areaRunShared2.out.indexOf("change in shared code " + closedFile) >= 0
+    && toolsPlan.plan === "gate tools" && toolsPlan.failClosed === false,
+    "16v an area line names the repository and the plan that chose its legs: mapped "
+    + (mappedChain && mappedChain.repo) + " " + (mappedChain && mappedChain.plan)
+    + ", fail-closed " + (closedChain && closedChain.plan)
+    + ", gate tools " + toolsPlan.plan);
   fs.unlinkSync(path.join(areaLab.lab, "electron-builder.js"));
 
   fs.writeFileSync(path.join(areaLab.lab, "src", "major.mjs"), "export const m = 1;\n");

@@ -217,12 +217,7 @@ async function startShell(appDir, ud) {
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  const b = await E.connectShell({ port: PORT, child, said });
   const p = (await b.pages())[0];
   lowered("the window", child.pid);
   await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/desk.js startShell", ready: "typeof window.E_VERSION === \"string\"" });
@@ -290,12 +285,7 @@ async function netLogArm(appDir, ud, logAt) {
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: LABDOCS }) });
   child.stdout.on("data", () => {});
   child.stderr.on("data", () => {});
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  const b = await E.connectShell({ port: PORT, child });
   lowered("a net-log arm", child.pid);
   await sleep(4500);
   const gone = new Promise(r => { if (child.exitCode !== null) r(true); else child.once("exit", () => r(true)); });
