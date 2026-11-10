@@ -1421,8 +1421,8 @@ body.role-waits #roleDrum{display:none}
   overflow:hidden;color:var(--ink)}
 #roleDrum .rd-cur{top:50%;transform:translateY(-50%);font:600 12.5px var(--sans)}
 #roleDrum .rd-cur.rd-empty{color:var(--dim);font:400 12.5px var(--sans)}
-#roleDrum .rd-prev{top:2px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
-#roleDrum .rd-next{bottom:2px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
 #roleDrum:hover .rd-prev,#roleDrum:hover .rd-next,#roleDrum:focus-visible .rd-prev,#roleDrum:focus-visible .rd-next{opacity:.5}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
@@ -7064,8 +7064,8 @@ What you type stays in this browser only.`;
     "Alternatives, split by blank lines": "Warianty oddzielone pustymi liniami",
     "Steps, in order (STEP badges)": "Kolejne kroki (znaczniki KROK)",
     "{PAX} as first name only": "{PAX} jako samo imię",
-    "Linked to every {INT}": "Powiązanie ze wszystkimi {INT}",
-    "Top of the {INT} group": "Na górze grupy {INT}",
+    "Wears {INT} under every intent": "Oznaczenie {INT} przy każdej intencji",
+    "First among the cards marked {INT}": "Pierwsza wśród kart oznaczonych {INT}",
     "steps": "kroki",
     "alt": "alt",
     /* Two senses, one English phrase: the agent typing their own name is asked for a first
@@ -7158,7 +7158,6 @@ What you type stays in this browser only.`;
     "you typed": "wpisano",
     "Toggle theme": "Przełącz motyw",
     "Switch language": "Przełącz język kart",
-    "int": "int",
     "Linked": "Powiązana",
     "In a supporting category, relevant regardless of the intent": "W kategorii wspierającej, przydatna niezależnie od intencji",
     "Also helps": "Także przydatna",
@@ -29791,7 +29790,7 @@ What you type stays in this browser only.`;
           body: (function() {
             const rows = [];
             const paxTag = '<span class="fillmiss">PAX</span>';
-            const intTag = '<span class="cbadge hit" title="' + esc(t("Intent")) + '">' + esc(t("int")) + "</span>";
+            const intTag = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
             const box = (id2, on, dis, tip, label2) => rows.push('<label title="' + esc(t(tip)) + '"><input type="checkbox" id="' + id2 + '"' + (on ? " checked" : "") + (dis ? " disabled" : "") + "> " + esc(t(label2)).split("{PAX}").join(paxTag).split("{INT}").join(intTag) + "</label>");
             box(
               "meAlt",
@@ -29830,14 +29829,14 @@ What you type stays in this browser only.`;
               m.allIntents,
               false,
               "Rings green under every intent - for text that always applies, like an opener.",
-              "Linked to every {INT}"
+              "Wears {INT} under every intent"
             );
             box(
               "meIntentTop",
               m.intentTop,
               false,
               "Sorts above the other linked cards when an intent is picked.",
-              "Top of the {INT} group"
+              "First among the cards marked {INT}"
             );
             const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
             const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";

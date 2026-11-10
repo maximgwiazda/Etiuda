@@ -157,8 +157,8 @@ UI_STRINGS.pl={
   "Alternatives, split by blank lines":"Warianty oddzielone pustymi liniami",
   "Steps, in order (STEP badges)":"Kolejne kroki (znaczniki KROK)",
   "{PAX} as first name only":"{PAX} jako samo imię",
-  "Linked to every {INT}":"Powiązanie ze wszystkimi {INT}",
-  "Top of the {INT} group":"Na górze grupy {INT}",
+  "Wears {INT} under every intent":"Oznaczenie {INT} przy każdej intencji",
+  "First among the cards marked {INT}":"Pierwsza wśród kart oznaczonych {INT}",
   "steps":"kroki",
   "alt":"alt",
   /* Two senses, one English phrase: the agent typing their own name is asked for a first
@@ -251,7 +251,6 @@ UI_STRINGS.pl={
   "you typed":"wpisano",
   "Toggle theme":"Przełącz motyw",
   "Switch language":"Przełącz język kart",
-  "int":"int",
   "Linked":"Powiązana",
   "In a supporting category, relevant regardless of the intent":"W kategorii wspierającej, przydatna niezależnie od intencji",
   "Also helps":"Także przydatna",
