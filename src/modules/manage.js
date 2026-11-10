@@ -10,7 +10,7 @@ import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
-import { askClearLocal } from "./local-memory.js";
+import { askClearLocal, bringBackCleared, clearedHeld } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
@@ -987,7 +987,10 @@ function wireLibrary(page){
       });
     };
   });
-  $("#mgWipe").onclick=askClearLocal;
+  const wipe=$("#mgWipe");
+  if(wipe) wipe.onclick=askClearLocal;
+  const bring=$("#mgBring");
+  if(bring) bring.onclick=bringBackCleared;
   /* Remember which groups are open, so the re-render after every edit does not shut them.
      Written on toggle rather than read back later because openManage() replaces the nodes. */
   wireFolds(page,"details[data-mg]","details.manage-sec",
@@ -1139,8 +1142,12 @@ function libraryActionsHtml(){
     +(join?libraryActRow("join","teams",t("Join a team"),t("Joins a team with an invitation from its lead."),join):'')
     +(eHasHistory()?libraryActRow("history","refresh",t("Saved copies"),t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
       '<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>'):'')
-    +libraryActRow("clear","delete",t("Clear local changes"),t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
-      '<button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local changes"))+'</button>')
+    +(clearedHeld()
+      ? libraryActRow("clear","delete",t("Bring back local changes"),
+        t("These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered."),
+        '<button type="button" class="btn" id="mgBring">'+esc(t("Bring back local changes"))+'</button>')
+      : libraryActRow("clear","delete",t("Clear local changes"),t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
+        '<button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local changes"))+'</button>'))
     +'</div>';
 }
 

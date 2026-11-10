@@ -1474,12 +1474,13 @@ const CARD_B = {
 }
 
 /* ------------------------------------------------------------------ local-memory.js
-   The two acts are the module's whole surface: nothing parks across a reload any more, so nothing
-   else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
+   The eject, the clear and the question are the acts. The cleared layer is held in memory on this
+   page, for the Library row, and is not written. What they do is driven in tests/test.js and, in
+   a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "the module exports the eject, the clear and the question before it, and nothing else",
-    () => eq(Object.keys(L).sort().join(","), "askClearLocal,clearLocalMemory,ejectCatalog"));
+  check("local-memory.js", "the module exports the eject, the clear, the question before it and the way back held on this page",
+    () => eq(Object.keys(L).sort().join(","), "askClearLocal,bringBackCleared,clearLocalMemory,clearedHeld,ejectCatalog"));
 }
 
 /* ==================================================================================

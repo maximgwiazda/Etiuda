@@ -658,7 +658,8 @@ function ejectUndoTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
   const loose = extractDecl(fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8"), "const LOOSE_FIELDS=");
   const markers = ["function catalogKeep(", "const CLEAR_KEEP_LAYER=", "const CLEAR_KEEP_PACK=", "function packKept(",
-    "function keepKeys(", "function putBack(", "function clearLocalMemory(",
+    "function keepKeys(", "function putBack(", "let clearedHold=", "function clearedHeld(", "function clearLocalMemory(",
+    "function bringBackCleared(",
     "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
   const OWN_PACK = JSON.stringify({ overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], favourites: ["c1"], hidden: ["c2"],
     intentFavourites: ["i1"], intentHidden: ["i2"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"], cardOrder: ["c1"] });
@@ -673,7 +674,8 @@ function ejectUndoTests() {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
         "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS",
-        loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
+        loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n")
+        + "\nreturn {ejectCatalog, clearLocalMemory, bringBackCleared: typeof bringBackCleared==='function' ? bringBackCleared : null};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
         ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
         k => (k in w.ls ? w.ls[k] : null), (k, v) => { w.ls[k] = String(v); return true; }, k => { delete w.ls[k]; },
@@ -714,6 +716,22 @@ function ejectUndoTests() {
     + " are not a change to the content", JSON.parse(w.ls["eab12~Pack"] || "null"), { intentKeys: "tag" });
   if (w.undo) w.undo();
   eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
+  /* The toast's Undo still ends at UNDO_MS. The cleared layer is a different hold: it survives that
+     wait and a later undoable act, and comes back byte for byte until the page closes. */
+  const undoMs = +((/const UNDO_MS=(\d+)/.exec(fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8")) || [])[1] || 0);
+  const late = world(true);
+  late.F.clearLocalMemory();
+  const stripped = late.ls["eab12~Pack"] !== OWN_PACK;
+  let clock = 0;
+  clock += undoMs + 1;
+  late.undo = null;
+  late.F.ejectCatalog();
+  const bring = late.F.bringBackCleared;
+  const brought = typeof bring === "function" && bring() === true;
+  eq("past UNDO_MS, and after another undoable act, the cleared layer still comes back byte for byte",
+    [undoMs >= 10000, clock > undoMs, stripped, late.said === "Catalog ejected", brought,
+     late.ls["eab12~Pack"], late.ls["eab12~CatOrder"], late.ls["eab12~LinksAside"], late.ls.ePack],
+    [true, true, true, true, true, OWN_PACK, "[\"t2\",\"t1\"]", "{}", "[\"loose\"]"]);
   const page = world(true, false);
   const pageBefore = sorted(page.ls) + sorted(page.ss);
   page.F.clearLocalMemory();
@@ -5861,8 +5879,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1335;
-const UI_STRINGS_SHA256 = "a4587aaf23e3ac9d58ea5432c6b3db78e7fd59c110a91a9695739cc45dd48eed";
+const UI_STRINGS_COUNT = 1337;
+const UI_STRINGS_SHA256 = "daa5dc671d50142039741a1facee1f0d5045764a032257372e001d8a6e527846";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or

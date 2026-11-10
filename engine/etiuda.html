@@ -7466,6 +7466,10 @@ What you type stays in this browser only.`;
     "Delete this intent": "Usuń tę intencję",
     "Export…": "Eksportuj…",
     "Clear local changes": "Wyczyść zmiany lokalne",
+    // placeholder: Claudette
+    "Bring back local changes": "Przywróć zmiany lokalne",
+    // placeholder: Claudette
+    "These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered.": "Zmiany zostają na tym stanowisku do zamknięcia Etiudy, a ponowne uruchomienie zostawia katalog w postaci dostarczonej.",
     "Removes every change made to the content on this computer, so the catalog reads as delivered.": "Usuwa wszystkie zmiany treści wprowadzone na tym komputerze, więc katalog wygląda tak, jak go dostarczono.",
     "Clear local changes?": "Wyczyścić zmiany lokalne?",
     "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.": "Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
@@ -27603,7 +27607,9 @@ What you type stays in this browser only.`;
   var local_memory_exports = {};
   __export(local_memory_exports, {
     askClearLocal: () => askClearLocal,
+    bringBackCleared: () => bringBackCleared,
     clearLocalMemory: () => clearLocalMemory,
+    clearedHeld: () => clearedHeld,
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
@@ -27652,6 +27658,10 @@ What you type stays in this browser only.`;
     else ssDel(TAB_KEY);
     hooks.restartDesk();
   }
+  var clearedHold = null;
+  function clearedHeld() {
+    return !!clearedHold;
+  }
   function clearLocalMemory() {
     let keep = { layer: [], pack: [] };
     keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
@@ -27666,8 +27676,20 @@ What you type stays in this browser only.`;
       if (half != null) lsSet(k, half);
       else lsDel(k);
     });
+    clearedHold = was;
     hooks.restartDesk();
-    offerUndo("Local changes cleared", () => putBack(was));
+    offerUndo("Local changes cleared", () => {
+      if (clearedHold !== was) return;
+      clearedHold = null;
+      putBack(was);
+    });
+  }
+  function bringBackCleared() {
+    const was = clearedHold;
+    if (!was) return false;
+    clearedHold = null;
+    putBack(was);
+    return true;
   }
   function askClearLocal() {
     const was = document.getElementById("eClearAsk");
@@ -32399,7 +32421,10 @@ What you type stays in this browser only.`;
         });
       };
     });
-    $("#mgWipe").onclick = askClearLocal;
+    const wipe = $("#mgWipe");
+    if (wipe) wipe.onclick = askClearLocal;
+    const bring = $("#mgBring");
+    if (bring) bring.onclick = bringBackCleared;
     wireFolds(
       page,
       "details[data-mg]",
@@ -32566,13 +32591,19 @@ What you type stays in this browser only.`;
       t("Saved copies"),
       t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
       '<button type="button" class="btn" id="mgHistory">' + esc(t("Saved copies…")) + "</button>"
-    ) : "") + libraryActRow(
+    ) : "") + (clearedHeld() ? libraryActRow(
+      "clear",
+      "delete",
+      t("Bring back local changes"),
+      t("These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered."),
+      '<button type="button" class="btn" id="mgBring">' + esc(t("Bring back local changes")) + "</button>"
+    ) : libraryActRow(
       "clear",
       "delete",
       t("Clear local changes"),
       t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
       '<button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local changes")) + "</button>"
-    ) + "</div>";
+    )) + "</div>";
   }
 
   // src/modules/settings.js
