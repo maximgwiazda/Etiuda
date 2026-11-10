@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 489;
+const EXPECTED = 492;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -3792,6 +3792,45 @@ async function main() {
       return { ok, detail: JSON.stringify({ asked, kept, after }) };
     }
 
+    /* A read-only team's lead cancels an invitation: a drop of one the relay holds, with nothing added and no wrap replaced, is taken
+       and that row is gone. A call that adds, replaces a wrap, or drops nothing held is refused team-lapsed, and so is a drop once a
+       trial has lapsed. */
+    async function cancelScene(T) {
+      const w = await lapseWorld(true, { T });
+      at(w, 31 * DAY);
+      const st = w.R.stores.get(w.rt);
+      const wrapBefore = JSON.stringify((st.get("inv:" + w.inv.id) || {}).wrap);
+      const added = { id: hex(16), hash: sha(hex(32)) };
+      const beside = { id: hex(16), hash: sha(hex(32)) };
+      const resealWrap = { epoch: 2, ct: "aa" };
+      const t0 = w.R.clock.now;
+      const reseal = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: {
+        add: [], drop: [], wraps: [{ id: w.inv.id, wrap: resealWrap }], t: t0,
+        sig: signHex(w.lead, C.invitesBytes(w.rt, t0, [], [], [{ id: w.inv.id, wrap: resealWrap }])),
+      } });
+      const wrapHeld = JSON.stringify((st.get("inv:" + w.inv.id) || {}).wrap) === wrapBefore;
+      const addOnly = await invites(w, [added], []);
+      const both = await invites(w, [beside], [w.inv2.id]);
+      const unknown = await invites(w, [], [hex(16)]);
+      const empty = await invites(w, [], []);
+      const dropped = await invites(w, [], [w.inv.id]);
+      const v = await lapseWorld(false, { T });
+      at(v, 0);
+      const trialDrop = await invites(v, [], [v.inv.id]);
+      const asked = [reseal, addOnly, both, unknown, empty, dropped, trialDrop].map(tail);
+      const kept = [
+        wrapHeld,
+        st.get("inv:" + added.id) === undefined,
+        !!st.get("inv:" + w.inv2.id),
+        st.get("inv:" + beside.id) === undefined,
+        st.get("inv:" + w.inv.id) === undefined,
+        !!v.R.stores.get(v.rt).get("inv:" + v.inv.id),
+      ];
+      const ok = sameJ(asked, ["team-lapsed", "team-lapsed", "team-lapsed", "team-lapsed", "team-lapsed", 200, "team-lapsed"])
+        && sameJ(kept, [true, true, true, true, true, true]);
+      return { ok, detail: JSON.stringify({ asked, kept }) };
+    }
+
     const paid = await held(() => paidScene());
     check(paid.a === true, "977a a paid team at its grant's end and 29 days is working: hello answers its challenge alone, the lead's and a desk's sessions are each told"
       + " { state: working, until, readOnly: until + 30 d, swept: until + 90 d }, since carries the same in its etiuda-lapse header, and fetch, socket, states,"
@@ -3843,6 +3882,10 @@ async function main() {
     check(withdraw.ok === true, "977q a read-only team's lead takes a desk off with a devices call that only removes it: the call is taken, the key is gone and its"
       + " session refused removed, the other desk still reads; a call that adds a key, moves a kept key to another desk or replaces a key is refused team-lapsed: "
       + (withdraw.detail || withdraw.failed));
+    const cancel = await held(() => cancelScene());
+    check(cancel.ok === true, "977r a read-only team's lead cancels an invitation with a drop-only call: the call is taken and that invitation's row is gone,"
+      + " the other invitation stays; a call that adds, replaces a wrap, drops an id the relay does not hold or drops nothing is refused team-lapsed,"
+      + " and a drop once a trial has lapsed is refused team-lapsed: " + (cancel.detail || cancel.failed));
 
     /* ---- 978: each line of the lapse lifted in a copy turns its leg red, and no product file is written ---- */
     const how2 = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
@@ -3863,7 +3906,7 @@ async function main() {
     /* Each plant counts only where the leg it turns red is green on the product. */
     const base = { "977a": paid.a === true, "977b": paid.b === true, "977c": paid.c === true, "977d": restored.ok === true, "977e": trial.e === true,
       "977h": renewal.zero === true && renewal.other === true && renewal.earlier === true, "977j": recorded.a === true, "977l": lazy.ok === true,
-      "977m": armed === true, "977n": sameJ(sql, WANT_SQL), "977o": edges === true, "977p": paidTrial.ok === true, "977q": withdraw.ok === true };
+      "977m": armed === true, "977n": sameJ(sql, WANT_SQL), "977o": edges === true, "977p": paidTrial.ok === true, "977q": withdraw.ok === true, "977r": cancel.ok === true };
     const CORE_LIFTS = [
       ["lapse-trial", "977e", "a trial's team keeps working past its until", async () => red(await held(() => trialScene()), "e")],
       ["lapse-working", "977a", "a working team refuses", async () => red(await held(() => paidScene()), "a")],
@@ -3930,6 +3973,7 @@ async function main() {
     const E_LIFTS = [
       ["paid-kept", "977p", "a trial's grant takes the paid end with it", async () => red(await held(() => paidThenTrialScene()), "ok")],
       ["lapse-withdraw", "977q", "a read-only team refuses a call that only removes a key", async () => red(await held(() => withdrawScene()), "ok")],
+      ["lapse-drop-invites", "977r", "a read-only team refuses a call that only drops an invitation", async () => red(await held(() => cancelScene()), "ok")],
     ];
     for (const [tag, leg, say, turns] of E_LIFTS) {
       const p = await liftCore("plant:" + tag, turns);
@@ -3941,6 +3985,9 @@ async function main() {
     const sameKey = await swapCore("held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk", "true", async () => red(await held(() => withdrawScene()), "ok"));
     check(base["977q"] && sameKey.turned && sameKey.back, label() + " judging a removal by key ids alone lets a read-only team's call move a kept key to another desk,"
       + " which turns 977q red, and the product file is never written: " + how2(sameKey));
+    const openAdd = await swapCore("if (add.length !== 0 || wraps.length !== 0) return false;", "if (false) return false;", async () => red(await held(() => cancelScene()), "ok"));
+    check(base["977r"] && openAdd.turned && openAdd.back, label() + " treating every invitations call as a drop lets a read-only team add an invitation beside a drop,"
+      + " which turns 977r red, and the product file is never written: " + how2(openAdd));
     const oneLift = await editTeam(lineLifted("plant:socket-one"), async T => {
       const p = await world({ team: T });
       const s = await sessionOf(p, p.desk);
