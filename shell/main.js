@@ -509,8 +509,9 @@ function conflictSiblingName(canonical, name) {
 }
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
+  /* The head is named with the files the watch already hears, so a landing reaches Settings. */
   return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
-    || n === PAUSE_NAME || conflictSiblingName(TEAM_NAME, n);
+    || n === PAUSE_NAME || n === "etiuda-head.json" || conflictSiblingName(TEAM_NAME, n);
 }
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the

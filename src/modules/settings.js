@@ -20,7 +20,7 @@ import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
+import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -778,6 +778,19 @@ function openSettings(section){
   const host=settingsHost(), on=host && host.querySelector(".sx-sec.on");
   if(on) try{ on.focus({preventScroll:true}); }catch(e){}
 }
+/* The head last drawn on Teams. A later join paint draws the page again only when that head changed, and only while Teams is the open section. */
+let headDrawn="";
+function headDrawSig(){
+  return teamLeads().map(l=>l.team+"\t"+(l.head?l.head.edition+"\t"+l.head.published+"\t"+String(l.head.t)+(l.head.catalog?"\t"+l.head.catalog:""):"")).join("\n");
+}
+onJoinPainted(()=>{
+  const next=headDrawSig();
+  if(next===headDrawn) return;
+  headDrawn=next;
+  if(sxOn!=="teams" || sxQuery) return;
+  try{ if(typeof document==="undefined" || !document.getElementById("setBody")) return; }catch(e){ return; }
+  paintSettings();
+});
 
 export {
   openSettings,

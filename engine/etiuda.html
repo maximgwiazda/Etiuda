@@ -33819,6 +33819,22 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
+  var headDrawn = "";
+  function headDrawSig() {
+    return teamLeads().map((l) => l.team + "	" + (l.head ? l.head.edition + "	" + l.head.published + "	" + String(l.head.t) + (l.head.catalog ? "	" + l.head.catalog : "") : "")).join("\n");
+  }
+  onJoinPainted(() => {
+    const next = headDrawSig();
+    if (next === headDrawn) return;
+    headDrawn = next;
+    if (sxOn !== "teams" || sxQuery) return;
+    try {
+      if (typeof document === "undefined" || !document.getElementById("setBody")) return;
+    } catch (e) {
+      return;
+    }
+    paintSettings();
+  });
 
   // src/modules/search-box.js
   var search_box_exports = {};
