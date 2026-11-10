@@ -1949,6 +1949,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .lang-tabs button[data-alt].on::after{background:var(--pl)}
 .lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
+.modal .lang-tabs-lab{font:12.5px var(--sans);letter-spacing:0;text-transform:none;color:var(--dim)}
 .lang-pane{display:none}
 .lang-pane.on{display:block}
 /* THE FIELDS ARE ONE SET SAID TWICE, so a swap should read as that set moving rather than as
@@ -2849,6 +2850,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .nw{white-space:nowrap}
 .mf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .mf>label{font:12px var(--mono);color:var(--dim)}
+/* The card form's own labels: the interface face, full ink. A direct child only, so a
+   checklist nested in a fold keeps the rule written for it. */
+.modal .mf>label{font:600 12.5px var(--sans);letter-spacing:0;color:var(--ink);text-transform:none}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
 .mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
@@ -2993,6 +2997,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    sits in a clickable row. */
 .manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec,.about-h{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
+/* The card form's fold headings out-specify this: sentence case, the interface face, full ink. */
 /* Section header states for all three accordion screens - base, open, hover, focus, in
    that order, in this one place; hover wins by source order at equal weight, so nobody
    counts classes. Exclusive accordions mean exactly one bright heading per screen. One rule
@@ -3189,6 +3194,14 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* A form field that folds. Shares the disclosure triangle and the animation with Manage's
    sections, but keeps the look of a label: no border, no uppercase heading, and the summary
    line reports what is inside so a closed fold still answers its own question. */
+/* Each fold after Content sits on a hairline. The heading is the interface face at 14px,
+   and the value beside it is the same face at 12.5px, dim, at full strength. */
+.modal .mf-fold{border-top:1px solid var(--line);padding-top:2px}
+.modal .mf-fold.mf-main{border-top:0}
+.modal .mf-fold>summary .mf-lab{font:600 14px var(--sans);letter-spacing:0;text-transform:none;color:var(--ink)}
+.modal .mf-fold>summary .mf-lab::first-letter{text-transform:uppercase}
+.modal .mf-sum{font:12.5px var(--sans);letter-spacing:0;color:var(--dim);opacity:1}
+.modal ::placeholder{color:color-mix(in srgb,var(--dim) 70%,transparent)}
 details.mf-fold>summary{list-style:none;cursor:default;display:flex;align-items:baseline;gap:8px;
   user-select:none;border-radius:var(--radius-xs)}
 details.mf-fold>summary::-webkit-details-marker{display:none}
