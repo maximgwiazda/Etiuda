@@ -3463,11 +3463,20 @@ function idListedHere(id) {
 function boxAnswerHere(file) {
   try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
 }
+/* Whether sharedFolderForWrite resolves to a team's place: a managed folder or its mirror, a relay team's mirror, a folder team's
+   share or mirror (joining or removed included), or the mirror a team moving to a folder waits in. */
+function teamWriteHere() {
+  if (sayJoinPolicy().folder || relayHere() || folderTeamHere()) return true;
+  const need = Object.values(teamNeedsFolder)[0];
+  return !!(need && need.mirror);
+}
 /* Where a working copy may go on a team this desk is on: one the team lists as before; a private one nowhere; any other to the lead's
-   box while the lead's switch applies, else held until it does. Off a team, as before but private. */
+   box while the lead's switch applies, else held until it does. Not a sealed member where writes reach a team's place: held. Off a
+   team, as before but private. */
 function branchGate(doc) {
   const use = teamUse(), onTeam = !!(use.member && use.seal);
   if (onTeam ? privateHere(doc, use.catalogs) : catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
+  if (!onTeam && teamWriteHere()) return { hold: true }; /* plant:team-write-hold */
   if (!onTeam) return {};
   if (teamListedDoc(doc, use)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */

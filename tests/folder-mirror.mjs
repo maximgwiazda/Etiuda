@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 100;
+const EXPECTED = 104;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -198,6 +198,18 @@ async function run() {
 
   const initDesk = loadDesk(folder("init-desk-ud"));
   const checks = typeof initDesk.api.deskTrustChecks === "function" ? initDesk.api.deskTrustChecks() : null;
+  /* Board 974, condition C5: a desk's working copy reaches a team's folder only from a sealed member, and in the clear only where it
+     grew from an edition the team lists and its lead signed. The legs about the mirror and the outbox write as such a member. */
+  const LAMP_GREW = { id: "lamp-shop", rev: 1, sha: initDesk.api.signedSha(JSON.parse(CAT_A1)) };
+  const enrol = (d, me, dirs, team) => {
+    const t = team || TEAM;
+    const doc = teamFile({ team: t, epoch: 1, rev: 2,
+      roster: [{ desk: { id: me.id, key: me.key, box: me.box }, wrap: d.api.wrapTeamKey(K1, me.box, t, 1, me.id) }] });
+    for (const dir of dirs) {
+      fs.writeFileSync(path.join(dir, "etiuda-team.json"), JSON.stringify(doc), "utf8");
+      fs.writeFileSync(path.join(dir, "lamp-shop.ec"), CAT_A1, "utf8");
+    }
+  };
 
   /* -------------------------------------------------------------------------------------------------
    * Leg 1 (41a): Main thread synchronous fs calls spy during readCatalog & catalogChanged
@@ -525,11 +537,12 @@ async function run() {
 
     const d = loadDesk(deskP.ud);
     const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirrorDir]);
     const stem = "cat-41p-12345678";
     const branchDoc = {
       format: 2, kind: "etiuda-catalog", id: me.id + "-12345678",
       desk: { id: me.id, key: me.key, box: me.box },
-      rev: 0, cards: []
+      rev: 0, cards: [], grew: LAMP_GREW
     };
 
     const wRes = d.api.writeBranch(stem, JSON.stringify(branchDoc));
@@ -576,11 +589,12 @@ async function run() {
 
     const d = loadDesk(deskQ.ud);
     const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirrorDir]);
     const stem = "cat-41q-12345678";
     const branchDoc = {
       format: 2, kind: "etiuda-catalog", id: me.id + "-12345678",
       desk: { id: me.id, key: me.key, box: me.box },
-      rev: 0, cards: []
+      rev: 0, cards: [], grew: LAMP_GREW
     };
     const prog = syncerMod.createFolderProgram({
       team: TEAM, folder: SHARE, mirror: mirrorDir,
@@ -1314,7 +1328,8 @@ async function run() {
     },
     unlink: p => fs.unlinkSync(p), mkdir: d => fs.mkdirSync(d, { recursive: true }), exists: p => fs.existsSync(p), rename: (a, b) => fs.renameSync(a, b)
   });
-  const branchOf = (me, tail, rev) => ({ format: 2, kind: "etiuda-catalog", id: me.id + "-" + tail, desk: { id: me.id, key: me.key, box: me.box }, rev: rev || 0, cards: [] });
+  const branchOf = (me, tail, rev) => ({ format: 2, kind: "etiuda-catalog", id: me.id + "-" + tail, desk: { id: me.id, key: me.key, box: me.box }, rev: rev || 0, cards: [],
+    grew: LAMP_GREW });
   const revAt = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")).rev; } catch { return null; } };
   const owedAtOf = (mirror, rel) => (typeof syncerMod.owedAt === "function" ? syncerMod.owedAt(mirror, rel) : null);
   let bump = Date.now() / 1000 + 100;
@@ -1331,6 +1346,7 @@ async function run() {
     fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
     const d = loadDesk(ud);
     const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
     const stem = "cat-44a-0a0b0c0d";
     const spied = [];
     const names = ["readdirSync", "readFileSync", "statSync", "existsSync", "writeFileSync", "renameSync", "mkdirSync", "openSync", "unlinkSync"];
@@ -1383,6 +1399,7 @@ async function run() {
     fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
     const d = loadDesk(ud);
     const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
     const stemA = "cat-44b-1a1b1c1d", stemB = "cat-44b-2a2b2c2d";
     const fileA = rel => path.join(rel, "desks", me.id, stemA + ".ec"), fileB = rel => path.join(rel, "desks", me.id, stemB + ".ec");
     d.api.writeBranch(stemA, JSON.stringify(branchOf(me, "1a1b1c1d")));
@@ -1623,6 +1640,7 @@ async function run() {
     fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
     const d = loadDesk(ud);
     const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
     const stem = "cat-44h-3a3b3c3d";
     d.api.writeBranch(stem, JSON.stringify(branchOf(me, "3a3b3c3d")));
     const rowOf = () => (d.api.deskRows().filter(r => r.id === me.id + "-3a3b3c3d")[0] || null);
@@ -2195,6 +2213,7 @@ async function run() {
       fs.writeFileSync(path.join(mirror, ".primed"), "");
       const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
       const me = d.api.branchIdentity(true);
+      enrol(d, me, [path.join(ud, "folder-mirror", TEAM), share]);
       d.api.writeBranch("cat-44o-4a4b4c4d", JSON.stringify(branchOf(me, "4a4b4c4d")));
       return fs.existsSync(path.join(share, "desks", me.id, "cat-44o-4a4b4c4d.ec")) && !fs.existsSync(path.join(mirror, "desks", me.id, "cat-44o-4a4b4c4d.ec"));
     });
@@ -2208,6 +2227,7 @@ async function run() {
       const { ud, mirror } = scratchDesk("plant-owes-desk", share);
       const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
       const me = d.api.branchIdentity(true);
+      enrol(d, me, [path.join(ud, "folder-mirror", TEAM), share]);
       d.api.writeBranch("cat-44p-5a5b5c5d", JSON.stringify(branchOf(me, "5a5b5c5d")));
       syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks }).syncOnce();
       return fs.existsSync(path.join(mirror, "desks", me.id, "cat-44p-5a5b5c5d.ec")) && !fs.existsSync(path.join(share, "desks", me.id, "cat-44p-5a5b5c5d.ec"));
@@ -2222,6 +2242,7 @@ async function run() {
       const { ud } = scratchDesk("plant-row-desk", share);
       const d = loadDesk(ud, { src: fs.readFileSync(scratchMain, "utf8") });
       const me = d.api.branchIdentity(true);
+      enrol(d, me, [path.join(ud, "folder-mirror", TEAM), share]);
       d.api.writeBranch("cat-44q-6a6b6c6d", JSON.stringify(branchOf(me, "6a6b6c6d")));
       const row = d.api.deskRows().filter(x => x.id === me.id + "-6a6b6c6d")[0];
       return !!row && row.reached === true;
@@ -3004,6 +3025,25 @@ async function run() {
 
   /* Finding 3 (Seam C): while joining, the desk writes its proposals into the local mirror and outbox,
      and finishJoin switches watchedFolder to the mirror once admitted. */
+  /* Board 974, condition C5: a desk's working copy, and whether its text sits in the clear anywhere under a folder. */
+  const C5_MARK = "The lamp notes stay at this desk.";
+  const copyDoc = (me, tail) => ({
+    format: 2, kind: "etiuda-catalog", id: me.id + "-" + tail, rev: 1, name: "Lamp notes, at this desk", date: "2026-04-03",
+    langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: [{ id: "c-desk", shelf: "t-op", bodyShape: "plain", title: { en: "Desk" }, body: { en: C5_MARK } }],
+    desk: { id: me.id, key: me.key, box: me.box }
+  });
+  const holdsMark = dir => {
+    let names = [];
+    try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+    return names.some(n => {
+      const p = path.join(dir, n.name);
+      if (n.isDirectory()) return holdsMark(p);
+      try { return fs.readFileSync(p, "utf8").indexOf(C5_MARK) >= 0; } catch { return false; }
+    });
+  };
+  const hexOf = n => crypto.randomBytes(n).toString("hex");
+
   async function seamCScene(name, src) {
     const share = folder(name + "-share");
     const T = "t-" + crypto.randomBytes(8).toString("hex");
@@ -3039,13 +3079,15 @@ async function run() {
     const mirrorHereJoining = d.api.folderMirrorHere();
     const catFolderJoining = d.api.catalogFolder();
 
+    /* A working copy of a catalog this desk keeps for itself, which the team does not list. */
     const stem = "prop-12345678";
-    const propDoc = { desk: { id: me.id, key: me.key, box: me.box }, id: me.id + "-12345678", rev: 1 };
-    await d.ask("etiuda:branch-write", stem, JSON.stringify(propDoc));
+    const propDoc = copyDoc(me, "12345678");
+    const wrote = await d.ask("etiuda:branch-write", stem, JSON.stringify(propDoc));
 
     const branchInMirror = fs.existsSync(path.join(mirror, "desks", me.id, stem + ".ec"));
-    const branchInOutbox = fs.existsSync(path.join(mirror, ".outbox.json"));
+    const branchInOutbox = !!syncerMod && syncerMod.owedList(mirror).some(o => o.rel.indexOf("desks/") === 0);
     const branchInShare = fs.existsSync(path.join(share, "desks", me.id, stem + ".ec"));
+    const markIn = [mirror, share].filter(dir => holdsMark(dir));
 
     // Admit the desk on the roster
     const wrap1 = d.api.wrapTeamKey(K1, me.box, T, 1, me.id);
@@ -3065,7 +3107,7 @@ async function run() {
 
     return {
       mirrorHereJoining, catFolderJoining, mirror, share,
-      branchInMirror, branchInOutbox, branchInShare,
+      branchInMirror, branchInOutbox, branchInShare, markIn, held: !!wrote && wrote.held === true,
       watchedAfterJoin
     };
   }
@@ -3073,12 +3115,58 @@ async function run() {
   {
     const r = await seamCScene("seam-c");
     const mirrorOk = r.mirrorHereJoining === r.mirror && r.catFolderJoining === r.mirror;
-    const writeOk = r.branchInMirror && r.branchInOutbox && !r.branchInShare;
     const watchOk = r.watchedAfterJoin === r.mirror;
-    const ok = mirrorOk && writeOk && watchOk;
-    check(ok, "45l desk while joining uses mirror and outbox for branch write and switches watchedFolder to mirror on finishJoin: "
-      + "mirror joining " + mirrorOk + " (" + r.mirrorHereJoining + "), branch in mirror " + r.branchInMirror + ", in outbox "
-      + r.branchInOutbox + ", not direct on share " + !r.branchInShare + ", watched after join " + (r.watchedAfterJoin === r.mirror));
+    check(mirrorOk && watchOk, "45l desk while joining reads and writes through the mirror and switches watchedFolder to mirror on finishJoin: "
+      + "mirror joining " + mirrorOk + " (" + r.mirrorHereJoining + "), watched after join " + watchOk);
+    check(r.held && !r.branchInMirror && !r.branchInOutbox && !r.branchInShare && !r.markIn.length,
+      "974a a joining desk's working copy of a catalog the team does not list is held: nothing under the mirror or the share's desks/<me>/, the outbox owes nothing, no clear text anywhere: "
+      + JSON.stringify({ held: r.held, mirror: r.branchInMirror, outbox: r.branchInOutbox, share: r.branchInShare, clearIn: r.markIn.length }));
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("team-write-hold", mainFile, async (scratchMain) => {
+      const res = await seamCScene("plant-c5-hold", fs.readFileSync(scratchMain, "utf8"));
+      return !res.held && (res.branchInMirror || res.markIn.length > 0);
+    });
+    if (r) check(r.ok, "974b lifting plant:team-write-hold writes the joining desk's working copy in the clear into the mirror: " + JSON.stringify(r));
+    else skip("974b lifting plant:team-write-hold writes the joining desk's working copy in the clear into the mirror");
+  }
+  /* The control: a desk on no team, its catalog folder a shared one, writes its working copy there as before. */
+  {
+    const share = folder("c5-plain-share");
+    const d = deskWithSrc("c5-plain", share);
+    await d.ask("etiuda:branch-identity", true);
+    const me = d.api.branchIdentity(false);
+    const wrote = await d.ask("etiuda:branch-write", "plain-12345678", JSON.stringify(copyDoc(me, "12345678")));
+    let doc = null;
+    try { doc = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "plain-12345678.ec"), "utf8")); } catch { doc = null; }
+    const written = !!wrote && wrote.ok === true && !wrote.held && !!doc && doc.id === me.id + "-12345678" && !!doc.sig;
+    check(written && holdsMark(share), "974c a desk on no team, on a shared folder, writes its working copy there signed and unsealed, as before: "
+      + JSON.stringify({ wrote, written, clear: holdsMark(share) }));
+  }
+  /* The relay: a desk joining a relay team writes into the relay's mirror (shareFolderShown), which the channel uploads once the
+     desk holds the team key, sealed under it whatever the team lists. Not yet a sealed member there, the copy is held. */
+  {
+    const own = folder("c5-relay-own");
+    const d = deskWithSrc("c5-relay", own);
+    await d.ask("etiuda:branch-identity", true);
+    const me = d.api.branchIdentity(false);
+    const T = "t-" + hexOf(8), rt = hexOf(16);
+    const mirror = path.join(d.ud, "relay", rt);
+    fs.mkdirSync(mirror, { recursive: true });
+    d.write({
+      teamPins: { [T]: LEAD }, teamPinFrom: { [T]: "invite" },
+      teamShown: { [T]: { folder: mirror, relay: "etiuda.dev", lead: "Lamp lead" } },
+      teamKeys: { [T]: { 1: keyIn(K1) } },
+      teamJoin: { team: T, file: "", nonce: hexOf(32), commit: hexOf(32), asked: Date.now(), held: 1, name: "Lamp Desk",
+        invite: { id: hexOf(8), proof: hexOf(32), lead: { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" }, pinned: true,
+          relay: { rt, url: "https://etiuda.dev/relay/v1", inv: hexOf(16), token: "token", seal: "seal" } } }
+    });
+    const onRelay = path.resolve(d.api.sharedFolderForWrite()) === path.resolve(mirror);
+    const wrote = await d.ask("etiuda:branch-write", "relay-12345678", JSON.stringify(copyDoc(me, "12345678")));
+    const inMirror = fs.existsSync(path.join(mirror, "desks", me.id, "relay-12345678.ec"));
+    check(onRelay && !!wrote && wrote.held === true && !inMirror && !holdsMark(mirror) && !holdsMark(own),
+      "974d a desk joining a relay team, its writes going to the relay's mirror, holds its working copy: nothing under the mirror, no clear text: "
+      + JSON.stringify({ onRelay, wrote, inMirror, clear: holdsMark(mirror) }));
   }
   {
     const r = PLANTS_OFF ? null : await testPlant("mirror-while-joining", mainFile, async (scratchMain) => {

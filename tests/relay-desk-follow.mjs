@@ -514,8 +514,8 @@ async function main() {
   );
 
   check(
-    r1.branchReachable && r1.inUseReachable && r1.heldBranchReached,
-    "945s5 the own branch and in-use reach the mirror: "
+    r1.branchReachable && r1.inUseReachable && !r1.heldBranchReached,
+    "945s5 the own branch and in-use reach the mirror, and a held working copy of a catalog the team does not list stays held, since the desk is no sealed member at the relay's mirror (board 974, C5): "
     + JSON.stringify(r1.mirrorFiles)
   );
 
