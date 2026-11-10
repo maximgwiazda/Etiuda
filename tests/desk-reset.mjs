@@ -37,15 +37,15 @@ function skip(line) {
   console.log("  SKIP " + line);
 }
 
-const GOES = "Everything on this desk goes: the catalog, the team, the agent's name, settings, open conversations and every local change. Only the licence stays.";
+const GOES = "Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.";
 const WARN = "There is no Undo. Joining the team again takes a new invitation from its lead.";
 const ASK = "Type RESET to confirm.";
 const ROW = "Returns this desk to a fresh install, keeping only the licence.";
 const AGAIN = "Etiuda is starting again as freshly installed.";
 const BOX_EN = "Remove my data";
-const LINE_EN = "Also removes Etiuda's data on this computer: settings, conversations and the licence. The catalog files stay.";
+const LINE_EN = "Also removes Etiuda's data on this computer: settings, conversations, the licence, own cards and stars, and this desk's place on its team, so a sealed catalog opens again only after a new invitation from the team's lead. The catalog files stay.";
 const BOX_PL = "Usuń także dane z tego komputera";
-const LINE_PL = "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy i licencję. Pliki katalogów zostają.";
+const LINE_PL = "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy, licencję, własne karty i gwiazdki oraz miejsce tego stanowiska w zespole, więc zapieczętowany katalog otworzy się dopiero po nowym zaproszeniu od lidera zespołu. Pliki katalogów zostają.";
 const UNFINISHED = "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
 const UNFINISHED_NEXT = "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
 const TRY_AGAIN = "Try again";
@@ -59,7 +59,7 @@ const UNFINISHED_PL = {
 const PL = {
   "Returns this desk to a fresh install, keeping only the licence.": "Przywraca stanowisko do stanu po świeżej instalacji; zostaje tylko licencja.",
   "Reset Etiuda?": "Zresetować Etiudę?",
-  [GOES]: "Ze stanowiska zniknie wszystko: katalog, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Zostaje tylko licencja.",
+  [GOES]: "Reset usuwa każdy katalog z własnego folderu Etiudy, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Pliki katalogów w każdym innym folderze zostają, podobnie jak licencja.",
   [WARN]: "Tego nie da się cofnąć. Ponowne dołączenie do zespołu wymaga nowego zaproszenia od lidera.",
   [ASK]: "Do potwierdzenia trzeba wpisać RESET.",
   [AGAIN]: "Etiuda uruchamia się ponownie jak po świeżej instalacji."
@@ -549,6 +549,15 @@ function boxOff(text) {
   if (/BST_CHECKED/.test(between)) return false;
   return /StrCpy \$RemoveMyData "0"/.test(init);
 }
+/* The desk keeps its own Remove my data step. OWN_UNINSTALL_DATA_STEP is Studio's switch (it has a step of its own); the
+   desk's script never defines it, and the step's lines stand only inside its !ifndef, so the desk's build emits them. */
+function deskKeepsDataStep(text) {
+  const t = String(text || "");
+  if (/^[ \t]*!define[ \t]+OWN_UNINSTALL_DATA_STEP\b/m.test(t)) return false;
+  const at = t.search(/^[ \t]*!ifndef[ \t]+OWN_UNINSTALL_DATA_STEP\b/m);
+  const use = t.search(/^[ \t]*\$\{If\} \$RemoveMyData == "1"/m);
+  return at > -1 && use > at;
+}
 function licenceDefine(text) {
   return /^[ \t]*!define ETIUDA_REMOVE_LICENCE_WITH_DATA\b.*plant:uninstall-licence-goes/m.test(text);
 }
@@ -558,6 +567,8 @@ function installLeg(decision) {
   try { nsh = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
   check(nsh.indexOf(BOX_EN) >= 0 && nsh.indexOf(LINE_EN) >= 0 && nsh.indexOf(BOX_PL) >= 0 && nsh.indexOf(LINE_PL) >= 0 && boxOff(nsh),
     "4d7 the checkbox is off by default and carries the copywriter's line in both languages");
+  check(deskKeepsDataStep(nsh) && !deskKeepsDataStep(nsh.replace(/^(!macro customUnInstall)/m, "!define OWN_UNINSTALL_DATA_STEP\n$1")),
+    "4d11 the desk's script never defines OWN_UNINSTALL_DATA_STEP, so its own Remove my data step is emitted, and a define of it reads red");
   if (typeof decision !== "function") {
     check(false, "4d7 install-plan has no uninstallDataDecision, so the update path is unjudged");
     return;

@@ -648,7 +648,7 @@ UI_STRINGS.pl={
   "Reset Etiuda":"Zresetuj Etiudę",
   "Returns this desk to a fresh install, keeping only the licence.":"Przywraca stanowisko do stanu po świeżej instalacji; zostaje tylko licencja.",
   "Reset Etiuda?":"Zresetować Etiudę?",
-  "Everything on this desk goes: the catalog, the team, the agent's name, settings, open conversations and every local change. Only the licence stays.":"Ze stanowiska zniknie wszystko: katalog, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Zostaje tylko licencja.",
+  "Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.":"Reset usuwa każdy katalog z własnego folderu Etiudy, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Pliki katalogów w każdym innym folderze zostają, podobnie jak licencja.",
   "There is no Undo. Joining the team again takes a new invitation from its lead.":"Tego nie da się cofnąć. Ponowne dołączenie do zespołu wymaga nowego zaproszenia od lidera.",
   "Type RESET to confirm.":"Do potwierdzenia trzeba wpisać RESET.",
   "Etiuda is starting again as freshly installed.":"Etiuda uruchamia się ponownie jak po świeżej instalacji.",

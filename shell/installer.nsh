@@ -536,6 +536,10 @@
   ${EndIf}
   !endif
 
+  # THE DESK'S OWN DATA STEP. A build with its own Remove my data step (Studio, packaging/installer-pages.nsh
+  # un.RemoveUserData, with its own keep list) defines OWN_UNINSTALL_DATA_STEP, so the copy cut from here into its
+  # hooks emits none of it: no $RemoveMyData or un.ClearDeskFolder it never declares, and none of the desk's keep rules.
+  !ifndef OWN_UNINSTALL_DATA_STEP
   # An update's silent uninstall carries /KEEP_APP_DATA or --updated. Either one keeps the desk's
   # data, whatever the checkbox, and this runs before any folder is removed.
   Push $R0
@@ -587,6 +591,7 @@
       SetShellVarContext all
     ${EndIf}
   ${EndIf}
+  !endif
 !macroend
 
 # THE TURNING SIDEBAR AND HEADER. Looping frames, one every ${TURN_INTERVAL} ms. Frame 0 is the still
@@ -842,7 +847,7 @@ Var RemoveDataBox
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
     LangString RemoveDataBox ${ID} "Usuń także dane z tego komputera"
-    LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy i licencję. Pliki katalogów zostają."
+    LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy, licencję, własne karty i gwiazdki oraz miejsce tego stanowiska w zespole, więc zapieczętowany katalog otworzy się dopiero po nowym zaproszeniu od lidera zespołu. Pliki katalogów zostają."
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
     LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nSetup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
@@ -859,7 +864,7 @@ Var RemoveDataBox
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
     LangString RemoveDataBox ${ID} "Remove my data"
-    LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: settings, conversations and the licence. The catalog files stay."
+    LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: settings, conversations, the licence, own cards and stars, and this desk's place on its team, so a sealed catalog opens again only after a new invitation from the team's lead. The catalog files stay."
   !endif
 !macroend
 !insertmacro TurnLang 1033
@@ -947,7 +952,7 @@ Var RemoveDataBox
     Pop $0
     ${NSD_CreateCheckbox} 0 0 100% 12u "$(RemoveDataBox)"
     Pop $RemoveDataBox
-    ${NSD_CreateLabel} 0 18u 100% 36u "$(RemoveDataLine)"
+    ${NSD_CreateLabel} 0 18u 100% 60u "$(RemoveDataLine)"
     Pop $0
     nsDialogs::Show
   FunctionEnd
