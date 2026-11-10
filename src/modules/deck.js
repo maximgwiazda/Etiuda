@@ -362,10 +362,13 @@ function wireDeck(){
     const c=deckKbdCard; deckKbdCard=null;
     if(!c.matches(":hover")) deckWant(c,false,DECK_GRACE);
   },{passive:true});
-  // A click on a reply still on its way is held: what is copied is what was there when the hand aimed.
+  /* A click on a tucked reply opens the deck and is not copied. One still travelling is held:
+     what is copied is what was there when the hand aimed. */
   document.addEventListener("click",e=>{
     const t=e.target && e.target.closest ? e.target.closest(".txt.deck-back") : null, c=t && deckAt(t);
-    if(c && (c.classList.contains("deck-moving") || !c.classList.contains("deck-open"))){ e.stopPropagation(); e.preventDefault(); }
+    if(!c) return;
+    if(!c.classList.contains("deck-open")){ e.stopPropagation(); e.preventDefault(); deckWant(c,true,0); return; }
+    if(c.classList.contains("deck-moving")){ e.stopPropagation(); e.preventDefault(); }
   },true);
   deckLater();
 }
