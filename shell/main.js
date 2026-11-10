@@ -6064,6 +6064,35 @@ function forkDismissed(team) {
   }
   return joinView();
 }
+/* The mirror this team's row is read from: the relay mirror while this desk follows that team, otherwise the folder mirror. */
+function teamStateMirror(team) {
+  if (teamChannel[team] && teamChannel[team].kind === "relay") {
+    const here = relayHere();
+    if (!here || here.team !== team) return "";
+    return relayMirrorOf(here.rt);
+  }
+  return folderMirrorOf(team);
+}
+/* True while the team's file lists a catalog the mirror holds no edition of. An edition is a catalog file there,
+   signed so this desk accepts it. The head's announcement is not one: the file is. An empty list, or a team file
+   that is not whole under the pinned lead, says nothing. */
+function awaitsFirstEdition(team) {
+  const pin = teamPins[team];
+  if (!pin) return false;
+  const root = teamStateMirror(team);
+  if (!root || !folderAnswers(root)) return false;
+  const doc = teamTextChosen(root).doc;
+  if (!doc || !teamWhole(doc) || String(doc.id) !== team || !doc.lead
+    || doc.lead.keyId !== pin.keyId || doc.lead.public !== pin.public
+    || !Array.isArray(doc.catalogs) || !doc.catalogs.length) return false;
+  const have = new Set();
+  for (const f of ecFilesIn(root)) {
+    let facts = null;
+    try { facts = ecFacts(f, ""); } catch { facts = null; }
+    if (facts && facts.id && Number.isFinite(+facts.rev) && +facts.rev >= 0 && facts.genuine) have.add(String(facts.id));
+  }
+  return doc.catalogs.some(id => !have.has(String(id)));
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
@@ -6097,6 +6126,7 @@ function leadsView() {
     }
     /* The same sentence the log says, on this team's row, until the listing lands. The page prints it. */
     if (reading && ftHere && t === ftHere.team) row.reading = reading; /* plant:still-reading-shown */
+    if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
   });
 }
