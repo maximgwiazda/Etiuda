@@ -459,15 +459,18 @@
 # ETIUDA IS ASKED TO CLOSE, NEVER STOPPED. The installer signals the running desk to seal its tabs and close, followed
 # by taskkill without /F; the desk keeps in-progress tabs sealed on disk without a modal, or asks where it cannot, and
 # the installer waits and says so. Still open after that, it asks for Retry; a silent install gives up there and leaves
-# the installed version as it was.
+# the installed version as it was. Both sentences name ${PRODUCT_NAME}, so each app says its own.
 !macro customCheckAppRunning
+  Push $R6
   Push $R7
   Push $R8
   Push $R9
   ${If} $LANGUAGE == 1045
-    StrCpy $R9 "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: Etiuda zachowa otwarte rozmowy wraz z wersjami roboczymi i przywróci je przy następnym uruchomieniu, a jeśli to niemożliwe, przy trwającej rozmowie najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę."
+    StrCpy $R6 "Program ${PRODUCT_NAME} jest uruchomiony; instalator zamknie go przed kontynuacją."
+    StrCpy $R9 "Program ${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów."
   ${Else}
-    StrCpy $R9 "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: Etiuda keeps its open conversations and their drafts and brings them back at its next start, or, where it cannot, asks first while a conversation is in progress. The installation carries on once it has closed; if it stays open, close it by hand and press Retry."
+    StrCpy $R6 "${PRODUCT_NAME} is running, and the installer will close it before going on."
+    StrCpy $R9 "${PRODUCT_NAME} is running. Close it, then choose Retry."
   ${EndIf}
   StrCpy $R7 0
   ${Do}
@@ -477,7 +480,7 @@
       ${ExitDo}
     ${EndIf}
     ${If} $R7 == 0
-      DetailPrint "$R9"
+      DetailPrint "$R6"
       ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
         nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
         Pop $R8
@@ -500,6 +503,7 @@
   Pop $R9
   Pop $R8
   Pop $R7
+  Pop $R6
 !macroend
 
 # AN UPDATE LEAVES THE INSTALLED FILES WHERE THEY ARE: the new installer copies over them only once its own extraction to a
@@ -774,8 +778,8 @@ Var RecogniseMsg
     LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
-    LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
     !endif
+    LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
@@ -789,8 +793,8 @@ Var RecogniseMsg
     LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
-    LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
     !endif
+    LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
   !endif
 !macroend

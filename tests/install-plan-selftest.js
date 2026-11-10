@@ -381,6 +381,26 @@ ok(patchTwiceSame, "9c the patch applied a second time changes nothing");
   const nsh = require("node:fs").readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
   const defs = (nsh.match(/LangString etiudaSetupNotFinished \$\{ID\} "[^"]*\$2[^"]*"/g) || []).length;
   ok(defs === 2, "9d the string the patched page shows for a child that did not finish is defined in both languages, naming the code: " + defs);
+  /* The patched leave function is compiled into the uninstaller as well (assistedInstaller.nsh inserts
+     PAGE_INSTALL_MODE on that side). A definition under !ifndef BUILD_UNINSTALLER is then missing there. */
+  const uninstallerLangCount = (text, name) => {
+    const stack = [], re = new RegExp("^LangString\\s+" + name + "\\b");
+    let visible = 0;
+    for (const line of text.split(/\r?\n/)) {
+      const t = line.trim();
+      if (/^!ifndef\s+BUILD_UNINSTALLER\b/.test(t)) { stack.push(true); continue; }
+      if (/^!if(?:def|ndef|macrodef)?\b/.test(t)) { stack.push(false); continue; }
+      if (/^!endif\b/.test(t)) { stack.pop(); continue; }
+      if (stack.indexOf(true) > -1) continue;
+      if (re.test(t)) visible++;
+    }
+    return visible;
+  };
+  ok(uninstallerLangCount(nsh, "etiudaSetupNotFinished") === 2,
+    "9e the did-not-finish string is defined for the uninstaller compile too, not only the installer's: "
+    + uninstallerLangCount(nsh, "etiudaSetupNotFinished"));
+  ok(uninstallerLangCount(nsh.replace(/LangString etiudaSetupNotFinished/g, "!ifndef BUILD_UNINSTALLER\nLangString etiudaSetupNotFinished"), "etiudaSetupNotFinished") === 0,
+    "9e control: the same string put back under !ifndef BUILD_UNINSTALLER reads none");
 }
 ok(recogInfo && recogInfo.bringsInnerToFront === true,
   "9c elevated inner copy is brought to front with BringToFront in skipLicenseIfInner");
