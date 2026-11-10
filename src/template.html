@@ -4087,7 +4087,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* THE LANES, over the list while they show: under the header and the round buttons, on the list's own dot
    field, which stays. The list keeps its place and its scroll unseen; the category bar leaves. */
 #lanes{position:fixed;left:0;right:0;bottom:0;top:calc(var(--rail-top,120px) - 8px);z-index:47;
-  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default}
+  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default;
+  --ln-chip:color-mix(in srgb,var(--ink) 9%,transparent)}
+:root[data-theme=light] #lanes{--ln-chip:color-mix(in srgb,var(--ink) 6%,transparent)}
 body.e-lanes #pageScroll>.shell{opacity:0}
 body.e-lanes #pageScroll{scrollbar-color:transparent transparent}
 body.e-lanes #pageScroll::-webkit-scrollbar-thumb{background-color:transparent}
@@ -4103,29 +4105,32 @@ body.e-lanes #pillsSlot{display:none}
 .ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
 .ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--dim)}
 .ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
-.ln-hint kbd,.ln-key{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
+.ln-hint kbd{margin-right:6px;font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
   color:var(--dim);background:var(--panel)}
-.ln-hint kbd{margin-right:6px}
 .ln-key{flex:none}
+#lanes .ln-lang,#lanes .ln-key{border:0;background:var(--ln-chip);color:var(--ink);border-radius:6px;padding:1px 6px;
+  font:600 10.5px var(--sans)}
 .ln-empty{margin:48px 0;text-align:center;font-size:14px;color:var(--dim)}
-.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.15fr) minmax(0,1.3fr);
-  column-gap:64px;row-gap:2px;align-items:start}
+.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.25fr);
+  column-gap:88px;row-gap:2px;align-items:start}
 .ln-h{grid-row:1;padding:0 2px 8px;font:600 11.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
 .ln-h1{grid-column:1}
 .ln-h2{grid-column:2}
 .ln-h3{grid-column:3}
 /* A reply sent: its time, card and language on the head line the thread passes through, its first words under it. */
-.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 20px}
-.ln-sent-h{display:flex;align-items:center;gap:7px;min-width:0}
-.ln-sent .ctitle{min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 24px}
+.ln-sent-h{display:flex;align-items:baseline;gap:7px;min-width:0}
+.ln-sent .ctitle{min-width:0;font-size:14px}
+#lanes .ln-sent .ctitle,#lanes .ln-row .ctitle,#lanes .ln-now .ctitle{white-space:normal;overflow:visible;-webkit-mask-image:none;mask-image:none}
 .ln-at{flex:none;font:12.5px var(--mono);color:var(--dim)}
-.ln-lang{flex:none;margin-left:auto;font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ln-lang{flex:none;margin-left:auto}
 .ln-first{margin-top:3px;font-size:13px;line-height:1.45;color:var(--dim)}
 .ln-clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .ln-when{flex:none;margin-left:auto;font:12px var(--mono);color:var(--dim)}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}
+#lanes .ln-now .txt{box-shadow:0 0 0 1.5px var(--accent),var(--card-shadow,0 0 #0000)}
 /* One track no wider than the lane: left to its rows' longest line, Next ran off a narrow window. */
 .ln-next{grid-column:3;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start}
 .ln-row{margin:0}
@@ -4134,12 +4139,16 @@ body.e-lanes #pillsSlot{display:none}
 .ln-txt{white-space:normal;margin-bottom:4px}
 .ln-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .ln-txt:hover,.ln-blk:hover{border-color:var(--accent)}
-.ln-then{padding:0 3px;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.ln-then{display:flex;align-items:center;flex-wrap:wrap;gap:6px;white-space:normal;overflow:visible;padding:2px 3px 0;font-size:12.5px;color:var(--dim)}
+.ln-then-l{font-size:12px;color:var(--dim);margin-right:2px}
+.ln-chip{display:inline-flex;align-items:center;padding:2px 9px;border-radius:7px;background:var(--ln-chip);color:var(--ink);font-size:12.5px;white-space:nowrap}
+.ln-part{position:absolute;top:8px;right:10px}
+.ln-sep{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .ln-wires{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-.ln-w{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-w{fill:none;stroke:var(--accent);stroke-width:1.7}
 .ln-w-learnt{stroke:var(--dim);stroke-dasharray:2 4}
-.ln-dot{fill:var(--accent)}
-.ln-dot-open{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-dot{fill:var(--accent);stroke:var(--bg);stroke-width:2.5}
+.ln-arrow{fill:var(--accent)}
 /* Editing the list in the lanes: the grip and the row's own action show under the pointer or the keyboard. */
 .ln-acts{margin-left:auto;flex:none;display:inline-flex;align-items:center}
 .ln-row .nx-grip,.ln-row .ln-acts{opacity:0;transition:opacity var(--m-tone) ease}

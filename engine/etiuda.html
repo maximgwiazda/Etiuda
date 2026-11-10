@@ -4087,7 +4087,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* THE LANES, over the list while they show: under the header and the round buttons, on the list's own dot
    field, which stays. The list keeps its place and its scroll unseen; the category bar leaves. */
 #lanes{position:fixed;left:0;right:0;bottom:0;top:calc(var(--rail-top,120px) - 8px);z-index:47;
-  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default}
+  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default;
+  --ln-chip:color-mix(in srgb,var(--ink) 9%,transparent)}
+:root[data-theme=light] #lanes{--ln-chip:color-mix(in srgb,var(--ink) 6%,transparent)}
 body.e-lanes #pageScroll>.shell{opacity:0}
 body.e-lanes #pageScroll{scrollbar-color:transparent transparent}
 body.e-lanes #pageScroll::-webkit-scrollbar-thumb{background-color:transparent}
@@ -4103,29 +4105,32 @@ body.e-lanes #pillsSlot{display:none}
 .ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
 .ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--dim)}
 .ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
-.ln-hint kbd,.ln-key{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
+.ln-hint kbd{margin-right:6px;font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
   color:var(--dim);background:var(--panel)}
-.ln-hint kbd{margin-right:6px}
 .ln-key{flex:none}
+#lanes .ln-lang,#lanes .ln-key{border:0;background:var(--ln-chip);color:var(--ink);border-radius:6px;padding:1px 6px;
+  font:600 10.5px var(--sans)}
 .ln-empty{margin:48px 0;text-align:center;font-size:14px;color:var(--dim)}
-.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.15fr) minmax(0,1.3fr);
-  column-gap:64px;row-gap:2px;align-items:start}
+.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.25fr);
+  column-gap:88px;row-gap:2px;align-items:start}
 .ln-h{grid-row:1;padding:0 2px 8px;font:600 11.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
 .ln-h1{grid-column:1}
 .ln-h2{grid-column:2}
 .ln-h3{grid-column:3}
 /* A reply sent: its time, card and language on the head line the thread passes through, its first words under it. */
-.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 20px}
-.ln-sent-h{display:flex;align-items:center;gap:7px;min-width:0}
-.ln-sent .ctitle{min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 24px}
+.ln-sent-h{display:flex;align-items:baseline;gap:7px;min-width:0}
+.ln-sent .ctitle{min-width:0;font-size:14px}
+#lanes .ln-sent .ctitle,#lanes .ln-row .ctitle,#lanes .ln-now .ctitle{white-space:normal;overflow:visible;-webkit-mask-image:none;mask-image:none}
 .ln-at{flex:none;font:12.5px var(--mono);color:var(--dim)}
-.ln-lang{flex:none;margin-left:auto;font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ln-lang{flex:none;margin-left:auto}
 .ln-first{margin-top:3px;font-size:13px;line-height:1.45;color:var(--dim)}
 .ln-clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .ln-when{flex:none;margin-left:auto;font:12px var(--mono);color:var(--dim)}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}
+#lanes .ln-now .txt{box-shadow:0 0 0 1.5px var(--accent),var(--card-shadow,0 0 #0000)}
 /* One track no wider than the lane: left to its rows' longest line, Next ran off a narrow window. */
 .ln-next{grid-column:3;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start}
 .ln-row{margin:0}
@@ -4134,12 +4139,16 @@ body.e-lanes #pillsSlot{display:none}
 .ln-txt{white-space:normal;margin-bottom:4px}
 .ln-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .ln-txt:hover,.ln-blk:hover{border-color:var(--accent)}
-.ln-then{padding:0 3px;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.ln-then{display:flex;align-items:center;flex-wrap:wrap;gap:6px;white-space:normal;overflow:visible;padding:2px 3px 0;font-size:12.5px;color:var(--dim)}
+.ln-then-l{font-size:12px;color:var(--dim);margin-right:2px}
+.ln-chip{display:inline-flex;align-items:center;padding:2px 9px;border-radius:7px;background:var(--ln-chip);color:var(--ink);font-size:12.5px;white-space:nowrap}
+.ln-part{position:absolute;top:8px;right:10px}
+.ln-sep{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .ln-wires{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-.ln-w{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-w{fill:none;stroke:var(--accent);stroke-width:1.7}
 .ln-w-learnt{stroke:var(--dim);stroke-dasharray:2 4}
-.ln-dot{fill:var(--accent)}
-.ln-dot-open{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-dot{fill:var(--accent);stroke:var(--bg);stroke-width:2.5}
+.ln-arrow{fill:var(--accent)}
 /* Editing the list in the lanes: the grip and the row's own action show under the pointer or the keyboard. */
 .ln-acts{margin-left:auto;flex:none;display:inline-flex;align-items:center}
 .ln-row .nx-grip,.ln-row .ln-acts{opacity:0;transition:opacity var(--m-tone) ease}
@@ -8222,7 +8231,7 @@ What you type stays in this browser only.`;
     "just now": "przed chwilą",
     "{N} min ago": "{N} min temu",
     "at {TIME}": "o {TIME}",
-    "then: {LIST}": "potem: {LIST}",
+    "then": "potem",
     "often": "często",
     "One of the cards this desk has used most lately": "Jedna z kart ostatnio najczęściej używanych na tym stanowisku",
     "To choose from next: {N}.": "Dalej do wyboru: {N}.",
@@ -34543,7 +34552,13 @@ What you type stays in this browser only.`;
     const off = r.learnt || r.used;
     const grip = off ? "" : '<button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>';
     const act = off ? '<button type="button" class="ln-keep" title="' + esc(t("Add it to the list")) + '" aria-label="' + esc(t("Add it to the list")) + '">' + ICON_PLUS + "</button>" : '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button>";
-    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + escFilled(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then">' + esc(t("then: {LIST}").replace("{LIST}", then.join(LN_DOT))) + "</div>" : "") + "</div>";
+    const l = cardLang(m), ps = parts(m, l), blocks = Math.max(1, ps.length);
+    let txts = "";
+    for (let b = 0; b < blocks; b++) {
+      const chip = blocks > 1 ? '<span class="ln-chip ln-part">' + (b + 1) + "/" + blocks + "</span>" : "";
+      txts += '<div class="txt ln-txt' + (i === laneMark && b === 0 ? " sel" : "") + '" role="button" data-b="' + b + '">' + chip + '<span class="ln-clamp">' + escFilled(laneBody(m, b).replace(/\s+/g, " ").trim()) + "</span></div>";
+    }
+    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + "</span></div>" + txts + (then.length ? '<div class="ln-then" role="list"><span class="ln-then-l">' + esc(t("then")) + "</span>" + then.map((n) => '<span class="ln-chip" role="listitem">' + esc(n) + "</span>").join('<span class="ln-sep">' + esc(LN_DOT) + "</span>") + "</div>" : "") + "</div>";
   }
   function laneEditHtml(st) {
     const own = st.fold && st.fold.own ? '<div class="ln-src"><span class="nx-who own">' + esc(t("Your list")) + '</span><button type="button" class="btn ln-back">' + esc(t("Back to the catalog's")) + "</button></div>" : "";
@@ -34568,37 +34583,43 @@ What you type stays in this browser only.`;
   function drawWires() {
     const el = lanesEl(), cols = el && el.querySelector(".ln-cols"), svg = cols && cols.querySelector(".ln-wires");
     if (!svg) return;
-    const o = cols.getBoundingClientRect(), at = (r) => ({ l: r.left - o.left, t: r.top - o.top, r: r.right - o.left, b: r.bottom - o.top });
+    const o = cols.getBoundingClientRect();
+    const at = (r) => ({ l: r.left - o.left, t: r.top - o.top, r: r.right - o.left, b: r.bottom - o.top, y: (r.top + r.bottom) / 2 - o.top });
     const now = cols.querySelector(".ln-now"), nh = now && now.querySelector(".chead");
     if (!now || !nh) return;
-    const n = at(now.getBoundingClientRect()), h = at(nh.getBoundingClientRect()), hy = (h.t + h.b) / 2;
-    let d = "", dots = "";
-    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length).map((e) => {
-      const r = at(e.getBoundingClientRect()), h2 = at((e.firstElementChild || e).getBoundingClientRect());
-      return { l: r.l, t: h2.t, b: h2.b };
-    });
+    const h = at(nh.getBoundingClientRect());
+    let d = "", arrows = "", ports = "";
+    const arrow = (x, y) => {
+      arrows += '<path class="ln-arrow" d="M' + (x - 1) + " " + y + 'l-9 -4.5v9z"/>';
+    };
+    const port = (x, y) => {
+      ports += '<circle class="ln-dot" cx="' + x + '" cy="' + y + '" r="6"/>';
+    };
+    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length);
     if (sent.length) {
-      const x = sent[0].l + 4, y0 = (sent[0].t + sent[0].b) / 2;
-      d += '<path class="ln-w" d="M' + x + " " + y0 + "V" + hy + "H" + (h.l - 10) + '"/>';
+      const heads = sent.map((e) => at((e.firstElementChild || e).getBoundingClientRect()));
+      const box = at(sent[sent.length - 1].getBoundingClientRect());
+      const x = box.l + 4, y0 = heads[0].y;
+      d += '<path class="ln-w" d="M' + x + " " + y0 + "V" + (h.y - 10) + "Q" + x + " " + h.y + " " + (x + 10) + " " + h.y + "H" + (h.l - 9) + '"/>';
       if (cols.querySelector(".ln-older")) d += '<path class="ln-w ln-w-learnt" d="M' + x + " " + (y0 - 18) + "V" + y0 + '"/>';
-      sent.forEach((r) => {
-        dots += '<circle class="ln-dot" cx="' + x + '" cy="' + (r.t + r.b) / 2 + '" r="4"/>';
-      });
+      arrow(h.l, h.y);
+      heads.forEach((q) => port(x, q.y));
     }
-    dots += '<circle class="ln-dot ln-dot-open" cx="' + (h.l - 6) + '" cy="' + hy + '" r="4"/>';
+    const slab = now.querySelector(".txt") || now, n = at(slab.getBoundingClientRect());
     const rows = [...cols.querySelectorAll(".ln-row")];
     rows.forEach((row2, i) => {
       const rh = row2.querySelector(".chead");
       if (!rh) return;
-      const r = at(rh.getBoundingClientRect()), y1 = (r.t + r.b) / 2, x1 = r.l - 8;
-      const y0 = n.t + 18 + i * Math.min(14, Math.max(0, n.b - n.t - 36) / Math.max(1, rows.length - 1)), x0 = n.r;
-      const dx = Math.max(12, (x1 - x0) / 2);
-      d += '<path class="ln-w' + (row2.hasAttribute("data-learnt") || row2.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + x1 + " " + y1 + '"/>';
-      dots += '<circle class="ln-dot" cx="' + x1 + '" cy="' + y1 + '" r="3.5"/>';
+      const b = at(rh.getBoundingClientRect()), x1 = b.l - 2, y1 = b.y;
+      const y0 = n.t + 20 + i * Math.min(20, Math.max(0, n.b - n.t - 40) / Math.max(1, rows.length - 1)), x0 = n.r;
+      const dx = Math.max(40, (x1 - x0) * 0.55);
+      d += '<path class="ln-w' + (row2.hasAttribute("data-learnt") || row2.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + (x1 - 7) + " " + y1 + '"/>';
+      arrow(x1, y1);
+      port(x0, y0);
     });
     svg.setAttribute("width", String(cols.scrollWidth));
     svg.setAttribute("height", String(cols.scrollHeight));
-    svg.innerHTML = d + dots;
+    svg.innerHTML = d + arrows + ports;
   }
   var walkRuns = [];
   var walkGhost = null;
@@ -34719,10 +34740,13 @@ What you type stays in this browser only.`;
     const el = lanesEl();
     return el ? el.querySelector('.ln-row[data-k="' + k + '"]') : null;
   }
-  function laneCopy(k, other) {
+  function laneCopy(k, other, part) {
     const r = laneRows[k];
     if (!r) return false;
-    copyCardPart(r.id, 0, laneRowEl(k), other);
+    const b = part != null ? part | 0 : 0;
+    const el = laneRowEl(k);
+    const anchor = el ? el.querySelector('.ln-txt[data-b="' + b + '"]') || el : null;
+    copyCardPart(r.id, b, anchor, other);
     return true;
   }
   function lanesShortcut(id) {
@@ -34838,7 +34862,9 @@ What you type stays in this browser only.`;
         laneTake(hit.getAttribute("data-to"));
         return true;
       }
-      return k < 0 ? false : (laneCopy(k), true);
+      const txt = at.closest(".ln-txt");
+      const part = txt && txt.dataset.b != null ? +txt.dataset.b : 0;
+      return k < 0 ? false : (laneCopy(k, false, part), true);
     });
     el.addEventListener("pointerdown", (e) => {
       if (e.target && e.target.closest && e.target.closest(".nx-hit")) e.preventDefault();
