@@ -9704,7 +9704,7 @@ function searchCacheWrite(key, buf) {
   fs.mkdirSync(searchCacheDir(), { recursive: true });
   const tmp = at + ".tmp";
   fs.writeFileSync(tmp, buf);
-  fs.renameSync(tmp, at);
+  renamePatiently(tmp, at);
 }
 function searchCachePrune(keep) {
   let names = [];
@@ -9937,7 +9937,8 @@ ipcMain.on("etiuda:search-set", (e, on) => {
   embedSuggest.setSearchOn(!!on);
 });
 ipcMain.handle("etiuda:search-prepare", (e, rows) => {
-  if (!fromEngine(e) || !embedSuggest) return { ready: false, skipped: true };
+  if (!fromEngine(e)) return null;
+  if (!embedSuggest) return { ready: false, skipped: true };
   try { return embedSuggest.prepareSearch(rows) || { ready: false, skipped: true }; }
   catch (err) { return { ready: false, skipped: true }; }
 });
