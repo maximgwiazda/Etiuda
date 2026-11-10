@@ -139,8 +139,7 @@ function render(){
           + (eCatalogFolder()
             ? (eFolderHoldsCatalog()
               ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
-              // placeholder: Claudette
-              : t("A catalog kept in {FOLDER} is read from there. A catalog kept anywhere else loads with Load catalog."))
+              : t("There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog."))
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')

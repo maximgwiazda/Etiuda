@@ -8722,8 +8722,7 @@ const SHELL_WORDS = {
         trayQuit: "Quit Etiuda",
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda keeps running in the tray",
-        // placeholder: Claudette
-        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. Right-click the tray icon and choose Quit Etiuda. Settings, under General, changes this.",
+        trayKeepsBody: "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead.",
         jumpRecent: "Recent catalogs",
         jumpReplies: "Bring the replies over any window",
         jumpNewTab: "New tab",
@@ -8747,8 +8746,7 @@ const SHELL_WORDS = {
         trayQuit: "Zakończ Etiudę",
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda działa dalej w zasobniku",
-        // placeholder: Claudette
-        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Pozycja Zakończ Etiudę w menu ikony zasobnika zamyka program, a to zachowanie zmienia się w Ustawieniach, w części Ogólne.",
+        trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka pozycja Zakończ Etiudę w menu ikony zasobnika; w Ustawieniach, w części Ogólne, można ustawić, by zamknięcie okna kończyło działanie.",
         jumpRecent: "Ostatnie katalogi",
         jumpReplies: "Przywołaj odpowiedzi nad dowolne okno",
         jumpNewTab: "Nowa rozmowa",

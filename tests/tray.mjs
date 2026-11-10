@@ -347,10 +347,10 @@ async function run() {
     const settingsSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
     const langSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
     const bodies = [...mainSrc.matchAll(/trayKeepsBody:\s*"([^"]*)"/g)].map(m => m[1]);
-    const noticeEn = "Its shortcut still works and the team's updates still arrive. Right-click the tray icon and choose Quit Etiuda. Settings, under General, changes this.";
-    const noticePl = "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Pozycja Zakończ Etiudę w menu ikony zasobnika zamyka program, a to zachowanie zmienia się w Ustawieniach, w części Ogólne.";
-    const toastEn = "The window will quit when it closes.";
-    const toastPl = "Okno zakończy działanie przy zamknięciu.";
+    const noticeEn = "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead.";
+    const noticePl = "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka pozycja Zakończ Etiudę w menu ikony zasobnika; w Ustawieniach, w części Ogólne, można ustawić, by zamknięcie okna kończyło działanie.";
+    const toastEn = "Closing the window will quit Etiuda.";
+    const toastPl = "Zamknięcie okna zakończy działanie Etiudy.";
     const toastWired = settingsSrc.includes('toast(quit?t("' + toastEn + '"):t("Stay in the tray"))');
     const pair = langSrc.includes('"' + toastEn + '":"' + toastPl + '"');
     const iconQuits = /tray icon quits|z ikony w zasobniku/.test(bodies.join("\n"));
