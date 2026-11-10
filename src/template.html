@@ -3676,6 +3676,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-mt .mt-tab{padding:10px 16px;border-top:1px solid var(--line)}
 @media (max-width:720px){
   .sx.lm-mt .mt-grid{grid-template-columns:minmax(0,1fr)}
+  /* The Library's acts carry long buttons (Saved copies, Clear local changes): narrow, the button goes under its words. */
+  .sx.lm-lib .mg-data-acts>.set-row{grid-template-columns:28px minmax(0,1fr)}
+  .sx.lm-lib .mg-data-acts>.set-row>.set-ctl{grid-column:2;justify-content:flex-start}
 }
 @media (max-height:700px){
   .sx.lm-mt .mt-h{padding:6px 8px}
