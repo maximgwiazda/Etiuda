@@ -549,6 +549,15 @@ function boxOff(text) {
   if (/BST_CHECKED/.test(between)) return false;
   return /StrCpy \$RemoveMyData "0"/.test(init);
 }
+/* The desk keeps its own Remove my data step. OWN_UNINSTALL_DATA_STEP is Studio's switch (it has a step of its own); the
+   desk's script never defines it, and the step's lines stand only inside its !ifndef, so the desk's build emits them. */
+function deskKeepsDataStep(text) {
+  const t = String(text || "");
+  if (/^[ \t]*!define[ \t]+OWN_UNINSTALL_DATA_STEP\b/m.test(t)) return false;
+  const at = t.search(/^[ \t]*!ifndef[ \t]+OWN_UNINSTALL_DATA_STEP\b/m);
+  const use = t.search(/^[ \t]*\$\{If\} \$RemoveMyData == "1"/m);
+  return at > -1 && use > at;
+}
 function licenceDefine(text) {
   return /^[ \t]*!define ETIUDA_REMOVE_LICENCE_WITH_DATA\b.*plant:uninstall-licence-goes/m.test(text);
 }
@@ -558,6 +567,8 @@ function installLeg(decision) {
   try { nsh = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
   check(nsh.indexOf(BOX_EN) >= 0 && nsh.indexOf(LINE_EN) >= 0 && nsh.indexOf(BOX_PL) >= 0 && nsh.indexOf(LINE_PL) >= 0 && boxOff(nsh),
     "4d7 the checkbox is off by default and carries the copywriter's line in both languages");
+  check(deskKeepsDataStep(nsh) && !deskKeepsDataStep(nsh.replace(/^(!macro customUnInstall)/m, "!define OWN_UNINSTALL_DATA_STEP\n$1")),
+    "4d11 the desk's script never defines OWN_UNINSTALL_DATA_STEP, so its own Remove my data step is emitted, and a define of it reads red");
   if (typeof decision !== "function") {
     check(false, "4d7 install-plan has no uninstallDataDecision, so the update path is unjudged");
     return;
