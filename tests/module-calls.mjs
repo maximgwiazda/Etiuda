@@ -4380,11 +4380,17 @@ const CARD_B = {
         const high = 10 + 50 * tags.length;
         const c = { nodeType: 1, dataset: { id: m.id }, classList: flip(new Set(["card"])), style: box(), hover: false, tags, offsetHeight: high,
           getBoundingClientRect: () => ({ top, bottom: top + high, left: 0, right: 300, width: 300, height: high }),
-          querySelectorAll: () => c.slabs, querySelector: () => null, closest: s => (s === ".card.deck" && c.classList.contains("deck") ? c : null),
+          querySelectorAll: sel => (sel && sel.includes(".txt") ? c.slabs : c.slabs),
+          querySelector: sel => {
+            const mv = sel && sel.match(/data-v="(\d+)"/);
+            return mv ? c.slabs.find(s => s.dataset && s.dataset.v === mv[1]) || null : null;
+          },
+          closest: s => (s === ".card.deck" && c.classList.contains("deck") ? c : null),
           matches: s => (s === ":hover" ? c.hover : s === ".card[data-id]"), contains: n => n === c || c.slabs.includes(n),
           getAttribute: () => [...c.classList.s].join(" ") };
-        c.slabs = tags.map((tag, k) => ({ nodeType: 1, tag, offsetTop: 10 + 50 * k, offsetHeight: 40, offsetWidth: 300, classList: flip(new Set(["txt"])),
+        c.slabs = tags.map((tag, k) => ({ nodeType: 1, tag, dataset: { v: String(k) }, offsetTop: 10 + 50 * k, offsetHeight: 40, offsetWidth: 300, classList: flip(new Set(["txt"])),
           style: box(), scrolled: 0, scrollIntoView() { this.scrolled++; },
+          getBoundingClientRect: () => ({ top: top + 10 + 50 * k, bottom: top + 50 + 50 * k, left: 0, right: 300, width: 300, height: 40 }),
           closest(s) { return s === ".card.deck" ? c.closest(s) : s === ".txt.deck-back" && this.classList.contains("deck-back") ? this : null; } }));
         return c;
       };
@@ -4393,9 +4399,22 @@ const CARD_B = {
       const l = listOf(cards), each = l.querySelectorAll.bind(l);
       l.querySelectorAll = sel => sel.split(",").map(x => x.trim())
         .flatMap(c => (c.startsWith(".txt") ? cards.flatMap(k => k.slabs || []).filter(e => hit(e, c)) : each(c)));
-      l.querySelector = sel => l.querySelectorAll(sel)[0] || null;
+      l.querySelector = sel => {
+        const m = sel && sel.match(/\[data-id="([^"]+)"\]/);
+        if (m) {
+          const card = cards.find(c => c.dataset && c.dataset.id === m[1]);
+          if (!card) return null;
+          if (sel.includes(".txt")) return card.querySelector(sel);
+          return card;
+        }
+        return l.querySelectorAll(sel)[0] || null;
+      };
+      l.offsetHeight = 1000;
       Object.assign(l, { nodeType: 1, addEventListener: on, closest: () => null, contains: n => cards.includes(n) });
       byId["#list"] = l;
+      const hadDocEl = doc.documentElement;
+      const docEl = part({ classList: flip(new Set()), addEventListener() {} });
+      doc.documentElement = docEl;
       Dom.grabDom();
       /* What a card shows: flat, every reply in its place with no deck class and no length on it or its replies; tucked,
          a deck with its height and every reply but the first behind it. */
@@ -4416,7 +4435,7 @@ const CARD_B = {
             if (!b || typeof b.onclick !== "function") throw new Error("no " + name + " " + val + " among " + segs.map(x => x.attrs["data-seg"]).join(","));
             b.onclick(); return String(toastEl.textContent || toastEl.innerHTML || ""); } };
       };
-      return { rig, run, fire, alt, under, steps, l, body, says, settings, made, byId, away: { closest: () => null }, now: () => now,
+      return { rig, run, fire, alt, under, steps, cards, drawn, l, body, docEl, says, settings, made, byId, away: { closest: () => null }, now: () => now,
         wire: () => DK.wireDeck(), cls: () => [...body.classList.s].filter(k => k.startsWith("deck")).join("+"),
         watched: () => rig.mo + "/" + rig.ro,
         restore() {
@@ -4424,6 +4443,7 @@ const CARD_B = {
           try { rig.restore(); } finally {
             g.setTimeout = had.st; g.clearTimeout = had.ct; doc.addEventListener = had.add; doc.querySelector = had.q; doc.createElement = had.make;
             for (const [k, v] of [["body", had.body], ["getElementById", had.gid], ["querySelectorAll", had.all], ["activeElement", had.active]]) if (v === undefined) delete doc[k]; else doc[k] = v;
+            if (hadDocEl === undefined) delete doc.documentElement; else doc.documentElement = hadDocEl;
             if (had.gcs === undefined) delete g.getComputedStyle; else g.getComputedStyle = had.gcs;
             for (const [k, v] of [["eMotionOff", had.motion], ["eDeckOff", had.deck]]) if (v == null) ST.lsDel(k); else ST.lsSet(k, v);
             AS.putLang(had.lang); DLG.accOpen.clear(); had.acc.forEach(k => DLG.accOpen.add(k));
@@ -4523,6 +4543,64 @@ const CARD_B = {
             "cols,raillock,pillslock,notehover,deck/on/off || null,2 alternatives:tucked,none,true/true || 1,2 alternatives:flat,deck-off,false/false"
             + " || deck-off,false/false,2 alternatives:flat,3 steps:flat || none,true/true,2 alternatives:tucked,3 steps:tucked || true");
         } finally { if (fresh) fresh.restore(); if (w) w.restore(); }
+      });
+    check("deck.js", "1016dk6 a stacked card opened stays open through every order change of a drag that reorders its macros and after the drop, and the order lands",
+      async () => {
+        const { animateTxtReorder } = await import(MOD("card-blocks.js"));
+        const P = await import(MOD("pack.js"));
+        const CM = await import(MOD("content-model.js"));
+        const hadLangs = CM.CONTENT_LANGS.slice(), hadCards = AS.cards.slice(), hadBase = P.BASE_M.slice(), hadCustom = P.pack.custom, hadOverrides = Object.assign({}, P.pack.overrides);
+        const hadRebuild = HK.hooks.rebuildCards;
+        CM.setContentLangs(["en", "pl"]); AS.putLang("en");
+        const base = { id: "c-fit", c: "orders", alt: 1, seq: 1, t: "Fitting a shade",
+          en: ["Loosen the ring.", "Set the shade on the holder.", "Tighten the ring."].join(GAP),
+          pl: ["Poluzuj pierscien.", "Zaloz abazur.", "Dokrec pierscien."].join(GAP) };
+        P.BASE_M.length = 0; P.BASE_M.push(base); P.pack.custom = []; P.pack.overrides = {};
+        AS.setCards([Object.assign({}, base)]);
+        if (!globalThis.document) globalThis.document = { querySelector: () => null, createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
+        const w = world();
+        try {
+          ST.lsDel("eDeckOff"); w.wire(); DK.deckSettle();
+          w.steps.hover = true;
+          w.fire("pointerover", { target: w.steps.slabs[0], relatedTarget: null });
+          w.run(w.now() + 400);
+          const opened = w.steps.classList.contains("deck-open");
+
+          HK.hooks.rebuildCards = () => {
+            const ov = P.pack.overrides["c-fit"];
+            const current = ov ? Object.assign({}, base, ov) : Object.assign({}, base);
+            AS.setCards([current]);
+            const newSteps = w.drawn(current, 400);
+            w.cards[2] = newSteps;
+            w.steps = newSteps;
+            DK.deckSettle();
+          };
+
+          globalThis.document.documentElement.classList.add("txtdrag");
+
+          animateTxtReorder("c-fit", 0, 1, true);
+          w.run(w.now() + 250);
+          const openAfterSwap1 = w.steps.classList.contains("deck-open");
+
+          animateTxtReorder("c-fit", 1, 2, true);
+          w.run(w.now() + 250);
+          const openAfterSwap2 = w.steps.classList.contains("deck-open");
+
+          globalThis.document.documentElement.classList.remove("txtdrag");
+          const openAfterDrop = w.steps.classList.contains("deck-open");
+
+          const ov = P.pack.overrides["c-fit"] || {};
+          const landedEn = ov.en || "";
+          const expectedEn = ["Set the shade on the holder.", "Tighten the ring.", "Loosen the ring."].join(GAP);
+          const orderMatches = landedEn === expectedEn;
+
+          return eq([opened, openAfterSwap1, openAfterSwap2, openAfterDrop, orderMatches].join(","), "true,true,true,true,true");
+        } finally {
+          CM.setContentLangs(hadLangs); AS.putLang("en"); AS.setCards(hadCards);
+          P.BASE_M.length = 0; hadBase.forEach(m => P.BASE_M.push(m)); P.pack.custom = hadCustom; P.pack.overrides = hadOverrides;
+          if (hadRebuild === undefined) delete HK.hooks.rebuildCards; else HK.hooks.rebuildCards = hadRebuild;
+          w.restore();
+        }
       });
     /* The sheet's half. With the switch off no deck class is on any card or reply (1016dk1 to dk3), so a deck rule is
        off with it if it asks for one; the fade's transition on every card and rule asks for none, so it asks for a body
