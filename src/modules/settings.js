@@ -649,7 +649,7 @@ function wirePage(box){
           if(quit) lsSet("eQuitOnClose","1"); else lsDel("eQuitOnClose");
           const host=closeHost();
           if(host){ try{ host.setClosePolicy(quit); }catch(e){} }
-          toast(quit?t("Quit"):t("Stay in the tray"));
+          toast(quit?t("Closing the window will quit Etiuda."):t("Stay in the tray"));
         }
         else if(seg==="notesmaster"){
           const host=eHost();

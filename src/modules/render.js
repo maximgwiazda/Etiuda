@@ -32,7 +32,7 @@ import { scheduleCutScan } from "./cut-text.js";
 import { markSearchHits } from "./search-marks.js";
 import { syncEmptyMark } from "./empty-mark.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, wireFolderLink } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eFolderHoldsCatalog, wireFolderLink } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
@@ -153,7 +153,9 @@ function render(){
             : '')
           + '<div class="mid-folder p2">'
           + (eCatalogFolder()
-            ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
+            ? (eFolderHoldsCatalog()
+              ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
+              : t("There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog."))
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')

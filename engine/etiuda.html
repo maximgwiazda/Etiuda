@@ -7862,6 +7862,7 @@ What you type stays in this browser only.`;
     "When the window closes": "Po zamknięciu okna",
     "Stay in the tray": "Zostaje w zasobniku",
     "Quit": "Kończy działanie",
+    "Closing the window will quit Etiuda.": "Zamknięcie okna zakończy działanie Etiudy.",
     "In the tray, Etiuda still answers its shortcut and shows notifications.": "W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
     "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
     "How the screen is laid out.": "Jak rozłożony jest ekran.",
@@ -8008,6 +8009,7 @@ What you type stays in this browser only.`;
     "The tour carries on once this tab is closed.": "Przewodnik ruszy dalej, gdy ta zakładka się zamknie.",
     'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.',
     "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
+    "There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog.": "W folderze {FOLDER} nie ma jeszcze katalogu. Katalog z innego miejsca można wczytać przyciskiem Wczytaj katalog.",
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Load catalog…": "Wczytaj katalog…",
     "Saved copies…": "Zapisane kopie…",
@@ -15547,6 +15549,7 @@ What you type stays in this browser only.`;
     eCatalogRing: () => eCatalogRing,
     eCatalogTaken: () => eCatalogTaken,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
+    eFolderHoldsCatalog: () => eFolderHoldsCatalog,
     eHasBranch: () => eHasBranch,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
@@ -15574,6 +15577,7 @@ What you type stays in this browser only.`;
     eTellAi: () => eTellAi,
     eTellSearch: () => eTellSearch,
     eWriteBranch: () => eWriteBranch,
+    noteCatalogFolderHold: () => noteCatalogFolderHold,
     syncBandHeight: () => syncBandHeight,
     wireFolderLink: () => wireFolderLink,
     wireHost: () => wireHost
@@ -15715,6 +15719,29 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h || typeof h.onCatalogListing !== "function") return;
     h.onCatalogListing((rows) => fn(mapListing(rows)));
+  }
+  var folderHold = null;
+  function normFolder(p) {
+    return String(p || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  }
+  function bootFolderHolds() {
+    if (!eCatalogFile() || eCatalogBuiltIn()) return false;
+    const folder = eCatalogFolder();
+    if (!folder) return false;
+    return normFolder(eCatalogIn()) === normFolder(folder);
+  }
+  function eFolderHoldsCatalog() {
+    return folderHold === null ? bootFolderHolds() : folderHold;
+  }
+  function rowHoldsCatalog(f) {
+    if (!f || !f.name || f.builtIn || f.desk) return false;
+    if (f.cards == null) return true;
+    return +f.cards >= 0;
+  }
+  function noteCatalogFolderHold(rows) {
+    const prev = eFolderHoldsCatalog();
+    folderHold = Array.isArray(rows) && rows.some(rowHoldsCatalog);
+    return folderHold !== prev;
   }
   function eLoadedCatalogFile() {
     const set = nsGet("CatalogFile");
@@ -24311,7 +24338,7 @@ What you type stays in this browser only.`;
     setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
-      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? (eFolderHoldsCatalog() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.") : t("There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog.")).split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
@@ -31594,6 +31621,16 @@ What you type stays in this browser only.`;
     }
   }
   function onCatalogListing(all) {
+    let flipped = false;
+    try {
+      flipped = noteCatalogFolderHold(all);
+    } catch (e) {
+      flipped = false;
+    }
+    try {
+      if (flipped && wholeThingEmpty() && document.querySelector(".empty-desk") && typeof hooks.render === "function") hooks.render();
+    } catch (e) {
+    }
     paintCatalogList();
     if (lsGet("eNotifyCatalogOff") !== "1") {
       const tLeads = teamLeads().filter((l) => l && !l.removed);
@@ -33550,7 +33587,7 @@ What you type stays in this browser only.`;
               } catch (e) {
               }
             }
-            toast(quit ? t("Quit") : t("Stay in the tray"));
+            toast(quit ? t("Closing the window will quit Etiuda.") : t("Stay in the tray"));
           } else if (seg3 === "notesmaster") {
             const host = eHost();
             if (host && typeof host.setTrayNotes === "function") {
