@@ -5409,6 +5409,7 @@ function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const root = catalogFolder();
   const view = { sealed: null, join: null, joined: null, leads: leadsView() };
+  if (relayHere()) view.onRelay = true;
   if (!folderAnswers(root)) return view;
   heedTeam();
   checkInviteRefusal();
@@ -6885,7 +6886,7 @@ function historyView() {
     return { sha: v.sha, path: v.path, name: v.path ? path.basename(v.path) : "", dir: dir, place: place, first: v.first, last: v.last,
       wrote: !!v.wrote, id: v.id || "", rev: +v.rev || 0, date: v.date || "", cards: +v.cards, macros: +v.macros, intents: +v.intents,
       cats: +v.cats, signed: !!v.signed, sealed: !!v.sealed, current: current,
-      put: place === "folder" && !current && !!held && held.free && historyFree(v) && /\.ec$/i.test(v.path) };
+      put: place === "folder" && !relayHere() && !current && !!held && held.free && historyFree(v) && /\.ec$/i.test(v.path) };
   });
 }
 /* A kept version's catalog for the page, opened where it is sealed and this desk holds the key; "" where it is not. */
@@ -6909,6 +6910,7 @@ function historyOpen(sha, file) {
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. */
 function historyPutBack(sha, file) {
+  if (relayHere()) return { ok: false }; /* See sharedWrite. */
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
   try {
@@ -6963,6 +6965,7 @@ function sharedBase(file, text, pin) {
 /* {text, sha, free, base}, text and sha "" where there is no file yet; null where the folder does not answer or the
    file will not read. `free` is false for a signed or sealed file or edition, and nothing of either is handed then. */
 function sharedRead(name, pin) {
+  if (relayHere()) return null; /* See sharedWrite. */
   const file = sharedFile(name);
   if (!file) return null;
   const share = shareSyncer(path.dirname(file));
@@ -7022,8 +7025,10 @@ function shareMustSeal(root) {
 }
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
-   {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused. */
+   {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused,
+   and a relay mirror is refused outright, since a write there would stay on this desk. */
 function sharedWrite(name, text, sha, create) {
+  if (relayHere()) return { ok: false, refused: true };
   const file = sharedFile(name);
   text = String(text || "");
   if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };

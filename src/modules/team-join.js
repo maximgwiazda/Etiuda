@@ -94,6 +94,7 @@ function leadToShow(){
 }
 /* The leads this desk trusts, as the shell last said them. */
 function teamLeads(){ return ((joinNow&&joinNow.leads)||[]).slice(); }
+function relayDesk(){ return !!(joinNow&&joinNow.onRelay===true); }
 /* The same, asked of the shell now: a page that never showed the join has no answer to read. [] where there is none. */
 function leadsNow(){
   if(!eHasJoin()) return Promise.resolve([]);
@@ -375,6 +376,7 @@ function joinTook(v,changed){
     paintJoin();
     return joinNow;
   }
+  if(s.onRelay===true) joinNow.onRelay=true;
   const hadAskWhy=askWhy;
   if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){
     askWhy=s.askRefused || s.refused;
@@ -779,4 +781,4 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
