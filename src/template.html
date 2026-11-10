@@ -1411,7 +1411,10 @@ body.pills-off.pills-peek .pills-slot{display:block}
   mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 /* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
    for the keyboard, which now reaches this box through the tab order. */
-#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Focused from the keyboard, the fade moves from the box to its words, so the ring is drawn whole: a keyboard
+   user has to see where focus is (board 976, the test architect's edit). At rest the box fades as drawn. */
+#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;-webkit-mask-image:none;mask-image:none}
+#roleDrum:focus-visible .rd-track{-webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 body.role-waits #roleDrum{display:none}
 #roleDrum .rd-track{position:absolute;inset:0}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
@@ -1430,7 +1433,8 @@ body.role-waits #roleDrum{display:none}
   border-radius:0 var(--radius-sm) var(--radius-sm) 0;
   -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
   mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
-#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;-webkit-mask-image:none;mask-image:none}
+#genderDrum:focus-visible .gd-track{-webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 .paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
 #genderDrum .gd-track{position:absolute;inset:0}
 #genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
