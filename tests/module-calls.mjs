@@ -4931,7 +4931,7 @@ const CARD_B = {
       const plNameless = who();
       UILANG_STORE.lsDel("eUiLang");
       check("pick.js", "901p1 the picker is told which conversation fills the reply, by its tab's name: the first name typed in it now, else its number",
-        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|Tab 2|Rozmowa 2"));
+        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|New chat|Nowa rozmowa"));
     }
 
     /* The window's close: the shell asks, and the conversations answer. */
@@ -5090,7 +5090,7 @@ const CARD_B = {
     const closedBefore = [strip().split(",").map((t) => t.split(":")[0]).join(","), pax.value].join("/");
     check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
       () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind, closedBefore].join("|"),
-        "New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
+        "Rename tab|-|New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
         + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna|dp-b,dp-c/Celina Nowak"));
 
     const pageListen = {};
@@ -5865,7 +5865,7 @@ const CARD_B = {
     const e = Object.assign({
       hidden: false, attrs: {}, _html: "",
       get innerHTML() { return this._html || ""; },
-      set innerHTML(v) { this._html = String(v); for (const k of Object.keys(made)) delete made[k]; },
+      set innerHTML(v) { this._html = String(v); if (v === "") this.kids = []; for (const k of Object.keys(made)) delete made[k]; },
       value: "", style: { setProperty() {}, removeProperty() {} }, tagName: "DIV",
       get textContent() {
         if (this._text !== undefined) return this._text;
@@ -6486,6 +6486,127 @@ const CARD_B = {
       STAB.clearScreenOn();
       STAB.screens.length = 0;
       return (titleOk && auxOk) || JSON.stringify({ titleOk, title: tabEl.title, hasAux: typeof tabEl.onauxclick === "function", auxOk });
+    });
+
+    // 24. order after a drag, persisted and restored
+    check("tabs.js", "order after a drag, persisted and restored", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      MN.openMaintenance();
+      if (typeof T.moveTab !== "function") return "no moveTab";
+      T.moveTab(2, 0);
+      const orderAfter = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
+      T.saveTabSession();
+      STAB.clearScreenOn();
+      STAB.screens.length = 0;
+      T.tabs.splice(0, T.tabs.length);
+      T.initTabs();
+      const restoredOrder = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
+      return (orderAfter.join(",") === "maintenance,t-a,t-b" && restoredOrder.join(",") === "maintenance,t-a,t-b") || JSON.stringify({ orderAfter, restoredOrder });
+    });
+
+    // 25. a new tab last with screen tabs present
+    check("tabs.js", "a new tab last with screen tabs present", () => {
+      start([["t-a", "Anna"]], "t-a");
+      MN.openMaintenance();
+      T.addTab();
+      const order = Array.from(tabsBar.kids).map(k => k.dataset.tid || k.dataset.sid);
+      const lastKey = order[order.length - 1];
+      const lastTab = T.tabs.find(t => t.id === lastKey);
+      return Boolean(lastTab && lastKey !== "maintenance" && order.indexOf("maintenance") < order.length - 1);
+    });
+
+    // 26. the label 'New chat' and no 'Tab N' left in the source
+    check("tabs.js", "the label 'New chat' and no 'Tab N' left in the source", () => {
+      start([["t-blank", ""]], "t-blank");
+      UILANG_STORE.lsSet("eUiLang", "en");
+      T.drawTabs();
+      const tabElEn = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
+      const nameEn = tabElEn && tabElEn.querySelector(".tab-label") && tabElEn.querySelector(".tab-label").textContent;
+      UILANG_STORE.lsSet("eUiLang", "pl");
+      T.drawTabs();
+      const tabElPl = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-blank");
+      const namePl = tabElPl && tabElPl.querySelector(".tab-label") && tabElPl.querySelector(".tab-label").textContent;
+      UILANG_STORE.lsDel("eUiLang");
+      T.drawTabs();
+      const tabsSrc = fs.readFileSync(join(MODDIR, "tabs.js"), "utf8");
+      const tplSrc = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+      const noTabN = !/Tab\s+[0-9N]/.test(tabsSrc) && !/Tab\s+[0-9N]/.test(tplSrc);
+      return (nameEn === "New chat" && namePl === "Nowa rozmowa" && noTabN) || JSON.stringify({ nameEn, namePl, noTabN });
+    });
+
+    // 27. PAX rename
+    check("tabs.js", "PAX rename", () => {
+      start([["t-pax", ""]], "t-pax");
+      pax.value = "Jan Kowalski";
+      T.scheduleTabSave();
+      const nameTyped = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      const nameCleared = T.activeTabName();
+      return nameTyped === "Jan" && nameCleared === "New chat";
+    });
+
+    // 28. a manual rename winning over PAX and surviving a restart
+    check("tabs.js", "a manual rename winning over PAX and surviving a restart", () => {
+      start([["t-man", "Jan Kowalski"]], "t-man");
+      if (typeof T.beginTabRename !== "function" || typeof T.finishTabRename !== "function") return "no rename functions";
+      T.beginTabRename("t-man");
+      T.finishTabRename("t-man", "VIP Support");
+      const nameMan = T.activeTabName();
+      pax.value = "Anna Nowak";
+      T.scheduleTabSave();
+      const nameStillMan = T.activeTabName();
+      T.saveTabSession();
+      T.initTabs();
+      const nameRestored = T.activeTabName();
+      return nameMan === "VIP Support" && nameStillMan === "VIP Support" && nameRestored === "VIP Support";
+    });
+
+    // 29. the empty rename handing back
+    check("tabs.js", "the empty rename handing back", () => {
+      start([["t-hb", "Jan Kowalski"]], "t-hb");
+      if (typeof T.beginTabRename !== "function" || typeof T.finishTabRename !== "function" || typeof T.clearTabRename !== "function") return "no rename functions";
+      T.beginTabRename("t-hb");
+      T.finishTabRename("t-hb", "Custom Name");
+      T.clearTabRename("t-hb");
+      const nameBackToPax = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      const nameBackToNewChat = T.activeTabName();
+      return nameBackToPax === "Jan" && nameBackToNewChat === "New chat";
+    });
+
+    // 30. a small press still a click
+    check("tabs.js", "a small press still a click", () => {
+      start([["t-c1", "First"], ["t-c2", "Second"]], "t-c1");
+      MN.openMaintenance();
+      const screenTabEl = tabsBar.kids.find(k => k.dataset && k.dataset.sid === "maintenance");
+      if (!screenTabEl) return "no screen tab";
+      if (typeof screenTabEl.onpointerdown !== "function") return "screen tab has no onpointerdown";
+      screenTabEl.closest = () => null;
+      screenTabEl.onpointerdown({ pointerType: "mouse", button: 0, clientX: 100, clientY: 50, target: screenTabEl });
+      screenTabEl.onclick({ target: screenTabEl });
+      const convTabEl = tabsBar.kids.find(k => k.dataset && k.dataset.tid === "t-c2");
+      if (!convTabEl) return "no conv tab";
+      convTabEl.closest = () => null;
+      convTabEl.onpointerdown({ pointerType: "mouse", button: 0, clientX: 100, clientY: 50, target: convTabEl });
+      convTabEl.onclick({ target: convTabEl });
+      return STAB.screenOn === "" && T.getActiveTabId() === "t-c2";
+    });
+
+    // 31. a session saved while renaming was retired keeps its title inert (the test architect's edit of 965)
+    check("tabs.js", "965e1 a saved title with no customName restores as New chat, and the customer's name still names it", () => {
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "t-old", tabs: [Object.assign(tab("t-old", ""), { title: "Old" })] }));
+      T.initTabs();
+      const nameless = T.activeTabName();
+      const kept = (T.tabs.find(x => x.id === "t-old") || {}).customName;
+      pax.value = "Jan Kowalski";
+      T.scheduleTabSave();
+      const named = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      return (nameless === "New chat" && kept === "" && named === "Jan") || JSON.stringify({ nameless, kept, named });
     });
 
   } finally {

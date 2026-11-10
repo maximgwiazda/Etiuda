@@ -23,6 +23,8 @@ import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, dropS
 const TAB_KEY="eSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
+let tabOrder=[];
+let editingTabId=null;
 
 /* The strip is redrawn, then the rail is measured. Leaving a screen gives the pill bar
    back in this same turn, and the rail's top is still the short header's. The resize
@@ -55,6 +57,7 @@ function blankTab(){
   return {
     id:"t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
     title:"",
+    customName:"",
     /* Seeded from the language on screen, which at boot is the one restored from storage and
        thereafter is the active tab's. So a new tab opens in the language you are already working
        in, and a fresh launch resumes where you left off - neither snaps back to English. */
@@ -149,18 +152,84 @@ function tabPathNow(){
   return {tab:tb ? tb.id : "", path:tb&&Array.isArray(tb.path) ? tb.path.slice() : [], log:tb&&Array.isArray(tb.log) ? tb.log.slice() : [],
     name:tb ? String(tb.pax||"").trim().split(/\s+/)[0] : ""};
 }
-function tabLabel(tb, i){
-  // tb.title is IGNORED on purpose - renaming is retired, but sessions saved before that
-  // may still carry titles (inert, not poisonous); a tab is named by the person in it, or
-  // by its number.
-  if(tb&&tb.pax&&String(tb.pax).trim()){
-    return String(tb.pax).trim().split(/\s+/)[0];
+function tabLabel(tb){
+  if(tb){
+    /* Only a rename made since names returned counts as manual. A session saved while renaming was retired
+       may still carry a title; it stays inert, so it never beats the customer's name or New chat (the test
+       architect's edit of 965, 2026-11-10). */
+    const manual = typeof tb.customName === "string" && tb.customName.trim() ? tb.customName.trim() : "";
+    if(manual) return manual;
+    if(tb.pax && String(tb.pax).trim()){
+      return String(tb.pax).trim().split(/\s+/)[0];
+    }
   }
-  /* The default name is the one thing on a tab the engine wrote, so it translates - and the
-     translation is why it does not always fit. TAB_FLOOR_W is the width at which "Tab 99"
-     stands whole, with a tenth of a pixel over; "Rozmowa 99" wants 38px more than the floor
-     leaves, so a full Polish strip fades its numbered tabs like any other name. */
-  return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
+  return t("New chat");
+}
+function beginTabRename(id){
+  editingTabId = id;
+  drawTabs();
+  const el = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="'+id+'"] .tab-rename-input');
+  if(el){
+    try{ el.focus(); el.select(); }catch(_){}
+  }
+}
+function finishTabRename(id, val){
+  editingTabId = null;
+  const tb = tabs.find(x => x.id === id);
+  if(tb){
+    const trimmed = String(val != null ? val : "").trim();
+    tb.customName = trimmed;
+    tb.title = trimmed;
+    saveTabSession();
+  }
+  drawTabs();
+  const lab = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="'+id+'"] .tab-label');
+  if(lab){
+    try{ lab.focus({preventScroll:true}); }catch(_){}
+  }
+}
+function cancelTabRename(id){
+  editingTabId = null;
+  drawTabs();
+  const lab = $("#tabsBar") && $("#tabsBar").querySelector('.tab[data-tid="'+id+'"] .tab-label');
+  if(lab){
+    try{ lab.focus({preventScroll:true}); }catch(_){}
+  }
+}
+function clearTabRename(id){
+  editingTabId = null;
+  const tb = tabs.find(x => x.id === id);
+  if(tb){
+    tb.customName = "";
+    tb.title = "";
+    saveTabSession();
+  }
+  drawTabs();
+}
+function getTabOrder(){
+  const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
+  const known = new Set();
+  const out = [];
+  tabOrder.forEach(id => {
+    if((tabs.some(t => t.id === id) || screenList.includes(id)) && !known.has(id)){
+      known.add(id);
+      out.push(id);
+    }
+  });
+  tabs.forEach(t => {
+    if(!known.has(t.id)){
+      known.add(t.id);
+      out.push(t.id);
+    }
+  });
+  screenList.forEach(s => {
+    if(!known.has(s)){
+      known.add(s);
+      out.push(s);
+    }
+  });
+  tabOrder = out.slice();
+  return tabOrder;
 }
 /* The conversation in front as its tab is named, from the name typed in it now. */
 function getActiveTabId(){ return activeTabId; }
@@ -189,7 +258,8 @@ function tabSessionPayload(){
   /* plant:screen-tabs-session-exclusion */
   const convTabs=tabs.filter(t=>!t.id.startsWith("screen-") && t.id!=="maintenance");
   const active=screenOn ? (convTabs[0] ? convTabs[0].id : activeTabId) : activeTabId;
-  return {v:1, tabs:convTabs, activeTabId:active};
+  const curScreens = typeof screens !== "undefined" && Array.isArray(screens) ? screens.slice() : [];
+  return {v:1, tabs:convTabs, activeTabId:active, order:getTabOrder().slice(), screens:curScreens};
 }
 function saveTabSession(){
   try{
@@ -350,10 +420,22 @@ function loadTabSession(){
       cats:Array.isArray(t.cats)?t.cats.filter(catOk):[],
       path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[],
       log:Array.isArray(t.log)?t.log.filter(tabLogEntry).slice(-TAB_LOG_MAX):[],
-      paxNamed:Boolean(t.paxNamed||String(t.pax||"").trim())
+      paxNamed:Boolean(t.paxNamed||String(t.pax||"").trim()),
+      customName:typeof t.customName === "string" ? t.customName : "",
+      title:typeof t["title"] === "string" ? t["title"] : (typeof t.customName === "string" ? t.customName : "")
     }));
     activeTabId=data.activeTabId;
     if(!tabs.some(t=>t.id===activeTabId)) activeTabId=tabs[0].id;
+    if(Array.isArray(data.screens) && typeof screens !== "undefined" && Array.isArray(screens)){
+      data.screens.forEach(s => {
+        if(typeof s === "string" && s && !screens.includes(s)) screens.push(s);
+      });
+    }
+    if(Array.isArray(data.order)){
+      tabOrder = data.order.filter(id => typeof id === "string" && (tabs.some(t => t.id === id) || (typeof screens !== "undefined" && screens.includes(id))));
+    } else {
+      tabOrder = tabs.map(t => t.id).concat(typeof screens !== "undefined" && Array.isArray(screens) ? screens : []);
+    }
     return true;
   }catch(e){ return false; }
 }
@@ -443,23 +525,24 @@ function switchTab(id, force){
 /* Wraps, and a lone tab is a handled no-op rather than a fall-through: the key must never
    walk focus on one tab and switch on two. */
 function stepTab(dir){
-  const allScreens=screens||[];
-  const total=tabs.length+allScreens.length;
+  const order=typeof getTabOrder === "function" ? getTabOrder() : tabs.map(t=>t.id);
+  const total=order.length;
   if(total<2) return;
-  let cur=0;
+  let cur=-1;
   if(screenOn){
-    const sidx=allScreens.indexOf(screenOn);
-    cur=tabs.length+(sidx>=0?sidx:0);
+    cur=order.indexOf(screenOn);
   } else {
-    const tidx=tabs.findIndex(x=>x.id===activeTabId);
-    cur=tidx>=0?tidx:0;
+    cur=order.indexOf(activeTabId);
   }
+  if(cur<0) cur=0;
   const next=(cur+dir+total)%total;
-  if(next<tabs.length){
-    switchTab(tabs[next].id);
+  const nextId=order[next];
+  const allScreens=typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
+  if(allScreens.includes(nextId)){
+    frontScreenTab(nextId);
   } else {
-    const target=allScreens[next-tabs.length];
-    if(target) frontScreenTab(target);
+    if(screenOn) clearScreenOn(false);
+    switchTab(nextId);
   }
 }
 /* A new tab GROWS into place - WIDTH, not transform. The tabs do not merely move, they
@@ -578,8 +661,11 @@ function addTab(){
   if(screenOn) clearScreenOn(false);
   if(!fromScreen) snapshotActiveTab();
   const t=blankTab();
+  if(typeof getTabOrder === "function") getTabOrder();
+  tabs.push(t);
+  if(!tabOrder.includes(t.id)) tabOrder.push(t.id);
   // applyTab() redraws the strip, so the whole insert happens inside the one capture
-  animateTabInsert(()=>{ tabs.push(t); applyTab(t); });
+  animateTabInsert(()=>{ applyTab(t); });
   saveTabSession();
   try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
   toast("The new tab starts with cleared fields and your settings kept.");
@@ -767,14 +853,15 @@ function animateTabReorder(mutate){
   const bar=$("#tabsBar");
   if(!bar || mgReduceMotion()){ mutate(); drawTabs(); return; }
   const before={};
-  bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
-    before[el.dataset.tid]=el.getBoundingClientRect();
+  bar.querySelectorAll(".tab[data-tid], .tab[data-sid]").forEach(el=>{
+    const id=el.dataset.tid || el.dataset.sid;
+    if(id) before[id]=el.getBoundingClientRect();
   });
   mutate();
   drawTabs();
   const moved=[];
-  bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
-    const id=el.dataset.tid, b=id&&before[id];
+  bar.querySelectorAll(".tab[data-tid], .tab[data-sid]").forEach(el=>{
+    const id=el.dataset.tid || el.dataset.sid, b=id&&before[id];
     if(!b) return;
     const a=el.getBoundingClientRect();
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
@@ -796,8 +883,17 @@ function animateTabReorder(mutate){
   });
 }
 function moveTab(from,to){
-  if(from===to||from<0||to<0) return;
-  animateTabReorder(()=>{ tabs.splice(to,0,tabs.splice(from,1)[0]); });
+  const order=typeof getTabOrder === "function" ? getTabOrder() : tabs.map(t=>t.id);
+  if(from===to||from<0||to<0||from>=order.length||to>=order.length) return;
+  animateTabReorder(()=>{
+    const [moved]=order.splice(from,1);
+    order.splice(to,0,moved);
+    tabOrder=order.slice();
+    tabs.sort((a,b)=>tabOrder.indexOf(a.id)-tabOrder.indexOf(b.id));
+    if(typeof screens !== "undefined" && Array.isArray(screens)){
+      screens.sort((a,b)=>tabOrder.indexOf(a)-tabOrder.indexOf(b));
+    }
+  });
 }
 function endTabDrag(){
   if(!tabDrag) return;
@@ -817,7 +913,7 @@ function endTabDrag(){
  *  width plus its flex gap - tab widths stay stable while the strip moves toward the tile. */
 /* THE FLOOR - how narrow a tab may get before the strip scrolls instead. Above it, tabs
    shrink with the window - the behaviour worth keeping; below it the row scrolls and tabs
-   hold their size. 100 is where "Tab 99" fits whole beside its close chip and the
+   hold their size. 100 is where a tab fits whole beside its close chip and the
    category dot's 12px inset: a default title is always said in full. Keep .tab's
    min-width in step. */
 let TAB_FLOOR_W=100;
@@ -1289,109 +1385,156 @@ function drawTabsCore(){
   bar.innerHTML="";
   const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
   const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
-  tabs.forEach((tb,i)=>{
-    const b=document.createElement("div"), on=!curScreen && tb.id===activeTabId;
-    b.className="tab"
-      +(on?" on":"")
-      +(tabDrag&&tabDrag.moved&&tabDrag.key===tb.id?" dragging":"");
-    b.dataset.tid=tb.id;
-    b.title=t("Click to switch, or drag to reorder");
-    const lab=document.createElement("span");
-    lab.className="tab-label";
-    /* The name is the tab to a screen reader, not the box: a tab role hides its children, and the
-       box holds the close button. The label is the tab stop, and its accessible name is the full
-       name even where the strip fades it. Enter switches, as a click on the tab does. Space is not
-       taken here: it is the lanes' key wherever the focus sits (board 883), so it passes on. */
-    lab.setAttribute("role","tab");
-    lab.setAttribute("aria-selected",on?"true":"false");
-    const name=tabLabel(tb,i);
-    lab.tabIndex=0;
-    lab.setAttribute("aria-label",name);
-    lab.onkeydown=e=>{
-      if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
-      if(e.key!=="Enter") return;
-      e.preventDefault();
-      e.stopPropagation();
-      switchTab(tb.id);
-    };
-    lab.onfocus=()=>scrollTabIntoView(tb.id);
-    const labViz=document.createElement("span");
-    labViz.textContent=name;
-    lab.appendChild(labViz);
-    const x=document.createElement("button");
-    x.type="button";
-    x.className="tab-x";
-    x.title=t(tabs.length===1?"Clear tab fields":"Close tab");
-    x.setAttribute("aria-label", t(tabs.length===1?"Clear tab":"Close tab"));
-    x.innerHTML=ICON_TAB_X;
-    x.onclick=e=>closeTab(tb.id,e);
-    b.appendChild(lab);
-    b.appendChild(x);
-    b.onpointerdown=e=>{
-      if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
-      if(e.button!==0) return;
-      if(e.target.closest(".tab-x")) return;
-      tabSuppressClick=false;
-      tabDrag={key:tb.id,x:e.clientX,y:e.clientY,moved:false};
-    };
-    b.onclick=e=>{
-      if(tabSuppressClick){ tabSuppressClick=false; return; }
-      if(e.target.closest(".tab-x")) return;
-      switchTab(tb.id);
-    };
-    /* The middle button closes the conversation as its x does, Undo included; its press is kept from starting the
-       page's own scrolling by drag. */
-    b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
-    b.onauxclick=e=>{ if(e.button===1) closeTab(tb.id,e); };
-    bar.appendChild(b);
-  });
-  screenList.forEach(sid => {
-    const b=document.createElement("div"), on=sid===curScreen;
-    b.className="tab screen"
-      +(on?" on":"");
-    b.dataset.sid=sid;
-    const def=typeof getScreenDef === "function" ? getScreenDef(sid) : null;
-    const name=def&&typeof def.title==="function"?def.title():(sid==="maintenance"?t("Maintenance"):sid);
-    b.title=name;
-    const lab=document.createElement("span");
-    lab.className="tab-label";
-    lab.setAttribute("role","tab");
-    lab.setAttribute("aria-selected",on?"true":"false");
-    lab.tabIndex=0;
-    lab.setAttribute("aria-label",name);
-    lab.onkeydown=e=>{
-      if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
-      if(e.key!=="Enter") return;
-      e.preventDefault(); e.stopPropagation();
-      if(typeof frontScreenTab === "function") frontScreenTab(sid);
-    };
-    const labViz=document.createElement("span");
-    labViz.textContent=name;
-    lab.appendChild(labViz);
-    const x=document.createElement("button");
-    x.type="button";
-    x.className="tab-x";
-    x.title=t("Close tab");
-    x.setAttribute("aria-label", t("Close tab"));
-    x.innerHTML=ICON_TAB_X;
-    x.onclick=e=>{
-      e.stopPropagation();
-      if(typeof closeScreenTab === "function") closeScreenTab(sid);
-    };
-    b.appendChild(lab);
-    b.appendChild(x);
-    b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
-    b.onauxclick=e=>{
-      if(e.button===1){
-        e.preventDefault();
+  const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map(tb => tb.id).concat(screenList);
+  order.forEach(id => {
+    if (screenList.includes(id)) {
+      const sid = id;
+      const b=document.createElement("div"), on=sid===curScreen;
+      b.className="tab screen"
+        +(on?" on":"")
+        +(tabDrag&&tabDrag.moved&&tabDrag.key===sid?" dragging":"");
+      b.dataset.sid=sid;
+      const def=typeof getScreenDef === "function" ? getScreenDef(sid) : null;
+      const name=def&&typeof def.title==="function"?def.title():(sid==="maintenance"?t("Maintenance"):sid);
+      b.title=name;
+      const lab=document.createElement("span");
+      lab.className="tab-label";
+      lab.setAttribute("role","tab");
+      lab.setAttribute("aria-selected",on?"true":"false");
+      lab.tabIndex=0;
+      lab.setAttribute("aria-label",name);
+      lab.onkeydown=e=>{
+        if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
+        if(e.key!=="Enter") return;
+        e.preventDefault(); e.stopPropagation();
+        if(typeof frontScreenTab === "function") frontScreenTab(sid);
+      };
+      const labViz=document.createElement("span");
+      labViz.textContent=name;
+      lab.appendChild(labViz);
+      const x=document.createElement("button");
+      x.type="button";
+      x.className="tab-x";
+      x.title=t("Close tab");
+      x.setAttribute("aria-label", t("Close tab"));
+      x.innerHTML=ICON_TAB_X;
+      x.onclick=e=>{
+        e.stopPropagation();
         if(typeof closeScreenTab === "function") closeScreenTab(sid);
+      };
+      b.appendChild(lab);
+      b.appendChild(x);
+      b.onpointerdown=e=>{
+        if(e.pointerType==="touch") return;
+        if(e.button!==0) return;
+        if(e.target.closest && e.target.closest(".tab-x")) return;
+        tabSuppressClick=false;
+        tabDrag={key:sid,x:e.clientX,y:e.clientY,moved:false};
+      };
+      b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
+      b.onauxclick=e=>{
+        if(e.button===1){
+          e.preventDefault();
+          if(typeof closeScreenTab === "function") closeScreenTab(sid);
+        }
+      };
+      b.onclick=e=>{
+        if(tabSuppressClick){ tabSuppressClick=false; return; }
+        if(e.target.closest && e.target.closest(".tab-x")) return;
+        if(typeof frontScreenTab === "function") frontScreenTab(sid);
+      };
+      bar.appendChild(b);
+    } else {
+      const tb = (tabs || []).find(x => x.id === id);
+      if (!tb) return;
+      const on=!curScreen && tb.id===activeTabId;
+      const b=document.createElement("div");
+      b.className="tab"
+        +(on?" on":"")
+        +(tabDrag&&tabDrag.moved&&tabDrag.key===tb.id?" dragging":"");
+      b.dataset.tid=tb.id;
+      b.title=t("Click to switch, or drag to reorder");
+      const lab=document.createElement("span");
+      lab.className="tab-label";
+      lab.setAttribute("role","tab");
+      lab.setAttribute("aria-selected",on?"true":"false");
+      const name=tabLabel(tb);
+      lab.tabIndex=0;
+      lab.setAttribute("aria-label",name);
+      lab.onkeydown=e=>{
+        if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
+        if(e.key!=="Enter") return;
+        e.preventDefault();
+        e.stopPropagation();
+        switchTab(tb.id);
+      };
+      lab.onfocus=()=>scrollTabIntoView(tb.id);
+      if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "tab-rename-input";
+        inp.value = (tb.customName != null && tb.customName !== "") ? tb.customName : "";
+        inp.placeholder = t("Tab name");
+        inp.setAttribute("aria-label", t("Tab name"));
+        inp.autocomplete = "off";
+        inp.spellcheck = false;
+        inp.onkeydown = e => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof finishTabRename === "function") finishTabRename(tb.id, inp.value);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof cancelTabRename === "function") cancelTabRename(tb.id);
+          }
+        };
+        inp.onblur = () => {
+          if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
+            if (typeof finishTabRename === "function") finishTabRename(tb.id, inp.value);
+          }
+        };
+        inp.onpointerdown = e => e.stopPropagation();
+        inp.onmousedown = e => e.stopPropagation();
+        inp.onclick = e => e.stopPropagation();
+        lab.appendChild(inp);
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            try { inp.focus(); inp.select(); } catch(_) {}
+          });
+        }
+      } else {
+        const labViz=document.createElement("span");
+        labViz.textContent=name;
+        lab.appendChild(labViz);
       }
-    };
-    b.onclick=e=>{
-      if(e.target.closest && e.target.closest(".tab-x")) return;
-      if(typeof frontScreenTab === "function") frontScreenTab(sid);
-    };
-    bar.appendChild(b);
+      const x=document.createElement("button");
+      x.type="button";
+      x.className="tab-x";
+      x.title=t(tabs.length===1?"Clear tab fields":"Close tab");
+      x.setAttribute("aria-label", t(tabs.length===1?"Clear tab":"Close tab"));
+      x.innerHTML=ICON_TAB_X;
+      x.onclick=e=>closeTab(tb.id,e);
+      b.appendChild(lab);
+      b.appendChild(x);
+      b.onpointerdown=e=>{
+        if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
+        if(e.button!==0) return;
+        if(e.target.closest && e.target.closest(".tab-x")) return;
+        tabSuppressClick=false;
+        tabDrag={key:tb.id,x:e.clientX,y:e.clientY,moved:false};
+      };
+      b.onclick=e=>{
+        if(tabSuppressClick){ tabSuppressClick=false; return; }
+        if(e.target.closest && e.target.closest(".tab-x")) return;
+        switchTab(tb.id);
+      };
+      /* The middle button closes the conversation as its x does, Undo included; its press is kept from starting the
+         page's own scrolling by drag. */
+      b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
+      b.onauxclick=e=>{ if(e.button===1) closeTab(tb.id,e); };
+      bar.appendChild(b);
+    }
   });
   const wrap=$("#tabsWrap")||bar.parentElement;
   // Rebuild + outside .tabs-bar so overflow:hidden never clips it when tabs are at min-width
@@ -1426,10 +1569,13 @@ function tabDragCheck(cx,cy){
   if(!tabDrag||!tabDrag.moved) return;
   if(Date.now()-tabSwapLock<120) return;
   const under=document.elementFromPoint(cx,cy);
-  const t=under&&under.closest?under.closest(".tab[data-tid]"):null;
-  if(!t||t.dataset.tid===tabDrag.key) return;
-  const from=tabs.findIndex(x=>x.id===tabDrag.key);
-  const to=tabs.findIndex(x=>x.id===t.dataset.tid);
+  const t=under&&under.closest?under.closest(".tab[data-tid], .tab[data-sid]"):null;
+  if(!t) return;
+  const targetKey=t.dataset.tid || t.dataset.sid;
+  if(!targetKey||targetKey===tabDrag.key) return;
+  const order=typeof getTabOrder === "function" ? getTabOrder() : tabs.map(x=>x.id);
+  const from=order.indexOf(tabDrag.key);
+  const to=order.indexOf(targetKey);
   if(from<0||to<0||from===to) return;
   // Swap once the pointer reaches ~1/4 into the other tab (not the far edge alone).
   const rect=t.getBoundingClientRect();
@@ -1473,7 +1619,8 @@ function wireTabDrag(){
       if(Math.abs(e.clientX-tabDrag.x)+Math.abs(e.clientY-tabDrag.y)<5) return;
       tabDrag.moved=true;
       document.documentElement.classList.add("tabdrag");
-      const el=$("#tabsBar")&&$("#tabsBar").querySelector('.tab[data-tid="'+tabDrag.key+'"]');
+      const bar=$("#tabsBar");
+      const el=bar && (bar.querySelector('.tab[data-tid="'+tabDrag.key+'"]') || bar.querySelector('.tab[data-sid="'+tabDrag.key+'"]'));
       if(el) el.classList.add("dragging");
       requestAnimationFrame(tabDragAutoScroll);
     }
@@ -1537,5 +1684,6 @@ export {
   tabSaveTimer,
   tabInsertAnimating,
   turnScreenTabToCards,
-  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName
+  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName,
+  beginTabRename, finishTabRename, cancelTabRename, clearTabRename, moveTab, getTabOrder, tabOrder
 };
