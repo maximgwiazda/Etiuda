@@ -147,10 +147,11 @@ try {
     /* A junction, which rmSync below takes away without reaching what it points at (measured). */
     fs.symlinkSync(fs.realpathSync(path.join(ROOT, 'node_modules', '@electron')),
       path.join(LAB, 'node_modules', '@electron'), 'junction');
-    /* The step checks electron-builder's NSIS templates carry the installer's patches (tools/patch-nsis.cjs), so the lab
-       reaches the tree's own copy of them; a patched template is left as it is, so nothing is written through this. */
-    fs.symlinkSync(fs.realpathSync(path.join(ROOT, 'node_modules', 'app-builder-lib')),
-      path.join(LAB, 'node_modules', 'app-builder-lib'), 'junction');
+    /* The step patches and checks electron-builder's NSIS templates (tools/patch-nsis.cjs), so the lab carries COPIES of
+       the two it patches; the step writes only into the lab, never into the shared node_modules. */
+    const NSIS = path.join('node_modules', 'app-builder-lib', 'templates', 'nsis');
+    fs.mkdirSync(path.join(LAB, NSIS), { recursive: true });
+    for (const t of ['multiUserUi.nsh', 'installSection.nsh']) fs.copyFileSync(path.join(ROOT, NSIS, t), path.join(LAB, NSIS, t));
     fs.writeFileSync(path.join(LAB, 'stub.cjs'), [
       'const fs = require("fs"), p = require("path"), d = p.resolve(process.env.ETIUDA_DIST);',
       'fs.mkdirSync(p.join(d, "win-unpacked"), { recursive: true });',

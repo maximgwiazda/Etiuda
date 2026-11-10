@@ -2,8 +2,9 @@
  *
  * Fixes:
  * 1. multiUserUi.nsh: outer process Quits on $1 = 1 without reading child exit code $2.
- *    Replaced with check: if $2 = 0 Quit; else show loginWithAdminAccount message and fall
- *    through to restore window.
+ *    Replaced with check: if $2 = 0 Quit; else, unless 0x666666 (the template's next block answers it), say the
+ *    installation did not finish, with the code (etiudaSetupNotFinished, shell/installer.nsh), and fall through to
+ *    restore the window.
  * 2. installSection.nsh: removes ${ifNot} ${UAC_IsInnerInstance} guard around CHECK_APP_RUNNING
  *    so elevated copy closes any running app before copying files.
  */
@@ -26,8 +27,7 @@ function verifyNsisPatches(rootDir) {
   const ui = fs.existsSync(uiPath) ? fs.readFileSync(uiPath, "utf8") : "";
   const sec = fs.existsSync(secPath) ? fs.readFileSync(secPath, "utf8") : "";
 
-  const multiUserUiPatched = /\$\{If\}\s+\$1\s*=\s*1\r?\n\s*\$\{If\}\s+\$2\s*=\s*0\r?\n\s*Quit\b/i.test(ui)
-    && /loginWithAdminAccount/.test(ui);
+  const multiUserUiPatched = /\$\{If\}\s+\$1\s*=\s*1\r?\n\s*\$\{If\}\s+\$2\s*=\s*0\r?\n\s*Quit\b[^\r\n]*\r?\n\s*\$\{ElseIf\}\s+\$2\s*<>\s*0x666666\r?\n\s*MessageBox[^\r\n]*\$\(etiudaSetupNotFinished\)/i.test(ui);
 
   const installSectionPatched = !/\$\{ifNot\}\s+\$\{UAC_IsInnerInstance\}\r?\n\s*!insertmacro\s+CHECK_APP_RUNNING/i.test(sec)
     && /!insertmacro\s+CHECK_APP_RUNNING/i.test(sec);
@@ -43,19 +43,21 @@ function applyNsisPatches(rootDir) {
   const { multiUserUi: uiPath, installSection: secPath } = getPaths(rootDir);
 
   if (fs.existsSync(uiPath)) {
+    /* Three states are met: electron-builder's original, this tool's first patch (which showed loginWithAdminAccount for
+       any failed child, 2026-11-10 morning) and the current one. The first two become the current; the current is left. */
+    const Q = "Quit ;we are the outer process, the inner process has done its work (ExitCode is $2), we are done";
+    const original = "${If} $1 = 1\n              " + Q + "\n            ${EndIf}";
+    const firstPatch = "${If} $1 = 1\n              ${If} $2 = 0\n                " + Q + "\n              ${Else}\n"
+      + "                MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \"$(loginWithAdminAccount)\"\n              ${EndIf}\n            ${EndIf}";
+    /* A child that stopped with 0x666666 (not admin after all) is answered by the template's own next block, so it is left to it. */
+    const current = "${If} $1 = 1\n              ${If} $2 = 0\n                " + Q + "\n              ${ElseIf} $2 <> 0x666666\n"
+      + "                MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \"$(etiudaSetupNotFinished)\"\n              ${EndIf}\n            ${EndIf}";
     let ui = fs.readFileSync(uiPath, "utf8");
-    if (!/\$\{If\}\s+\$2\s*=\s*0/i.test(ui)) {
-      const target = "${If} $1 = 1\n              Quit ;we are the outer process, the inner process has done its work (ExitCode is $2), we are done\n            ${EndIf}";
-      const targetCrlf = target.replace(/\n/g, "\r\n");
-      const repl = "${If} $1 = 1\n              ${If} $2 = 0\n                Quit ;we are the outer process, the inner process has done its work (ExitCode is $2), we are done\n              ${Else}\n                MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \"$(loginWithAdminAccount)\"\n              ${EndIf}\n            ${EndIf}";
-      const replCrlf = repl.replace(/\n/g, "\r\n");
-
-      if (ui.includes(targetCrlf)) {
-        ui = ui.replace(targetCrlf, replCrlf);
-        fs.writeFileSync(uiPath, ui, "utf8");
-      } else if (ui.includes(target)) {
-        ui = ui.replace(target, repl);
-        fs.writeFileSync(uiPath, ui, "utf8");
+    const crlf = ui.indexOf("\r\n") > -1;
+    const eol = t => (crlf ? t.replace(/\n/g, "\r\n") : t);
+    if (!ui.includes(eol(current))) {
+      for (const old of [original, firstPatch]) {
+        if (ui.includes(eol(old))) { ui = ui.replace(eol(old), eol(current)); fs.writeFileSync(uiPath, ui, "utf8"); break; }
       }
     }
   }

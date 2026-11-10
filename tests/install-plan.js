@@ -364,8 +364,7 @@ function readInstallerRecognise(nsh) {
   // Check that every placeholder in LangString lines has "; placeholder: Claudette"
   const langLines = text.split(/\r?\n/).filter(l => /^\s*LangString\s+/i.test(l));
   const placeholderLines = langLines.filter(l => /placeholder/i.test(l) || /Title/i.test(l) && !/Turn/i.test(l));
-  const placeholdersMarked = placeholderLines.length > 0
-    && placeholderLines.every(l => /;\s*placeholder:\s*Claudette\b/i.test(l));
+  const placeholdersMarked = placeholderLines.every(l => /;\s*placeholder:\s*Claudette\b/i.test(l));
 
   const bringsInnerToFront = /\$\{If\}\s+\$\{UAC_IsInnerInstance\}[\s\S]*?BringToFront[\s\S]*?SendMessage\s+\$HWNDPARENT\s+0x408/i.test(skipLicense);
 

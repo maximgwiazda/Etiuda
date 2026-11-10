@@ -285,6 +285,8 @@ const drifted = pages[0][1] ? pages[0][1].replace("#list .card", "#list .cards")
 ok(!!drifted && drifted !== pages[0][2], "6b control: one selector changed in a copy of SEEN reads as different");
 
 /* ---- 7. semver comparison with pre-release tags and installer actions ------------------------ */
+/* These cases hold the JS twin, compareSemver in tests/install-plan.js. The installer's own CompareSemver in
+   shell/installer.nsh is held only by reading: no leg runs NSIS. */
 
 const semverCases = [
   ["2.0.0-dev", "2.0.0", -1, "2.0.0-dev is older than 2.0.0"],
@@ -292,6 +294,7 @@ const semverCases = [
   ["2.0.1", "2.0.0", 1, "2.0.1 is newer than 2.0.0"],
   ["1.9.9", "2.0.0", -1, "1.9.9 is older than 2.0.0"],
   ["2.0.0-alpha", "2.0.0-beta", -1, "alpha is older than beta"],
+  ["2.0.0-dev", "2.0.0-rc.1", -1, "dev is older than rc.1 (alphabetic prerelease, the pair LogicLib's integer < judged equal)"],
   ["2.0.0-beta.1", "2.0.0-beta.2", -1, "beta.1 is older than beta.2"],
   ["2.0.0-beta.2", "2.0.0-beta.11", -1, "beta.2 is older than beta.11 (numeric prerelease)"],
   ["2.0.0-alpha", "2.0.0-alpha.1", -1, "fewer prerelease fields has lower precedence"],
@@ -351,21 +354,34 @@ ok(recogInfo && recogInfo.placeholdersMarked === true,
 
 /* ---- 9. package-time patch verification ---------------------------------------------------- */
 
-let patchStatus;
+/* The patch tool runs on COPIES of the installed templates in a scratch root, so this leg neither depends on whether
+   node_modules was patched already nor writes into it; applying twice must change nothing (idempotent). */
+let patchStatus, patchTwiceSame = false;
 try {
   const patchTool = require("../tools/patch-nsis.cjs");
-  patchStatus = patchTool.verifyNsisPatches(path.join(__dirname, ".."));
-} catch (e) {
-  try {
-    const P_tool = P.readNsisPatchStatus(path.join(__dirname, ".."));
-    patchStatus = P_tool;
-  } catch (err) { patchStatus = { error: err.message }; }
-}
+  const fsx = require("node:fs"), osx = require("node:os");
+  const lab = fsx.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-patch-"));
+  const from = patchTool.getPaths(path.join(__dirname, "..")), to = patchTool.getPaths(lab);
+  fsx.mkdirSync(path.dirname(to.multiUserUi), { recursive: true });
+  fsx.copyFileSync(from.multiUserUi, to.multiUserUi);
+  fsx.copyFileSync(from.installSection, to.installSection);
+  patchStatus = patchTool.applyNsisPatches(lab);
+  const once = fsx.readFileSync(to.multiUserUi, "utf8") + fsx.readFileSync(to.installSection, "utf8");
+  patchTool.applyNsisPatches(lab);
+  patchTwiceSame = once === fsx.readFileSync(to.multiUserUi, "utf8") + fsx.readFileSync(to.installSection, "utf8");
+  fsx.rmSync(lab, { recursive: true, force: true });
+} catch (e) { patchStatus = { error: e.message }; }
 
 ok(patchStatus && patchStatus.multiUserUiPatched === true,
   "9a multiUserUi.nsh checks elevated child exit code $2 on $1 = 1 rather than bare Quit");
 ok(patchStatus && patchStatus.installSectionPatched === true,
   "9b installSection.nsh runs CHECK_APP_RUNNING without UAC_IsInnerInstance guard");
+ok(patchTwiceSame, "9c the patch applied a second time changes nothing");
+{
+  const nsh = require("node:fs").readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
+  const defs = (nsh.match(/LangString etiudaSetupNotFinished \$\{ID\} "[^"]*\$2[^"]*"/g) || []).length;
+  ok(defs === 2, "9d the string the patched page shows for a child that did not finish is defined in both languages, naming the code: " + defs);
+}
 ok(recogInfo && recogInfo.bringsInnerToFront === true,
   "9c elevated inner copy is brought to front with BringToFront in skipLicenseIfInner");
 
