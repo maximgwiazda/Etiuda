@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 492;
+const EXPECTED = 493;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2866,6 +2866,24 @@ async function main() {
       "970l an answer is served to the session of the invitation it answers once that invitation's upload is made and to no other, not to another uploaded invitation's session"
         + " nor to its own before the upload, an answer is on no list, and a blob at an invitation place under the same id is listed and fetched: own " + own.status
         + ", another's " + (other.json && other.json.error) + ", before the upload " + (early.json && early.json.error) + ", the lookalike " + seen.status);
+    }
+
+    /* A deletion past its keep is still a blob until a list prunes it. The invitation's session must not be told that it expired. */
+    {
+      const w = await world();
+      const only = await answerOnly(w);
+      const lead = await sessionOf(w, w.lead);
+      const del = sealAs(w, w.lead, "old.ec", 1, { kind: "delete" });
+      const up = await put(w, lead, del);
+      const store = w.R.stores.get(w.rt);
+      const row = store.get("blob:" + del.id);
+      row.at = w.R.clock.now - C.KEEP_MS - 1;
+      store.put("blob:" + del.id, row);
+      const heard = await getBlob(w, only.token, del.id);
+      const leadHeard = await getBlob(w, lead, del.id);
+      check(only.ok && up.status === 200 && row.del === true && refused(heard, "not-enrolled") && refused(leadHeard, "expired"),
+        "934w an uploaded invitation's session is told not-enrolled for a deletion past its keep that no list has pruned, and the lead is still told it has expired: "
+        + (heard.json && heard.json.error) + ", lead " + (leadHeard.json && leadHeard.json.error));
     }
 
     /* A guard that stands behind another, shown with the one in front lifted in a copy of the core: the session of a dropped invitation, were the
