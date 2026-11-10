@@ -4587,6 +4587,20 @@ const CARD_B = {
         const got = [!!moving && /pointer-events:\s*none/.test(moving[0]), !!resting && !/pointer-events:\s*none/.test(resting[0])].join(",");
         return eq(got, "true,true");
       });
+    /* A wheel focused from the keyboard draws its ring whole: the fade leaves the box for its words, so the ring is under no mask
+       (board 976, the test architect's edit of 2026-11-10). Read from the sheet, both drums. */
+    check("gender-turn.js", "1110wh1 a focused wheel's ring is under no mask and its words keep the fade, for the role and the gender drums",
+      () => {
+        const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const got = [["#roleDrum", ".rd-track"], ["#genderDrum", ".gd-track"]].map(([box, track]) => {
+          const esc = (s) => s.replace(/[.#]/g, (c) => "\\" + c);
+          const own = css.match(new RegExp(esc(box) + ":focus-visible\{[^}]*\}"));
+          const words = css.match(new RegExp(esc(box) + ":focus-visible " + esc(track) + "\{[^}]*\}"));
+          return !!own && /outline:2px/.test(own[0]) && /(^|[;{])mask-image:none/.test(own[0])
+            && !!words && /(^|[;{])mask-image:linear-gradient/.test(words[0]);
+        }).join(",");
+        return eq(got, "true,true");
+      });
     check("settings.js", "1016dk3 Layout's switch pressed off in Settings lays an open deck flat at once: its classes, height and lengths gone, the card it faded given back, the scan it owed let go and the list no longer watched, with eDeckOff stored and a toast that says so; pressed on, every deck is tucked anew without a reload, the list watched again and the key forgotten",
       () => {
         const w = world();

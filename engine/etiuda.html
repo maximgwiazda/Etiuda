@@ -1111,11 +1111,17 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    are both measured from the wrap's padding box, so the same two numbers put them in the same
    box, to the pixel. */
 #intentPh{position:absolute;left:12px;right:34px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;gap:8px;
   pointer-events:none;white-space:nowrap;overflow:hidden;
   font:var(--intent-type) var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px;vertical-align:1px}
+/* The keys sit at the far end, a step smaller than the lead, and the dot between them is quieter than either. */
+#intentPh .ph-keys{margin-left:auto;display:inline-flex;align-items:center;gap:5px;
+  font-size:12.5px;color:var(--dim);white-space:nowrap}
+#intentPh .ph-keys kbd{font:11.5px var(--mono);padding:0 5px}
+#intentPh .ph-dot{opacity:.5;margin:0 3px}
 /* A held query keeps its accent ink; the box stays the same quiet line as PAX and ROLE - the
    outline is not the signal, the colour of the words is. Green stays the selection colour and
    lives in the rail. Focus is the wrap's - see .fill input. */
@@ -1221,25 +1227,30 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
 #settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-/* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
-   picture beside a word. The language badge fills the same slot the drawings do, so the three
-   rows share one left edge. */
-.menu.menu-ic button{display:flex;align-items:center;gap:9px}
-.menu.menu-ic button .ic{flex:0 0 auto;color:inherit}
+/* A menu row is an icon and a word. The icon is dim until the pointer or the keyboard reaches
+   the row, when it turns accent; the words stay ink. The language badge fills the same slot the
+   icons do, so those rows share one left edge. */
+.menu.menu-ic button{display:flex;align-items:center;gap:10px}
+.menu.menu-ic button .ic{flex:0 0 auto;color:var(--dim)}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
-  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
+  font:700 10.5px var(--sans);letter-spacing:.4px;color:var(--dim)}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
-.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:232px;
   background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
-  box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
-.menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
+  box-shadow:var(--shadow-pop);padding:6px;display:flex;flex-direction:column;gap:2px}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
-.menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.menu button .sx-ic,.menu button .ic{flex:none;width:16px;height:16px;color:var(--dim)}
+.menu button:hover,.menu button:focus-visible{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--ink);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
+.menu button:hover .sx-ic,.menu button:focus-visible .sx-ic,
+.menu button:hover .ic,.menu button:focus-visible .ic,
+.menu button:hover .more-lang-badge,.menu button:focus-visible .more-lang-badge{color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
-#menuPicker{display:flex;align-items:center;gap:18px}
+#menuPicker{display:flex;align-items:center;gap:10px}
 #menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
@@ -1390,40 +1401,51 @@ body.pills-off.pills-peek .pills-slot{display:block}
    and the naked input are every field's arrangement - see .fill input - so the pair needs
    only the share of the box the name takes. */
 .paxrole #pax{flex:1 1 auto}
-/* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
-   peek at the edges so it reads as turnable. The wheel and the arrow keys turn it
-   (stepRoleDrum); the hidden roleSel stays the one value {ROLE} reads. */
+/* The drum: a slot wheel over whoOptions() plus an empty notch that clears. The neighbours
+   rest hidden and come in with the pointer or the keyboard, so it reads as turnable when it
+   is being used. The wheel and the arrow keys turn it (stepRoleDrum); the hidden roleSel
+   stays the one value {ROLE} reads. */
 /* 70px: the widest class word (purchaser, 56px at this font) plus the 6px insets - the
    drum earns no width beyond its longest word. */
 #roleDrum{position:relative;flex:0 0 auto;width:70px;border-right:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
-  border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
+  border-radius:var(--radius-sm) 0 0 var(--radius-sm);
+  -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
+  mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 /* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
    for the keyboard, which now reaches this box through the tab order. */
-#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Focused from the keyboard, the fade moves from the box to its words, so the ring is drawn whole: a keyboard
+   user has to see where focus is (board 976, the test architect's edit). At rest the box fades as drawn. */
+#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;-webkit-mask-image:none;mask-image:none}
+#roleDrum:focus-visible .rd-track{-webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 body.role-waits #roleDrum{display:none}
 #roleDrum .rd-track{position:absolute;inset:0}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
   overflow:hidden;color:var(--ink)}
 #roleDrum .rd-cur{top:50%;transform:translateY(-50%);font:600 12.5px var(--sans)}
-#roleDrum .rd-cur.rd-empty{color:var(--dim);font:italic 400 12.5px var(--sans)}
-#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:.35}
-#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
+#roleDrum .rd-cur.rd-empty{color:var(--dim);font:400 12.5px var(--sans)}
+#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum:hover .rd-prev,#roleDrum:hover .rd-next,#roleDrum:focus-visible .rd-prev,#roleDrum:focus-visible .rd-next{opacity:.5}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 /* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
    set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
 #genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
-  border-radius:0 var(--radius-sm) var(--radius-sm) 0}
-#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
+  mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
+#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;-webkit-mask-image:none;mask-image:none}
+#genderDrum:focus-visible .gd-track{-webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 .paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
 #genderDrum .gd-track{position:absolute;inset:0}
 #genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
 #genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
 #genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
 #genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
-  color:var(--ink);opacity:.35}
+  color:var(--ink);opacity:0;transition:opacity var(--m-tone) ease}
+#genderDrum:hover .gd-prev,#genderDrum:hover .gd-next,#genderDrum:focus-visible .gd-prev,#genderDrum:focus-visible .gd-next{opacity:.6}
 #genderDrum .gd-prev{top:0}
 #genderDrum .gd-next{bottom:0}
 #genderDrum.gd-hand::after{content:"";position:absolute;right:4px;top:50%;width:4px;height:4px;margin-top:-2px;
@@ -1572,36 +1594,33 @@ body.e-take-drag .pills-slot.pills-overflow::before,
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-/* THE WEIGHT BELONGS TO THE RING, NEVER TO SELECTION. Bold on the selected pill widened it by
-   ~2px and pushed every pill after it along the bar, and a bar that moves under the pointer is
-   worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
-   below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
-   the same width picked or not, and picking is the one thing that never changes a width. */
+/* THE WEIGHT STAYS OFF THE RING AND OFF THE SELECTION. Bold on a pill widened it by ~2px and
+   pushed every pill after it along the bar, and a bar that moves under the pointer is worse than
+   any gain in emphasis; the cobalt fill and the white text already say which slice is below.
+   Hint, hint2 and both .on pairs are 400, so a ringed pill is the same width picked or not, and
+   picking is the one thing that never changes a width. */
 .pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
 html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.dragging{opacity:.55}
-/* No bold-width ghost; the ~2px width breath when a hint ring lights is accepted, and it is a
-   separate question from selection, which takes none. If the judder ever returns, two lessons
-   bind: the ghost must be ::before (an inline-block takes its baseline from its LAST line box,
-   unless its overflow is hidden - see footer .nw), and the count stays outside the reservation. */
-/* category the selected {INTENT} belongs to (blue outline when not selected) */
-/* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
-   the ring is the state, the label is just a name. Selected pills still go white. */
-/* The intent's green lived on an underline for one rung and there is no underline to return
-   it to: in the pill idiom its home is the ring and the halo, which is what hint2 always was. */
-.pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
-  box-shadow:0 0 0 2px var(--accent-soft)}
+/* No width ghost. If a weight returns, two lessons bind: the ghost must be ::before (an
+   inline-block takes its baseline from its LAST line box, unless its overflow is hidden - see
+   footer .nw), and the count stays outside the reservation. */
+/* A hint is a thin ring in its own colour, and the label stays quiet ink. The ring is the
+   state. Selected pills still go white, and they keep the halo. The label keeps its bold
+   (Max, 2026-11-10: "Let's leave the bold font as it is"). */
+.pill.hint{border-color:color-mix(in srgb,var(--accent) 55%,transparent);color:var(--dim);font-weight:650;
+  box-shadow:none}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
-.pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
-  box-shadow:0 0 0 2px var(--go-soft)}
+.pill.hint2{border-color:color-mix(in srgb,var(--go) 60%,transparent);color:var(--dim);font-weight:650;
+  box-shadow:none}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
-.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
-.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
-/* selected + intent-relevant: blue fill, keep green border ring */
+.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--go) 60%,transparent)}
+/* selected + intent-relevant: blue fill, keep the green border and its halo */
 .pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
@@ -1738,8 +1757,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
-.list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
-  opacity:.75;font-variant-numeric:tabular-nums}
+.list-sep .sep-n{flex:none;margin-left:8px;font:600 12px/calc(11px * 1.5) var(--sans);color:var(--dim);
+  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 8px}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
@@ -1795,9 +1814,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 .card{background:transparent;border:0;border-radius:0;
   position:relative;margin-bottom:20px;overflow:visible;box-shadow:none}
 /* The two rings follow the panel down: a ring round a group of slabs would enclose whitespace
-   and the caption as well, which is what the ring was never about. --go-edge on the linked
-   one, so dark murmurs where twenty matched borders would shout. */
-.card.intent-hit>.txt{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
+   and the caption as well, which is what the ring was never about. A linked card wears a
+   hairline of --go, and the badge already says the match, so there is no second ring. */
+.card.intent-hit>.txt{border-color:color-mix(in srgb,var(--go) 45%,transparent);box-shadow:var(--card-shadow,none)}
 .card.cat-hit>.txt{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
 /* OFF-SCREEN CARDS ARE NOT LAID OUT. A real desk's catalog is a few hundred cards and around
@@ -1819,9 +1838,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
-.cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
-.cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
-.cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
+.cbadge.hit{background:var(--go-soft);color:var(--go)}
+.cbadge.cat{background:var(--accent-soft);color:var(--accent)}
+.cbadge.fav{background:var(--fav-soft);color:var(--fav)}
 /* The hue is worn by exactly TWO things: the pill's dot and the card's top-edge tag -
    NO icon carries it, so the editor's swatch means the dot and the edge, nothing else.
    Shape stays the channel that survives colour-blindness. All is chrome and wears nothing. */
@@ -1945,6 +1964,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .lang-tabs button[data-alt].on::after{background:var(--pl)}
 .lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
+.modal .lang-tabs-lab{font:12.5px var(--sans);letter-spacing:0;text-transform:none;color:var(--dim)}
 .lang-pane{display:none}
 .lang-pane.on{display:block}
 /* THE FIELDS ARE ONE SET SAID TWICE, so a swap should read as that set moving rather than as
@@ -2125,9 +2145,15 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
    only one not the edge of something; the slab-as-card removes the card's own top border, so
    the premise is gone and the rule can be what a section rule should be. ONE GREY whatever it
    names - the hue already identifies a category on its icon and on every slab it holds. The
-   tier divider's own <i> pair wears the same line, in one voice. */
+   group rule is the stronger line. The tier divider's own <i> stays the quiet one. */
 .list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:1px;
-  margin-left:10px;border-radius:0;align-self:center;background:var(--line)}
+  margin-left:10px;border-radius:0;align-self:center;background:var(--line-strong)}
+/* The name and the count sit on the page's ground, so the dot field stops at the word.
+   The 12px face keeps the 11px group's strut (body's 1.5): a 12px face on that 1.5 is an
+   18px row, and a taller row moves every card under it. */
+.list-sep.e-catsep>span:first-child,.list-sep.e-favsep>span:first-child{font-size:12px;
+  line-height:calc(11px * 1.5);letter-spacing:.07em;color:var(--dim);opacity:1;
+  background:var(--bg);padding:0 8px 0 0}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
@@ -2692,12 +2718,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
-.cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
-  background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
-.cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
-/* What a loaded edition brought, worn until the card is next copied: the family's own accent, with the
-   border the others carry so every badge sits one height. */
-.cbadge.edn{border:1px solid transparent}
+.cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
+  background:var(--accent-soft);color:var(--accent);text-transform:none}
+.cbadge.ed{background:var(--ed-soft);color:var(--ed)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
 .modal,.bub{user-select:none;-webkit-user-select:none}
@@ -2855,6 +2878,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .nw{white-space:nowrap}
 .mf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .mf>label{font:12px var(--mono);color:var(--dim)}
+/* The card form's own labels: the interface face, full ink. A direct child only, so a
+   checklist nested in a fold keeps the rule written for it. */
+.modal .mf>label{font:600 12.5px var(--sans);letter-spacing:0;color:var(--ink);text-transform:none}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
 .mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
@@ -2999,6 +3025,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    sits in a clickable row. */
 .manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec,.about-h{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
+/* The card form's fold headings out-specify this: sentence case, the interface face, full ink. */
 /* Section header states for all three accordion screens - base, open, hover, focus, in
    that order, in this one place; hover wins by source order at equal weight, so nobody
    counts classes. Exclusive accordions mean exactly one bright heading per screen. One rule
@@ -3195,6 +3222,14 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* A form field that folds. Shares the disclosure triangle and the animation with Manage's
    sections, but keeps the look of a label: no border, no uppercase heading, and the summary
    line reports what is inside so a closed fold still answers its own question. */
+/* Each fold after Content sits on a hairline. The heading is the interface face at 14px,
+   and the value beside it is the same face at 12.5px, dim, at full strength. */
+.modal .mf-fold{border-top:1px solid var(--line);padding-top:2px}
+.modal .mf-fold.mf-main{border-top:0}
+.modal .mf-fold>summary .mf-lab{font:600 14px var(--sans);letter-spacing:0;text-transform:none;color:var(--ink)}
+.modal .mf-fold>summary .mf-lab::first-letter{text-transform:uppercase}
+.modal .mf-sum{font:12.5px var(--sans);letter-spacing:0;color:var(--dim);opacity:1}
+.modal ::placeholder{color:color-mix(in srgb,var(--dim) 70%,transparent)}
 details.mf-fold>summary{list-style:none;cursor:default;display:flex;align-items:baseline;gap:8px;
   user-select:none;border-radius:var(--radius-xs)}
 details.mf-fold>summary::-webkit-details-marker{display:none}
@@ -3961,8 +3996,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* A BADGE INSIDE THE PROSE IS AN OUTLINE, NOT A CHIP. Their tonal grounds are mixed against
    the PAGE and measure 1.25:1 to 4.24:1 on the fill; hollowed out they carry the panel's own
    white at 5.17:1 and keep their hue on the rule round them. The tinted chip is what a card
-   shows, and the card is where the hue is learned. */
-.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)}
+   shows, and the card is where the hue is learned. The face is restated here so the card's
+   chip does not land in the sentence. */
+.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);
+  font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;text-transform:uppercase}
 .bub .cbadge.hit{border-color:#d1fae5}
 .bub .cbadge.fav{border-color:#fef3c7}
 .bub .cbadge.ed{border-color:#eff6ff}
@@ -4370,11 +4407,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
       </div></div>
     <div class="fill">
       <div class="combo" id="intentComboWrap">
-        <input id="intent" placeholder="search intents and cards"
+        <input id="intent" placeholder="Search intents and cards"
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="One search: intents rank in the panel, cards filter below">
-        <span id="intentPh" aria-hidden="true"></span>
+        <!-- Painted whole by updateIntentPlaceholder. Two sentences, and a sweep would translate the key names apart from them. -->
+        <span id="intentPh" aria-hidden="true" data-i18n-skip></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
     <!-- THE FOUR TOOLS, in the box the agent's name used to hold. They left the band because
@@ -7045,8 +7083,8 @@ What you type stays in this browser only.`;
     "Alternatives, split by blank lines": "Warianty oddzielone pustymi liniami",
     "Steps, in order (STEP badges)": "Kolejne kroki (znaczniki KROK)",
     "{PAX} as first name only": "{PAX} jako samo imię",
-    "Linked to every {INT}": "Powiązanie ze wszystkimi {INT}",
-    "Top of the {INT} group": "Na górze grupy {INT}",
+    "Wears {INT} under every intent": "Oznaczenie {INT} przy każdej intencji",
+    "First among the cards marked {INT}": "Pierwsza wśród kart oznaczonych {INT}",
     "steps": "kroki",
     "alt": "alt",
     /* Two senses, one English phrase: the agent typing their own name is asked for a first
@@ -7139,9 +7177,9 @@ What you type stays in this browser only.`;
     "you typed": "wpisano",
     "Toggle theme": "Przełącz motyw",
     "Switch language": "Przełącz język kart",
-    "int": "int",
+    "Linked": "Powiązana",
     "In a supporting category, relevant regardless of the intent": "W kategorii wspierającej, przydatna niezależnie od intencji",
-    "sup": "wsp",
+    "Also helps": "Także przydatna",
     "fav": "fav",
     "mod": "mod",
     "Put this card away: it greys out at the foot of this category and loses its star": "Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii i straci gwiazdkę",
@@ -7736,10 +7774,10 @@ What you type stays in this browser only.`;
     "PAX": "PAX",
     "INTENT": "INTENCJA",
     "Intents arrive with a catalog.": "Intencje przynosi katalog.",
-    "search intents and cards": "szukaj intencji i kart",
+    "Search intents and cards": "Wyszukiwanie intencji i kart",
     "Search": "Szukaj",
     "One search: intents rank in the panel, cards filter below": "Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
-    "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
+    "<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "<kbd>Enter</kbd> wybiera<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
     "Search cleared": "Wyczyszczono wyszukiwanie",
     "ROLE": "ROLA",
     "EN": "EN",
@@ -22813,8 +22851,8 @@ What you type stays in this browser only.`;
     cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
     cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
-    const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("int")) + "</span>";
-    const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("sup")) + "</span>";
+    const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
+    const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("Also helps")) + "</span>";
     if (hit) cardH += hitBadge;
     if (catHit) cardH += catBadge;
     if (fav) cardH += '<span class="cbadge fav" title="' + esc(t("In Favourites")) + '">' + esc(t("fav")) + "</span>";
@@ -24995,8 +25033,75 @@ What you type stays in this browser only.`;
     }) : null;
   }
 
+  // src/modules/sx-icons.js
+  var SX_ICONS = {
+    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
+    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
+    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
+    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
+    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
+    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
+    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
+    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
+    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
+    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
+    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
+    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
+    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
+    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
+    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
+    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
+    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
+    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
+  };
+  function sxIcon(name) {
+    const body = SX_ICONS[name];
+    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
+  }
+
   // src/modules/header-menus.js
+  var MENU_ICON = {
+    manage: "cards",
+    settings: "general",
+    join: "desks",
+    picker: "expand",
+    rail: "intents",
+    pills: "categories",
+    tour: "forward",
+    about: "about"
+  };
+  function paintMenuIcons() {
+    const menu = $("#settingsMenu");
+    if (!menu || typeof menu.querySelectorAll !== "function") return;
+    menu.querySelectorAll("button[data-act]").forEach((b) => {
+      const name = b.dataset && MENU_ICON[b.dataset.act];
+      if (!name || typeof b.querySelector !== "function" || b.querySelector(".sx-ic")) return;
+      if (typeof b.insertBefore !== "function" || typeof document.createElement !== "function") return;
+      const hold = document.createElement("span");
+      hold.innerHTML = sxIcon(name);
+      const icon = hold.firstChild;
+      if (icon) b.insertBefore(icon, b.firstChild);
+    });
+  }
+  function menuLabel(btn, text) {
+    if (!btn) return;
+    let n = null;
+    for (let i = 0; i < btn.childNodes.length; i++) {
+      const c = btn.childNodes[i];
+      if (c.nodeType === 3 && c.nodeValue.trim()) {
+        n = c;
+        break;
+      }
+    }
+    if (n) n.nodeValue = text;
+    else btn.appendChild(document.createTextNode(text));
+  }
   function wireHeaderMenus() {
+    paintMenuIcons();
     const host = eHost(), canClose = !!(host && typeof host.close === "function");
     ["#menuQuit", "#menuQuitSep"].forEach((s) => {
       const el = $(s);
@@ -25131,20 +25236,21 @@ What you type stays in this browser only.`;
     row2.hidden = !hk || !h || typeof h.openPicker !== "function";
     if (row2.hidden) return;
     const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
-    row2.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
+    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
     row2.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
   }
   function syncSettingsMenu() {
+    paintMenuIcons();
     syncPickerRow();
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
-      pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
+      menuLabel(pillsBtn, pillsWanted() ? t("Hide categories") : t("Show categories"));
       const hold = scReady ? formatActionChord("expandPills") : "Hold Ctrl";
       pillsBtn.title = pillsWanted() ? pillsLocked() ? t("Hide the category bar, which is locked fully expanded when shown") : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}", hold) : t("Show the category bar under the header.");
     }
     if (railBtn) {
-      railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+      menuLabel(railBtn, railWanted() ? t("Hide intent panel") : t("Show intent panel"));
       railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
     }
     syncRailPinBtn();
@@ -30120,7 +30226,7 @@ What you type stays in this browser only.`;
           body: (function() {
             const rows = [];
             const paxTag = '<span class="fillmiss">PAX</span>';
-            const intTag = '<span class="cbadge hit" title="' + esc(t("Intent")) + '">' + esc(t("int")) + "</span>";
+            const intTag = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
             const box = (id2, on, dis, tip, label2) => rows.push('<label title="' + esc(t(tip)) + '"><input type="checkbox" id="' + id2 + '"' + (on ? " checked" : "") + (dis ? " disabled" : "") + "> " + esc(t(label2)).split("{PAX}").join(paxTag).split("{INT}").join(intTag) + "</label>");
             box(
               "meAlt",
@@ -30159,14 +30265,14 @@ What you type stays in this browser only.`;
               m.allIntents,
               false,
               "Rings green under every intent - for text that always applies, like an opener.",
-              "Linked to every {INT}"
+              "Wears {INT} under every intent"
             );
             box(
               "meIntentTop",
               m.intentTop,
               false,
               "Sorts above the other linked cards when an intent is picked.",
-              "Top of the {INT} group"
+              "First among the cards marked {INT}"
             );
             const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
             const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
@@ -33251,34 +33357,6 @@ What you type stays in this browser only.`;
       });
     });
   }
-  var SX_ICONS = {
-    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
-    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
-    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
-    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
-    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
-    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
-    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
-    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
-    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
-    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
-    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
-    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
-    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
-    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
-    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
-    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
-    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
-    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
-    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
-    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
-    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
-    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
-  };
-  function sxIcon(name) {
-    const body = SX_ICONS[name];
-    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
-  }
   function seg2(name, opts, cur) {
     return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
   }
@@ -34195,9 +34273,9 @@ What you type stays in this browser only.`;
   // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
-    intentEl.placeholder = t("search intents and cards");
+    intentEl.placeholder = t("Search intents and cards");
     const ph = $("#intentPh");
-    if (ph) ph.innerHTML = t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
+    if (ph) ph.innerHTML = "<span>" + t("Search intents and cards") + '</span><span class="ph-keys">' + t("<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several") + "</span>";
   }
   function clearSearchQuery() {
     if (intentEl) intentEl.value = "";

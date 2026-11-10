@@ -16,8 +16,50 @@ import { hooks } from "./hooks.js";
 import { eHost, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
 import { esc } from "./esc.js";
 import { openJoinPaste } from "./team-join.js";
+import { sxIcon } from "./sx-icons.js";
+
+/* The glyph Settings already uses for the same idea. Quit has none: the set has no close mark,
+   and the delete mark is a different act. The picker takes expand, the nearest mark for a window
+   brought forward. */
+const MENU_ICON={
+  manage:"cards",
+  settings:"general",
+  join:"desks",
+  picker:"expand",
+  rail:"intents",
+  pills:"categories",
+  tour:"forward",
+  about:"about"
+};
+function paintMenuIcons(){
+  const menu=$("#settingsMenu");
+  if(!menu || typeof menu.querySelectorAll!=="function") return;
+  menu.querySelectorAll("button[data-act]").forEach(b=>{
+    const name=b.dataset && MENU_ICON[b.dataset.act];
+    if(!name || typeof b.querySelector!=="function" || b.querySelector(".sx-ic")) return;
+    if(typeof b.insertBefore!=="function" || typeof document.createElement!=="function") return;
+    /* A node, not insertAdjacentHTML: the desk's node page builds elements that parse
+       innerHTML and take insertBefore, and does not implement insertAdjacentHTML. */
+    const hold=document.createElement("span");
+    hold.innerHTML=sxIcon(name);
+    const icon=hold.firstChild;
+    if(icon) b.insertBefore(icon, b.firstChild);
+  });
+}
+/* The words live in their own text node, so a label change leaves the icon where it is. */
+function menuLabel(btn, text){
+  if(!btn) return;
+  let n=null;
+  for(let i=0;i<btn.childNodes.length;i++){
+    const c=btn.childNodes[i];
+    if(c.nodeType===3 && c.nodeValue.trim()){ n=c; break; }
+  }
+  if(n) n.nodeValue=text;
+  else btn.appendChild(document.createTextNode(text));
+}
 
 function wireHeaderMenus(){
+  paintMenuIcons();
   /* Close Etiuda stands in the Menu where there is a window to close, and closes it as the band's own button does. */
   const host=eHost(), canClose=!!(host && typeof host.close==="function");
   ["#menuQuit","#menuQuitSep"].forEach(s=>{ const el=$(s); if(el) el.hidden=!canClose; });
@@ -153,15 +195,16 @@ function syncPickerRow(){
   row.hidden=!hk || !h || typeof h.openPicker!=="function";
   if(row.hidden) return;
   const keys=hk.held ? eHotkeyLabel(hk.accel) : "";
-  row.innerHTML='<span>'+esc(t("Bring the replies over any window"))+'</span>'+(keys ? '<kbd data-i18n-skip>'+esc(keys)+'</kbd>' : "");
+  row.innerHTML=sxIcon("expand")+'<span>'+esc(t("Bring the replies over any window"))+'</span>'+(keys ? '<kbd data-i18n-skip>'+esc(keys)+'</kbd>' : "");
   row.title=t("The replies beside the pointer, over any program; the combination is changed in Settings");
 }
 function syncSettingsMenu(){
+  paintMenuIcons();
   syncPickerRow();
   const pillsBtn=$("#menuPills");
   const railBtn=$("#menuRail");
   if(pillsBtn){
-    pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
+    menuLabel(pillsBtn, pillsWanted() ? t("Hide categories") : t("Show categories"));
     // Avoid formatActionChord here during early boot (scReady may still be false).
     const hold=scReady?formatActionChord("expandPills"):"Hold Ctrl";
     pillsBtn.title = pillsWanted()
@@ -171,7 +214,7 @@ function syncSettingsMenu(){
       : t("Show the category bar under the header.");
   }
   if(railBtn){
-    railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+    menuLabel(railBtn, railWanted() ? t("Hide intent panel") : t("Show intent panel"));
     railBtn.title = t(railWanted()
       ? (railLocked()
         ? "Panel is locked open (always docked). Hide turns it off entirely."
