@@ -154,9 +154,10 @@ function tabPathNow(){
 }
 function tabLabel(tb){
   if(tb){
-    const manual = typeof tb.customName === "string" && tb.customName.trim()
-      ? tb.customName.trim()
-      : (typeof tb["title"] === "string" && tb["title"].trim() ? tb["title"].trim() : "");
+    /* Only a rename made since names returned counts as manual. A session saved while renaming was retired
+       may still carry a title; it stays inert, so it never beats the customer's name or New chat (the test
+       architect's edit of 965, 2026-11-10). */
+    const manual = typeof tb.customName === "string" && tb.customName.trim() ? tb.customName.trim() : "";
     if(manual) return manual;
     if(tb.pax && String(tb.pax).trim()){
       return String(tb.pax).trim().split(/\s+/)[0];
@@ -420,7 +421,7 @@ function loadTabSession(){
       path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[],
       log:Array.isArray(t.log)?t.log.filter(tabLogEntry).slice(-TAB_LOG_MAX):[],
       paxNamed:Boolean(t.paxNamed||String(t.pax||"").trim()),
-      customName:typeof t.customName === "string" ? t.customName : (typeof t["title"] === "string" ? t["title"] : ""),
+      customName:typeof t.customName === "string" ? t.customName : "",
       title:typeof t["title"] === "string" ? t["title"] : (typeof t.customName === "string" ? t.customName : "")
     }));
     activeTabId=data.activeTabId;
@@ -1472,7 +1473,7 @@ function drawTabsCore(){
         const inp = document.createElement("input");
         inp.type = "text";
         inp.className = "tab-rename-input";
-        inp.value = (tb.customName != null && tb.customName !== "") ? tb.customName : (tb.title != null ? tb.title : "");
+        inp.value = (tb.customName != null && tb.customName !== "") ? tb.customName : "";
         inp.placeholder = t("Tab name");
         inp.setAttribute("aria-label", t("Tab name"));
         inp.autocomplete = "off";

@@ -6542,6 +6542,21 @@ const CARD_B = {
       return STAB.screenOn === "" && T.getActiveTabId() === "t-c2";
     });
 
+    // 31. a session saved while renaming was retired keeps its title inert (the test architect's edit of 965)
+    check("tabs.js", "965e1 a saved title with no customName restores as New chat, and the customer's name still names it", () => {
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "t-old", tabs: [Object.assign(tab("t-old", ""), { title: "Old" })] }));
+      T.initTabs();
+      const nameless = T.activeTabName();
+      const kept = (T.tabs.find(x => x.id === "t-old") || {}).customName;
+      pax.value = "Jan Kowalski";
+      T.scheduleTabSave();
+      const named = T.activeTabName();
+      pax.value = "";
+      T.scheduleTabSave();
+      return (nameless === "New chat" && kept === "" && named === "Jan") || JSON.stringify({ nameless, kept, named });
+    });
+
   } finally {
     STAB.clearScreenOn();
     STAB.screens.length = 0;

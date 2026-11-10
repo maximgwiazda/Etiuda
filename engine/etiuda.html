@@ -12812,7 +12812,7 @@ What you type stays in this browser only.`;
   }
   function tabLabel(tb) {
     if (tb) {
-      const manual = typeof tb.customName === "string" && tb.customName.trim() ? tb.customName.trim() : typeof tb["title"] === "string" && tb["title"].trim() ? tb["title"].trim() : "";
+      const manual = typeof tb.customName === "string" && tb.customName.trim() ? tb.customName.trim() : "";
       if (manual) return manual;
       if (tb.pax && String(tb.pax).trim()) {
         return String(tb.pax).trim().split(/\s+/)[0];
@@ -13081,7 +13081,7 @@ What you type stays in this browser only.`;
         path: Array.isArray(t2.path) ? t2.path.filter((x) => typeof x === "string" && x).slice(-TAB_PATH_MAX) : [],
         log: Array.isArray(t2.log) ? t2.log.filter(tabLogEntry).slice(-TAB_LOG_MAX) : [],
         paxNamed: Boolean(t2.paxNamed || String(t2.pax || "").trim()),
-        customName: typeof t2.customName === "string" ? t2.customName : typeof t2["title"] === "string" ? t2["title"] : "",
+        customName: typeof t2.customName === "string" ? t2.customName : "",
         title: typeof t2["title"] === "string" ? t2["title"] : typeof t2.customName === "string" ? t2.customName : ""
       }));
       activeTabId = data.activeTabId;
@@ -13958,7 +13958,7 @@ What you type stays in this browser only.`;
           const inp = document.createElement("input");
           inp.type = "text";
           inp.className = "tab-rename-input";
-          inp.value = tb.customName != null && tb.customName !== "" ? tb.customName : tb.title != null ? tb.title : "";
+          inp.value = tb.customName != null && tb.customName !== "" ? tb.customName : "";
           inp.placeholder = t("Tab name");
           inp.setAttribute("aria-label", t("Tab name"));
           inp.autocomplete = "off";
