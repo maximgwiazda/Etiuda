@@ -1756,7 +1756,7 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
-.list-sep .sep-n{flex:none;margin-left:8px;font:600 12px var(--sans);color:var(--dim);
+.list-sep .sep-n{flex:none;margin-left:8px;font:600 12px/calc(11px * 1.5) var(--sans);color:var(--dim);
   opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 8px}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
@@ -2137,9 +2137,12 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
    group rule is the stronger line. The tier divider's own <i> stays the quiet one. */
 .list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:1px;
   margin-left:10px;border-radius:0;align-self:center;background:var(--line-strong)}
-/* The name and the count sit on the page's ground, so the dot field stops at the word. */
+/* The name and the count sit on the page's ground, so the dot field stops at the word.
+   The 12px face keeps the 11px group's strut (body's 1.5): a 12px face on that 1.5 is an
+   18px row, and a taller row moves every card under it. */
 .list-sep.e-catsep>span:first-child,.list-sep.e-favsep>span:first-child{font-size:12px;
-  letter-spacing:.07em;color:var(--dim);opacity:1;background:var(--bg);padding:0 8px 0 0}
+  line-height:calc(11px * 1.5);letter-spacing:.07em;color:var(--dim);opacity:1;
+  background:var(--bg);padding:0 8px 0 0}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
