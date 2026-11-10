@@ -47,6 +47,11 @@ function putBack(was){
   if(was.tabs!=null) ssSet(TAB_KEY,was.tabs); else ssDel(TAB_KEY);
   hooks.restartDesk();
 }
+/* THE CLEARED LAYER STAYS ON THIS PAGE until it is brought back or the page closes. The toast's
+   Undo is the short way; this hold is what the Library row keeps, and a later act does not drop
+   it. Nothing here is written, so a restart forgets it. */
+let clearedHold=null;
+function clearedHeld(){ return !!clearedHold; }
 /* THE CLEAR ITSELF, at once once asked, and its Undo puts every key back. */
 function clearLocalMemory(){
   let keep={layer:[], pack:[]};
@@ -56,8 +61,16 @@ function clearLocalMemory(){
   spaces.forEach(ns=>LAYER_KEYS.forEach(n=>{ if(keep.layer.indexOf(n)<0 && lsGet(ns+n)!=null) keys.push(ns+n); }));
   const was=keepKeys(keys);
   keys.forEach(k=>{ const half=/Pack$/.test(k) ? packKept(was.keys[k],keep.pack) : null; if(half!=null) lsSet(k,half); else lsDel(k); });
+  if(!clearedHold) clearedHold=was;
   hooks.restartDesk();
-  offerUndo("Local changes cleared", ()=>putBack(was));
+  offerUndo("Local changes cleared", ()=>{ if(clearedHold===was) clearedHold=null; putBack(was); });
+}
+function bringBackCleared(){
+  const was=clearedHold;
+  if(!was) return false;
+  clearedHold=null;
+  putBack(was);
+  return true;
 }
 /* THE QUESTION BEFORE THE CLEAR: Cancel holds the focus, so Enter and Escape both keep the changes. */
 function askClearLocal(){
@@ -113,6 +126,8 @@ function undoEject(was){
 
 export {
   askClearLocal,
+  bringBackCleared,
   clearLocalMemory,
+  clearedHeld,
   ejectCatalog
 };

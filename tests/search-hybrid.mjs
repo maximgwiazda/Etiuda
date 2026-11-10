@@ -370,6 +370,23 @@ try {
   const different = JSON.stringify(qVec) !== JSON.stringify(classVec);
   check(!!booted && Array.isArray(qVec) && same && different,
     "h13 a query posted before the session still answers, with the search prompt and not the classification one");
+
+  /* A meaning tail is marked. The function is pure: the label and the no-match block arrive already
+     built, so this leg does not need the page's t() or esc(). Missing the function fails only this check. */
+  let boundary = null;
+  try { boundary = evalFn(RENDER, "meaningBoundaryHtml"); }
+  catch (e) { boundary = null; }
+  const noMatch = '<div class="empty">A different word may do better.</div>';
+  const label = "Close in meaning";
+  const none = boundary ? boundary(0, 2, noMatch, label) : "";
+  const some = boundary ? boundary(3, 2, noMatch, label) : "";
+  const noTail = boundary ? boundary(3, 0, noMatch, label) : "";
+  const called = /meaningBoundaryHtml\(wordN,tailN,wordN\?"":searchMissHtml\(\)/.test(RENDER);
+  check(!!boundary && none.indexOf(noMatch) >= 0 && none.indexOf("list-sep e-meaning") >= 0 && none.indexOf(label) >= 0
+      && some.indexOf(noMatch) < 0 && some.indexOf(label) >= 0 && some.indexOf("list-sep e-meaning") >= 0
+      && noTail === "" && called,
+    "h14 a search with no word hit keeps the no-match line and a labelled separator before the meaning cards"
+      + (boundary ? "" : " (meaningBoundaryHtml is missing)"));
 } catch (e) {
   check(false, "the leg threw: " + (e && e.stack || e));
 }

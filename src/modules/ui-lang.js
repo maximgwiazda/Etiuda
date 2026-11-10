@@ -149,6 +149,8 @@ UI_STRINGS.pl={
   "Clear search text":"Wyczyść tekst wyszukiwania",
   "not linked to your intent":"niepowiązane z wybraną intencją",
   "also mentions your search":"zawierają też szukane słowa",
+  // placeholder: Claudette
+  "Close in meaning":"Bliskie znaczeniem",
   "A search ranks the cards by relevance; clear it to order them yourself":"Wyszukiwanie porządkuje karty według trafności; po jego wyczyszczeniu kolejność można ustawić ręcznie",
   "Drag header to reorder within the same highlight group":"Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu",
   "Drag header to reorder within the same highlight group; same category only":"Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu i w tej samej kategorii",
@@ -600,6 +602,10 @@ UI_STRINGS.pl={
   "Delete this intent":"Usuń tę intencję",
   "Export…":"Eksportuj…",
   "Clear local changes":"Wyczyść zmiany lokalne",
+  // placeholder: Claudette
+  "Bring back local changes":"Przywróć zmiany lokalne",
+  // placeholder: Claudette
+  "These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered.":"Zmiany zostają na tym stanowisku do zamknięcia Etiudy, a ponowne uruchomienie zostawia katalog w postaci dostarczonej.",
   "Removes every change made to the content on this computer, so the catalog reads as delivered.":"Usuwa wszystkie zmiany treści wprowadzone na tym komputerze, więc katalog wygląda tak, jak go dostarczono.",
   "Clear local changes?":"Wyczyścić zmiany lokalne?",
   "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.":"Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
