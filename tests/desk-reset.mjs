@@ -479,6 +479,7 @@ function lockLeg(mod) {
       && fs.readFileSync(path.join(busy, "desk.json"), "utf8") === "stay"
       && fs.existsSync(path.join(busy, mod.MARKER_NAME)),
       "4d9 a busy file on the first pass leaves the marker");
+    mod.retryPendingReset({ userData: busy, holdsLock: true });
     const second = mod.honourPendingReset({ userData: busy, holdsLock: true });
     check(!!second && second.ok === true && gone(path.join(busy, "desk.json"))
       && gone(path.join(busy, mod.MARKER_NAME)),
@@ -635,7 +636,10 @@ function outsidePath(held) { return held; }
    only what the failed pass still owed. The notice travels the shell's channel to the page. */
 async function unfinishedLeg(mod) {
   if (!mod || typeof mod.honourPendingReset !== "function") {
-    check(false, "4d10 the reset is not there to leave a path undone");
+    check(false, "4d10 two starts after a failed pass with no press, and a file written at an owed path between them survives both");
+    check(false, "4d10 the Try again press deletes nothing live, leaves an un-held marker, and asks for the relaunch");
+    check(false, "4d10 the start after an un-holding removes the owed paths and nothing else (a file written elsewhere after the failed pass survives)");
+    check(false, "4d10 Stop drops the marker and the next start removes nothing");
     return;
   }
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-undone-"));
@@ -657,26 +661,60 @@ async function unfinishedLeg(mod) {
       return origUnlink.call(nodeFs, p);
     };
     const first = mod.honourPendingReset({ userData: dir, holdsLock: true });
-    const fresh = path.join(dir, "since.txt");
-    write(fresh, "kept");
-    const second = mod.honourPendingReset({ userData: dir, holdsLock: true });
-    let survived = false, stuckLeft = false, recorded = false;
-    try { survived = fs.readFileSync(fresh, "utf8") === "kept"; } catch (e) { survived = false; }
-    try { stuckLeft = fs.readFileSync(path.join(dir, "stuck.txt"), "utf8") === "held"; } catch (e) { stuckLeft = false; }
+    let recorded = false;
     try {
       const doc = JSON.parse(fs.readFileSync(path.join(dir, mod.MARKER_NAME), "utf8"));
-      recorded = Array.isArray(doc.owed) && doc.owed.some(p => String(p).toLowerCase().endsWith("stuck.txt")) && !!doc.owedAt;
+      recorded = Array.isArray(doc.owed) && doc.owed.some(p => String(p).toLowerCase().endsWith("stuck.txt")) && doc.held === true;
     } catch (e) { recorded = false; }
-    const names = second && Array.isArray(second.paths) ? second.paths : [];
-    check(!!first && first.ok === false && !!second && second.ok === false && survived && stuckLeft && recorded,
-      "4d10 a file written after a failed pass survives the next start, and the stuck file stays owed");
+    const names = first && Array.isArray(first.paths) ? first.paths : [];
     check(names.indexOf("stuck.txt") >= 0, "4d10 the pass names what is in the way: " + names.join(", "));
-    const stopped = typeof mod.stopPendingReset === "function"
-      ? mod.stopPendingReset({ userData: dir, holdsLock: true }) : null;
-    let kept = false;
-    try { kept = fs.readFileSync(fresh, "utf8") === "kept"; } catch (e) { kept = false; }
-    check(!!stopped && stopped.ok === true && gone(path.join(dir, mod.MARKER_NAME)) && kept,
-      "4d10 stopping the reset drops the marker and keeps what was written since");
+
+    /* (a) two starts after a failed pass with no press, and a file written at an owed path between them survives both */
+    const start1 = mod.honourPendingReset({ userData: dir, holdsLock: true });
+    const stuckPath = path.join(dir, "stuck.txt");
+    write(stuckPath, "new stuck work");
+    const start2 = mod.honourPendingReset({ userData: dir, holdsLock: true });
+    let stuckSurvived = false;
+    try { stuckSurvived = fs.readFileSync(stuckPath, "utf8") === "new stuck work"; } catch (e) { stuckSurvived = false; }
+    check(!!first && first.ok === false && !!start1 && start1.ok === false && !!start2 && start2.ok === false
+      && start1.changed === false && start2.changed === false && stuckSurvived && recorded,
+      "4d10 two starts after a failed pass with no press, and a file written at an owed path between them survives both");
+
+    /* (b) the Try again press deletes nothing live, leaves an un-held marker, and asks for the relaunch */
+    const elsewhere = path.join(dir, "elsewhere.txt");
+    write(elsewhere, "kept");
+    const retried = mod.retryPendingReset({ userData: dir, holdsLock: true });
+    let unheld = false;
+    try {
+      const doc = JSON.parse(fs.readFileSync(path.join(dir, mod.MARKER_NAME), "utf8"));
+      unheld = doc.held === false;
+    } catch (e) { unheld = false; }
+    const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const retryRelaunches = /ipcMain\.handle\(\s*"etiuda:reset-retry"[\s\S]{0,300}relaunchAfterReset/.test(mainSrc);
+    const liveKept = fs.existsSync(stuckPath) && fs.existsSync(elsewhere);
+    check(!!retried && retried.ok === true && retried.changed === false && liveKept && unheld && retryRelaunches,
+      "4d10 the Try again press deletes nothing live, leaves an un-held marker, and asks for the relaunch");
+
+    /* (c) the start after an un-holding removes the owed paths and nothing else (a file written elsewhere after the failed pass survives) */
+    nodeFs.unlinkSync = origUnlink;
+    const start3 = mod.honourPendingReset({ userData: dir, holdsLock: true });
+    let elsewhereSurvived = false;
+    try { elsewhereSurvived = fs.readFileSync(elsewhere, "utf8") === "kept"; } catch (e) { elsewhereSurvived = false; }
+    check(!!start3 && start3.ok === true && start3.changed === true && gone(stuckPath) && elsewhereSurvived && gone(path.join(dir, mod.MARKER_NAME)),
+      "4d10 the start after an un-holding removes the owed paths and nothing else (a file written elsewhere after the failed pass survives)");
+
+    /* (d) Stop drops the marker and the next start removes nothing */
+    const stopDir = path.join(lab, "stop-desk");
+    fs.mkdirSync(stopDir);
+    const stopFile = path.join(stopDir, "stuck.txt");
+    write(stopFile, "keep me");
+    write(path.join(stopDir, mod.MARKER_NAME), JSON.stringify({ v: 1, userData: stopDir, catalogSetting: "", defaultCatalog: "", attempts: 1, owed: [stopFile], held: true }));
+    const stopped = mod.stopPendingReset({ userData: stopDir, holdsLock: true });
+    const nextStart = mod.honourPendingReset({ userData: stopDir, holdsLock: true });
+    let stopKept = false;
+    try { stopKept = fs.readFileSync(stopFile, "utf8") === "keep me"; } catch (e) { stopKept = false; }
+    check(!!stopped && stopped.ok === true && gone(path.join(stopDir, mod.MARKER_NAME)) && nextStart.pending === false && nextStart.changed === false && stopKept,
+      "4d10 Stop drops the marker and the next start removes nothing");
   } finally {
     nodeFs.unlinkSync = origUnlink;
     try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) { /* the temp folder */ }

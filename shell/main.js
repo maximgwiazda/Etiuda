@@ -8215,7 +8215,8 @@ function relaunchAfterReset() {
     try {
       if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock();
       if (typeof app.relaunch === "function") app.relaunch();
-      if (typeof app.exit === "function") app.exit(0);
+      if (typeof app.quit === "function") app.quit();
+      else if (typeof app.exit === "function") app.exit(0);
     } catch (err) { /* the marker still waits for the next start */ }
   });
 }
@@ -8238,12 +8239,6 @@ ipcMain.handle("etiuda:reset-retry", (e) => {
   if (result && result.ok) {
     resetNotice = null;
     relaunchAfterReset();
-  } else if (result && result.notice && Array.isArray(result.paths) && result.paths.length) {
-    resetNotice = { paths: result.paths.slice() };
-    try {
-      const win = BrowserWindow.fromWebContents(e.sender);
-      if (win) deliverResetNotice(win, resetNotice);
-    } catch (err) { /* the page still has the answer */ }
   }
   return result || { ok: false };
 });

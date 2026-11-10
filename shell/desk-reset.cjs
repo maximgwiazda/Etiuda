@@ -251,12 +251,10 @@ function owedAllowed(p, user, roots) {
   return true;
 }
 
-/* Only the paths the failed pass recorded. A file newer than that pass is left, and stays owed
-   so the reset does not end by itself. */
+/* Only the paths the failed pass recorded. */
 function applyOwed(doc, roots) {
   const owed = Array.isArray(doc.owed) ? doc.owed : [];
   const user = doc.userData;
-  const owedAt = Date.parse(doc.owedAt || "") || 0;
   const left = [];
   let changed = false;
   let blocked = "";
@@ -265,11 +263,6 @@ function applyOwed(doc, roots) {
     if (!owedAllowed(p, user, roots)) continue;
     const st = lstatOf(p);
     if (!st) continue;
-    if (owedAt && st.mtimeMs > owedAt) {
-      left.push(p);
-      if (!blocked) blocked = p;
-      continue;
-    }
     const err = removeExact(p);
     if (err) {
       left.push(p);
@@ -285,7 +278,7 @@ function applyOwed(doc, roots) {
     }
     changed = true;
   }
-  if (left.length) return { ok: false, changed: changed, owed: left, blocked: blocked, reason: "newer" };
+  if (left.length) return { ok: false, changed: changed, owed: left, blocked: blocked, reason: "refused" };
   return { ok: true, changed: changed, owed: [] };
 }
 
@@ -324,7 +317,7 @@ function dropMarker(marker) {
 }
 
 /* Dropped only when the pass completes, or the marker will not parse, or it names another
-   folder. A failed pass leaves it. Without the lock, nothing here is read. */
+   folder. A failed pass leaves it held. Without the lock, nothing here is read. */
 function honourPendingReset(opts) {
   if (!opts || opts.holdsLock !== true) return { pending: false, changed: false };
   const raw = String((opts && opts.userData) || "");
@@ -357,6 +350,13 @@ function honourPendingReset(opts) {
   };
   let done;
   if (Array.isArray(doc.owed) && doc.owed.length) {
+    if (doc.held !== false) {
+      const blocked = doc.blocked || doc.owed[0];
+      return {
+        pending: true, ok: false, changed: false, notice: true,
+        paths: noticePaths(blocked), owed: doc.owed
+      };
+    }
     const plan = planReset(planOpts);
     if (!plan.ok) return { pending: true, ok: false, changed: false };
     done = applyOwed(doc, plan.roots);
@@ -407,7 +407,8 @@ function rememberOwed(user, doc, done) {
     attempts: (doc.attempts || 0) + 1,
     owed: done.owed,
     owedAt: doc.owedAt || new Date().toISOString(),
-    blocked: blocked || ""
+    blocked: blocked || "",
+    held: true
   };
   writeMarker(user, next);
   return {
@@ -416,7 +417,7 @@ function rememberOwed(user, doc, done) {
   };
 }
 
-/* The person's Try again: the desk as it is now, not the list from the failed pass. */
+/* The person's Try again: un-holds the marker for the next start and deletes nothing live. */
 function retryPendingReset(opts) {
   if (!opts || opts.holdsLock !== true) return { ok: false, reason: "refused", changed: false };
   const raw = String(opts.userData || "");
@@ -435,17 +436,9 @@ function retryPendingReset(opts) {
     dropMarker(marker);
     return { ok: false, reason: "refused", changed: false };
   }
-  const done = commitReset({
-    userData: user,
-    catalogSetting: doc.catalogSetting,
-    defaultCatalog: doc.defaultCatalog
-  });
-  if (done && done.ok) {
-    dropMarker(marker);
-    return { ok: true, changed: true };
-  }
-  const held = rememberOwed(user, { v: 1, userData: user, catalogSetting: doc.catalogSetting, defaultCatalog: doc.defaultCatalog, attempts: doc.attempts }, done);
-  return held;
+  doc.held = false;
+  if (!writeMarker(user, doc)) return { ok: false, reason: "refused", changed: false };
+  return { ok: true, changed: false, marker: marker };
 }
 
 function stopPendingReset(opts) {
