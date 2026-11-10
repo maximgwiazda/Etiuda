@@ -1965,7 +1965,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    Never copied. See FILL_M_A. */
 .mf-cols .cbadge{vertical-align:1px}
 .txt .fillmiss{background:var(--accent-soft);color:var(--accent);border:0;border-radius:6px;
-  padding:1px 7px;font:600 11px var(--sans);letter-spacing:.2px}
+  padding:1px 5px;font:600 11px var(--sans);letter-spacing:.2px}
 .mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
@@ -1980,6 +1980,8 @@ body:not(.e-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accen
    body.e-kbdnav so a resting pointer cannot show a second mark while the keyboard
    drives; the first mousemove hands the mark back to the pointer. */
 .txt.sel{border-color:var(--accent);background:var(--accent-soft)}
+body:not(.e-kbdnav) .txt:hover .fillmiss,
+.txt.sel .fillmiss{background:var(--panel)}
 .txt.dragging{opacity:.55;z-index:2}
 html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);

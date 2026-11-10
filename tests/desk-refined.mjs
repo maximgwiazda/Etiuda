@@ -63,7 +63,7 @@ function findings(css) {
   need(".txt .fillmiss", "color", "var(--accent)", "empty fill");
   need(".txt .fillmiss", "border", "0", "empty fill");
   need(".txt .fillmiss", "border-radius", "6px", "empty fill");
-  need(".txt .fillmiss", "padding", "1px 7px", "empty fill");
+  need(".txt .fillmiss", "padding", "1px 5px", "empty fill");
   need(".txt .fillmiss", "font", "600 11px var(--sans)", "empty fill");
   need(".txt .fillmiss", "letter-spacing", ".2px", "empty fill");
   need(".pill", "border-radius", "9px", "category pill");
@@ -98,7 +98,7 @@ const GOOD = [
   ":root[data-theme=dark]{--dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);--card-border:rgba(255,255,255,.075);",
   "--card-shadow:var(--bevel);--card-lift:0 0 #0000}",
   ".dotfield>div{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .7px,color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px);background-size:16px 16px}",
-  ".txt .fillmiss{background:var(--accent-soft);color:var(--accent);border:0;border-radius:6px;padding:1px 7px;font:600 11px var(--sans);letter-spacing:.2px}",
+  ".txt .fillmiss{background:var(--accent-soft);color:var(--accent);border:0;border-radius:6px;padding:1px 5px;font:600 11px var(--sans);letter-spacing:.2px}",
   ".pill{border-radius:9px}",
   ".pill-add{border-radius:999px}",
   ".txt{border:1px solid var(--card-border,var(--line));box-shadow:var(--card-shadow,none)}",
