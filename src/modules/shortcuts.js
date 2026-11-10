@@ -70,7 +70,7 @@ const SC_DEFS=[
   /* inField so an empty search box still switches. Space is the lanes' key wherever the focus
      sits, a button included. A field being typed in, a dialog, a bubble or a menu keep it
      (lanesKeyFree). */
-  {id:"lanes",label:"Cards or the conversation's path",hint:"Switch between the cards and the conversation's path while nothing is being typed",
+  {id:"lanes",label:"Cards or the timeline",hint:"Switch between the cards and the timeline while nothing is being typed",
     def:{code:"Space",key:" ",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"expandPills",label:"Reveal / expand categories",
     hint:"Hold Ctrl (Cmd on Mac): show the pills when hidden, or expand them past two rows",
