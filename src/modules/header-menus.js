@@ -33,11 +33,17 @@ const MENU_ICON={
 };
 function paintMenuIcons(){
   const menu=$("#settingsMenu");
-  if(!menu) return;
+  if(!menu || typeof menu.querySelectorAll!=="function") return;
   menu.querySelectorAll("button[data-act]").forEach(b=>{
-    const name=MENU_ICON[b.dataset.act];
-    if(!name || b.querySelector(".sx-ic")) return;
-    b.insertAdjacentHTML("afterbegin", sxIcon(name));
+    const name=b.dataset && MENU_ICON[b.dataset.act];
+    if(!name || typeof b.querySelector!=="function" || b.querySelector(".sx-ic")) return;
+    if(typeof b.insertBefore!=="function" || typeof document.createElement!=="function") return;
+    /* A node, not insertAdjacentHTML: the desk's node page builds elements that parse
+       innerHTML and take insertBefore, and does not implement insertAdjacentHTML. */
+    const hold=document.createElement("span");
+    hold.innerHTML=sxIcon(name);
+    const icon=hold.firstChild;
+    if(icon) b.insertBefore(icon, b.firstChild);
   });
 }
 /* The words live in their own text node, so a label change leaves the icon where it is. */

@@ -24766,11 +24766,15 @@ What you type stays in this browser only.`;
   };
   function paintMenuIcons() {
     const menu = $("#settingsMenu");
-    if (!menu) return;
+    if (!menu || typeof menu.querySelectorAll !== "function") return;
     menu.querySelectorAll("button[data-act]").forEach((b) => {
-      const name = MENU_ICON[b.dataset.act];
-      if (!name || b.querySelector(".sx-ic")) return;
-      b.insertAdjacentHTML("afterbegin", sxIcon(name));
+      const name = b.dataset && MENU_ICON[b.dataset.act];
+      if (!name || typeof b.querySelector !== "function" || b.querySelector(".sx-ic")) return;
+      if (typeof b.insertBefore !== "function" || typeof document.createElement !== "function") return;
+      const hold = document.createElement("span");
+      hold.innerHTML = sxIcon(name);
+      const icon = hold.firstChild;
+      if (icon) b.insertBefore(icon, b.firstChild);
     });
   }
   function menuLabel(btn, text) {
