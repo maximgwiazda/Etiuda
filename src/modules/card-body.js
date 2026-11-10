@@ -34,8 +34,8 @@ function cardBodyHtml(m,i,ctx){
     cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>'+(cardCommits(m)?stampHtml("cstamp"):"");
     /* Captured rather than appended inline: a kept card has its badges added and removed by
        patchCard(), and they must be the same bytes a rebuild would have written. */
-    const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("int"))+'</span>';
-    const catBadge='<span class="cbadge cat" title="'+esc(t("In a supporting category, relevant regardless of the intent"))+'">'+esc(t("sup"))+'</span>';
+    const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("Linked"))+'</span>';
+    const catBadge='<span class="cbadge cat" title="'+esc(t("In a supporting category, relevant regardless of the intent"))+'">'+esc(t("Also helps"))+'</span>';
     if(hit) cardH+=hitBadge;
     if(catHit) cardH+=catBadge;
     if(fav) cardH+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';

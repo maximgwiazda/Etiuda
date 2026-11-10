@@ -1575,40 +1575,36 @@ body.e-take-drag .pills-slot.pills-overflow::before,
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-/* THE WEIGHT BELONGS TO THE RING, NEVER TO SELECTION. Bold on the selected pill widened it by
-   ~2px and pushed every pill after it along the bar, and a bar that moves under the pointer is
-   worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
-   below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
-   the same width picked or not, and picking is the one thing that never changes a width. */
+/* THE WEIGHT STAYS OFF THE RING AND OFF THE SELECTION. Bold on a pill widened it by ~2px and
+   pushed every pill after it along the bar, and a bar that moves under the pointer is worse than
+   any gain in emphasis; the cobalt fill and the white text already say which slice is below.
+   Hint, hint2 and both .on pairs are 400, so a ringed pill is the same width picked or not, and
+   picking is the one thing that never changes a width. */
 .pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
 html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.dragging{opacity:.55}
-/* No bold-width ghost; the ~2px width breath when a hint ring lights is accepted, and it is a
-   separate question from selection, which takes none. If the judder ever returns, two lessons
-   bind: the ghost must be ::before (an inline-block takes its baseline from its LAST line box,
-   unless its overflow is hidden - see footer .nw), and the count stays outside the reservation. */
-/* category the selected {INTENT} belongs to (blue outline when not selected) */
-/* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
-   the ring is the state, the label is just a name. Selected pills still go white. */
-/* The intent's green lived on an underline for one rung and there is no underline to return
-   it to: in the pill idiom its home is the ring and the halo, which is what hint2 always was. */
-.pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
-  box-shadow:0 0 0 2px var(--accent-soft)}
+/* No width ghost. If a weight returns, two lessons bind: the ghost must be ::before (an
+   inline-block takes its baseline from its LAST line box, unless its overflow is hidden - see
+   footer .nw), and the count stays outside the reservation. */
+/* A hint is a thin ring in its own colour, and the label stays quiet ink. The ring is the
+   state. Selected pills still go white, and they keep the halo. */
+.pill.hint{border-color:color-mix(in srgb,var(--accent) 55%,transparent);color:var(--dim);font-weight:400;
+  box-shadow:none}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
-.pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
-  box-shadow:0 0 0 2px var(--go-soft)}
+.pill.hint2{border-color:color-mix(in srgb,var(--go) 60%,transparent);color:var(--dim);font-weight:400;
+  box-shadow:none}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
-.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
-.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
-/* selected + intent-relevant: blue fill, keep green border ring */
+.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--go) 60%,transparent)}
+/* selected + intent-relevant: blue fill, keep the green border and its halo */
 .pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
-  box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
+  box-shadow:0 0 0 2px var(--go-soft);font-weight:400}
 .pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
-  box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
+  box-shadow:0 0 0 2px var(--accent-soft);font-weight:400}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
 .pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
@@ -1805,9 +1801,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 .card{background:transparent;border:0;border-radius:0;
   position:relative;margin-bottom:20px;overflow:visible;box-shadow:none}
 /* The two rings follow the panel down: a ring round a group of slabs would enclose whitespace
-   and the caption as well, which is what the ring was never about. --go-edge on the linked
-   one, so dark murmurs where twenty matched borders would shout. */
-.card.intent-hit>.txt{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
+   and the caption as well, which is what the ring was never about. A linked card wears a
+   hairline of --go, and the badge already says the match, so there is no second ring. */
+.card.intent-hit>.txt{border-color:color-mix(in srgb,var(--go) 45%,transparent);box-shadow:var(--card-shadow,none)}
 .card.cat-hit>.txt{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
 /* OFF-SCREEN CARDS ARE NOT LAID OUT. A real desk's catalog is a few hundred cards and around
@@ -1829,9 +1825,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
-.cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
-.cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
-.cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
+.cbadge.hit{background:var(--go-soft);color:var(--go)}
+.cbadge.cat{background:var(--accent-soft);color:var(--accent)}
+.cbadge.fav{background:var(--fav-soft);color:var(--fav)}
 /* The hue is worn by exactly TWO things: the pill's dot and the card's top-edge tag -
    NO icon carries it, so the editor's swatch means the dot and the edge, nothing else.
    Shape stays the channel that survives colour-blindness. All is chrome and wears nothing. */
@@ -2693,12 +2689,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
-.cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
-  background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
-.cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
-/* What a loaded edition brought, worn until the card is next copied: the family's own accent, with the
-   border the others carry so every badge sits one height. */
-.cbadge.edn{border:1px solid transparent}
+.cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
+  background:var(--accent-soft);color:var(--accent);text-transform:none}
+.cbadge.ed{background:var(--ed-soft);color:var(--ed)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
 .modal,.bub{user-select:none;-webkit-user-select:none}
@@ -3972,8 +3965,10 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* A BADGE INSIDE THE PROSE IS AN OUTLINE, NOT A CHIP. Their tonal grounds are mixed against
    the PAGE and measure 1.25:1 to 4.24:1 on the fill; hollowed out they carry the panel's own
    white at 5.17:1 and keep their hue on the rule round them. The tinted chip is what a card
-   shows, and the card is where the hue is learned. */
-.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)}
+   shows, and the card is where the hue is learned. The face is restated here so the card's
+   chip does not land in the sentence. */
+.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);
+  font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;text-transform:uppercase}
 .bub .cbadge.hit{border-color:#d1fae5}
 .bub .cbadge.fav{border-color:#fef3c7}
 .bub .cbadge.ed{border-color:#eff6ff}
