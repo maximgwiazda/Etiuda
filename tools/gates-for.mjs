@@ -221,6 +221,7 @@ export const SCANS = {
   "tests/no-crash-dialog.mjs": ["tests/**/*.{js,mjs,cjs}"],
   "tests/swap.mjs": ["engine/etiuda.html", "shell/sample-catalog.ec"],
   "tests/shell-shipped.mjs": ["shell/**", "tools/release.mjs"],
+  "tests/nsis-compile.mjs": ["shell/installer.nsh", "electron-builder.js", "tools/patch-nsis.cjs"],
 };
 
 /* A diff that adds, removes or renames a file under tests/ changes what the chains must list, so it selects chain-split,
