@@ -179,7 +179,13 @@ module.exports = {
   beforePack: async context => {
     const plat = context.electronPlatformName;
     if (plat === "linux") linuxIcons();
-    if (plat === "win32") caretHelper();
+    if (plat === "win32") {
+      caretHelper();
+      const { applyNsisPatches, verifyNsisPatches } = await import("./tools/patch-nsis.mjs");
+      applyNsisPatches();
+      const status = verifyNsisPatches();
+      if (!status.applied) throw new Error("NSIS template patches not applied: " + JSON.stringify(status));
+    }
     if (plat === "linux" || plat === "win32") {
       const { prepareEmbed } = await import("./tools/model.mjs");
       await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });

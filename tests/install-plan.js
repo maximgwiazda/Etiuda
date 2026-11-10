@@ -255,6 +255,224 @@ function judgeAllUsers(f) {
   return rows;
 }
 
+/** SemVer 2.0.0 comparison with pre-release tags. Pure function.
+ *  Answers -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2, or null if unparseable. */
+function compareSemver(v1, v2) {
+  if (typeof v1 !== "string" || typeof v2 !== "string") return null;
+  const s1 = v1.trim(), s2 = v2.trim();
+  if (!s1 || !s2) return null;
+  if (s1 === s2) return 0;
+
+  const SEMVER_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+  const m1 = SEMVER_RE.exec(s1);
+  const m2 = SEMVER_RE.exec(s2);
+  if (!m1 || !m2) return null;
+
+  const [maj1, min1, pat1] = [Number(m1[1]), Number(m1[2]), Number(m1[3])];
+  const [maj2, min2, pat2] = [Number(m2[1]), Number(m2[2]), Number(m2[3])];
+
+  if (maj1 !== maj2) return maj1 < maj2 ? -1 : 1;
+  if (min1 !== min2) return min1 < min2 ? -1 : 1;
+  if (pat1 !== pat2) return pat1 < pat2 ? -1 : 1;
+
+  const pre1 = m1[4], pre2 = m2[4];
+  if (pre1 === undefined && pre2 === undefined) return 0;
+  // A version with pre-release is older (lower precedence) than a normal release.
+  if (pre1 !== undefined && pre2 === undefined) return -1;
+  if (pre1 === undefined && pre2 !== undefined) return 1;
+
+  const ids1 = pre1.split(".");
+  const ids2 = pre2.split(".");
+  const len = Math.max(ids1.length, ids2.length);
+
+  for (let i = 0; i < len; i++) {
+    if (i >= ids1.length) return -1; // fewer fields has lower precedence
+    if (i >= ids2.length) return 1;
+
+    const id1 = ids1[i], id2 = ids2[i];
+    const num1 = /^\d+$/.test(id1), num2 = /^\d+$/.test(id2);
+
+    if (num1 && num2) {
+      const n1 = Number(id1), n2 = Number(id2);
+      if (n1 !== n2) return n1 < n2 ? -1 : 1;
+    } else if (num1 && !num2) {
+      return -1; // numeric has lower precedence than non-numeric
+    } else if (!num1 && num2) {
+      return 1;
+    } else {
+      if (id1 !== id2) return id1 < id2 ? -1 : 1;
+    }
+  }
+
+  return 0;
+}
+
+/** The three recognition outcomes (older, same, newer, or unreadable). */
+function recogniseOutcome(installedVersion, installerVersion) {
+  if (!installedVersion) return "unreadable";
+  const cmp = compareSemver(installedVersion, installerVersion);
+  if (cmp === null) return "unreadable";
+  if (cmp < 0) return "older";
+  if (cmp === 0) return "same";
+  return "newer";
+}
+
+/** Maps outcome to user action: older -> Update; same, newer, unreadable -> Reinstall. */
+function recogniseAction(outcome) {
+  return outcome === "older" ? "Update" : "Reinstall";
+}
+
+/** Parses shell/installer.nsh and verifies recognition logic and copywriter words. */
+function readInstallerRecognise(nsh) {
+  const text = String(nsh || "");
+  const macro = name => (new RegExp("!macro\\s+" + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
+  const customInit = macro("customInit");
+  const skipLicense = (/Function\s+skipLicenseIfInner\r?\n([\s\S]*?)FunctionEnd/.exec(text) || [])[1] || "";
+
+  const inCustomInit = /RecogniseExistingInstallation|RecogniseInstallation/.test(customInit)
+    || (/DisplayVersion/.test(customInit) && /MessageBox/.test(customInit));
+
+  const readsInstalledVersion = /ReadRegStr[^\n]+UNINSTALL_REGISTRY_KEY[^\n]+DisplayVersion/i.test(text)
+    || (/\$\{UNINSTALL_REGISTRY_KEY\}/.test(text) && /DisplayVersion/.test(text));
+
+  const comparesVersions = /CompareSemver|compareSemver|SemverCompare/i.test(text)
+    && /RecogniseOlder|older/i.test(text) && /RecogniseSame|same/i.test(text)
+    && /RecogniseNewer|newer/i.test(text) && /RecogniseUnreadable|unreadable/i.test(text);
+
+  const silentSkips = /\$\{IfNot\}\s+\$\{Silent\}[\s\S]*?(?:RecogniseExistingInstallation|MessageBox)[\s\S]*?\$\{EndIf\}/.test(customInit);
+
+  const cancelQuits = /\bQuit\b/.test(customInit) || /RecogniseExistingInstallation[\s\S]*?\bQuit\b/.test(text);
+
+  const EN_OLDER = "is installed on this computer, and this installer holds";
+  const EN_SAME = "is already installed on this computer, the same version as this installer";
+  const EN_NEWER = "is installed on this computer, which is newer than this installer's";
+  const EN_UNREADABLE = "is already installed on this computer, but its version cannot be read";
+  const EN_UNDER = "Data on this computer and the licence stay as they are.";
+
+  const PL_OLDER = "Na tym komputerze jest już program";
+  const PL_SAME = "tej samej co w instalatorze";
+  const PL_NEWER = "nowszej niż wersja";
+  const PL_UNREADABLE = "ale nie da się odczytać jego wersji";
+  const PL_UNDER = "Dane na tym komputerze i licencja zostają bez zmian.";
+
+  const hasCopywriterWordsEn = text.includes(EN_OLDER) && text.includes(EN_SAME)
+    && text.includes(EN_NEWER) && text.includes(EN_UNREADABLE) && text.includes(EN_UNDER);
+
+  const hasCopywriterWordsPl = text.includes(PL_OLDER) && text.includes(PL_SAME)
+    && text.includes(PL_NEWER) && text.includes(PL_UNREADABLE) && text.includes(PL_UNDER);
+
+  // Check that every placeholder in LangString lines has "; placeholder: Claudette"
+  const langLines = text.split(/\r?\n/).filter(l => /^\s*LangString\s+/i.test(l));
+  const placeholderLines = langLines.filter(l => /placeholder/i.test(l) || /Title/i.test(l) && !/Turn/i.test(l));
+  const placeholdersMarked = placeholderLines.every(l => /;\s*placeholder:\s*Claudette\b/i.test(l));
+
+  const bringsInnerToFront = /\$\{If\}\s+\$\{UAC_IsInnerInstance\}[\s\S]*?BringToFront[\s\S]*?SendMessage\s+\$HWNDPARENT\s+0x408/i.test(skipLicense);
+
+  return {
+    inCustomInit: !!inCustomInit,
+    readsInstalledVersion: !!readsInstalledVersion,
+    comparesVersions: !!comparesVersions,
+    silentSkips: !!silentSkips,
+    cancelQuits: !!cancelQuits,
+    hasCopywriterWordsEn,
+    hasCopywriterWordsPl,
+    placeholdersMarked,
+    bringsInnerToFront: !!bringsInnerToFront,
+  };
+}
+
+/** THE SCOPE OF WHAT AN INSTALL WRITES, read from app-builder-lib's NSIS templates as installed (`t`, file name to text)
+ *  and the tree's own script (`nsh`). NSIS itself is held only by reading: no leg compiles or runs it. Each answer is a
+ *  boolean the selftest names, so a template that moves under an upgrade, or a hook that leaves the context changed,
+ *  reddens its own row. */
+function readInstallScopes(t, nsh) {
+  const T = k => String((t || {})[k] || "");
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const body = (text, kind, name) => {
+    const open = kind === "macro" ? "!macro\\s+" : kind === "Function" ? "Function\\s+\"?" : "Section\\s+\"";
+    const close = kind === "macro" ? "!macroend" : kind === "Function" ? "FunctionEnd" : "SectionEnd";
+    const m = new RegExp("^[ \\t]*" + open + esc(name) + "\"?[ \\t]*\\r?\\n([\\s\\S]*?)^[ \\t]*" + close, "m").exec(text);
+    return m ? m[1] : "";
+  };
+  const at = (text, re) => { const m = re.exec(text); return m ? m.index : -1; };
+  const code = s => String(s).split(/\r?\n/).map(l => l.replace(/^\s*[#;].*$/, "").replace(/\s[#;].*$/, "")).join("\n");
+  const own = code(nsh);
+  const add = code(body(T("include/installer.nsh"), "macro", "registryAddInstallInfo"));
+  const perUser = code(body(T("multiUser.nsh"), "macro", "setInstallModePerUser"));
+  const perAll = code(body(T("multiUser.nsh"), "macro", "setInstallModePerAllUsers"));
+  const sect = code(T("installSection.nsh"));
+  const unin = code(T("uninstaller.nsh"));
+  const unSect = code(body(T("uninstaller.nsh"), "Section", "un.${UNINSTALL_SECTION_NAME}"));
+  const onInit = code(body(T("installer.nsi"), "Function", ".onInit"));
+  const unInit = code(body(T("uninstaller.nsh"), "Function", "un.onInit"));
+  const links = code(body(T("common.nsh"), "macro", "setLinkVars"));
+  const recognise = body(own, "Function", "RecogniseExistingInstallation");
+  const stale = body(own, "Function", "un.RemoveStaleLinks");
+  const unHook = body(own, "macro", "customUnInstall");
+
+  /* (a) the registration: written to the context the mode chose, before the shortcuts, read back where it was written */
+  const writes = ["DisplayName", "UninstallString", "DisplayVersion"].every(v =>
+    new RegExp("WriteRegStr\\s+SHELL_CONTEXT\\s+\"\\$\\{UNINSTALL_REGISTRY_KEY\\}\"\\s+\"?" + v + "\\b").test(add));
+  const modes = /SetShellVarContext\s+current/.test(perUser) && /SetShellVarContext\s+all/.test(perAll);
+  const iRun = at(sect, /!insertmacro\s+CHECK_APP_RUNNING/), iFiles = at(sect, /!insertmacro\s+installApplicationFiles/),
+    iReg = at(sect, /!insertmacro\s+registryAddInstallInfo/), iLink = at(sect, /!insertmacro\s+addStartMenuLink/);
+  const order = iRun > -1 && iFiles > iRun && iReg > iFiles && iLink > iReg;
+  const unDeletes = /DeleteRegKey\s+SHELL_CONTEXT\s+"\$\{UNINSTALL_REGISTRY_KEY\}"/.test(unin);
+  const iView = at(onInit, /check64BitAndSetRegView/), iMulti = at(onInit, /initMultiUser/), iCustom = at(onInit, /customInit/);
+  const view = iView > -1 && iMulti > iView && iCustom > iMulti;
+  const readsBoth = ["HKLM", "HKCU"].every(h =>
+    new RegExp("ReadRegStr\\s+\\$\\w+\\s+" + h + "\\s+\"\\$\\{UNINSTALL_REGISTRY_KEY\\}\"\\s+\"DisplayVersion\"").test(recognise));
+
+  /* every block of the tree's own script that changes the shell context changes it back, in pairs that differ */
+  const blocks = [];
+  for (const re of [/^[ \t]*!macro\s+(\S+)[^\n]*\n([\s\S]*?)^[ \t]*!macroend/gm, /^[ \t]*Function\s+(\S+)[^\n]*\n([\s\S]*?)^[ \t]*FunctionEnd/gm,
+    /^[ \t]*Section\s+("[^"]*"|\S+)[^\n]*\n([\s\S]*?)^[ \t]*SectionEnd/gm])
+    for (let m; (m = re.exec(own));) blocks.push([m[1], m[2]]);
+  const unpaired = blocks.filter(([, b]) => {
+    const seq = (b.match(/SetShellVarContext\s+(current|all)/g) || []).map(s => s.split(/\s+/)[1]);
+    if (seq.length % 2) return true;
+    for (let i = 0; i < seq.length; i += 2) if (seq[i] === seq[i + 1]) return true;
+    return false;
+  }).map(([n]) => n);
+
+  /* (b) the shortcuts: both sides build them from the context's own folders, after the mode is set, and the uninstall
+     also takes a same-name shortcut from the other scope when nothing is registered there */
+  const linksFromContext = /\$newStartMenuLink\s+"\$SMPROGRAMS\\/.test(links) && /\$oldStartMenuLink\s+"\$SMPROGRAMS\\/.test(links)
+    && /\$newDesktopLink\s+"\$DESKTOP\\/.test(links) && /\$oldDesktopLink\s+"\$DESKTOP\\/.test(links);
+  const bothAfterMode = /!insertmacro\s+setLinkVars/.test(sect) && /!insertmacro\s+setLinkVars/.test(unSect)
+    && iMulti > -1 && at(unInit, /initMultiUser/) > -1
+    && /Delete\s+"\$oldStartMenuLink"/.test(unSect) && /Delete\s+"\$oldDesktopLink"/.test(unSect);
+  const branch = (b, mine, other) => {
+    const r = new RegExp("ReadRegStr\\s+(\\$\\w+)\\s+" + other.hive + "\\s+\"\\$\\{INSTALL_REGISTRY_KEY\\}\"\\s+InstallLocation").exec(b);
+    if (!r) return false;
+    const rest = b.slice(r.index);
+    const guard = new RegExp("\\$\\{If\\}\\s+" + esc(r[1]) + "\\s+==\\s+\"\"").exec(rest);
+    if (!guard) return false;
+    const inner = rest.slice(guard.index);
+    const iTo = at(inner, new RegExp("SetShellVarContext\\s+" + other.ctx)), iBack = at(inner, new RegExp("SetShellVarContext\\s+" + mine));
+    const iM = at(inner, /Delete\s+"\$SMPROGRAMS\\\$\{SHORTCUT_NAME\}\.lnk"/), iD = at(inner, /Delete\s+"\$DESKTOP\\\$\{SHORTCUT_NAME\}\.lnk"/);
+    return iTo > -1 && iM > iTo && iD > iTo && iBack > iM && iBack > iD;
+  };
+  const split = /\$\{If\}\s+\$installMode\s+==\s+"all"([\s\S]*?)\$\{Else\}([\s\S]*?)\$\{EndIf\}\s*Pop/.exec(stale);
+  const staleBoth = !!split && branch(split[1], "all", { hive: "HKCU", ctx: "current" })
+    && branch(split[2], "current", { hive: "HKLM", ctx: "all" });
+  const staleCalled = /\$\{IfNot\}\s+\$\{isKeepShortcuts\}\s*\r?\n\s*Call\s+un\.RemoveStaleLinks/.test(unHook);
+
+  return { writes, modes, order, unDeletes, view, readsBoth, unpaired, linksFromContext, bothAfterMode, staleBoth, staleCalled };
+}
+
+/** The templates readInstallScopes reads, from app-builder-lib as installed under `root`. */
+function nsisTemplates(root) {
+  const fs = require("node:fs");
+  const dir = path.join(root, "node_modules", "app-builder-lib", "templates", "nsis");
+  const out = {};
+  for (const f of ["installer.nsi", "installSection.nsh", "multiUser.nsh", "uninstaller.nsh", "common.nsh", "include/installer.nsh"])
+    out[f] = fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), "utf8") : "";
+  return out;
+}
+
 module.exports = { BUILDER_NS, uuidV5, appGuid, registryKeys, badInstallDir, installArgs, uninstallArgs, plainArgs,
                    argsFault, scratchHome, userDataName, defaultUserInstallDir, samePath,
-                   judgeUpdate, judgeUpdatedRun, judgeAllUsers };
+                   judgeUpdate, judgeUpdatedRun, judgeAllUsers,
+                   compareSemver, recogniseOutcome, recogniseAction,
+                   readInstallerRecognise, readInstallScopes, nsisTemplates };

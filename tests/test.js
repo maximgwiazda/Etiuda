@@ -3866,12 +3866,17 @@ function installerUpdateTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   const tpl = n => fs.readFileSync(path.join(lib, "templates", "nsis", n), "utf8");
   const macro = (text, name) => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(text) || [])[1] || "";
-  const EN = "Etiuda is still open, so the installer is asking it to close. Nothing is closed by force: Etiuda keeps its open conversations and their drafts and brings them back at its next start, or, where it cannot, asks first while a conversation is in progress. The installation carries on once it has closed; if it stays open, close it by hand and press Retry.";
-  const PL = "Etiuda jest jeszcze otwarta, więc instalator prosi ją o zamknięcie. Nic nie zostanie zamknięte siłą: Etiuda zachowa otwarte rozmowy wraz z wersjami roboczymi i przywróci je przy następnym uruchomieniu, a jeśli to niemożliwe, przy trwającej rozmowie najpierw o to zapyta. Instalacja będzie kontynuowana, gdy Etiuda się zamknie; jeśli pozostanie otwarta, trzeba zamknąć ją ręcznie i nacisnąć Ponów próbę.";
+  /* The copywriter's two lines. ${PRODUCT_NAME} is electron-builder's define, so the desk says Etiuda and Studio
+     says Etiuda Studio from the same hook. The first is said while the installer asks the app to close; the second
+     when it is still open and the person must close it and choose Retry. */
+  const EN_CLOSE = "${PRODUCT_NAME} is running, and the installer will close it before going on.";
+  const EN_RETRY = "${PRODUCT_NAME} is running. Close it, then choose Retry.";
+  const PL_CLOSE = "Program ${PRODUCT_NAME} jest uruchomiony; instalator zamknie go przed kontynuacją.";
+  const PL_RETRY = "Program ${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów.";
   const asks = text => {
     const m = macro(text, "customCheckAppRunning");
     return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
-      !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R9"/.test(m),
+      !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R6"/.test(m),
       /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 2\r?\n\s*Quit\b/.test(m)];
   };
   const keeps = text => {
@@ -3888,9 +3893,13 @@ function installerUpdateTests() {
   eq("1152a the installer asks a running Etiuda to close with taskkill and no /F, the close its window's X sends, says so, asks for Retry where it stays open, and a silent install gives up with error level 2 rather than stopping it; electron-builder inserts this in place of its own check",
     got, [true, true, true, true, true, true, true]);
   const words = macro(nsh, "customCheckAppRunning");
-  got = [/\$\{If\} \$LANGUAGE == 1045\r?\n\s*(?:#[^\r\n]*\r?\n\s*)?StrCpy \$R9 "([^"]*)"/.exec(words), /\$\{Else\}\r?\n\s*(?:#[^\r\n]*\r?\n\s*)?StrCpy \$R9 "([^"]*)"/.exec(words)].map(m => m && m[1]);
-  eq("1152b the installer's line is the copywriter's, Polish under the Polish LCID and English otherwise, with its sentence on work in progress kept at the close, and the Polish names Windows's own Retry button",
-    got, [PL, EN]);
+  const grab = head => {
+    const m = new RegExp(head + "\\r?\\n\\s*(?:#[^\\r\\n]*\\r?\\n\\s*)?StrCpy \\$R6 \"([^\"]*)\"\\r?\\n\\s*StrCpy \\$R9 \"([^\"]*)\"").exec(words);
+    return m ? [m[1], m[2]] : [null, null];
+  };
+  got = grab("\\$\\{If\\} \\$LANGUAGE == 1045").concat(grab("\\$\\{Else\\}"));
+  eq("1152b the installer's two lines are the copywriter's, Polish under the Polish LCID and English otherwise: the first names the app while the installer closes it, the second when it is still open and the person must close it and choose Retry, and each carries ${PRODUCT_NAME}",
+    got, [PL_CLOSE, PL_RETRY, EN_CLOSE, EN_RETRY]);
   try {
     const un = tpl("uninstaller.nsh");
     got = keeps(nsh).concat([/!ifmacrodef customRemoveFiles\r?\n\s*!insertmacro customRemoveFiles\r?\n\s*!else/.test(un)]);
@@ -3910,16 +3919,18 @@ function installerUpdateTests() {
     const mk = JSON.parse(String(where.stdout).trim().split(/\r?\n/).pop());
     const script = ["Unicode true", "!include LogicLib.nsh", "!define APP_EXECUTABLE_FILENAME \"Etiuda.exe\"", "!define isUpdated \"$0 == 1\"",
       "!define APP_INSTALLER_STORE_FILE \"etiuda-updater\\installer.exe\"",
+      "!define PRODUCT_NAME \"Etiuda Studio\"",
       "!include /CHARSET=UTF8 \"" + path.join(root, "shell", "installer.nsh") + "\"",
       "Section", "!insertmacro customCheckAppRunning", "!insertmacro customRemoveFiles", "SectionEnd", ""].join("\n");
     const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
       { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
     const out = String(r.stdout || "");
+    const named = s => out.indexOf(s.split("${PRODUCT_NAME}").join("Etiuda Studio")) > -1;
     got = r.status !== 0 ? "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ")
-      : [/taskkill \/IM "Etiuda\.exe"/.test(out), out.indexOf(EN) > -1, out.indexOf(PL) > -1, /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
+      : [/taskkill \/IM "Etiuda\.exe"/.test(out), named(EN_CLOSE), named(EN_RETRY), named(PL_CLOSE), named(PL_RETRY), /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
   } catch (e) { got = "makensis could not be asked: " + e.message; }
-  eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, both lines, the removal and the give-up intact",
-    got, [true, true, true, true, true]);
+  eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, the four lines with the product's name, the removal and the give-up intact",
+    got, [true, true, true, true, true, true, true]);
 }
 function ecTypeNameTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");

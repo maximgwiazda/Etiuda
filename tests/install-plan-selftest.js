@@ -284,6 +284,169 @@ ok(pages.every(([, a, b]) => !!a && a === b),
 const drifted = pages[0][1] ? pages[0][1].replace("#list .card", "#list .cards") : "";
 ok(!!drifted && drifted !== pages[0][2], "6b control: one selector changed in a copy of SEEN reads as different");
 
+/* ---- 7. semver comparison with pre-release tags and installer actions ------------------------ */
+/* These cases hold the JS twin, compareSemver in tests/install-plan.js. The installer's own CompareSemver in
+   shell/installer.nsh is held only by reading: no leg runs NSIS. */
+
+const semverCases = [
+  ["2.0.0-dev", "2.0.0", -1, "2.0.0-dev is older than 2.0.0"],
+  ["2.0.0", "2.0.0", 0, "equal strings are the same"],
+  ["2.0.1", "2.0.0", 1, "2.0.1 is newer than 2.0.0"],
+  ["1.9.9", "2.0.0", -1, "1.9.9 is older than 2.0.0"],
+  ["2.0.0-alpha", "2.0.0-beta", -1, "alpha is older than beta"],
+  ["2.0.0-dev", "2.0.0-rc.1", -1, "dev is older than rc.1 (alphabetic prerelease, the pair LogicLib's integer < judged equal)"],
+  ["2.0.0-beta.1", "2.0.0-beta.2", -1, "beta.1 is older than beta.2"],
+  ["2.0.0-beta.2", "2.0.0-beta.11", -1, "beta.2 is older than beta.11 (numeric prerelease)"],
+  ["2.0.0-alpha", "2.0.0-alpha.1", -1, "fewer prerelease fields has lower precedence"],
+  ["2.0.0-1", "2.0.0-2", -1, "numeric prerelease comparison"],
+  ["2.0.0+build1", "2.0.0+build2", 0, "build metadata is ignored in precedence"],
+  ["invalid", "2.0.0", null, "unparseable string answers null"],
+  ["", "2.0.0", null, "empty string answers null"],
+];
+for (const [a, b, expected, msg] of semverCases) {
+  let cmp;
+  try { cmp = P.compareSemver(a, b); } catch (e) { cmp = "THREW"; }
+  ok(cmp === expected, "7a semver: " + msg + " (" + a + " vs " + b + " -> " + cmp + ")");
+}
+
+const outcomeCases = [
+  ["1.9.0", "2.0.0", "older", "Update"],
+  ["2.0.0-dev", "2.0.0", "older", "Update"],
+  ["2.0.0", "2.0.0", "same", "Reinstall"],
+  ["2.1.0", "2.0.0", "newer", "Reinstall"],
+  ["unreadable", "2.0.0", "unreadable", "Reinstall"],
+  ["", "2.0.0", "unreadable", "Reinstall"],
+  [null, "2.0.0", "unreadable", "Reinstall"],
+];
+for (const [installed, current, outcome, action] of outcomeCases) {
+  let gotOutcome, gotAction;
+  try {
+    gotOutcome = P.recogniseOutcome(installed, current);
+    gotAction = P.recogniseAction(gotOutcome);
+  } catch (e) { gotOutcome = "THREW"; gotAction = "THREW"; }
+  ok(gotOutcome === outcome && gotAction === action,
+    "7b outcome: installed " + JSON.stringify(installed) + " vs current " + current
+    + " maps to " + gotOutcome + " -> " + gotAction);
+}
+
+/* ---- 8. installer script recognition verification ------------------------------------------- */
+
+let recogInfo;
+try {
+  const nsh = fs.readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
+  recogInfo = P.readInstallerRecognise(nsh);
+} catch (e) { recogInfo = { error: e.message }; }
+
+ok(recogInfo && recogInfo.inCustomInit === true,
+  "8a recognition runs in the install side's init (customInit), before any file is written");
+ok(recogInfo && recogInfo.readsInstalledVersion === true,
+  "8b recognition reads the installed version from the key electron-builder writes (${UNINSTALL_REGISTRY_KEY})");
+ok(recogInfo && recogInfo.comparesVersions === true,
+  "8c recognition compares versions and handles older, same, newer and unreadable");
+ok(recogInfo && recogInfo.silentSkips === true,
+  "8d silent install skips the dialog entirely");
+ok(recogInfo && recogInfo.cancelQuits === true,
+  "8e cancel quits without change");
+ok(recogInfo && recogInfo.hasCopywriterWordsEn === true && recogInfo.hasCopywriterWordsPl === true,
+  "8f copywriter words present for English and Polish exactly");
+ok(recogInfo && recogInfo.placeholdersMarked === true,
+  "8g placeholders in LangString lines are marked with '; placeholder: Claudette'");
+
+/* ---- 9. package-time patch verification ---------------------------------------------------- */
+
+/* The patch tool runs on COPIES of the installed templates in a scratch root, so this leg neither depends on whether
+   node_modules was patched already nor writes into it; applying twice must change nothing (idempotent). */
+let patchStatus, patchTwiceSame = false;
+try {
+  const patchTool = require("../tools/patch-nsis.cjs");
+  const fsx = require("node:fs"), osx = require("node:os");
+  const lab = fsx.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-patch-"));
+  const from = patchTool.getPaths(path.join(__dirname, "..")), to = patchTool.getPaths(lab);
+  fsx.mkdirSync(path.dirname(to.multiUserUi), { recursive: true });
+  fsx.copyFileSync(from.multiUserUi, to.multiUserUi);
+  fsx.copyFileSync(from.installSection, to.installSection);
+  patchStatus = patchTool.applyNsisPatches(lab);
+  const once = fsx.readFileSync(to.multiUserUi, "utf8") + fsx.readFileSync(to.installSection, "utf8");
+  patchTool.applyNsisPatches(lab);
+  patchTwiceSame = once === fsx.readFileSync(to.multiUserUi, "utf8") + fsx.readFileSync(to.installSection, "utf8");
+  fsx.rmSync(lab, { recursive: true, force: true });
+} catch (e) { patchStatus = { error: e.message }; }
+
+ok(patchStatus && patchStatus.multiUserUiPatched === true,
+  "9a multiUserUi.nsh checks elevated child exit code $2 on $1 = 1 rather than bare Quit");
+ok(patchStatus && patchStatus.installSectionPatched === true,
+  "9b installSection.nsh runs CHECK_APP_RUNNING without UAC_IsInnerInstance guard");
+ok(patchTwiceSame, "9c the patch applied a second time changes nothing");
+{
+  const nsh = require("node:fs").readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
+  const defs = (nsh.match(/LangString etiudaSetupNotFinished \$\{ID\} "[^"]*\$2[^"]*"/g) || []).length;
+  ok(defs === 2, "9d the string the patched page shows for a child that did not finish is defined in both languages, naming the code: " + defs);
+  /* The patched leave function is compiled into the uninstaller as well (assistedInstaller.nsh inserts
+     PAGE_INSTALL_MODE on that side). A definition under !ifndef BUILD_UNINSTALLER is then missing there. */
+  const uninstallerLangCount = (text, name) => {
+    const stack = [], re = new RegExp("^LangString\\s+" + name + "\\b");
+    let visible = 0;
+    for (const line of text.split(/\r?\n/)) {
+      const t = line.trim();
+      if (/^!ifndef\s+BUILD_UNINSTALLER\b/.test(t)) { stack.push(true); continue; }
+      if (/^!if(?:def|ndef|macrodef)?\b/.test(t)) { stack.push(false); continue; }
+      if (/^!endif\b/.test(t)) { stack.pop(); continue; }
+      if (stack.indexOf(true) > -1) continue;
+      if (re.test(t)) visible++;
+    }
+    return visible;
+  };
+  ok(uninstallerLangCount(nsh, "etiudaSetupNotFinished") === 2,
+    "9e the did-not-finish string is defined for the uninstaller compile too, not only the installer's: "
+    + uninstallerLangCount(nsh, "etiudaSetupNotFinished"));
+  ok(uninstallerLangCount(nsh.replace(/LangString etiudaSetupNotFinished/g, "!ifndef BUILD_UNINSTALLER\nLangString etiudaSetupNotFinished"), "etiudaSetupNotFinished") === 0,
+    "9e control: the same string put back under !ifndef BUILD_UNINSTALLER reads none");
+}
+ok(recogInfo && recogInfo.bringsInnerToFront === true,
+  "9c elevated inner copy is brought to front with BringToFront in skipLicenseIfInner");
+
+/* ---- 10. where the install is registered, and where its shortcuts go, in both modes ----------- */
+/* NSIS itself is held only by reading: these rows read app-builder-lib's templates as installed and shell/installer.nsh,
+   and no leg compiles or runs either. Each row has a planted control beside it that must read red. */
+{
+  const T = P.nsisTemplates(path.join(__dirname, ".."));
+  const NSH = fs.readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
+  const S = P.readInstallScopes(T, NSH);
+  const mut = (k, from, to) => { const c = Object.assign({}, T); c[k] = String(c[k]).replace(from, to); return c; };
+  const nshMut = (from, to) => NSH.replace(from, to);
+
+  ok(Object.values(T).every(s => s.length > 0), "10a the six templates are read from app-builder-lib as installed: "
+    + Object.entries(T).map(([k, v]) => k + " " + v.length).join(", "));
+  ok(S.writes && S.modes, "10b the uninstall key (DisplayName, UninstallString, DisplayVersion) is written to SHELL_CONTEXT, which"
+    + " a per-user install sets to the current user (HKCU) and an all-users install to all (HKLM)");
+  ok(!P.readInstallScopes(mut("include/installer.nsh", /(WriteRegStr\s+)SHELL_CONTEXT(\s+"\$\{UNINSTALL_REGISTRY_KEY\}"\s+"DisplayVersion")/, "$1HKLM$2"), NSH).writes,
+    "10b control: DisplayVersion written to HKLM whatever the mode reads red");
+  ok(S.order, "10c the key is written after the running app is closed and the files are copied, and before the shortcuts,"
+    + " so a run that left shortcuts wrote it");
+  ok(!P.readInstallScopes(mut("installSection.nsh", /(!insertmacro registryAddInstallInfo)\r?\n(!insertmacro addStartMenuLink[^\n]*)/, "$2\n$1"), NSH).order,
+    "10c control: the shortcuts before the key reads red");
+  ok(S.view && S.readsBoth, "10d the recognition reads DisplayVersion under the same key in HKLM and HKCU, after .onInit has set"
+    + " the 64-bit view the write uses and after initMultiUser");
+  ok(!P.readInstallScopes(T, nshMut(/ReadRegStr \$1 HKCU "\$\{UNINSTALL_REGISTRY_KEY\}" "DisplayVersion"/, "ReadRegStr $1 HKCU \"Software\\Etiuda\" \"DisplayVersion\"")).readsBoth,
+    "10d control: the per-user read pointed at another key reads red");
+  ok(S.unDeletes, "10e the uninstaller deletes the key from SHELL_CONTEXT, the scope its own mode sets");
+  ok(S.unpaired.length === 0, "10f every block of shell/installer.nsh that changes the shell context changes it back: "
+    + (S.unpaired.join(", ") || "none unpaired"));
+  ok(P.readInstallScopes(T, nshMut(/(\r?\n)(\s*)Delete "\$LOCALAPPDATA\\\$\{APP_INSTALLER_STORE_FILE\}"[\s\S]*?SetShellVarContext all/, "$1$2Delete x")).unpaired.indexOf("customInstall") > -1,
+    "10f control: customInstall left in the current user's context reads red");
+
+  ok(S.linksFromContext && S.bothAfterMode, "10g install and uninstall both build the Start menu and desktop shortcuts from"
+    + " $SMPROGRAMS and $DESKTOP after the mode has set the context, so each removes what the other wrote in its own scope");
+  ok(S.staleBoth && S.staleCalled, "10h the uninstaller also removes a shortcut of the same name in the other scope when no"
+    + " installation is registered there (InstallLocation empty), puts the context back, and leaves it under --keep-shortcuts");
+  ok(!P.readInstallScopes(T, nshMut(/(ReadRegStr \$0 HKCU "\$\{INSTALL_REGISTRY_KEY\}" InstallLocation\s*\r?\n\s*)\$\{If\} \$0 == ""/, "$1${If} 1 == 1")).staleBoth,
+    "10h control: the user's shortcut removed even while a per-user copy is registered reads red");
+  ok(!P.readInstallScopes(T, nshMut(/(Delete "\$DESKTOP\\\$\{SHORTCUT_NAME\}\.lnk"\s*\r?\n\s*)SetShellVarContext all/, "$1")).staleBoth,
+    "10h control: the context left in the current user's after the removal reads red");
+  ok(!P.readInstallScopes(T, nshMut(/\s*Call un\.RemoveStaleLinks/, "")).staleCalled,
+    "10h control: the removal never called from the uninstall reads red");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);

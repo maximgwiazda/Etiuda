@@ -31,6 +31,15 @@ if (existsSync(turningTool)) {
   await prepareTurning(ROOT, 'shell');
 }
 
+/* Ensure electron-builder's NSIS templates have the required patches applied */
+const { applyNsisPatches, verifyNsisPatches } = await import('./patch-nsis.mjs');
+applyNsisPatches(ROOT);
+const nsisStatus = verifyNsisPatches(ROOT);
+if (!nsisStatus.applied) {
+  console.error('npm run package: NSIS template patches are missing: ' + JSON.stringify(nsisStatus));
+  process.exit(1);
+}
+
 function installers(dir) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter(f => /-setup\.exe$/i.test(f)).map(name => {
