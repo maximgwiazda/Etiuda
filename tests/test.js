@@ -583,6 +583,7 @@ function runUnitTests() {
   catalogIdentityTests();
   catalogNsTests();
   strandedAdoptionTests();
+  unreadablePackTests();
   langSegWiringTests();
   deskStatsTests();
   ejectUndoTests();
@@ -732,6 +733,15 @@ function ejectUndoTests() {
     [undoMs >= 10000, clock > undoMs, stripped, late.said === "Catalog ejected", brought,
      late.ls["eab12~Pack"], late.ls["eab12~CatOrder"], late.ls["eab12~LinksAside"], late.ls.ePack],
     [true, true, true, true, true, OWN_PACK, "[\"t2\",\"t1\"]", "{}", "[\"loose\"]"]);
+  const twice = world(true);
+  twice.F.clearLocalMemory();
+  twice.ls["eab12~Pack"] = JSON.stringify({ overrides: { c1: { t: "edited" } }, intentKeys: "tag" });
+  twice.F.clearLocalMemory();
+  const twiceBring = twice.F.bringBackCleared;
+  const twiceBrought = typeof twiceBring === "function" && twiceBring() === true;
+  eq("a second clear while a layer is held keeps the first, so bring back returns the person's original layer byte for byte",
+    [twiceBrought, twice.ls["eab12~Pack"], twice.ls["eab12~CatOrder"], twice.ls["eab12~LinksAside"], twice.ls.ePack],
+    [true, OWN_PACK, "[\"t2\",\"t1\"]", "{}", "[\"loose\"]"]);
   const page = world(true, false);
   const pageBefore = sorted(page.ls) + sorted(page.ss);
   page.F.clearLocalMemory();
@@ -2333,6 +2343,63 @@ function strandedAdoptionTests() {
   const s4 = boot({ [stranger + "Pack"]: PACK("an edit an earlier build stranded") }, own, [other]);
   eq("a lone stranded layer no catalog of this desk wrote is still adopted by the build's own catalog",
      JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
+}
+
+/* THE PACK LOADER TOLERATES AN UNREADABLE LAYER, not JSON or JSON of the wrong shape: the desk starts,
+   the catalog shows as delivered, and the unreadable text is not thrown away silently. */
+function unreadablePackTests() {
+  const cp = require("child_process");
+  const script = [
+    'process.removeAllListeners("warning");',
+    'process.on("warning", () => {});',
+    'import { pathToFileURL } from "node:url";',
+    'import { join } from "node:path";',
+    'const root = process.env.UNREADABLE_PACK_ROOT;',
+    'const mod = (n) => pathToFileURL(join(root, "src", "modules", n)).href;',
+    'const ST = await import(mod("storage.js"));',
+    'const PK = await import(mod("pack.js"));',
+    'const cases = [',
+    '  "{ unreadable not JSON",',
+    '  "123",',
+    '  JSON.stringify([1, 2, 3]),',
+    '  JSON.stringify("just a string"),',
+    '  JSON.stringify({ overrides: [1, 2] }),',
+    '  JSON.stringify({ overrides: "bad" }),',
+    '  JSON.stringify({ custom: 123 }),',
+    '  JSON.stringify({ hidden: 456 }),',
+    '  JSON.stringify({ favourites: "nope" }),',
+    '  JSON.stringify({ cardOrder: "nope" }),',
+    '  JSON.stringify({ baseCards: "nope" }),',
+    '];',
+    'const results = [];',
+    'for (const raw of cases) {',
+    '  ST.setLayer("eab12~");',
+    '  ST.lsSet("eab12~Pack", raw);',
+    '  PK.resetPack();',
+    '  let threw = false;',
+    '  try { PK.loadPack(); } catch (e) { threw = true; }',
+    '  const delivered = !threw && typeof PK.pack === "object" && !Array.isArray(PK.pack)',
+    '    && Object.keys(PK.pack).filter(k => /^\\d+$/.test(k)).length === 0',
+    '    && typeof PK.pack.overrides === "object" && !Array.isArray(PK.pack.overrides)',
+    '    && Object.keys(PK.pack.overrides).length === 0',
+    '    && Array.isArray(PK.pack.custom) && PK.pack.custom.length === 0',
+    '    && Array.isArray(PK.pack.hidden) && PK.pack.hidden.length === 0',
+    '    && Array.isArray(PK.pack.favourites) && PK.pack.favourites.length === 0',
+    '    && PK.pack.baseCards === null;',
+    '  const kept = ST.lsGet("eab12~Pack") === raw;',
+    '  results.push(delivered && kept);',
+    '}',
+    'process.stdout.write(JSON.stringify(results));',
+  ].join("\n");
+  const r = cp.spawnSync(process.execPath, ["--input-type=module", "-"], {
+    input: script, encoding: "utf8", cwd: E.ROOT, timeout: 60000, windowsHide: true,
+    env: Object.assign({}, process.env, { UNREADABLE_PACK_ROOT: E.ROOT })
+  });
+  let results = [];
+  try { results = JSON.parse(r.stdout.trim().split(/\r?\n/).filter(Boolean).pop() || "[]"); } catch (e) {}
+  eq("the pack loader tolerates an unreadable layer (not JSON, or JSON of the wrong shape): the desk starts, the catalog shows as delivered, and the unreadable text is kept as it was",
+    [r.status === 0, results.length === 11, results.every(Boolean)],
+    [true, true, true]);
 }
 
 /* EVERY LANGUAGE BUTTON THE HEADER HOLDS ANSWERS A PRESS, however it got there. The desk starts

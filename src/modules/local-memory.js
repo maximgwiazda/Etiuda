@@ -61,9 +61,9 @@ function clearLocalMemory(){
   spaces.forEach(ns=>LAYER_KEYS.forEach(n=>{ if(keep.layer.indexOf(n)<0 && lsGet(ns+n)!=null) keys.push(ns+n); }));
   const was=keepKeys(keys);
   keys.forEach(k=>{ const half=/Pack$/.test(k) ? packKept(was.keys[k],keep.pack) : null; if(half!=null) lsSet(k,half); else lsDel(k); });
-  clearedHold=was;
+  if(!clearedHold) clearedHold=was;
   hooks.restartDesk();
-  offerUndo("Local changes cleared", ()=>{ if(clearedHold!==was) return; clearedHold=null; putBack(was); });
+  offerUndo("Local changes cleared", ()=>{ if(clearedHold===was) clearedHold=null; putBack(was); });
 }
 function bringBackCleared(){
   const was=clearedHold;
