@@ -1226,9 +1226,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(800);
-    /* WHERE EVERY ACT OF THIS SECTION LIVES NOW, board 452: the folder on the title line, a
+    /* WHERE EVERY ACT OF THIS SECTION LIVES NOW, board 452: the folder named on the title line, a
        catalog's own acts in its row, the Library's own in Catalog and data's rows. Read as places
-       rather than as presence - a button that exists in the wrong home is the failure. */
+       rather than as presence - a button that exists in the wrong home is the failure.
+       Since 8f62feae (2026-11-09) the folder's path and its Change button (the ids) stand on the
+       section's data bar, the list's header inside the fold, and the Library tab hides the title
+       line except while searching, when the bar hides and the title line shows the same folder
+       without ids. So the bar is a home, not a stray, and the title line's copy is read as present
+       (the test architect, 2026-11-10). */
     const q = sel => document.querySelector(sel);
     const pathEl = q("#mgCatFolderPath"), change = q("#mgCatFolder");
     const exp = q("#mgExportCatalog"), imp = q("#mgImportCatalog"), close = q("#mgClose");
@@ -1237,7 +1242,10 @@ const placeEc = (dir, from, as, minutesOld) => {
                   short: pathEl ? pathEl.textContent : null,
                   button: !!change && !!r && r.width > 0 && r.height > 0,
                   pencil: !!change && !!change.querySelector("svg"),
-                  inSummary: !!pathEl && !!pathEl.closest("summary") && !!change.closest("summary"),
+                  onBar: !!pathEl && !!change && !!pathEl.closest('details.manage-sec[data-mg="data"] .mg-data-bar')
+                    && !!change.closest('details.manage-sec[data-mg="data"] .mg-data-bar'),
+                  titleNames: [...document.querySelectorAll('details.manage-sec[data-mg="data"] > summary .ec-where .open-folder')]
+                    .some(n => !!pathEl && n.title === pathEl.title),
                   loadedRow: !!document.querySelector("#mgCatList .ec-row.is-loaded"),
                   exportInRow: !!exp && !!exp.closest(".ec-row.is-loaded"),
                   importInRow: !!imp && !!imp.closest('.mg-data-acts .set-row[data-row="load"]'),
@@ -1253,10 +1261,10 @@ const placeEc = (dir, from, as, minutesOld) => {
                     .map(d => d.getAttribute("data-sx")) });
   });
   check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
-        && row.button && row.pencil && row.inSummary && row.exportInRow === row.loadedRow
+        && row.button && row.pencil && row.onBar && row.titleNames && row.exportInRow === row.loadedRow
         && row.importInRow
-        && row.noClose && row.oldOnes === 0 && row.strays.join(",") === "ec-list,mg-data-acts",
-    "2h the folder is named and changed in the Library alone, on its title line, with each act in"
+        && row.noClose && row.oldOnes === 0 && row.strays.join(",") === "mg-data-bar,ec-list,mg-data-acts",
+    "2h the folder is named and changed in the Library alone, on Catalog and data's bar (the title line naming it for search), with each act in"
     + " the home it belongs to and nothing floating in the body; Settings offers no catalog"
     + " section at all (452): " + JSON.stringify(row));
   const setBar = await s.p.evaluate(() => {
