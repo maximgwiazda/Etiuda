@@ -349,6 +349,7 @@ function joinTook(v,changed){
              if(fork) row.fork=fork;
              if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};
              if(l.needsFolder===true) row.needsFolder=true; /* plant:needs-folder-kept */
+             if(l.awaitsEdition===true) row.awaitsEdition=true;
              /* The shell's still-reading sentence, as text. The page prints it; it is not a translation of its own. */
              if(typeof l.reading==="string" && l.reading) row.reading=String(l.reading);
              return row;

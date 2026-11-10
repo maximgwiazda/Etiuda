@@ -1257,6 +1257,8 @@ UI_STRINGS.pl={
   "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.":"Lider zespołu nadal widzi nazwę i wydanie tego katalogu, ale jego treść i zmiany wprowadzone w nim na tym stanowisku nigdy nie są wysyłane. Oznaczenie wycofuje to, co stanowisko z niego udostępniło; tego, co lider zespołu już otworzył, nie da się odebrać.",
   "This catalog is no longer private, and the team's rules apply to it again.":"Ten katalog nie jest już prywatny i znów obowiązują go zasady zespołu.",
   "Newest edition {E}, published {WHEN}. The team's news: {AGE}.":"Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
+  /* placeholder: Claudette */
+  "This desk waits for the team's lead to publish a first edition.":"To stanowisko czeka na pierwsze wydanie od lidera zespołu.",
   "Another catalog of the team has a newer edition.":"Inny katalog zespołu ma nowsze wydanie.",
   "Other catalogs of the team with a newer edition: {N}.":"Inne katalogi zespołu z nowszym wydaniem: {N}.",
   "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.":"Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",

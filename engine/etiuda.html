@@ -8104,6 +8104,8 @@ What you type stays in this browser only.`;
     "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.": "Lider zespołu nadal widzi nazwę i wydanie tego katalogu, ale jego treść i zmiany wprowadzone w nim na tym stanowisku nigdy nie są wysyłane. Oznaczenie wycofuje to, co stanowisko z niego udostępniło; tego, co lider zespołu już otworzył, nie da się odebrać.",
     "This catalog is no longer private, and the team's rules apply to it again.": "Ten katalog nie jest już prywatny i znów obowiązują go zasady zespołu.",
     "Newest edition {E}, published {WHEN}. The team's news: {AGE}.": "Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
+    /* placeholder: Claudette */
+    "This desk waits for the team's lead to publish a first edition.": "To stanowisko czeka na pierwsze wydanie od lidera zespołu.",
     "Another catalog of the team has a newer edition.": "Inny katalog zespołu ma nowsze wydanie.",
     "Other catalogs of the team with a newer edition: {N}.": "Inne katalogi zespołu z nowszym wydaniem: {N}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -16442,6 +16444,7 @@ What you type stays in this browser only.`;
         if (fork) row2.fork = fork;
         if (l.stranded && typeof l.stranded === "object") row2.stranded = { seen: l.stranded.seen === true };
         if (l.needsFolder === true) row2.needsFolder = true;
+        if (l.awaitsEdition === true) row2.awaitsEdition = true;
         if (typeof l.reading === "string" && l.reading) row2.reading = String(l.reading);
         return row2;
       }) : []
@@ -32702,6 +32705,7 @@ What you type stays in this browser only.`;
       l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ];
     if (l.head) notes.push(teamHeadNote(l.head));
+    if (l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
     if (l.lapse) notes.push(lapseNote(l.lapse));
     if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
     if (l.reading) notes.push(l.reading);
