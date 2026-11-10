@@ -170,7 +170,7 @@ function teamRowHtml(l,status,bar){
     l.removed?t("This team no longer includes this desk."):status,
     l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
-  if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition.")); /* placeholder: Claudette */
+  if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */
   if(l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
   if(l.reading) notes.push(l.reading);
