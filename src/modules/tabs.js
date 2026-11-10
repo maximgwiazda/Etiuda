@@ -156,7 +156,7 @@ function tabLabel(tb){
   if(tb){
     const manual = typeof tb.customName === "string" && tb.customName.trim()
       ? tb.customName.trim()
-      : (typeof tb.title === "string" && tb.title.trim() ? tb.title.trim() : "");
+      : (typeof tb["title"] === "string" && tb["title"].trim() ? tb["title"].trim() : "");
     if(manual) return manual;
     if(tb.pax && String(tb.pax).trim()){
       return String(tb.pax).trim().split(/\s+/)[0];
@@ -420,8 +420,8 @@ function loadTabSession(){
       path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[],
       log:Array.isArray(t.log)?t.log.filter(tabLogEntry).slice(-TAB_LOG_MAX):[],
       paxNamed:Boolean(t.paxNamed||String(t.pax||"").trim()),
-      customName:typeof t.customName === "string" ? t.customName : (typeof t.title === "string" ? t.title : ""),
-      title:typeof t.title === "string" ? t.title : (typeof t.customName === "string" ? t.customName : "")
+      customName:typeof t.customName === "string" ? t.customName : (typeof t["title"] === "string" ? t["title"] : ""),
+      title:typeof t["title"] === "string" ? t["title"] : (typeof t.customName === "string" ? t.customName : "")
     }));
     activeTabId=data.activeTabId;
     if(!tabs.some(t=>t.id===activeTabId)) activeTabId=tabs[0].id;
@@ -1384,7 +1384,7 @@ function drawTabsCore(){
   bar.innerHTML="";
   const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
   const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
-  const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map(t => t.id).concat(screenList);
+  const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map(tb => tb.id).concat(screenList);
   order.forEach(id => {
     if (screenList.includes(id)) {
       const sid = id;

@@ -5038,7 +5038,7 @@ const CARD_B = {
     const closedBefore = [strip().split(",").map((t) => t.split(":")[0]).join(","), pax.value].join("/");
     check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
       () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind, closedBefore].join("|"),
-        "New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
+        "Rename tab|-|New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
         + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna|dp-b,dp-c/Celina Nowak"));
 
     const pageListen = {};
