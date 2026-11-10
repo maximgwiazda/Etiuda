@@ -2017,11 +2017,10 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 #list .card.deck.deck-up{z-index:6}
 .card.deck>.txt{z-index:var(--deck-z,1);
   transition:box-shadow var(--m-move) ease}
-/* The peek is a hit target: a click there opens the deck. */
 .card.deck:not(.deck-open)>.txt.deck-back{
   transform:translateY(var(--deck-dy)) scaleX(var(--deck-sx));transform-origin:50% 100%;
   clip-path:inset(var(--deck-clip) -3px -3px -3px round var(--radius));
-  filter:brightness(var(--deck-dim))}
+  filter:brightness(var(--deck-dim));pointer-events:none}
 /* On a light desk the edges darken a third as much: grey bars under white read as weight, not depth. */
 :root[data-theme=light] .card.deck:not(.deck-open)>.txt.deck-back{
   filter:brightness(calc(1 - (1 - var(--deck-dim)) / 3));box-shadow:none}
