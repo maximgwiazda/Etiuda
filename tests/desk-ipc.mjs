@@ -2272,6 +2272,10 @@ try {
 
     // 1. Lead-signed edition offered while window is hidden toasts once
     CO.eOfferCatalogDialog(signedCat, { file: "catalog-alpha.ec", asked: false });
+    /* The toast follows an asynchronous check of the lead, so it is waited for (up to 3 s) rather than given a fixed
+       100 ms: under load it came later, note1 was then the previous leg's tray notice, and D7-offer and D7-click both
+       read the wrong note (fold 26 and fold 30 landings). The 100 ms after it still catches a second toast. */
+    for (let waited = 0; madeNotes.length === notesStart && waited < 3000; waited += 25) await tick(25);
     await tick(100);
 
     const note1 = madeNotes[madeNotes.length - 1];
