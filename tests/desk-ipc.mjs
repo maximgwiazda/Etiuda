@@ -45,6 +45,9 @@ function skip(line) {
   console.log("  SKIP  " + line);
 }
 const tick = ms => new Promise(r => setTimeout(r, ms || 0));
+/* A toast that follows an asynchronous check is waited for, up to 3 s, never given a fixed wait: under load a fixed
+   100 ms read the previous leg's note (D7 at the fold-26 and fold-30 landings). */
+const waitNotes = async (list, count) => { for (let w = 0; list.length < count && w < 3000; w += 25) await tick(25); };
 
 /* ---- electron, as small as main.js needs at load and at a desk write ---------------------- */
 const UD = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-"));
@@ -2275,7 +2278,7 @@ try {
     /* The toast follows an asynchronous check of the lead, so it is waited for (up to 3 s) rather than given a fixed
        100 ms: under load it came later, note1 was then the previous leg's tray notice, and D7-offer and D7-click both
        read the wrong note (fold 26 and fold 30 landings). The 100 ms after it still catches a second toast. */
-    for (let waited = 0; madeNotes.length === notesStart && waited < 3000; waited += 25) await tick(25);
+    await waitNotes(madeNotes, notesStart + 1);
     await tick(100);
 
     const note1 = madeNotes[madeNotes.length - 1];
@@ -2320,6 +2323,7 @@ try {
     if (typeof CO.onCatalogListing === "function") {
       CO.onCatalogListing(newListing);
     }
+    await waitNotes(madeNotes, notesBeforeListing + 1);
     await tick(100);
 
     const noteList = madeNotes[madeNotes.length - 1];
@@ -2344,9 +2348,11 @@ try {
       ST.lsSet("eUiLang", lang);
       const before = madeNotes.length;
       CO.eOfferCatalogDialog(d7Sign(Object.assign({}, d7Fixture, { rev: n, edition: String(n) }), d7LeadPair.privateKey), { file: "catalog-nl-" + lang + ".ec", asked: false });
+      await waitNotes(madeNotes, before + 1);
       await tick(100);
       const a = madeNotes.length === before + 1 ? madeNotes[madeNotes.length - 1].opts.title : null;
       if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now() }]);
+      await waitNotes(madeNotes, before + 2);
       await tick(100);
       const b = madeNotes.length === before + 2 ? madeNotes[madeNotes.length - 1].opts.title : null;
       nlTitles.push(a, b);
@@ -2423,6 +2429,7 @@ try {
     const signedCatNoEd = d7Sign(Object.assign({}, d7Fixture, { rev: 7, edition: "", version: "7" }), d7LeadPair.privateKey);
     delete signedCatNoEd.edition;
     CO.eOfferCatalogDialog(signedCatNoEd, { file: "catalog-noed.ec", asked: false });
+    await waitNotes(madeNotes, notesBeforeNoEd + 1);
     await tick(100);
     const noteNoEd = madeNotes[madeNotes.length - 1];
     const bodyNoEd = (noteNoEd && noteNoEd.opts && noteNoEd.opts.body) || "";
