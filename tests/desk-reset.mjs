@@ -604,7 +604,7 @@ function installLeg(decision) {
   check(deskKeepsDataStep(nsh) && !deskKeepsDataStep(nsh.replace(/^(!macro customUnInstall)/m, "!define OWN_UNINSTALL_DATA_STEP\n$1")),
     "4d11 the desk's script never defines OWN_UNINSTALL_DATA_STEP, so its own Remove my data step is emitted, and a define of it reads red");
   if (typeof decision !== "function") {
-    check(false, "4d7 install-plan has no uninstallDataDecision, so the update path is unjudged");
+    check(false, "4d14 install-plan has no uninstallDataDecision, so the update path is unjudged");
     return;
   }
   const quiet = decision({ args: ["/S", "/currentuser"], box: false, removeLicence: true });
@@ -616,12 +616,12 @@ function installLeg(decision) {
   check(quiet.remove === false && ticked.remove === true && ticked.licence === true
     && keep.remove === false && updated.remove === false && flag.remove === false
     && keptLicence.remove === true && keptLicence.licence === false,
-    "4d7 unticked keeps today's behaviour, a ticked box removes data, and /KEEP_APP_DATA or --updated never does");
+    "4d15 unticked keeps today's behaviour, a ticked box removes data, and /KEEP_APP_DATA or --updated never does");
   check(licenceDefine(nsh) && updateGuardHolds(nsh),
-    "4d7 the script defines the licence constant and guards the update before it touches app data");
+    "4d16 the script defines the licence constant and guards the update before it touches app data");
   const withDefine = decision({ args: ["/S"], box: true, removeLicence: licenceDefine(nsh) });
   check(withDefine.licence === true && withDefine.remove === true,
-    "4d7 the constant's default is that a ticked box takes the licence too");
+    "4d17 the constant's default is that a ticked box takes the licence too");
 }
 
 function plantLeg(mod, decision) {
