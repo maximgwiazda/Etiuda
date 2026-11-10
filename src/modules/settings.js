@@ -164,8 +164,7 @@ function teamHeadNote(h){
    back, before the press. The button wears danger, the same class as Delete: the leave destroys the pin, the
    sealed keys and bars the team once its Undo has lapsed. The head, where the shell has one, is a note under the
    name: the newest edition, when it was published, how old the news is, and how many of the team's other catalogs
-   have an edition newer than this desk has loaded. It never disables a control. A listed catalog
-   with no edition yet says that this desk waits for the lead's first edition. */
+   have an edition newer than this desk has loaded. It never disables a control. A listed catalog with no edition yet says that this desk waits for the lead's first edition. */
 function teamRowHtml(l,status,bar){
   const notes=[l.relay?t("Relay: {HOST}").split("{HOST}").join(l.relay):l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
