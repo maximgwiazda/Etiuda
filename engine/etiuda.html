@@ -4119,6 +4119,8 @@ body.e-lanes #pillsSlot{display:none}
 .ln-then{display:flex;align-items:center;flex-wrap:wrap;gap:6px;white-space:normal;overflow:visible;padding:2px 3px 0;font-size:12.5px;color:var(--dim)}
 .ln-then-l{font-size:12px;color:var(--dim);margin-right:2px}
 .ln-chip{display:inline-flex;align-items:center;padding:2px 9px;border-radius:7px;background:var(--ln-chip);color:var(--ink);font-size:12.5px;white-space:nowrap}
+.ln-part{margin-bottom:4px}
+.ln-sep{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .ln-wires{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
 .ln-w{fill:none;stroke:var(--accent);stroke-width:1.7}
 .ln-w-learnt{stroke:var(--dim);stroke-dasharray:2 4}
@@ -34365,7 +34367,13 @@ What you type stays in this browser only.`;
     const off = r.learnt || r.used;
     const grip = off ? "" : '<button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>';
     const act = off ? '<button type="button" class="ln-keep" title="' + esc(t("Add it to the list")) + '" aria-label="' + esc(t("Add it to the list")) + '">' + ICON_PLUS + "</button>" : '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button>";
-    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + escFilled(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then"><span class="ln-then-l">' + esc(t("then")) + "</span>" + then.map((n) => '<span class="ln-chip">' + esc(n) + "</span>").join("") + "</div>" : "") + "</div>";
+    const l = cardLang(m), ps = parts(m, l), blocks = Math.max(1, ps.length);
+    let txts = "";
+    for (let b = 0; b < blocks; b++) {
+      const chip = blocks > 1 ? '<span class="ln-chip ln-part">' + (b + 1) + "/" + blocks + "</span>" : "";
+      txts += '<div class="txt ln-txt' + (i === laneMark && b === 0 ? " sel" : "") + '" role="button" data-b="' + b + '">' + chip + '<span class="ln-clamp">' + escFilled(laneBody(m, b).replace(/\s+/g, " ").trim()) + "</span></div>";
+    }
+    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + "</span></div>" + txts + (then.length ? '<div class="ln-then" role="list"><span class="ln-then-l">' + esc(t("then")) + "</span>" + then.map((n) => '<span class="ln-chip" role="listitem">' + esc(n) + "</span>").join('<span class="ln-sep">' + esc(LN_DOT) + "</span>") + "</div>" : "") + "</div>";
   }
   function laneEditHtml(st) {
     const own = st.fold && st.fold.own ? '<div class="ln-src"><span class="nx-who own">' + esc(t("Your list")) + '</span><button type="button" class="btn ln-back">' + esc(t("Back to the catalog's")) + "</button></div>" : "";
@@ -34547,10 +34555,13 @@ What you type stays in this browser only.`;
     const el = lanesEl();
     return el ? el.querySelector('.ln-row[data-k="' + k + '"]') : null;
   }
-  function laneCopy(k, other) {
+  function laneCopy(k, other, part) {
     const r = laneRows[k];
     if (!r) return false;
-    copyCardPart(r.id, 0, laneRowEl(k), other);
+    const b = part != null ? part | 0 : 0;
+    const el = laneRowEl(k);
+    const anchor = el ? el.querySelector('.ln-txt[data-b="' + b + '"]') || el : null;
+    copyCardPart(r.id, b, anchor, other);
     return true;
   }
   function lanesShortcut(id) {
@@ -34666,7 +34677,9 @@ What you type stays in this browser only.`;
         laneTake(hit.getAttribute("data-to"));
         return true;
       }
-      return k < 0 ? false : (laneCopy(k), true);
+      const txt = at.closest(".ln-txt");
+      const part = txt && txt.dataset.b != null ? +txt.dataset.b : 0;
+      return k < 0 ? false : (laneCopy(k, false, part), true);
     });
     el.addEventListener("pointerdown", (e) => {
       if (e.target && e.target.closest && e.target.closest(".nx-hit")) e.preventDefault();

@@ -136,6 +136,13 @@ function laneRowHtml(st, r, i){
   const act=off
     ? '<button type="button" class="ln-keep" title="'+esc(t("Add it to the list"))+'" aria-label="'+esc(t("Add it to the list"))+'">'+ICON_PLUS+'</button>'
     : '<button type="button" class="nx-x" title="'+esc(t("Take it off the list"))+'" aria-label="'+esc(t("Take it off the list"))+'">'+ICON_X+'</button>';
+  const l=cardLang(m), ps=parts(m,l), blocks=Math.max(1, ps.length);
+  let txts="";
+  for(let b=0;b<blocks;b++){
+    const chip=blocks>1 ? '<span class="ln-chip ln-part">'+(b+1)+"/"+blocks+'</span>' : "";
+    txts+='<div class="txt ln-txt'+(i===laneMark&&b===0?" sel":"")+'" role="button" data-b="'+b+'">'
+      +chip+'<span class="ln-clamp">'+escFilled(laneBody(m,b).replace(/\s+/g," ").trim())+'</span></div>';
+  }
   return '<div class="card ln-row'+(i===laneMark?" on":"")+'" data-k="'+i+'" data-to="'+esc(r.id)+'"'+(slot>=0 ? ' data-ec="'+slot+'"' : "")
     +(r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "")+'><div class="chead">'+grip
     +(key&&key!=="-" ? '<kbd class="ln-key">'+esc(key)+'</kbd>' : "")+laneTitleHtml(m)
@@ -143,9 +150,9 @@ function laneRowHtml(st, r, i){
       +esc(t("learnt"))+'</span>'
       : r.used ? '<span class="nd-learnt" title="'+esc(t("One of the cards this desk has used most lately"))+'">'+esc(t("often"))+'</span>' : "")
     +'<span class="ln-acts">'+act+'</span>'
-    +'</div><div class="txt ln-txt'+(i===laneMark?" sel":"")+'" role="button"><span class="ln-clamp">'+escFilled(laneBody(m,0).replace(/\s+/g," ").trim())+'</span></div>'
-    +(then.length ? '<div class="ln-then"><span class="ln-then-l">'+esc(t("then"))+'</span>'
-      +then.map(n=>'<span class="ln-chip">'+esc(n)+'</span>').join("")+'</div>' : "")
+    +'</div>'+txts
+    +(then.length ? '<div class="ln-then" role="list"><span class="ln-then-l">'+esc(t("then"))+'</span>'
+      +then.map(n=>'<span class="ln-chip" role="listitem">'+esc(n)+'</span>').join('<span class="ln-sep">' + esc(LN_DOT) + '</span>')+'</div>' : "")
     +'</div>';
 }
 // Whose list it is, the way back to the catalog's, and the way to add a reply, as the editor's fold offers them.
@@ -318,10 +325,13 @@ function laneMarkTo(i){
 }
 function laneRowEl(k){ const el=lanesEl(); return el ? el.querySelector('.ln-row[data-k="'+k+'"]') : null; }
 /** A copy from the lanes, by place: the question for its fields hangs from that reply. */
-function laneCopy(k, other){
+function laneCopy(k, other, part){
   const r=laneRows[k];
   if(!r) return false;
-  copyCardPart(r.id, 0, laneRowEl(k), other);
+  const b=part!=null ? part|0 : 0;
+  const el=laneRowEl(k);
+  const anchor=el ? (el.querySelector('.ln-txt[data-b="'+b+'"]')||el) : null;
+  copyCardPart(r.id, b, anchor, other);
   return true;
 }
 /** The main screen's keys while the lanes show: they walk and copy the replies here, and those that would
@@ -402,7 +412,9 @@ function wireLaneEdits(el){
     if(at.closest(".ln-add-btn")){ laneFindOpen(true); return true; }
     const hit=at.closest(".nx-hit");
     if(hit){ laneTake(hit.getAttribute("data-to")); return true; }
-    return k<0 ? false : (laneCopy(k), true);
+    const txt=at.closest(".ln-txt");
+    const part=txt && txt.dataset.b!=null ? +txt.dataset.b : 0;
+    return k<0 ? false : (laneCopy(k, false, part), true);
   });
   // A hit is pressed without the field losing focus, so its blur never closes the find first.
   el.addEventListener("pointerdown", e=>{ if(e.target && e.target.closest && e.target.closest(".nx-hit")) e.preventDefault(); });

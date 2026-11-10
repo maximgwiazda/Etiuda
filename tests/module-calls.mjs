@@ -3447,6 +3447,51 @@ const CARD_B = {
       check("lanes.js", "1008w2 with nothing marked, Enter in the lanes copies nothing and marks row 0; a second Enter copies row 0",
         () => eq([pathBefore.join(","), pathFirst.join(","), markedFirst, pathSecond.join(",")].join("|"),
           "c-warn-now|c-warn-now|true|c-warn-now,c-warn-next"));
+
+      /* E1 and D4: the then-line separates titles in text, and Next rows draw every part of a multi-part card */
+      lanesBox.contains = () => true;
+      body.appendChild = () => {};
+      const hadToast = byId["#toast"], hadRange = document.createRange;
+      document.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) });
+      Dom.grabDom();
+      byId["#toast"] = el({ classList: on(new Set()), getBoundingClientRect: () => ({ left: 0, top: 0, right: 100, bottom: 20, width: 100, height: 20 }) });
+      const hadSec2 = globalThis.window.isSecureContext, hadClip2 = navigator.clipboard, hadCs = globalThis.getComputedStyle;
+      globalThis.window.isSecureContext = true;
+      navigator.clipboard = { writeText: () => Promise.resolve() };
+      globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
+      AS.setCards([
+        { id: "c-e1-now", c: "orders", t: "Card Now", en: "Now body", next: [{ to: "c-e1-two" }] },
+        { id: "c-e1-two", c: "orders", alt: 1, t: "Two Part", en: "First part text\n\nSecond part text", next: [{ to: "c-e1-a" }, { to: "c-e1-b" }] },
+        { id: "c-e1-a", c: "orders", t: "Alpha", en: "Body A" },
+        { id: "c-e1-b", c: "orders", t: "Beta", en: "Body B" },
+      ]);
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, "null");
+      T.initTabs();
+      LP.bumpUseCount("c-e1-now", "en", 0);
+      LN.toggleLanes(true);
+      const lanesHtmlNow = lanesBox.innerHTML;
+      const thenHtml = (lanesHtmlNow.match(/<div class="ln-then"[^>]*>[\s\S]*?<\/div>/) || [""])[0];
+      const thenText = thenHtml.replace(/<[^>]+>/g, "");
+      check("lanes.js", "814e1 the then-line's text content separates the titles",
+        () => eq([thenText.indexOf("AlphaBeta") === -1, /Alpha[^\w]+Beta/.test(thenText)].join(","), "true,true"));
+
+      const twoRow = lanesHtmlNow.split('<div class="card ln-row')[1] || "";
+      const rowEl = { dataset: { k: "0", to: "c-e1-two" } };
+      const part1El = { dataset: { b: "1" }, closest: s => (s === ".ln-txt" ? part1El : s === ".ln-row" ? rowEl : null) };
+      ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: part1El }));
+      await new Promise(r => setTimeout(r, 30));
+      const lastSent = (T.tabs[0].log || []).slice(-1)[0] || {};
+      globalThis.window.isSecureContext = hadSec2;
+      if (hadClip2) navigator.clipboard = hadClip2; else delete navigator.clipboard;
+      if (hadCs !== undefined) globalThis.getComputedStyle = hadCs; else delete globalThis.getComputedStyle;
+      if (hadToast !== undefined) byId["#toast"] = hadToast; else delete byId["#toast"];
+      document.createRange = hadRange;
+      LN.toggleLanes(false);
+      check("lanes.js", "814d4 (ln-row) a two-part card draws both parts or a 1/2 mark, and a click on the second copies part 1",
+        () => eq([twoRow.indexOf("First part text") > -1, twoRow.indexOf("Second part text") > -1,
+          /1\/2/.test(twoRow), lastSent.id, lastSent.b].join("|"),
+          "true|true|true|c-e1-two|1"));
     } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);
