@@ -306,6 +306,13 @@ if (flag('--package')) {
     return true;
   });
 
+  /* The packaged desk starts with its model: drives win-unpacked directly as the installer carries it,
+     so an uncaught start error or model regression fails the release before reinstall or publishing. */
+  gate('the packaged desk starts with its model: npm run packaged-start, against the build above', () => {
+    return run('npm', ['run', 'packaged-start'], { ETIUDA_PACKAGED_DIR: join(DIST, 'win-unpacked') })
+      ? true : 'npm run packaged-start failed: what the installer carries did not start with its model';
+  });
+
   /* The gate that follows the installer's build, and it drives the file that gate just made
      rather than building a second one: install silently into a scratch folder, write a key and a
      catalog through the running app, uninstall, install again and read both back, with the

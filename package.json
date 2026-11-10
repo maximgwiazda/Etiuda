@@ -46,7 +46,8 @@
     "package:linux": "node tools/package-linux.mjs",
     "linux-desk": "node tests/linux-desk.js",
     "linux-keyring": "node tests/linux-keyring.js",
-    "no-crash-dialog-desk": "node tests/no-crash-dialog-desk.js"
+    "no-crash-dialog-desk": "node tests/no-crash-dialog-desk.js",
+    "packaged-start": "node tests/packaged-start.js"
   },
   "devDependencies": {
     "@huggingface/tokenizers": "0.2.0",
