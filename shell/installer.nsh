@@ -26,7 +26,34 @@
     !endif
   FunctionEnd
 
-  !ifndef BUILD_UNINSTALLER
+  # A build that carries its own copy of the two install checks (Studio, while its pin predates them) defines
+  # INSTALL_CHECKS_OWN_COPY, so the copy cut from here into its hooks emits neither and makensis meets no duplicate.
+  !ifndef INSTALL_CHECKS_OWN_COPY
+  !ifdef BUILD_UNINSTALLER
+  # A SHORTCUT OF THIS NAME IN THE OTHER SCOPE goes with this uninstall when no installation is registered there, so a
+  # copy that moved between per-user and all-users leaves no dead entry; one still registered keeps its own.
+  Function un.RemoveStaleLinks
+    Push $0
+    ${If} $installMode == "all"
+      ReadRegStr $0 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+      ${If} $0 == ""
+        SetShellVarContext current
+        Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+        Delete "$DESKTOP\${SHORTCUT_NAME}.lnk"
+        SetShellVarContext all
+      ${EndIf}
+    ${Else}
+      ReadRegStr $0 HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
+      ${If} $0 == ""
+        SetShellVarContext all
+        Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+        Delete "$DESKTOP\${SHORTCUT_NAME}.lnk"
+        SetShellVarContext current
+      ${EndIf}
+    ${EndIf}
+    Pop $0
+  FunctionEnd
+  !else
   Function CompareSemver
     # Compares $0 (v1, installed) with $1 (v2, installer).
     # Returns $0: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2, 2 if unreadable.
@@ -374,6 +401,7 @@
     Pop $0
   FunctionEnd
   !endif
+  !endif
 !macroend
 
 # The cache directory, taken from electron-builder's own define rather than spelled a second time
@@ -485,6 +513,12 @@
 !macroend
 
 !macro customUnInstall
+  !ifndef INSTALL_CHECKS_OWN_COPY
+  ${IfNot} ${isKeepShortcuts}
+    Call un.RemoveStaleLinks
+  ${EndIf}
+  !endif
+
   # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
   !ifmacrodef unregisterFileAssociations
   ReadRegStr $0 HKCU "Software\Classes\etiuda\shell\open\command" ""

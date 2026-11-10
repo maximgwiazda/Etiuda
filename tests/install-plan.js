@@ -381,27 +381,98 @@ function readInstallerRecognise(nsh) {
   };
 }
 
-/** Checks whether app-builder-lib templates have been patched. */
-function readNsisPatchStatus(rootDir) {
-  const root = rootDir || path.resolve(__dirname, "..");
-  const libTemplates = path.join(root, "node_modules", "app-builder-lib", "templates", "nsis");
-  const multiUserUiPath = path.join(libTemplates, "multiUserUi.nsh");
-  const installSectionPath = path.join(libTemplates, "installSection.nsh");
+/** THE SCOPE OF WHAT AN INSTALL WRITES, read from app-builder-lib's NSIS templates as installed (`t`, file name to text)
+ *  and the tree's own script (`nsh`). NSIS itself is held only by reading: no leg compiles or runs it. Each answer is a
+ *  boolean the selftest names, so a template that moves under an upgrade, or a hook that leaves the context changed,
+ *  reddens its own row. */
+function readInstallScopes(t, nsh) {
+  const T = k => String((t || {})[k] || "");
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const body = (text, kind, name) => {
+    const open = kind === "macro" ? "!macro\\s+" : kind === "Function" ? "Function\\s+\"?" : "Section\\s+\"";
+    const close = kind === "macro" ? "!macroend" : kind === "Function" ? "FunctionEnd" : "SectionEnd";
+    const m = new RegExp("^[ \\t]*" + open + esc(name) + "\"?[ \\t]*\\r?\\n([\\s\\S]*?)^[ \\t]*" + close, "m").exec(text);
+    return m ? m[1] : "";
+  };
+  const at = (text, re) => { const m = re.exec(text); return m ? m.index : -1; };
+  const code = s => String(s).split(/\r?\n/).map(l => l.replace(/^\s*[#;].*$/, "").replace(/\s[#;].*$/, "")).join("\n");
+  const own = code(nsh);
+  const add = code(body(T("include/installer.nsh"), "macro", "registryAddInstallInfo"));
+  const perUser = code(body(T("multiUser.nsh"), "macro", "setInstallModePerUser"));
+  const perAll = code(body(T("multiUser.nsh"), "macro", "setInstallModePerAllUsers"));
+  const sect = code(T("installSection.nsh"));
+  const unin = code(T("uninstaller.nsh"));
+  const unSect = code(body(T("uninstaller.nsh"), "Section", "un.${UNINSTALL_SECTION_NAME}"));
+  const onInit = code(body(T("installer.nsi"), "Function", ".onInit"));
+  const unInit = code(body(T("uninstaller.nsh"), "Function", "un.onInit"));
+  const links = code(body(T("common.nsh"), "macro", "setLinkVars"));
+  const recognise = body(own, "Function", "RecogniseExistingInstallation");
+  const stale = body(own, "Function", "un.RemoveStaleLinks");
+  const unHook = body(own, "macro", "customUnInstall");
 
-  const multiUserUi = fs.existsSync(multiUserUiPath) ? fs.readFileSync(multiUserUiPath, "utf8") : "";
-  const installSection = fs.existsSync(installSectionPath) ? fs.readFileSync(installSectionPath, "utf8") : "";
+  /* (a) the registration: written to the context the mode chose, before the shortcuts, read back where it was written */
+  const writes = ["DisplayName", "UninstallString", "DisplayVersion"].every(v =>
+    new RegExp("WriteRegStr\\s+SHELL_CONTEXT\\s+\"\\$\\{UNINSTALL_REGISTRY_KEY\\}\"\\s+\"?" + v + "\\b").test(add));
+  const modes = /SetShellVarContext\s+current/.test(perUser) && /SetShellVarContext\s+all/.test(perAll);
+  const iRun = at(sect, /!insertmacro\s+CHECK_APP_RUNNING/), iFiles = at(sect, /!insertmacro\s+installApplicationFiles/),
+    iReg = at(sect, /!insertmacro\s+registryAddInstallInfo/), iLink = at(sect, /!insertmacro\s+addStartMenuLink/);
+  const order = iRun > -1 && iFiles > iRun && iReg > iFiles && iLink > iReg;
+  const unDeletes = /DeleteRegKey\s+SHELL_CONTEXT\s+"\$\{UNINSTALL_REGISTRY_KEY\}"/.test(unin);
+  const iView = at(onInit, /check64BitAndSetRegView/), iMulti = at(onInit, /initMultiUser/), iCustom = at(onInit, /customInit/);
+  const view = iView > -1 && iMulti > iView && iCustom > iMulti;
+  const readsBoth = ["HKLM", "HKCU"].every(h =>
+    new RegExp("ReadRegStr\\s+\\$\\w+\\s+" + h + "\\s+\"\\$\\{UNINSTALL_REGISTRY_KEY\\}\"\\s+\"DisplayVersion\"").test(recognise));
 
-  const multiUserUiPatched = /\$\{If\}\s+\$1\s*=\s*1\r?\n\s*\$\{If\}\s+\$2\s*=\s*0\r?\n\s*Quit\b/i.test(multiUserUi)
-    && /loginWithAdminAccount/.test(multiUserUi);
+  /* every block of the tree's own script that changes the shell context changes it back, in pairs that differ */
+  const blocks = [];
+  for (const re of [/^[ \t]*!macro\s+(\S+)[^\n]*\n([\s\S]*?)^[ \t]*!macroend/gm, /^[ \t]*Function\s+(\S+)[^\n]*\n([\s\S]*?)^[ \t]*FunctionEnd/gm,
+    /^[ \t]*Section\s+("[^"]*"|\S+)[^\n]*\n([\s\S]*?)^[ \t]*SectionEnd/gm])
+    for (let m; (m = re.exec(own));) blocks.push([m[1], m[2]]);
+  const unpaired = blocks.filter(([, b]) => {
+    const seq = (b.match(/SetShellVarContext\s+(current|all)/g) || []).map(s => s.split(/\s+/)[1]);
+    if (seq.length % 2) return true;
+    for (let i = 0; i < seq.length; i += 2) if (seq[i] === seq[i + 1]) return true;
+    return false;
+  }).map(([n]) => n);
 
-  const installSectionPatched = !/\$\{ifNot\}\s+\$\{UAC_IsInnerInstance\}\r?\n\s*!insertmacro\s+CHECK_APP_RUNNING/i.test(installSection)
-    && /!insertmacro\s+CHECK_APP_RUNNING/i.test(installSection);
+  /* (b) the shortcuts: both sides build them from the context's own folders, after the mode is set, and the uninstall
+     also takes a same-name shortcut from the other scope when nothing is registered there */
+  const linksFromContext = /\$newStartMenuLink\s+"\$SMPROGRAMS\\/.test(links) && /\$oldStartMenuLink\s+"\$SMPROGRAMS\\/.test(links)
+    && /\$newDesktopLink\s+"\$DESKTOP\\/.test(links) && /\$oldDesktopLink\s+"\$DESKTOP\\/.test(links);
+  const bothAfterMode = /!insertmacro\s+setLinkVars/.test(sect) && /!insertmacro\s+setLinkVars/.test(unSect)
+    && iMulti > -1 && at(unInit, /initMultiUser/) > -1
+    && /Delete\s+"\$oldStartMenuLink"/.test(unSect) && /Delete\s+"\$oldDesktopLink"/.test(unSect);
+  const branch = (b, mine, other) => {
+    const r = new RegExp("ReadRegStr\\s+(\\$\\w+)\\s+" + other.hive + "\\s+\"\\$\\{INSTALL_REGISTRY_KEY\\}\"\\s+InstallLocation").exec(b);
+    if (!r) return false;
+    const rest = b.slice(r.index);
+    const guard = new RegExp("\\$\\{If\\}\\s+" + esc(r[1]) + "\\s+==\\s+\"\"").exec(rest);
+    if (!guard) return false;
+    const inner = rest.slice(guard.index);
+    const iTo = at(inner, new RegExp("SetShellVarContext\\s+" + other.ctx)), iBack = at(inner, new RegExp("SetShellVarContext\\s+" + mine));
+    const iM = at(inner, /Delete\s+"\$SMPROGRAMS\\\$\{SHORTCUT_NAME\}\.lnk"/), iD = at(inner, /Delete\s+"\$DESKTOP\\\$\{SHORTCUT_NAME\}\.lnk"/);
+    return iTo > -1 && iM > iTo && iD > iTo && iBack > iM && iBack > iD;
+  };
+  const split = /\$\{If\}\s+\$installMode\s+==\s+"all"([\s\S]*?)\$\{Else\}([\s\S]*?)\$\{EndIf\}\s*Pop/.exec(stale);
+  const staleBoth = !!split && branch(split[1], "all", { hive: "HKCU", ctx: "current" })
+    && branch(split[2], "current", { hive: "HKLM", ctx: "all" });
+  const staleCalled = /\$\{IfNot\}\s+\$\{isKeepShortcuts\}\s*\r?\n\s*Call\s+un\.RemoveStaleLinks/.test(unHook);
 
-  return { multiUserUiPatched, installSectionPatched };
+  return { writes, modes, order, unDeletes, view, readsBoth, unpaired, linksFromContext, bothAfterMode, staleBoth, staleCalled };
+}
+
+/** The templates readInstallScopes reads, from app-builder-lib as installed under `root`. */
+function nsisTemplates(root) {
+  const fs = require("node:fs");
+  const dir = path.join(root, "node_modules", "app-builder-lib", "templates", "nsis");
+  const out = {};
+  for (const f of ["installer.nsi", "installSection.nsh", "multiUser.nsh", "uninstaller.nsh", "common.nsh", "include/installer.nsh"])
+    out[f] = fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), "utf8") : "";
+  return out;
 }
 
 module.exports = { BUILDER_NS, uuidV5, appGuid, registryKeys, badInstallDir, installArgs, uninstallArgs, plainArgs,
                    argsFault, scratchHome, userDataName, defaultUserInstallDir, samePath,
                    judgeUpdate, judgeUpdatedRun, judgeAllUsers,
                    compareSemver, recogniseOutcome, recogniseAction,
-                   readInstallerRecognise, readNsisPatchStatus };
+                   readInstallerRecognise, readInstallScopes, nsisTemplates };

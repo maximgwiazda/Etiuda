@@ -385,6 +385,48 @@ ok(patchTwiceSame, "9c the patch applied a second time changes nothing");
 ok(recogInfo && recogInfo.bringsInnerToFront === true,
   "9c elevated inner copy is brought to front with BringToFront in skipLicenseIfInner");
 
+/* ---- 10. where the install is registered, and where its shortcuts go, in both modes ----------- */
+/* NSIS itself is held only by reading: these rows read app-builder-lib's templates as installed and shell/installer.nsh,
+   and no leg compiles or runs either. Each row has a planted control beside it that must read red. */
+{
+  const T = P.nsisTemplates(path.join(__dirname, ".."));
+  const NSH = fs.readFileSync(path.join(__dirname, "..", "shell", "installer.nsh"), "utf8");
+  const S = P.readInstallScopes(T, NSH);
+  const mut = (k, from, to) => { const c = Object.assign({}, T); c[k] = String(c[k]).replace(from, to); return c; };
+  const nshMut = (from, to) => NSH.replace(from, to);
+
+  ok(Object.values(T).every(s => s.length > 0), "10a the six templates are read from app-builder-lib as installed: "
+    + Object.entries(T).map(([k, v]) => k + " " + v.length).join(", "));
+  ok(S.writes && S.modes, "10b the uninstall key (DisplayName, UninstallString, DisplayVersion) is written to SHELL_CONTEXT, which"
+    + " a per-user install sets to the current user (HKCU) and an all-users install to all (HKLM)");
+  ok(!P.readInstallScopes(mut("include/installer.nsh", /(WriteRegStr\s+)SHELL_CONTEXT(\s+"\$\{UNINSTALL_REGISTRY_KEY\}"\s+"DisplayVersion")/, "$1HKLM$2"), NSH).writes,
+    "10b control: DisplayVersion written to HKLM whatever the mode reads red");
+  ok(S.order, "10c the key is written after the running app is closed and the files are copied, and before the shortcuts,"
+    + " so a run that left shortcuts wrote it");
+  ok(!P.readInstallScopes(mut("installSection.nsh", /(!insertmacro registryAddInstallInfo)\r?\n(!insertmacro addStartMenuLink[^\n]*)/, "$2\n$1"), NSH).order,
+    "10c control: the shortcuts before the key reads red");
+  ok(S.view && S.readsBoth, "10d the recognition reads DisplayVersion under the same key in HKLM and HKCU, after .onInit has set"
+    + " the 64-bit view the write uses and after initMultiUser");
+  ok(!P.readInstallScopes(T, nshMut(/ReadRegStr \$1 HKCU "\$\{UNINSTALL_REGISTRY_KEY\}" "DisplayVersion"/, "ReadRegStr $1 HKCU \"Software\\Etiuda\" \"DisplayVersion\"")).readsBoth,
+    "10d control: the per-user read pointed at another key reads red");
+  ok(S.unDeletes, "10e the uninstaller deletes the key from SHELL_CONTEXT, the scope its own mode sets");
+  ok(S.unpaired.length === 0, "10f every block of shell/installer.nsh that changes the shell context changes it back: "
+    + (S.unpaired.join(", ") || "none unpaired"));
+  ok(P.readInstallScopes(T, nshMut(/(\r?\n)(\s*)Delete "\$LOCALAPPDATA\\\$\{APP_INSTALLER_STORE_FILE\}"[\s\S]*?SetShellVarContext all/, "$1$2Delete x")).unpaired.indexOf("customInstall") > -1,
+    "10f control: customInstall left in the current user's context reads red");
+
+  ok(S.linksFromContext && S.bothAfterMode, "10g install and uninstall both build the Start menu and desktop shortcuts from"
+    + " $SMPROGRAMS and $DESKTOP after the mode has set the context, so each removes what the other wrote in its own scope");
+  ok(S.staleBoth && S.staleCalled, "10h the uninstaller also removes a shortcut of the same name in the other scope when no"
+    + " installation is registered there (InstallLocation empty), puts the context back, and leaves it under --keep-shortcuts");
+  ok(!P.readInstallScopes(T, nshMut(/(ReadRegStr \$0 HKCU "\$\{INSTALL_REGISTRY_KEY\}" InstallLocation\s*\r?\n\s*)\$\{If\} \$0 == ""/, "$1${If} 1 == 1")).staleBoth,
+    "10h control: the user's shortcut removed even while a per-user copy is registered reads red");
+  ok(!P.readInstallScopes(T, nshMut(/(Delete "\$DESKTOP\\\$\{SHORTCUT_NAME\}\.lnk"\s*\r?\n\s*)SetShellVarContext all/, "$1")).staleBoth,
+    "10h control: the context left in the current user's after the removal reads red");
+  ok(!P.readInstallScopes(T, nshMut(/\s*Call un\.RemoveStaleLinks/, "")).staleCalled,
+    "10h control: the removal never called from the uninstall reads red");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);
