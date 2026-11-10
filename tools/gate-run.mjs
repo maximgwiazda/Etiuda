@@ -174,6 +174,7 @@ export const RELEASE_ONLY_LEGS = [
   "tests/text-scan-selftest.js",
   "tests/theme-presses.mjs",
   "tests/theme-roll.mjs",
+  "tests/packaged-start.js",
 ];
 
 /* VISUAL LEGS NEVER BLOCK A MERGE (Max, 2026-11-08 18:36: "leave only whats really helpful in our situation"; his own eye
