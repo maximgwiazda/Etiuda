@@ -4524,6 +4524,39 @@ const CARD_B = {
           return eq(off + " || " + act(), "false,false,false,false,false,0/2 alternatives:flat/3 steps:flat || true,true,true,true,true,1");
         } finally { w.restore(); }
       });
+    /* A click during the 70 ms dwell, and one with no rest at all, used to be stopped and left the stack shut. */
+    check("deck.js", "1110dk6 a click on a tucked reply before the stack opens deals it, at rest and during the 70 ms dwell, and does not copy; a click after it has opened is not held, and the peek is a hit target",
+      () => {
+        const w = world();
+        try {
+          ST.lsDel("eDeckOff");
+          w.wire();
+          DK.deckSettle();
+          const back = w.alt.slabs[1];
+          if (!back.classList.contains("deck-back")) return "the second reply was not tucked";
+          const click = () => {
+            let held = false;
+            w.fire("click", { target: back, stopPropagation() { held = true; }, preventDefault() {} });
+            return held;
+          };
+          const coldHeld = click();
+          const coldOpen = w.alt.classList.contains("deck-open");
+          w.alt.hover = false;
+          w.alt.classList.remove("deck-open", "deck-up", "deck-moving", "deck-return");
+          w.fire("pointerover", { target: w.alt.slabs[0], relatedTarget: null });
+          w.run(w.now() + 30);
+          const during = w.alt.classList.contains("deck-open");
+          const dwellHeld = click();
+          const dwellOpen = w.alt.classList.contains("deck-open");
+          w.run(w.now() + 500);
+          const laterHeld = click();
+          const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+          const rule = css.match(/\.card\.deck:not\(\.deck-open\)>\.txt\.deck-back\{[^}]*\}/);
+          const peekHits = !!rule && !/pointer-events:\s*none/.test(rule[0]);
+          const got = [coldHeld, coldOpen, during, dwellHeld, dwellOpen, laterHeld, peekHits].join(",");
+          return eq(got, "true,true,false,true,true,false,true");
+        } finally { w.restore(); }
+      });
     check("settings.js", "1016dk3 Layout's switch pressed off in Settings lays an open deck flat at once: its classes, height and lengths gone, the card it faded given back, the scan it owed let go and the list no longer watched, with eDeckOff stored and a toast that says so; pressed on, every deck is tucked anew without a reload, the list watched again and the key forgotten",
       () => {
         const w = world();
