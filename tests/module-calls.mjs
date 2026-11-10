@@ -4737,6 +4737,87 @@ const CARD_B = {
           w.restore();
         }
       });
+    /* Board 982, finding 1: a reorder in an open stack redraws it, and the render patches every kept card, the one under the
+       stack among them. Every read of the page through that redraw is a moment the page is laid out, so the card under is
+       faded at each one, or its fade plays again from nothing; the stack keeps the resting height it opened with, so what
+       lies below keeps its place until it closes and then glides. The second reply is drawn 21 taller than the first, so
+       the reorder brings a front reply that would rest at 87 where the stack opened at 66. */
+    check("deck.js", "1111dk1 through a reorder in an open stack the card under it is faded at every read of the page and keeps its top, the stack keeps its resting height and stays open after the drop and through a redraw under a still pointer, and on closing it takes its new height while the card below glides there",
+      async () => {
+        const { animateTxtReorder } = await import(MOD("card-blocks.js"));
+        const P = await import(MOD("pack.js"));
+        const CM = await import(MOD("content-model.js"));
+        const POOL = await import(MOD("card-pool.js"));
+        const hadLangs = CM.CONTENT_LANGS.slice(), hadCards = AS.cards.slice(), hadBase = P.BASE_M.slice(), hadCustom = P.pack.custom, hadOverrides = Object.assign({}, P.pack.overrides);
+        const hadRebuild = HK.hooks.rebuildCards;
+        CM.setContentLangs(["en"]); AS.putLang("en");
+        P.BASE_M.length = 0; P.BASE_M.push(Object.assign({}, ALT)); P.pack.custom = []; P.pack.overrides = {};
+        AS.setCards([Object.assign({}, ALT)]);
+        if (!globalThis.document) globalThis.document = { querySelector: () => null, createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
+        const w = world();
+        try {
+          ST.lsDel("eDeckOff"); ST.lsDel("eMotionOff");
+          const u = w.under, writes = [], seen = [];
+          // The card under, as the render keeps it: its class assigned whole by patchCard, its top below the stack's box.
+          u.classList[Symbol.iterator] = function () { return this.s.values(); };
+          Object.defineProperty(u, "className", { configurable: true, get() { return [...this.classList.s].join(" "); }, set(v) { this.classList.s = new Set(String(v).split(/\s+/).filter(Boolean)); } });
+          Object.assign(u, { setAttribute() {}, querySelector: () => null });
+          const topOf = () => 100 + (parseFloat(w.alt.style.height) || 110) + 24;
+          u.getBoundingClientRect = () => { seen.push(u.classList.contains("deck-under")); const t = topOf(); return { top: t, bottom: t + 90, left: 0, right: 300, width: 300, height: 90 }; };
+          u.style.v = u.style.v || {};
+          let tf = "", tr = "";
+          Object.defineProperty(u.style, "transform", { configurable: true, get: () => tf, set: x => { tf = x; writes.push(x); } });
+          Object.defineProperty(u.style, "transition", { configurable: true, get: () => tr, set: x => { tr = x; } });
+          w.wire(); DK.deckSettle();
+          w.alt.hover = true;
+          w.fire("pointermove", { clientX: 150, clientY: 120 });
+          w.fire("pointerover", { target: w.alt.slabs[0], relatedTarget: null });
+          w.run(w.now() + 400);
+          DK.deckFade();
+          const entered = [w.alt.classList.contains("deck-open"), u.classList.contains("deck-under"), w.alt.style.height, topOf()].join(",");
+          // The render, as render() runs it for a reorder: a new node for the stack, the kept card patched, the list's records, the settle.
+          HK.hooks.rebuildCards = () => {
+            const ov = P.pack.overrides[ALT.id], current = ov ? Object.assign({}, ALT, ov) : Object.assign({}, ALT);
+            AS.setCards([current]);
+            const was = w.alt, fresh = w.drawn(current, 100);
+            fresh.hover = w.still ? false : was.hover;
+            if (current.en.split(GAP)[0].indexOf("paper") > -1) { fresh.slabs[0].offsetHeight = 61; fresh.slabs[1].offsetTop = 81; fresh.offsetHeight = 131; }
+            const watch = (o, k) => { const v = o[k]; Object.defineProperty(o, k, { configurable: true, get() { seen.push(u.classList.contains("deck-under")); return v; } }); };
+            fresh.slabs.forEach(sl => ["offsetTop", "offsetHeight", "offsetWidth"].forEach(k => watch(sl, k))); watch(fresh, "offsetHeight");
+            w.cards[0] = fresh; w.alt = fresh;
+            POOL.patchCard(u, { hidden: false, hit: false, catHit: false, dragging: false, dragTip: "", i: 1, band: "" });
+            w.rig.held.push({ type: "childList", target: w.l, addedNodes: [fresh], removedNodes: [was] });
+            DK.deckSettle();
+          };
+          globalThis.document.documentElement.classList.add("txtdrag");
+          seen.length = 0;
+          animateTxtReorder(ALT.id, 0, 1, true);
+          w.run(w.now() + 250);
+          const reads = seen.length, faded = seen.every(Boolean);
+          const swapped = [reads > 0, faded, w.alt.classList.contains("deck-open"), w.alt.style.height, topOf()].join(",");
+          globalThis.document.documentElement.classList.remove("txtdrag");
+          w.fire("pointerup", {});
+          const dropped = [w.alt.classList.contains("deck-open"), w.alt.style.height].join(",");
+          // A redraw with the pointer still on the stack: the new node is not :hover until the pointer moves.
+          w.still = true; HK.hooks.rebuildCards(); w.still = false;
+          const redrawn = [w.alt.classList.contains("deck-open"), w.alt.style.height, topOf()].join(",");
+          // The pointer leaves the window: after the grace the stack closes, takes the front reply's rest and the card below glides.
+          writes.length = 0;
+          w.alt.hover = false;
+          w.fire("pointerout", { target: w.alt.slabs[0], relatedTarget: null });
+          w.run(w.now() + 150);
+          const closed = [w.alt.classList.contains("deck-open"), w.alt.style.height, writes.join("|"), /^transform var\(--m-move\)/.test(tr)].join(",");
+          w.run(w.now() + 600);
+          const landed = [tf === "", tr === "", topOf()].join(",");
+          return eq([entered, swapped, dropped, redrawn, closed, landed].join(" || "),
+            "true,true,66px,190 || true,true,true,66px,190 || true,66px || true,66px,190 || false,87px,translateY(-21px)|,true || true,true,211");
+        } finally {
+          CM.setContentLangs(hadLangs); AS.putLang("en"); AS.setCards(hadCards);
+          P.BASE_M.length = 0; hadBase.forEach(m => P.BASE_M.push(m)); P.pack.custom = hadCustom; P.pack.overrides = hadOverrides;
+          if (hadRebuild === undefined) delete HK.hooks.rebuildCards; else HK.hooks.rebuildCards = hadRebuild;
+          w.restore();
+        }
+      });
     /* The sheet's half. With the switch off no deck class is on any card or reply (1016dk1 to dk3), so a deck rule is
        off with it if it asks for one; the fade's transition on every card and rule asks for none, so it asks for a body
        without the switch's class instead. */

@@ -9629,7 +9629,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-10";
+  var E_BUILT = "2026-11-11";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -10789,6 +10789,7 @@ What you type stays in this browser only.`;
   // src/modules/deck.js
   var deck_exports = {};
   __export(deck_exports, {
+    deckCarry: () => deckCarry,
     deckCovers: () => deckCovers,
     deckDragEnd: () => deckDragEnd,
     deckFade: () => deckFade,
@@ -10842,7 +10843,10 @@ What you type stays in this browser only.`;
   }
   function deckReset(card) {
     const id = card && card.dataset && card.dataset.id;
-    if (id) deckOpenIds.delete(id);
+    if (id) {
+      deckOpenIds.delete(id);
+      deckRestHeld.delete(id);
+    }
     card.classList.remove("deck", "deck-open", "deck-up", "deck-moving", "deck-return", "deck-near");
     ["height", "--deck-rest-bottom", "--deck-extra"].forEach((p) => card.style.removeProperty(p));
     deckSlabs(card).forEach((s) => {
@@ -10856,7 +10860,18 @@ What you type stays in this browser only.`;
   var deckKbdCard = null;
   var deckObs = null;
   var deckListW = -1;
+  var deckPtr = null;
   var deckOpenIds = /* @__PURE__ */ new Set();
+  var deckRestHeld = /* @__PURE__ */ new Map();
+  function deckCarry(el) {
+    const own = el && el.classList ? Array.from(el.classList).filter((k) => /^deck(-[a-z]+)?$/.test(k)) : [];
+    return own.length ? " " + own.join(" ") : "";
+  }
+  function deckPointerIn(c) {
+    if (!deckPtr || typeof c.getBoundingClientRect !== "function") return false;
+    const r = c.getBoundingClientRect();
+    return deckPtr.x >= r.left && deckPtr.x < r.right && deckPtr.y >= r.top && deckPtr.y < r.bottom;
+  }
   function deckView() {
     const h = globalThis.innerHeight;
     return typeof h === "number" && h > 0 ? h : 800;
@@ -10874,22 +10889,27 @@ What you type stays in this browser only.`;
     if (!todo.length) return;
     const dragging = deckDragging();
     todo.forEach((c) => {
-      const id = c.dataset && c.dataset.id;
-      if (!dragging && !c.matches(":hover")) {
-        if (id) deckOpenIds.delete(id);
-      } else if (c.classList.contains("deck-open") && id) deckOpenIds.add(id);
       c.style.removeProperty("height");
       c.classList.add("deck", "deck-near");
     });
     const read = todo.map((c) => {
-      const s = deckSlabs(c);
-      return { c, s, L: deckLengths(s.map((e) => e.offsetTop), s.map((e) => e.offsetHeight), s[0].offsetWidth, c.offsetHeight) };
+      const s = deckSlabs(c), id = c.dataset && c.dataset.id;
+      const L = deckLengths(s.map((e) => e.offsetTop), s.map((e) => e.offsetHeight), s[0].offsetWidth, c.offsetHeight);
+      const here = c.matches(":hover") || !!id && deckOpenIds.has(id) && deckPointerIn(c);
+      return { c, s, L, id, here };
     });
-    read.forEach(({ c, s, L }) => {
-      c.style.height = deckPx(L.rest);
+    read.forEach(({ c, s, L, id, here }) => {
+      if (!dragging && !here) {
+        if (id) deckOpenIds.delete(id);
+      } else if (c.classList.contains("deck-open") && id) deckOpenIds.add(id);
+      if (deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id === id) deckKbdCard = c;
+      const shouldOpen = id && deckOpenIds.has(id) && (dragging || here) || here || c === deckKbdCard;
+      const held = shouldOpen && id ? deckRestHeld.get(id) : "";
+      c._deckRest = L.rest;
+      c.style.height = held || deckPx(L.rest);
       c.style.setProperty("--deck-rest-bottom", deckPx(L.restBottom));
       c.style.setProperty("--deck-extra", deckPx(L.extra));
-      c._deckGrow = L.grow;
+      c._deckGrow = held ? Math.max(0, L.grow + L.rest - parseFloat(held)) : L.grow;
       s.forEach((e, k) => {
         const v = L.slabs[k];
         e.style.setProperty("--deck-z", String(v.z));
@@ -10904,9 +10924,6 @@ What you type stays in this browser only.`;
         e.style.setProperty("--deck-clip", deckPx(v.clip));
         e.style.setProperty("--deck-dim", String(v.dim));
       });
-      const id = c.dataset && c.dataset.id;
-      if (deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id === id) deckKbdCard = c;
-      const shouldOpen = id && deckOpenIds.has(id) && (dragging || c.matches(":hover")) || c.matches(":hover") || c === deckKbdCard;
       if (shouldOpen) deckSetOpen(c, true, true);
       else if (c.classList.contains("deck-open")) deckSetOpen(c, false, true);
     });
@@ -10986,9 +11003,13 @@ What you type stays in this browser only.`;
     clearTimeout(card._deckT);
     const id = card && card.dataset && card.dataset.id;
     if (open) {
-      if (id) deckOpenIds.add(id);
-    } else {
-      if (id) deckOpenIds.delete(id);
+      if (id) {
+        deckOpenIds.add(id);
+        if (!deckRestHeld.has(id) && card.style.height) deckRestHeld.set(id, card.style.height);
+      }
+    } else if (id) {
+      deckOpenIds.delete(id);
+      if (deckRestHeld.delete(id)) deckSettleRest(card);
     }
     if (open === card.classList.contains("deck-open")) return;
     clearTimeout(card._deckM);
@@ -11009,6 +11030,41 @@ What you type stays in this browser only.`;
         if (!card.classList.contains("deck-open")) card.classList.remove("deck-up", "deck-return");
       }, move + 40);
     }
+  }
+  function deckSettleRest(card) {
+    const want = card._deckRest ? deckPx(card._deckRest) : "";
+    if (!want || card.style.height === want) return;
+    const after = list ? deckSeqAfter(card, Array.from(list.querySelectorAll(".card[data-id], .list-sep"))) : [];
+    if (mgReduceMotion() || !after.length || typeof card.getBoundingClientRect !== "function") {
+      card.style.height = want;
+      return;
+    }
+    const h = deckView(), was = after.map((e) => e.getBoundingClientRect());
+    card.style.height = want;
+    const moved = [], dys = [];
+    after.forEach((e, i) => {
+      const b = was[i];
+      if (b.bottom < -h || b.top > h + h) return;
+      const dy = Math.round(b.top - e.getBoundingClientRect().top);
+      if (dy) {
+        moved.push(e);
+        dys.push(dy);
+      }
+    });
+    if (!moved.length) return;
+    moved.forEach((e, i) => {
+      e.style.transition = "none";
+      e.style.transform = "translateY(" + dys[i] + "px)";
+    });
+    void card.offsetHeight;
+    moved.forEach((e) => {
+      e.style.transition = "transform var(--m-move) " + E_EASE + ",opacity var(--m-move) ease,filter var(--m-move) ease";
+      e.style.transform = "";
+    });
+    setTimeout(() => moved.forEach((e) => {
+      e.style.transition = "";
+      e.style.transform = "";
+    }), M_MS.move + 40);
   }
   function deckWant(card, open, ms) {
     clearTimeout(card._deckT);
@@ -11130,6 +11186,11 @@ What you type stays in this browser only.`;
   function wireDeck() {
     if (!list) return;
     deckOpenIds.clear();
+    deckRestHeld.clear();
+    deckPtr = null;
+    document.addEventListener("pointermove", (e) => {
+      deckPtr = { x: e.clientX, y: e.clientY };
+    }, { capture: true, passive: true });
     deckObs = new MutationObserver((ms) => {
       const h = deckHeard(ms);
       if (h.shape) deckLater();
@@ -11164,6 +11225,7 @@ What you type stays in this browser only.`;
     }, true);
     document.addEventListener("pointerout", (e) => {
       if (deckDragging()) return;
+      if (!e.relatedTarget) deckPtr = null;
       const c = deckAt(e.target), to = deckAt(e.relatedTarget);
       if (c && c !== to && !e.relatedTarget) deckWant(c, false, DECK_GRACE);
     }, true);
@@ -11251,6 +11313,7 @@ What you type stays in this browser only.`;
     deckApproachRaf = 0;
     deckKbdCard = null;
     deckOpenIds.clear();
+    deckRestHeld.clear();
     if (deckIO) {
       deckIO.disconnect();
       deckIO = null;
@@ -18361,6 +18424,7 @@ What you type stays in this browser only.`;
     dropCardPool: () => dropCardPool,
     keepPoolAcross: () => keepPoolAcross,
     paintList: () => paintList,
+    patchCard: () => patchCard,
     rebuildCardsInPlace: () => rebuildCardsInPlace,
     runLangChunks: () => runLangChunks,
     settleFreshCards: () => settleFreshCards
@@ -22938,7 +23002,7 @@ What you type stays in this browser only.`;
     cardPool = /* @__PURE__ */ new Map();
   }
   function patchCard(el, it) {
-    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "");
+    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
     el.setAttribute("title", it.dragTip);
     el.setAttribute("data-i", it.i);
     el.setAttribute("data-rank", it.band);

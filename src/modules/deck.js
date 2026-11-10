@@ -1,5 +1,5 @@
 import { list } from "./dom.js";
-import { mgReduceMotion, M_MS } from "./motion.js";
+import { mgReduceMotion, M_MS, E_EASE } from "./motion.js";
 import { lsGet } from "./storage.js";
 /* THE DECK: a card holding two or more replies rests as its first, the others tucked behind it
    with one bottom edge showing for each, three at most. The pointer resting on it, or the
@@ -33,14 +33,30 @@ function deckLengths(tops, heights, width, natural){
 
 function deckReset(card){
   const id=card&&card.dataset&&card.dataset.id;
-  if(id) deckOpenIds.delete(id);
+  if(id){ deckOpenIds.delete(id); deckRestHeld.delete(id); }
   card.classList.remove("deck","deck-open","deck-up","deck-moving","deck-return","deck-near");
   ["height","--deck-rest-bottom","--deck-extra"].forEach(p=>card.style.removeProperty(p));
   deckSlabs(card).forEach(s=>{ s.classList.remove("deck-back"); DECK_SLAB_PROPS.forEach(p=>s.style.removeProperty(p)); });
   clearTimeout(card._deckT); card._deckGrow=0;
 }
-let deckRaf=0, deckKbdCard=null, deckObs=null, deckListW=-1;
+let deckRaf=0, deckKbdCard=null, deckObs=null, deckListW=-1, deckPtr=null;
 const deckOpenIds=new Set();
+/* An open deck's resting height, by id, kept while it stays open: a redraw that brings a taller or
+   shorter front reply moves nothing under it until it closes, and then the cards below glide (deckSettleRest). */
+const deckRestHeld=new Map();
+/* The deck's own classes on a card, for a redraw that assigns its class whole (patchCard): carried, the
+   card under an open deck is never laid out unfaded between the redraw and the fade, which would replay the fade. */
+function deckCarry(el){
+  const own=el&&el.classList ? Array.from(el.classList).filter(k=>/^deck(-[a-z]+)?$/.test(k)) : [];
+  return own.length ? " "+own.join(" ") : "";
+}
+/* Where the pointer last stood. A node drawn new under a still pointer is not :hover until the pointer
+   moves again, so a deck held open is kept open by its box holding this point. */
+function deckPointerIn(c){
+  if(!deckPtr||typeof c.getBoundingClientRect!=="function") return false;
+  const r=c.getBoundingClientRect();
+  return deckPtr.x>=r.left && deckPtr.x<r.right && deckPtr.y>=r.top && deckPtr.y<r.bottom;
+}
 /* A deck whose own box sits more than one viewport outside the screen keeps the list's
    content-visibility. Inside that band it is measured, which is what deck-near records. */
 function deckView(){
@@ -63,21 +79,27 @@ function deckMeasure(todo){
   if(!todo.length) return;
   const dragging=deckDragging();
   todo.forEach(c=>{
-    const id=c.dataset&&c.dataset.id;
-    if(!dragging && !c.matches(":hover")){ if(id) deckOpenIds.delete(id); }
-    else if(c.classList.contains("deck-open") && id) deckOpenIds.add(id);
     c.style.removeProperty("height");
     c.classList.add("deck","deck-near");
   });
   const read=todo.map(c=>{
-    const s=deckSlabs(c);
-    return {c, s, L:deckLengths(s.map(e=>e.offsetTop), s.map(e=>e.offsetHeight), s[0].offsetWidth, c.offsetHeight)};
+    const s=deckSlabs(c), id=c.dataset&&c.dataset.id;
+    const L=deckLengths(s.map(e=>e.offsetTop), s.map(e=>e.offsetHeight), s[0].offsetWidth, c.offsetHeight);
+    // Read with every reply in its place, which is where the dealt deck stands.
+    const here=c.matches(":hover") || (!!id && deckOpenIds.has(id) && deckPointerIn(c));
+    return {c, s, L, id, here};
   });
-  read.forEach(({c,s,L})=>{
-    c.style.height=deckPx(L.rest);
+  read.forEach(({c,s,L,id,here})=>{
+    if(!dragging && !here){ if(id) deckOpenIds.delete(id); }
+    else if(c.classList.contains("deck-open") && id) deckOpenIds.add(id);
+    if(deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id===id) deckKbdCard=c;
+    const shouldOpen=(id&&deckOpenIds.has(id)&&(dragging||here)) || here || c===deckKbdCard;
+    const held=shouldOpen && id ? deckRestHeld.get(id) : "";
+    c._deckRest=L.rest;
+    c.style.height=held||deckPx(L.rest);
     c.style.setProperty("--deck-rest-bottom",deckPx(L.restBottom));
     c.style.setProperty("--deck-extra",deckPx(L.extra));
-    c._deckGrow=L.grow;
+    c._deckGrow=held ? Math.max(0,L.grow+L.rest-parseFloat(held)) : L.grow;
     s.forEach((e,k)=>{
       const v=L.slabs[k];
       e.style.setProperty("--deck-z",String(v.z)); e.style.setProperty("--deck-k",String(k));
@@ -86,9 +108,6 @@ function deckMeasure(todo){
       e.style.setProperty("--deck-dy",deckPx(v.dy)); e.style.setProperty("--deck-sx",String(v.sx));
       e.style.setProperty("--deck-clip",deckPx(v.clip)); e.style.setProperty("--deck-dim",String(v.dim));
     });
-    const id=c.dataset&&c.dataset.id;
-    if(deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id===id) deckKbdCard=c;
-    const shouldOpen=(id&&deckOpenIds.has(id)&&(dragging||c.matches(":hover"))) || c.matches(":hover") || c===deckKbdCard;
     if(shouldOpen) deckSetOpen(c,true,true);
     else if(c.classList.contains("deck-open")) deckSetOpen(c,false,true);
   });
@@ -175,8 +194,8 @@ function deckMarkLive(){
 function deckSetOpen(card, open, instant){
   clearTimeout(card._deckT);
   const id=card&&card.dataset&&card.dataset.id;
-  if(open){ if(id) deckOpenIds.add(id); }
-  else { if(id) deckOpenIds.delete(id); }
+  if(open){ if(id){ deckOpenIds.add(id); if(!deckRestHeld.has(id) && card.style.height) deckRestHeld.set(id,card.style.height); } }
+  else if(id){ deckOpenIds.delete(id); if(deckRestHeld.delete(id)) deckSettleRest(card); }
   if(open===card.classList.contains("deck-open")) return;
   // Only a change cancels the deal's end: a repeated ask that did would leave deck-moving on, and the click guard holding.
   clearTimeout(card._deckM);
@@ -196,6 +215,29 @@ function deckSetOpen(card, open, instant){
     card.classList.remove("deck-open","deck-moving");
     card._deckM=setTimeout(()=>{ if(!card.classList.contains("deck-open")) card.classList.remove("deck-up","deck-return"); }, move+40);
   }
+}
+/* A deck closing takes the resting height its replies now give it, and what follows it in its column
+   glides there on the house curve, as a card swap does (list-pointer.js animateCardReorder). */
+function deckSettleRest(card){
+  const want=card._deckRest ? deckPx(card._deckRest) : "";
+  if(!want || card.style.height===want) return;
+  const after=list ? deckSeqAfter(card, Array.from(list.querySelectorAll(".card[data-id], .list-sep"))) : [];
+  if(mgReduceMotion() || !after.length || typeof card.getBoundingClientRect!=="function"){ card.style.height=want; return; }
+  const h=deckView(), was=after.map(e=>e.getBoundingClientRect());
+  card.style.height=want;
+  const moved=[], dys=[];
+  after.forEach((e,i)=>{
+    const b=was[i];
+    if(b.bottom<-h || b.top>h+h) return;
+    const dy=Math.round(b.top-e.getBoundingClientRect().top);
+    if(dy){ moved.push(e); dys.push(dy); }
+  });
+  if(!moved.length) return;
+  moved.forEach((e,i)=>{ e.style.transition="none"; e.style.transform="translateY("+dys[i]+"px)"; });
+  void card.offsetHeight;
+  // The fade's own transitions ride along: the card is given back from under the deck in this same turn.
+  moved.forEach(e=>{ e.style.transition="transform var(--m-move) "+E_EASE+",opacity var(--m-move) ease,filter var(--m-move) ease"; e.style.transform=""; });
+  setTimeout(()=>moved.forEach(e=>{ e.style.transition=""; e.style.transform=""; }), M_MS.move+40);
 }
 function deckWant(card, open, ms){
   clearTimeout(card._deckT);
@@ -321,6 +363,8 @@ function deckDragEnd(){
 function wireDeck(){
   if(!list) return;
   deckOpenIds.clear();
+  deckRestHeld.clear(); deckPtr=null;
+  document.addEventListener("pointermove",e=>{ deckPtr={x:e.clientX, y:e.clientY}; },{capture:true, passive:true});
   deckObs=new MutationObserver(ms=>{
     const h=deckHeard(ms);
     if(h.shape) deckLater();
@@ -351,6 +395,7 @@ function wireDeck(){
   },true);
   document.addEventListener("pointerout",e=>{
     if(deckDragging()) return;
+    if(!e.relatedTarget) deckPtr=null;
     const c=deckAt(e.target), to=deckAt(e.relatedTarget);
     if(c && c!==to && !e.relatedTarget) deckWant(c,false,DECK_GRACE);
   },true);
@@ -418,7 +463,7 @@ function deckWatch(on){
 function deckFlat(){
   [deckRaf,deckFadeRaf,deckApproachRaf].forEach(id=>{ if(id) cancelAnimationFrame(id); });
   deckRaf=0; deckFadeRaf=0; deckApproachRaf=0; deckKbdCard=null;
-  deckOpenIds.clear();
+  deckOpenIds.clear(); deckRestHeld.clear();
   if(deckIO){ deckIO.disconnect(); deckIO=null; }
   list.querySelectorAll(".card.deck").forEach(c=>{ clearTimeout(c._deckM); deckReset(c); });
   list.querySelectorAll(".deck-under, .deck-fresh").forEach(e=>e.classList.remove("deck-under","deck-fresh"));
@@ -438,6 +483,7 @@ export {
   deckCovers,
   deckOwnChange,
   deckReach,
+  deckCarry,
   deckFade,
   deckScan,
   deckSettle,
