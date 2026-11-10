@@ -216,7 +216,8 @@ let eWiping=false;
 function eResetClear(){
   eWiping=true;
   if(!E_DESK) return false;
-  Object.keys(E_DESK.map).forEach(k=>{ if(E_KEY_RE.test(k)){ delete E_DESK.map[k]; eDeskOwed.add(k); } });
+  /* The person's own layer of a catalog (e<ns>~Pack, their cards and stars) stays: a Reset clears settings (board D7b). */
+  Object.keys(E_DESK.map).forEach(k=>{ if(E_KEY_RE.test(k) && !/^e[0-9a-z]+~Pack$/.test(k)){ delete E_DESK.map[k]; eDeskOwed.add(k); } });
   return deskSave();
 }
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
