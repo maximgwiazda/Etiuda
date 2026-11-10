@@ -10748,6 +10748,7 @@ What you type stays in this browser only.`;
   var deck_exports = {};
   __export(deck_exports, {
     deckCovers: () => deckCovers,
+    deckDragEnd: () => deckDragEnd,
     deckFade: () => deckFade,
     deckLengths: () => deckLengths,
     deckOn: () => deckOn,
@@ -10798,6 +10799,8 @@ What you type stays in this browser only.`;
     };
   }
   function deckReset(card) {
+    const id = card && card.dataset && card.dataset.id;
+    if (id) deckOpenIds.delete(id);
     card.classList.remove("deck", "deck-open", "deck-up", "deck-moving", "deck-return", "deck-near");
     ["height", "--deck-rest-bottom", "--deck-extra"].forEach((p) => card.style.removeProperty(p));
     deckSlabs(card).forEach((s) => {
@@ -10811,6 +10814,7 @@ What you type stays in this browser only.`;
   var deckKbdCard = null;
   var deckObs = null;
   var deckListW = -1;
+  var deckOpenIds = /* @__PURE__ */ new Set();
   function deckView() {
     const h = globalThis.innerHeight;
     return typeof h === "number" && h > 0 ? h : 800;
@@ -10821,11 +10825,17 @@ What you type stays in this browser only.`;
     return r.bottom >= -h && r.top <= h + h;
   }
   function deckLive(c) {
-    return c.classList.contains("deck-open") || c.classList.contains("deck-up") || deckInRange(c);
+    const id = c.dataset && c.dataset.id;
+    return id && deckOpenIds.has(id) || c.classList.contains("deck-open") || c.classList.contains("deck-up") || deckInRange(c);
   }
   function deckMeasure(todo) {
     if (!todo.length) return;
+    const dragging = deckDragging();
     todo.forEach((c) => {
+      const id = c.dataset && c.dataset.id;
+      if (!dragging && !c.matches(":hover")) {
+        if (id) deckOpenIds.delete(id);
+      } else if (c.classList.contains("deck-open") && id) deckOpenIds.add(id);
       c.style.removeProperty("height");
       c.classList.add("deck", "deck-near");
     });
@@ -10852,7 +10862,11 @@ What you type stays in this browser only.`;
         e.style.setProperty("--deck-clip", deckPx(v.clip));
         e.style.setProperty("--deck-dim", String(v.dim));
       });
-      if (c.matches(":hover") || c === deckKbdCard) deckSetOpen(c, true, true);
+      const id = c.dataset && c.dataset.id;
+      if (deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id === id) deckKbdCard = c;
+      const shouldOpen = id && deckOpenIds.has(id) && (dragging || c.matches(":hover")) || c.matches(":hover") || c === deckKbdCard;
+      if (shouldOpen) deckSetOpen(c, true, true);
+      else if (c.classList.contains("deck-open")) deckSetOpen(c, false, true);
     });
   }
   function deckScan() {
@@ -10928,6 +10942,12 @@ What you type stays in this browser only.`;
   }
   function deckSetOpen(card, open, instant) {
     clearTimeout(card._deckT);
+    const id = card && card.dataset && card.dataset.id;
+    if (open) {
+      if (id) deckOpenIds.add(id);
+    } else {
+      if (id) deckOpenIds.delete(id);
+    }
     if (open === card.classList.contains("deck-open")) return;
     clearTimeout(card._deckM);
     const now = mgReduceMotion() || instant, travel = now ? 0 : M_MS.travel, move = now ? 0 : M_MS.move;
@@ -11055,8 +11075,19 @@ What you type stays in this browser only.`;
     deckSetOpen(c, true);
     if (!was) setTimeout(() => sel.scrollIntoView({ block: "nearest", behavior: mgReduceMotion() ? "auto" : "smooth" }), mgReduceMotion() ? 0 : 200);
   }
+  function deckDragging() {
+    const cl2 = document.documentElement && document.documentElement.classList;
+    return !!(cl2 && (cl2.contains("txtdrag") || cl2.contains("carddrag") || cl2.contains("pilldrag") || cl2.contains("tabdrag")));
+  }
+  function deckDragEnd() {
+    if (!list) return;
+    list.querySelectorAll(".card.deck.deck-open").forEach((c) => {
+      if (c !== deckKbdCard && !c.matches(":hover")) deckSetOpen(c, false);
+    });
+  }
   function wireDeck() {
     if (!list) return;
+    deckOpenIds.clear();
     deckObs = new MutationObserver((ms) => {
       const h = deckHeard(ms);
       if (h.shape) deckLater();
@@ -11084,14 +11115,18 @@ What you type stays in this browser only.`;
       deckFadeLater();
     });
     document.addEventListener("pointerover", (e) => {
+      if (deckDragging()) return;
       const c = deckAt(e.target), from = deckAt(e.relatedTarget);
       if (c && c !== from) deckWant(c, true, DECK_DWELL);
       if (from && from !== c) deckWant(from, false, DECK_GRACE);
     }, true);
     document.addEventListener("pointerout", (e) => {
+      if (deckDragging()) return;
       const c = deckAt(e.target), to = deckAt(e.relatedTarget);
       if (c && c !== to && !e.relatedTarget) deckWant(c, false, DECK_GRACE);
     }, true);
+    document.addEventListener("pointerup", deckDragEnd, true);
+    document.addEventListener("pointercancel", deckDragEnd, true);
     addEventListener("keydown", () => setTimeout(deckKbdSync, 0), true);
     addEventListener("mousemove", () => {
       if (!deckKbdCard || document.body.classList.contains("e-kbdnav")) return;
@@ -11166,6 +11201,7 @@ What you type stays in this browser only.`;
     deckFadeRaf = 0;
     deckApproachRaf = 0;
     deckKbdCard = null;
+    deckOpenIds.clear();
     if (deckIO) {
       deckIO.disconnect();
       deckIO = null;
