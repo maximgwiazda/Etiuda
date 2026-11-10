@@ -1319,7 +1319,7 @@ function catalogChanged(win) {
   /* The owed eject is in the envelope, which the read above loads on a fresh run. */
   if (ejectOwed) tryHeldUse();
   tryLiveStats(win);
-  tryHeldBranches();
+  tryHeldBranches(); /* plant:changed-held */
   sendListing(win, false);
   sendJoin(win);
   offerNewerLead(win);
@@ -3463,12 +3463,16 @@ function idListedHere(id) {
 function boxAnswerHere(file) {
   try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
 }
-/* Whether sharedFolderForWrite resolves to a team's place: a managed folder or its mirror, a relay team's mirror, a folder team's
-   share or mirror (joining or removed included), or the mirror a team moving to a folder waits in. */
+/* Whether sharedFolderForWrite resolves to a team's place: a relay team's mirror, a folder team's share or mirror (joining or
+   removed included), a managed folder holding a team file or a team's primed mirror, or the mirror a team moving to a folder
+   waits in. A managed folder with no team there yet is the desk's own. */
 function teamWriteHere() {
-  if (sayJoinPolicy().folder || relayHere() || folderTeamHere()) return true;
+  if (relayHere() || folderTeamHere()) return true;
+  const named = sayJoinPolicy().folder;
+  if (named && (fs.existsSync(path.join(named, TEAM_NAME))
+    || Object.keys(teamPins).some(t => fs.existsSync(path.join(folderMirrorOf(t), FolderSyncer().PRIMED_NAME))))) return true;
   const need = Object.values(teamNeedsFolder)[0];
-  return !!(need && need.mirror);
+  return !!(need && need.mirror); /* plant:team-write-moving */
 }
 /* Where a working copy may go on a team this desk is on: one the team lists as before; a private one nowhere; any other to the lead's
    box while the lead's switch applies, else held until it does. Not a sealed member where writes reach a team's place: held. Off a

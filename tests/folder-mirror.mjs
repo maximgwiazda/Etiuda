@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 104;
+const EXPECTED = 109;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -3088,6 +3088,11 @@ async function run() {
     const branchInOutbox = !!syncerMod && syncerMod.owedList(mirror).some(o => o.rel.indexOf("desks/") === 0);
     const branchInShare = fs.existsSync(path.join(share, "desks", me.id, stem + ".ec"));
     const markIn = [mirror, share].filter(dir => holdsMark(dir));
+    /* A working copy grown from the edition the team lists, held while joining like any other. */
+    const listedStem = "lamp-87654321";
+    const listedWrote = await d.ask("etiuda:branch-write", listedStem, JSON.stringify(Object.assign(copyDoc(me, "87654321"), { grew: LAMP_GREW })));
+    const listedAt = path.join(mirror, "desks", me.id, listedStem + ".ec");
+    const listedHeld = !!listedWrote && listedWrote.held === true && !fs.existsSync(listedAt);
 
     // Admit the desk on the roster
     const wrap1 = d.api.wrapTeamKey(K1, me.box, T, 1, me.id);
@@ -3100,15 +3105,21 @@ async function run() {
     /* As the syncer would bring it; a shell that never made the mirror must judge red, not throw. */
     fs.mkdirSync(mirror, { recursive: true });
     fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(admittedTeam), "utf8");
+    fs.writeFileSync(path.join(mirror, "lamp-shop.ec"), CAT_A1, "utf8");
 
     // Trigger finishJoin via joinView
     await d.ask("etiuda:team-join");
     const watchedAfterJoin = d.api.watchedFolder;
+    let released = null;
+    try { released = JSON.parse(fs.readFileSync(listedAt, "utf8")); } catch { released = null; }
+    const listedReleased = !!released && released.id === me.id + "-87654321" && !!released.sig
+      && !!syncerMod && syncerMod.owedAt(mirror, "desks/" + me.id + "/" + listedStem + ".ec");
+    const unlistedStill = !fs.existsSync(path.join(mirror, "desks", me.id, stem + ".ec"));
 
     return {
       mirrorHereJoining, catFolderJoining, mirror, share,
       branchInMirror, branchInOutbox, branchInShare, markIn, held: !!wrote && wrote.held === true,
-      watchedAfterJoin
+      watchedAfterJoin, listedHeld, listedReleased, unlistedStill
     };
   }
 
@@ -3129,6 +3140,71 @@ async function run() {
     });
     if (r) check(r.ok, "974b lifting plant:team-write-hold writes the joining desk's working copy in the clear into the mirror: " + JSON.stringify(r));
     else skip("974b lifting plant:team-write-hold writes the joining desk's working copy in the clear into the mirror");
+  }
+  /* The release: a copy held while joining is written once the desk is admitted, where the team lists what it grew from. */
+  {
+    const r = await seamCScene("c5-release");
+    check(r.listedHeld && r.listedReleased && r.unlistedStill,
+      "974h a copy of a listed catalog held while joining is written to the mirror, owed to the share, once the desk is admitted; the unlisted one stays held: "
+      + JSON.stringify({ heldWhileJoining: r.listedHeld, released: r.listedReleased, unlistedStillHeld: r.unlistedStill }));
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("changed-held", mainFile, async (scratchMain) => {
+      const res = await seamCScene("plant-c5-release", fs.readFileSync(scratchMain, "utf8"));
+      return res.listedHeld && !res.listedReleased;
+    });
+    if (r) check(r.ok, "974k lifting plant:changed-held leaves the copy held while joining unwritten after the admission: " + JSON.stringify(r));
+    else skip("974k lifting plant:changed-held leaves the copy held while joining unwritten after the admission");
+  }
+  /* E1: a managed folder with no team file there is the desk's own, and a copy is written there; once a team file is there, held. */
+  {
+    const share = folder("c5-policy-share");
+    const ud = folder("c5-policy-desk");
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }), "utf8");
+    REG.policy = regText([["TeamFolder", share], ["LeadKey", LEAD.public]]);
+    let out = {};
+    try {
+      const d = loadDesk(ud);
+      await d.ask("etiuda:branch-identity", true);
+      const me = d.api.branchIdentity(false);
+      const first = d.api.writeBranch("own-12345678", JSON.stringify(copyDoc(me, "12345678")));
+      const firstAt = path.join(share, "desks", me.id, "own-12345678.ec");
+      fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      const second = d.api.writeBranch("own-23456789", JSON.stringify(copyDoc(me, "23456789")));
+      out = { root: path.resolve(d.api.sharedFolderForWrite()) === path.resolve(share),
+        written: !!first && first.ok === true && !first.held && fs.existsSync(firstAt),
+        heldOnceTeam: !!second && second.held === true && !fs.existsSync(path.join(share, "desks", me.id, "own-23456789.ec")) };
+    } catch (e) { out.error = String(e && e.message); }
+    finally { REG.policy = null; }
+    check(!out.error && out.root && out.written && out.heldOnceTeam,
+      "974e under a policy naming a folder with no team file in it the desk writes its working copy there as before; once a team file is there, a desk off its roster holds it: " + JSON.stringify(out));
+  }
+  /* E3: a team moving to a folder, the desk waiting for it, writes into the mirror it waits in: held there, as the team's place. */
+  async function movingScene(name, src) {
+    const own = folder(name + "-own");
+    const d = deskWithSrc(name, own, src);
+    await d.ask("etiuda:branch-identity", true);
+    const me = d.api.branchIdentity(false);
+    const T = "t-" + hexOf(8);
+    const mirror = path.join(d.ud, "relay", hexOf(16));
+    fs.mkdirSync(mirror, { recursive: true });
+    d.write({ teamNeedsFolder: { [T]: { rev: 2, lead: { keyId: LEAD.keyId, public: LEAD.public }, mirror } } });
+    const onMirror = path.resolve(d.api.sharedFolderForWrite()) === path.resolve(mirror);
+    const wrote = d.api.writeBranch("move-12345678", JSON.stringify(copyDoc(me, "12345678")));
+    return { onMirror, held: !!wrote && wrote.held === true, inMirror: fs.existsSync(path.join(mirror, "desks", me.id, "move-12345678.ec")), clear: holdsMark(mirror) };
+  }
+  {
+    const r = await movingScene("c5-moving");
+    check(r.onMirror && r.held && !r.inMirror && !r.clear,
+      "974i a desk waiting for its team's new folder, its writes going to the mirror the team moved from, holds its working copy there: " + JSON.stringify(r));
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("team-write-moving", mainFile, async (scratchMain) => {
+      const res = await movingScene("plant-c5-moving", fs.readFileSync(scratchMain, "utf8"));
+      return res.onMirror && !res.held && res.inMirror;
+    });
+    if (r) check(r.ok, "974j lifting plant:team-write-moving writes the waiting desk's working copy in the clear into the mirror: " + JSON.stringify(r));
+    else skip("974j lifting plant:team-write-moving writes the waiting desk's working copy in the clear into the mirror");
   }
   /* The control: a desk on no team, its catalog folder a shared one, writes its working copy there as before. */
   {

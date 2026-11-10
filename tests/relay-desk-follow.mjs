@@ -257,14 +257,22 @@ async function launch(plan) {
   const FRAME = { parent: null, url: "file:///C:/engine/etiuda.html" };
   const ev = { sender: pageWin.webContents, senderFrame: FRAME };
 
+  let preWrite = null;
   if (plan.holdBranch && invokeHandlers["etiuda:branch-write"]) {
     const blockDir = path.join(SHARED, "desks", ownId, plan.holdBranch.stem + ".ec");
     fs.mkdirSync(blockDir, { recursive: true });
     try {
-      await invokeHandlers["etiuda:branch-write"](ev, plan.holdBranch.stem, plan.holdBranch.text);
+      preWrite = await invokeHandlers["etiuda:branch-write"](ev, plan.holdBranch.stem, plan.holdBranch.text);
     } finally {
       try { fs.rmdirSync(blockDir); } catch {}
     }
+  }
+  /* The team file reaches the relay's mirror only after the copy is held there, as the channel would bring it. */
+  if (plan.mirrorTeamAfterHold) {
+    fs.mkdirSync(MIRROR, { recursive: true });
+    fs.writeFileSync(path.join(MIRROR, "etiuda-team.json"), plan.mirrorTeamAfterHold);
+    /* The mirror's watch settles 300 ms after the last event before the desk reads it again. */
+    await new Promise(r => setTimeout(r, 1200));
   }
 
   if (plan.triggerTeamMove && invokeHandlers["etiuda:team-join"]) {
@@ -308,6 +316,7 @@ async function launch(plan) {
     inUseReachable: mirrorFiles.includes("in-use.ec"),
     answerSurvived: mirrorFiles.includes("catalog-answer.ec"),
     heldBranchReached: plan.holdBranch ? mirrorFiles.includes(plan.holdBranch.stem + ".ec") : false,
+    preHeld: !!preWrite && preWrite.held === true,
     said,
     contentViews,
   };
@@ -441,6 +450,19 @@ function makeScenario(kind, extra = {}) {
     cards: [{ id: "c-1", bodyShape: "plain", title: { en: "Held Card" }, body: { en: "Text" } }],
     desk: { id: ownDesk.keyId, key: ownDesk.public, box: ownBox.public },
   };
+  /* A member at the relay's mirror once its team file arrives (board 974, C5): the lead's signed edition of the listed catalog waits
+     there, and the team file reaches it after the copy is held (mirrorTeamAfterHold). */
+  if (extra.memberMirror) {
+    fs.mkdirSync(mirror, { recursive: true });
+    const lamp = { format: 2, kind: "etiuda-catalog", id: "lamp", rev: 1, name: "Lamp", date: "2026-10-30",
+      langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+      cards: [{ id: "c-1", shelf: "t-op", bodyShape: "plain", title: { en: "Lamp" }, body: { en: "Lamp text" } }],
+      sig: { alg: "Ed25519", keyId: lead.keyId } };
+    const sha = "sha256:" + sha256Hex(REAL_CHANNEL.signedBytes(lamp));
+    const signed = signTeamDoc(lamp, lead);
+    fs.writeFileSync(path.join(mirror, "lamp.ec"), JSON.stringify(signed, null, 1) + "\n");
+    heldDoc.grew = { id: "lamp", rev: 1, sha };
+  }
 
   return {
     lab,
@@ -451,6 +473,7 @@ function makeScenario(kind, extra = {}) {
     movedTeamDoc,
     triggerTeamMove: true,
     holdBranch: extra.holdBranch !== undefined ? extra.holdBranch : { stem: heldStem, text: JSON.stringify(heldDoc) },
+    mirrorTeamAfterHold: extra.memberMirror ? JSON.stringify(signTeamDoc(movedTeamDoc, lead), null, 2) : undefined,
     policyFolder: extra.policyFolder,
     policyLead: lead.public,
   };
@@ -712,8 +735,28 @@ async function main() {
       && !!cv.shown && cv.shown.said === true,
     "945s16 on a relay team the lead's switch is read from the relay's mirror, shown and then applies: " + JSON.stringify({ opened: r7.openedDir === s7.mirrorFolder, before: cv.before, shown: cv.shown && cv.shown.said }));
 
+  /* Scenario 8 (board 974, C5): the desk follows at boot, as in scenario 1, and its copy grown from a listed edition is held at the
+     relay's mirror until the team file arrives there; then it is written. */
+  const s8 = makeScenario("member-follow", { memberMirror: true });
+  fs.writeFileSync(path.join(s8.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s8.movedTeamDoc, s8.lead), null, 2));
+  const r8 = runScenario(s8);
+  check(r8.openedDir === s8.mirrorFolder && r8.preHeld && r8.heldBranchReached,
+    "945s17 a desk that followed its team to the relay holds its working copy of a listed catalog at the relay's mirror until the team file arrives there, and then writes it: "
+    + JSON.stringify({ opened: r8.openedDir === s8.mirrorFolder, heldFirst: r8.preHeld, files: r8.mirrorFiles }));
+  {
+    const p = testPlant("plant:changed-held", (lines, at) => {
+      lines[at] = "  /* plant:changed-held */";
+    }, (() => {
+      const q = makeScenario("member-follow-plant", { memberMirror: true });
+      fs.writeFileSync(path.join(q.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(q.movedTeamDoc, q.lead), null, 2));
+      return q;
+    })());
+    const turned = p.found && p.res.preHeld && !p.res.heldBranchReached;
+    check(turned && p.shaSame, "945s18 lifting plant:changed-held turns 945s17 red: turned=" + turned + ", shaSame=" + p.shaSame);
+  }
+
   // Clean up scenario temp dirs
-  [s1, s2, s3, s4, s6, s7].forEach(s => {
+  [s1, s2, s3, s4, s6, s7, s8].forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 
