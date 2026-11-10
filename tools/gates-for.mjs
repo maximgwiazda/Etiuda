@@ -1656,6 +1656,267 @@ function printRows(files, rows) {
   process.stdout.write(JSON.stringify({ files, gates: rows }) + "\n");
 }
 
+/* RELAY-CHANNEL PARTS. A part reaches a file its own text imports or reads, or that a function it calls
+ * names. The slice is from one markPart("id") to the next, so a helper declared before the first mark
+ * is not inherited by every part. Two functions of the same name both count (the desk's liftChannel and
+ * the later one). A function body that fails to parse, or that runs across a later markPart, is skipped:
+ * taking the rest of the file would pull team-join.js and attacks.mjs into every caller. A missing suite
+ * file is an empty graph, so a plan still runs. */
+const RELAY_CHANNEL_SKIP_FN = new Set(["check", "skip"]);
+const relayChannelCache = new Map();
+
+function rcLineOf(text, i) {
+  let n = 1;
+  for (let k = 0; k < i && k < text.length; k++) if (text[k] === "\n") n++;
+  return n;
+}
+
+function rcCanRegex(text, i) {
+  let j = i - 1;
+  while (j >= 0 && (text[j] === " " || text[j] === "\t" || text[j] === "\n" || text[j] === "\r")) j--;
+  if (j < 0) return true;
+  const c = text[j];
+  if ("([{:;,=!?&|+-*%^~<>".includes(c)) return true;
+  const tail = text.slice(Math.max(0, j - 6), j + 1);
+  return /(?:return|typeof|case|else|do|in|of|void|delete|await|throw|yield)$/.test(tail);
+}
+
+function rcScan(text, i, depth, done) {
+  const n = text.length;
+  let curly = depth.curly, paren = depth.paren, square = depth.square;
+  while (i < n) {
+    const c = text[i];
+    if (c === "/" && text[i + 1] === "/") {
+      i += 2;
+      while (i < n && text[i] !== "\n") i++;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      i += 2;
+      while (i < n && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i = Math.min(n, i + 2);
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      const q = c;
+      i++;
+      while (i < n && text[i] !== q) {
+        if (text[i] === "\\") i += 2;
+        else i++;
+      }
+      i++;
+      continue;
+    }
+    if (c === "`") {
+      i++;
+      while (i < n && text[i] !== "`") {
+        if (text[i] === "\\") { i += 2; continue; }
+        if (text[i] === "$" && text[i + 1] === "{") {
+          i += 2;
+          i = rcScan(text, i, { curly: 1, paren: 0, square: 0 }, (ch, d) => ch === "}" && d.curly === 0 && d.paren === 0 && d.square === 0);
+          if (text[i] === "}") i++;
+          continue;
+        }
+        i++;
+      }
+      i++;
+      continue;
+    }
+    if (c === "/" && rcCanRegex(text, i)) {
+      const start = i;
+      i++;
+      while (i < n && text[i] !== "/" && text[i] !== "\n") {
+        if (text[i] === "\\") i += 2;
+        else if (text[i] === "[") {
+          i++;
+          while (i < n && text[i] !== "]" && text[i] !== "\n") {
+            if (text[i] === "\\") i += 2;
+            else i++;
+          }
+          i++;
+        } else i++;
+      }
+      if (text[i] !== "/") throw new Error("regex ran to a newline at " + rcLineOf(text, start));
+      i++;
+      while (i < n && /[a-z]/i.test(text[i])) i++;
+      continue;
+    }
+    if (c === "{") curly++;
+    else if (c === "}") curly--;
+    else if (c === "(") paren++;
+    else if (c === ")") paren--;
+    else if (c === "[") square++;
+    else if (c === "]") square--;
+    if (done(c, { curly, paren, square }, i)) return i;
+    i++;
+  }
+  return i;
+}
+
+function rcEndOfDelim(text, i, open, close) {
+  if (text[i] !== open) throw new Error("expected " + open + " at " + rcLineOf(text, i));
+  const depth = { curly: open === "{" ? 1 : 0, paren: open === "(" ? 1 : 0, square: open === "[" ? 1 : 0 };
+  const at = rcScan(text, i + 1, depth, (c, d) => c === close && d.curly === 0 && d.paren === 0 && d.square === 0);
+  if (text[at] !== close) throw new Error("unclosed " + open + " at " + rcLineOf(text, i));
+  return at + 1;
+}
+
+function rcIndexOfBrace(text, i) {
+  const at = rcScan(text, i, { curly: 0, paren: 0, square: 0 }, (c) => c === "{");
+  if (text[at] !== "{") throw new Error("no brace from " + rcLineOf(text, i));
+  return at;
+}
+
+function rcFunctionBody(text, parenAt) {
+  try {
+    const endParen = rcEndOfDelim(text, parenAt, "(", ")");
+    const brace = rcIndexOfBrace(text, endParen);
+    const end = rcEndOfDelim(text, brace, "{", "}");
+    const body = text.slice(brace, end);
+    if (/markPart\(\s*"/.test(body)) return "";
+    return body;
+  } catch (e) {
+    return "";
+  }
+}
+
+function relayChannelAddRel(out, rel) {
+  rel = String(rel || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!rel || rel.includes("*") || rel.endsWith("/")) return;
+  if (/^(src|shell|ui|engine|relay|service|tests)\//.test(rel)) out.add(rel.split("?")[0]);
+}
+
+function relayChannelAddSpec(out, spec) {
+  if (!spec || spec.startsWith("node:")) return;
+  if (spec.startsWith("./")) return;
+  let rel = spec;
+  if (rel.startsWith("../")) rel = rel.slice(3);
+  relayChannelAddRel(out, rel);
+}
+
+function relayChannelFilesIn(slice) {
+  const out = new Set();
+  let mm;
+  const imp = /import\s*\(\s*["']([^"']+)["']/g;
+  while ((mm = imp.exec(slice))) relayChannelAddSpec(out, mm[1]);
+  const from = /from\s+["']([^"']+)["']/g;
+  while ((mm = from.exec(slice))) relayChannelAddSpec(out, mm[1]);
+  const req = /require\(\s*["']([^"']+)["']/g;
+  while ((mm = req.exec(slice))) relayChannelAddSpec(out, mm[1]);
+  const join = /path\.join\(\s*([^)]*)\)/g;
+  while ((mm = join.exec(slice))) {
+    const bits = [];
+    const q = /["']([^"']+)["']/g;
+    let b;
+    while ((b = q.exec(mm[1]))) bits.push(b[1]);
+    if (bits.length) relayChannelAddRel(out, bits.join("/"));
+  }
+  const lit = /["']((?:src|shell|ui|engine|relay|service|tests)\/[^"']+)["']/g;
+  while ((mm = lit.exec(slice))) relayChannelAddRel(out, mm[1]);
+  if (/\bC\./.test(slice) || /\bcreateChannel\b/.test(slice) || /\bcreateProgram\b/.test(slice)) out.add("shell/relay/channel.cjs");
+  if (/\bloadDesk\b/.test(slice) || /\bnewDesk\b/.test(slice) || /\bliftDesk\b/.test(slice)) out.add("shell/main.js");
+  if (/\bB\./.test(slice)) out.add("shell/relay/blob.cjs");
+  if (/\bcore\./.test(slice)) out.add("relay/core.cjs");
+  if (/\bteamMod\b/.test(slice)) out.add("relay/team.cjs");
+  if (/\bK\./.test(slice)) out.add("relay/test/grant-kit.cjs");
+  if (/\bS\.relayEnv\b/.test(slice)) out.add("relay/test/stand-ins.cjs");
+  if (/\bW\.fetch\b/.test(slice)) out.add("relay/worker.mjs");
+  return out;
+}
+
+function relayChannelParse(src) {
+  const marks = [];
+  const markRe = /markPart\(\s*"([A-Za-z0-9]+)"\s*\)/g;
+  let m;
+  while ((m = markRe.exec(src))) marks.push({ id: m[1], at: m.index });
+  const order = [];
+  const seenId = new Set();
+  const slices = new Map();
+  for (let i = 0; i < marks.length; i++) {
+    const id = marks[i].id;
+    const slice = src.slice(marks[i].at, i + 1 < marks.length ? marks[i + 1].at : src.length);
+    if (!slices.has(id)) slices.set(id, []);
+    slices.get(id).push(slice);
+    if (!seenId.has(id)) { seenId.add(id); order.push(id); }
+  }
+  const fns = new Map();
+  const fnRe = /^(?:[ \t]*)(?:async[ \t]+function|function)[ \t]+([A-Za-z0-9_$]+)[ \t]*\(/gm;
+  while ((m = fnRe.exec(src))) {
+    if (RELAY_CHANNEL_SKIP_FN.has(m[1])) continue;
+    const body = rcFunctionBody(src, m.index + m[0].length - 1);
+    if (!body) continue;
+    if (!fns.has(m[1])) fns.set(m[1], []);
+    fns.get(m[1]).push(body);
+  }
+  const names = [...fns.keys()].sort((a, b) => b.length - a.length);
+  const callRe = names.length ? new RegExp("\\b(" + names.join("|") + ")\\s*\\(", "g") : null;
+  function closure(body) {
+    if (!callRe) return body;
+    const seen = new Set();
+    const chunks = [body];
+    const queue = [body];
+    while (queue.length) {
+      const cur = queue.pop();
+      callRe.lastIndex = 0;
+      let hit;
+      while ((hit = callRe.exec(cur))) {
+        const name = hit[1];
+        if (seen.has(name)) continue;
+        seen.add(name);
+        for (const b of fns.get(name)) {
+          chunks.push(b);
+          queue.push(b);
+        }
+      }
+    }
+    return chunks.join("\n");
+  }
+  const byFile = new Map();
+  function add(part, rel) {
+    if (!byFile.has(rel)) byFile.set(rel, new Set());
+    byFile.get(rel).add(part);
+  }
+  for (const id of order) {
+    const text = slices.get(id).map(closure).join("\n");
+    for (const rel of relayChannelFilesIn(text)) add(id, rel);
+  }
+  return { order, byFile };
+}
+
+function relayChannelRead(root) {
+  const abs = path.join(root, "tests", "relay-channel.mjs");
+  let st;
+  try { st = fs.statSync(abs); } catch (e) { return null; }
+  const key = abs + "\0" + st.mtimeMs + "\0" + st.size;
+  if (relayChannelCache.has(key)) return relayChannelCache.get(key);
+  const graph = relayChannelParse(fs.readFileSync(abs, "utf8"));
+  relayChannelCache.set(key, graph);
+  return graph;
+}
+
+export function relayChannelPartIds(root) {
+  const g = relayChannelRead(root);
+  return g ? g.order.slice() : [];
+}
+
+export function relayChannelEdges(root) {
+  const g = relayChannelRead(root);
+  return g ? g.byFile : new Map();
+}
+
+/* Part ids, in source order, that import or read one of these files. */
+export function relayChannelParts(root, files) {
+  const g = relayChannelRead(root);
+  if (!g) return [];
+  const want = new Set();
+  for (const f of files || []) {
+    const rel = String(f).replace(/\\/g, "/").replace(/^\.\//, "");
+    const set = g.byFile.get(rel);
+    if (set) for (const id of set) want.add(id);
+  }
+  return g.order.filter(id => want.has(id));
+}
+
 function main() {
   const root = path.resolve(path.dirname(SELF), "..");
   const args = process.argv.slice(2);
