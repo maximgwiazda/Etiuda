@@ -19,9 +19,11 @@ import { noteSearchTyping } from "./search-meaning.js";
 
 function updateIntentPlaceholder(){
   if(!intentEl) return;
-  intentEl.placeholder=t("search intents and cards");
+  intentEl.placeholder=t("Search intents and cards");
   const ph=$("#intentPh");
-  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
+  /* Two whole sentences, the lead and the keys, so a language can place the keys on its own. */
+  if(ph) ph.innerHTML='<span>'+t("Search intents and cards")+'</span><span class="ph-keys">'+
+    t("<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several")+'</span>';
 }
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category

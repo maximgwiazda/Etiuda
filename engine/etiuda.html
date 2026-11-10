@@ -1108,11 +1108,17 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    are both measured from the wrap's padding box, so the same two numbers put them in the same
    box, to the pixel. */
 #intentPh{position:absolute;left:12px;right:34px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;gap:8px;
   pointer-events:none;white-space:nowrap;overflow:hidden;
   font:var(--intent-type) var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px;vertical-align:1px}
+/* The keys sit at the far end, a step smaller than the lead, and the dot between them is quieter than either. */
+#intentPh .ph-keys{margin-left:auto;display:inline-flex;align-items:center;gap:5px;
+  font-size:12.5px;color:var(--dim);white-space:nowrap}
+#intentPh .ph-keys kbd{font:11.5px var(--mono);padding:0 5px}
+#intentPh .ph-dot{opacity:.5;margin:0 3px}
 /* A held query keeps its accent ink; the box stays the same quiet line as PAX and ROLE - the
    outline is not the signal, the colour of the words is. Green stays the selection colour and
    lives in the rail. Focus is the wrap's - see .fill input. */
@@ -4366,11 +4372,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
       </div></div>
     <div class="fill">
       <div class="combo" id="intentComboWrap">
-        <input id="intent" placeholder="search intents and cards"
+        <input id="intent" placeholder="Search intents and cards"
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="One search: intents rank in the panel, cards filter below">
-        <span id="intentPh" aria-hidden="true"></span>
+        <!-- Painted whole by updateIntentPlaceholder. Two sentences, and a sweep would translate the key names apart from them. -->
+        <span id="intentPh" aria-hidden="true" data-i18n-skip></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
     <!-- THE FOUR TOOLS, in the box the agent's name used to hold. They left the band because
@@ -7711,10 +7718,10 @@ What you type stays in this browser only.`;
     "PAX": "PAX",
     "INTENT": "INTENCJA",
     "Intents arrive with a catalog.": "Intencje przynosi katalog.",
-    "search intents and cards": "szukaj intencji i kart",
+    "Search intents and cards": "Wyszukiwanie intencji i kart",
     "Search": "Szukaj",
     "One search: intents rank in the panel, cards filter below": "Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
-    "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
+    "<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "<kbd>Enter</kbd> wybiera<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
     "Search cleared": "Wyczyszczono wyszukiwanie",
     "ROLE": "ROLA",
     "EN": "EN",
@@ -33718,9 +33725,9 @@ What you type stays in this browser only.`;
   // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
-    intentEl.placeholder = t("search intents and cards");
+    intentEl.placeholder = t("Search intents and cards");
     const ph = $("#intentPh");
-    if (ph) ph.innerHTML = t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
+    if (ph) ph.innerHTML = "<span>" + t("Search intents and cards") + '</span><span class="ph-keys">' + t("<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several") + "</span>";
   }
   function clearSearchQuery() {
     if (intentEl) intentEl.value = "";

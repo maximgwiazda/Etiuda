@@ -829,10 +829,10 @@ UI_STRINGS.pl={
   "PAX":"PAX",
   "INTENT":"INTENCJA",
   "Intents arrive with a catalog.":"Intencje przynosi katalog.",
-  "search intents and cards":"szukaj intencji i kart",
+  "Search intents and cards":"Wyszukiwanie intencji i kart",
   "Search":"Szukaj",
   "One search: intents rank in the panel, cards filter below":"Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
-  "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
+  "<kbd>Enter</kbd> to choose<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"<kbd>Enter</kbd> wybiera<span class='ph-dot'>·</span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
   "Search cleared":"Wyczyszczono wyszukiwanie",
 
   "ROLE":"ROLA",
