@@ -1602,11 +1602,12 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
    inline-block takes its baseline from its LAST line box, unless its overflow is hidden - see
    footer .nw), and the count stays outside the reservation. */
 /* A hint is a thin ring in its own colour, and the label stays quiet ink. The ring is the
-   state. Selected pills still go white, and they keep the halo. */
-.pill.hint{border-color:color-mix(in srgb,var(--accent) 55%,transparent);color:var(--dim);font-weight:400;
+   state. Selected pills still go white, and they keep the halo. The label keeps its bold
+   (Max, 2026-11-10: "Let's leave the bold font as it is"). */
+.pill.hint{border-color:color-mix(in srgb,var(--accent) 55%,transparent);color:var(--dim);font-weight:650;
   box-shadow:none}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
-.pill.hint2{border-color:color-mix(in srgb,var(--go) 60%,transparent);color:var(--dim);font-weight:400;
+.pill.hint2{border-color:color-mix(in srgb,var(--go) 60%,transparent);color:var(--dim);font-weight:650;
   box-shadow:none}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
@@ -1614,9 +1615,9 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:color-mix(in srgb,var(--go) 60%,transparent)}
 /* selected + intent-relevant: blue fill, keep the green border and its halo */
 .pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
-  box-shadow:0 0 0 2px var(--go-soft);font-weight:400}
+  box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
-  box-shadow:0 0 0 2px var(--accent-soft);font-weight:400}
+  box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
 .pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
