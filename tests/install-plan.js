@@ -471,8 +471,22 @@ function nsisTemplates(root) {
   return out;
 }
 
+/* What a ticked Remove my data does, and what an update must never do. removeLicence is the
+   one switch for whether the licence goes with the data: omitted, it does. An argument list
+   or one string is read the same way, because the uninstaller is handed either. */
+function uninstallDataDecision(opts) {
+  const o = opts || {};
+  const args = Array.isArray(o.args) ? o.args.map(String) : (o.args == null || o.args === "" ? [] : [String(o.args)]);
+  const blob = args.join(" ");
+  const update = args.indexOf("/KEEP_APP_DATA") >= 0 || args.indexOf("--updated") >= 0
+    || blob.indexOf("/KEEP_APP_DATA") >= 0 || blob.indexOf("--updated") >= 0;
+  if (update) return { remove: false, licence: false, why: "update" };
+  if (!o.box) return { remove: false, licence: false, why: "unticked" };
+  return { remove: true, licence: o.removeLicence !== false, why: "ticked" };
+}
+
 module.exports = { BUILDER_NS, uuidV5, appGuid, registryKeys, badInstallDir, installArgs, uninstallArgs, plainArgs,
                    argsFault, scratchHome, userDataName, defaultUserInstallDir, samePath,
                    judgeUpdate, judgeUpdatedRun, judgeAllUsers,
                    compareSemver, recogniseOutcome, recogniseAction,
-                   readInstallerRecognise, readInstallScopes, nsisTemplates };
+                   readInstallerRecognise, readInstallScopes, nsisTemplates, uninstallDataDecision };

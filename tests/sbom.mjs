@@ -330,8 +330,8 @@ async function main() {
 
   /* ---- 7. THE RELEASE LEAVES ONE BESIDE THE INSTALLER --------------------------------------- */
   /* A throwaway repository with the real release script and its imports, stub npm scripts, and a
-     stub package step that writes a fourteen-byte installer and a real seventeen-file app.asar, the
-     release's allowlist (seventeen since the tray helper and the embedded model's worker). Every gate then runs and the last two are the
+     stub package step that writes a fourteen-byte installer and an app.asar of the release's
+     allowlist (the desk reset included). Every gate then runs and the last two are the
      ones after the document is written. */
   /* The stub asar holds exactly what tools/release.mjs expects, read from its own `expected` list, so the two cannot drift: a
      hand copy here went red on main when the tray PNG joined the release list (the test architect, 2026-11-09). */

@@ -286,6 +286,7 @@ function boot(){
   dom.grabDom();
   /* The desktop host, if there is one, before anything reads a body class it sets. */
   host.wireHost();
+  maintenance.armResetNotice();
   // The browser's own suggestion popups, off before a field can be focused
   browserSuggest.suppressBrowserSuggest();
   // The maintenance panel's watch on the states no resize reports

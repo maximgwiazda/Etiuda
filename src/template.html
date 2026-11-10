@@ -3686,6 +3686,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-mt[data-page="catalog"] .mt-sec[data-mt-sec="Catalog file"],
 .sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Storage"],
 .sx.lm-mt[data-page="storage"] .mt-sec[data-mt-sec="Desk"],
+.sx.lm-mt:not([data-page="storage"]) .mt-reset{display:none}
+.sx.lm-mt .mt-reset{grid-template-columns:minmax(0,1fr) auto;margin-top:16px}
 .sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Layout"],
 .sx.lm-mt[data-page="layout"] .mt-sec[data-mt-sec="Intent panel"],
 .sx.lm-mt[data-page="state"] .mt-sec[data-mt-sec="Personal state"]{display:block}
