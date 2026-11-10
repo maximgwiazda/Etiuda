@@ -377,12 +377,20 @@ try {
   {
     let kindOf = null, err = "";
     try { kindOf = new Function(slice("rescueKind") + "\nreturn rescueKind;")(); } catch (e) { err = String(e && e.message || e); }
-    const got = kindOf ? [kindOf(true, 0), kindOf(true, 1), kindOf(false, 0), kindOf(false, 1), kindOf(false, 2)] : [];
+    /* [broken, tries, inHost, resetTried]: storage broken; a first crash; the app after the silent repair with no Reset
+       pressed yet (the repair never reached the desk's saved settings); the app after Reset too; a browser after the repair. */
+    const cases = [[true, 0, true, false], [true, 1, false, false], [false, 0, true, false], [false, 1, true, false],
+                   [false, 1, true, true], [false, 1, false, false], [false, 2, false, false]];
+    const got = kindOf ? cases.map(c => kindOf.apply(null, c)) : [];
     const banner = (() => { try { return slice("banner"); } catch (e) { return ""; } })();
-    check(JSON.stringify(got) === JSON.stringify(["broken", "broken", "damaged", "fault", "fault"])
-      && /rescueKind\(\s*broken\s*,\s*tries\s*\)/.test(banner) && /kind\s*===\s*"damaged"/.test(banner),
-      "5f a crash after the boot guard's own repair is the code's: no Reset and no word about damaged settings; a first crash"
-      + " still offers Reset, unusable storage still says so: " + (err || JSON.stringify(got)));
+    const layer2 = tpl.slice(tpl.indexOf('window.addEventListener("error"'), tpl.indexOf('window.addEventListener("error"') + 600);
+    check(JSON.stringify(got) === JSON.stringify(["broken", "broken", "damaged", "damaged", "fault", "fault", "fault"])
+      && /rescueKind\(\s*broken\s*,\s*tries\s*,\s*inHost\s*,\s*rescueTried\(\)\s*\)/.test(banner) && /kind\s*===\s*"damaged"/.test(banner)
+      && /clearState\(true\);\s*try\{\s*sessionStorage\.setItem\("eRescueTried","1"\)/.test(banner)
+      && /var tried=rescueTried\(\);[\s\S]*clearState\(false\);[\s\S]*if\(tried\) sessionStorage\.setItem\("eRescueTried","1"\)/.test(layer2),
+      "5f the banner's kind: a first crash offers Reset; in the app, the first banner after the silent repair still offers"
+      + " the Reset that reaches the desk's settings and marks it after clearing; only a crash after that Reset, or after the"
+      + " repair in a browser, is the code's, with no Reset; unusable storage still says so: " + (err || JSON.stringify(got)));
   }
 
   /* ---- a click on a link, at the preload's two listeners: only a middle click, besides the primary

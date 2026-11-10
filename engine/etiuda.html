@@ -152,7 +152,7 @@
     booted=true;
     arrive();
     document.documentElement.classList.remove("e-veiled");   // a launch held where blocking is not understood
-    try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
+    try{ sessionStorage.removeItem("eBootTry"); sessionStorage.removeItem("eRescueTried"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
      is KEPT: the causes (damaged DB, blocked cookies, quota, private window) are
@@ -250,13 +250,19 @@
 
     return W.refused;
   }
-  /* WHAT THE BANNER IS ABOUT. Storage that cannot be written is "broken": no Reset, which is the failing operation. The
-     boot guard clears the app's state once by itself and reloads (layer 2 below), so a crash that comes back after that
-     is the code's, "fault": a Reset would clear the settings again and reload into the same fault, and the banner must
-     not blame the person's settings. Only a first crash is "damaged", and only it offers Reset (2026-11-10). */
-  function rescueKind(broken, tries){
+  /* WHAT THE BANNER IS ABOUT. Storage that cannot be written is "broken": no Reset, which is the failing operation.
+     A first crash is "damaged" and offers Reset. The boot guard's silent repair (layer 2) clears the page's keys and the
+     session but, in the desktop app, not the desk's saved settings, which only Reset's clearState(true) reaches; so in the
+     app the first banner after the silent repair still offers that Reset, and the press marks it (eRescueTried). A crash
+     that survives Reset too, or the silent repair in a browser where that repair reaches everything, is the code's,
+     "fault": no Reset, and nothing said against the settings (2026-11-10, the test architect's read). */
+  function rescueKind(broken, tries, inHost, resetTried){
     if(broken) return "broken";
-    return tries>=1 ? "fault" : "damaged";
+    if(tries<1) return "damaged";
+    return inHost && !resetTried ? "damaged" : "fault";
+  }
+  function rescueTried(){
+    try{ return sessionStorage.getItem("eRescueTried")==="1"; }catch(e){ return false; }
   }
   /* THE RESCUE WEARS THE FAMILY'S BUBBLE (.bub-ask, its type and its entrance) under the band, which
      holds the window's controls; the fill and the ink are written here as well, so it still
@@ -264,7 +270,7 @@
   function banner(msg, broken){
     document.documentElement.classList.remove("e-arriving","e-veiled");
     if(document.getElementById("eRescue")) return;
-    var W=words(), inHost=!!hostDesk(), kind=rescueKind(broken, tries);
+    var W=words(), inHost=!!hostDesk(), kind=rescueKind(broken, tries, inHost, rescueTried());
     var band=document.querySelector(".row"), top=band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0;
     var d=document.createElement("div");
     d.id="eRescue";
@@ -304,7 +310,8 @@
     if(kind==="damaged"){
       var go=document.createElement("button");
       go.type="button"; go.className="btn primary"; go.id="eRescueGo"; go.textContent=W.reset;
-      go.onclick=function(){ clearState(true); location.replace(location.href.split("#")[0]); };
+      /* The mark goes in after the clearing, which empties sessionStorage. */
+      go.onclick=function(){ clearState(true); try{ sessionStorage.setItem("eRescueTried","1"); }catch(e){} location.replace(location.href.split("#")[0]); };
       acts.appendChild(go);
     }
     d.appendChild(acts);
@@ -317,8 +324,9 @@
     if(booted) return;                       // errors after a good boot are the app's business
     var ok=storeUsable();
     if(ok && tries<1){
+      var tried=rescueTried();               // a Reset already pressed survives the silent repair's own clearing
       clearState(false);
-      try{ sessionStorage.setItem("eBootTry","1"); }catch(e){}
+      try{ sessionStorage.setItem("eBootTry","1"); if(tried) sessionStorage.setItem("eRescueTried","1"); }catch(e){}
       location.reload();
       return;
     }
