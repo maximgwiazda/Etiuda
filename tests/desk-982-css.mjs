@@ -309,4 +309,4 @@ try {
 
 console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=11");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails ? 1 : 0);
+process.exit(fails || checks !== 11 ? 1 : 0);
