@@ -195,6 +195,15 @@ function windowWallRefusal(who, env) {
           "this is a refusal and not a failure: no window was opened and nothing about the product was measured"];
 }
 
+/** A copy of `env` WITHOUT the word, for a child that must meet the wall (a leg proving the wall still refuses). Taking the
+ *  word away is the opposite of giving it, and this file stays the only one in tests/ and tools/ that names the variable
+ *  (engine-selftest 22e; the test architect, 2026-11-10). */
+function envWithoutWindowWord(env) {
+  const out = Object.assign({}, env || process.env);
+  delete out[WINDOWS_VAR];
+  return out;
+}
+
 /** The wall at the top of a window gate, before it builds, waits or leases anything. The marker
  *  line is what tools/gate-run.mjs reads to record the step as refused by the wall. */
 function windowWall(who) {
@@ -1719,7 +1728,7 @@ async function connectShell(opts) {
   shellDidNotStart(shellStartWhy({ child: child, port: port, said: o.said, waitMs: waitMs }));
 }
 
-module.exports = { shellAppFiles, copyShellApp, NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
+module.exports = { shellAppFiles, copyShellApp, envWithoutWindowWord, NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
                    shellDidNotStart, shellStartFailed, shellStartWhy, connectShell,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
