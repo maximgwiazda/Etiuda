@@ -7113,6 +7113,52 @@ const CARD_B = {
   if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
 }
 
+/* ------------------------------------------------------------------ AN IMPORT CALLED AS A FUNCTION IS ONE.
+   2026-11-10: search-meaning.js called ePackEpoch(), which pack.js exports as a number, and the desk died at start
+   with "ePackEpoch is not a function" the moment a packed model made that line run; no leg had run it. So every
+   module's named imports from ./x.js are read from its source, the exporting module is loaded through node's own
+   loader, and a binding the importer calls (a bare name followed by an open bracket, not a member and not a
+   declaration) must be a function there. A module that cannot load in bare node is skipped and counted, never passed. */
+{
+  const fsI = await import("node:fs"), pathI = await import("node:path");
+  const DIR = MODDIR;
+  const files = fsI.readdirSync(DIR).filter(f => f.endsWith(".js"));
+  const loaded = {}, unloadable = [];
+  const nsOf = async f => {
+    if (f in loaded) return loaded[f];
+    try { loaded[f] = await import(MOD(f)); } catch (e) { loaded[f] = null; unloadable.push(f); }
+    return loaded[f];
+  };
+  const wrong = [];
+  let pairs = 0;
+  for (const f of files) {
+    const src = fsI.readFileSync(pathI.join(DIR, f), "utf8");
+    const body = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'\\])\/\/[^\n]*/g, "$1");
+    for (const m of body.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+)["']/g)) {
+      const from = m[2];
+      for (const spec of m[1].split(",").map(x => x.trim()).filter(Boolean)) {
+        const parts = spec.split(/\s+as\s+/);
+        const exported = parts[0].trim(), local = (parts[1] || parts[0]).trim();
+        const called = new RegExp("(^|[^.\\w$])" + local.replace(/\$/g, "\\$") + "\\s*\\(", "m");
+        const declared = new RegExp("function\\s+" + local.replace(/\$/g, "\\$") + "\\s*\\(");
+        if (!called.test(body.replace(declared, ""))) continue;
+        const ns = await nsOf(from);
+        if (!ns) continue;
+        pairs++;
+        /* A slot set later (let x = null, assigned when its owner mounts) is a function only once set, so every call of it
+           must stand behind its own test on the same line: if (x) x() or x && x(). */
+        const v = ns[exported], esc = local.replace(/\$/g, "\\$");
+        const guardedAll = v == null && body.split("\n").filter(l => called.test(l))
+          .every(l => new RegExp("(if\\s*\\(\\s*" + esc + "\\s*\\)|" + esc + "\\s*&&)\\s*" + esc + "\\s*\\(").test(l));
+        if (typeof v !== "function" && !guardedAll) wrong.push(f + " calls " + local + "() from " + from + ", which exports a " + typeof ns[exported]);
+      }
+    }
+  }
+  check("module-calls", "every named import a module calls is a function in the module that exports it: " + pairs
+    + " called import(s) checked over " + files.length + " module(s), " + unloadable.length + " exporter(s) not loadable in bare node"
+    + (unloadable.length ? " " + JSON.stringify(unloadable) : ""), () => wrong.length === 0 && pairs > 50 ? true : JSON.stringify(wrong));
+}
+
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print
    a green line, so the floor is frozen here and a drop reddens the file. */

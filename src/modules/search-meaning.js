@@ -142,7 +142,7 @@ function cheapStamp() {
     labels = mixHash(pack.catLabelsPl && pack.catLabelsPl[k], labels);
     labels = mixHash(CAT_LABELS_PL[k], labels);
   }
-  return String(ePackEpoch()) + "|" + n + "|" + chars + "|" + labels.toString(16) + "|" + intentCount();
+  return String(ePackEpoch) + "|" + n + "|" + chars + "|" + labels.toString(16) + "|" + intentCount();
 }
 function textStamp(rows) {
   let h = 5381;
