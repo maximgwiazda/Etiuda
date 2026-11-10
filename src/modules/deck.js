@@ -61,8 +61,11 @@ function deckLive(c){
    list costs one layout rather than one per card. A deck outside the band is not read. */
 function deckMeasure(todo){
   if(!todo.length) return;
+  const dragging=deckDragging();
   todo.forEach(c=>{
-    if(c.classList.contains("deck-open")&&c.dataset&&c.dataset.id) deckOpenIds.add(c.dataset.id);
+    const id=c.dataset&&c.dataset.id;
+    if(!dragging && !c.matches(":hover")){ if(id) deckOpenIds.delete(id); }
+    else if(c.classList.contains("deck-open") && id) deckOpenIds.add(id);
     c.style.removeProperty("height");
     c.classList.add("deck","deck-near");
   });
@@ -85,7 +88,9 @@ function deckMeasure(todo){
     });
     const id=c.dataset&&c.dataset.id;
     if(deckKbdCard && id && deckKbdCard.dataset && deckKbdCard.dataset.id===id) deckKbdCard=c;
-    if((id&&deckOpenIds.has(id)) || c.matches(":hover") || c===deckKbdCard) deckSetOpen(c,true,true);
+    const shouldOpen=(id&&deckOpenIds.has(id)&&(dragging||c.matches(":hover"))) || c.matches(":hover") || c===deckKbdCard;
+    if(shouldOpen) deckSetOpen(c,true,true);
+    else if(c.classList.contains("deck-open")) deckSetOpen(c,false,true);
   });
 }
 function deckScan(){
@@ -305,6 +310,13 @@ function deckDragging(){
   return !!(cl && (cl.contains("txtdrag")||cl.contains("carddrag")||cl.contains("pilldrag")||cl.contains("tabdrag")));
 }
 
+function deckDragEnd(){
+  if(!list) return;
+  list.querySelectorAll(".card.deck.deck-open").forEach(c=>{
+    if(c!==deckKbdCard && !c.matches(":hover")) deckSetOpen(c,false);
+  });
+}
+
 /* A module may not register a listener at load: boot calls this after the note pane's. */
 function wireDeck(){
   if(!list) return;
@@ -342,6 +354,8 @@ function wireDeck(){
     const c=deckAt(e.target), to=deckAt(e.relatedTarget);
     if(c && c!==to && !e.relatedTarget) deckWant(c,false,DECK_GRACE);
   },true);
+  document.addEventListener("pointerup",deckDragEnd,true);
+  document.addEventListener("pointercancel",deckDragEnd,true);
   addEventListener("keydown",()=>setTimeout(deckKbdSync,0),true);
   addEventListener("mousemove",()=>{
     if(!deckKbdCard || document.body.classList.contains("e-kbdnav")) return;
@@ -428,4 +442,5 @@ export {
   deckOn,
   syncDeck,
   wireDeck,
+  deckDragEnd,
 };

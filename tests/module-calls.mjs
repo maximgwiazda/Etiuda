@@ -4544,7 +4544,7 @@ const CARD_B = {
             + " || deck-off,false/false,2 alternatives:flat,3 steps:flat || none,true/true,2 alternatives:tucked,3 steps:tucked || true");
         } finally { if (fresh) fresh.restore(); if (w) w.restore(); }
       });
-    check("deck.js", "1016dk6 a stacked card opened stays open through every order change of a drag that reorders its macros and after the drop, and the order lands",
+    check("deck.js", "1016dk6 a stacked card opened stays open through every order change of a drag that reorders its macros, closes if a drag ends off it or a re-render happens with the pointer elsewhere, and stays open after a drop on it",
       async () => {
         const { animateTxtReorder } = await import(MOD("card-blocks.js"));
         const P = await import(MOD("pack.js"));
@@ -4567,15 +4567,29 @@ const CARD_B = {
           const opened = w.steps.classList.contains("deck-open");
 
           HK.hooks.rebuildCards = () => {
+            const wasHover = w.steps ? w.steps.hover : false;
             const ov = P.pack.overrides["c-fit"];
             const current = ov ? Object.assign({}, base, ov) : Object.assign({}, base);
             AS.setCards([current]);
             const newSteps = w.drawn(current, 400);
+            newSteps.hover = wasHover;
             w.cards[2] = newSteps;
             w.steps = newSteps;
             DK.deckSettle();
           };
 
+          // Case 1: hover-open, re-render with the pointer elsewhere, and the card is closed
+          w.steps.hover = false;
+          HK.hooks.rebuildCards();
+          const closedAfterRerender = !w.steps.classList.contains("deck-open");
+
+          // Re-open for drag test
+          w.steps.hover = true;
+          w.fire("pointerover", { target: w.steps.slabs[0], relatedTarget: null });
+          w.run(w.now() + 400);
+          const reOpened = w.steps.classList.contains("deck-open");
+
+          // Case 2: card open while its macros are dragged stays open through each re-render and the drop while the pointer is on it
           globalThis.document.documentElement.classList.add("txtdrag");
 
           animateTxtReorder("c-fit", 0, 1, true);
@@ -4587,6 +4601,7 @@ const CARD_B = {
           const openAfterSwap2 = w.steps.classList.contains("deck-open");
 
           globalThis.document.documentElement.classList.remove("txtdrag");
+          w.fire("pointerup", {});
           const openAfterDrop = w.steps.classList.contains("deck-open");
 
           const ov = P.pack.overrides["c-fit"] || {};
@@ -4594,7 +4609,18 @@ const CARD_B = {
           const expectedEn = ["Set the shade on the holder.", "Tighten the ring.", "Loosen the ring."].join(GAP);
           const orderMatches = landedEn === expectedEn;
 
-          return eq([opened, openAfterSwap1, openAfterSwap2, openAfterDrop, orderMatches].join(","), "true,true,true,true,true");
+          // Case 3: a drag ending off the card closes it
+          globalThis.document.documentElement.classList.add("txtdrag");
+          w.steps.hover = false;
+          w.fire("pointerout", { target: w.steps, relatedTarget: null });
+          const openMidDragOffCard = w.steps.classList.contains("deck-open");
+
+          globalThis.document.documentElement.classList.remove("txtdrag");
+          w.fire("pointerup", {});
+          const closedAfterDropOffCard = !w.steps.classList.contains("deck-open");
+
+          return eq([opened, closedAfterRerender, reOpened, openAfterSwap1, openAfterSwap2, openAfterDrop, orderMatches, openMidDragOffCard, closedAfterDropOffCard].join(","),
+            "true,true,true,true,true,true,true,true,true");
         } finally {
           CM.setContentLangs(hadLangs); AS.putLang("en"); AS.setCards(hadCards);
           P.BASE_M.length = 0; hadBase.forEach(m => P.BASE_M.push(m)); P.pack.custom = hadCustom; P.pack.overrides = hadOverrides;
