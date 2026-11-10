@@ -37,8 +37,7 @@ fs.writeFileSync(wallFile, [
   "wall('tests/shell-did-not-start.mjs');",
   "",
 ].join("\n"));
-const wallEnv = Object.assign({}, process.env);
-delete wallEnv.ETIUDA_WINDOWS;
+const wallEnv = E.envWithoutWindowWord(process.env);
 const wall = spawnSync(process.execPath, [wallFile], { encoding: "utf8", env: wallEnv });
 const wallOut = String(wall.stdout || "") + String(wall.stderr || "");
 check(wall.status === 78 && wallOut.indexOf("SHELL DID NOT START") < 0 && wallOut.indexOf("SUITE DID NOT COMPLETE") >= 0,
