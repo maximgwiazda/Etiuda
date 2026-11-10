@@ -549,8 +549,10 @@ Var TurnHwnd
 Var TurnKind
 Var TurnBmp
 Var TurnReady
+!ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
+!endif
 
 !macro TurnEmit UN
   !ifdef TURN_PFX
@@ -732,42 +734,54 @@ Var RecogniseMsg
     LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda"
     LangString TurnUnWelcomeText ${ID} "Program Etiuda zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
 
+    !ifndef BUILD_UNINSTALLER
     LangString RecogniseOlderTitle ${ID} "Aktualizacja programu Etiuda" ; placeholder: Claudette
     LangString RecogniseSameTitle ${ID} "Ponowna instalacja programu Etiuda" ; placeholder: Claudette
     LangString RecogniseNewerTitle ${ID} "Instalacja programu Etiuda" ; placeholder: Claudette
     LangString RecogniseUnreadableTitle ${ID} "Instalacja programu Etiuda" ; placeholder: Claudette
+    !endif
 
+    !ifndef BUILD_UNINSTALLER
     LangString RecogniseOlderText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, a ten instalator zawiera nowszą wersję ${VERSION}. Zaktualizować do wersji ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+    !endif
 
+    !ifndef BUILD_UNINSTALLER
     LangString RecogniseBtnUpdate ${ID} "Aktualizuj" ; placeholder: Claudette
     LangString RecogniseBtnReinstall ${ID} "Zainstaluj ponownie" ; placeholder: Claudette
     LangString RecogniseBtnCancel ${ID} "Anuluj" ; placeholder: Claudette
     LangString RecogniseAppRunningRetry ${ID} "${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów." ; placeholder: Claudette
     LangString RecogniseAppRunningClose ${ID} "${PRODUCT_NAME} jest uruchomiony; instalator zamknie go przed kontynuacją." ; placeholder: Claudette
+    !endif
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
     LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nSetup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
     LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda"
     LangString TurnUnWelcomeText ${ID} "This removes Etiuda from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
 
+    !ifndef BUILD_UNINSTALLER
     LangString RecogniseOlderTitle ${ID} "Update Etiuda" ; placeholder: Claudette
     LangString RecogniseSameTitle ${ID} "Reinstall Etiuda" ; placeholder: Claudette
     LangString RecogniseNewerTitle ${ID} "Install Etiuda" ; placeholder: Claudette
     LangString RecogniseUnreadableTitle ${ID} "Install Etiuda" ; placeholder: Claudette
+    !endif
 
+    !ifndef BUILD_UNINSTALLER
     LangString RecogniseOlderText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, and this installer holds ${VERSION}, which is newer. Update to ${VERSION}?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+    !endif
 
+    !ifndef BUILD_UNINSTALLER
     LangString RecogniseBtnUpdate ${ID} "Update" ; placeholder: Claudette
     LangString RecogniseBtnReinstall ${ID} "Reinstall" ; placeholder: Claudette
     LangString RecogniseBtnCancel ${ID} "Cancel" ; placeholder: Claudette
     LangString RecogniseAppRunningRetry ${ID} "${PRODUCT_NAME} is running. Close it, then choose Retry." ; placeholder: Claudette
     LangString RecogniseAppRunningClose ${ID} "${PRODUCT_NAME} is running, and the installer will close it before going on." ; placeholder: Claudette
+    !endif
   !endif
 !macroend
 !insertmacro TurnLang 1033

@@ -140,13 +140,17 @@ try {
     /* tools/package.mjs prepares the built-in model first (tools/model.mjs, Prima Vista step 2), so the lab carries what that
        step reads; with no model in the lab it packages the desk without one, as a build without the model does. */
     for (const f of ['tools/package.mjs', 'tools/fuses.mjs', 'electron-builder.js', 'src/modules/env.js', 'tools/model.mjs',
-                     'tools/model-runtime.json', 'shell/embed/core.cjs', 'shell/embed/third-party.txt'].filter(f => fs.existsSync(path.join(ROOT, f))))
+                     'tools/model-runtime.json', 'shell/embed/core.cjs', 'shell/embed/third-party.txt', 'tools/patch-nsis.mjs', 'tools/patch-nsis.cjs'].filter(f => fs.existsSync(path.join(ROOT, f))))
       fs.copyFileSync(path.join(ROOT, f), path.join(LAB, f));
     fs.writeFileSync(path.join(LAB, 'package.json'),
       JSON.stringify({ name: 'fuses-lab', version: '0.0.0', private: true, scripts: { build: 'node -e 0' } }));
     /* A junction, which rmSync below takes away without reaching what it points at (measured). */
     fs.symlinkSync(fs.realpathSync(path.join(ROOT, 'node_modules', '@electron')),
       path.join(LAB, 'node_modules', '@electron'), 'junction');
+    /* The step checks electron-builder's NSIS templates carry the installer's patches (tools/patch-nsis.cjs), so the lab
+       reaches the tree's own copy of them; a patched template is left as it is, so nothing is written through this. */
+    fs.symlinkSync(fs.realpathSync(path.join(ROOT, 'node_modules', 'app-builder-lib')),
+      path.join(LAB, 'node_modules', 'app-builder-lib'), 'junction');
     fs.writeFileSync(path.join(LAB, 'stub.cjs'), [
       'const fs = require("fs"), p = require("path"), d = p.resolve(process.env.ETIUDA_DIST);',
       'fs.mkdirSync(p.join(d, "win-unpacked"), { recursive: true });',
