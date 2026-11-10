@@ -1224,25 +1224,30 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
 #settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-/* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
-   picture beside a word. The language badge fills the same slot the drawings do, so the three
-   rows share one left edge. */
-.menu.menu-ic button{display:flex;align-items:center;gap:9px}
-.menu.menu-ic button .ic{flex:0 0 auto;color:inherit}
+/* A menu row is an icon and a word. The icon is dim until the pointer or the keyboard reaches
+   the row, when it turns accent; the words stay ink. The language badge fills the same slot the
+   icons do, so those rows share one left edge. */
+.menu.menu-ic button{display:flex;align-items:center;gap:10px}
+.menu.menu-ic button .ic{flex:0 0 auto;color:var(--dim)}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
-  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
+  font:700 10.5px var(--sans);letter-spacing:.4px;color:var(--dim)}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
-.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:232px;
   background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
-  box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
-.menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
+  box-shadow:var(--shadow-pop);padding:6px;display:flex;flex-direction:column;gap:2px}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
-.menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.menu button .sx-ic,.menu button .ic{flex:none;width:16px;height:16px;color:var(--dim)}
+.menu button:hover,.menu button:focus-visible{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--ink);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
+.menu button:hover .sx-ic,.menu button:focus-visible .sx-ic,
+.menu button:hover .ic,.menu button:focus-visible .ic,
+.menu button:hover .more-lang-badge,.menu button:focus-visible .more-lang-badge{color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
-#menuPicker{display:flex;align-items:center;gap:18px}
+#menuPicker{display:flex;align-items:center;gap:10px}
 #menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
@@ -24708,8 +24713,71 @@ What you type stays in this browser only.`;
     }) : null;
   }
 
+  // src/modules/sx-icons.js
+  var SX_ICONS = {
+    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
+    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
+    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
+    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
+    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
+    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
+    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
+    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
+    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
+    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
+    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
+    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
+    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
+    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
+    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
+    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
+    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
+    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
+    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
+    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
+  };
+  function sxIcon(name) {
+    const body = SX_ICONS[name];
+    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
+  }
+
   // src/modules/header-menus.js
+  var MENU_ICON = {
+    manage: "cards",
+    settings: "general",
+    join: "desks",
+    picker: "expand",
+    rail: "intents",
+    pills: "categories",
+    tour: "forward",
+    about: "about"
+  };
+  function paintMenuIcons() {
+    const menu = $("#settingsMenu");
+    if (!menu) return;
+    menu.querySelectorAll("button[data-act]").forEach((b) => {
+      const name = MENU_ICON[b.dataset.act];
+      if (!name || b.querySelector(".sx-ic")) return;
+      b.insertAdjacentHTML("afterbegin", sxIcon(name));
+    });
+  }
+  function menuLabel(btn, text) {
+    if (!btn) return;
+    let n = null;
+    for (let i = 0; i < btn.childNodes.length; i++) {
+      const c = btn.childNodes[i];
+      if (c.nodeType === 3 && c.nodeValue.trim()) {
+        n = c;
+        break;
+      }
+    }
+    if (n) n.nodeValue = text;
+    else btn.appendChild(document.createTextNode(text));
+  }
   function wireHeaderMenus() {
+    paintMenuIcons();
     const host = eHost(), canClose = !!(host && typeof host.close === "function");
     ["#menuQuit", "#menuQuitSep"].forEach((s) => {
       const el = $(s);
@@ -24844,20 +24912,21 @@ What you type stays in this browser only.`;
     row2.hidden = !hk || !h || typeof h.openPicker !== "function";
     if (row2.hidden) return;
     const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
-    row2.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
+    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
     row2.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
   }
   function syncSettingsMenu() {
+    paintMenuIcons();
     syncPickerRow();
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
-      pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
+      menuLabel(pillsBtn, pillsWanted() ? t("Hide categories") : t("Show categories"));
       const hold = scReady ? formatActionChord("expandPills") : "Hold Ctrl";
       pillsBtn.title = pillsWanted() ? pillsLocked() ? t("Hide the category bar, which is locked fully expanded when shown") : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}", hold) : t("Show the category bar under the header.");
     }
     if (railBtn) {
-      railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+      menuLabel(railBtn, railWanted() ? t("Hide intent panel") : t("Show intent panel"));
       railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
     }
     syncRailPinBtn();
@@ -32779,34 +32848,6 @@ What you type stays in this browser only.`;
         if (document.getElementById("setBody")) paintSettings();
       });
     });
-  }
-  var SX_ICONS = {
-    "general": '<path d="M11.16 6.4L11.37 4.08L13.63 4.08L13.84 6.4L15.87 7.24L17.65 5.74L19.26 7.35L17.76 9.13L18.6 11.16L20.92 11.37L20.92 13.63L18.6 13.84L17.76 15.87L19.26 17.65L17.65 19.26L15.87 17.76L13.84 18.6L13.63 20.92L11.37 20.92L11.16 18.6L9.13 17.76L7.35 19.26L5.74 17.65L7.24 15.87L6.4 13.84L4.08 13.63L4.08 11.37L6.4 11.16L7.24 9.13L5.74 7.35L7.35 5.74L9.13 7.24z"/><circle cx="12.5" cy="12.5" r="2.75"/>',
-    "appearance": '<path d="M12.5 4.5a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12.5" r="8"/>',
-    "layout": '<rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.6" fill="currentColor" fill-opacity=".35"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.6"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.6"/>',
-    "keys": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M8.5 10.5h.01M12.5 10.5h.01M16.5 10.5h.01M8.5 14.5h8"/>',
-    "notifications": '<rect x="4.5" y="6.5" width="16" height="12" rx="2"/><path d="M4.5 8.5l8 5.5 8-5.5"/>',
-    "teams": '<path d="M4.5 12.5a8 8 0 0 1 8-8c2.6 0 5 1 6.8 2.8L20.5 9M20.5 4.5v4.5h-4.5M20.5 12.5a8 8 0 0 1-8 8c-2.6 0-5-1-6.8-2.8L4.5 16M4.5 20.5v-4.5h4.5"/>',
-    "data": '<path d="M4.5 12.5a8 8 0 1 0 8-8c-2.4 0-4.6 1-6.2 2.7L4.5 9M4.5 4.5v4.5h4.5"/><circle cx="10.34" cy="14.66" r="2.6"/><path d="M12.18 12.82L16.5 8.5M15.43 9.57l1.84 1.84M14.09 10.91l1.84 1.84"/>',
-    "about": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 11.5v5M12.5 8.5h.01"/>',
-    "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
-    "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
-    "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
-    "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
-    "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
-    "intents": '<path d="M4.5 10.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-5l-3 3v-3a2 2 0 0 1-2-2zM9.5 8.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
-    "categories": '<path d="M4.5 18.5h16M6.5 18.5v-7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v7M13.5 18.5v-11a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v11"/>',
-    "note": '<path d="M4.5 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8l-6 6h-8a2 2 0 0 1-2-2zM20.5 14.5h-4a2 2 0 0 0-2 2v4"/>',
-    "cards": '<rect x="4.5" y="9.5" width="14" height="11" rx="2"/><path d="M7.5 6.5h11a2 2 0 0 1 2 2v9"/>',
-    "desks": '<rect x="4.5" y="8.5" width="12" height="8" rx="2"/><path d="M10.5 16.5v4M7.5 20.5h6M8.5 8.5v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/>',
-    "delete": '<path d="M4.5 7.5h16M9.5 7.5v-1.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5M6.5 7.5l.8 11.3a2 2 0 0 0 2 1.7h6.4a2 2 0 0 0 2-1.7l.8-11.3M10.5 11.5v5M14.5 11.5v5"/>',
-    "forward": '<path d="M4.5 12.5h16M14.5 6.5l6 6-6 6"/>',
-    "statistics": '<path d="M4.5 4.5v16h16M9.5 16.5v-4M13.5 16.5v-8M17.5 16.5v-6"/>',
-    "ai": '<path d="M11.5 4.5l1.6 4.9 4.9 1.6-4.9 1.6-1.6 4.9-1.6-4.9-4.9-1.6 4.9-1.6zM17.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
-  };
-  function sxIcon(name) {
-    const body = SX_ICONS[name];
-    return body ? '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>" : '<span class="sx-ic"></span>';
   }
   function seg2(name, opts, cur) {
     return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
