@@ -602,6 +602,13 @@ function createCore(deps) {
     return keys.every(k => !!k && typeof k === "object" && held.has(k.id) && held.get(k.id).pub === k.pub && held.get(k.id).desk === k.desk); /* plant:withdraw-same */
   }
 
+  /* A call that drops at least one invitation the relay holds, adds none and replaces no wrap. */
+  function onlyDrops(add, drop, wraps) {
+    if (add.length !== 0 || wraps.length !== 0) return false;
+    const held = new Set(store.list("inv:").map(([k]) => k.slice(4)));
+    return drop.some(id => held.has(id));
+  }
+
 /* A wrap is {epoch, ct}. The relay keeps at most 1 KiB of its canonical JSON and cannot open it, so anything else on the
      object, a team key among it, is not stored. */
   function takeWrap(wrap) {
@@ -658,9 +665,12 @@ function createCore(deps) {
     if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */ /* plant:invites-unsigned */
     const seen = "seen:" + sha256(bytes);
     if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
-    /* The lapse is asked after the signature, as on the devices route. */
+    /* A read-only team's lead may still drop invitations; nothing is added and no wrap is replaced.
+       The lapse is asked after the signature, as on the devices route. */
     const lapsedInvites = lapseGate(true);
-    if (lapsedInvites) return lapsedInvites; /* plant:lapse-invites */
+    let dropping = false;
+    dropping = lapseState() === "read-only" && onlyDrops(b.add, b.drop, wrapRows); /* plant:lapse-drop-invites */
+    if (lapsedInvites && !dropping) return lapsedInvites; /* plant:lapse-invites */
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
     const revived = new Set(prepared.filter(a => store.get("sp:" + a.id)).map(a => a.id));
