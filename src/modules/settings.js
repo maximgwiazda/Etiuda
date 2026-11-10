@@ -20,7 +20,7 @@ import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, teamLeads, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste } from "./team-join.js";
+import { lapseNote, teamLeads, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -347,7 +347,7 @@ function teamsGroups(){
   const rows=teamLeads().map((l,i,all)=>({key:"team", html:teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))}));
   if(joinDoor) rows.push({key:"join", html:'<div class="set-row" data-row="join">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))+'</div><div class="set-ctl">'+joinDoor+'</div></div>'});
   /* Under a host only: a browser has no catalog folder to share. */
-  if(eHasShared()) rows.push(row("sharededit","teams",t("Edit the shared catalog directly"),
+  if(eHasShared() && !relayDesk()) rows.push(row("sharededit","teams",t("Edit the shared catalog directly"),
     t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
     onoff("sharededit", lsGet("eSharedEdit")==="1",
       t("Each change goes into the shared catalog; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
@@ -749,6 +749,19 @@ function openSettings(section){
   const host=settingsHost(), on=host && host.querySelector(".sx-sec.on");
   if(on) try{ on.focus({preventScroll:true}); }catch(e){}
 }
+/* The head last drawn on Teams. A later join paint draws the page again only when that head changed, and only while Teams is the open section. */
+let headDrawn="";
+function headDrawSig(){
+  return (relayDesk()?"1":"0")+"\n"+teamLeads().map(l=>l.team+"\t"+(l.head?l.head.edition+"\t"+l.head.published+"\t"+String(l.head.t)+(l.head.catalog?"\t"+l.head.catalog:""):"")).join("\n");
+}
+onJoinPainted(()=>{
+  const next=headDrawSig();
+  if(next===headDrawn) return;
+  headDrawn=next;
+  if(sxOn!=="teams" || sxQuery) return;
+  try{ if(typeof document==="undefined" || !document.getElementById("setBody")) return; }catch(e){ return; }
+  paintSettings();
+});
 
 export {
   openSettings,

@@ -21,7 +21,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 26;
+const EXPECTED = 27;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -64,7 +64,18 @@ function boot() {
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
     + "\n__test.catalogChanged = catalogChanged; __test.teamKeys = teamKeys;"
-    + " __test.historyKept = typeof historyKept === \"function\" ? historyKept : null;")(
+    + " __test.historyKept = typeof historyKept === \"function\" ? historyKept : null;"
+    + " __test.relayHere = function() { return relayHere(); };"
+    + " __test.bindRelay = function(team, pinPublic, rt) {"
+    + " if (deskKeys === undefined) deskKeys = {};"
+    + " teamPins[team] = { keyId: \"lead-key\", public: pinPublic };"
+    + " teamPinFrom[team] = \"invite\";"
+    + " teamJoin = { team: team, file: \"\", nonce: \"aa\".repeat(16), commit: \"bb\".repeat(16), asked: 1, held: 1, name: \"Desk\","
+    + " invite: { id: \"cc\".repeat(4), proof: \"dd\".repeat(16), lead: { keyId: \"lead-key\", public: pinPublic, name: \"Lead\" }, pinned: true,"
+    + " relay: { rt: rt, url: \"https://etiuda.dev/relay/v1\", inv: \"ee\".repeat(8), token: \"tok\", seal: \"sea\" } } };"
+    + " };"
+    + " __test.sharedWrite = sharedWrite;"
+    + " __test.keepHist = function(file, text) { return historyKeep(file, text, false); };")(
     n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
     { exports: {} }, {}, quiet, test);
   const ev = { sender: { id: 1, once: noop }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
@@ -267,6 +278,32 @@ try {
   await tick(5);
   check(Array.isArray(index()) && index().length === copies + 1 && blobs().length === copies + 1,
     "5b and the next version kept writes a sound index again, the rebuilt copies still in it (" + (index() || []).length + ")");
+
+  /* A relay desk's mirror is not a folder the person edits. The write and the putting back are refused, and the file stays. */
+  {
+    const rt = "ab".repeat(16), team = "t-" + "11".repeat(8);
+    const mirror = path.join(UD, "relay", rt), file = path.join(mirror, "mirror.ec");
+    fs.mkdirSync(mirror, { recursive: true });
+    const first = catalog("mirrorcat", 1, "Mirror"), second = catalog("mirrorcat", 2, "Changed");
+    write(file, second);
+    const R = boot();
+    R.test.bindRelay(team, "ab".repeat(32), rt);
+    R.test.keepHist(file, first);
+    R.test.keepHist(file, second);
+    const here = R.test.relayHere();
+    const before = fs.readFileSync(file, "utf8");
+    const wrote = await Promise.resolve(R.test.sharedWrite("mirror.ec", catalog("mirrorcat", 3, "Edited"), sha(Buffer.from(before)), false));
+    const afterWrite = fs.readFileSync(file, "utf8");
+    const list = (await R.ask("etiuda:history-list")) || [];
+    const older = list.find(v => v.path === path.resolve(file) && v.sha === sha(Buffer.from(first)));
+    const put = await R.ask("etiuda:history-put", sha(Buffer.from(first)), file);
+    const afterPut = fs.readFileSync(file, "utf8");
+    check(!!here && wrote && wrote.ok === false && wrote.refused === true && afterWrite === before
+      && !!older && older.put === false && put && put.ok === false && afterPut === second,
+      "15ib a relay desk does not write an unsigned catalog in its mirror, and does not put an earlier version back over it: "
+      + JSON.stringify({ here: !!here, wrote: wrote, held: afterWrite === before,
+        offered: !!(older && older.put), put: put && put.ok, restored: afterPut === second }));
+  }
 
   /* ---- the page's half ------------------------------------------------------------------------------------------------ */
   globalThis.window = globalThis.window || {};

@@ -24,7 +24,7 @@ const nodeRequire = createRequire(import.meta.url);
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 20;
+const EXPECTED = 21;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -323,6 +323,8 @@ try {
     check(A.test.isCatalogName("etiuda-team (1).json") && A.test.isCatalogName("etiuda-team.json")
       && !A.test.isCatalogName("etiuda-team.json.tmp") && !A.test.isCatalogName("notes.json"),
       "f3j the watch hears a conflict sibling of the team file, and a temp or a note still passes by");
+    check(A.test.isCatalogName("etiuda-head.json"),
+      "15ia the watch hears the team's head land, so Settings can show it");
   }
   {
     const { ud, folder } = fresh();
