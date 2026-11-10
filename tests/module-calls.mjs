@@ -3492,6 +3492,12 @@ const CARD_B = {
         () => eq([twoRow.indexOf("First part text") > -1, twoRow.indexOf("Second part text") > -1,
           /1\/2/.test(twoRow), lastSent.id, lastSent.b].join("|"),
           "true|true|true|c-e1-two|1"));
+      check("lanes.js", "814d4 (ln-part) chip placed in box top-right corner",
+        () => {
+          const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+          const lnPart = (/\.ln-part\{([^}]+)\}/.exec(sheet) || [])[1] || "";
+          return eq([/position:\s*absolute/.test(lnPart), /top:\s*8px/.test(lnPart), /right:\s*10px/.test(lnPart), !/margin-bottom/.test(lnPart)].join(","), "true,true,true,true");
+        });
     } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);
