@@ -2228,6 +2228,7 @@ if (deskOn()) try {
     if (stopSecond) await stopSecond.stop();
     return { taken: taken, said: said, uploaded: uploaded, keptAfterUpload: keptAfterUpload, read: read2, asks: seen.asks, afterUpload: seen.afterUpload };
   }
+  const PUT_BACK_REFUSED = '    const why = r.refused || refusalOf(r); if (why.reason === "token-spent") return why; wrapPhase = "none";';
   if (partOn("pDesk")) {
   const e2 = await wrapRestart("wrap-restart", 3);
 
@@ -2238,9 +2239,6 @@ if (deskOn()) try {
       + (e2.said ? "refused and said" : "not refused") + ", upload " + (e2.uploaded ? "at the lead" : "absent")
       + ", wrap key " + (e2.keptAfterUpload ? "kept" : "forgotten") + ", asks after the upload " + e2.afterUpload
       + ", edition " + (e2.read ? "read" : "unread"));
-
-  
-  const PUT_BACK_REFUSED = '    const why = r.refused || refusalOf(r); if (why.reason === "token-spent") return why; wrapPhase = "none";';
 
   
   const e2Plant = await plantChannel([{ tag: "plant:S3-wrap-once", text: null }, { tag: "plant:S3-wrap-gone", text: null },
@@ -7188,7 +7186,17 @@ if (deskOn()) try {
 
   if (partOn("p942f")) {
   markPart("p942f");
-
+  /* Alone, nothing has read policy, and an empty counter is not a pass.
+     One export of the desk's key, through the stand-in, before the audit. */
+  if (process.platform === "win32" && regStand.total() < 1) {
+    const file = path.join(LAB, "942f-policy.reg");
+    try {
+      nodeRequire("node:child_process").execFileSync("C:\\Windows\\System32\\reg.exe",
+        ["export", "HKLM\\SOFTWARE\\Policies\\Etiuda", file, "/y"],
+        { windowsHide: true, timeout: 5000, stdio: "ignore" });
+    } catch { /* the key is not there; the stand-in counted the export */ }
+    try { fs.unlinkSync(file); } catch { /* never written */ }
+  }
 
   check(regStand.held(), "942f every reg call was answered by the stand-in (" + regStand.said() + ")");
   }
