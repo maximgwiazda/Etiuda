@@ -413,7 +413,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --rail-max:228px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
-  /* The painted side column, from the window's edge to one 12px dot pitch short of the cards.
+  /* The painted side column, from the window's edge to 12px short of the cards, where the dot field begins.
      The docked rail and Settings' section list both read it, so a dragged rail and the list
      stay one width. --app-pad is the page gutter, declared below; --rail-max is the column
      inside that gutter. The measured --rail-left is not in this sum: it is 0 while a screen
@@ -450,7 +450,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      transparent. All four token blocks. */
   --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
-  --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
+  --card-border:var(--line);   /* a hairline; dark keeps its own seam */
   /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
      so the card ground gets its own token - see the dark blocks. */
   --card-bg:var(--panel);
@@ -469,10 +469,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The bevel at alpha zero, the same three lines in every theme, so a transition to --bevel
      fades the cut in place - the pill bar's two states, as with --shadow-pop-off. */
   --bevel-off:inset 0 1px 0 #0000,inset 0 -1px 0 #0000,inset 1px 0 0 #0000;
-  /* Lift apart from card shadow: the intent panel wears the lift under its bevel, and a dark
-     card wears the bevel alone - see the dark blocks. */
+  /* Lift apart from card shadow: the intent panel wears both layers under its bevel. A light
+     card's own shadow is the near layer only; dark wears the bevel alone. See the dark blocks. */
   --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
-  --card-shadow:var(--card-lift);
+  --card-shadow:0 1px 2px rgba(15,23,42,.05);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
@@ -589,7 +589,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bub:#0e67d8; --bub-shadow:rgba(14,103,216,.30);
   --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
-  --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
+  --card-border:var(--line);   /* a hairline; dark keeps its own seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
   --shadow-pop:0 18px 48px rgba(0,0,0,.28);
@@ -602,7 +602,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
   --bevel:inset 0 1px 0 #fff,inset 0 -1px 0 rgba(0,0,0,.08),inset 1px 0 0 rgba(255,255,255,.7);
   --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
-  --card-shadow:var(--card-lift);
+  /* The panel wears the two-layer lift above. A light card takes the near layer only. */
+  --card-shadow:0 1px 2px rgba(15,23,42,.05);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
@@ -1561,12 +1562,11 @@ body.e-take-drag .pills-slot.pills-overflow::before,
    counter-scale by the same value the pill scales by. */
 @property --pill-sx{syntax:"<number>";inherits:true;initial-value:1}
 .pill{display:inline-flex;align-items:center;
-  padding:5px 11px;border:1px solid transparent;border-radius:999px;
+  padding:5px 11px;border:1px solid transparent;border-radius:9px;
   background:color-mix(in srgb,var(--ink) 5%,transparent);
   color:var(--dim);font-size:13px;cursor:default;user-select:none}
-/* Pills that wear a swatch tuck it toward the cap - a coloured block can sit nearer the
-   curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
-   All carries no swatch and keeps the text inset. */
+/* Pills that wear a swatch tuck it toward the cap. 4px keeps the 21px dot off the corner
+   of the 9px radius. All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 /* THE WEIGHT BELONGS TO THE RING, NEVER TO SELECTION. Bold on the selected pill widened it by
@@ -1712,8 +1712,8 @@ body.rail-peek #railHit{width:min(300px,90vw)}
 /* The 80px gap belongs to the LIST, not to main: hung on main it strands the footer 80px short
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
-/* THE DOT FIELD. A ground for the card area, at the pitch and the contrast the reference
-   uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
+/* THE DOT FIELD. A ground for the card area: one dot of --dots-ink, solid out to .7px and faded
+   to that ink at zero alpha by 1.2px, on a 16px pitch, in both themes. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
 /* A LAYER OF ITS OWN, UNDER THE SCROLLER IN THE SCROLLER'S GRID CELL. Nothing that scrolls carries the field, so
@@ -1723,22 +1723,15 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* The lane is reserved the way the scroller reserves it, so the right margin is measured from the same edge.
    Under body.e-backdrop this layer is the window's ground and the scroller above it is clear. */
 /* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
-   and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
-/* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
-   pixel takes the colour at its centre, so one hard .75px edge painted 4 pixels at 100%, 1 at 125%
-   and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
-   (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
-   disc and 150% paints what it did; shell smoke 2k6 holds it. */
+   and the ramp between the stops would then pass through grey on a pale ground. */
 .dotfield{pointer-events:none;overflow:hidden;scrollbar-gutter:stable;padding:16px var(--app-pad) var(--app-pad)}
-/* ONE PITCH PAST THE CARDS ON EACH SIDE (Maxim, 2026-10-03 21:01: "ever so slightly bigger, so that it extends just so
-   beyond the cards"). 12px is the background-size below, a whole pitch, so the pattern's phase on the window is the
-   one it had at main's edges. On the left it ends in the docked panel's gap (18px) and never under the panel; on the
-   right it stops short of the scrollbar lane, which the padding keeps clear. */
+/* THE FIELD REACHES 12px PAST THE CARDS ON EACH SIDE. That inset ends inside the docked panel's gap
+   (18px) and 2px short of the scrollbar lane, whose padding is 14px. The reach is not the pitch:
+   the pitch is 16px, and a reach of one pitch would cross the lane. */
 .dotfield>div{height:100%;margin-left:calc(var(--rail-col,0px) + var(--rail-colgap,0px) - 12px);margin-right:-12px;
-  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
-    color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
-    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
-  background-size:12px 12px}
+  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .7px,
+    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px);
+  background-size:16px 16px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
@@ -1988,9 +1981,13 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   text-decoration-color:color-mix(in srgb,var(--ink) 45%,transparent)}
 /* A token that resolved to NOTHING. Reads as a slot waiting to be filled rather than as a
    fault: the agent has simply not picked an intent yet, which is a normal state and not an
-   error. Never copied - see FILL_M_A. */
+   error. In a reply it is a soft chip. The note, the editor columns and the tour keep the
+   outlined tag: the tour sits on a filled panel, and the override below only recolours it.
+   Never copied. See FILL_M_A. */
 .mf-cols .cbadge{vertical-align:1px}
-.txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
+.txt .fillmiss{background:var(--accent-soft);color:var(--accent);border:0;border-radius:6px;
+  padding:1px 5px;font:600 11px var(--sans);letter-spacing:.2px}
+.mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
 /* The PL claim is a QUIET FIELD - 7% violet folded into the panel, no edge of its own: the
@@ -2004,6 +2001,8 @@ body:not(.e-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accen
    body.e-kbdnav so a resting pointer cannot show a second mark while the keyboard
    drives; the first mousemove hands the mark back to the pointer. */
 .txt.sel{border-color:var(--accent);background:var(--accent-soft)}
+body:not(.e-kbdnav) .txt:hover .fillmiss,
+.txt.sel .fillmiss{background:var(--panel)}
 .txt.dragging{opacity:.55;z-index:2}
 html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
