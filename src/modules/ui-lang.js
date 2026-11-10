@@ -1341,7 +1341,7 @@ UI_STRINGS.pl={
   "just now":"przed chwilą",
   "{N} min ago":"{N} min temu",
   "at {TIME}":"o {TIME}",
-  "then: {LIST}":"potem: {LIST}",
+  "then":"potem",
   "often":"często",
   "One of the cards this desk has used most lately":"Jedna z kart ostatnio najczęściej używanych na tym stanowisku",
   "To choose from next: {N}.":"Dalej do wyboru: {N}.",

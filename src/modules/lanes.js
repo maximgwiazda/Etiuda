@@ -144,7 +144,8 @@ function laneRowHtml(st, r, i){
       : r.used ? '<span class="nd-learnt" title="'+esc(t("One of the cards this desk has used most lately"))+'">'+esc(t("often"))+'</span>' : "")
     +'<span class="ln-acts">'+act+'</span>'
     +'</div><div class="txt ln-txt'+(i===laneMark?" sel":"")+'" role="button"><span class="ln-clamp">'+escFilled(laneBody(m,0).replace(/\s+/g," ").trim())+'</span></div>'
-    +(then.length ? '<div class="ln-then">'+esc(t("then: {LIST}").replace("{LIST}",then.join(LN_DOT)))+'</div>' : "")
+    +(then.length ? '<div class="ln-then"><span class="ln-then-l">'+esc(t("then"))+'</span>'
+      +then.map(n=>'<span class="ln-chip">'+esc(n)+'</span>').join("")+'</div>' : "")
     +'</div>';
 }
 // Whose list it is, the way back to the catalog's, and the way to add a reply, as the editor's fold offers them.
@@ -187,39 +188,47 @@ function lanesHtml(st){
     +'<div class="ln-next" style="grid-row:'+nextAt+' / span '+(k+4-nextAt)+'">'+rows+laneEditHtml(st)+'</div>'
     +'<svg class="ln-wires" aria-hidden="true"></svg></div>';
 }
-/* The threads, drawn once the lanes are laid out: down through what was sent and into the reply now, then
-   out of it to each reply that can follow, solid for the card's own list and dashed for what was learnt. */
+/* The threads, once the lanes are laid out. What was sent is one thread down the lane's edge, a filled
+   port on each reply and an arrow where it enters the reply now. From that reply's text, one port for
+   each reply that can follow, spaced up to 20px, the wire ending in an arrow at that reply's title.
+   Solid for the card's own list, dashed for what was learnt. */
 function drawWires(){
   const el=lanesEl(), cols=el && el.querySelector(".ln-cols"), svg=cols && cols.querySelector(".ln-wires");
   if(!svg) return;
-  const o=cols.getBoundingClientRect(), at=r=>({l:r.left-o.left, t:r.top-o.top, r:r.right-o.left, b:r.bottom-o.top});
+  const o=cols.getBoundingClientRect();
+  const at=r=>({l:r.left-o.left, t:r.top-o.top, r:r.right-o.left, b:r.bottom-o.top, y:(r.top+r.bottom)/2-o.top});
   const now=cols.querySelector(".ln-now"), nh=now && now.querySelector(".chead");
   if(!now || !nh) return;
-  const n=at(now.getBoundingClientRect()), h=at(nh.getBoundingClientRect()), hy=(h.t+h.b)/2;
-  let d="", dots="";
+  const h=at(nh.getBoundingClientRect());
+  let d="", arrows="", ports="";
+  const arrow=(x,y)=>{ arrows+='<path class="ln-arrow" d="M'+(x-1)+" "+y+'l-9 -4.5v9z"/>'; };
+  const port=(x,y)=>{ ports+='<circle class="ln-dot" cx="'+x+'" cy="'+y+'" r="6"/>'; };
   // A reply sent is threaded at its head line, the time and the title, not the middle of its words.
-  const sent=[...cols.querySelectorAll(".ln-sent")].filter(e=>e.getClientRects().length)
-    .map(e=>{ const r=at(e.getBoundingClientRect()), h=at((e.firstElementChild||e).getBoundingClientRect()); return {l:r.l, t:h.t, b:h.b}; });
+  const sent=[...cols.querySelectorAll(".ln-sent")].filter(e=>e.getClientRects().length);
   if(sent.length){
-    const x=sent[0].l+4, y0=(sent[0].t+sent[0].b)/2;
-    d+='<path class="ln-w" d="M'+x+" "+y0+"V"+hy+"H"+(h.l-10)+'"/>';
+    const heads=sent.map(e=>at((e.firstElementChild||e).getBoundingClientRect()));
+    const box=at(sent[sent.length-1].getBoundingClientRect());
+    const x=box.l+4, y0=heads[0].y;
+    d+='<path class="ln-w" d="M'+x+" "+y0+"V"+(h.y-10)+"Q"+x+" "+h.y+" "+(x+10)+" "+h.y+"H"+(h.l-9)+'"/>';
     if(cols.querySelector(".ln-older")) d+='<path class="ln-w ln-w-learnt" d="M'+x+" "+(y0-18)+"V"+y0+'"/>';
-    sent.forEach(r=>{ dots+='<circle class="ln-dot" cx="'+x+'" cy="'+((r.t+r.b)/2)+'" r="4"/>'; });
+    arrow(h.l, h.y);
+    heads.forEach(q=>port(x, q.y));
   }
-  dots+='<circle class="ln-dot ln-dot-open" cx="'+(h.l-6)+'" cy="'+hy+'" r="4"/>';
+  const slab=now.querySelector(".txt")||now, n=at(slab.getBoundingClientRect());
   const rows=[...cols.querySelectorAll(".ln-row")];
   rows.forEach((row,i)=>{
     const rh=row.querySelector(".chead");
     if(!rh) return;
-    const r=at(rh.getBoundingClientRect()), y1=(r.t+r.b)/2, x1=r.l-8;
-    const y0=n.t+18+i*Math.min(14, Math.max(0,(n.b-n.t-36))/Math.max(1,rows.length-1)), x0=n.r;
-    const dx=Math.max(12,(x1-x0)/2);
-    d+='<path class="ln-w'+(row.hasAttribute("data-learnt")||row.hasAttribute("data-used")?" ln-w-learnt":"")+'" d="M'+x0+" "+y0+"C"+(x0+dx)+" "+y0+" "+(x1-dx)+" "+y1+" "+x1+" "+y1+'"/>';
-    dots+='<circle class="ln-dot" cx="'+x1+'" cy="'+y1+'" r="3.5"/>';
+    const b=at(rh.getBoundingClientRect()), x1=b.l-2, y1=b.y;
+    const y0=n.t+20+i*Math.min(20, Math.max(0,(n.b-n.t-40))/Math.max(1,rows.length-1)), x0=n.r;
+    const dx=Math.max(40,(x1-x0)*.55);
+    d+='<path class="ln-w'+(row.hasAttribute("data-learnt")||row.hasAttribute("data-used")?" ln-w-learnt":"")+'" d="M'+x0+" "+y0+"C"+(x0+dx)+" "+y0+" "+(x1-dx)+" "+y1+" "+(x1-7)+" "+y1+'"/>';
+    arrow(x1, y1);
+    port(x0, y0);
   });
   svg.setAttribute("width", String(cols.scrollWidth));
   svg.setAttribute("height", String(cols.scrollHeight));
-  svg.innerHTML=d+dots;
+  svg.innerHTML=d+arrows+ports;
 }
 /* THE WALK, after a step: what was Now travels into Sent, the reply chosen travels from its row into Now, and
    what can follow fans in once it lands. The copy is already made; the next step or redraw ends it at once. */
