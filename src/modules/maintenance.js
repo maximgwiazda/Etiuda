@@ -557,7 +557,7 @@ function openResetConfirm(){
   openDialog({
     cls:"mt-reset-confirm",
     title:"Reset Etiuda?",
-    body:'<p>'+esc(t("Everything on this desk goes: the catalog, the team, the agent's name, settings, open conversations and every local change. Only the licence stays."))+'</p>'
+    body:'<p>'+esc(t("Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence."))+'</p>'
       +'<p class="mt-reset-warn">'+esc(t("There is no Undo. Joining the team again takes a new invitation from its lead."))+'</p>'
       +'<label class="mf">'+esc(t("Type RESET to confirm."))
       +'<input type="text" id="mtResetWord" autocomplete="off" spellcheck="false"></label>',
