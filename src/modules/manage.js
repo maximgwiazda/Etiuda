@@ -866,7 +866,7 @@ function openManage(justHtml){
        the two sections above. Not called "administrative" or "compliance": nothing is gated
        and nobody is being administered. */
     /* NOTHING IN THIS SECTION FLOATS. Every act belongs to the thing it acts on: the folder is
-       the list's header and sits on the title line, a catalog's own acts ride in its row, and
+       the list's header and sits on Catalog and data's bar (.mg-data-bar), a catalog's own acts ride in its row, and
        bringing one in is the Library's, so it stands in the Library's bar. What is left here is
        the list, which is the answer to "what is on this desk". */
     mgSec("data","Catalog & data",

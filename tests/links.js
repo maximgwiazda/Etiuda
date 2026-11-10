@@ -86,21 +86,11 @@ const APP = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-links-"));
 let outCalls = -1;
 function buildApp() {
   for (const d of ["shell", "engine", "userdata", "documents"]) fs.mkdirSync(path.join(APP, d), { recursive: true });
+  E.copyShellApp(APP); /* the release's shell, as tools/release.mjs lists it; main.js and preload.js are the lab's, below */
   const { pre, lab, count } = shellOutCalls();
   outCalls = count;
   fs.writeFileSync(path.join(APP, "shell", "main.js"), lab, "utf8");
   fs.writeFileSync(path.join(APP, "shell", "preload.js"), pre, "utf8");
-  /* Every file main.js requires at load, read from its source, so a new helper (tray.cjs was one) never leaves the lab's
-     shell dead at start, which reads only as a port that never answers. */
-  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
-  const needs = [...src.matchAll(/require\(path\.join\(__dirname, ((?:"[^"]+",? ?)+)\)\)/g)]
-    .map(m => m[1].split(",").map(x => x.trim().replace(/^"|"$/g, "")).filter(Boolean));
-  for (const parts of needs) {
-    const from = path.join(E.ROOT, "shell", ...parts);
-    if (!fs.existsSync(from)) continue;
-    if (parts.length > 1) fs.cpSync(path.join(E.ROOT, "shell", parts[0]), path.join(APP, "shell", parts[0]), { recursive: true });
-    else fs.copyFileSync(from, path.join(APP, "shell", parts[0]));
-  }
   fs.writeFileSync(path.join(APP, "package.json"),
     JSON.stringify({ name: "etiuda-links-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   for (const f of ["etiuda.html", "etiuda.csp.json"])
